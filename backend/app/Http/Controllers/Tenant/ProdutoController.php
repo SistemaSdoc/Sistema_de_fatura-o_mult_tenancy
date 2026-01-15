@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Tenant;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use App\Models\Produto;
 use App\Models\Categoria;
 
@@ -12,8 +11,8 @@ class ProdutoController extends Controller
 {
     public function __construct()
     {
-        // Garante que todas as queries usam a conexão tenant
-        // O ResolveTenant Middleware deve ter configurado o tenant
+        // Aplica a policy de Produto para todas as ações do CRUD
+        $this->authorizeResource(Produto::class, 'produto');
     }
 
     // LISTAR PRODUTOS
@@ -46,17 +45,14 @@ class ProdutoController extends Controller
     }
 
     // MOSTRAR PRODUTO
-    public function show($id)
+    public function show(Produto $produto)
     {
-        $produto = Produto::findOrFail($id);
         return response()->json($produto);
     }
 
     // ATUALIZAR PRODUTO
-    public function update(Request $request, $id)
+    public function update(Request $request, Produto $produto)
     {
-        $produto = Produto::findOrFail($id);
-
         $dados = $request->validate([
             'categoria_id' => 'sometimes|required|uuid',
             'nome' => 'sometimes|required|string|max:255',
@@ -77,9 +73,8 @@ class ProdutoController extends Controller
     }
 
     // DELETAR PRODUTO
-    public function destroy($id)
+    public function destroy(Produto $produto)
     {
-        $produto = Produto::findOrFail($id);
         $produto->delete();
         return response()->json(null, 204);
     }

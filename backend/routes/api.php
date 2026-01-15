@@ -1,9 +1,12 @@
+<?php
+
+namespace App\Http\Routes;
+
 use App\Http\Middleware\ResolveTenant;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ApiAuthController;
 
 // Controllers Tenant
-use App\Http\Controllers\Tenant\TenantUserController;
 use App\Http\Controllers\Tenant\ProdutoController;
 use App\Http\Controllers\Tenant\CategoriaController;
 use App\Http\Controllers\Tenant\FornecedorController;
@@ -12,18 +15,19 @@ use App\Http\Controllers\Tenant\VendaController;
 use App\Http\Controllers\Tenant\PagamentoController;
 use App\Http\Controllers\Tenant\MovimentoStockController;
 use App\Http\Controllers\Tenant\FaturaController;
+use App\Http\Controllers\TenantUserController;
 
 /*
-|--------------------------------------------------------------------------
+|--------------------------------------------------------------------------|
 | LOGIN GLOBAL
-|--------------------------------------------------------------------------
+|--------------------------------------------------------------------------|
 */
 Route::post('/login', [ApiAuthController::class, 'login']);
 
 /*
-|--------------------------------------------------------------------------
+|--------------------------------------------------------------------------|
 | ROTAS DO TENANT (multi-tenant)
-|--------------------------------------------------------------------------
+|--------------------------------------------------------------------------|
 */
 Route::middleware([ResolveTenant::class])->prefix('tenant')->group(function () {
 
@@ -45,67 +49,81 @@ Route::middleware([ResolveTenant::class])->prefix('tenant')->group(function () {
         Route::post('/logout', [ApiAuthController::class, 'logout']);
 
         /*
-        |--------------------------------------------------------------------------
-        | CRUD USERS
-        |--------------------------------------------------------------------------
+        |--------------------------------------------------------------------------|
+        | CRUD USERS - somente admins
+        |--------------------------------------------------------------------------|
         */
-        Route::apiResource('/users', TenantUserController::class);
+          Route::middleware(['role:admin'])->group(function () {
+            Route::apiResource('/users', TenantUserController::class);
+        });
 
         /*
-        |--------------------------------------------------------------------------
-        | CRUD PRODUTOS
-        |--------------------------------------------------------------------------
+        |--------------------------------------------------------------------------|
+        | CRUD PRODUTOS - admin e operador
+        |--------------------------------------------------------------------------|
         */
-        Route::apiResource('/produtos', ProdutoController::class);
+        Route::middleware(['role:admin,operador'])->group(function () {
+            Route::apiResource('/produtos', ProdutoController::class);
+        });
 
         /*
-        |--------------------------------------------------------------------------
-        | CRUD CATEGORIAS
-        |--------------------------------------------------------------------------
+        |--------------------------------------------------------------------------|
+        | CRUD CATEGORIAS - admin e operador
+        |--------------------------------------------------------------------------|
         */
-        Route::apiResource('/categorias', CategoriaController::class);
+        Route::middleware(['role:admin,operador'])->group(function () {
+            Route::apiResource('/categorias', CategoriaController::class);
+        });
 
         /*
-        |--------------------------------------------------------------------------
-        | CRUD FORNECEDORES
-        |--------------------------------------------------------------------------
+        |--------------------------------------------------------------------------|
+        | CRUD FORNECEDORES - admin e operador
+        |--------------------------------------------------------------------------|
         */
-        Route::apiResource('/fornecedores', FornecedorController::class);
+        Route::middleware(['role:admin,operador'])->group(function () {
+            Route::apiResource('/fornecedores', FornecedorController::class);
+        });
 
         /*
-        |--------------------------------------------------------------------------
-        | COMPRAS
-        |--------------------------------------------------------------------------
+        |--------------------------------------------------------------------------|
+        | COMPRAS - admin e operador
+        |--------------------------------------------------------------------------|
         */
-        Route::post('/compras', [CompraController::class, 'store']);
+        Route::middleware(['role:admin,operador'])->post('/compras', [CompraController::class, 'store']);
 
         /*
-        |--------------------------------------------------------------------------
-        | VENDAS
-        |--------------------------------------------------------------------------
+        |--------------------------------------------------------------------------|
+        | VENDAS - admin, operador e caixa
+        |--------------------------------------------------------------------------|
         */
-        Route::post('/vendas', [VendaController::class, 'store']);
+        Route::middleware(['role:admin,operador,caixa'])->post('/vendas', [VendaController::class, 'store']);
 
         /*
-        |--------------------------------------------------------------------------
-        | PAGAMENTOS
-        |--------------------------------------------------------------------------
+        |--------------------------------------------------------------------------|
+        | PAGAMENTOS - admin, operador e caixa
+        |--------------------------------------------------------------------------|
         */
-        Route::apiResource('/pagamentos', PagamentoController::class);
+        Route::middleware(['role:admin,operador,caixa'])->group(function () {
+            Route::apiResource('/pagamentos', PagamentoController::class);
+        });
 
         /*
-        |--------------------------------------------------------------------------
-        | MOVIMENTOS DE STOCK
-        |--------------------------------------------------------------------------
+        |--------------------------------------------------------------------------|
+        | MOVIMENTOS DE STOCK - admin e operador
+        |--------------------------------------------------------------------------|
         */
-        Route::apiResource('/movimentos-stock', MovimentoStockController::class);
+        Route::middleware(['role:admin,operador'])->group(function () {
+            Route::apiResource('/movimentos-stock', MovimentoStockController::class);
+        });
 
         /*
-        |--------------------------------------------------------------------------
-        | FATURAS
-        |--------------------------------------------------------------------------
+        |--------------------------------------------------------------------------|
+        | FATURAS - admin, operador e caixa
+        |--------------------------------------------------------------------------|
         */
-        Route::get('/faturas', [FaturaController::class, 'index']);
-        Route::post('/faturas/gerar', [FaturaController::class, 'gerarFatura']);
+        Route::middleware(['role:admin,operador,caixa'])->group(function () {
+            Route::get('/faturas', [FaturaController::class, 'index']);
+            Route::post('/faturas/gerar', [FaturaController::class, 'gerarFatura']);
+        });
     });
 });

@@ -8,11 +8,20 @@ use App\Models\Categoria;
 
 class CategoriaController extends Controller
 {
-    public function index()
+    public function __construct()
     {
-        return response()->json(Categoria::all());
+        // Aplica a policy de Categoria em todas as ações do CRUD
+        $this->authorizeResource(Categoria::class, 'categoria');
     }
 
+    // LISTAR CATEGORIAS
+    public function index()
+    {
+        $categorias = Categoria::all();
+        return response()->json($categorias);
+    }
+
+    // CRIAR CATEGORIA
     public function store(Request $request)
     {
         $dados = $request->validate([
@@ -21,17 +30,18 @@ class CategoriaController extends Controller
         ]);
 
         $categoria = Categoria::create($dados);
-        return response()->json($categoria);
+        return response()->json($categoria, 201);
     }
-    public function show($id)
-    {
-        $categoria = Categoria::findOrFail($id);
-        return response()->json($categoria);
-    }
-    public function update(Request $request, $id)
-    {
-        $categoria = Categoria::findOrFail($id);
 
+    // MOSTRAR CATEGORIA
+    public function show(Categoria $categoria)
+    {
+        return response()->json($categoria);
+    }
+
+    // ATUALIZAR CATEGORIA
+    public function update(Request $request, Categoria $categoria)
+    {
         $dados = $request->validate([
             'nome' => 'sometimes|required|string|max:255',
             'descricao' => 'nullable|string',
@@ -40,9 +50,10 @@ class CategoriaController extends Controller
         $categoria->update($dados);
         return response()->json($categoria);
     }
-    public function destroy($id)
+
+    // DELETAR CATEGORIA
+    public function destroy(Categoria $categoria)
     {
-        $categoria = Categoria::findOrFail($id);
         $categoria->delete();
         return response()->json(null, 204);
     }

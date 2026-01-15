@@ -8,11 +8,18 @@ use App\Models\Tenant;
 use App\Models\TenantUser;
 use App\Models\Domain;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use App\Services\TenantService;
 
 class TenantAdminController extends Controller
 {
+    protected $tenantService;
+
+    public function __construct(TenantService $tenantService)
+    {
+        $this->tenantService = $tenantService;
+    }
+
     // ================= LISTAR TENANTS =================
     public function index()
     {
@@ -35,12 +42,28 @@ class TenantAdminController extends Controller
 
         $tenant = Tenant::create($dados);
 
-        // Opcional: criar banco do tenant automaticamente
-        DB::statement("CREATE DATABASE IF NOT EXISTS `{$tenant->database_name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
+        // Criar banco + migrations + seed via TenantService
+        $this->tenantService->criarTenantDatabase($tenant);
 
         return response()->json([
             'message' => 'Tenant criado com sucesso',
             'tenant' => $tenant,
+        ]);
+    }
+
+    // ================= DELETAR TENANT =================
+    public function destroy($tenantId)
+    {
+        $tenant = Tenant::findOrFail($tenantId);
+
+        // Deletar banco
+        $this->tenantService->deletarTenantDatabase($tenant);
+
+        // Deletar registro do landlord
+        $tenant->delete();
+
+        return response()->json([
+            'message' => 'Tenant deletado com sucesso',
         ]);
     }
 
@@ -49,7 +72,6 @@ class TenantAdminController extends Controller
     {
         $tenant = Tenant::findOrFail($tenantId);
 
-        // Valida se tenant está ativo
         if ($tenant->status !== 'ativo') {
             return response()->json(['message' => 'Tenant inativo'], 403);
         }
@@ -71,7 +93,6 @@ class TenantAdminController extends Controller
     {
         $tenant = Tenant::findOrFail($tenantId);
 
-        // Valida se tenant está ativo
         if ($tenant->status !== 'ativo') {
             return response()->json(['message' => 'Tenant inativo'], 403);
         }
@@ -88,8 +109,8 @@ class TenantAdminController extends Controller
 
         // Conecta dinamicamente ao banco do tenant
         config(['database.connections.tenant.database' => $tenant->database_name]);
-        DB::purge('tenant');
-        DB::reconnect('tenant');
+        \Illuminate\Support\Facades\DB::purge('tenant');
+        \Illuminate\Support\Facades\DB::reconnect('tenant');
 
         $user = TenantUser::create($dados);
 

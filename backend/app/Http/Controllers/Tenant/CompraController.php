@@ -14,16 +14,19 @@ class CompraController extends Controller
     public function __construct(CompraService $compraService)
     {
         $this->compraService = $compraService;
+
+        // Aplica a policy de Compra em todas as ações do CRUD
+        $this->authorizeResource(Compra::class, 'compra');
     }
 
-    // Listar todas as compras
+    // LISTAR TODAS AS COMPRAS
     public function index()
     {
         $compras = Compra::all();
         return response()->json($compras);
     }
 
-    // Criar nova compra
+    // CRIAR NOVA COMPRA
     public function store(Request $request)
     {
         $dados = $request->validate([
@@ -40,27 +43,15 @@ class CompraController extends Controller
         ], 201);
     }
 
-    // Mostrar compra específica
-    public function show($id)
+    // MOSTRAR COMPRA
+    public function show(Compra $compra)
     {
-        $compra = Compra::find($id);
-
-        if (!$compra) {
-            return response()->json(['message' => 'Compra não encontrada'], 404);
-        }
-
         return response()->json($compra);
     }
 
-    // Excluir compra
-    public function destroy($id)
+    // EXCLUIR COMPRA
+    public function destroy(Compra $compra)
     {
-        $compra = Compra::find($id);
-
-        if (!$compra) {
-            return response()->json(['message' => 'Compra não encontrada'], 404);
-        }
-
         $compra->delete();
         return response()->json(null, 204);
     }

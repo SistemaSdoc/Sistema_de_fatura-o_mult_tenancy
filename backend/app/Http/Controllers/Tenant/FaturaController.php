@@ -14,23 +14,25 @@ class FaturaController extends Controller
     public function __construct(FaturaService $faturaService)
     {
         $this->faturaService = $faturaService;
+
+        // Aplica a policy de Fatura em todas as ações do CRUD
+        $this->authorizeResource(Fatura::class, 'fatura');
     }
 
-    // Listar todas as faturas
+    // LISTAR TODAS AS FATURAS
     public function index()
     {
         $faturas = Fatura::all();
         return response()->json($faturas);
     }
 
-    // Gerar fatura para uma venda
+    // GERAR FATURA PARA UMA VENDA
     public function gerarFatura(Request $request)
     {
         $dados = $request->validate([
             'venda_id' => 'required|uuid',
         ]);
 
-        // Verifica se a venda existe
         $fatura = $this->faturaService->gerarFatura($dados['venda_id']);
 
         if (!$fatura) {
@@ -42,27 +44,15 @@ class FaturaController extends Controller
         return response()->json($fatura, 201);
     }
 
-    // Mostrar fatura específica
-    public function show($id)
+    // MOSTRAR FATURA
+    public function show(Fatura $fatura)
     {
-        $fatura = Fatura::find($id);
-
-        if (!$fatura) {
-            return response()->json(['message' => 'Fatura não encontrada'], 404);
-        }
-
         return response()->json($fatura);
     }
 
-    // Excluir fatura
-    public function destroy($id)
+    // EXCLUIR FATURA
+    public function destroy(Fatura $fatura)
     {
-        $fatura = Fatura::find($id);
-
-        if (!$fatura) {
-            return response()->json(['message' => 'Fatura não encontrada'], 404);
-        }
-
         $fatura->delete();
         return response()->json(null, 204);
     }

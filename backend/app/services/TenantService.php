@@ -7,17 +7,14 @@ use Illuminate\Support\Facades\Artisan;
 
 class TenantService
 {
-    /**
-     * Cria um banco de dados para o tenant e roda as migrations.
-     */
     public function criarTenantDatabase($tenant)
     {
         $dbName = $tenant->database;
 
-        // 1. Criar banco de dados
+        // 1️⃣ Criar banco
         DB::statement("CREATE DATABASE IF NOT EXISTS `$dbName` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
 
-        // 2. Configurar conexão dinâmica
+        // 2️⃣ Configurar conexão dinâmica
         config([
             'database.connections.tenant' => [
                 'driver' => 'mysql',
@@ -30,23 +27,37 @@ class TenantService
                 'collation' => 'utf8mb4_unicode_ci',
                 'prefix' => '',
                 'strict' => true,
-                'engine' => null,
             ],
         ]);
 
-        // 3. Rodar migrations do tenant
+        DB::purge('tenant');
+        DB::reconnect('tenant');
+
+        // 3️⃣ Rodar migrations
         Artisan::call('migrate', [
             '--database' => 'tenant',
-            '--path' => '/database/migrations/tenant', // coloque suas migrations do tenant aqui
+            '--path' => 'database/migrations/tenant',
             '--force' => true
         ]);
 
-         Artisan::call('db:seed', [
-            '--database' => 'tenant',
-            '--class' => 'TenantInitialSeeder',
-            '--force' => true
-        ]);
-        
-        return true;
+        // 4️⃣ Rodar seeder inicial se existir
+        if (class_exists('TenantInitialSeeder')) {
+            Artisan::call('db:seed', [
+                '--database' => 'tenant',
+                '--class' => 'TenantInitialSeeder',
+                '--force' => true
+            ]);
+        }
+
+        return ['success' => true, 'message' => 'Banco do tenant criado com sucesso'];
+    }
+
+    public function deletarTenantDatabase($tenant)
+    {
+        $dbName = $tenant->database;
+
+        DB::statement("DROP DATABASE IF EXISTS `$dbName`");
+
+        return ['success' => true, 'message' => 'Banco do tenant deletado com sucesso'];
     }
 }

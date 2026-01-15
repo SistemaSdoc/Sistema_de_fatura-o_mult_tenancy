@@ -10,6 +10,12 @@ use App\Models\TenantUser;
 
 class PagamentoController extends Controller
 {
+    public function __construct()
+    {
+        // Aplica a policy de Pagamento para todas as ações do CRUD
+        $this->authorizeResource(Pagamento::class, 'pagamento');
+    }
+
     // LISTAR PAGAMENTOS
     public function index()
     {
@@ -43,17 +49,14 @@ class PagamentoController extends Controller
     }
 
     // MOSTRAR PAGAMENTO
-    public function show($id)
+    public function show(Pagamento $pagamento)
     {
-        $pagamento = Pagamento::findOrFail($id);
         return response()->json($pagamento);
     }
 
     // ATUALIZAR PAGAMENTO
-    public function update(Request $request, $id)
+    public function update(Request $request, Pagamento $pagamento)
     {
-        $pagamento = Pagamento::findOrFail($id);
-
         $dados = $request->validate([
             'venda_id' => 'sometimes|required|uuid',
             'user_id' => 'sometimes|required|uuid',
@@ -76,9 +79,8 @@ class PagamentoController extends Controller
     }
 
     // DELETAR PAGAMENTO
-    public function destroy($id)
+    public function destroy(Pagamento $pagamento)
     {
-        $pagamento = Pagamento::findOrFail($id);
         $pagamento->delete();
         return response()->json(null, 204);
     }

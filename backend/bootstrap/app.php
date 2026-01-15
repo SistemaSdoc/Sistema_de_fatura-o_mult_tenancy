@@ -30,7 +30,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // 🔹 Middleware de ROTA (alias)
         $middleware->alias([
             'tenant.user'   => EnsureTenantUser::class,                 // Verifica se user pertence ao tenant
-            'auth:sanctum'  => EnsureFrontendRequestsAreStateful::class // Protege API com token
+            'auth:sanctum'  => EnsureFrontendRequestsAreStateful::class, // Protege API com token
+             'role' => \App\Http\Middleware\RoleMiddleware::class,
         ]);
     })
 
