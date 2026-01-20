@@ -2,10 +2,10 @@
 
 import React, { useState } from "react";
 import MainEmpresa from "../../../components/MainEmpresa";
-import { BarChart2, Calendar, TrendingUp, DollarSign } from "lucide-react";
+import { BarChart2, Calendar, TrendingUp, DollarSign, LucideIcon } from "lucide-react";
 
 /* MOCK DE FATURAS */
-const faturasMock = [
+const faturasMock: Fatura[] = [
     {
         id: 1,
         cliente: "Consumidor Final",
@@ -36,8 +36,18 @@ const faturasMock = [
     },
 ];
 
+type FiltroRelatorio = "diario" | "mensal" | "anual";
+
+type Fatura = {
+    id: number;
+    cliente: string;
+    data: string;
+    total: number;
+    tipo: "paga" | "pendente";
+};
+
 export default function RelatoriosFaturasPage() {
-    const [filtro, setFiltro] = useState<"diario" | "mensal" | "anual">("diario");
+    const [filtro, setFiltro] = useState<FiltroRelatorio>("diario");
 
     const hoje = new Date().toISOString().slice(0, 10);
     const mesAtual = hoje.slice(0, 7);
@@ -64,9 +74,10 @@ export default function RelatoriosFaturasPage() {
                     {["diario", "mensal", "anual"].map((tipo) => (
                         <button
                             key={tipo}
-                            onClick={() => setFiltro(tipo as any)}
-                            className={`px-4 py-2 rounded-lg font-semibold ${filtro === tipo ? "bg-[#123859] text-white" : "bg-white border"
-                                }`}
+                            onClick={() => setFiltro(tipo as FiltroRelatorio)}
+                            className={`px-4 py-2 rounded-lg font-semibold ${
+                                filtro === tipo ? "bg-[#123859] text-white" : "bg-white border"
+                            }`}
                         >
                             {tipo === "diario" && "Diário"}
                             {tipo === "mensal" && "Mensal"}
@@ -104,8 +115,11 @@ export default function RelatoriosFaturasPage() {
                                     <td className="p-3">{fatura.total.toLocaleString()} Kz</td>
                                     <td className="p-3">
                                         <span
-                                            className={`px-3 py-1 rounded-full text-xs font-semibold ${fatura.tipo === "paga" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
-                                                }`}
+                                            className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                                fatura.tipo === "paga"
+                                                    ? "bg-green-100 text-green-700"
+                                                    : "bg-yellow-100 text-yellow-700"
+                                            }`}
                                         >
                                             {fatura.tipo}
                                         </span>
@@ -128,11 +142,17 @@ export default function RelatoriosFaturasPage() {
 }
 
 /* Card do dashboard */
-function DashboardCard({ titulo, valor, icon: Icon }: { titulo: string; valor: any; icon: any }) {
+type DashboardCardProps = {
+    titulo: string;
+    valor: string | number;
+    icon: LucideIcon;
+};
+
+function DashboardCard({ titulo, valor, icon: Icon }: DashboardCardProps) {
     return (
         <div className="bg-white p-4 rounded-xl shadow flex items-center gap-4">
             <div className="p-3 rounded-lg bg-[#123859]/10 text-[#123859]">
-                <Icon />
+                <Icon className="w-5 h-5" />
             </div>
             <div>
                 <p className="text-sm text-gray-500">{titulo}</p>

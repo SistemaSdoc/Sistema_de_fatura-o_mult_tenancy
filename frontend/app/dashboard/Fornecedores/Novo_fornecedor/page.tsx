@@ -13,9 +13,12 @@ interface Fornecedor {
     status: "Ativo" | "Inativo";
 }
 
+type FormFornecedor = Omit<Fornecedor, "id">;
+
 export default function NovoFornecedorPage() {
     const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
-    const [form, setForm] = useState({
+
+    const [form, setForm] = useState<FormFornecedor>({
         nome: "",
         telefone: "",
         email: "",
@@ -23,13 +26,20 @@ export default function NovoFornecedorPage() {
         status: "Ativo",
     });
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const handleChange = (
+        e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+    ) => {
         const { name, value } = e.target;
-        setForm({ ...form, [name]: value });
+
+        setForm({
+            ...form,
+            [name]: value,
+        });
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
         if (!form.nome || !form.telefone) {
             alert("Por favor, preencha o nome e o telefone!");
             return;
@@ -41,7 +51,7 @@ export default function NovoFornecedorPage() {
             telefone: form.telefone,
             email: form.email,
             endereco: form.endereco,
-            status: form.status as "Ativo" | "Inativo",
+            status: form.status,
         };
 
         setFornecedores([...fornecedores, novoFornecedor]);
@@ -70,7 +80,10 @@ export default function NovoFornecedorPage() {
         const telefone = prompt("Editar telefone", fornecedor.telefone);
         const email = prompt("Editar email", fornecedor.email);
         const endereco = prompt("Editar endereço", fornecedor.endereco);
-        const status = prompt("Editar status (Ativo/Inativo)", fornecedor.status);
+        const status = prompt(
+            "Editar status (Ativo/Inativo)",
+            fornecedor.status
+        );
 
         if (nome && telefone && (status === "Ativo" || status === "Inativo")) {
             setFornecedores(
@@ -82,7 +95,7 @@ export default function NovoFornecedorPage() {
                             telefone,
                             email: email || "",
                             endereco: endereco || "",
-                            status: status as "Ativo" | "Inativo",
+                            status: status,
                         }
                         : f
                 )
@@ -112,6 +125,7 @@ export default function NovoFornecedorPage() {
                             required
                         />
                     </div>
+
                     <div>
                         <label className="block font-semibold mb-1">Telefone</label>
                         <input
@@ -124,6 +138,7 @@ export default function NovoFornecedorPage() {
                             required
                         />
                     </div>
+
                     <div>
                         <label className="block font-semibold mb-1">Email</label>
                         <input
@@ -135,6 +150,7 @@ export default function NovoFornecedorPage() {
                             placeholder="Digite o email"
                         />
                     </div>
+
                     <div>
                         <label className="block font-semibold mb-1">Endereço</label>
                         <input
@@ -146,6 +162,7 @@ export default function NovoFornecedorPage() {
                             placeholder="Digite o endereço"
                         />
                     </div>
+
                     <div>
                         <label className="block font-semibold mb-1">Status</label>
                         <select
@@ -158,6 +175,7 @@ export default function NovoFornecedorPage() {
                             <option value="Inativo">Inativo</option>
                         </select>
                     </div>
+
                     <div className="flex justify-end">
                         <button
                             type="submit"
@@ -171,7 +189,9 @@ export default function NovoFornecedorPage() {
                 {/* Lista de fornecedores */}
                 {fornecedores.length > 0 && (
                     <div className="bg-white rounded-xl shadow p-4 w-full max-w-4xl">
-                        <h2 className="text-xl font-bold text-[#123859] mb-4">Fornecedores Cadastrados</h2>
+                        <h2 className="text-xl font-bold text-[#123859] mb-4">
+                            Fornecedores Cadastrados
+                        </h2>
                         <table className="w-full text-sm">
                             <thead className="bg-[#123859] text-white">
                                 <tr>

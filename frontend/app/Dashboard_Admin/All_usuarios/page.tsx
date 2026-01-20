@@ -136,18 +136,11 @@ export default function AllUsuariosPage() {
                                     <td className="p-3 text-center">{usuario.dataCriacao}</td>
                                     <td className="p-3 text-center flex justify-center gap-2">
                                         <a
-                                            href={`/admin/usuarios/ver/${usuario.id}`}
+                                            href={`/Dashboard_Admin/All_usuarios/ver/${usuario.id}`}
                                             title="Ver"
                                             className="p-1 rounded hover:bg-gray-100"
                                         >
                                             <Eye size={16} />
-                                        </a>
-                                        <a
-                                            href={`/admin/usuarios/editar/${usuario.id}`}
-                                            title="Editar"
-                                            className="p-1 rounded hover:bg-gray-100 text-green-600"
-                                        >
-                                            <Pencil size={16} />
                                         </a>
                                         <button
                                             title="Eliminar"

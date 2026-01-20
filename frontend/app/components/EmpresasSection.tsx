@@ -1,6 +1,6 @@
 "use client";
-import React from "react";
 import { motion } from "framer-motion";
+import Image from "next/image";
 
 const empresas = [
     { name: "SDOC", logo: "/images/Gestão de Clientes.webp", website: "https://sdoca.it.ao/" },
@@ -28,7 +28,13 @@ const EmpresasSection = () => {
                             whileHover={{ scale: 1.2 }}
                             transition={{ type: "spring", stiffness: 300 }}
                         >
-                            <img src={empresa.logo} alt={empresa.name} className="h-16 md:h-20 object-contain transition duration-300" />
+                            <Image
+                                src={empresa.logo || "/images/no-logo.png"}
+                                alt={empresa.name || "Logo da empresa"}
+                                width={80}
+                                height={80}
+                                className="h-16 md:h-20 object-contain transition duration-300"
+                            />
                             {/* Tooltip */}
                             <span className="absolute bottom-0 mb-10 opacity-0 group-hover:opacity-100 text-sm text-[#123859] bg-white rounded px-2 py-1 shadow-lg transition-opacity duration-300">
                                 {empresa.name}

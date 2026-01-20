@@ -15,19 +15,22 @@ import {
     Package,
     Archive,
     Briefcase,
-    Truck
+    Truck,
 } from "lucide-react";
-import { label } from "framer-motion/client";
+import { LucideIcon } from "lucide-react";
+import Image from "next/image";
 
+
+/* ===================== TIPOS ===================== */
 interface DropdownLink {
     label: string;
     path: string;
-    icon?: any;
+    icon?: LucideIcon;
 }
 
 interface MenuItem {
     label: string;
-    icon: any;
+    icon: LucideIcon;
     path: string;
     links: DropdownLink[];
 }
@@ -40,245 +43,265 @@ interface MainEmpresaProps {
     companyName?: string;
 }
 
+/* ===================== COMPONENT ===================== */
 export default function MainEmpresa({
     children,
     userName = "Admin",
-    userAvatar,
     companyLogo,
     companyName = "Minha Empresa",
 }: MainEmpresaProps) {
     const [sidebarOpen, setSidebarOpen] = useState(true);
-    const [dropdownOpen, setDropdownOpen] = useState<{ [key: string]: boolean }>({});
+    const [dropdownOpen, setDropdownOpen] = useState<Record<string, boolean>>({});
     const [adminDropdownOpen, setAdminDropdownOpen] = useState(false);
 
     const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
-    const toggleDropdown = (label: string) =>
-        setDropdownOpen((prev) => ({ ...prev, [label]: !prev[label] }));
-    const toggleAdminDropdown = () => setAdminDropdownOpen((prev) => !prev);
 
+    const toggleDropdown = (label: string) => {
+        setDropdownOpen((prev) => ({
+            ...prev,
+            [label]: !prev[label],
+        }));
+    };
+
+    /* ===================== MENU ===================== */
     const menuItems: MenuItem[] = [
-        { label: "Dashboard", icon: Home, path: "/dashboard", links: [] },
+        {
+            label: "Dashboard",
+            icon: Home,
+            path: "/dashboard",
+            links: [],
+        },
         {
             label: "Vendas",
             icon: ShoppingCart,
-            path: "/vendas",
+            path: "/dashboard/Vendas",
             links: [
-                { label: "Nova venda", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart },
-                { label: "Relatórios de vendas", path: "/dashboard/Vendas/relatorios", icon: BarChart2 },
+                {
+                    label: "Nova venda",
+                    path: "/dashboard/Vendas/Nova_venda",
+                    icon: ShoppingCart,
+                },
+                {
+                    label: "Relatórios de vendas",
+                    path: "/dashboard/Vendas/relatorios",
+                    icon: BarChart2,
+                },
             ],
         },
         {
             label: "Faturas",
             icon: FileText,
-            path: "/faturas",
+            path: "/dashboard/Faturas",
             links: [
-                { label: "Faturas", path: "dashboard/Faturas/Faturas", icon: FileText },
-                { label: "Relatórios de faturas", path: "/dashboard/Faturas/relatorios", icon: BarChart2 },
+                {
+                    label: "Faturas",
+                    path: "/dashboard/Faturas/Faturas",
+                    icon: FileText,
+                },
+                {
+                    label: "Relatórios de faturas",
+                    path: "/dashboard/Faturas/relatorios",
+                    icon: BarChart2,
+                },
             ],
         },
         {
             label: "Clientes",
             icon: Users,
-            path: "/clientes",
+            path: "/dashboard/Clientes",
             links: [
-                { label: "Novo cliente", path: "dashboard/Clientes/Novo_cliente", icon: Users },
-                { label: "Total de clientes", path: "dashboard/Clientes/Total_clientes", icon: Users },
+                {
+                    label: "Novo cliente",
+                    path: "/dashboard/Clientes/Novo_cliente",
+                    icon: Users,
+                },
+                {
+                    label: "Total de clientes",
+                    path: "/dashboard/Clientes/Total_clientes",
+                    icon: Users,
+                },
             ],
         },
         {
-            label: "Produtos ou Serviços",
+            label: "Produtos / Serviços",
             icon: Archive,
-            path: "/Produtos_servicos",
+            path: "/dashboard/Produtos_servicos",
             links: [
-                { label: "Novo produto/serviço", path: "dashboard/Produtos_servicos/Novo_produto_servico", icon: Package },
-                { label: "Stock", path: "dashboard/Produtos_servicos/Stock", icon: Package },
+                {
+                    label: "Novo produto / serviço",
+                    path: "/dashboard/Produtos_servicos/Novo_produto_servico",
+                    icon: Package,
+                },
+                {
+                    label: "Stock",
+                    path: "/dashboard/Produtos_servicos/Stock",
+                    icon: Package,
+                },
             ],
         },
-
         {
             label: "Fornecedores",
             icon: Truck,
-            path: "/fornecedores",
+            path: "/dashboard/Fornecedores",
             links: [
-                { label: "Novo fornecedor", path: "dashboard/Fornecedores/Novo_fornecedor", icon: Truck },
-                { label: "Total de fornecedores", path: "dashboard/Fornecedores/Total_fornecedores", icon: Briefcase },
+                {
+                    label: "Novo fornecedor",
+                    path: "/dashboard/Fornecedores/Novo_fornecedor",
+                    icon: Truck,
+                },
+                {
+                    label: "Total de fornecedores",
+                    path: "/dashboard/Fornecedores/Total_fornecedores",
+                    icon: Briefcase,
+                },
             ],
         },
         {
             label: "Relatórios",
             icon: BarChart2,
-            path: "/relatorios",
+            path: "/dashboard/relatorios",
             links: [
-                { label: "Diário", path: "dashboard/relatorios/diario", icon: BarChart2 },
-                { label: "Mensal", path: "dashboard/relatorios/mensal", icon: BarChart2 },
-                { label: "Anual", path: "dashboard/relatorios/anual", icon: BarChart2 },
+                {
+                    label: "Diário",
+                    path: "/dashboard/relatorios/diario",
+                    icon: BarChart2,
+                },
+                {
+                    label: "Mensal",
+                    path: "/dashboard/relatorios/mensal",
+                    icon: BarChart2,
+                },
+                {
+                    label: "Anual",
+                    path: "/dashboard/relatorios/anual",
+                    icon: BarChart2,
+                },
             ],
         },
-        { label: "Configurações", icon: Menu, path: "/configuracoes", links: [] },
+        {
+            label: "Configurações",
+            icon: Menu,
+            path: "/dashboard/configuracoes",
+            links: [],
+        },
     ];
 
+    /* ===================== JSX ===================== */
     return (
         <div className="flex h-screen bg-gray-100">
-            {/* Sidebar */}
+            {/* SIDEBAR */}
             <aside
-                className={`bg-[#123859] text-[#F9941F] transition-all duration-500 ${sidebarOpen ? "w-64" : "w-20"
+                className={`bg-[#123859] text-[#F9941F] transition-all duration-300 ${sidebarOpen ? "w-64" : "w-20"
                     } flex flex-col relative`}
             >
-                {/* Toggle sidebar button */}
+                {/* Toggle */}
                 <button
+                    type="button"
                     onClick={toggleSidebar}
-                    className="absolute top-4 right-[-12px] bg-[#F9941F] text-[#123859] p-1 rounded-full shadow-lg hover:bg-yellow-600 transition-all duration-300 z-20"
+                    aria-label="Abrir / Fechar menu lateral"
+                    className="absolute top-4 -right-3 bg-[#F9941F] text-[#123859] p-1 rounded-full shadow z-20 hover:bg-[#e68918] transition"
                 >
-                    <Menu className="w-5 h-5" />
+                    <Menu size={18} />
                 </button>
 
-                {/* Logo da empresa */}
-                <div className="flex flex-col items-center justify-center h-24 border-b border-[#F9941F] p-2">
-                    {companyLogo && (
-                        <motion.img
+
+                {/* Logo */}
+                <div className="h-20 flex items-center justify-center border-b border-[#F9941F]/40">
+                    {companyLogo ? (
+                        <Image
                             src={companyLogo}
-                            alt="Logo Empresa"
-                            className="object-cover rounded-full"
-                            initial={{ opacity: 0, scale: 0.8 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ duration: 0.5 }}
-                            style={{ width: sidebarOpen ? 64 : 40, height: sidebarOpen ? 64 : 40 }}
+                            alt="Logo da Empresa"
+                            width={sidebarOpen ? 56 : 36}
+                            height={sidebarOpen ? 56 : 36}
+                            className="rounded-full object-cover transition-all duration-300"
+                            priority
                         />
+                    ) : (
+                        <span className="font-bold text-lg text-[#F9941F]">
+                            {sidebarOpen ? companyName : companyName.charAt(0)}
+                        </span>
                     )}
                 </div>
+
 
                 {/* Menu */}
                 <nav className="flex-1 mt-4">
                     {menuItems.map((item) => (
-                        <div key={item.label} className="relative">
+                        <div key={item.label}>
                             {item.links.length === 0 ? (
-                                <Link href={item.path} className="block">
-                                    <motion.div
-                                        whileHover={{ scale: 1.03 }}
-                                        className="flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors duration-300 hover:bg-[#0f2b4c]"
-                                    >
-                                        <item.icon className="w-5 h-5 text-[#F9941F]" />
-                                        {sidebarOpen && <span className="font-medium">{item.label}</span>}
-                                    </motion.div>
+                                <Link href={item.path}>
+                                    <div className="flex items-center gap-3 px-4 py-3 hover:bg-[#0f2b4c] cursor-pointer">
+                                        <item.icon size={20} />
+                                        {sidebarOpen && <span>{item.label}</span>}
+                                    </div>
                                 </Link>
                             ) : (
-                                <div>
-                                    <motion.div
-                                        whileHover={{ scale: 1.03 }}
-                                        className="flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors duration-300 hover:bg-[#0f2b4c]"
+                                <>
+                                    <div
                                         onClick={() => toggleDropdown(item.label)}
+                                        className="flex items-center gap-3 px-4 py-3 hover:bg-[#0f2b4c] cursor-pointer"
                                     >
-                                        <item.icon className="w-5 h-5 text-[#F9941F]" />
-                                        {sidebarOpen && <span className="font-medium">{item.label}</span>}
+                                        <item.icon size={20} />
+                                        {sidebarOpen && <span>{item.label}</span>}
                                         {sidebarOpen && (
                                             <ChevronDown
-                                                className={`w-4 h-4 ml-auto transition-transform duration-300 ${dropdownOpen[item.label] ? "rotate-180" : ""
+                                                size={16}
+                                                className={`ml-auto transition ${dropdownOpen[item.label]
+                                                    ? "rotate-180"
+                                                    : ""
                                                     }`}
                                             />
                                         )}
-                                    </motion.div>
+                                    </div>
 
-                                    {/* Dropdown */}
                                     <AnimatePresence>
                                         {dropdownOpen[item.label] && (
                                             <motion.div
-                                                initial={{ opacity: 0, y: -10 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                exit={{ opacity: 0, y: -10 }}
-                                                transition={{ duration: 0.3 }}
-                                                className={`${sidebarOpen
-                                                    ? "ml-8 mt-1 rounded-b-md"
-                                                    : "absolute left-full top-0 bg-[#123859] min-w-[200px] shadow-lg rounded-md z-30"
-                                                    }`}
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: "auto" }}
+                                                exit={{ opacity: 0, height: 0 }}
+                                                className="ml-8"
                                             >
                                                 {item.links.map((link) => (
                                                     <Link key={link.path} href={link.path}>
-                                                        <motion.div
-                                                            whileHover={{ scale: 1.05 }}
-                                                            className="flex items-center gap-2 px-4 py-2 hover:bg-[#0f2b4c] cursor-pointer text-[#F9941F] transition-colors duration-200"
-                                                        >
-                                                            {link.icon && <link.icon className="w-4 h-4" />}
-                                                            <span>{link.label}</span>
-                                                        </motion.div>
+                                                        <div className="px-4 py-2 hover:bg-[#0f2b4c] text-sm cursor-pointer flex gap-2">
+                                                            {link.icon && (
+                                                                <link.icon size={14} />
+                                                            )}
+                                                            {link.label}
+                                                        </div>
                                                     </Link>
                                                 ))}
                                             </motion.div>
                                         )}
                                     </AnimatePresence>
-                                </div>
+                                </>
                             )}
                         </div>
                     ))}
                 </nav>
 
-                {/* Logout no final do sidebar */}
+                {/* Logout */}
                 <Link href="/logout">
-                    <motion.div
-                        whileHover={{ scale: 1.05, backgroundColor: "#F9941F", color: "#123859" }}
-                        className="flex items-center gap-2 font-semibold px-4 py-2 rounded cursor-pointer transition-all duration-200 m-4 mt-auto"
-                    >
-                        <LogOut className="w-5 h-5" /> {sidebarOpen && "Logout"}
-                    </motion.div>
+                    <div className="px-4 py-3 m-4 flex gap-2 hover:bg-[#F9941F] hover:text-[#123859] rounded cursor-pointer">
+                        <LogOut size={18} />
+                        {sidebarOpen && "Logout"}
+                    </div>
                 </Link>
             </aside>
 
-            {/* Main content */}
+            {/* MAIN */}
             <div className="flex-1 flex flex-col">
-                {/* Navbar */}
-                <header className="h-16 bg-white shadow flex items-center justify-between px-6 border-b border-gray-200">
-                    <div className="font-bold text-xl text-[#123859]">{companyName}</div>
-                    <div className="flex items-center gap-4 relative">
-                        <input
-                            type="text"
-                            placeholder="Pesquisar empresa..."
-                            className="px-4 py-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#F9941F] transition-all duration-300"
-                        />
+                <header className="h-16 bg-white shadow px-6 flex items-center justify-between">
+                    <h1 className="font-bold text-[#123859]">{companyName}</h1>
 
-                        {/* Admin */}
-                        <div
-                            className="flex items-center gap-2 cursor-pointer relative"
-                            onClick={toggleAdminDropdown}
-                        >
-                            <span className="hidden md:block font-medium">{userName}</span>
-                            <div className="w-10 h-10 rounded-full overflow-hidden">
-                                {userAvatar ? (
-                                    <img
-                                        src={userAvatar}
-                                        alt="Avatar"
-                                        className="w-full h-full object-cover"
-                                    />
-                                ) : (
-                                    <span className="bg-gray-300 w-full h-full flex items-center justify-center text-white font-bold">
-                                        {userName[0]}
-                                    </span>
-                                )}
-                            </div>
-
-                            {/* Dropdown Admin */}
-                            <AnimatePresence>
-                                {adminDropdownOpen && (
-                                    <motion.div
-                                        initial={{ opacity: 0, y: -10 }}
-                                        animate={{ opacity: 1, y: 5 }}
-                                        exit={{ opacity: 0, y: -10 }}
-                                        transition={{ duration: 0.3 }}
-                                        className="absolute right-0 mt-12 w-40 bg-white border border-gray-200 shadow-lg rounded-md z-30 overflow-hidden"
-                                    >
-                                        <Link href="/logout">
-                                            <motion.div
-                                                whileHover={{
-                                                    scale: 1.05,
-                                                    backgroundColor: "#F9941F",
-                                                    color: "#123859",
-                                                }}
-                                                className="px-4 py-2 cursor-pointer font-semibold transition-all duration-200"
-                                            >
-                                                Logout
-                                            </motion.div>
-                                        </Link>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
+                    <div
+                        className="flex items-center gap-3 cursor-pointer"
+                        onClick={() => setAdminDropdownOpen(!adminDropdownOpen)}
+                    >
+                        <span>{userName}</span>
+                        <div className="w-9 h-9 rounded-full bg-gray-300 flex items-center justify-center">
+                            {userName[0]}
                         </div>
                     </div>
                 </header>

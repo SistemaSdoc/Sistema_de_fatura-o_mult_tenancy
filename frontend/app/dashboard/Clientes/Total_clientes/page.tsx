@@ -5,7 +5,16 @@ import MainEmpresa from "../../../components/MainEmpresa";
 import { Trash2, Edit } from "lucide-react";
 
 /* MOCK DE CLIENTES */
-const clientesMock = [
+type Cliente = {
+    id: number;
+    nome: string;
+    telefone: string;
+    email: string;
+    endereco: string;
+    status: "ativo" | "inativo";
+};
+
+const clientesMock: Cliente[] = [
     {
         id: 1,
         nome: "Consumidor Final 1",
@@ -25,7 +34,7 @@ const clientesMock = [
 ];
 
 export default function TotalClientesPage() {
-    const [clientes, setClientes] = useState(clientesMock);
+    const [clientes, setClientes] = useState<Cliente[]>(clientesMock);
     const [filtro, setFiltro] = useState<"todos" | "ativo" | "inativo">("todos");
 
     const clientesFiltrados =
@@ -46,7 +55,7 @@ export default function TotalClientesPage() {
                     {["todos", "ativo", "inativo"].map((tipo) => (
                         <button
                             key={tipo}
-                            onClick={() => setFiltro(tipo as any)}
+                            onClick={() => setFiltro(tipo as "todos" | "ativo" | "inativo")}
                             className={`px-4 py-2 rounded-lg font-semibold ${filtro === tipo ? "bg-[#123859] text-white" : "bg-white border"
                                 }`}
                         >
@@ -65,19 +74,21 @@ export default function TotalClientesPage() {
                             <p className="text-xl font-bold">{clientes.length}</p>
                         </div>
                     </div>
+
                     <div className="bg-white p-4 rounded-xl shadow flex items-center justify-between">
                         <div>
                             <p className="text-sm text-gray-500">Clientes Ativos</p>
                             <p className="text-xl font-bold">
-                                {clientes.filter(c => c.status === "ativo").length}
+                                {clientes.filter((c) => c.status === "ativo").length}
                             </p>
                         </div>
                     </div>
+
                     <div className="bg-white p-4 rounded-xl shadow flex items-center justify-between">
                         <div>
                             <p className="text-sm text-gray-500">Clientes Inativos</p>
                             <p className="text-xl font-bold">
-                                {clientes.filter(c => c.status === "inativo").length}
+                                {clientes.filter((c) => c.status === "inativo").length}
                             </p>
                         </div>
                     </div>
@@ -97,6 +108,7 @@ export default function TotalClientesPage() {
                                 <th className="p-3 text-left">Ações</th>
                             </tr>
                         </thead>
+
                         <tbody>
                             {clientesFiltrados.map((cliente) => (
                                 <tr key={cliente.id} className="border-b">
@@ -105,6 +117,7 @@ export default function TotalClientesPage() {
                                     <td className="p-3">{cliente.telefone}</td>
                                     <td className="p-3">{cliente.email}</td>
                                     <td className="p-3">{cliente.endereco}</td>
+
                                     <td className="p-3">
                                         <span
                                             className={`px-3 py-1 rounded-full text-xs font-semibold ${cliente.status === "ativo"
@@ -115,13 +128,18 @@ export default function TotalClientesPage() {
                                             {cliente.status}
                                         </span>
                                     </td>
+
                                     <td className="p-3 flex gap-2">
                                         <button
                                             className="text-green-600 flex items-center gap-1"
-                                            onClick={() => alert(`Editar cliente ${cliente.id} (mock)`)}
+                                            onClick={() => {
+                                                // FUTURO: redirecionar para editar cliente
+                                                alert(`Editar cliente ${cliente.id} (mock)`);
+                                            }}
                                         >
                                             <Edit size={16} /> Editar
                                         </button>
+
                                         <button
                                             className="text-red-600 flex items-center gap-1"
                                             onClick={() => apagarCliente(cliente.id)}

@@ -182,11 +182,6 @@ export default function RegisterPage() {
                                     animate={{ opacity: 1 }}
                                     transition={{ duration: 0.3 }}
                                 >
-                                    <img
-                                        src={logoPreview}
-                                        alt="Logo Preview"
-                                        className="w-14 h-14 object-cover rounded"
-                                    />
                                     <motion.button
                                         type="button"
                                         onClick={handleRemoveLogo}
