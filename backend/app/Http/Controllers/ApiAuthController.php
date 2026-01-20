@@ -10,66 +10,8 @@ use App\Models\TenantUser;
 
 class ApiAuthController extends Controller
 {
-    public function __construct()
-    {
-        // Aplica ResolveTenant automaticamente em todas as rotas, exceto login global
-        $this->middleware('resolve.tenant')->except(['loginGlobal']);
-    }
-
     /**
-     * LOGIN GLOBAL (descobre tenant pelo email)
-     */
-    public function loginGlobal(Request $request)
-    {
-        $request->validate([
-            'email'    => 'required|email',
-            'password' => 'required|string',
-        ]);
-
-        // Busca tenant pelo email do usuário
-        $tenant = Tenant::all()->first(function ($tenant) use ($request) {
-
-            config([
-                'database.connections.tenant.database' => $tenant->database_name,
-            ]);
-
-            DB::purge('tenant');
-            DB::reconnect('tenant');
-
-            return DB::connection('tenant')
-                ->table('users')
-                ->where('email', $request->email)
-                ->exists();
-        });
-
-        if (! $tenant) {
-            return response()->json([
-                'message' => 'Usuário não pertence a nenhuma empresa'
-            ], 404);
-        }
-
-        // Buscar usuário no tenant correto
-        $user = TenantUser::where('email', $request->email)->first();
-
-        if (! $user || ! Hash::check($request->password, $user->password)) {
-            return response()->json([
-                'message' => 'Credenciais inválidas'
-            ], 401);
-        }
-
-        // Criar token API
-        $token = $user->createToken('api-token')->plainTextToken;
-
-        return response()->json([
-            'token'        => $token,
-            'tenant'       => $tenant->subdomain,
-            'user'         => $user->only(['id', 'name', 'email', 'role']),
-            'redirect_api' => "https://{$tenant->subdomain}.faturaja.sdoca/api"
-        ]);
-    }
-
-    /**
-     * LOGIN DE TENANT (tenant já resolvido via middleware)
+     * LOGIN DO USUÁRIO NO TENANT
      */
     public function login(Request $request)
     {
@@ -78,37 +20,59 @@ class ApiAuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        $user = TenantUser::where('email', $request->email)->first();
+        foreach (Tenant::all() as $tenant) {
 
-        if (! $user || ! Hash::check($request->password, $user->password)) {
-            return response()->json([
-                'message' => 'Credenciais inválidas'
-            ], 401);
+            // Conecta ao banco do tenant para buscar o usuário
+            config(['database.connections.tenant.database' => $tenant->database]);
+            DB::purge('tenant');
+            DB::reconnect('tenant');
+
+            $user = TenantUser::where('email', $request->email)->first();
+
+            if ($user && Hash::check($request->password, $user->password)) {
+
+                // 🔹 Criar token no banco principal, não no tenant
+                $token = $user->setConnection('mysql')->createToken('api-token')->plainTextToken;
+
+                return response()->json([
+                    'token' => $token,
+
+                    'tenant' => [
+                        'id'    => $tenant->id,
+                        'nome'  => $tenant->nome,
+                        'email' => $tenant->email,
+                    ],
+
+                    'user' => [
+                        'id'    => $user->id,
+                        'name'  => $user->name,
+                        'email' => $user->email,
+                        'role'  => $user->role,
+                    ],
+                ]);
+            }
         }
 
-        $token = $user->createToken('api-token')->plainTextToken;
-
         return response()->json([
-            'token' => $token,
-            'user'  => $user->only(['id', 'name', 'email', 'role']),
-        ]);
+            'message' => 'Credenciais inválidas'
+        ], 401);
     }
 
     /**
-     * REGISTRO (tenant já resolvido via middleware)
+     * REGISTRO DE USUÁRIO NO TENANT
      */
     public function register(Request $request)
     {
         $request->validate([
             'name'     => 'required|string|max:255',
-            'email'    => 'required|email|unique:tenant.users,email',
+            'email'    => 'required|email|unique:users,email',
             'password' => 'required|min:6|confirmed',
         ]);
 
         $user = TenantUser::create([
             'name'     => $request->name,
             'email'    => $request->email,
-            'password' => $request->password, // já será criptografado pelo mutator
+            'password' => $request->password,
         ]);
 
         return response()->json([
@@ -118,10 +82,11 @@ class ApiAuthController extends Controller
     }
 
     /**
-     * LOGOUT (tenant já resolvido via middleware)
+     * LOGOUT
      */
     public function logout(Request $request)
     {
+        // 🔹 Deletar token no banco principal
         $request->user()->currentAccessToken()->delete();
 
         return response()->json([

@@ -1,19 +1,19 @@
 <?php
 
+namespace App\Database\Migrations;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('personal_access_tokens', function (Blueprint $table) {
-            $table->id();
-            $table->morphs('tokenable');
+            $table->id(); // id autoincrement padrão
+            $table->string('tokenable_id', 36); // UUID do usuário
+            $table->string('tokenable_type'); // modelo
+            $table->index(['tokenable_id', 'tokenable_type']); // índice composto
             $table->text('name');
             $table->string('token', 64)->unique();
             $table->text('abilities')->nullable();
@@ -23,9 +23,6 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('personal_access_tokens');

@@ -37,14 +37,6 @@ Route::middleware([ResolveTenant::class])->prefix('tenant')->group(function () {
     // Rotas protegidas do tenant
     Route::middleware(['auth:sanctum', 'tenant.user'])->group(function () {
 
-        // Informações do tenant e usuário autenticado
-        Route::get('/info', function () {
-            return response()->json([
-                'tenant' => app('tenant'),
-                'user'   => request()->user(),
-            ]);
-        });
-
         // Logout
         Route::post('/logout', [ApiAuthController::class, 'logout']);
 
