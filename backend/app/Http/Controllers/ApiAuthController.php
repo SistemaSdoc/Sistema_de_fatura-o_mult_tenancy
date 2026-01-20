@@ -6,13 +6,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use App\Models\Tenant;
-use App\Models\TenantUser;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class ApiAuthController extends Controller
 {
-    /**
-     * LOGIN DO USUÁRIO NO TENANT
-     */
     public function login(Request $request)
     {
         $request->validate([
@@ -21,76 +19,89 @@ class ApiAuthController extends Controller
         ]);
 
         foreach (Tenant::all() as $tenant) {
+            try {
+                if (empty($tenant->data['database'])) {
+                    continue;
+                }
 
-            // Conecta ao banco do tenant para buscar o usuário
-            config(['database.connections.tenant.database' => $tenant->database]);
-            DB::purge('tenant');
-            DB::reconnect('tenant');
+                // Configura conexão dinamicamente
+                config(['database.connections.tenant.database' => $tenant->data['database']]);
+                DB::purge('tenant');
+                DB::reconnect('tenant');
 
-            $user = TenantUser::where('email', $request->email)->first();
+                tenancy()->initialize($tenant);
 
-            if ($user && Hash::check($request->password, $user->password)) {
+                // Procura usuário no tenant
+                $user = DB::connection('tenant')->table('users')
+                    ->where('email', $request->email)
+                    ->first();
 
-                // 🔹 Criar token no banco principal, não no tenant
-                $token = $user->setConnection('mysql')->createToken('api-token')->plainTextToken;
+                if ($user && Hash::check($request->password, $user->password)) {
 
-                return response()->json([
-                    'token' => $token,
+                    // Cria token
+                    $tokenValue = Str::random(64);
+                    DB::connection('tenant')->table('personal_access_tokens')->insert([
+                        'tokenable_type' => 'App\Models\User',
+                        'tokenable_id'   => $user->id,
+                        'name'           => 'api-token',
+                        'token'          => $tokenValue,
+                        'abilities'      => json_encode(['*']),
+                        'created_at'     => now(),
+                        'updated_at'     => now(),
+                    ]);
 
-                    'tenant' => [
-                        'id'    => $tenant->id,
-                        'nome'  => $tenant->nome,
-                        'email' => $tenant->email,
-                    ],
+                    return response()->json([
+                        'token' => $tokenValue,
+                        'tenant' => [
+                            'id'    => $tenant->id,
+                            'nome'  => $tenant->nome,
+                            'email' => $tenant->email,
+                        ],
+                        'user' => [
+                            'id'    => $user->id,
+                            'name'  => $user->name,
+                            'email' => $user->email,
+                            'role'  => $user->role,
+                        ],
+                    ]);
+                }
 
-                    'user' => [
-                        'id'    => $user->id,
-                        'name'  => $user->name,
-                        'email' => $user->email,
-                        'role'  => $user->role,
-                    ],
-                ]);
+            } catch (\Exception $e) {
+                Log::error("Erro ao tentar login no tenant {$tenant->nome}", ['erro' => $e->getMessage()]);
+            } finally {
+                tenancy()->end();
             }
         }
 
-        return response()->json([
-            'message' => 'Credenciais inválidas'
-        ], 401);
+        return response()->json(['message' => 'Credenciais inválidas'], 401);
     }
 
-    /**
-     * REGISTRO DE USUÁRIO NO TENANT
-     */
-    public function register(Request $request)
-    {
-        $request->validate([
-            'name'     => 'required|string|max:255',
-            'email'    => 'required|email|unique:users,email',
-            'password' => 'required|min:6|confirmed',
-        ]);
-
-        $user = TenantUser::create([
-            'name'     => $request->name,
-            'email'    => $request->email,
-            'password' => $request->password,
-        ]);
-
-        return response()->json([
-            'message' => 'Usuário criado com sucesso',
-            'user'    => $user->only(['id', 'name', 'email', 'role']),
-        ], 201);
-    }
-
-    /**
-     * LOGOUT
-     */
     public function logout(Request $request)
     {
-        // 🔹 Deletar token no banco principal
-        $request->user()->currentAccessToken()->delete();
+        $token = $request->bearerToken();
+        if ($token) {
+            foreach (Tenant::all() as $tenant) {
+                try {
+                    if (empty($tenant->data['database'])) continue;
 
-        return response()->json([
-            'message' => 'Logout realizado com sucesso'
-        ]);
+                    config(['database.connections.tenant.database' => $tenant->data['database']]);
+                    DB::purge('tenant');
+                    DB::reconnect('tenant');
+                    tenancy()->initialize($tenant);
+
+                    $deleted = DB::connection('tenant')->table('personal_access_tokens')
+                        ->where('token', $token)->delete();
+
+                    if ($deleted) {
+                        return response()->json(['message' => 'Logout realizado com sucesso']);
+                    }
+
+                } finally {
+                    tenancy()->end();
+                }
+            }
+        }
+
+        return response()->json(['message' => 'Token inválido'], 401);
     }
 }

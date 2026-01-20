@@ -15,10 +15,11 @@ Schema::create('tenants', function (Blueprint $table) {
     $table->string('nome');
     $table->string('nif')->unique();
     $table->string('subdomain')->unique();
-    $table->string('database')->unique();
+    $table->string('database')->nullable();
     $table->string('email')->unique();
     $table->string('logo')->nullable();
     $table->enum('status', ['ativo', 'suspenso'])->default('ativo');
+    $table->json('data')->nullable();
     $table->timestamps();
 });
 

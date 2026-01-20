@@ -10,6 +10,9 @@ class Tenant extends Model
 
     public $incrementing = false;
     protected $keyType = 'string';
+    protected $casts = [
+    'data' => 'array',
+];
 
     protected $fillable = [
         'nome',
@@ -19,6 +22,7 @@ class Tenant extends Model
         'email',
         'logo',
         'status',
+        'data',
     ];
 
     protected static function boot(): void

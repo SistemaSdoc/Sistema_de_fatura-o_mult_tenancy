@@ -23,9 +23,11 @@ class BICSeeder extends Seeder
             'id' => Str::uuid(),
             'nome' => 'BIC',
             'subdomain' => 'bic',
-            'nif' => '12345678000199',
             'email' => 'bic@gmail.com',
-            'database' => $databaseName,
+            'nif' => '12345678009108',
+             'data' => [
+        'database' => $databaseName
+    ],
             'status' => 'ativo',
         ]);
 
@@ -66,8 +68,8 @@ class BICSeeder extends Seeder
         DB::connection('tenant')->table('users')->insert([
             [
                 'id' => Str::uuid(),
-                'name' => 'Stelvio Marques',
-                'email' => 'stelviomarques157@gmail.com',
+                'name' => 'Vanio',
+                'email' => 'vanioneto709@gmail.com',
                 'password' => Hash::make('123456'),
                 'role' => 'admin',
                 'created_at' => now(),
@@ -75,8 +77,8 @@ class BICSeeder extends Seeder
             ],
             [
                 'id' => Str::uuid(),
-                'name' => 'Alice Rocha',
-                'email' => 'alicepaula507@gmail.com',
+                'name' => 'Paulina Capitao',
+                'email' => 'capitaopaulinafernando@gmail.com',
                 'password' => Hash::make('123456'),
                 'role' => 'operador',
                 'created_at' => now(),
@@ -84,8 +86,8 @@ class BICSeeder extends Seeder
             ],
             [
                 'id' => Str::uuid(),
-                'name' => 'Caixa Teste',
-                'email' => 'caixa@bic.com',
+                'name' => 'Fatima Fula',
+                'email' => 'fatima@teste.com',
                 'password' => Hash::make('123456'),
                 'role' => 'caixa',
                 'created_at' => now(),
@@ -95,6 +97,7 @@ class BICSeeder extends Seeder
 
         $this->command->info("Usuários iniciais inseridos no tenant '{$databaseName}'");
 
+      
         // 6️⃣ Insere categorias iniciais
         DB::connection('tenant')->table('categorias')->insert([
             ['id' => Str::uuid(),'nome' => 'Cosméticos', 'descricao' => 'Produtos de cosmética', 'created_at' => now(), 'updated_at' => now()],
@@ -104,9 +107,9 @@ class BICSeeder extends Seeder
 
         $this->command->info("Categorias iniciais inseridas no tenant '{$databaseName}'");
 
-
-         $cosmeticos = DB::connection('tenant')->table('categorias')->where('nome', 'Cosméticos')->first();
+          $cosmeticos = DB::connection('tenant')->table('categorias')->where('nome', 'Cosméticos')->first();
           $alimentacao = DB::connection('tenant')->table('categorias')->where('nome', 'Alimentação')->first();
+
 
         // 7️⃣ Insere produtos iniciais
         DB::connection('tenant')->table('produtos')->insert([
@@ -124,7 +127,7 @@ class BICSeeder extends Seeder
             ],
             [
                 'id' => Str::uuid(),
-                'categoria_id' =>  $alimentacao->id,
+                'categoria_id' => $alimentacao->id,
                 'nome' => 'Arroz Premium 5kg',
                 'descricao' => 'Arroz importado premium',
                 'preco_compra' => 12000,

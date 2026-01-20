@@ -1,238 +1,244 @@
 "use client";
-import React, { useState } from "react";
+ import { AxiosError } from "axios";
+import React, { useState, useEffect } from "react";
 import MainEmpresa from "../../../components/MainEmpresa";
-import { Plus, Trash2, Edit, CheckCircle } from "lucide-react";
+import { Plus, Trash2, Edit } from "lucide-react";
+import { listarVendas, criarVenda, Venda, ItemVenda } from "@/services/vendas";
 
-const produtosMock = [
-    { id: 1, nome: "Produto A", preco: 5000, stock: 20 },
-    { id: 2, nome: "Produto B", preco: 7500, stock: 10 },
+/* ================= TIPOS ================= */
+interface Produto {
+  id: string;
+  nome: string;
+  preco: number;
+  stock: number;
+}
+
+/* ================= MOCK DE PRODUTOS ================= */
+const produtosMock: Produto[] = [
+  { id: "1", nome: "Produto A", preco: 5000, stock: 20 },
+  { id: "2", nome: "Produto B", preco: 7500, stock: 10 },
 ];
 
 export default function NovaVendaPage() {
-    const [cliente, setCliente] = useState("");
-    const [tipoVenda, setTipoVenda] = useState("");
-    const [metodoPagamento, setMetodoPagamento] = useState("");
-    const [itens, setItens] = useState<any[]>([]);
-    const [vendas, setVendas] = useState<any[]>([]);
-    const [mostrarFinalizar, setMostrarFinalizar] = useState(false);
-    const [vendaEditando, setVendaEditando] = useState<any>(null);
+  const [clienteId, setClienteId] = useState("");
+  const [clienteNome, setClienteNome] = useState("");
+  const [itens, setItens] = useState<ItemVenda[]>([]);
+  const [vendas, setVendas] = useState<Venda[]>([]);
+  const [loading, setLoading] = useState(false);
 
-    /* ================= ITENS ================= */
+  /* ================= FETCH VENDAS ================= */
+  useEffect(() => {
+    async function fetchVendas() {
+      try {
+        const data = await listarVendas();
+        setVendas(data);
+      } catch (err) {
+        console.error("Erro ao listar vendas:", err);
+      }
+    }
+    fetchVendas();
+  }, []);
 
-    const adicionarItem = () => {
-        setItens([
-            ...itens,
-            { produto_id: "", quantidade: 1, preco: 0, subtotal: 0, stock: 0 },
-        ]);
+  /* ================= FUNÇÕES DE ITENS ================= */
+  const adicionarItem = () => {
+    setItens(prev => [
+      ...prev,
+      { id: crypto.randomUUID(), produto_id: "", quantidade: 1, preco_venda: 0, subtotal: 0 },
+    ]);
+  };
+
+  const atualizarItem = (index: number, campo: keyof ItemVenda, valor: string | number) => {
+    setItens(prev => {
+      const novosItens = [...prev];
+      novosItens[index][campo] = valor as never;
+
+      if (campo === "produto_id") {
+        const produto = produtosMock.find(p => p.id === valor);
+        novosItens[index].preco_venda = produto?.preco ?? 0;
+      }
+
+      novosItens[index].subtotal = novosItens[index].quantidade * novosItens[index].preco_venda;
+      return novosItens;
+    });
+  };
+
+  const removerItem = (index: number) => {
+    setItens(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const totalVenda = itens.reduce((acc, item) => acc + item.subtotal, 0);
+
+  /* ================= SALVAR VENDA ================= */
+
+
+// ...
+
+const salvarVenda = async () => {
+  if (!clienteId) return alert("Informe o cliente");
+  if (itens.length === 0) return alert("Adicione pelo menos um item");
+
+  setLoading(true);
+  try {
+    const payload = {
+      cliente_id: clienteId,
+      itens: itens.map(i => ({ produto_id: i.produto_id, quantidade: i.quantidade })),
     };
 
-    const atualizarItem = (index: number, campo: string, valor: any) => {
-        const novosItens = [...itens];
-        novosItens[index][campo] = valor;
+    const { venda } = await criarVenda(payload);
+    setVendas(prev => [venda, ...prev]);
 
-        if (campo === "produto_id") {
-            const produto = produtosMock.find(p => p.id == valor);
-            novosItens[index].preco = produto?.preco || 0;
-            novosItens[index].stock = produto?.stock || 0;
-        }
+    // Resetar formulário
+    setClienteId("");
+    setClienteNome("");
+    setItens([]);
+  } catch (err) {
+    let mensagem = "Erro desconhecido";
 
-        novosItens[index].subtotal =
-            novosItens[index].quantidade * novosItens[index].preco;
+    if (err instanceof AxiosError) {
+      mensagem = err.response?.data?.message || err.message;
+    } else if (err instanceof Error) {
+      mensagem = err.message;
+    }
 
-        setItens(novosItens);
-    };
+    alert(`Erro ao salvar venda: ${mensagem}`);
+  } finally {
+    setLoading(false);
+  }
+};
 
-    const removerItem = (index: number) => {
-        setItens(itens.filter((_, i) => i !== index));
-    };
+  /* ================= RENDER ================= */
+  return (
+    <MainEmpresa>
+      <div className="p-6 space-y-6">
+        <h1 className="text-2xl font-bold text-[#123859]">Nova Venda</h1>
 
-    const totalVenda = itens.reduce((acc, item) => acc + item.subtotal, 0);
+        {/* Cliente */}
+        <div className="bg-white p-4 rounded-xl shadow">
+          <label htmlFor="cliente" className="font-semibold">
+            Cliente
+          </label>
+          <input
+            id="cliente"
+            value={clienteNome}
+            onChange={e => setClienteNome(e.target.value)}
+            placeholder="Nome do cliente"
+            className="w-full border p-2 rounded mt-2"
+            aria-label="Nome do cliente"
+          />
+        </div>
 
-    /* ================= VENDAS ================= */
+        {/* Itens */}
+        <div className="bg-white p-4 rounded-xl shadow space-y-4">
+          <div className="flex justify-between">
+            <h2 className="font-semibold">Itens da Venda</h2>
+            <button
+              onClick={adicionarItem}
+              className="flex gap-2 bg-[#123859] text-white px-3 py-1 rounded"
+              aria-label="Adicionar item"
+            >
+              <Plus size={16} /> Adicionar
+            </button>
+          </div>
 
-    const adicionarVenda = () => {
-        if (!cliente || !tipoVenda || !metodoPagamento || itens.length === 0) return;
+          {itens.map((item, index) => (
+            <div key={item.id} className="grid grid-cols-6 gap-2 items-center">
+              <label className="sr-only" htmlFor={`produto-${index}`}>
+                Produto
+              </label>
+              <select
+                id={`produto-${index}`}
+                className="border p-2 rounded"
+                value={item.produto_id}
+                onChange={e => atualizarItem(index, "produto_id", e.target.value)}
+              >
+                <option value="">Produto</option>
+                {produtosMock.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.nome}
+                  </option>
+                ))}
+              </select>
 
-        setVendas([
-            ...vendas,
-            {
-                id: Date.now(),
-                cliente,
-                itens,
-                tipoVenda,
-                metodoPagamento,
-                total: totalVenda,
-                status: "pendente",
-            },
-        ]);
+              <label className="sr-only" htmlFor={`quantidade-${index}`}>
+                Quantidade
+              </label>
+              <input
+                id={`quantidade-${index}`}
+                type="number"
+                value={item.quantidade}
+                onChange={e => atualizarItem(index, "quantidade", Number(e.target.value))}
+                className="border p-2 rounded"
+                min={1}
+              />
 
-        // limpar formulário
-        setCliente("");
-        setTipoVenda("");
-        setMetodoPagamento("");
-        setItens([]);
-        setMostrarFinalizar(true);
-    };
+              <input
+                disabled
+                value={item.preco_venda}
+                className="border p-2 rounded bg-gray-100"
+                aria-label={`Preço do item ${index + 1}`}
+              />
 
-    const editarVenda = (venda: any) => {
-        setVendaEditando(venda);
-        setCliente(venda.cliente);
-        setItens(venda.itens);
-        setMetodoPagamento(venda.metodoPagamento);
-        setTipoVenda(venda.tipoVenda);
-        setMostrarFinalizar(true);
-    };
+              <input
+                disabled
+                value={item.subtotal}
+                className="border p-2 rounded bg-gray-100"
+                aria-label={`Subtotal do item ${index + 1}`}
+              />
 
-    const finalizarVenda = () => {
-        setVendas(vendas.map(v =>
-            v.id === vendaEditando?.id
-                ? { ...v, status: "finalizada" }
-                : v
-        ));
-
-        setVendaEditando(null);
-        setMostrarFinalizar(false);
-        setCliente("");
-        setItens([]);
-        setMetodoPagamento("");
-        setTipoVenda("");
-    };
-
-    return (
-        <MainEmpresa>
-            <div className="p-6 space-y-6">
-                <h1 className="text-2xl font-bold text-[#123859]">Nova Venda</h1>
-
-                {/* Cliente */}
-                <div className="bg-white p-4 rounded-xl shadow">
-                    <label className="font-semibold">Cliente</label>
-                    <input
-                        value={cliente}
-                        onChange={e => setCliente(e.target.value)}
-                        className="w-full border p-2 rounded mt-2"
-                        placeholder="Nome do cliente"
-                    />
-                </div>
-
-                {/* Itens */}
-                <div className="bg-white p-4 rounded-xl shadow space-y-4">
-                    <div className="flex justify-between">
-                        <h2 className="font-semibold">Itens da Venda</h2>
-                        <button
-                            onClick={adicionarItem}
-                            className="flex gap-2 bg-[#123859] text-white px-3 py-1 rounded"
-                        >
-                            <Plus size={16} /> Adicionar
-                        </button>
-                    </div>
-
-                    {itens.map((item, index) => (
-                        <div key={index} className="grid grid-cols-6 gap-2">
-                            <select
-                                className="border p-2 rounded"
-                                onChange={e => atualizarItem(index, "produto_id", e.target.value)}
-                            >
-                                <option value="">Produto</option>
-                                {produtosMock.map(p => (
-                                    <option key={p.id} value={p.id}>{p.nome}</option>
-                                ))}
-                            </select>
-
-                            <input
-                                type="number"
-                                value={item.quantidade}
-                                onChange={e => atualizarItem(index, "quantidade", Number(e.target.value))}
-                                className="border p-2 rounded"
-                            />
-
-                            <input disabled value={item.preco} className="border p-2 rounded bg-gray-100" />
-                            <input disabled value={item.stock} className="border p-2 rounded bg-gray-100" />
-                            <input disabled value={item.subtotal} className="border p-2 rounded bg-gray-100" />
-
-                            <button onClick={() => removerItem(index)} className="text-red-600">
-                                <Trash2 />
-                            </button>
-                        </div>
-                    ))}
-                </div>
-                {/* Pagamento + Tipo de Venda */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Método de Pagamento */}
-                    <div className="bg-white p-4 rounded-xl shadow">
-                        <label className="font-semibold">Método de Pagamento</label>
-                        <select
-                            value={metodoPagamento}
-                            onChange={e => setMetodoPagamento(e.target.value)}
-                            className="w-full border p-2 rounded mt-2"
-                        >
-                            <option value="" disabled hidden>Selecione o método de pagamento</option>
-                            <option value="dinheiro">Dinheiro</option>
-                            <option value="transferencia">Transferência</option>
-                            <option value="multicaixa">Multicaixa</option>
-                        </select>
-                    </div>
-
-                    {/* Tipo de Venda */}
-                    <div className="bg-white p-4 rounded-xl shadow">
-                        <label className="font-semibold">Tipo de Venda</label>
-                        <select
-                            value={tipoVenda}
-                            onChange={e => setTipoVenda(e.target.value)}
-                            className="w-full border p-2 rounded mt-2"
-                        >
-                            <option value="" disabled hidden>Selecione o tipo de venda</option>
-                            <option value="pendente">Venda Pendente</option>
-                            <option value="paga">Venda Paga</option>
-                        </select>
-                    </div>
-                </div>
-
-                {/* Total */}
-                <div className="bg-white p-4 rounded-xl shadow flex justify-between">
-                    <strong>Total</strong>
-                    <span className="text-[#F9941F] font-bold">
-                        {totalVenda.toLocaleString()} Kz
-                    </span>
-                </div>
-
-                {/* Adicionar */}
-                <button
-                    onClick={adicionarVenda}
-                    className="w-full bg-[#F9941F] text-white py-3 rounded-xl font-semibold"
-                >
-                    Adicionar Venda
-                </button>
-
-                {/* Finalizar */}
-                {mostrarFinalizar && (
-                    <button
-                        onClick={finalizarVenda}
-                        className="w-full bg-green-600 text-white py-3 rounded-xl flex justify-center gap-2"
-                    >
-                        <CheckCircle /> Finalizar Venda
-                    </button>
-                )}
-
-                {/* Vendas Pendentes */}
-                {vendas.length > 0 && (
-                    <div className="bg-white p-4 rounded-xl shadow">
-                        <h2 className="font-semibold mb-3">Vendas Pendentes</h2>
-
-                        {vendas.map(v => (
-                            <div key={v.id} className="flex justify-between border p-3 rounded mb-2">
-                                <div>
-                                    <p><strong>Cliente:</strong> {v.cliente}</p>
-                                    <p><strong>Total:</strong> {v.total.toLocaleString()} Kz</p>
-                                    <p><strong>Status:</strong> {v.status}</p>
-                                </div>
-                                <button onClick={() => editarVenda(v)} className="text-[#F9941F]">
-                                    <Edit />
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                )}
+              <button
+                onClick={() => removerItem(index)}
+                className="text-red-600"
+                aria-label={`Remover item ${index + 1}`}
+              >
+                <Trash2 />
+              </button>
             </div>
-        </MainEmpresa>
-    );
+          ))}
+        </div>
+
+        {/* Total */}
+        <div className="bg-white p-4 rounded-xl shadow flex justify-between">
+          <strong>Total</strong>
+          <span className="text-[#F9941F] font-bold">{totalVenda.toLocaleString()} Kz</span>
+        </div>
+
+        {/* Botão salvar */}
+        <button
+          onClick={salvarVenda}
+          disabled={loading}
+          className="w-full bg-[#F9941F] text-white py-3 rounded-xl font-semibold"
+        >
+          {loading ? "Salvando..." : "Salvar Venda"}
+        </button>
+
+        {/* Vendas recentes */}
+        {vendas.length > 0 && (
+          <div className="bg-white p-4 rounded-xl shadow mt-6">
+            <h2 className="font-semibold mb-3">Vendas Recentes</h2>
+            {vendas.map(v => (
+              <div
+                key={v.id}
+                className="flex justify-between border p-3 rounded mb-2 items-center"
+              >
+                <div>
+                  <p>
+                    <strong>Cliente:</strong> {v.cliente_nome}
+                  </p>
+                  <p>
+                    <strong>Total:</strong> {v.total.toLocaleString()} Kz
+                  </p>
+                  <p>
+                    <strong>Status:</strong> {v.itens.length > 0 ? "Finalizada" : "Pendente"}
+                  </p>
+                </div>
+                <button className="text-[#123859]" aria-label="Editar venda">
+                  <Edit />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </MainEmpresa>
+  );
 }

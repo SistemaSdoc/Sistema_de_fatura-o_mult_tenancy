@@ -9,29 +9,26 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Hash;
 use App\Models\Tenant;
 
-class TenantSeeder extends Seeder
+class BAISeeder extends Seeder
 {
     public function run()
     {
-        $databaseName = 'bai_bd'; // nome do banco do tenant
+        $databaseName = 'bai_bd';
 
-        // 1️⃣ Cria o database do tenant se não existir
         DB::statement("CREATE DATABASE IF NOT EXISTS `$databaseName` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
 
-        // 2️⃣ Cria o tenant no banco landlord
         $tenant = Tenant::create([
             'id' => Str::uuid(),
             'nome' => 'BAI',
             'subdomain' => 'bai',
             'email' => 'bai@gmail.com',
             'nif' => '12345678000108',
-            'database' => $databaseName,
             'status' => 'ativo',
+            'data' => ['database' => $databaseName],
         ]);
 
-        $this->command->info("Tenant '{$tenant->nome}' criado no landlord com sucesso!");
+        $this->command->info("Tenant '{$tenant->nome}' criado no landlord.");
 
-        // 3️⃣ Configura a conexão tenant dinamicamente
         config([
             'database.connections.tenant' => [
                 'driver' => 'mysql',
@@ -50,66 +47,56 @@ class TenantSeeder extends Seeder
         DB::purge('tenant');
         DB::reconnect('tenant');
 
-        $this->command->info("Conexão tenant configurada para '{$databaseName}'");
-
-        // 4️⃣ Roda as migrations específicas do tenant
         Artisan::call('migrate', [
             '--database' => 'tenant',
-            '--path' => 'database/migrations/tenant', 
+            '--path' => 'database/migrations/tenant',
             '--force' => true,
         ]);
 
-        $this->command->info("Migrations do tenant rodadas com sucesso!");
-        $this->command->info(Artisan::output());
+        if (!DB::connection('tenant')->getSchemaBuilder()->hasTable('personal_access_tokens')) {
+            DB::connection('tenant')->getSchemaBuilder()->create('personal_access_tokens', function ($table) {
+                $table->id();
+                $table->string('tokenable_id', 36);
+                $table->string('tokenable_type');
+                $table->index(['tokenable_id', 'tokenable_type']);
+                $table->text('name');
+                $table->string('token', 64)->unique();
+                $table->text('abilities')->nullable();
+                $table->timestamp('last_used_at')->nullable();
+                $table->timestamp('expires_at')->nullable()->index();
+                $table->timestamps();
+            });
+        }
 
-        // 5️⃣ Insere usuários iniciais do tenant
-        DB::connection('tenant')->table('users')->insert([
-            [
+        // Usuários BAI
+        $users = [
+            ['name' => 'Diniz', 'email' => 'dinizcabenda@gmail.com', 'role' => 'admin'],
+            ['name' => 'Alice', 'email' => 'alicericha507@gmail.com', 'role' => 'operador'],
+            ['name' => 'Stefania', 'email' => 'stefania@gmail.com', 'role' => 'caixa'],
+        ];
+
+        foreach ($users as $user) {
+            DB::connection('tenant')->table('users')->insert([
                 'id' => Str::uuid(),
-                'name' => 'Vanio',
-                'email' => 'vanioneto709@gmail.com',
+                'name' => $user['name'],
+                'email' => $user['email'],
                 'password' => Hash::make('123456'),
-                'role' => 'admin',
+                'role' => $user['role'],
                 'created_at' => now(),
                 'updated_at' => now(),
-            ],
-            [
-                'id' => Str::uuid(),
-                'name' => 'Paulina Capitao',
-                'email' => 'capitaopaulinafernando@gmail.com',
-                'password' => Hash::make('123456'),
-                'role' => 'operador',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'id' => Str::uuid(),
-                'name' => 'Moça do Caixa',
-                'email' => 'cliente@teste.com',
-                'password' => Hash::make('123456'),
-                'role' => 'caixa',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-        ]);
+            ]);
+        }
 
-        $this->command->info("Usuários iniciais inseridos no tenant '{$databaseName}'");
-
-      
-        // 6️⃣ Insere categorias iniciais
+        // Categorias, produtos, fornecedores e clientes iguais ao BIC
         DB::connection('tenant')->table('categorias')->insert([
-            ['id' => Str::uuid(),'nome' => 'Cosméticos', 'descricao' => 'Produtos de cosmética', 'created_at' => now(), 'updated_at' => now()],
-            ['id' => Str::uuid(),'nome' => 'Alimentação', 'descricao' => 'Produtos alimentares', 'created_at' => now(), 'updated_at' => now()],
-            ['id' => Str::uuid(),'nome' => 'Eletrónica', 'descricao' => 'Equipamentos eletrónicos', 'created_at' => now(), 'updated_at' => now()],
+            ['id' => Str::uuid(), 'nome' => 'Cosméticos', 'descricao' => 'Produtos de cosmética', 'created_at' => now(), 'updated_at' => now()],
+            ['id' => Str::uuid(), 'nome' => 'Alimentação', 'descricao' => 'Produtos alimentares', 'created_at' => now(), 'updated_at' => now()],
+            ['id' => Str::uuid(), 'nome' => 'Eletrónica', 'descricao' => 'Equipamentos eletrónicos', 'created_at' => now(), 'updated_at' => now()],
         ]);
 
-        $this->command->info("Categorias iniciais inseridas no tenant '{$databaseName}'");
+        $cosmeticos = DB::connection('tenant')->table('categorias')->where('nome', 'Cosméticos')->first();
+        $alimentacao = DB::connection('tenant')->table('categorias')->where('nome', 'Alimentação')->first();
 
-          $cosmeticos = DB::connection('tenant')->table('categorias')->where('nome', 'Cosméticos')->first();
-          $alimentacao = DB::connection('tenant')->table('categorias')->where('nome', 'Alimentação')->first();
-
-
-        // 7️⃣ Insere produtos iniciais
         DB::connection('tenant')->table('produtos')->insert([
             [
                 'id' => Str::uuid(),
@@ -137,9 +124,6 @@ class TenantSeeder extends Seeder
             ],
         ]);
 
-        $this->command->info("Produtos iniciais inseridos no tenant '{$databaseName}'");
-
-        // 8️⃣ Insere fornecedores iniciais
         DB::connection('tenant')->table('fornecedores')->insert([
             [
                 'id' => Str::uuid(),
@@ -163,9 +147,6 @@ class TenantSeeder extends Seeder
             ],
         ]);
 
-        $this->command->info("Fornecedores iniciais inseridos no tenant '{$databaseName}'");
-
-        // 9️⃣ Insere clientes iniciais
         DB::connection('tenant')->table('clientes')->insert([
             [
                 'id' => Str::uuid(),
@@ -190,7 +171,5 @@ class TenantSeeder extends Seeder
                 'updated_at' => now(),
             ],
         ]);
-
-        $this->command->info("Clientes iniciais inseridos no tenant '{$databaseName}'");
     }
 }

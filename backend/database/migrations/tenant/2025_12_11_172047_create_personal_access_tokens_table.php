@@ -1,6 +1,5 @@
 <?php
 
-namespace App\Database\Migrations;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -9,11 +8,11 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('personal_access_tokens', function (Blueprint $table) {
-            $table->id(); // id autoincrement padrão
-            $table->string('tokenable_id', 36); // UUID do usuário
-            $table->string('tokenable_type'); // modelo
-            $table->index(['tokenable_id', 'tokenable_type']); // índice composto
+        Schema::connection('tenant')->create('personal_access_tokens', function (Blueprint $table) {
+            $table->id();
+            $table->string('tokenable_id', 36);
+            $table->string('tokenable_type');
+            $table->index(['tokenable_id', 'tokenable_type']);
             $table->text('name');
             $table->string('token', 64)->unique();
             $table->text('abilities')->nullable();
@@ -25,6 +24,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('personal_access_tokens');
+        Schema::connection('tenant')->dropIfExists('personal_access_tokens');
     }
 };

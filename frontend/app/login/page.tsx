@@ -4,11 +4,12 @@ import React, { useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import axios, { AxiosError } from "axios";
+import api from "@/services/axios";
+import { AxiosError } from "axios";
 
 /* ---------------- TIPOS ---------------- */
 interface ApiUser {
-  id: number;
+  id: string;
   name: string;
   email: string;
   role: string;
@@ -52,10 +53,10 @@ const InputField = ({
 export default function LoginPage() {
   const router = useRouter();
 
-  const [email, setEmail] = useState<string>("");
-  const [password, setPassword] = useState<string>("");
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string>("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -63,10 +64,10 @@ export default function LoginPage() {
     setError("");
 
     try {
-      const response = await axios.post<LoginResponse>(
-        "http://localhost:8000/api/login",
-        { email, password }
-      );
+      const response = await api.post<LoginResponse>("/login", {
+        email,
+        password,
+      });
 
       const { token, user, tenant } = response.data;
 
@@ -78,10 +79,11 @@ export default function LoginPage() {
       // 🚀 Redirect por role
       switch (user.role) {
         case "admin":
-          router.push("/dashboard/Vendas");
+          router.push("/dashboard/Vendas/relatorios");
           break;
         case "caixa":
-          router.push("/dashboard/Vendas");
+          router.push("/dashboard/Vendas/Nova-venda");
+          break;
         case "operador":
           router.push("/dashboard");
           break;

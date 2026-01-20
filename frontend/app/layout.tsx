@@ -1,34 +1,30 @@
-import type { Metadata } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
-import "./globals.css"
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+import { AuthProvider } from "@/context/authprovider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
-})
+});
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
-})
+});
 
 export const metadata: Metadata = {
   title: {
     default: "FacturaJá — Sistema de Faturação",
     template: "%s | FacturaJá",
   },
-  description:
-    "FacturaJá — Sistema moderno de faturação e gestão empresarial",
+  description: "FacturaJá — Sistema moderno de faturação e gestão empresarial",
   icons: {
     icon: "/favicon.ico",
   },
-}
+};
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="pt"
@@ -45,8 +41,11 @@ export default function RootLayout({
           antialiased
         `}
       >
-        {children}
+        {/* AuthProvider envolve toda a app */}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
-  )
+  );
 }
