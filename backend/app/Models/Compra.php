@@ -7,7 +7,6 @@ use Illuminate\Support\Str;
 
 class Compra extends Model
 {
-    protected $connection = 'tenant';
     protected $table = 'compras';
 
     public $incrementing = false;

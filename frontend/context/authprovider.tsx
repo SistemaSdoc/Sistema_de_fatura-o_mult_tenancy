@@ -12,21 +12,13 @@ export interface User {
   role: string;
 }
 
-export interface Tenant {
-  id: string;
-  nome: string;
-  email: string;
-}
-
 interface LoginResponse {
   token: string;
   user: User;
-  tenant: Tenant;
 }
 
 interface AuthContextData {
   user: User | null;
-  tenant: Tenant | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -38,20 +30,15 @@ const AuthContext = createContext<AuthContextData | null>(null);
 /* ================= PROVIDER ================= */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [tenant, setTenant] = useState<Tenant | null>(null);
   const [loading, setLoading] = useState(true);
 
   /* -------- Inicialização -------- */
   useEffect(() => {
     const token = localStorage.getItem('token');
     const savedUser = localStorage.getItem('user');
-    const savedTenant = localStorage.getItem('tenant');
 
-    if (token && savedUser && savedTenant) {
+    if (token && savedUser) {
       setUser(JSON.parse(savedUser));
-      setTenant(JSON.parse(savedTenant));
-
-      // 🔐 Apenas o token
       api.defaults.headers.common.Authorization = `Bearer ${token}`;
     }
 
@@ -63,22 +50,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
 
     try {
-      const response = await api.post<LoginResponse>('/login', {
-        email,
-        password,
-      });
-
-      const { token, user, tenant } = response.data;
+      const response = await api.post<LoginResponse>('/login', { email, password });
+      const { token, user } = response.data;
 
       // Persistência
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
-      localStorage.setItem('tenant', JSON.stringify(tenant));
 
       setUser(user);
-      setTenant(tenant);
-
-      // 🔐 Apenas Authorization
       api.defaults.headers.common.Authorization = `Bearer ${token}`;
     } catch (err) {
       if (err instanceof AxiosError) {
@@ -96,17 +75,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    localStorage.removeItem('tenant');
 
     delete api.defaults.headers.common.Authorization;
-
-    
     setUser(null);
-    setTenant(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, tenant, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

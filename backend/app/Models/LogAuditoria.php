@@ -7,7 +7,6 @@ use Illuminate\Support\Str;
 
 class LogAuditoria extends Model
 {
-    protected $connection = 'tenant';
     protected $table = 'logs_auditoria';
 
     public $incrementing = false;
@@ -39,6 +38,6 @@ class LogAuditoria extends Model
 
     public function user()
     {
-        return $this->belongsTo(TenantUser::class, 'user_id');
+        return $this->belongsTo(User::class, 'user_id');
     }
 }

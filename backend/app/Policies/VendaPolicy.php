@@ -2,21 +2,21 @@
 
 namespace App\Policies;
 
-use App\Models\TenantUser;
+use App\Models\User;
 
 class VendaPolicy
 {
-    public function viewAny(TenantUser $user)
+    public function viewAny(User $user)
     {
         return in_array($user->role, ['admin', 'operador']);
     }
 
-    public function create(TenantUser $user)
+    public function create(User $user)
     {
         return in_array($user->role, ['admin', 'operador']);
     }
 
-    public function cancel(TenantUser $user)
+    public function cancel(User $user)
     {
         return $user->role === 'admin';
     }

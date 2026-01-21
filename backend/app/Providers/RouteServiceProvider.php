@@ -27,7 +27,6 @@ class RouteServiceProvider extends ServiceProvider
 
         $this->mapApiRoutes();
         $this->mapWebRoutes();
-        $this->mapTenantRoutes(); // Registrando tenant.php
     }
 
     /**
@@ -51,14 +50,4 @@ class RouteServiceProvider extends ServiceProvider
             ->group(base_path('routes/api.php'));
     }
 
-    /**
-     * Rotas do tenant (multi-tenant)
-     */
-    protected function mapTenantRoutes(): void
-    {
-        Route::prefix('tenant') // Prefixo opcional
-            ->middleware(['web']) // ou 'api' se preferir JSON puro
-            ->namespace($this->namespace)
-            ->group(base_path('routes/tenant.php'));
-    }
 }

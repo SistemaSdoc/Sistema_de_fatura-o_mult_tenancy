@@ -3,9 +3,8 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use App\Http\Middleware\ResolveTenant;
-use App\Http\Middleware\EnsureTenantUser;
 use App\Http\Middleware\RoleMiddleware;
+use Illuminate\Auth\Middleware\Authenticate as SanctumAuthenticate;
 
 return Application::configure(basePath: dirname(__DIR__))
 
@@ -18,14 +17,10 @@ return Application::configure(basePath: dirname(__DIR__))
 
     ->withMiddleware(function (Middleware $middleware) {
 
-        // 🔹 Resolve tenant antes de tudo
-        $middleware->append(ResolveTenant::class);
-
         // 🔹 Middlewares de rota
         $middleware->alias([
-            'tenant.user' => EnsureTenantUser::class,
             'role'        => RoleMiddleware::class,
-            'auth:sanctum'=> \Laravel\Sanctum\Http\Middleware\Authenticate::class,
+            'auth:sanctum' => SanctumAuthenticate::class,
         ]);
     })
 

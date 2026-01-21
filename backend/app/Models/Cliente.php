@@ -10,7 +10,6 @@ class Cliente extends Model
 {
     use HasFactory;
 
-    protected $connection = 'tenant';
     protected $table = 'clientes';
 
     public $incrementing = false;

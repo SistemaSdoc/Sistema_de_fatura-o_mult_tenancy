@@ -7,7 +7,6 @@ use Illuminate\Support\Str;
 
 class Produto extends Model
 {
-    protected $connection = 'tenant';
     protected $table = 'produtos';
 
     public $incrementing = false;

@@ -30,17 +30,8 @@ return [
             'provider' => 'users',
         ],
 
-        // Tenant - Web
-        'tenant' => [
-            'driver' => 'session',
-            'provider' => 'tenant_users',
-        ],
 
-        // Tenant - API
-        'sanctum' => [
-            'driver' => 'sanctum',
-            'provider' => 'tenant_users',
-        ],
+
     ],
 
     /*
@@ -55,11 +46,6 @@ return [
             'model' => App\Models\User::class,
         ],
 
-        // Tenant Users
-        'tenant_users' => [
-            'driver' => 'eloquent',
-            'model' => App\Models\TenantUser::class,
-        ],
     ],
 
     /*
@@ -76,13 +62,6 @@ return [
             'throttle' => 60,
         ],
 
-        // Tenant Users
-        'tenant_users' => [
-            'provider' => 'tenant_users',
-            'table' => 'tenant_password_resets', // tabela específica do tenant
-            'expire' => 60,
-            'throttle' => 60,
-        ],
     ],
 
     /*

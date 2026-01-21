@@ -3,27 +3,27 @@
 namespace App\Policies;
 
 use App\Models\Categoria;
-use App\Models\TenantUser;
+use App\Models\User;
 use Illuminate\Auth\Access\Response;
 
 class CategoriaPolicy
 {
-    public function viewAny(TenantUser $user)
+    public function viewAny(User $user)
     {
         return true;
     }
 
-    public function create(TenantUser $user)
+    public function create(User $user)
     {
         return $user->role === 'admin';
     }
 
-    public function update(TenantUser $user)
+    public function update(User $user)
     {
         return $user->role === 'admin';
     }
 
-    public function delete(TenantUser $user)
+    public function delete(User $user)
     {
         return $user->role === 'admin';
     }

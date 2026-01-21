@@ -7,7 +7,6 @@ use Illuminate\Support\Str;
 
 class NotaCredito extends Model
 {
-    protected $connection = 'tenant';
     protected $table = 'notas_credito';
 
     public $incrementing = false;
@@ -47,6 +46,6 @@ class NotaCredito extends Model
 
     public function user()
     {
-        return $this->belongsTo(TenantUser::class, 'user_id');
+        return $this->belongsTo(User::class, 'user_id');
     }
 }

@@ -58,6 +58,66 @@ export interface DashboardData {
   }[];
 }
 
+/* ================== TIPOS ================== */
+
+export interface Produto {
+  id: string;
+  nome: string;
+  descricao?: string;
+  categoria_id: string;
+  preco_compra: number;
+  preco_venda: number;
+  estoque_atual: number;
+  estoque_minimo: number;
+}
+
+export interface ProdutoPayload {
+  nome: string;
+  descricao?: string;
+  categoria_id: string;
+  preco_compra: number;
+  preco_venda: number;
+  estoque_atual: number;
+  estoque_minimo: number;
+}
+
+/* ================== PRODUTOS ================== */
+
+// Listar todos os produtos
+export async function listarProdutos(): Promise<Produto[]> {
+  try {
+    const response = await api.get<Produto[]>("/produtos");
+    return response.data;
+  } catch (err) {
+    if (err instanceof AxiosError) {
+      console.error("Erro ao listar produtos:", err.response?.data || err.message);
+    } else {
+      console.error("Erro desconhecido ao listar produtos:", err);
+    }
+    return [];
+  }
+}
+
+// Criar novo produto
+export async function criarProduto(payload: ProdutoPayload): Promise<Produto> {
+  const response = await api.post<Produto>("/produtos", payload);
+  return response.data;
+}
+
+// Atualizar produto existente
+export async function atualizarProduto(id: string, payload: Partial<ProdutoPayload>): Promise<Produto> {
+  const response = await api.put<Produto>(`/produtos/${id}`, payload);
+  return response.data;
+}
+
+// Deletar produto
+export async function deletarProduto(id: string): Promise<void> {
+  await api.delete(`/produtos/${id}`);
+}
+
+
+
+
 /* ================== VENDAS ================== */
 
 export async function criarVenda(
@@ -83,7 +143,7 @@ export async function listarVendas(): Promise<Venda[]> {
   } catch (error) {
     if (error instanceof AxiosError) {
       console.error(
-        "Erro ao listar vendas:",
+        "[VENDAS] Erro ao listar vendas:",
         error.response?.data?.message || error.message
       );
     }
@@ -93,26 +153,21 @@ export async function listarVendas(): Promise<Venda[]> {
 
 /* ================== DASHBOARD ================== */
 
-
 export async function fetchDashboardData(): Promise<DashboardData> {
   try {
-    const token = localStorage.getItem("token");
-    if (!token) throw new Error("Usuário não autenticado.");
-
-    const response = await api.get<DashboardData>("/dashboard", {
-      headers: {
-        Authorization: `Bearer ${token}`, 
-      },
-    });
-
+    const response = await api.get<DashboardData>("/dashboard");
     return response.data;
   } catch (error) {
     if (error instanceof AxiosError) {
       console.error(
-        "Erro ao carregar o dashboard:",
+        "[DASHBOARD] Erro ao carregar dados:",
         error.response?.data?.message || error.message
       );
+    } else {
+      console.error("[DASHBOARD] Erro desconhecido:", error);
     }
+
+    // Valores default para evitar quebra do frontend
     return {
       faturasEmitidas: 0,
       clientesAtivos: 0,

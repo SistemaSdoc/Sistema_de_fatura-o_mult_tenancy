@@ -12,7 +12,6 @@ return [
         'sanctum/csrf-cookie',
         'login',
         'logout',
-        'tenant/*',
     ],
 
     /*

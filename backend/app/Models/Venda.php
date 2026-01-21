@@ -7,7 +7,6 @@ use Illuminate\Support\Str;
 
 class Venda extends Model
 {
-    protected $connection = 'tenant';
     protected $table = 'vendas';
 
     public $incrementing = false;
@@ -45,7 +44,7 @@ class Venda extends Model
 
     public function user()
     {
-        return $this->belongsTo(TenantUser::class, 'user_id');
+        return $this->belongsTo(User::class, 'user_id');
     }
 
     public function itens()

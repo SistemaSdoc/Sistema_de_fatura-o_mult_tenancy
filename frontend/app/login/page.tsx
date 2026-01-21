@@ -1,31 +1,12 @@
-"use client";
+
+'use client';
 
 import React, { useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import api from "@/services/axios";
+import { useAuth } from "@/context/authprovider";
 import { AxiosError } from "axios";
-
-/* ---------------- TIPOS ---------------- */
-interface ApiUser {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-}
-
-interface ApiTenant {
-  id: string;
-  nome: string;
-  email: string;
-}
-
-interface LoginResponse {
-  token: string;
-  user: ApiUser;
-  tenant: ApiTenant;
-}
 
 /* ---------------- INPUT ---------------- */
 const InputField = ({
@@ -52,6 +33,7 @@ const InputField = ({
 /* ---------------- PAGE ---------------- */
 export default function LoginPage() {
   const router = useRouter();
+  const { login } = useAuth(); // AuthProvider agora só retorna user + token
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -64,40 +46,34 @@ export default function LoginPage() {
     setError("");
 
     try {
-      const response = await api.post<LoginResponse>("/login", {
-        email,
-        password,
-      });
+      await login(email, password);
 
-      const { token, user, tenant } = response.data;
+      const userStr = localStorage.getItem("user");
+      const user = userStr ? JSON.parse(userStr) : null;
 
-      // 🔐 Persistência
-      localStorage.setItem("token", token);
-      localStorage.setItem("user", JSON.stringify(user));
-      localStorage.setItem("tenant", JSON.stringify(tenant));
-
-      // 🚀 Redirect por role
-      switch (user.role) {
+      switch (user?.role) {
         case "admin":
           router.push("/dashboard/Vendas/relatorios");
           break;
         case "caixa":
-          router.push("/dashboard/Vendas/Nova-venda");
+          router.push("/dashboard/Vendas/Nova_venda");
           break;
         case "operador":
           router.push("/dashboard");
           break;
         default:
-          router.push("/dashboard");
+          router.push("/login");
       }
 
-    } catch (err) {
-      const errorAxios = err as AxiosError<{ message: string }>;
-
-      setError(
-        errorAxios.response?.data?.message ??
-        "Email ou senha incorretos"
-      );
+    } catch (err: unknown) {
+      if (err instanceof AxiosError) {
+        const message = err.response?.data?.message ?? err.message;
+        setError(message);
+      } else if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Ocorreu um erro desconhecido");
+      }
     } finally {
       setLoading(false);
     }

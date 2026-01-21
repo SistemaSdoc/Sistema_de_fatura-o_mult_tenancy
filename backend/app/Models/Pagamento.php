@@ -7,7 +7,6 @@ use Illuminate\Support\Str;
 
 class Pagamento extends Model
 {
-    protected $connection = 'tenant';
     protected $table = 'pagamentos';
 
     public $incrementing = false;
@@ -48,6 +47,6 @@ class Pagamento extends Model
 
     public function user()
     {
-        return $this->belongsTo(TenantUser::class, 'user_id');
+        return $this->belongsTo(User::class, 'user_id');
     }
 }

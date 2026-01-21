@@ -7,7 +7,6 @@ use Illuminate\Support\Str;
 
 class Fatura extends Model
 {
-    protected $connection = 'tenant';
     protected $table = 'faturas';
 
     public $incrementing = false;

@@ -62,20 +62,15 @@ export interface CriarVendaPayload {
 /* ================== AXIOS INSTANCE ================== */
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
-  withCredentials: false,
 });
 
 /* ================= REQUEST INTERCEPTOR ================= */
 api.interceptors.request.use((config) => {
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("token");
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
+  if (token) {
     config.headers = config.headers ?? {};
-
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-      console.log("[AXIOS] Token set:", token);
-    }
+    config.headers.Authorization = `Bearer ${token}`;
   }
 
   return config;
@@ -95,4 +90,3 @@ api.interceptors.response.use(
 );
 
 export default api;
-/* ================== EXPORTS ================== */ 

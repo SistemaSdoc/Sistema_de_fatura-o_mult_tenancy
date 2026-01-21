@@ -3,17 +3,17 @@
 namespace App\Policies;
 
 use App\Models\Compra;
-use App\Models\TenantUser;
+use App\Models\User;
 
 
 class CompraPolicy
 {
-    public function viewAny(TenantUser $user)
+    public function viewAny(User $user)
     {
         return $user->role === 'admin';
     }
 
-    public function create(TenantUser $user)
+    public function create(User $user)
     {
         return $user->role === 'admin';
     }

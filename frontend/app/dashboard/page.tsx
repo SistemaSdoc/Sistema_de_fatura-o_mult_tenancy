@@ -19,22 +19,20 @@ import {
 
 /* ================= DASHBOARD PAGE ================= */
 export default function DashboardPage() {
-  const { tenant, loading: tenantLoading, user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Só executa quando o tenant está definido
-    if (!tenant || tenantLoading) return;
+    if (!user || authLoading) return;
 
     const carregarDashboard = async () => {
       setLoading(true);
       setError(null);
 
       try {
-        // 🔹 Chamada limpa, sem X-Tenant
         const response = await fetchDashboardData();
         setData(response);
       } catch (err) {
@@ -54,23 +52,13 @@ export default function DashboardPage() {
     };
 
     carregarDashboard();
-  }, [tenant, tenantLoading]);
+  }, [user, authLoading]);
 
-  if (tenantLoading || !user) {
+  if (authLoading || !user) {
     return (
       <MainEmpresa>
         <p className="p-6 text-center text-gray-500">
-          Carregando informações da empresa...
-        </p>
-      </MainEmpresa>
-    );
-  }
-
-  if (!tenant) {
-    return (
-      <MainEmpresa>
-        <p className="p-6 text-center text-gray-500">
-          Nenhuma empresa selecionada
+          Carregando informações do usuário...
         </p>
       </MainEmpresa>
     );
@@ -96,7 +84,7 @@ export default function DashboardPage() {
               />
             </div>
 
-            {/* GRÁFICO */}
+            {/* GRÁFICO DE VENDAS POR MÊS */}
             {data.vendasPorMes.length > 0 && (
               <div className="bg-white shadow rounded-xl p-6 mb-6">
                 <h2 className="text-xl font-semibold text-[#123859] mb-4">

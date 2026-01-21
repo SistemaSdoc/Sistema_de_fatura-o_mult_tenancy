@@ -11,7 +11,7 @@ use App\Models\Compra;
 use App\Models\Pagamento;
 use App\Models\Fatura;
 use App\Models\Categoria;
-use App\Models\TenantUser;
+use App\Models\User;
 
 // Policies
 use App\Policies\ProdutoPolicy;
@@ -36,7 +36,7 @@ class AuthServiceProvider extends ServiceProvider
         Pagamento::class  => PagamentoPolicy::class,
         Fatura::class     => FaturaPolicy::class,
         Categoria::class  => CategoriaPolicy::class,
-        TenantUser::class => TenantUserPolicy::class,
+        User::class       => User::class,
     ];
 
     /**
