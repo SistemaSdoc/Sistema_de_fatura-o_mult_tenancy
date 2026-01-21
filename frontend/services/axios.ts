@@ -1,5 +1,6 @@
-import axios from "axios";
 
+import axios, { AxiosHeaders, InternalAxiosRequestConfig } from "axios";
+import { AxiosError } from "axios";
 /* ================== TIPOS ================== */
 export interface ItemVenda {
   id: string;
@@ -59,32 +60,38 @@ export interface CriarVendaPayload {
   }[];
 }
 
-/* ================== AXIOS INSTANCE ================== */
+
+
+
+/* ================== TIPOS ================== */
+export interface ApiErrorResponse {
+  message?: string;
+  errors?: Record<string, string[]>; 
+  status?: number;                   
+}
+
+/* ================== INSTÂNCIA AXIOS PARA COOKIES ================== */
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL,
+  baseURL: process.env.NEXT_PUBLIC_API_URL, // ex: http://localhost:8000
+  withCredentials: true, // ⚠ essencial para enviar cookies
 });
 
-/* ================= REQUEST INTERCEPTOR ================= */
-api.interceptors.request.use((config) => {
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-
-  if (token) {
-    config.headers = config.headers ?? {};
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-
+/* ================== INTERCEPTOR DE REQUEST ================== */
+// Aqui não precisamos do token Bearer, mas podemos usar para logs
+api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  // Pode adicionar headers adicionais se precisar
   return config;
 });
 
-/* ================= RESPONSE INTERCEPTOR ================= */
+/* ================== INTERCEPTOR DE RESPONSE ================== */
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    console.error(
-      "[AXIOS ERROR]",
-      error.response?.status,
-      error.response?.data || error.message
-    );
+  (error: AxiosError<ApiErrorResponse>) => {
+    const data = error.response?.data as ApiErrorResponse;
+    const message = data?.message || error.message;
+
+    console.error("[AXIOS ERROR]", error.response?.status, message);
+
     return Promise.reject(error);
   }
 );

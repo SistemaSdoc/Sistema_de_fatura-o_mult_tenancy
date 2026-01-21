@@ -58,7 +58,7 @@ export interface DashboardData {
   }[];
 }
 
-/* ================== TIPOS ================== */
+/* ================== PRODUTOS ================== */
 
 export interface Produto {
   id: string;
@@ -83,53 +83,40 @@ export interface ProdutoPayload {
 
 /* ================== PRODUTOS ================== */
 
-// Listar todos os produtos
 export async function listarProdutos(): Promise<Produto[]> {
   try {
-    const response = await api.get<Produto[]>("/produtos");
-    return response.data;
+    const { data } = await api.get<Produto[]>("/produtos");
+    return data;
   } catch (err) {
-    if (err instanceof AxiosError) {
-      console.error("Erro ao listar produtos:", err.response?.data || err.message);
-    } else {
-      console.error("Erro desconhecido ao listar produtos:", err);
-    }
+    handleAxiosError(err, "[PRODUTOS] Erro ao listar produtos");
     return [];
   }
 }
 
-// Criar novo produto
 export async function criarProduto(payload: ProdutoPayload): Promise<Produto> {
-  const response = await api.post<Produto>("/produtos", payload);
-  return response.data;
+  const { data } = await api.post<Produto>("/produtos", payload);
+  return data;
 }
 
-// Atualizar produto existente
 export async function atualizarProduto(id: string, payload: Partial<ProdutoPayload>): Promise<Produto> {
-  const response = await api.put<Produto>(`/produtos/${id}`, payload);
-  return response.data;
+  const { data } = await api.put<Produto>(`/produtos/${id}`, payload);
+  return data;
 }
 
-// Deletar produto
 export async function deletarProduto(id: string): Promise<void> {
   await api.delete(`/produtos/${id}`);
 }
 
-
-
-
 /* ================== VENDAS ================== */
 
-export async function criarVenda(
-  payload: CriarVendaPayload
-): Promise<{ venda: Venda; fatura: Fatura }> {
-  const response = await api.post("/vendas", payload);
-  return response.data;
+export async function criarVenda(payload: CriarVendaPayload): Promise<{ venda: Venda; fatura: Fatura }> {
+  const { data } = await api.post("/vendas", payload);
+  return data;
 }
 
 export async function obterVenda(vendaId: string): Promise<Venda> {
-  const response = await api.get(`/vendas/${vendaId}`);
-  return response.data;
+  const { data } = await api.get(`/vendas/${vendaId}`);
+  return data;
 }
 
 export async function cancelarVenda(vendaId: string): Promise<void> {
@@ -138,15 +125,10 @@ export async function cancelarVenda(vendaId: string): Promise<void> {
 
 export async function listarVendas(): Promise<Venda[]> {
   try {
-    const response = await api.get<Venda[]>("/vendas");
-    return response.data;
-  } catch (error) {
-    if (error instanceof AxiosError) {
-      console.error(
-        "[VENDAS] Erro ao listar vendas:",
-        error.response?.data?.message || error.message
-      );
-    }
+    const { data } = await api.get<Venda[]>("/vendas");
+    return data;
+  } catch (err) {
+    handleAxiosError(err, "[VENDAS] Erro ao listar vendas");
     return [];
   }
 }
@@ -155,17 +137,10 @@ export async function listarVendas(): Promise<Venda[]> {
 
 export async function fetchDashboardData(): Promise<DashboardData> {
   try {
-    const response = await api.get<DashboardData>("/dashboard");
-    return response.data;
-  } catch (error) {
-    if (error instanceof AxiosError) {
-      console.error(
-        "[DASHBOARD] Erro ao carregar dados:",
-        error.response?.data?.message || error.message
-      );
-    } else {
-      console.error("[DASHBOARD] Erro desconhecido:", error);
-    }
+    const { data } = await api.get<DashboardData>("/dashboard");
+    return data;
+  } catch (err) {
+    handleAxiosError(err, "[DASHBOARD] Erro ao carregar dados");
 
     // Valores default para evitar quebra do frontend
     return {
@@ -175,5 +150,16 @@ export async function fetchDashboardData(): Promise<DashboardData> {
       vendasPorMes: [],
       ultimasFaturas: [],
     };
+  }
+}
+
+/* ================== HELPERS ================== */
+
+function handleAxiosError(err: unknown, prefix: string) {
+  if (err instanceof AxiosError) {
+    const msg = err.response?.data?.message || err.message || "Erro desconhecido";
+    console.error(`${prefix}:`, msg);
+  } else {
+    console.error(`${prefix}:`, err);
   }
 }

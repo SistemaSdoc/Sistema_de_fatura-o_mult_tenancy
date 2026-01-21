@@ -26,7 +26,7 @@ Route::post('/register', [ApiAuthController::class, 'register']);
 | ROTAS PROTEGIDAS
 |--------------------------------------------------------------------------
 */
-Route::middleware(['auth:sanctum'])->group(function () {
+ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Logout
     Route::post('/logout', [ApiAuthController::class, 'logout']);
@@ -47,6 +47,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::apiResource('/users', UserController::class);
     });
 
+    
     /*
     |--------------------------------------------------------------------------
     | PRODUTOS / CATEGORIAS / FORNECEDORES
@@ -73,4 +74,4 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/faturas/gerar', [FaturaController::class, 'gerarFatura']);
     });
 
-});
+ });

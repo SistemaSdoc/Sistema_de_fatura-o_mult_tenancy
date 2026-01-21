@@ -4,11 +4,14 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Auth;
+use App\Models\User;
 
 class ApiAuthController extends Controller
 {
+    /**
+     * Login do usuário usando cookies Sanctum
+     */
     public function login(Request $request)
     {
         $request->validate([
@@ -16,51 +19,55 @@ class ApiAuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        // Procura usuário direto no banco padrão
-        $user = DB::table('users')->where('email', $request->email)->first();
-
-        if ($user && Hash::check($request->password, $user->password)) {
-
-            // Cria token
-            $tokenValue = Str::random(64);
-            DB::table('personal_access_tokens')->insert([
-                'tokenable_type' => 'App\Models\User',
-                'tokenable_id'   => $user->id,
-                'name'           => 'api-token',
-                'token'          => $tokenValue,
-                'abilities'      => json_encode(['*']),
-                'created_at'     => now(),
-                'updated_at'     => now(),
-            ]);
-
-            return response()->json([
-                'token' => $tokenValue,
-                'user' => [
-                    'id'    => $user->id,
-                    'name'  => $user->name,
-                    'email' => $user->email,
-                    'role'  => $user->role,
-                ],
-            ]);
+        // Tenta autenticar
+        if (!Auth::attempt($request->only('email', 'password'))) {
+            return response()->json(['message' => 'Credenciais inválidas'], 401);
         }
 
-        return response()->json(['message' => 'Credenciais inválidas'], 401);
+        // Regenera a sessão para segurança
+        $request->session()->regenerate();
+
+        // Retorna dados do usuário
+        $user = $request->user();
+        return response()->json([
+            'user' => [
+                'id'    => $user->id,
+                'name'  => $user->name,
+                'email' => $user->email,
+                'role'  => $user->role,
+            ],
+        ]);
     }
 
+    /**
+     * Logout do usuário
+     */
     public function logout(Request $request)
     {
-        $token = $request->bearerToken();
+        Auth::guard('web')->logout();
 
-        if ($token) {
-            $deleted = DB::table('personal_access_tokens')
-                ->where('token', $token)
-                ->delete();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
 
-            if ($deleted) {
-                return response()->json(['message' => 'Logout realizado com sucesso']);
-            }
+        return response()->json(['message' => 'Logout realizado com sucesso']);
+    }
+
+    /**
+     * Retorna informações do usuário autenticado
+     */
+    public function me(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Não autenticado'], 401);
         }
 
-        return response()->json(['message' => 'Token inválido'], 401);
+        return response()->json([
+            'id'    => $user->id,
+            'name'  => $user->name,
+            'email' => $user->email,
+            'role'  => $user->role,
+        ]);
     }
 }

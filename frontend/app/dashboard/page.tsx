@@ -1,11 +1,10 @@
-
-"use client";
+'use client';
 
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/authprovider";
 import MainEmpresa from "../components/MainEmpresa";
 import { fetchDashboardData, DashboardData } from "@/services/vendas";
-import { AxiosError } from "axios";
 
 import {
   ResponsiveContainer,
@@ -17,14 +16,22 @@ import {
   CartesianGrid,
 } from "recharts";
 
-/* ================= DASHBOARD PAGE ================= */
 export default function DashboardPage() {
+  const router = useRouter();
   const { user, loading: authLoading } = useAuth();
 
   const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /* 🔐 Proteção da rota */
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push("/login");
+    }
+  }, [authLoading, user, router]);
+
+  /* 📊 Carrega dashboard */
   useEffect(() => {
     if (!user || authLoading) return;
 
@@ -35,17 +42,9 @@ export default function DashboardPage() {
       try {
         const response = await fetchDashboardData();
         setData(response);
-      } catch (err) {
-        if (err instanceof AxiosError) {
-          console.error("[DASHBOARD] Axios error:", err.response?.data || err.message);
-          setError(
-            err.response?.data?.message ??
-            "Erro ao carregar o dashboard. Verifique se você está logado."
-          );
-        } else {
-          console.error("[DASHBOARD] Erro desconhecido:", err);
-          setError("Erro desconhecido ao carregar o dashboard.");
-        }
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Erro desconhecido");
+        setData(null);
       } finally {
         setLoading(false);
       }
@@ -55,26 +54,30 @@ export default function DashboardPage() {
   }, [user, authLoading]);
 
   if (authLoading || !user) {
-    return (
-      <MainEmpresa>
-        <p className="p-6 text-center text-gray-500">
-          Carregando informações do usuário...
-        </p>
-      </MainEmpresa>
-    );
+    return <p className="text-center mt-10">Carregando usuário...</p>;
   }
 
   return (
     <MainEmpresa>
       <div className="p-6">
-        <h1 className="text-3xl font-bold text-[#123859] mb-6">Dashboard</h1>
+        <h1 className="text-3xl font-bold text-[#123859] mb-6">
+          Dashboard
+        </h1>
 
-        {loading && <p className="text-center text-gray-500">Carregando dados...</p>}
-        {error && <p className="text-center text-red-600">{error}</p>}
+        {loading && (
+          <p className="text-center text-gray-500">
+            Carregando dados...
+          </p>
+        )}
+
+        {error && (
+          <p className="text-center text-red-600">
+            {error}
+          </p>
+        )}
 
         {data && (
           <>
-            {/* CARDS */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
               <Card titulo="Faturas Emitidas" valor={data.faturasEmitidas} />
               <Card titulo="Clientes Ativos" valor={data.clientesAtivos} />
@@ -84,12 +87,12 @@ export default function DashboardPage() {
               />
             </div>
 
-            {/* GRÁFICO DE VENDAS POR MÊS */}
             {data.vendasPorMes.length > 0 && (
               <div className="bg-white shadow rounded-xl p-6 mb-6">
                 <h2 className="text-xl font-semibold text-[#123859] mb-4">
                   Vendas por Mês
                 </h2>
+
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={data.vendasPorMes}>
@@ -110,7 +113,6 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* ÚLTIMAS FATURAS */}
             {data.ultimasFaturas.length > 0 ? (
               <div className="bg-white shadow rounded-xl p-6">
                 <h2 className="text-xl font-semibold text-[#123859] mb-4">
@@ -128,26 +130,28 @@ export default function DashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.ultimasFaturas.map((fatura, i) => (
-                      <tr key={fatura.id} className="border-b">
+                    {data.ultimasFaturas.map((f, i) => (
+                      <tr key={f.id} className="border-b">
                         <td className="p-2">{i + 1}</td>
-                        <td className="p-2">{fatura.cliente ?? "-"}</td>
+                        <td className="p-2">{f.cliente ?? "-"}</td>
                         <td className="p-2">
-                          {fatura.data
-                            ? new Date(fatura.data).toLocaleDateString("pt-PT")
+                          {f.data
+                            ? new Date(f.data).toLocaleDateString("pt-PT")
                             : "-"}
                         </td>
                         <td className="p-2">
-                          {fatura.valor
-                            ? `AOA ${fatura.valor.toLocaleString()}`
-                            : "-"}
+                          {`AOA ${f.valor.toLocaleString()}`}
                         </td>
                         <td
                           className={`p-2 font-semibold ${
-                            fatura.status === "emitida" ? "text-green-600" : "text-red-600"
+                            f.status === "emitida"
+                              ? "text-green-600"
+                              : "text-red-600"
                           }`}
                         >
-                          {fatura.status === "emitida" ? "Emitida" : "Cancelada"}
+                          {f.status === "emitida"
+                            ? "Emitida"
+                            : "Cancelada"}
                         </td>
                       </tr>
                     ))}
@@ -155,7 +159,9 @@ export default function DashboardPage() {
                 </table>
               </div>
             ) : (
-              <p className="text-center text-gray-500">Nenhuma fatura encontrada.</p>
+              <p className="text-center text-gray-500">
+                Nenhuma fatura encontrada.
+              </p>
             )}
           </>
         )}
@@ -164,7 +170,6 @@ export default function DashboardPage() {
   );
 }
 
-/* ================= CARD ================= */
 function Card({ titulo, valor }: { titulo: string; valor: string | number }) {
   return (
     <div className="bg-white shadow rounded-xl p-6 border">

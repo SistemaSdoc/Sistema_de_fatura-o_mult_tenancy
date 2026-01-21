@@ -6,6 +6,7 @@ return [
     |--------------------------------------------------------------------------
     | Paths
     |--------------------------------------------------------------------------
+    | Rotas que aceitarão CORS.
     */
     'paths' => [
         'api/*',
@@ -19,17 +20,17 @@ return [
     | Allowed Methods
     |--------------------------------------------------------------------------
     */
-    'allowed_methods' => ['*'],
+    'allowed_methods' => ['*'], // Permite GET, POST, PUT, DELETE, etc.
 
     /*
     |--------------------------------------------------------------------------
     | Allowed Origins
     |--------------------------------------------------------------------------
+    | Domínios autorizados a enviar requests com cookies.
     */
     'allowed_origins' => [
-        'http://localhost:3000', // Next.js
-        'http://localhost:5173', // Vite
-        'http://localhost',
+        'http://localhost:3000', // Next.js frontend
+        'http://localhost:5173', // Vite ou outro frontend
     ],
 
     /*
@@ -44,7 +45,7 @@ return [
     | Allowed Headers
     |--------------------------------------------------------------------------
     */
-    'allowed_headers' => ['*'],
+    'allowed_headers' => ['*'], // Permite todos os headers, incluindo X-CSRF-TOKEN
 
     /*
     |--------------------------------------------------------------------------
@@ -64,6 +65,8 @@ return [
     |--------------------------------------------------------------------------
     | Supports Credentials
     |--------------------------------------------------------------------------
+    | Importante: permite cookies serem enviados
     */
     'supports_credentials' => true,
+
 ];

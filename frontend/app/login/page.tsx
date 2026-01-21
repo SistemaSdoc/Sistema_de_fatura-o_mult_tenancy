@@ -1,7 +1,6 @@
-
 'use client';
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -33,83 +32,57 @@ const InputField = ({
 /* ---------------- PAGE ---------------- */
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth(); // AuthProvider agora só retorna user + token
+  const { login, user, loading } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setLoading(true);
     setError("");
 
     try {
       await login(email, password);
-
-      const userStr = localStorage.getItem("user");
-      const user = userStr ? JSON.parse(userStr) : null;
-
-      switch (user?.role) {
-        case "admin":
-          router.push("/dashboard/Vendas/relatorios");
-          break;
-        case "caixa":
-          router.push("/dashboard/Vendas/Nova_venda");
-          break;
-        case "operador":
-          router.push("/dashboard");
-          break;
-        default:
-          router.push("/login");
-      }
-
+      // 🚫 nada de localStorage aqui
     } catch (err: unknown) {
       if (err instanceof AxiosError) {
-        const message = err.response?.data?.message ?? err.message;
-        setError(message);
+        setError(err.response?.data?.message ?? err.message);
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
         setError("Ocorreu um erro desconhecido");
       }
-    } finally {
-      setLoading(false);
     }
   };
 
+  /* 🔁 Redireciona assim que o usuário estiver disponível */
+  useEffect(() => {
+    if (!user) return;
+
+    switch (user.role) {
+      case "admin":
+        router.push("/dashboard/Vendas/relatorios");
+        break;
+      case "caixa":
+        router.push("/dashboard/Vendas/Nova_venda");
+        break;
+      case "operador":
+        router.push("/dashboard");
+        break;
+      default:
+        router.push("/login");
+    }
+  }, [user, router]);
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden bg-gray-100">
-      <div className="absolute inset-0 bg-linear-to-r from-[#123859] via-[#F9941F] to-[#123859] opacity-20 z-0" />
-
-      <motion.div
-        className="self-start mb-4 z-10 w-full max-w-md"
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <button
-          onClick={() => window.history.back()}
-          className="border border-[#123859] text-[#123859] font-semibold rounded-xl px-4 py-2 hover:bg-[#123859] hover:text-white transition"
-        >
-          &larr; Voltar
-        </button>
-      </motion.div>
-
       <motion.div
         className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl z-10 p-6"
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
       >
-        <motion.img
-          src="/images/3.png"
-          alt="Logo"
-          className="w-24 h-24 mb-4 mx-auto"
-          whileHover={{ scale: 1.1, rotate: 10 }}
-        />
-
         <h2 className="text-2xl font-bold text-center text-[#123859] mb-2">
           Login
         </h2>
@@ -127,7 +100,6 @@ export default function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
-
           <InputField
             type="password"
             placeholder="Senha"

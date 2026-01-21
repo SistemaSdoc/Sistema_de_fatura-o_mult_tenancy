@@ -3,21 +3,43 @@
 
 import { AxiosError } from "axios";
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/authprovider";
+
 import MainEmpresa from "../../../components/MainEmpresa";
 import { Plus, Trash2, Edit } from "lucide-react";
-import { listarVendas, criarVenda, Venda, ItemVenda } from "@/services/vendas";
-import { listarProdutos, Produto } from "@/services/vendas"; // API real de produtos
+
+import {
+  listarVendas,
+  criarVenda,
+  Venda,
+  ItemVenda,
+  listarProdutos,
+  Produto,
+} from "@/services/vendas";
 
 export default function NovaVendaPage() {
-  const [clienteId, setClienteId] = useState("");
+  const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
+
+  /* ================= STATE ================= */
   const [clienteNome, setClienteNome] = useState("");
   const [itens, setItens] = useState<ItemVenda[]>([]);
   const [vendas, setVendas] = useState<Venda[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [loading, setLoading] = useState(false);
 
+  /* ================= PROTEÇÃO DE ROTA ================= */
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push("/login");
+    }
+  }, [authLoading, user, router]);
+
   /* ================= FETCH VENDAS ================= */
   useEffect(() => {
+    if (!user) return;
+
     async function fetchVendas() {
       try {
         const data = await listarVendas();
@@ -26,11 +48,14 @@ export default function NovaVendaPage() {
         console.error("Erro ao listar vendas:", err);
       }
     }
+
     fetchVendas();
-  }, []);
+  }, [user]);
 
   /* ================= FETCH PRODUTOS ================= */
   useEffect(() => {
+    if (!user) return;
+
     async function fetchProdutos() {
       try {
         const data = await listarProdutos();
@@ -39,8 +64,13 @@ export default function NovaVendaPage() {
         console.error("Erro ao listar produtos:", err);
       }
     }
+
     fetchProdutos();
-  }, []);
+  }, [user]);
+
+  if (authLoading || !user) {
+    return <p className="text-center mt-10">Carregando usuário...</p>;
+  }
 
   /* ================= FUNÇÕES DE ITENS ================= */
   const adicionarItem = () => {
@@ -92,13 +122,16 @@ export default function NovaVendaPage() {
 
   /* ================= SALVAR VENDA ================= */
   const salvarVenda = async () => {
-    if (!clienteId) return alert("Informe o cliente");
+    if (!clienteNome) return alert("Informe o nome do cliente");
     if (itens.length === 0) return alert("Adicione pelo menos um item");
+    if (itens.some((i) => !i.produto_id))
+      return alert("Selecione um produto em todos os itens");
 
     setLoading(true);
+
     try {
       const payload = {
-        cliente_id: clienteId,
+        cliente_nome: clienteNome,
         itens: itens.map((i) => ({
           produto_id: i.produto_id,
           quantidade: i.quantidade,
@@ -108,8 +141,7 @@ export default function NovaVendaPage() {
       const { venda } = await criarVenda(payload);
       setVendas((prev) => [venda, ...prev]);
 
-      // Resetar formulário
-      setClienteId("");
+      // Reset
       setClienteNome("");
       setItens([]);
     } catch (err) {
@@ -135,16 +167,12 @@ export default function NovaVendaPage() {
 
         {/* Cliente */}
         <div className="bg-white p-4 rounded-xl shadow">
-          <label htmlFor="cliente" className="font-semibold">
-            Cliente
-          </label>
+          <label className="font-semibold">Cliente</label>
           <input
-            id="cliente"
             value={clienteNome}
             onChange={(e) => setClienteNome(e.target.value)}
             placeholder="Nome do cliente"
             className="w-full border p-2 rounded mt-2"
-            aria-label="Nome do cliente"
           />
         </div>
 
@@ -155,80 +183,58 @@ export default function NovaVendaPage() {
             <button
               onClick={adicionarItem}
               className="flex gap-2 bg-[#123859] text-white px-3 py-1 rounded"
-              aria-label="Adicionar item"
             >
               <Plus size={16} /> Adicionar
             </button>
           </div>
 
-{itens.map((item, index) => (
-  <div key={item.id} className="grid grid-cols-6 gap-2 items-center">
-    
-    {/* Produto */}
-    <label htmlFor={`produto-${index}`} className="sr-only">
-      Produto {index + 1}
-    </label>
-    <select
-      id={`produto-${index}`}
-      className="border p-2 rounded"
-      value={item.produto_id}
-      onChange={(e) => atualizarItem(index, "produto_id", e.target.value)}
-    >
-      <option value="">Selecione o produto</option>
-      {produtos.map((p) => (
-        <option key={p.id} value={p.id}>
-          {p.nome} - {p.preco_venda.toLocaleString()} Kz
-        </option>
-      ))}
-    </select>
+          {itens.map((item, index) => (
+            <div key={item.id} className="grid grid-cols-6 gap-2 items-center">
+              <select
+                className="border p-2 rounded"
+                value={item.produto_id}
+                onChange={(e) =>
+                  atualizarItem(index, "produto_id", e.target.value)
+                }
+              >
+                <option value="">Selecione o produto</option>
+                {produtos.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nome} - {p.preco_venda.toLocaleString()} Kz
+                  </option>
+                ))}
+              </select>
 
-    {/* Quantidade */}
-    <label htmlFor={`quantidade-${index}`} className="sr-only">
-      Quantidade do produto {index + 1}
-    </label>
-    <input
-      id={`quantidade-${index}`}
-      type="number"
-      value={item.quantidade}
-      onChange={(e) =>
-        atualizarItem(index, "quantidade", Number(e.target.value))
-      }
-      className="border p-2 rounded"
-      min={1}
-      aria-label={`Quantidade do produto ${index + 1}`}
-      title={`Quantidade do produto ${index + 1}`}
-    />
+              <input
+                type="number"
+                min={1}
+                value={item.quantidade}
+                onChange={(e) =>
+                  atualizarItem(index, "quantidade", Number(e.target.value))
+                }
+                className="border p-2 rounded"
+              />
 
-    {/* Preço unitário (disabled) */}
-    <input
-      disabled
-      value={item.preco_venda.toLocaleString()}
-      className="border p-2 rounded bg-gray-100"
-      aria-label={`Preço unitário do produto ${index + 1}`}
-      title={`Preço unitário do produto ${index + 1}`}
-    />
+              <input
+                disabled
+                value={item.preco_venda.toLocaleString()}
+                className="border p-2 rounded bg-gray-100"
+              />
 
-    {/* Subtotal (disabled) */}
-    <input
-      disabled
-      value={item.subtotal.toLocaleString()}
-      className="border p-2 rounded bg-gray-100"
-      aria-label={`Subtotal do produto ${index + 1}`}
-      title={`Subtotal do produto ${index + 1}`}
-    />
+              <input
+                disabled
+                value={item.subtotal.toLocaleString()}
+                className="border p-2 rounded bg-gray-100"
+              />
 
-    {/* Botão remover */}
-    <button
-      onClick={() => removerItem(index)}
-      className="text-red-600"
-      aria-label={`Remover produto ${index + 1}`}
-      title={`Remover produto ${index + 1}`}
-    >
-      <Trash2 />
-    </button>
-  </div>
-))}
-
+              <button
+                onClick={() => removerItem(index)}
+                className="text-red-600"
+              >
+                <Trash2 />
+              </button>
+            </div>
+          ))}
         </div>
 
         {/* Total */}
@@ -242,7 +248,7 @@ export default function NovaVendaPage() {
         {/* Botão salvar */}
         <button
           onClick={salvarVenda}
-          disabled={loading || itens.length === 0 || !clienteId}
+          disabled={loading || itens.length === 0 || !clienteNome}
           className="w-full bg-[#F9941F] text-white py-3 rounded-xl font-semibold disabled:opacity-50"
         >
           {loading ? "Salvando..." : "Salvar Venda"}
@@ -255,23 +261,13 @@ export default function NovaVendaPage() {
             {vendas.map((v) => (
               <div
                 key={v.id}
-                className="flex justify-between border p-3 rounded mb-2 items-center"
+                className="flex justify-between border p-3 rounded mb-2"
               >
                 <div>
-                  <p>
-                    <strong>Cliente:</strong> {v.cliente_nome}
-                  </p>
-                  <p>
-                    <strong>Total:</strong> {v.total.toLocaleString()} Kz
-                  </p>
-                  <p>
-                    <strong>Status:</strong>{" "}
-                    {v.itens.length > 0 ? "Finalizada" : "Pendente"}
-                  </p>
+                  <p><strong>Cliente:</strong> {v.cliente_nome}</p>
+                  <p><strong>Total:</strong> {v.total.toLocaleString()} Kz</p>
                 </div>
-                <button className="text-[#123859]" aria-label="Editar venda">
-                  <Edit />
-                </button>
+                <Edit className="text-[#123859]" />
               </div>
             ))}
           </div>
