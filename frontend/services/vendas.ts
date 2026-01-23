@@ -45,17 +45,8 @@ export interface DashboardData {
   faturasEmitidas: number;
   clientesAtivos: number;
   receitaMensal: number;
-  vendasPorMes: {
-    mes: string;
-    total: number;
-  }[];
-  ultimasFaturas: {
-    id: string;
-    cliente: string;
-    data: string;
-    valor: number;
-    status: "emitida" | "cancelada";
-  }[];
+  vendasPorMes: { mes: string; total: number }[];
+  ultimasFaturas: Fatura[];
 }
 
 /* ================== PRODUTOS ================== */
@@ -81,6 +72,17 @@ export interface ProdutoPayload {
   estoque_minimo: number;
 }
 
+/* ================== HELPERS ================== */
+
+function handleAxiosError(err: unknown, prefix: string) {
+  if (err instanceof AxiosError) {
+    const msg = err.response?.data?.message || err.message || "Erro desconhecido";
+    console.error(`${prefix}:`, msg);
+  } else {
+    console.error(`${prefix}:`, err);
+  }
+}
+
 /* ================== PRODUTOS ================== */
 
 export async function listarProdutos(): Promise<Produto[]> {
@@ -93,34 +95,71 @@ export async function listarProdutos(): Promise<Produto[]> {
   }
 }
 
-export async function criarProduto(payload: ProdutoPayload): Promise<Produto> {
-  const { data } = await api.post<Produto>("/produtos", payload);
-  return data;
+export async function criarProduto(payload: ProdutoPayload): Promise<Produto | null> {
+  try {
+    const { data } = await api.post<Produto>("/produtos", payload);
+    return data;
+  } catch (err) {
+    handleAxiosError(err, "[PRODUTOS] Erro ao criar produto");
+    return null;
+  }
 }
 
-export async function atualizarProduto(id: string, payload: Partial<ProdutoPayload>): Promise<Produto> {
-  const { data } = await api.put<Produto>(`/produtos/${id}`, payload);
-  return data;
+export async function atualizarProduto(
+  id: string,
+  payload: Partial<ProdutoPayload>
+): Promise<Produto | null> {
+  try {
+    const { data } = await api.put<Produto>(`/produtos/${id}`, payload);
+    return data;
+  } catch (err) {
+    handleAxiosError(err, "[PRODUTOS] Erro ao atualizar produto");
+    return null;
+  }
 }
 
-export async function deletarProduto(id: string): Promise<void> {
-  await api.delete(`/produtos/${id}`);
+export async function deletarProduto(id: string): Promise<boolean> {
+  try {
+    await api.delete(`/produtos/${id}`);
+    return true;
+  } catch (err) {
+    handleAxiosError(err, "[PRODUTOS] Erro ao deletar produto");
+    return false;
+  }
 }
 
 /* ================== VENDAS ================== */
 
-export async function criarVenda(payload: CriarVendaPayload): Promise<{ venda: Venda; fatura: Fatura }> {
-  const { data } = await api.post("/vendas", payload);
-  return data;
+export async function criarVenda(
+  payload: CriarVendaPayload
+): Promise<{ venda: Venda; fatura: Fatura } | null> {
+  try {
+    const { data } = await api.post<{ venda: Venda; fatura: Fatura }>("/vendas", payload);
+    return data;
+  } catch (err) {
+    handleAxiosError(err, "[VENDAS] Erro ao criar venda");
+    return null;
+  }
 }
 
-export async function obterVenda(vendaId: string): Promise<Venda> {
-  const { data } = await api.get(`/vendas/${vendaId}`);
-  return data;
+export async function obterVenda(vendaId: string): Promise<Venda | null> {
+  try {
+    const { data } = await api.get<Venda>(`/vendas/${vendaId}`);
+    return data;
+  } catch (err) {
+    handleAxiosError(err, "[VENDAS] Erro ao obter venda");
+    return null;
+  }
 }
 
-export async function cancelarVenda(vendaId: string): Promise<void> {
-  await api.post(`/vendas/${vendaId}/cancelar`);
+export async function cancelarVenda(vendaId: string): Promise<boolean> {
+  try {
+    await api.post(`/vendas/${vendaId}/cancelar`);
+    return true;
+  } catch (err) {
+    handleAxiosError(err, "[VENDAS] Erro ao cancelar venda");
+    return false;
+  }
 }
 
 export async function listarVendas(): Promise<Venda[]> {
@@ -141,8 +180,6 @@ export async function fetchDashboardData(): Promise<DashboardData> {
     return data;
   } catch (err) {
     handleAxiosError(err, "[DASHBOARD] Erro ao carregar dados");
-
-    // Valores default para evitar quebra do frontend
     return {
       faturasEmitidas: 0,
       clientesAtivos: 0,
@@ -150,16 +187,5 @@ export async function fetchDashboardData(): Promise<DashboardData> {
       vendasPorMes: [],
       ultimasFaturas: [],
     };
-  }
-}
-
-/* ================== HELPERS ================== */
-
-function handleAxiosError(err: unknown, prefix: string) {
-  if (err instanceof AxiosError) {
-    const msg = err.response?.data?.message || err.message || "Erro desconhecido";
-    console.error(`${prefix}:`, msg);
-  } else {
-    console.error(`${prefix}:`, err);
   }
 }

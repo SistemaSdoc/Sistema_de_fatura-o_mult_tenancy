@@ -44,7 +44,6 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-      // 🚫 nada de localStorage aqui
     } catch (err: unknown) {
       if (err instanceof AxiosError) {
         setError(err.response?.data?.message ?? err.message);

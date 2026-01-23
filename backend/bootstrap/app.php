@@ -4,7 +4,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use App\Http\Middleware\RoleMiddleware;
-use Illuminate\Auth\Middleware\Authenticate as SanctumAuthenticate;
+use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 
 return Application::configure(basePath: dirname(__DIR__))
 
@@ -15,14 +15,22 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
 
-    ->withMiddleware(function (Middleware $middleware) {
+   ->withMiddleware(function (Middleware $middleware) {
 
-        // 🔹 Middlewares de rota
-        $middleware->alias([
-            'role'        => RoleMiddleware::class,
-            'auth:sanctum' => SanctumAuthenticate::class,
-        ]);
-    })
+    $middleware->alias([
+        'role' => RoleMiddleware::class,
+    ]);
+
+    $middleware->group('api', [
+        EnsureFrontendRequestsAreStateful::class,
+        \Illuminate\Cookie\Middleware\EncryptCookies::class,
+        \Illuminate\Session\Middleware\StartSession::class,
+        \Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class,
+        \Illuminate\Routing\Middleware\ThrottleRequests::class.':api',
+        \Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class,
+    ]);
+})
+
 
     ->withExceptions(function (Exceptions $exceptions) {
         //

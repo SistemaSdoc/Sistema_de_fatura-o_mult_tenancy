@@ -2,11 +2,10 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import api from "@/services/axios";
-import { AxiosError } from "axios";
+import Cookies from "js-cookie"; // 🔹 para ler o cookie XSRF-TOKEN
 
-/* -------- Tipos -------- */
 export interface User {
-  id: string;
+  id: number;
   name: string;
   email: string;
   role: string;
@@ -20,62 +19,77 @@ interface AuthContextData {
   fetchUser: () => Promise<void>;
 }
 
-/* -------- Context -------- */
 const AuthContext = createContext<AuthContextData | null>(null);
 
-/* -------- Provider -------- */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Busca usuário logado no backend via cookie
+  // 🔹 Busca usuário autenticado
   const fetchUser = useCallback(async () => {
-    setLoading(true);
     try {
-      const response = await api.get<User>("/api/me");
-      setUser(response.data);
-    } catch (err) {
+      const { data } = await api.get<{ user: User }>("/me");
+      setUser(data.user ?? null);
+    } catch {
       setUser(null);
-      console.error("Erro ao buscar usuário:", err);
-    } finally {
-      setLoading(false);
     }
   }, []);
 
-  // Inicializa usuário quando o app carrega
+  // 🔹 Inicialização SPA
   useEffect(() => {
-    fetchUser();
+    const init = async () => {
+      try {
+        // 1️⃣ Pega CSRF cookie
+        await api.get("/sanctum/csrf-cookie");
+
+        // 2️⃣ Tenta buscar usuário se já estiver logado
+        await fetchUser();
+      } finally {
+        setLoading(false);
+      }
+    };
+    init();
   }, [fetchUser]);
 
-  // Login usando cookies (Sanctum)
-  const login = useCallback(async (email: string, password: string) => {
-    setLoading(true);
-    try {
-      // 1️⃣ Pega CSRF cookie
-      await api.get("/sanctum/csrf-cookie");
+  // 🔹 Login
+  const login = useCallback(
+    async (email: string, password: string) => {
+      setLoading(true);
+      try {
+        // ✅ Garante CSRF cookie antes do login
+        await api.get("/sanctum/csrf-cookie");
 
-      // 2️⃣ Faz login
-      await api.post("/login", { email, password });
+        // ✅ Captura token do cookie e envia no header
+        const xsrfToken = Cookies.get("XSRF-TOKEN");
 
-      // 3️⃣ Atualiza usuário logado
-      await fetchUser();
-    } catch (err) {
-      if (err instanceof AxiosError) console.error("Erro login:", err.response?.data?.message || err.message);
-      else console.error("Erro login desconhecido:", err);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, [fetchUser]);
+        await api.post(
+          "/login",
+          { email, password },
+          {
+            headers: {
+              "X-XSRF-TOKEN": xsrfToken,
+            },
+          }
+        );
 
-  // Logout usando cookies
+        // ✅ Atualiza estado do usuário
+        await fetchUser();
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchUser]
+  );
+
+  // 🔹 Logout
   const logout = useCallback(async () => {
     setLoading(true);
     try {
       await api.post("/logout");
       setUser(null);
-    } catch (err) {
-      console.error("Erro logout:", err);
+
+      // Prepara próximo login
+      await api.get("/sanctum/csrf-cookie");
     } finally {
       setLoading(false);
     }
@@ -88,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-/* -------- Hook -------- */
+// 🔹 Hook para consumir contexto
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) throw new Error("useAuth deve ser usado dentro de <AuthProvider>");
