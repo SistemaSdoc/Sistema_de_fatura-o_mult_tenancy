@@ -4,12 +4,14 @@ namespace App\Providers;
 
 use Illuminate\Foundation\Support\Providers\RouteServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Http\Request;
 
 class RouteServiceProvider extends ServiceProvider
 {
     /**
      * Namespace para os controllers.
-     * Você pode remover se estiver usando PHP 8+ e rotas sem namespace.
      */
     protected $namespace = 'App\\Http\\Controllers';
 
@@ -19,18 +21,20 @@ class RouteServiceProvider extends ServiceProvider
     public const HOME = '/home';
 
     /**
-     * Registrar rotas do aplicativo.
+     * Registrar rotas e configurar rate limiters.
      */
     public function boot(): void
     {
+ 
         parent::boot();
 
         $this->mapApiRoutes();
         $this->mapWebRoutes();
     }
 
+
     /**
-     * Rotas web (normalmente pages blade, session cookies, etc.)
+     * Rotas web (blade, session cookies, etc.)
      */
     protected function mapWebRoutes(): void
     {
@@ -40,7 +44,7 @@ class RouteServiceProvider extends ServiceProvider
     }
 
     /**
-     * Rotas API (sem estado de sessão, normalmente JSON)
+     * Rotas API (JSON, sem estado de sessão)
      */
     protected function mapApiRoutes(): void
     {
@@ -49,5 +53,4 @@ class RouteServiceProvider extends ServiceProvider
             ->namespace($this->namespace)
             ->group(base_path('routes/api.php'));
     }
-
 }

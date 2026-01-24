@@ -25,8 +25,6 @@ return Application::configure(basePath: dirname(__DIR__))
         EnsureFrontendRequestsAreStateful::class,
         \Illuminate\Cookie\Middleware\EncryptCookies::class,
         \Illuminate\Session\Middleware\StartSession::class,
-        \Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class,
-        \Illuminate\Routing\Middleware\ThrottleRequests::class.':api',
         \Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class,
     ]);
 })

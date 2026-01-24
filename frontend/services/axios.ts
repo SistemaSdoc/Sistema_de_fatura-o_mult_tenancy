@@ -27,4 +27,10 @@ api.interceptors.response.use(
   }
 );
 
+await fetch("http://127.0.0.1:8000/api/test", {
+  method: "POST",
+  credentials: "include",
+});
+
+
 export default api;

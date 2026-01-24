@@ -50,6 +50,12 @@ class DashboardController extends Controller
             ]);
 
         return response()->json([
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role, 
+            ],
             'faturasEmitidas' => $faturasEmitidas,
             'clientesAtivos' => $clientesAtivos,
             'receitaMensal' => (float) $receitaMensal,

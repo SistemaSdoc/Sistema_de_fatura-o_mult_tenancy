@@ -13,6 +13,7 @@ class VendaResource extends JsonResource
             'cliente' => [
                 'id' => $this->cliente->id,
                 'nome' => $this->cliente->nome,
+                'nif'=>$this->cliente->nif,
             ],
             'user' => [
                 'id' => $this->user->id,

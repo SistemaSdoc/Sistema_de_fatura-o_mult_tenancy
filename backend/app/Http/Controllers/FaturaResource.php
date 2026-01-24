@@ -14,6 +14,8 @@ class FaturaResource extends JsonResource
             'cliente' => [
                 'id' => $this->cliente->id,
                 'nome' => $this->cliente->nome,
+                'nif'=>$this->cliente->nif,
+
             ],
             'num_sequencial' => $this->num_sequencial,
             'total' => $this->total,

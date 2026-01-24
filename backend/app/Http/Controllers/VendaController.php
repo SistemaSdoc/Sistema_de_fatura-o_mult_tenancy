@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Services\VendaService;
@@ -16,12 +15,13 @@ class VendaController extends Controller
     protected VendaService $vendaService;
     protected FaturaService $faturaService;
 
-    public function __construct(
-        VendaService $vendaService,
-        FaturaService $faturaService
-    ) {
+    public function __construct(VendaService $vendaService, FaturaService $faturaService)
+    {
         $this->vendaService = $vendaService;
         $this->faturaService = $faturaService;
+
+        // Forçar auth via sanctum para todas rotas do controller
+        $this->middleware('auth:sanctum');
     }
 
     /**
@@ -39,20 +39,46 @@ class VendaController extends Controller
     }
 
     /**
-     * MOSTRAR VENDA
+     * MOSTRAR UMA VENDA
      */
     public function show(string $id)
     {
-        $venda = Venda::with(['cliente', 'user', 'itens', 'fatura'])
-            ->findOrFail($id);
-
+        $venda = Venda::with(['cliente', 'user', 'itens', 'fatura'])->findOrFail($id);
         $this->authorize('view', $venda);
 
         return new VendaResource($venda);
     }
 
     /**
-     * CRIAR VENDA + FATURA
+     * DADOS NECESSÁRIOS PARA CRIAR NOVA VENDA
+     */
+/**
+ * DADOS PARA NOVA VENDA
+ * Fornece clientes e produtos para popular a página de criação de venda
+ */
+public function createData()
+{
+    $this->authorize('create', Venda::class);
+
+    // Clientes
+    $clientes = DB::table('clientes')
+        ->select('id', 'nome', 'nif')
+        ->get();
+
+    // Produtos com preço de venda e estoque atual
+    $produtos = DB::table('produtos')
+        ->select('id', 'nome', 'preco_venda', 'estoque_atual')
+        ->get();
+
+    return response()->json([
+        'clientes' => $clientes,
+        'produtos' => $produtos,
+    ]);
+}
+
+
+    /**
+     * CRIAR VENDA E GERAR FATURA
      */
     public function store(Request $request)
     {
@@ -65,16 +91,13 @@ class VendaController extends Controller
             'itens.*.quantidade' => 'required|integer|min:1',
         ]);
 
-        $user = $request->user(); // 🔐 vem do token
+        $user = $request->user(); // Vem do cookie Sanctum
 
         return DB::transaction(function () use ($dados, $user) {
-
-            // valida cliente
             if (!DB::table('clientes')->find($dados['cliente_id'])) {
                 abort(422, 'Cliente não encontrado');
             }
 
-            // valida produtos
             foreach ($dados['itens'] as $item) {
                 if (!DB::table('produtos')->find($item['produto_id'])) {
                     abort(422, "Produto {$item['produto_id']} não encontrado");
@@ -93,5 +116,18 @@ class VendaController extends Controller
                 'fatura' => new FaturaResource($fatura),
             ], 201);
         });
+    }
+
+    /**
+     * CANCELAR VENDA
+     */
+    public function cancel(string $id)
+    {
+        $venda = Venda::findOrFail($id);
+        $this->authorize('cancel', $venda);
+
+        $venda->update(['status' => 'cancelada']);
+
+        return response()->json(['message' => 'Venda cancelada com sucesso']);
     }
 }

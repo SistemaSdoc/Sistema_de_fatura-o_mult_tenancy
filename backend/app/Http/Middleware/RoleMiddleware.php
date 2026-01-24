@@ -17,8 +17,8 @@ class RoleMiddleware
      */
     public function handle(Request $request, Closure $next, ...$roles)
     {
-        // Pegando usuário autenticado no tenant
-        $user = Auth::guard('tenant')->user();
+       $user = auth()->guard('sanctum')->user();
+
 
         if (!$user) {
             return response()->json(['message' => 'Não autorizado'], 401);

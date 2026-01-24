@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import api from "@/services/axios";
-import Cookies from "js-cookie"; // 🔹 para ler o cookie XSRF-TOKEN
+import Cookies from "js-cookie"; 
 
 export interface User {
   id: number;
@@ -56,10 +56,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async (email: string, password: string) => {
       setLoading(true);
       try {
-        // ✅ Garante CSRF cookie antes do login
         await api.get("/sanctum/csrf-cookie");
 
-        // ✅ Captura token do cookie e envia no header
+       
         const xsrfToken = Cookies.get("XSRF-TOKEN");
 
         await api.post(
@@ -72,7 +71,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         );
 
-        // ✅ Atualiza estado do usuário
         await fetchUser();
       } finally {
         setLoading(false);

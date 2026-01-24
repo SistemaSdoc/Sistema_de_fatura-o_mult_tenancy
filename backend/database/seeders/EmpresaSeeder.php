@@ -133,6 +133,17 @@ class EmpresaSeeder extends Seeder
             ],
             [
                 'id' => Str::uuid(),
+                'nome' => 'BAI',
+                'nif' => '1122334499',
+                'tipo' => 'empresa',
+                'telefone' => '922334455',
+                'email' => 'bai@gmail.com',
+                'endereco' => 'Zona Contablidade, Icolo e Bengo',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'id' => Str::uuid(),
                 'nome' => 'Empresa XYZ',
                 'nif' => '1122334455',
                 'tipo' => 'empresa',
