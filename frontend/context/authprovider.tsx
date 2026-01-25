@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import api from "@/services/axios";
-import Cookies from "js-cookie"; 
+import Cookies from "js-cookie";
 
 export interface User {
   id: number;
@@ -58,7 +58,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         await api.get("/sanctum/csrf-cookie");
 
-       
         const xsrfToken = Cookies.get("XSRF-TOKEN");
 
         await api.post(

@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from "react";
@@ -9,14 +10,13 @@ import {
   criarVenda,
   ItemVenda,
   Venda,
-  Produto,
+  ProdutoVenda,
   Cliente,
   obterDadosNovaVenda,
 } from "@/services/vendas";
-import api from "@/services/axios"; // 🔹 para garantir CSRF cookie
+import api from "@/services/axios";
 
 /* ================== TIPOS LOCAIS ================== */
-interface ItemVendaForm extends ItemVenda {}
 
 export default function NovaVendaPage() {
   const router = useRouter();
@@ -25,10 +25,11 @@ export default function NovaVendaPage() {
   /* ================= STATES ================= */
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
   const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [produtos, setProdutos] = useState<Produto[]>([]);
-  const [itens, setItens] = useState<ItemVendaForm[]>([]);
+  const [produtos, setProdutos] = useState<ProdutoVenda[]>([]); 
+  const [itens, setItens] = useState<ItemVenda[]>([]);
   const [vendas, setVendas] = useState<Venda[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null); 
 
   /* ================= PROTEÇÃO DE ROTA ================= */
   useEffect(() => {
@@ -54,7 +55,7 @@ export default function NovaVendaPage() {
     ]);
   };
 
-  const atualizarItem = (index: number, campo: keyof ItemVendaForm, valor: string | number): void => {
+  const atualizarItem = (index: number, campo: keyof ItemVenda, valor: string | number): void => {
     setItens(prev => {
       const novosItens = [...prev];
       novosItens[index][campo] = valor as never;
@@ -86,20 +87,20 @@ export default function NovaVendaPage() {
 
   /* ================= SALVAR VENDA ================= */
   const salvarVenda = async (): Promise<void> => {
-    if (!clienteSelecionado) return alert("Selecione um cliente");
-    if (itens.length === 0) return alert("Adicione pelo menos um item");
-    if (itens.some(i => !i.produto_id)) return alert("Selecione todos os produtos");
+    if (!clienteSelecionado) return setError("Selecione um cliente");
+    if (itens.length === 0) return setError("Adicione pelo menos um item");
+    if (itens.some(i => !i.produto_id)) return setError("Selecione todos os produtos");
 
     for (const item of itens) {
       const produto = produtos.find(p => p.id === item.produto_id);
       if (produto && item.quantidade > produto.estoque_atual) {
-        return alert(`Quantidade do produto ${produto.nome} maior que o estoque disponível`);
+        return setError(`Quantidade do produto ${produto.nome} maior que o estoque disponível`);
       }
     }
 
     setLoading(true);
+    setError(null);
     try {
-      // 🔹 Garante CSRF cookie antes do POST
       await api.get("/sanctum/csrf-cookie");
 
       const payload = {
@@ -108,16 +109,14 @@ export default function NovaVendaPage() {
       };
 
       const result = await criarVenda(payload);
-      if (!result) return alert("Erro ao criar venda");
+      if (!result) return setError("Erro ao criar venda");
 
-      // Atualiza lista e limpa formulário
       setVendas(prev => [result.venda, ...prev]);
       setClienteSelecionado(null);
       setItens([]);
-      alert("Venda criada com sucesso!");
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : "Erro desconhecido ao criar venda";
-      alert(msg);
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -131,10 +130,28 @@ export default function NovaVendaPage() {
       <div className="p-6 space-y-6">
         <h1 className="text-3xl font-bold text-[#123859]">Nova Venda</h1>
 
+        {/* Banner de erro */}
+        {error && (
+          <div className="w-full bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+            <strong className="font-bold">Ops!</strong>
+            <span className="block sm:inline ml-2">{error}</span>
+            <span
+              className="absolute top-0 bottom-0 right-0 px-4 py-3 cursor-pointer"
+              onClick={() => setError(null)}
+            >
+              <svg className="fill-current h-6 w-6 text-red-500" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                <title>Fechar</title>
+                <path d="M14.348 5.652a1 1 0 00-1.414 0L10 8.586 7.066 5.652a1 1 0 10-1.414 1.414L8.586 10l-2.934 2.934a1 1 0 101.414 1.414L10 11.414l2.934 2.934a1 1 0 001.414-1.414L11.414 10l2.934-2.934a1 1 0 000-1.414z"/>
+              </svg>
+            </span>
+          </div>
+        )}
+
         {/* Cliente */}
         <div className="bg-white p-4 rounded-xl shadow space-y-2">
-          <label className="font-semibold">Cliente</label>
+          <label htmlFor="cliente" className="font-semibold">Cliente</label>
           <select
+            id="cliente"
             className="w-full border p-2 rounded"
             value={clienteSelecionado?.id || ""}
             onChange={e => {
@@ -155,7 +172,10 @@ export default function NovaVendaPage() {
         <div className="bg-white p-4 rounded-xl shadow space-y-4">
           <div className="flex justify-between items-center">
             <h2 className="font-semibold">Itens da Venda</h2>
-            <button onClick={adicionarItem} className="flex gap-2 bg-[#123859] text-white px-3 py-1 rounded hover:bg-[#0d2a45] transition">
+            <button
+              onClick={adicionarItem}
+              className="flex gap-2 bg-[#123859] text-white px-3 py-1 rounded hover:bg-[#0d2a45] transition"
+            >
               <Plus size={16} /> Adicionar Item
             </button>
           </div>
@@ -167,7 +187,9 @@ export default function NovaVendaPage() {
             const maxQtd = produto ? produto.estoque_atual : 1;
             return (
               <div key={item.id} className="grid grid-cols-6 gap-2 items-center">
+                <label htmlFor={`produto-${index}`} className="sr-only">Produto</label>
                 <select
+                  id={`produto-${index}`}
                   className="border p-2 rounded"
                   value={item.produto_id}
                   onChange={e => atualizarItem(index, "produto_id", e.target.value)}
@@ -179,20 +201,37 @@ export default function NovaVendaPage() {
                     </option>
                   ))}
                 </select>
-
+                <label htmlFor={`quantidade-${index}`} className="sr-only">Quantidade</label>
                 <input
+                  id={`quantidade-${index}`}
                   type="number"
                   min={1}
                   max={maxQtd}
                   value={item.quantidade}
                   onChange={e => atualizarItem(index, "quantidade", Number(e.target.value))}
                   className="border p-2 rounded"
+                  placeholder="Qtd"
                 />
 
-                <input disabled value={item.preco_venda.toLocaleString()} className="border p-2 rounded bg-gray-100" />
-                <input disabled value={item.subtotal.toLocaleString()} className="border p-2 rounded bg-gray-100" />
+                <input
+                  disabled
+                  value={item.preco_venda.toLocaleString("pt-AO")}
+                  className="border p-2 rounded bg-gray-100"
+                  aria-label="Preço unitário"
+                />
 
-                <button onClick={() => removerItem(index)} className="text-red-600 hover:text-red-800">
+                <input
+                  disabled
+                  value={item.subtotal.toLocaleString("pt-AO")}
+                  className="border p-2 rounded bg-gray-100"
+                  aria-label="Subtotal"
+                />
+
+                <button
+                  onClick={() => removerItem(index)}
+                  className="text-red-600 hover:text-red-800"
+                  aria-label="Remover item"
+                >
                   <Trash2 />
                 </button>
               </div>
@@ -203,7 +242,9 @@ export default function NovaVendaPage() {
         {/* Total */}
         <div className="bg-white p-4 rounded-xl shadow flex justify-between items-center">
           <strong className="text-lg">Total</strong>
-          <span className="text-[#F9941F] font-bold text-lg">{totalVenda.toLocaleString()} Kz</span>
+          <span className="text-[#F9941F] font-bold text-lg">
+            {totalVenda.toLocaleString("pt-AO")} Kz
+          </span>
         </div>
 
         {/* Botão Salvar */}
@@ -220,11 +261,14 @@ export default function NovaVendaPage() {
           <div className="bg-white p-4 rounded-xl shadow mt-6 space-y-2">
             <h2 className="font-semibold mb-2">Vendas Recentes</h2>
             {vendas.map(v => (
-              <div key={v.id} className="flex justify-between border p-3 rounded items-center hover:bg-gray-50 transition">
+              <div
+                key={v.id}
+                className="flex justify-between border p-3 rounded items-center hover:bg-gray-50 transition"
+              >
                 <div>
                   <p><strong>Cliente:</strong> {v.cliente_nome}</p>
-                  <p><strong>Total:</strong> {v.total.toLocaleString()} Kz</p>
-                  <p><strong>Data:</strong> {new Date(v.data).toLocaleDateString()}</p>
+                  <p><strong>Total:</strong> {v.total.toLocaleString("pt-AO")} Kz</p>
+                  <p><strong>Data:</strong> {new Date(v.data).toLocaleDateString("pt-AO")}</p>
                 </div>
               </div>
             ))}

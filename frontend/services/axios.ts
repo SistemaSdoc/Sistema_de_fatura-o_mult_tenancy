@@ -1,4 +1,5 @@
 import axios, { AxiosError } from "axios";
+import Cookies from "js-cookie";
 
 export interface ApiErrorResponse {
   message?: string;
@@ -7,17 +8,27 @@ export interface ApiErrorResponse {
 }
 
 const api = axios.create({
-  baseURL: "http://127.0.0.1:8000",
-  withCredentials: true,
+  baseURL: "http://127.0.0.1:8000", //backend Laravel
+  withCredentials: true,            //envia cookies
   headers: {
     Accept: "application/json",
   },
 });
 
+// Configuração padrão de CSRF
 api.defaults.xsrfCookieName = "XSRF-TOKEN";
 api.defaults.xsrfHeaderName = "X-XSRF-TOKEN";
 
-// 🔹 Interceptor de erros
+// Interceptor de requisição → injeta o token em todos os POST/PUT/DELETE
+api.interceptors.request.use((config) => {
+  const xsrfToken = Cookies.get("XSRF-TOKEN");
+  if (xsrfToken && config.method && ["post", "put", "delete"].includes(config.method)) {
+    config.headers["X-XSRF-TOKEN"] = xsrfToken;
+  }
+  return config;
+});
+
+// Interceptor de resposta → trata erros
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError<ApiErrorResponse>) => {
@@ -26,11 +37,5 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
-await fetch("http://127.0.0.1:8000/api/test", {
-  method: "POST",
-  credentials: "include",
-});
-
 
 export default api;

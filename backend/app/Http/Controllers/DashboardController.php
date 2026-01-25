@@ -16,16 +16,16 @@ class DashboardController extends Controller
         $faturasEmitidas = DB::table('faturas')->count();
 
         // Total de clientes ativos
-        $clientesAtivos = DB::table('clientes')->where('ativo', true)->count();
+        $clientesAtivos = DB::table('clientes')->count();
 
-        // Receita do mês atual
+        // Receita do mês atual (usando created_at)
         $receitaMensal = DB::table('faturas')
-            ->whereMonth('data', now()->month)
-            ->sum('valor');
+            ->whereMonth('created_at', now()->month)
+            ->sum('total');
 
-        // Vendas por mês
+        // Vendas por mês (usando created_at)
         $vendasPorMes = DB::table('vendas')
-            ->selectRaw('MONTH(data) as mes, SUM(total) as total')
+            ->selectRaw('MONTH(created_at) as mes, SUM(total) as total')
             ->groupBy('mes')
             ->orderBy('mes')
             ->get()
@@ -34,11 +34,18 @@ class DashboardController extends Controller
                 'total' => (float) $v->total,
             ]);
 
-        // Últimas 5 faturas com dados do cliente
+        // Últimas 5 faturas com dados do cliente via venda
         $ultimasFaturas = DB::table('faturas as f')
-            ->leftJoin('clientes as c', 'f.cliente_id', '=', 'c.id')
-            ->select('f.id', 'f.data', 'f.valor as total', 'f.status', 'c.nome as cliente_nome')
-            ->latest('f.data')
+            ->leftJoin('vendas as v', 'f.venda_id', '=', 'v.id')
+            ->leftJoin('clientes as c', 'v.cliente_id', '=', 'c.id') // join via vendas
+            ->select(
+                'f.id',
+                'f.created_at as data',
+                'f.total',
+                'f.status',
+                'c.nome as cliente_nome'
+            )
+            ->latest('f.created_at')
             ->limit(5)
             ->get()
             ->map(fn($f) => [
@@ -54,7 +61,7 @@ class DashboardController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
-                'role' => $user->role, 
+                'role' => $user->role,
             ],
             'faturasEmitidas' => $faturasEmitidas,
             'clientesAtivos' => $clientesAtivos,

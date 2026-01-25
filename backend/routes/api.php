@@ -48,8 +48,5 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/faturas/gerar', [FaturaController::class, 'gerarFatura']);
     });
 
-    Route::post('/test', function () {
-    return response()->json(['ok' => true]);
-});
 
 });

@@ -9,7 +9,7 @@ interface User {
   id: string;
   name: string;
   email: string;
-  role?: string | null;
+  role: string;
 }
 
 interface DashboardData {
@@ -33,6 +33,8 @@ export default function DashboardPage() {
     }
   }, [loading, authUser, router]);
 
+
+  console.log("Auth User:", authUser);
   // 📡 Fetch do dashboard
   useEffect(() => {
     if (!authUser) return;

@@ -9,6 +9,9 @@ use App\Services\FaturaService;
 use App\Models\Venda;
 use App\Http\Resources\VendaResource;
 use App\Http\Resources\FaturaResource;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Exception;
 
 class VendaController extends Controller
 {
@@ -80,43 +83,58 @@ public function createData()
     /**
      * CRIAR VENDA E GERAR FATURA
      */
-    public function store(Request $request)
-    {
-        $this->authorize('create', Venda::class);
+public function store(Request $request)
+{
+    $this->authorize('create', Venda::class);
 
-        $dados = $request->validate([
-            'cliente_id' => 'required|uuid',
-            'itens'      => 'required|array|min:1',
-            'itens.*.produto_id' => 'required|uuid',
-            'itens.*.quantidade' => 'required|integer|min:1',
+    $dados = $request->validate([
+        'cliente_id' => 'required|uuid',
+        'itens'      => 'required|array|min:1',
+        'itens.*.produto_id' => 'required|uuid',
+        'itens.*.quantidade' => 'required|integer|min:1',
+    ]);
+
+    // 🔥 pegar o user correto, SEM confiar no frontend
+    $user = Auth::user(); 
+    if (!$user) {
+        abort(401, 'Usuário não autenticado');
+    }
+
+        // 🔥 LOG para teste
+    Log::info('Criando venda', [
+    'auth_user_name' => $user?->name,
+        'auth_id' => $user?->id,
+        'request_data' => $dados,
+    ]);
+
+    return DB::transaction(function () use ($dados, $user) {
+        // verifica cliente
+        if (!DB::table('clientes')->find($dados['cliente_id'])) {
+            abort(422, 'Cliente não encontrado');
+        }
+
+        // verifica produtos
+        foreach ($dados['itens'] as $item) {
+            if (!DB::table('produtos')->find($item['produto_id'])) {
+                abort(422, "Produto {$item['produto_id']} não encontrado");
+            }
+        }
+
+        // Cria a venda com UUID do user correto
+        $venda = $this->vendaService->criarVenda([
+            ...$dados,
+            'user_id' => $user->id, // 🔥 UUID correto
         ]);
 
-        $user = $request->user(); // Vem do cookie Sanctum
+        $fatura = $this->faturaService->gerarFatura($venda);
 
-        return DB::transaction(function () use ($dados, $user) {
-            if (!DB::table('clientes')->find($dados['cliente_id'])) {
-                abort(422, 'Cliente não encontrado');
-            }
+        return response()->json([
+            'venda'  => new VendaResource($venda),
+            'fatura' => new FaturaResource($fatura),
+        ], 201);
+    });
+}
 
-            foreach ($dados['itens'] as $item) {
-                if (!DB::table('produtos')->find($item['produto_id'])) {
-                    abort(422, "Produto {$item['produto_id']} não encontrado");
-                }
-            }
-
-            $venda = $this->vendaService->criarVenda([
-                ...$dados,
-                'user_id' => $user->id,
-            ]);
-
-            $fatura = $this->faturaService->gerarFatura($venda);
-
-            return response()->json([
-                'venda'  => new VendaResource($venda),
-                'fatura' => new FaturaResource($fatura),
-            ], 201);
-        });
-    }
 
     /**
      * CANCELAR VENDA

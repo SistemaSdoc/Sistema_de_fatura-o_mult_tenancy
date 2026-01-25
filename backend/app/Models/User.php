@@ -16,6 +16,9 @@ class User extends Authenticatable implements MustVerifyEmail
     use HasApiTokens, Notifiable, MustVerifyEmailTrait;
 
     protected $table = 'users'; // landlord DB
+    
+    public $incrementing = false;   // importante!
+    protected $keyType = 'string';  // chave primária é UUID
 
     protected $fillable = [
         'name',
