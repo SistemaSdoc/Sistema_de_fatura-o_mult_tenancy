@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use App\Services\VendaService;
 use App\Services\FaturaService;
 use App\Models\Venda;
+use App\Models\Produto;
 use App\Http\Resources\VendaResource;
 use App\Http\Resources\FaturaResource;
 use Illuminate\Support\Facades\Auth;
@@ -119,6 +120,20 @@ public function store(Request $request)
                 abort(422, "Produto {$item['produto_id']} não encontrado");
             }
         }
+
+        Log::info('Payload recebido', request()->all());
+
+$total = 0;
+foreach(request('itens') as $item) {
+    $produto = Produto::find($item['produto_id']);
+    if(!$produto) {
+        Log::error("Produto não encontrado: " . $item['produto_id']);
+        return response()->json(['error' => 'Produto não encontrado'], 400);
+    }
+    $total += $produto->preco_venda * $item['quantidade'];
+}
+
+Log::info("Total calculado: " . $total);
 
         // Cria a venda com UUID do user correto
         $venda = $this->vendaService->criarVenda([

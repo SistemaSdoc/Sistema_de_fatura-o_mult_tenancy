@@ -11,16 +11,22 @@ use Exception;
 
 class VendaService
 {
+    protected StockService $stockService;
+
+    public function __construct(StockService $stockService)
+    {
+        $this->stockService = $stockService;
+    }
+
     /**
-     * Cria uma venda com itens e controla estoque
+     * Cria uma venda com itens e registra movimento de estoque
      */
     public function criarVenda(array $dados): Venda
     {
         return DB::transaction(function () use ($dados) {
 
-            // 🔐 Usuário autenticado (OBRIGATÓRIO)
+            // 🔐 Usuário autenticado
             $user = Auth::user();
-
             if (!$user) {
                 throw new Exception('Usuário não autenticado');
             }
@@ -28,7 +34,7 @@ class VendaService
             // 🧾 Criação da venda
             $venda = Venda::create([
                 'cliente_id' => $dados['cliente_id'],
-                'user_id'    => $user->id,   // 👈 vem da sessão
+                'user_id'    => $user->id,
                 'data'       => $dados['data'] ?? now(),
                 'total'      => 0,
             ]);
@@ -40,7 +46,7 @@ class VendaService
 
                 $produto = Produto::findOrFail($item['produto_id']);
 
-                // (opcional) validar estoque
+                // Validar estoque
                 if ($produto->estoque_atual < $item['quantidade']) {
                     throw new Exception(
                         "Estoque insuficiente para o produto {$produto->nome}"
@@ -49,31 +55,30 @@ class VendaService
 
                 $subtotal = $produto->preco_venda * $item['quantidade'];
 
-                dd([
-    'auth_user' => Auth::user(),
-    'auth_id'   => Auth::id(),
-    'type'      => gettype(Auth::id()),
-]);
-
+                // Criar item da venda
                 ItemVenda::create([
                     'venda_id'    => $venda->id,
-                    'user_id'     => Auth::id(),
+                    'user_id'     => $user->id,
                     'produto_id'  => $produto->id,
                     'quantidade'  => $item['quantidade'],
                     'preco_venda' => $produto->preco_venda,
                     'subtotal'    => $subtotal,
                 ]);
 
-                // 🔻 Atualiza estoque
-                $produto->decrement('estoque_atual', $item['quantidade']);
+                // Registrar saída de estoque
+                $this->stockService->registrarMovimento(
+                    produto_id: $produto->id,
+                    tipo: 'saida',
+                    quantidade: $item['quantidade'],
+                    origem: 'venda',
+                    referencia: 'Venda #' . $venda->id
+                );
 
                 $total += $subtotal;
             }
 
-            // 💰 Atualiza total da venda
-            $venda->update([
-                'total' => $total
-            ]);
+            // Atualizar total da venda
+            $venda->update(['total' => $total]);
 
             return $venda;
         });

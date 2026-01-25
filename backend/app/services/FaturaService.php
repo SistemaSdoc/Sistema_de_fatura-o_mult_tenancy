@@ -12,31 +12,54 @@ class FaturaService
     public function gerarFatura(Venda $venda)
     {
         return DB::transaction(function () use ($venda) {
-            // Gera numeração sequencial (exemplo simples)
-            $num_sequencial = Fatura::max('num_sequencial') + 1 ?? 1;
 
-            // Cria fatura
+            $venda->load(['cliente', 'itens.produto']);
+
+            // numeração sequencial segura
+            $ultimo = Fatura::max('numero');
+            $numero = $ultimo ? $ultimo + 1 : 1;
+
             $fatura = Fatura::create([
                 'venda_id' => $venda->id,
                 'cliente_id' => $venda->cliente_id,
-                'num_sequencial' => $num_sequencial,
-                'total' => $venda->total,
+                'numero' => $numero,
+                'total' => 0, // inicial, será calculado depois
                 'status' => 'emitida',
                 'hash' => $this->gerarHash($venda),
-                'data' => now(),
             ]);
 
-            // Cria itens da fatura
+            $totalFatura = 0;
+
             foreach ($venda->itens as $item) {
+                // Calculando desconto e IVA
+                $precoUnitario = $item->preco_venda;
+                $quantidade = $item->quantidade;
+                $desconto = $item->desconto ?? 0; // desconto informado pelo usuário
+                $iva = $item->iva ?? 0;
+
+                // Verifica se o produto é isento de IVA
+                if ($item->produto->isento_iva) {
+                    $iva = 0;
+                }
+
+                // subtotal do item: (preço * quantidade) - desconto + IVA
+                $subtotal = ($precoUnitario * $quantidade) - $desconto + $iva;
+
                 ItemFatura::create([
                     'fatura_id' => $fatura->id,
                     'descricao' => $item->produto->nome,
-                    'quantidade' => $item->quantidade,
-                    'preco_unitario' => $item->preco_venda,
-                    'iva' => 0, // depois ajustar para regra fiscal
-                    'subtotal' => $item->subtotal,
+                    'quantidade' => $quantidade,
+                    'preco' => $precoUnitario,
+                    'desconto' => $desconto,
+                    'iva' => $iva,
+                    'subtotal' => $subtotal,
                 ]);
+
+                $totalFatura += $subtotal;
             }
+
+            // Atualiza total da fatura
+            $fatura->update(['total' => $totalFatura]);
 
             return $fatura;
         });
@@ -44,8 +67,12 @@ class FaturaService
 
     private function gerarHash(Venda $venda)
     {
-        // Hash simples exemplo: NIF + total + timestamp
-        $string = $venda->cliente->nif . '|' . $venda->total . '|' . now()->timestamp;
+        $venda->loadMissing('cliente');
+
+        $string = $venda->cliente->nif
+            . '|' . $venda->total
+            . '|' . now()->timestamp;
+
         return hash('sha256', $string);
     }
 }

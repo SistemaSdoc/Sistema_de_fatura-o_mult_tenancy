@@ -21,7 +21,7 @@ Schema::create('vendas', function (Blueprint $table) {
 
 
         // Itens da venda
-Schema::create('itens_vendas', function (Blueprint $table) {
+Schema::create('itens_venda', function (Blueprint $table) {
     $table->uuid('id')->primary();
     $table->foreignUuid('venda_id')->references('id')->on('vendas')->onDelete('cascade');
     $table->foreignUuid('produto_id')->references('id')->on('produtos')->onDelete('cascade');

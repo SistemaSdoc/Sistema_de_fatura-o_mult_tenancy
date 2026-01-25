@@ -15,7 +15,7 @@ class Fatura extends Model
     protected $fillable = [
         'venda_id',
         'cliente_id',
-        'num_sequencial',
+        'numero',
         'total',
         'status',
         'hash',

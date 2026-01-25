@@ -17,15 +17,16 @@ return Application::configure(basePath: dirname(__DIR__))
 
    ->withMiddleware(function (Middleware $middleware) {
 
+       $middleware->append(
+            \Illuminate\Http\Middleware\HandleCors::class
+        );
+
     $middleware->alias([
         'role' => RoleMiddleware::class,
     ]);
 
     $middleware->group('api', [
-        EnsureFrontendRequestsAreStateful::class,
-        \Illuminate\Cookie\Middleware\EncryptCookies::class,
-        \Illuminate\Session\Middleware\StartSession::class,
-        \Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class,
+        EnsureFrontendRequestsAreStateful::class,           // Sanctum
     ]);
 })
 
