@@ -1,80 +1,171 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { useAuth } from "@/context/authprovider";
-import api from "@/services/axios";
+import { Eye } from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+} from "recharts";
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-}
-
-interface DashboardData {
-  user: User;
-  faturasEmitidas: number;
-  clientesAtivos: number;
-  receitaMensal: number;
-}
+import MainEmpresa from "@/app/components/MainEmpresa";
+import { useDashboard } from "@/hooks/useDashboard";
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const { user: authUser, loading } = useAuth();
+  const { data, loading, error } = useDashboard();
 
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  // 🔐 Proteção simples
-  useEffect(() => {
-    if (!loading && !authUser) {
-      router.push("/login");
-    }
-  }, [loading, authUser, router]);
-
-
-  console.log("Auth User:", authUser);
-  // 📡 Fetch do dashboard
-  useEffect(() => {
-    if (!authUser) return;
-
-    const fetchData = async () => {
-      try {
-        const res = await api.get<DashboardData>("/api/dashboard");
-        setData(res.data);
-      } catch (err) {
-        console.error(err);
-        setError("Erro ao carregar dashboard");
-      }
-    };
-
-    fetchData();
-  }, [authUser]);
-
-  if (loading || !authUser) {
-    return <p style={{ padding: 20 }}>Carregando usuário...</p>;
+  if (loading) {
+    return <MainEmpresa>Carregando dashboard...</MainEmpresa>;
   }
 
-  if (error) {
-    return <p style={{ padding: 20, color: "red" }}>{error}</p>;
-  }
-
-  if (!data) {
-    return <p style={{ padding: 20 }}>Carregando dados...</p>;
+  if (error || !data) {
+    return <MainEmpresa>Erro ao carregar dados</MainEmpresa>;
   }
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Dashboard</h1>
+    <MainEmpresa>
+      <div className="p-6 space-y-6 bg-gray-50 min-h-screen">
 
-      <p>Bem-vindo, <strong>{data.user.name}</strong>!</p>
+        <h1 className="text-3xl font-bold text-gray-800">
+          Dashboard Financeiro
+        </h1>
 
-      <ul>
-        <li>Faturas Emitidas: {data.faturasEmitidas}</li>
-        <li>Clientes Ativos: {data.clientesAtivos}</li>
-        <li>Receita Mensal: AOA {data.receitaMensal}</li>
-      </ul>
+        {/* ===================== CARDS ===================== */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <ResumoCard titulo="Receita mês atual" valor={data.receitaMesAtual} moeda />
+          <ResumoCard titulo="Receita mês anterior" valor={data.receitaMesAnterior} moeda />
+          <ResumoCard titulo="Faturas emitidas" valor={data.faturasEmitidas} />
+          <ResumoCard titulo="Clientes ativos" valor={data.clientesAtivos} />
+        </div>
+
+        {/* ===================== COMPARAÇÃO MENSAL ===================== */}
+        <div className="bg-white p-5 rounded-xl shadow">
+          <h2 className="font-semibold mb-4">📈 Comparação mensal</h2>
+
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart
+              data={[
+                {
+                  nome: "Receita",
+                  Atual: data.receitaMesAtual,
+                  Anterior: data.receitaMesAnterior,
+                },
+              ]}
+            >
+              <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" />
+              <XAxis dataKey="nome" />
+              <YAxis />
+              <Tooltip />
+              <Bar
+                dataKey="Atual"
+                fill="#C9F5D7"
+                radius={[6, 6, 0, 0]}
+              />
+              <Bar
+                dataKey="Anterior"
+                fill="#C9B6E4"
+                radius={[6, 6, 0, 0]}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* ===================== VENDAS POR MÊS ===================== */}
+        <div className="bg-white p-5 rounded-xl shadow">
+          <h2 className="font-semibold mb-4">📊 Vendas por mês</h2>
+
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={data.vendasPorMes}>
+              <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" />
+              <XAxis dataKey="mes" />
+              <YAxis />
+              <Tooltip />
+              <Bar
+                dataKey="total"
+                fill="#C9B6E4"
+                radius={[6, 6, 0, 0]}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* ===================== PRODUTOS MAIS VENDIDOS ===================== */}
+        <div className="bg-white p-5 rounded-xl shadow">
+          <h2 className="font-semibold mb-4">📦 Produtos mais vendidos</h2>
+
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={data.produtosMaisVendidos}>
+              <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" />
+              <XAxis dataKey="produto" />
+              <YAxis />
+              <Tooltip />
+              <Bar
+                dataKey="quantidade"
+                fill="#C9F5D7"
+                radius={[6, 6, 0, 0]}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* ===================== ÚLTIMAS FATURAS ===================== */}
+        <div className="bg-white p-5 rounded-xl shadow">
+          <h2 className="font-semibold mb-4">📄 Últimas faturas</h2>
+
+          <table className="w-full border">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="p-2 text-left">Cliente</th>
+                <th className="p-2">Total</th>
+                <th className="p-2">Data</th>
+                <th className="p-2">Ação</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.ultimasFaturas.map(f => (
+                <tr key={f.id} className="border-t hover:bg-gray-50">
+                  <td className="p-2">{f.cliente}</td>
+                  <td className="p-2 text-right">
+                    {f.total.toLocaleString("pt-AO")} Kz
+                  </td>
+                  <td className="p-2">
+                    {new Date(f.data).toLocaleDateString("pt-AO")}
+                  </td>
+                  <td className="p-2 text-center">
+                    <button title="Ver fatura">
+                      <Eye size={18} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </MainEmpresa>
+  );
+}
+
+/* ===================== CARD ===================== */
+function ResumoCard({
+  titulo,
+  valor,
+  moeda = false,
+}: {
+  titulo: string;
+  valor: number;
+  moeda?: boolean;
+}) {
+  return (
+    <div className="bg-white p-4 rounded-xl shadow">
+      <p className="text-gray-500 text-sm">{titulo}</p>
+      <p className="text-2xl font-bold text-gray-800">
+        {moeda ? `${valor.toLocaleString("pt-AO")} Kz` : valor}
+      </p>
     </div>
   );
 }

@@ -32,7 +32,7 @@ class VendaResource extends JsonResource
             'data' => $this->data,
             'fatura' => $this->fatura ? [
                 'id' => $this->fatura->id,
-                'num_sequencial' => $this->fatura->num_sequencial,
+                'numero' => $this->fatura->numero,
                 'status' => $this->fatura->status,
                 'total' => $this->fatura->total,
             ] : null,

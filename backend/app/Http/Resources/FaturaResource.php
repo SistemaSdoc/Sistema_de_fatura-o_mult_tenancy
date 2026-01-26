@@ -17,11 +17,11 @@ class FaturaResource extends JsonResource
                 'nif'=>$this->cliente->nif,
 
             ],
-            'num_sequencial' => $this->num_sequencial,
+            'numero' => $this->numero,
             'total' => $this->total,
             'status' => $this->status,
             'hash' => $this->hash,
-            'data' => $this->data,
+            'data' => $this->created_at->toDateString(),
             'itens' => $this->itens->map(function ($item) {
                 return [
                     'descricao' => $item->descricao,

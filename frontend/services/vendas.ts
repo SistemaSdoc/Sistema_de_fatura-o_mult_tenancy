@@ -50,6 +50,8 @@ export interface ProdutoPayload {
   estoque_minimo: number;
 }
 
+
+
 /* -------- Item de Venda -------- */
 export interface ItemVenda {
   id: string;
@@ -58,6 +60,8 @@ export interface ItemVenda {
   quantidade: number;
   preco_venda: number;
   subtotal: number;
+  desconto?: number; // desconto informado pelo usuário
+  iva?: number;  
 }
 
 /* -------- Venda -------- */
@@ -69,7 +73,20 @@ export interface Venda {
   user_nome: string;
   data: string;
   total: number;
-  itens: ItemVenda[];
+  itens: ItemVenda[];  
+  cliente: {
+    id: string;
+    nome: string;
+  };
+  user: {
+    id: string;
+    name: string;
+  };
+  fatura?: {
+    id: string;
+    status: "emitida" | "cancelada";
+    total: number;
+  };
 }
 
 export interface ProdutoVenda {
@@ -77,6 +94,7 @@ export interface ProdutoVenda {
   nome: string;
   preco_venda: number;
   estoque_atual: number;
+  isento_iva: boolean;
 }
 
 
@@ -85,27 +103,70 @@ export interface CriarVendaPayload {
   itens: {
     produto_id: string;
     quantidade: number;
+    desconto?: number; // desconto informado pelo usuário
+    iva?: number;      // IVA informado pelo usuário, ou 0 se isento
   }[];
 }
 
 /* -------- Fatura -------- */
 export interface Fatura {
   id: string;
-  cliente: string;
-  data: string;
-  valor: number;
+  venda_id: string;
+  numero: string;
+  total: string;
   status: "emitida" | "cancelada";
+  hash: string;
+  data: string;
+  venda?: {
+    id: string;
+    cliente: {
+      id: string;
+      nome: string;
+      nif: string;
+    };
+    }
 }
 
+
 /* -------- Dashboard -------- */
+
 export interface DashboardData {
-  user: User;
+  user: {
+    id: number;
+    name: string;
+    email: string;
+    role: string;
+  };
+
   faturasEmitidas: number;
   clientesAtivos: number;
+
   receitaMensal: number;
-  vendasPorMes: { mes: string; total: number }[];
-  ultimasFaturas: Fatura[];
+  receitaMesAtual: number;
+  receitaMesAnterior: number;
+
+  vendasPorMes: {
+    mes: string;
+    total: number;
+  }[];
+
+  produtosMaisVendidos: {
+    produto: string;
+    quantidade: number;
+  }[];
+
+  ultimasFaturas: {
+    id: number;
+    cliente: string;
+    data: string;
+    total: number;
+    status: string;
+  }[];
 }
+
+
+
+
 
 /* -------- Nova Venda (Clientes + Produtos) -------- */
 export interface NovaVendaData {
@@ -192,13 +253,14 @@ export async function cancelarVenda(vendaId: string): Promise<boolean> {
 
 export async function listarVendas(): Promise<Venda[]> {
   try {
-    const { data } = await api.get<Venda[]>("/api/vendas/listar");
-    return data;
+    const { data } = await api.get<{ data: Venda[] }>("/api/vendas/listar");
+    return data.data ?? [];
   } catch (err) {
     handleAxiosError(err, "[VENDAS] Erro ao listar vendas");
     return [];
   }
 }
+
 
 /* ================== NOVA VENDA ================== */
 export async function obterDadosNovaVenda(): Promise<NovaVendaData> {
@@ -219,5 +281,25 @@ export async function fetchDashboardData(): Promise<DashboardData> {
   } catch (err) {
     handleAxiosError(err, "[DASHBOARD] Erro ao carregar dados");
     throw err;
+  }
+}
+
+// services/vendas.ts
+export async function emitirFatura(vendaId: string): Promise<Fatura | null> {
+  try {
+    const { data } = await api.post<{ fatura: Fatura }>("/api/faturas/gerar", { venda_id: vendaId });
+    return data.fatura;
+  } catch (err) {
+    handleAxiosError(err, "[FATURA] Erro ao gerar fatura");
+    return null;
+  }
+}
+export async function listarFaturas(): Promise<Fatura[]> {
+  try {
+    const { data } = await api.get<Fatura[]>("/api/faturas");
+    return data;
+  } catch (err) {
+    handleAxiosError(err, "[FATURA] Erro ao listar faturas");
+    return [];
   }
 }

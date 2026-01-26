@@ -6,42 +6,79 @@ use App\Models\Fatura;
 use App\Models\ItemFatura;
 use App\Models\Venda;
 use Illuminate\Support\Facades\DB;
+
 class FaturaService
 {
+    /**
+     * Gera uma fatura a partir de uma venda
+     */
     public function gerarFatura(Venda $venda)
     {
         return DB::transaction(function () use ($venda) {
 
+            // Carrega relacionamento de cliente e itens com produtos
             $venda->load(['cliente', 'itens.produto']);
 
-            // numeração sequencial segura
+            // Numeração sequencial da fatura
             $ultimo = Fatura::max('numero');
             $numero = $ultimo ? $ultimo + 1 : 1;
 
+            // Cria fatura inicial com total 0
             $fatura = Fatura::create([
                 'venda_id' => $venda->id,
                 'cliente_id' => $venda->cliente_id,
                 'numero' => $numero,
-                'total' => $venda->total,
+                'total' => 0,
                 'status' => 'emitida',
                 'hash' => $this->gerarHash($venda),
             ]);
 
+            $totalFatura = 0;
+
             foreach ($venda->itens as $item) {
+                $precoUnitario = $item->preco_venda;
+                $quantidade = $item->quantidade;
+                $desconto = $item->desconto ?? 0; // desconto informado pelo usuário
+                $ivaPercent = $item->iva ?? 0;    // IVA em percentual
+
+                // Se o produto for isento de IVA
+                if ($item->produto->isento_iva) {
+                    $ivaPercent = 0;
+                }
+
+                // Valor líquido = preço * quantidade - desconto
+                $valorLiquido = ($precoUnitario * $quantidade) - $desconto;
+
+                // Valor do IVA em Kz
+                $ivaValor = $valorLiquido * ($ivaPercent / 100);
+
+                // Subtotal do item
+                $subtotal = $valorLiquido + $ivaValor;
+
+                // Cria item da fatura
                 ItemFatura::create([
                     'fatura_id' => $fatura->id,
                     'descricao' => $item->produto->nome,
-                    'quantidade' => $item->quantidade,
-                    'preco' => $item->preco_venda,
-                    'iva' => 0,
-                    'subtotal' => $item->subtotal,
+                    'quantidade' => $quantidade,
+                    'preco' => $precoUnitario,
+                    'desconto' => $desconto,
+                    'iva' => $ivaValor,
+                    'subtotal' => $subtotal,
                 ]);
+
+                $totalFatura += $subtotal;
             }
+
+            // Atualiza total da fatura
+            $fatura->update(['total' => $totalFatura]);
 
             return $fatura;
         });
     }
 
+    /**
+     * Gera hash fiscal para fatura
+     */
     private function gerarHash(Venda $venda)
     {
         $venda->loadMissing('cliente');

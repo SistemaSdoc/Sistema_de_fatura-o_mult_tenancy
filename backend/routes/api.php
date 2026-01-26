@@ -43,6 +43,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/vendas/listar', [VendaController::class, 'index']);
         Route::get('/vendas/create-data', [VendaController::class, 'createData']);
         Route::post('/vendas', [VendaController::class, 'store']);
+        Route::get('/vendas/{id}', [VendaController::class, 'show']);
         Route::apiResource('/pagamentos', PagamentoController::class);
         Route::get('/faturas', [FaturaController::class, 'index']);
         Route::post('/faturas/gerar', [FaturaController::class, 'gerarFatura']);
