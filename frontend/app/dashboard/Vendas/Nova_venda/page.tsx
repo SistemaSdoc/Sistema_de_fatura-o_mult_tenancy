@@ -60,56 +60,54 @@ export default function NovaVendaPage() {
     ]);
   };
 
+  const atualizarItem = (
+    index: number,
+    campo: keyof ItemVenda,
+    valor: string | number
+  ): void => {
+    setItens(prev => {
+      const novosItens = [...prev];
+      const item = { ...novosItens[index] };
 
-const atualizarItem = (
-  index: number,
-  campo: keyof ItemVenda,
-  valor: string | number
-): void => {
-  setItens(prev => {
-    const novosItens = [...prev];
-    const item = { ...novosItens[index] };
-
-    // Atualiza campo de forma segura
-    if (campo === "produto_id" && typeof valor === "string") {
-      item.produto_id = valor;
-    } else if (campo === "produto_nome" && typeof valor === "string") {
-      item.produto_nome = valor;
-    } else if (
-      campo === "quantidade" ||
-      campo === "preco_venda" ||
-      campo === "subtotal" ||
-      campo === "desconto" ||
-      campo === "iva"
-    ) {
-      item[campo] = Number(valor);
-    }
-
-    // Se mudou o produto, atualiza preço, nome e IVA
-    if (campo === "produto_id") {
-      const produto = produtos.find(p => p.id === valor);
-      if (produto) {
-        item.produto_nome = produto.nome;
-        item.preco_venda = produto.preco_venda;
-        item.iva = produto.isento_iva ? 0 : 14; // IVA padrão 14%
-        if (item.quantidade > produto.estoque_atual) {
-          item.quantidade = produto.estoque_atual;
-        }
-      } else {
-        item.produto_nome = "";
-        item.preco_venda = 0;
-        item.iva = 0;
+      // Atualiza campo de forma segura
+      if (campo === "produto_id" && typeof valor === "string") {
+        item.produto_id = valor;
+      } else if (campo === "produto_nome" && typeof valor === "string") {
+        item.produto_nome = valor;
+      } else if (
+        campo === "quantidade" ||
+        campo === "preco_venda" ||
+        campo === "subtotal" ||
+        campo === "desconto" ||
+        campo === "iva"
+      ) {
+        item[campo] = Number(valor);
       }
-    }
 
-    // Atualiza subtotal
-    item.subtotal = (item.preco_venda * item.quantidade) - (item.desconto || 0) + (item.iva || 0);
+      // Se mudou o produto, atualiza preço, nome e IVA
+      if (campo === "produto_id") {
+        const produto = produtos.find(p => p.id === valor);
+        if (produto) {
+          item.produto_nome = produto.nome;
+          item.preco_venda = produto.preco_venda;
+          item.iva = produto.isento_iva ? 0 : 14; // IVA padrão 14%
+          if (item.quantidade > produto.estoque_atual) {
+            item.quantidade = produto.estoque_atual;
+          }
+        } else {
+          item.produto_nome = "";
+          item.preco_venda = 0;
+          item.iva = 0;
+        }
+      }
 
-    novosItens[index] = item;
-    return novosItens;
-  });
-};
+      // Atualiza subtotal
+      item.subtotal = (item.preco_venda * item.quantidade) - (item.desconto || 0) + (item.iva || 0);
 
+      novosItens[index] = item;
+      return novosItens;
+    });
+  };
 
   const removerItem = (index: number): void => {
     setItens(prev => prev.filter((_, i) => i !== index));
@@ -151,6 +149,10 @@ const atualizarItem = (
       setVendas(prev => [result.venda, ...prev]);
       setClienteSelecionado(null);
       setItens([]);
+
+      // ✅ REDIRECIONAMENTO PARA FATURAS (após salvar)
+      router.push("/dashboard/Faturas/Faturas");
+
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : "Erro desconhecido ao criar venda";
       setError(msg);
@@ -175,7 +177,7 @@ const atualizarItem = (
             <span className="absolute top-0 bottom-0 right-0 px-4 py-3 cursor-pointer" onClick={() => setError(null)}>
               <svg className="fill-current h-6 w-6 text-red-500" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
                 <title>Fechar</title>
-                <path d="M14.348 5.652a1 1 0 00-1.414 0L10 8.586 7.066 5.652a1 1 0 10-1.414 1.414L8.586 10l-2.934 2.934a1 1 0 101.414 1.414L10 11.414l2.934 2.934a1 1 0 001.414-1.414L11.414 10l2.934-2.934a1 1 0 000-1.414z"/>
+                <path d="M14.348 5.652a1 1 0 00-1.414 0L10 8.586 7.066 5.652a1 1 0 10-1.414 1.414L8.586 10l-2.934 2.934a1 1 0 101.414 1.414L10 11.414l2.934 2.934a1 1 0 001.414-1.414L11.414 10l2.934-2.934a1 1 0 000-1.414z" />
               </svg>
             </span>
           </div>
@@ -216,144 +218,144 @@ const atualizarItem = (
 
           {itens.length === 0 && <p className="text-gray-500">Nenhum item adicionado</p>}
 
-         {itens.map((item, index) => {
-  const produto = produtos.find(p => p.id === item.produto_id);
-  const maxQtd = produto ? produto.estoque_atual : 1;
+          {itens.map((item, index) => {
+            const produto = produtos.find(p => p.id === item.produto_id);
+            const maxQtd = produto ? produto.estoque_atual : 1;
 
-  return (
-    <div
-      key={item.id}
-      className="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-4"
-    >
-      {/* Nome do Produto */}
-      <div className="mb-3">
-        <label htmlFor={`produto-${index}`} className="block font-semibold mb-1">
-          Produto
-        </label>
-        <select
-          id={`produto-${index}`}
-          className="border p-2 rounded w-full"
-          value={item.produto_id}
-          onChange={e => atualizarItem(index, "produto_id", e.target.value)}
-        >
-          <option value="">Selecione o produto</option>
-          {produtos.map(p => (
-            <option key={p.id} value={p.id}>
-              {p.nome} - {p.preco_venda.toLocaleString()} Kz (Estoque: {p.estoque_atual})
-            </option>
-          ))}
-        </select>
-      </div>
+            return (
+              <div
+                key={item.id}
+                className="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-4"
+              >
+                {/* Nome do Produto */}
+                <div className="mb-3">
+                  <label htmlFor={`produto-${index}`} className="block font-semibold mb-1">
+                    Produto
+                  </label>
+                  <select
+                    id={`produto-${index}`}
+                    className="border p-2 rounded w-full"
+                    value={item.produto_id}
+                    onChange={e => atualizarItem(index, "produto_id", e.target.value)}
+                  >
+                    <option value="">Selecione o produto</option>
+                    {produtos.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.nome} - {p.preco_venda.toLocaleString()} Kz (Estoque: {p.estoque_atual})
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-      <div className="mb-4" >
-         <p className="text-sm text-gray-500">
-            Estoque atual: {produto?.estoque_atual || 0} | Restante: {produto ? produto.estoque_atual - item.quantidade : 0}
-          </p>
-      </div>
+                <div className="mb-4" >
+                  <p className="text-sm text-gray-500">
+                    Estoque atual: {produto?.estoque_atual || 0} | Restante: {produto ? produto.estoque_atual - item.quantidade : 0}
+                  </p>
+                </div>
 
-      {/* Campos: Quantidade, Desconto, IVA, Preço, Subtotal, Remover */}
-      <div className="grid grid-cols-6 gap-3 items-end">
-        {/* Quantidade */}
-        <div>
-          <label htmlFor={`quantidade-${index}`} className="block font-semibold mb-1">
-            Quantidade
-          </label>
-          <input
-            id={`quantidade-${index}`}
-            type="number"
-            min={1}
-            max={maxQtd}
-            value={item.quantidade}
-            onChange={e => atualizarItem(index, "quantidade", Number(e.target.value))}
-            className="border p-2 rounded w-full"
-          />
-         
+                {/* Campos: Quantidade, Desconto, IVA, Preço, Subtotal, Remover */}
+                <div className="grid grid-cols-6 gap-3 items-end">
+                  {/* Quantidade */}
+                  <div>
+                    <label htmlFor={`quantidade-${index}`} className="block font-semibold mb-1">
+                      Quantidade
+                    </label>
+                    <input
+                      id={`quantidade-${index}`}
+                      type="number"
+                      min={1}
+                      max={maxQtd}
+                      value={item.quantidade}
+                      onChange={e => atualizarItem(index, "quantidade", Number(e.target.value))}
+                      className="border p-2 rounded w-full"
+                    />
+                  </div>
+
+                  {/* Desconto */}
+                  <div>
+                    <label htmlFor={`desconto-${index}`} className="block font-semibold mb-1">
+                      Desconto
+                    </label>
+                    <input
+                      id={`desconto-${index}`}
+                      type="number"
+                      value={item.desconto || 0}
+                      onChange={e => atualizarItem(index, "desconto", Number(e.target.value))}
+                      className="border p-2 rounded w-full"
+                    />
+                  </div>
+
+                  {/* IVA */}
+                  <div>
+                    <label htmlFor={`iva-${index}`} className="block font-semibold mb-1">
+                      IVA
+                    </label>
+                    <input
+                      id={`iva-${index}`}
+                      type="number"
+                      value={item.iva || 0}
+                      disabled
+                      className="border p-2 rounded w-full bg-gray-100"
+                      title="IVA automático"
+                    />
+                  </div>
+
+                  {/* Preço unitário */}
+                  <div>
+                    <label htmlFor={`preco-${index}`} className="block font-semibold mb-1">
+                      Preço
+                    </label>
+                    <input
+                      id={`preco-${index}`}
+                      type="text"
+                      value={item.preco_venda.toLocaleString("pt-AO")}
+                      disabled
+                      className="border p-2 rounded w-full bg-gray-100"
+                      title="Preço unitário do produto"
+                    />
+                  </div>
+
+                  {/* Subtotal */}
+                  <div>
+                    <label htmlFor={`subtotal-${index}`} className="block font-semibold mb-1">
+                      Subtotal
+                    </label>
+                    <input
+                      id={`subtotal-${index}`}
+                      type="text"
+                      value={item.subtotal.toLocaleString("pt-AO")}
+                      disabled
+                      className="border p-2 rounded w-full bg-gray-100"
+                      title="Subtotal do item"
+                    />
+                  </div>
+
+                  {/* Remover */}
+                  <div className="flex items-end">
+                    <button
+                      type="button"
+                      onClick={() => removerItem(index)}
+                      aria-label={`Remover item ${item.produto_nome}`}
+                      className="text-[#F9941F]"
+                    >
+                      <Trash2 />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Total */}
+          <div className="bg-white p-4 rounded-xl shadow flex justify-between items-center">
+            <strong className="text-lg">Total</strong>
+            <span className="text-[#F9941F] font-bold text-lg">
+              {totalVenda.toLocaleString("pt-AO")} Kz
+            </span>
+          </div>
         </div>
 
-        {/* Desconto */}
-        <div>
-          <label htmlFor={`desconto-${index}`} className="block font-semibold mb-1">
-            Desconto
-          </label>
-          <input
-            id={`desconto-${index}`}
-            type="number"
-            value={item.desconto || 0}
-            onChange={e => atualizarItem(index, "desconto", Number(e.target.value))}
-            className="border p-2 rounded w-full"
-          />
-        </div>
 
-        {/* IVA */}
-        <div>
-          <label htmlFor={`iva-${index}`} className="block font-semibold mb-1">
-            IVA
-          </label>
-          <input
-            id={`iva-${index}`}
-            type="number"
-            value={item.iva || 0}
-            disabled
-            className="border p-2 rounded w-full bg-gray-100"
-            title="IVA automático"
-          />
-        </div>
-
-        {/* Preço unitário */}
-        <div>
-          <label htmlFor={`preco-${index}`} className="block font-semibold mb-1">
-            Preço
-          </label>
-          <input
-            id={`preco-${index}`}
-            type="text"
-            value={item.preco_venda.toLocaleString("pt-AO")}
-            disabled
-            className="border p-2 rounded w-full bg-gray-100"
-            title="Preço unitário do produto"
-          />
-        </div>
-
-        {/* Subtotal */}
-        <div>
-          <label htmlFor={`subtotal-${index}`} className="block font-semibold mb-1">
-            Subtotal
-          </label>
-          <input
-            id={`subtotal-${index}`}
-            type="text"
-            value={item.subtotal.toLocaleString("pt-AO")}
-            disabled
-            className="border p-2 rounded w-full bg-gray-100"
-            title="Subtotal do item"
-          />
-        </div>
-
-        {/* Remover */}
-        <div className="flex items-end">
-          <button
-            type="button"
-            onClick={() => removerItem(index)}
-            aria-label={`Remover item ${item.produto_nome}`}
-            className="text-red-600 hover:text-red-800"
-          >
-            <Trash2 />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-})}
-
-        </div>
-
-        {/* Total */}
-        <div className="bg-white p-4 rounded-xl shadow flex justify-between items-center">
-          <strong className="text-lg">Total</strong>
-          <span className="text-[#F9941F] font-bold text-lg">
-            {totalVenda.toLocaleString("pt-AO")} Kz
-          </span>
-        </div>
 
         {/* Botão Salvar */}
         <button

@@ -19,6 +19,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { useDashboard } from "@/hooks/useDashboard";
+import Link from "next/link";
 
 interface DashboardCardProps {
   titulo: string;
@@ -50,7 +51,7 @@ export default function DashboardPage() {
   return (
     <MainEmpresa>
       <div className="p-6 space-y-6">
-        <h1 className="text-3xl font-bold text-[#123859]">Dashboard</h1>
+        <h1 className="text-3xl font-bold text-[#123859]">Relatório total das vendas</h1>
 
         {/* CARDS */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -62,7 +63,7 @@ export default function DashboardPage() {
 
         {/* GRÁFICO COMPARATIVO MÊS */}
         <div className="bg-white p-4 rounded-xl shadow">
-          <h2 className="font-bold mb-4">📈 Comparação mês atual vs anterior</h2>
+          <h2 className="font-bold mb-4">Comparação mês atual vs anterior</h2>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={[{ nome: "Receita", atual: receitaMesAtual, anterior: receitaMesAnterior }]}>
               <XAxis dataKey="nome" />
@@ -76,7 +77,7 @@ export default function DashboardPage() {
 
         {/* VENDAS POR MÊS */}
         <div className="bg-white p-4 rounded-xl shadow">
-          <h2 className="font-bold mb-4">📊 Vendas por mês</h2>
+          <h2 className="font-bold mb-4">Vendas por mês</h2>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={vendasPorMes}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -90,40 +91,40 @@ export default function DashboardPage() {
 
         {/* PRODUTOS MAIS VENDIDOS (Pie) */}
         <div className="bg-white p-4 rounded-xl shadow">
-          <h2 className="font-bold mb-4">📦 Produtos mais vendidos</h2>
+          <h2 className="font-bold mb-4">Produtos mais vendidos</h2>
           <ResponsiveContainer width="100%" height={300}>
-<PieChart>
-  <Pie
-    data={produtosMaisVendidos}
-    dataKey="quantidade"
-    nameKey="produto"
-    cx="50%"
-    cy="50%"
-    outerRadius={100}
-    fill="#F9941F"
-    label={({ percent }) =>
-      percent !== undefined ? `${(percent * 100).toFixed(0)}%` : ""
-    }
-  >
-    {produtosMaisVendidos.map((_, index) => (
-      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-    ))}
-  </Pie>
-  <Tooltip 
-    formatter={(value: number | undefined) => 
-      value !== undefined ? value.toLocaleString("pt-AO") : "0"
-    } 
-  />
-</PieChart>
+            <PieChart>
+              <Pie
+                data={produtosMaisVendidos}
+                dataKey="quantidade"
+                nameKey="produto"
+                cx="50%"
+                cy="50%"
+                outerRadius={100}
+                fill="#F9941F"
+                label={({ percent }) =>
+                  percent !== undefined ? `${(percent * 100).toFixed(0)}%` : ""
+                }
+              >
+                {produtosMaisVendidos.map((_, index) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip
+                formatter={(value: number | undefined) =>
+                  value !== undefined ? value.toLocaleString("pt-AO") : "0"
+                }
+              />
+            </PieChart>
 
           </ResponsiveContainer>
         </div>
 
         {/* ÚLTIMAS FATURAS */}
         <div className="bg-white p-4 rounded-xl shadow">
-          <h2 className="font-bold mb-4">📄 Últimas faturas</h2>
+          <h2 className="font-bold mb-4">Últimas faturas</h2>
           <table className="w-full border">
-            <thead className="bg-gray-100">
+            <thead className="bg-[#0f2b4c] text-[#fff]">
               <tr>
                 <th className="p-2 text-left">Cliente</th>
                 <th className="p-2 text-right">Total</th>
@@ -138,9 +139,9 @@ export default function DashboardPage() {
                   <td className="p-2 text-right">{f.total.toLocaleString("pt-AO")} Kz</td>
                   <td className="p-2">{new Date(f.data).toLocaleDateString("pt-AO")}</td>
                   <td className="p-2 text-center">
-                    <button title="Ver fatura">
-                      <Eye size={18} className="text-[#123859]" />
-                    </button>
+                    <Link href="/dashboard/Faturas/Faturas">
+                      <Eye size={18} className="text-[#123859] hover:scale-110 transition" />
+                    </Link>
                   </td>
                 </tr>
               ))}

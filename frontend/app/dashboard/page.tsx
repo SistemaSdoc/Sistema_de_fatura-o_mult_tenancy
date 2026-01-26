@@ -34,8 +34,8 @@ export default function DashboardPage() {
         </h1>
 
         {/* ===================== CARDS ===================== */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <ResumoCard titulo="Receita mês atual" valor={data.receitaMesAtual} moeda />
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 ">
+          <ResumoCard titulo="Receita mês atual"  valor={data.receitaMesAtual} moeda />
           <ResumoCard titulo="Receita mês anterior" valor={data.receitaMesAnterior} moeda />
           <ResumoCard titulo="Faturas emitidas" valor={data.faturasEmitidas} />
           <ResumoCard titulo="Clientes ativos" valor={data.clientesAtivos} />
@@ -43,7 +43,7 @@ export default function DashboardPage() {
 
         {/* ===================== COMPARAÇÃO MENSAL ===================== */}
         <div className="bg-white p-5 rounded-xl shadow">
-          <h2 className="font-semibold mb-4">📈 Comparação mensal</h2>
+          <h2 className="font-semibold mb-4">Comparação mensal</h2>
 
           <ResponsiveContainer width="100%" height={260}>
             <BarChart
@@ -61,12 +61,12 @@ export default function DashboardPage() {
               <Tooltip />
               <Bar
                 dataKey="Atual"
-                fill="#C9F5D7"
+                fill="#123859"
                 radius={[6, 6, 0, 0]}
               />
               <Bar
                 dataKey="Anterior"
-                fill="#C9B6E4"
+                fill="#F9941F"
                 radius={[6, 6, 0, 0]}
               />
             </BarChart>
@@ -75,7 +75,7 @@ export default function DashboardPage() {
 
         {/* ===================== VENDAS POR MÊS ===================== */}
         <div className="bg-white p-5 rounded-xl shadow">
-          <h2 className="font-semibold mb-4">📊 Vendas por mês</h2>
+          <h2 className="font-semibold mb-4">Vendas por mês</h2>
 
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={data.vendasPorMes}>
@@ -85,7 +85,7 @@ export default function DashboardPage() {
               <Tooltip />
               <Bar
                 dataKey="total"
-                fill="#C9B6E4"
+                fill="#123859"
                 radius={[6, 6, 0, 0]}
               />
             </BarChart>
@@ -94,9 +94,9 @@ export default function DashboardPage() {
 
         {/* ===================== PRODUTOS MAIS VENDIDOS ===================== */}
         <div className="bg-white p-5 rounded-xl shadow">
-          <h2 className="font-semibold mb-4">📦 Produtos mais vendidos</h2>
+          <h2 className="font-semibold mb-4">Produtos mais vendidos</h2>
 
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="99%" height={300}>
             <BarChart data={data.produtosMaisVendidos}>
               <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" />
               <XAxis dataKey="produto" />
@@ -104,8 +104,8 @@ export default function DashboardPage() {
               <Tooltip />
               <Bar
                 dataKey="quantidade"
-                fill="#C9F5D7"
-                radius={[6, 6, 0, 0]}
+                fill="#F9941F"
+                radius={[5, 5, 0, 0]}
               />
             </BarChart>
           </ResponsiveContainer>
@@ -113,10 +113,10 @@ export default function DashboardPage() {
 
         {/* ===================== ÚLTIMAS FATURAS ===================== */}
         <div className="bg-white p-5 rounded-xl shadow">
-          <h2 className="font-semibold mb-4">📄 Últimas faturas</h2>
+          <h2 className="font-semibold mb-4">Faturas</h2>
 
           <table className="w-full border">
-            <thead className="bg-gray-100">
+            <thead className="bg-[#123859] text-[#ffffff]">
               <tr>
                 <th className="p-2 text-left">Cliente</th>
                 <th className="p-2">Total</th>

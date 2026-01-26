@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/authprovider";
 import { AxiosError } from "axios";
@@ -61,13 +62,13 @@ export default function LoginPage() {
 
     switch (user.role) {
       case "admin":
-        router.push("/dashboard/Vendas/relatorios");
+        router.push("/dashboard");
         break;
       case "caixa":
         router.push("/dashboard/Vendas/Nova_venda");
         break;
       case "operador":
-        router.push("/dashboard");
+        router.push("/dashboard/Vendas/Nova_venda");
         break;
       default:
         router.push("/login");
@@ -82,6 +83,31 @@ export default function LoginPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
       >
+        {/* LOGO */}
+        <motion.div
+          className="flex justify-center mb-4"
+          whileHover={{
+            rotateX: 10,
+            rotateY: -10,
+            scale: 1.05,
+          }}
+          transition={{
+            type: "spring",
+            stiffness: 200,
+            damping: 12,
+          }}
+          style={{ perspective: 1000 }}
+        >
+          <Image
+            src="/images/3.png"
+            alt="Logo do Sistema"
+            width={70}
+            height={70}
+            className="rounded-xl cursor-pointer"
+            priority
+          />
+        </motion.div>
+
         <h2 className="text-2xl font-bold text-center text-[#123859] mb-2">
           Login
         </h2>

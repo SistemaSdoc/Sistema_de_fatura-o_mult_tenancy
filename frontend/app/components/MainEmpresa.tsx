@@ -14,12 +14,10 @@ import {
     ShoppingCart,
     Package,
     Archive,
-    Briefcase,
     Truck,
 } from "lucide-react";
 import { LucideIcon } from "lucide-react";
 import Image from "next/image";
-
 
 /* ===================== TIPOS ===================== */
 interface DropdownLink {
@@ -65,76 +63,39 @@ export default function MainEmpresa({
 
     /* ===================== MENU ===================== */
     const menuItems: MenuItem[] = [
-        {
-            label: "Dashboard",
-            icon: Home,
-            path: "/dashboard",
-            links: [],
-        },
+        { label: "Dashboard", icon: Home, path: "/dashboard", links: [] },
         {
             label: "Vendas",
             icon: ShoppingCart,
-            path: "/dashboard/Vendas",
+            path: "/dashboard/Vendas/relatorios",
             links: [
-                {
-                    label: "Nova venda",
-                    path: "/dashboard/Vendas/Nova_venda",
-                    icon: ShoppingCart,
-                },
-                {
-                    label: "Relatórios de vendas",
-                    path: "/dashboard/Vendas/relatorios",
-                    icon: BarChart2,
-                },
+                { label: "Nova venda", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart },
             ],
         },
         {
             label: "Faturas",
             icon: FileText,
-            path: "/dashboard/Faturas",
+            path: "/dashboard/Faturas/Faturas",
             links: [
-                {
-                    label: "Faturas",
-                    path: "/dashboard/Faturas/Faturas",
-                    icon: FileText,
-                },
-                {
-                    label: "Relatórios de faturas",
-                    path: "/dashboard/Faturas/relatorios",
-                    icon: BarChart2,
-                },
+                { label: "Relatório das faturas", path: "/dashboard/Faturas/relatorios", icon: BarChart2 },
             ],
         },
         {
             label: "Clientes",
             icon: Users,
-            path: "/dashboard/Clientes",
+            path: "/dashboard/Clientes/Total_clientes",
             links: [
-                {
-                    label: "Novo cliente",
-                    path: "/dashboard/Clientes/Novo_cliente",
-                    icon: Users,
-                },
-                {
-                    label: "Total de clientes",
-                    path: "/dashboard/Clientes/Total_clientes",
-                    icon: Users,
-                },
+                { label: "Novo cliente", path: "/dashboard/Clientes/Novo_cliente", icon: Users },
             ],
         },
         {
             label: "Produtos / Serviços",
             icon: Archive,
-            path: "/dashboard/Produtos_servicos",
+            path: "/dashboard/Produtos_servicos/Stock",
             links: [
                 {
                     label: "Novo produto / serviço",
                     path: "/dashboard/Produtos_servicos/Novo_produto_servico",
-                    icon: Package,
-                },
-                {
-                    label: "Stock",
-                    path: "/dashboard/Produtos_servicos/Stock",
                     icon: Package,
                 },
             ],
@@ -142,48 +103,22 @@ export default function MainEmpresa({
         {
             label: "Fornecedores",
             icon: Truck,
-            path: "/dashboard/Fornecedores",
+            path: "/dashboard/Fornecedores/Total_fornecedores",
             links: [
-                {
-                    label: "Novo fornecedor",
-                    path: "/dashboard/Fornecedores/Novo_fornecedor",
-                    icon: Truck,
-                },
-                {
-                    label: "Total de fornecedores",
-                    path: "/dashboard/Fornecedores/Total_fornecedores",
-                    icon: Briefcase,
-                },
+                { label: "Novo fornecedor", path: "/dashboard/Fornecedores/Novo_fornecedor", icon: Truck },
             ],
         },
         {
             label: "Relatórios",
             icon: BarChart2,
-            path: "/dashboard/relatorios",
+            path: "#",
             links: [
-                {
-                    label: "Diário",
-                    path: "/dashboard/relatorios/diario",
-                    icon: BarChart2,
-                },
-                {
-                    label: "Mensal",
-                    path: "/dashboard/relatorios/mensal",
-                    icon: BarChart2,
-                },
-                {
-                    label: "Anual",
-                    path: "/dashboard/relatorios/anual",
-                    icon: BarChart2,
-                },
+                { label: "Diário", path: "/dashboard/relatorios/diario", icon: BarChart2 },
+                { label: "Mensal", path: "/dashboard/relatorios/mensal", icon: BarChart2 },
+                { label: "Anual", path: "/dashboard/relatorios/anual", icon: BarChart2 },
             ],
         },
-        {
-            label: "Configurações",
-            icon: Menu,
-            path: "/dashboard/configuracoes",
-            links: [],
-        },
+        { label: "Configurações", icon: Menu, path: "/dashboard/configuracoes", links: [] },
     ];
 
     /* ===================== JSX ===================== */
@@ -191,38 +126,33 @@ export default function MainEmpresa({
         <div className="flex h-screen bg-gray-100">
             {/* SIDEBAR */}
             <aside
-                className={`bg-[#123859] text-[#F9941F] transition-all duration-300 ${sidebarOpen ? "w-64" : "w-20"
+                className={`bg-white text-[#F9941F] transition-all duration-300 ${sidebarOpen ? "w-64" : "w-20"
                     } flex flex-col relative`}
             >
                 {/* Toggle */}
                 <button
-                    type="button"
                     onClick={toggleSidebar}
-                    aria-label="Abrir / Fechar menu lateral"
-                    className="absolute top-4 -right-3 bg-[#F9941F] text-[#123859] p-1 rounded-full shadow z-20 hover:bg-[#e68918] transition"
+                    className="absolute top-4 -right-3 bg-white text-[#123859] p-1 rounded-full shadow z-20 hover:bg-[#F9941F]"
                 >
                     <Menu size={18} />
                 </button>
-
 
                 {/* Logo */}
                 <div className="h-20 flex items-center justify-center border-b border-[#F9941F]/40">
                     {companyLogo ? (
                         <Image
                             src={companyLogo}
-                            alt="Logo da Empresa"
+                            alt="Logo"
                             width={sidebarOpen ? 56 : 36}
                             height={sidebarOpen ? 56 : 36}
-                            className="rounded-full object-cover transition-all duration-300"
-                            priority
+                            className="rounded-full"
                         />
                     ) : (
-                        <span className="font-bold text-lg text-[#F9941F]">
+                        <span className="font-bold text-lg">
                             {sidebarOpen ? companyName : companyName.charAt(0)}
                         </span>
                     )}
                 </div>
-
 
                 {/* Menu */}
                 <nav className="flex-1 mt-4">
@@ -237,23 +167,35 @@ export default function MainEmpresa({
                                 </Link>
                             ) : (
                                 <>
-                                    <div
-                                        onClick={() => toggleDropdown(item.label)}
-                                        className="flex items-center gap-3 px-4 py-3 hover:bg-[#0f2b4c] cursor-pointer"
-                                    >
-                                        <item.icon size={20} />
-                                        {sidebarOpen && <span>{item.label}</span>}
+                                    {/* ITEM PRINCIPAL */}
+                                    <div className="flex items-center px-4 py-3 hover:bg-[#0f2b4c]">
+                                        <Link
+                                            href={item.path}
+                                            className="flex items-center gap-3 flex-1"
+                                        >
+                                            <item.icon size={20} />
+                                            {sidebarOpen && <span>{item.label}</span>}
+                                        </Link>
+
+                                        {/* BOTÃO DROPDOWN */}
                                         {sidebarOpen && (
-                                            <ChevronDown
-                                                size={16}
-                                                className={`ml-auto transition ${dropdownOpen[item.label]
-                                                    ? "rotate-180"
-                                                    : ""
-                                                    }`}
-                                            />
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    toggleDropdown(item.label);
+                                                }}
+                                                className="p-1 hover:bg-[#123859] rounded"
+                                            >
+                                                <ChevronDown
+                                                    size={16}
+                                                    className={`transition ${dropdownOpen[item.label] ? "rotate-180" : ""
+                                                        }`}
+                                                />
+                                            </button>
                                         )}
                                     </div>
 
+                                    {/* SUBMENU */}
                                     <AnimatePresence>
                                         {dropdownOpen[item.label] && (
                                             <motion.div
@@ -264,10 +206,8 @@ export default function MainEmpresa({
                                             >
                                                 {item.links.map((link) => (
                                                     <Link key={link.path} href={link.path}>
-                                                        <div className="px-4 py-2 hover:bg-[#0f2b4c] text-sm cursor-pointer flex gap-2">
-                                                            {link.icon && (
-                                                                <link.icon size={14} />
-                                                            )}
+                                                        <div className="px-4 py-2 hover:bg-[#0f2b4c] text-sm flex gap-2">
+                                                            {link.icon && <link.icon size={14} />}
                                                             {link.label}
                                                         </div>
                                                     </Link>
@@ -283,7 +223,7 @@ export default function MainEmpresa({
 
                 {/* Logout */}
                 <Link href="/logout">
-                    <div className="px-4 py-3 m-4 flex gap-2 hover:bg-[#F9941F] hover:text-[#123859] rounded cursor-pointer">
+                    <div className="px-4 py-3 m-4 flex gap-2 hover:bg-[#F9941F] hover:text-[#123859] rounded">
                         <LogOut size={18} />
                         {sidebarOpen && "Logout"}
                     </div>
@@ -294,11 +234,7 @@ export default function MainEmpresa({
             <div className="flex-1 flex flex-col">
                 <header className="h-16 bg-white shadow px-6 flex items-center justify-between">
                     <h1 className="font-bold text-[#123859]">{companyName}</h1>
-
-                    <div
-                        className="flex items-center gap-3 cursor-pointer"
-                        onClick={() => setAdminDropdownOpen(!adminDropdownOpen)}
-                    >
+                    <div className="flex items-center gap-3 cursor-pointer">
                         <span>{userName}</span>
                         <div className="w-9 h-9 rounded-full bg-gray-300 flex items-center justify-center">
                             {userName[0]}

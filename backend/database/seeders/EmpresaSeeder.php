@@ -92,6 +92,30 @@ class EmpresaSeeder extends Seeder
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
+                        [
+                'id' => Str::uuid(),
+                'categoria_id' => $alimentacaoId,
+                'nome' => 'Batata Doce 5kg',
+                'descricao' => 'Batata doce importada',
+                'preco_compra' => 2000,
+                'preco_venda' => 5000,
+                'estoque_atual' => 100,
+                'estoque_minimo' => 20,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+                        [
+                'id' => Str::uuid(),
+                'categoria_id' => $alimentacaoId,
+                'nome' => 'Cenoura 5kg',
+                'descricao' => 'Cenoura importada',
+                'preco_compra' => 500,
+                'preco_venda' => 1000,
+                'estoque_atual' => 100,
+                'estoque_minimo' => 20,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
         ]);
 
         /* ================= FORNECEDORES ================= */
