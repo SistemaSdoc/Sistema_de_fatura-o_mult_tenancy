@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from "react";
+import { v4 as uuidv4 } from "uuid";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/authprovider";
 import MainEmpresa from "../../../components/MainEmpresa";
@@ -48,7 +49,7 @@ export default function NovaVendaPage() {
     setItens(prev => [
       ...prev,
       {
-        id: crypto.randomUUID(),
+        id: uuidv4(),
         produto_id: "",
         produto_nome: "",
         quantidade: 1,

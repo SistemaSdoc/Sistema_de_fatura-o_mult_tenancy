@@ -1,316 +1,276 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { ReactNode, useEffect, useMemo, useState } from "react";
 import MainEmpresa from "../../../components/MainEmpresa";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, Legend, ResponsiveContainer, LineChart, Line } from "recharts";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+  ResponsiveContainer,
+  LineChart,
+  Line,
+} from "recharts";
 import * as XLSX from "xlsx";
+import {
+  listarVendas,
+  clienteService,
+  produtoService,
+  fornecedorService,
+  Venda,
+  Cliente,
+  Produto,
+  Fornecedor,
+} from "@/services/vendas";
 
-interface Venda {
-    id: number;
-    cliente: string;
-    data: string; // yyyy-mm-dd
-    total: number;
-    tipo: "paga" | "pendente";
+/* ================= CORES ================= */
+const theme = {
+  primary: "#123859",
+  secondary: "#F9941F",
+  success: "#22c55e",
+  danger: "#ef4444",
+};
+
+interface ResumoProps {
+  titulo: string;
+  valor: ReactNode;
 }
 
-interface Cliente {
-    id: number;
-    nome: string;
-    dataCadastro: string;
+interface CardProps {
+  titulo: string;
+  children: ReactNode;
 }
 
-interface ProdutoServico {
-    id: number;
-    nome: string;
-    tipo: "Produto" | "Serviço";
-    preco: number;
-}
-
-interface Fornecedor {
-    id: number;
-    nome: string;
-    status: "Ativo" | "Inativo";
-}
-
-/* MOCK DATA */
-const vendasMock: Venda[] = [
-    { id: 1, cliente: "Consumidor Final 1", data: "2026-01-14", total: 15000, tipo: "paga" },
-    { id: 2, cliente: "Empresa XYZ", data: "2026-01-14", total: 22000, tipo: "pendente" },
-    { id: 3, cliente: "Consumidor Final 2", data: "2026-03-14", total: 8000, tipo: "paga" },
-    { id: 4, cliente: "Consumidor Final 1", data: "2026-04-03", total: 12000, tipo: "paga" },
-    { id: 5, cliente: "Empresa XYZ", data: "2026-05-10", total: 18000, tipo: "paga" },
-    { id: 6, cliente: "Consumidor Final 2", data: "2026-06-05", total: 9000, tipo: "pendente" },
-    { id: 7, cliente: "Consumidor Final 1", data: "2025-12-20", total: 11000, tipo: "paga" },
-];
-
-const clientesMock: Cliente[] = [
-    { id: 1, nome: "Consumidor Final 1", dataCadastro: "2026-01-14" },
-    { id: 2, nome: "Consumidor Final 2", dataCadastro: "2026-03-14" },
-    { id: 3, nome: "Empresa XYZ", dataCadastro: "2026-01-03" },
-    { id: 4, nome: "Consumidor Final 3", dataCadastro: "2025-11-20" },
-];
-
-const produtosMock: ProdutoServico[] = [
-    { id: 1, nome: "Produto A", tipo: "Produto", preco: 5000 },
-    { id: 2, nome: "Serviço B", tipo: "Serviço", preco: 10000 },
-    { id: 3, nome: "Produto C", tipo: "Produto", preco: 7000 },
-];
-
-const fornecedoresMock: Fornecedor[] = [
-    { id: 1, nome: "Fornecedor A", status: "Ativo" },
-    { id: 2, nome: "Fornecedor B", status: "Inativo" },
-    { id: 3, nome: "Fornecedor C", status: "Ativo" },
-];
-
-const coresPie = ["#123859", "#F9941F"];
-
+/* ================= PAGE ================= */
 export default function RelatorioAnualPage() {
-    const [vendas, setVendas] = useState(vendasMock);
-    const [clientes, setClientes] = useState(clientesMock);
-    const [produtos, setProdutos] = useState(produtosMock);
-    const [fornecedores, setFornecedores] = useState(fornecedoresMock);
+  const [ano, setAno] = useState(new Date().getFullYear().toString());
+  const [vendas, setVendas] = useState<Venda[]>([]);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
+  const [loading, setLoading] = useState(true);
 
-    const [ano, setAno] = useState("2026");
-    const [vendasFiltradas, setVendasFiltradas] = useState<Venda[]>([]);
-    const [clientesFiltrados, setClientesFiltrados] = useState<Cliente[]>([]);
+  /* ================= LOAD ================= */
+  useEffect(() => {
+    async function carregar() {
+      setLoading(true);
 
-    useEffect(() => {
-        setVendasFiltradas(vendas.filter(v => v.data.startsWith(ano)));
-        setClientesFiltrados(clientes.filter(c => c.dataCadastro.startsWith(ano)));
-    }, [ano, vendas, clientes]);
+      const [
+        vendasData,
+        clientesData,
+        produtosData,
+        fornecedoresData,
+      ] = await Promise.all([
+        listarVendas(),
+        clienteService.listar(),
+        produtoService.listarPaginado(1),
+        fornecedorService.listar(),
+      ]);
 
-    const totalVendas = vendasFiltradas.reduce((sum, v) => sum + v.total, 0);
+      setVendas(vendasData);
+      setClientes(clientesData);
+      setProdutos(produtosData.data);
+      setFornecedores(fornecedoresData);
 
-    const vendasPorStatus = [
-        { name: "Pagas", value: vendasFiltradas.filter(v => v.tipo === "paga").length },
-        { name: "Pendentes", value: vendasFiltradas.filter(v => v.tipo === "pendente").length },
-    ];
+      setLoading(false);
+    }
 
-    // Vendas por mês
-    const meses = Array.from({ length: 12 }, (_, i) => `${i + 1}`.padStart(2, "0"));
-    const vendasPorMes = meses.map(m => ({
-        mes: m,
-        total: vendasFiltradas
-            .filter(v => v.data.slice(5, 7) === m)
-            .reduce((sum, v) => sum + v.total, 0),
+    carregar();
+  }, []);
+
+  /* ================= FILTROS ================= */
+  const vendasFiltradas = useMemo(
+    () => vendas.filter(v => v.data.startsWith(ano)),
+    [vendas, ano]
+  );
+
+  const clientesFiltrados = useMemo(
+    () => clientes.filter(c => c.created_at?.startsWith(ano)),
+    [clientes, ano]
+  );
+
+  /* ================= KPIs ================= */
+  const totalVendas = vendasFiltradas.reduce((s, v) => s + v.total, 0);
+
+  const ticketMedio =
+    vendasFiltradas.length > 0
+      ? totalVendas / vendasFiltradas.length
+      : 0;
+
+  /* ================= STATUS ================= */
+  const vendasPorStatus = [
+    {
+      name: "Emitidas",
+      value: vendasFiltradas.filter(v => v.fatura?.status === "emitida").length,
+    },
+    {
+      name: "Canceladas",
+      value: vendasFiltradas.filter(v => v.fatura?.status === "cancelada").length,
+    },
+  ];
+
+  /* ================= MENSAL ================= */
+  const meses = Array.from({ length: 12 }, (_, i) =>
+    `${i + 1}`.padStart(2, "0")
+  );
+
+  const vendasPorMes = meses.map(mes => ({
+    mes,
+    total: vendasFiltradas
+      .filter(v => v.data.slice(5, 7) === mes)
+      .reduce((s, v) => s + v.total, 0),
+  }));
+
+  let acumulado = 0;
+  const vendasAcumuladas = vendasPorMes.map(m => {
+    acumulado += m.total;
+    return { ...m, acumulado };
+  });
+
+  /* ================= CLIENTES ================= */
+  const topClientes = useMemo(() => {
+    const mapa: Record<string, number> = {};
+
+    vendasFiltradas.forEach(v => {
+      mapa[v.cliente_nome] =
+        (mapa[v.cliente_nome] || 0) + v.total;
+    });
+
+    return Object.entries(mapa)
+      .map(([cliente, total]) => ({ cliente, total }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5);
+  }, [vendasFiltradas]);
+
+  /* ================= EXPORT ================= */
+  const exportToExcel = () => {
+    const dados = vendasFiltradas.map(v => ({
+      "ID Venda": v.id,
+      Cliente: v.cliente_nome,
+      Data: new Date(v.data).toLocaleDateString(),
+      Total: v.total,
+      Status: v.fatura?.status ?? "N/A",
     }));
 
-    const exportToExcel = () => {
-        const ws = XLSX.utils.json_to_sheet(vendasFiltradas);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "VendasAnual");
-        XLSX.writeFile(wb, "RelatorioAnual.xlsx");
-    };
+    const ws = XLSX.utils.json_to_sheet(dados);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Vendas");
+    XLSX.writeFile(wb, `Relatorio_Gestao_${ano}.xlsx`);
+  };
 
-    const exportToPDF = () => {
-        alert("Exportar PDF: você pode integrar com jsPDF ou html2pdf!");
-    };
-
+  if (loading) {
     return (
-        <MainEmpresa>
-            <div className="p-6 space-y-6">
-                <h1 className="text-2xl font-bold text-[#123859]">Relatório Anual</h1>
-
-                {/* Filtro por ano */}
-                <div className="flex gap-4 items-end mt-4">
-                    <div>
-                        <label className="block font-semibold">Ano</label>
-                        <input
-                            type="number"
-                            value={ano}
-                            onChange={e => setAno(e.target.value)}
-                            className="border rounded px-2 py-1"
-                        />
-                    </div>
-                    <button
-                        onClick={exportToExcel}
-                        className="bg-[#123859] text-white px-4 py-2 rounded hover:bg-[#0f2c4c]"
-                    >
-                        Exportar Excel
-                    </button>
-                    <button
-                        onClick={exportToPDF}
-                        className="bg-[#F9941F] text-white px-4 py-2 rounded hover:bg-[#d87e17]"
-                    >
-                        Exportar PDF
-                    </button>
-                </div>
-
-                {/* Resumos */}
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mt-4">
-                    <div className="bg-white p-4 rounded-xl shadow flex flex-col items-center">
-                        <p className="text-sm text-gray-500">Total Vendas (Kz)</p>
-                        <p className="text-xl font-bold">{totalVendas.toLocaleString()}</p>
-                    </div>
-                    <div className="bg-white p-4 rounded-xl shadow flex flex-col items-center">
-                        <p className="text-sm text-gray-500">Clientes do Ano</p>
-                        <p className="text-xl font-bold">{clientesFiltrados.length}</p>
-                    </div>
-                    <div className="bg-white p-4 rounded-xl shadow flex flex-col items-center">
-                        <p className="text-sm text-gray-500">Total Clientes</p>
-                        <p className="text-xl font-bold">{clientes.length}</p>
-                    </div>
-                    <div className="bg-white p-4 rounded-xl shadow flex flex-col items-center">
-                        <p className="text-sm text-gray-500">Produtos/Serviços</p>
-                        <p className="text-xl font-bold">{produtos.length}</p>
-                    </div>
-                    <div className="bg-white p-4 rounded-xl shadow flex flex-col items-center">
-                        <p className="text-sm text-gray-500">Fornecedores</p>
-                        <p className="text-xl font-bold">{fornecedores.length}</p>
-                    </div>
-                </div>
-
-                {/* Gráficos */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                    <div className="bg-white p-4 rounded-xl shadow">
-                        <h2 className="text-lg font-bold text-[#123859] mb-2">Vendas por Status</h2>
-                        <ResponsiveContainer width="100%" height={250}>
-                            <PieChart>
-                                <Pie
-                                    data={vendasPorStatus}
-                                    dataKey="value"
-                                    nameKey="name"
-                                    cx="50%"
-                                    cy="50%"
-                                    outerRadius={80}
-                                    label
-                                >
-                                    {vendasPorStatus.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={coresPie[index % coresPie.length]} />
-                                    ))}
-                                </Pie>
-                                <Legend />
-                                <Tooltip />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </div>
-
-                    <div className="bg-white p-4 rounded-xl shadow">
-                        <h2 className="text-lg font-bold text-[#123859] mb-2">Vendas por Cliente</h2>
-                        <ResponsiveContainer width="100%" height={250}>
-                            <BarChart data={vendasFiltradas}>
-                                <XAxis dataKey="cliente" />
-                                <YAxis />
-                                <Tooltip />
-                                <Bar dataKey="total" fill="#F9941F" />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-
-                <div className="bg-white p-4 rounded-xl shadow mt-6">
-                    <h2 className="text-lg font-bold text-[#123859] mb-2">Vendas Mensais</h2>
-                    <ResponsiveContainer width="100%" height={250}>
-                        <LineChart data={vendasPorMes}>
-                            <XAxis dataKey="mes" />
-                            <YAxis />
-                            <Tooltip />
-                            <Line type="monotone" dataKey="total" stroke="#123859" />
-                        </LineChart>
-                    </ResponsiveContainer>
-                </div>
-
-                {/* Tabelas detalhadas */}
-                <div className="space-y-6 mt-6">
-                    {/* Vendas */}
-                    <div className="bg-white p-4 rounded-xl shadow overflow-x-auto">
-                        <h2 className="text-lg font-bold text-[#123859] mb-2">Vendas do Ano</h2>
-                        <table className="w-full text-sm">
-                            <thead className="bg-[#123859] text-white">
-                                <tr>
-                                    <th className="p-2 text-left">ID</th>
-                                    <th className="p-2 text-left">Cliente</th>
-                                    <th className="p-2 text-left">Data</th>
-                                    <th className="p-2 text-left">Total (Kz)</th>
-                                    <th className="p-2 text-left">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {vendasFiltradas.map(v => (
-                                    <tr key={v.id} className="border-b">
-                                        <td className="p-2">{v.id}</td>
-                                        <td className="p-2">{v.cliente}</td>
-                                        <td className="p-2">{v.data}</td>
-                                        <td className="p-2">{v.total.toLocaleString()}</td>
-                                        <td className="p-2">{v.tipo}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* Clientes */}
-                    <div className="bg-white p-4 rounded-xl shadow overflow-x-auto">
-                        <h2 className="text-lg font-bold text-[#123859] mb-2">Clientes do Ano</h2>
-                        <table className="w-full text-sm">
-                            <thead className="bg-[#123859] text-white">
-                                <tr>
-                                    <th className="p-2 text-left">ID</th>
-                                    <th className="p-2 text-left">Nome</th>
-                                    <th className="p-2 text-left">Data Cadastro</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {clientesFiltrados.map(c => (
-                                    <tr key={c.id} className="border-b">
-                                        <td className="p-2">{c.id}</td>
-                                        <td className="p-2">{c.nome}</td>
-                                        <td className="p-2">{c.dataCadastro}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* Produtos/Serviços */}
-                    <div className="bg-white p-4 rounded-xl shadow overflow-x-auto">
-                        <h2 className="text-lg font-bold text-[#123859] mb-2">Produtos/Serviços</h2>
-                        <table className="w-full text-sm">
-                            <thead className="bg-[#123859] text-white">
-                                <tr>
-                                    <th className="p-2 text-left">ID</th>
-                                    <th className="p-2 text-left">Nome</th>
-                                    <th className="p-2 text-left">Tipo</th>
-                                    <th className="p-2 text-left">Preço (Kz)</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {produtos.map(p => (
-                                    <tr key={p.id} className="border-b">
-                                        <td className="p-2">{p.id}</td>
-                                        <td className="p-2">{p.nome}</td>
-                                        <td className="p-2">{p.tipo}</td>
-                                        <td className="p-2">{p.preco.toLocaleString()}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* Fornecedores */}
-                    <div className="bg-white p-4 rounded-xl shadow overflow-x-auto">
-                        <h2 className="text-lg font-bold text-[#123859] mb-2">Fornecedores</h2>
-                        <table className="w-full text-sm">
-                            <thead className="bg-[#123859] text-white">
-                                <tr>
-                                    <th className="p-2 text-left">ID</th>
-                                    <th className="p-2 text-left">Nome</th>
-                                    <th className="p-2 text-left">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {fornecedores.map(f => (
-                                    <tr key={f.id} className="border-b">
-                                        <td className="p-2">{f.id}</td>
-                                        <td className="p-2">{f.nome}</td>
-                                        <td className="p-2">{f.status}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </MainEmpresa>
+      <MainEmpresa>
+        <div className="p-6">Carregando relatório…</div>
+      </MainEmpresa>
     );
+  }
+
+  return (
+    <MainEmpresa>
+      <div className="p-6 space-y-8">
+        {/* HEADER */}
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-[#123859]">
+            Relatório Anual de Gestão
+          </h1>
+
+          <div  className="flex gap-3 items-end">
+            <label htmlFor="ano">Ano</label>
+            <input
+            name="ano"
+            id="ano"
+              type="number"
+              value={ano}
+              onChange={e => setAno(e.target.value)}
+              className="border rounded px-2 py-1"
+            />
+            <button
+              onClick={exportToExcel}
+              className="bg-[#123859] text-white px-4 py-2 rounded"
+            >
+              Exportar Excel
+            </button>
+          </div>
+        </div>
+
+        {/* KPIs */}
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <Resumo titulo="Total de Vendas (Kz)" valor={totalVendas.toLocaleString()} />
+          <Resumo titulo="Ticket Médio" valor={ticketMedio.toLocaleString()} />
+          <Resumo titulo="Clientes do Ano" valor={clientesFiltrados.length} />
+          <Resumo titulo="Produtos" valor={produtos.length} />
+          <Resumo titulo="Fornecedores" valor={fornecedores.length} />
+        </div>
+
+        {/* GRÁFICOS */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Card titulo="Vendas por Status">
+            <ResponsiveContainer width="100%" height={260}>
+              <PieChart>
+                <Pie data={vendasPorStatus} dataKey="value" label>
+                  <Cell fill={theme.success} />
+                  <Cell fill={theme.danger} />
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </Card>
+
+          <Card titulo="Top 5 Clientes">
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={topClientes}>
+                <XAxis dataKey="cliente" />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="total" fill={theme.secondary} />
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+        </div>
+
+        <Card titulo="Vendas Mensais & Acumuladas">
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={vendasAcumuladas}>
+              <XAxis dataKey="mes" />
+              <YAxis />
+              <Tooltip />
+              <Line dataKey="total" stroke={theme.primary} />
+              <Line dataKey="acumulado" stroke={theme.secondary} strokeWidth={3} />
+            </LineChart>
+          </ResponsiveContainer>
+        </Card>
+      </div>
+    </MainEmpresa>
+  );
+}
+
+/* ================= COMPONENTES ================= */
+
+function Resumo({ titulo, valor }: ResumoProps) {
+  return (
+    <div className="bg-white p-4 rounded-xl shadow border-l-4 border-[#123859]">
+      <p className="text-sm text-gray-500">{titulo}</p>
+      <p className="text-2xl font-bold text-[#123859]">
+        {valor}
+      </p>
+    </div>
+  );
+}
+
+function Card({ titulo, children }: CardProps) {
+  return (
+    <div className="bg-white p-4 rounded-xl shadow">
+      <h2 className="text-lg font-bold text-[#123859] mb-3">
+        {titulo}
+      </h2>
+      {children}
+    </div>
+  );
 }

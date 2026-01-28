@@ -13,6 +13,14 @@ function handleAxiosError(err: unknown, prefix: string) {
 
 /* ================== TIPOS ================== */
 
+export interface Paginacao<T> {
+  data: T[];
+  current_page: number;
+  last_page: number;
+  per_page: number;
+  total: number;
+}
+
 /* -------- Usuário -------- */
 export interface User {
   id: string;
@@ -38,12 +46,21 @@ export interface Produto {
   preco_venda: number;
   estoque_atual: number;
   estoque_minimo: number;
+  Categoria: { 
+    id: string;
+    nome: string;
+  };
+  Fornecedor: {
+    id: string;
+    nome: string;
+  };
 }
 
 export interface ProdutoPayload {
   nome: string;
   descricao?: string;
   categoria_id: string;
+  fornecedor_id: string;
   preco_compra: number;
   preco_venda: number;
   estoque_atual: number;
@@ -165,6 +182,36 @@ export interface DashboardData {
 }
 
 
+export interface Cliente {
+  id: string;
+  name: string;
+  nif?: string;
+  tipo: 'consumidor_final' | 'empresa';
+  telefone?: string | null;
+  email?: string | null;
+  endereco?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  
+}
+
+export type Fornecedor = {
+  id: string;
+  nome: string;
+  nif?: string;
+  telefone?: string | null;
+  email?: string;
+  endereco?: string | null;
+};
+
+export interface ClientePayload {
+  nome: string;
+  nif?: string | null;
+  tipo: 'consumidor_final' | 'empresa';
+  telefone?: string | null;
+  email?: string | null;
+  endereco?: string | null;
+}
 
 
 
@@ -173,50 +220,176 @@ export interface NovaVendaData {
   clientes: Cliente[];
   produtos: ProdutoVenda[];
 }
+  
 
-/* ================== PRODUTOS ================== */
-export async function listarProdutos(): Promise<Produto[]> {
-  try {
-    const { data } = await api.get<Produto[]>("/api/produtos");
-    return data;
-  } catch (err) {
-    handleAxiosError(err, "[PRODUTOS] Erro ao listar produtos");
-    return [];
-  }
+
+export interface Categoria {
+  id: string;
+  nome: string;
+  descricao?: string;
 }
 
-export async function criarProduto(payload: ProdutoPayload): Promise<Produto | null> {
-  try {
-    const { data } = await api.post<Produto>("/api/produtos", payload);
-    return data;
-  } catch (err) {
-    handleAxiosError(err, "[PRODUTOS] Erro ao criar produto");
-    return null;
-  }
+export interface CategoriaPayload {
+  nome: string;
+  descricao?: string;
 }
 
-export async function atualizarProduto(
-  id: string,
-  payload: Partial<ProdutoPayload>
-): Promise<Produto | null> {
-  try {
-    const { data } = await api.put<Produto>(`/api/produtos/${id}`, payload);
-    return data;
-  } catch (err) {
-    handleAxiosError(err, "[PRODUTOS] Erro ao atualizar produto");
-    return null;
-  }
+
+/* ================== TIPOS ================== */
+export interface MovimentoStock {
+  id: string;
+  produto_id: string;
+  tipo: "entrada" | "saida";
+  quantidade: number;
+  origem?: string;
+  referencia?: string;
+  data?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
-export async function deletarProduto(id: string): Promise<boolean> {
-  try {
-    await api.delete(`/api/produtos/${id}`);
-    return true;
-  } catch (err) {
-    handleAxiosError(err, "[PRODUTOS] Erro ao deletar produto");
-    return false;
-  }
+export interface CriarMovimentoPayload {
+  produto_id: string;
+  tipo: "entrada" | "saida";
+  quantidade: number;
+  origem?: string;
+  referencia?: string;
+  data?: string;
 }
+
+
+
+/* ================== STOCK SERVICE ================== */
+export const stockService = {
+  // LISTAR MOVIMENTOS
+  async listar(): Promise<MovimentoStock[]> {
+    try {
+      const { data } = await api.get<MovimentoStock[]>("/api/movimentos-stock");
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[STOCK] Erro ao listar movimentos");
+      return [];
+    }
+  },
+
+  // CRIAR MOVIMENTO
+  async criar(payload: CriarMovimentoPayload): Promise<MovimentoStock | null> {
+    try {
+      const { data } = await api.post<MovimentoStock>("/api/movimentos-stock", payload);
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[STOCK] Erro ao criar movimento");
+      return null;
+    }
+  },
+
+  // OBTER UM MOVIMENTO
+  async obter(id: string): Promise<MovimentoStock | null> {
+    try {
+      const { data } = await api.get<MovimentoStock>(`/api/movimentos-stock/${id}`);
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[STOCK] Erro ao obter movimento");
+      return null;
+    }
+  },
+
+  // ATUALIZAR MOVIMENTO
+  async atualizar(id: string, payload: Partial<CriarMovimentoPayload>): Promise<MovimentoStock | null> {
+    try {
+      const { data } = await api.put<MovimentoStock>(`/api/movimentos-stock/${id}`, payload);
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[STOCK] Erro ao atualizar movimento");
+      return null;
+    }
+  },
+
+  // DELETAR MOVIMENTO
+  async deletar(id: string): Promise<boolean> {
+    try {
+      await api.delete(`/api/movimentos-stock/${id}`);
+      return true;
+    } catch (err) {
+      handleAxiosError(err, "[STOCK] Erro ao deletar movimento");
+      return false;
+    }
+  },
+
+  
+
+  // CALCULAR STOCK ATUAL DE UM PRODUTO
+  async calcularStock(produto_id: string): Promise<number> {
+    try {
+      const movimentos = await this.listar();
+      const entradas = movimentos
+        .filter(m => m.produto_id === produto_id && m.tipo === "entrada")
+        .reduce((sum, m) => sum + m.quantidade, 0);
+      const saidas = movimentos
+        .filter(m => m.produto_id === produto_id && m.tipo === "saida")
+        .reduce((sum, m) => sum + m.quantidade, 0);
+
+      return entradas - saidas;
+    } catch (err) {
+      handleAxiosError(err, "[STOCK] Erro ao calcular stock");
+      return 0;
+    }
+  }
+};
+
+export const categoriaService = {
+  listar: async (): Promise<Categoria[]> => {
+    try {
+      const res = await api.get("/api/categorias");
+      return res.data;
+    } catch (err) {
+      console.error("Erro ao listar categorias:", err);
+      return [];
+    }
+  },
+
+  criar: async (payload: CategoriaPayload): Promise<Categoria> => {
+    try {
+      const res = await api.post("/api/categorias", payload);
+      return res.data;
+    } catch (err) {
+      console.error("Erro ao criar categoria:", err);
+      throw err;
+    }
+  },
+
+  atualizar: async (id: string, payload: Partial<CategoriaPayload>): Promise<Categoria> => {
+    try {
+      const res = await api.put(`/api/categorias/${id}`, payload);
+      return res.data;
+    } catch (err) {
+      console.error("Erro ao atualizar categoria:", err);
+      throw err;
+    }
+  },
+
+  deletar: async (id: string): Promise<boolean> => {
+    try {
+      await api.delete(`/api/categorias/${id}`);
+      return true;
+    } catch (err) {
+      console.error("Erro ao deletar categoria:", err);
+      return false;
+    }
+  },
+
+  buscar: async (id: string): Promise<Categoria> => {
+    try {
+      const res = await api.get(`/api/categorias/${id}`);
+      return res.data;
+    } catch (err) {
+      console.error("Erro ao buscar categoria:", err);
+      throw err;
+    }
+  },
+};
+
+
 
 /* ================== VENDAS ================== */
 export async function criarVenda(
@@ -303,3 +476,92 @@ export async function listarFaturas(): Promise<Fatura[]> {
     return [];
   }
 }
+
+export const clienteService = {
+
+  // LISTAR
+  async listar(): Promise<Cliente[]> {
+    const response = await api.get('/api/clientes')
+    return response.data
+  },
+
+  // CRIAR
+  async criar(payload: ClientePayload): Promise<Cliente> {
+    const response = await api.post('/api/clientes', payload)
+    return response.data
+  },
+
+  // MOSTRAR
+  async buscar(id: string): Promise<Cliente> {
+    const response = await api.get(`/api/clientes/${id}`)
+    return response.data
+  },
+
+  // ATUALIZAR
+  async atualizar(id: string, payload: Partial<ClientePayload>): Promise<Cliente> {
+    const response = await api.put(`/api/clientes/${id}`, payload)
+    return response.data
+  },
+
+  // DELETAR
+  async deletar(id: string): Promise<void> {
+    await api.delete(`/api/clientes/${id}`)
+  }
+}
+
+
+export const fornecedorService = {
+  // LISTAR
+  async listar(): Promise<Fornecedor[]> {
+    const response = await api.get("/api/fornecedores");
+    return response.data;
+  },
+
+  // BUSCAR POR ID
+  async buscar(id: string): Promise<Fornecedor> {
+    const response = await api.get(`/api/fornecedores/${id}`);
+    return response.data;
+  },
+
+  // CRIAR
+  async criar(data: Omit<Fornecedor, "id">): Promise<Fornecedor> {
+    const response = await api.post("/api/fornecedores", data);
+    return response.data;
+  },
+
+  // ATUALIZAR
+  async atualizar(id: string, data: Partial<Omit<Fornecedor, "id">>): Promise<Fornecedor> {
+    const response = await api.put(`/api/fornecedores/${id}`, data);
+    return response.data;
+  },
+
+  // DELETAR
+  async deletar(id: string): Promise<void> {
+    await api.delete(`/api/fornecedores/${id}`);
+  },
+};
+
+
+/* ================== PRODUTO SERVICE ================== */
+export const produtoService = {
+  // LISTAR COM PAGINAÇÃO
+  async listarPaginado(page = 1): Promise<Paginacao<Produto>> {
+    const { data } = await api.get(`/api/produtos?page=${page}`);
+    return data;
+  },
+
+  async criar(payload: ProdutoPayload): Promise<Produto | null> {
+    const { data } = await api.post("/api/produtos", payload);
+    return data;
+  },
+
+  async atualizar(id: string, payload: ProdutoPayload): Promise<Produto | null> {
+    const { data } = await api.put(`/api/produtos/${id}`, payload);
+    return data;
+  },
+
+  async deletar(id: string): Promise<boolean> {
+    await api.delete(`/api/produtos/${id}`);
+    return true;
+  },
+};

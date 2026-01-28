@@ -1,326 +1,283 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import MainEmpresa from "../../../components/MainEmpresa";
-import { Trash2, Edit, Eye, X } from "lucide-react";
+import { Trash2, Edit, X } from "lucide-react";
+import { fornecedorService } from "@/services/vendas";
 
-interface Fornecedor {
-    id: number;
-    nome: string;
-    telefone: string;
-    email: string;
-    endereco: string;
-    status: "Ativo" | "Inativo";
-}
-
-/* MOCK DE FORNECEDORES */
-const fornecedoresMock: Fornecedor[] = [
-    {
-        id: 1,
-        nome: "Fornecedor A",
-        telefone: "+244 900 000 101",
-        email: "fornecedorA@example.com",
-        endereco: "Rua X, Luanda",
-        status: "Ativo",
-    },
-    {
-        id: 2,
-        nome: "Fornecedor B",
-        telefone: "+244 900 000 102",
-        email: "fornecedorB@example.com",
-        endereco: "Av. Y, Luanda",
-        status: "Inativo",
-    },
-];
+export type Fornecedor = {
+  id: string;
+  nome: string;
+  nif?: string;
+  telefone?: string | null;
+  email?: string;
+  endereco?: string | null;
+};
 
 export default function TotalFornecedoresPage() {
-    const [fornecedores, setFornecedores] = useState<Fornecedor[]>(fornecedoresMock);
-    const [filtro, setFiltro] = useState<"Todos" | "Ativo" | "Inativo">("Todos");
+  const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
+  const [loading, setLoading] = useState(false);
 
-    // Modal de edição
-    const [modalEditarAberto, setModalEditarAberto] = useState(false);
-    const [fornecedorSelecionado, setFornecedorSelecionado] = useState<Fornecedor | null>(null);
+  // Paginação
+  const [pagina, setPagina] = useState(1);
+  const [ultimaPagina, setUltimaPagina] = useState(1);
 
-    // Modal de visualização
-    const [modalVisualizarAberto, setModalVisualizarAberto] = useState(false);
-    const [fornecedorVisualizar, setFornecedorVisualizar] = useState<Fornecedor | null>(null);
+  // Banner
+  const [banner, setBanner] = useState<{
+    tipo: "success" | "error";
+    texto: string;
+  } | null>(null);
 
-    const fornecedoresFiltrados =
-        filtro === "Todos" ? fornecedores : fornecedores.filter((f) => f.status === filtro);
+  // Modal edição
+  const [modalEditar, setModalEditar] = useState(false);
+  const [fornecedorSelecionado, setFornecedorSelecionado] =
+    useState<Fornecedor | null>(null);
 
-    const apagarFornecedor = (id: number) => {
-        if (!confirm("Tem certeza que deseja apagar este fornecedor?")) return;
-        setFornecedores(fornecedores.filter((f) => f.id !== id));
-    };
+  const mostrarBanner = (tipo: "success" | "error", texto: string) => {
+    setBanner({ tipo, texto });
+    setTimeout(() => setBanner(null), 4000);
+  };
 
-    const abrirModalEditar = (fornecedor: Fornecedor) => {
-        setFornecedorSelecionado(fornecedor);
-        setModalEditarAberto(true);
-    };
+  // 🔄 Carregar fornecedores
+const carregarFornecedores = async (page = 1) => {
+  try {
+    setLoading(true);
 
-    const abrirModalVisualizar = (fornecedor: Fornecedor) => {
-        setFornecedorVisualizar(fornecedor);
-        setModalVisualizarAberto(true);
-    };
+    const response = await fornecedorService.listar({ page });
 
-    const fecharModalEditar = () => {
-        setFornecedorSelecionado(null);
-        setModalEditarAberto(false);
-    };
+    setFornecedores(response?.data ?? []);
+    setPagina(response?.current_page ?? 1);
+    setUltimaPagina(response?.last_page ?? 1);
 
-    const fecharModalVisualizar = () => {
-        setFornecedorVisualizar(null);
-        setModalVisualizarAberto(false);
-    };
+  } catch {
+    mostrarBanner("error", "Erro ao carregar fornecedores");
+    setFornecedores([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        if (!fornecedorSelecionado) return;
-        const { name, value } = e.target;
-        setFornecedorSelecionado({ ...fornecedorSelecionado, [name]: value });
-    };
 
-    const salvarEdicao = () => {
-        if (!fornecedorSelecionado) return;
-        setFornecedores(
-            fornecedores.map((f) => (f.id === fornecedorSelecionado.id ? fornecedorSelecionado : f))
-        );
-        fecharModalEditar();
-    };
+  useEffect(() => {
+    carregarFornecedores();
+  }, []);
 
-    return (
-        <MainEmpresa>
-            <div className="p-6 space-y-6">
-                <h1 className="text-2xl font-bold text-[#123859]">Total de Fornecedores</h1>
+  // 🗑️ Apagar
+  const apagarFornecedor = async (id: string) => {
+    if (!confirm("Deseja mesmo apagar este fornecedor?")) return;
 
-                {/* Filtro por status */}
-                <div className="flex gap-3 mb-4">
-                    {["Todos", "Ativo", "Inativo"].map((tipo) => (
-                        <button
-                            key={tipo}
-                            onClick={() => setFiltro(tipo as any)}
-                            className={`px-4 py-2 rounded-lg font-semibold ${filtro === tipo ? "bg-[#123859] text-white" : "bg-white border"
-                                }`}
-                        >
-                            {tipo}
-                        </button>
-                    ))}
-                </div>
+    try {
+      await fornecedorService.deletar(id);
+      setFornecedores((prev) => prev.filter((f) => f.id !== id));
+      mostrarBanner("success", "Fornecedor removido com sucesso");
+    } catch {
+      mostrarBanner("error", "Erro ao remover fornecedor");
+    }
+  };
 
-                {/* Cards resumo */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                    <div className="bg-white p-4 rounded-xl shadow flex items-center justify-between">
-                        <div>
-                            <p className="text-sm text-gray-500">Total de Fornecedores</p>
-                            <p className="text-xl font-bold">{fornecedores.length}</p>
-                        </div>
-                    </div>
-                    <div className="bg-white p-4 rounded-xl shadow flex items-center justify-between">
-                        <div>
-                            <p className="text-sm text-gray-500">Ativos</p>
-                            <p className="text-xl font-bold">
-                                {fornecedores.filter((f) => f.status === "Ativo").length}
-                            </p>
-                        </div>
-                    </div>
-                    <div className="bg-white p-4 rounded-xl shadow flex items-center justify-between">
-                        <div>
-                            <p className="text-sm text-gray-500">Inativos</p>
-                            <p className="text-xl font-bold">
-                                {fornecedores.filter((f) => f.status === "Inativo").length}
-                            </p>
-                        </div>
-                    </div>
-                </div>
+  // ✏️ Editar
+  const abrirEditar = (fornecedor: Fornecedor) => {
+    setFornecedorSelecionado(fornecedor);
+    setModalEditar(true);
+  };
 
-                {/* Tabela de fornecedores */}
-                <div className="bg-white rounded-xl shadow overflow-x-auto">
-                    <table className="w-full text-sm">
-                        <thead className="bg-[#123859] text-white">
-                            <tr>
-                                <th className="p-3 text-left">ID</th>
-                                <th className="p-3 text-left">Nome</th>
-                                <th className="p-3 text-left">Telefone</th>
-                                <th className="p-3 text-left">Email</th>
-                                <th className="p-3 text-left">Endereço</th>
-                                <th className="p-3 text-left">Status</th>
-                                <th className="p-3 text-left">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {fornecedoresFiltrados.map((f) => (
-                                <tr key={f.id} className="border-b">
-                                    <td className="p-3">{f.id}</td>
-                                    <td className="p-3">{f.nome}</td>
-                                    <td className="p-3">{f.telefone}</td>
-                                    <td className="p-3">{f.email || "-"}</td>
-                                    <td className="p-3">{f.endereco || "-"}</td>
-                                    <td className="p-3">
-                                        <span
-                                            className={`px-3 py-1 rounded-full text-xs font-semibold ${f.status === "Ativo"
-                                                    ? "bg-green-100 text-green-700"
-                                                    : "bg-red-100 text-red-700"
-                                                }`}
-                                        >
-                                            {f.status}
-                                        </span>
-                                    </td>
-                                    <td className="p-3 flex gap-2">
-                                        <button
-                                            className="text-blue-600 flex items-center gap-1"
-                                            onClick={() => abrirModalVisualizar(f)}
-                                        >
-                                            <Eye size={16} /> Ver
-                                        </button>
-                                        <button
-                                            className="text-green-600 flex items-center gap-1"
-                                            onClick={() => abrirModalEditar(f)}
-                                        >
-                                            <Edit size={16} /> Editar
-                                        </button>
-                                        <button
-                                            className="text-red-600 flex items-center gap-1"
-                                            onClick={() => apagarFornecedor(f.id)}
-                                        >
-                                            <Trash2 size={16} /> Apagar
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                            {fornecedoresFiltrados.length === 0 && (
-                                <tr>
-                                    <td colSpan={7} className="p-4 text-center text-gray-500">
-                                        Nenhum fornecedor encontrado
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+  const salvarEdicao = async () => {
+    if (!fornecedorSelecionado) return;
 
-                {/* Modal de edição */}
-                {modalEditarAberto && fornecedorSelecionado && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                        <div className="bg-white rounded-xl w-11/12 md:w-1/2 p-6 space-y-4 relative shadow-xl">
-                            <button
-                                className="absolute top-4 right-4 text-gray-500 hover:text-gray-800"
-                                onClick={fecharModalEditar}
-                            >
-                                <X size={24} />
-                            </button>
-                            <h2 className="text-xl font-bold text-[#123859]">Editar Fornecedor</h2>
-                            <div className="space-y-3">
-                                <div>
-                                    <label className="block font-semibold mb-1">Nome</label>
-                                    <input
-                                        type="text"
-                                        name="nome"
-                                        value={fornecedorSelecionado.nome}
-                                        onChange={handleChange}
-                                        className="w-full border rounded px-3 py-2"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block font-semibold mb-1">Telefone</label>
-                                    <input
-                                        type="text"
-                                        name="telefone"
-                                        value={fornecedorSelecionado.telefone}
-                                        onChange={handleChange}
-                                        className="w-full border rounded px-3 py-2"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block font-semibold mb-1">Email</label>
-                                    <input
-                                        type="email"
-                                        name="email"
-                                        value={fornecedorSelecionado.email}
-                                        onChange={handleChange}
-                                        className="w-full border rounded px-3 py-2"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block font-semibold mb-1">Endereço</label>
-                                    <input
-                                        type="text"
-                                        name="endereco"
-                                        value={fornecedorSelecionado.endereco}
-                                        onChange={handleChange}
-                                        className="w-full border rounded px-3 py-2"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block font-semibold mb-1">Status</label>
-                                    <select
-                                        name="status"
-                                        value={fornecedorSelecionado.status}
-                                        onChange={handleChange}
-                                        className="w-full border rounded px-3 py-2"
-                                    >
-                                        <option value="Ativo">Ativo</option>
-                                        <option value="Inativo">Inativo</option>
-                                    </select>
-                                </div>
-                                <div className="flex justify-end gap-2 mt-4">
-                                    <button
-                                        className="bg-gray-300 text-gray-800 px-4 py-2 rounded"
-                                        onClick={fecharModalEditar}
-                                    >
-                                        Cancelar
-                                    </button>
-                                    <button
-                                        className="bg-[#123859] text-white px-4 py-2 rounded"
-                                        onClick={salvarEdicao}
-                                    >
-                                        Salvar
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
+    try {
+      const atualizado = await fornecedorService.atualizar(
+        fornecedorSelecionado.id,
+        fornecedorSelecionado
+      );
 
-                {/* Modal de visualização */}
-                {modalVisualizarAberto && fornecedorVisualizar && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                        <div className="bg-white rounded-xl w-11/12 md:w-1/3 p-6 space-y-4 relative shadow-xl">
-                            <button
-                                className="absolute top-4 right-4 text-gray-500 hover:text-gray-800"
-                                onClick={fecharModalVisualizar}
-                            >
-                                <X size={24} />
-                            </button>
-                            <h2 className="text-xl font-bold text-[#123859]">Detalhes do Fornecedor</h2>
-                            <div className="space-y-2">
-                                <p><strong>ID:</strong> {fornecedorVisualizar.id}</p>
-                                <p><strong>Nome:</strong> {fornecedorVisualizar.nome}</p>
-                                <p><strong>Telefone:</strong> {fornecedorVisualizar.telefone}</p>
-                                <p><strong>Email:</strong> {fornecedorVisualizar.email || "-"}</p>
-                                <p><strong>Endereço:</strong> {fornecedorVisualizar.endereco || "-"}</p>
-                                <p>
-                                    <strong>Status:</strong>{" "}
-                                    <span
-                                        className={`px-2 py-1 rounded-full text-xs font-semibold ${fornecedorVisualizar.status === "Ativo"
-                                                ? "bg-green-100 text-green-700"
-                                                : "bg-red-100 text-red-700"
-                                            }`}
-                                    >
-                                        {fornecedorVisualizar.status}
-                                    </span>
-                                </p>
-                            </div>
-                            <div className="flex justify-end mt-4">
-                                <button
-                                    className="bg-[#123859] text-white px-4 py-2 rounded"
-                                    onClick={fecharModalVisualizar}
-                                >
-                                    Fechar
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
+      setFornecedores((prev) =>
+        prev.map((f) => (f.id === atualizado.id ? atualizado : f))
+      );
+
+      setModalEditar(false);
+      mostrarBanner("success", "Fornecedor atualizado");
+    } catch (error: any) {
+      mostrarBanner(
+        "error",
+        error?.response?.data?.message || "Erro ao atualizar fornecedor"
+      );
+    }
+  };
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    if (!fornecedorSelecionado) return;
+    const { name, value } = e.target;
+    setFornecedorSelecionado({ ...fornecedorSelecionado, [name]: value });
+  };
+
+  return (
+    <MainEmpresa>
+      <div className="p-6 space-y-6">
+
+        {/* BANNER */}
+        {banner && (
+          <div
+            className={`w-full max-w-5xl mx-auto px-4 py-3 rounded-lg font-semibold ${
+              banner.tipo === "success"
+                ? "bg-green-100 text-green-700"
+                : "bg-red-100 text-red-700"
+            }`}
+          >
+            {banner.texto}
+          </div>
+        )}
+
+        <h1 className="text-2xl font-bold text-[#123859]">
+          Fornecedores
+        </h1>
+
+        {/* TABELA */}
+        <div className="bg-white rounded-xl shadow overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-[#123859] text-white">
+              <tr>
+                <th className="p-3 text-left">Nome</th>
+                <th className="p-3 text-left">NIF</th>
+                <th className="p-3 text-left">Telefone</th>
+                <th className="p-3 text-left">Email</th>
+                <th className="p-3 text-left">Endereço</th>
+                <th className="p-3 text-left">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fornecedores.map((f) => (
+                <tr key={f.id} className="border-b">
+                  <td className="p-3">{f.nome}</td>
+                  <td className="p-3">{f.nif}</td>
+                  <td className="p-3">{f.telefone || "-"}</td>
+                  <td className="p-3">{f.email}</td>
+                  <td className="p-3">{f.endereco || "-"}</td>
+                  <td className="p-3 flex gap-3">
+                    <button
+                      className="text-green-600 flex items-center gap-1"
+                      onClick={() => abrirEditar(f)}
+                    >
+                      <Edit size={16} /> Editar
+                    </button>
+                    <button
+                      className="text-red-600 flex items-center gap-1"
+                      onClick={() => apagarFornecedor(f.id)}
+                    >
+                      <Trash2 size={16} /> Apagar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+
+              {fornecedores.length === 0 && !loading && (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="p-4 text-center text-gray-500"
+                  >
+                    Nenhum fornecedor encontrado
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* PAGINAÇÃO */}
+        <div className="flex justify-center gap-2">
+          <button
+            disabled={pagina === 1}
+            onClick={() => carregarFornecedores(pagina - 1)}
+            className="px-4 py-2 border rounded disabled:opacity-50"
+          >
+            Anterior
+          </button>
+
+          <span className="px-4 py-2 font-semibold">
+            Página {pagina} de {ultimaPagina}
+          </span>
+
+          <button
+            disabled={pagina === ultimaPagina}
+            onClick={() => carregarFornecedores(pagina + 1)}
+            className="px-4 py-2 border rounded disabled:opacity-50"
+          >
+            Próxima
+          </button>
+        </div>
+
+        {/* MODAL EDITAR */}
+        {modalEditar && fornecedorSelecionado && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-white rounded-xl w-full max-w-md p-6 relative space-y-3">
+              <button
+                className="absolute top-3 right-3 text-gray-500"
+                aria-label="Fechar modal"
+                onClick={() => setModalEditar(false)}
+              >
+                <X size={20} />
+              </button>
+
+              <h2 className="text-xl font-bold text-[#123859]">
+                Editar Fornecedor
+              </h2>
+
+              <input
+                name="nome"
+                value={fornecedorSelecionado.nome}
+                onChange={handleChange}
+                className="w-full border rounded px-3 py-2"
+                placeholder="Nome"
+              />
+              <input
+                name="nif"
+                value={fornecedorSelecionado.nif || ""}
+                onChange={handleChange}
+                className="w-full border rounded px-3 py-2"
+                placeholder="NIF"
+              />
+              <input
+                name="telefone"
+                value={fornecedorSelecionado.telefone || ""}
+                onChange={handleChange}
+                className="w-full border rounded px-3 py-2"
+                placeholder="Telefone"
+              />
+              <input
+                name="email"
+                value={fornecedorSelecionado.email || ""}
+                onChange={handleChange}
+                className="w-full border rounded px-3 py-2"
+                placeholder="Email"
+              />
+              <input
+                name="endereco"
+                value={fornecedorSelecionado.endereco || ""}
+                onChange={handleChange}
+                className="w-full border rounded px-3 py-2"
+                placeholder="Endereço"
+              />
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  className="px-4 py-2 border rounded"
+                  onClick={() => setModalEditar(false)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  className="px-4 py-2 bg-[#123859] text-white rounded"
+                  onClick={salvarEdicao}
+                >
+                  Salvar
+                </button>
+              </div>
             </div>
-        </MainEmpresa>
-    );
+          </div>
+        )}
+      </div>
+    </MainEmpresa>
+  );
 }

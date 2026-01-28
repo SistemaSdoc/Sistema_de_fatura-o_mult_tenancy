@@ -12,6 +12,7 @@ use App\Http\Controllers\MovimentoStockController;
 use App\Http\Controllers\FaturaController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ClienteController;
 
 /*
 |--------------------------------------------------------------------------
@@ -27,6 +28,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // ---------------------- ADMIN ----------------------
     Route::middleware('role:admin')->group(function () {
         Route::apiResource('/users', UserController::class);
+        Route::apiResource('/clientes', ClienteController::class);
     });
 
     // ---------------------- ADMIN + OPERADOR ----------------------

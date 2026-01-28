@@ -9,10 +9,21 @@ use App\Models\Fornecedor;
 class FornecedorController extends Controller
 {
     // LISTAR FORNECEDORES
-    public function index()
-    {
-        return response()->json(Fornecedor::all());
-    }
+public function index()
+{
+    $fornecedores = Fornecedor::paginate(10);
+
+    return response()->json([
+        'data' => $fornecedores->items(),
+        'meta' => [
+            'current_page' => $fornecedores->currentPage(),
+            'last_page' => $fornecedores->lastPage(),
+            'per_page' => $fornecedores->perPage(),
+            'total' => $fornecedores->total(),
+        ]
+    ]);
+}
+
 
     // CRIAR FORNECEDOR
     public function store(Request $request)

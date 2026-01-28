@@ -62,4 +62,9 @@ class Produto extends Model
     {
         return $this->hasMany(MovimentoStock::class);
     }
+    public function fornecedor()
+{
+    return $this->belongsTo(Fornecedor::class, 'fornecedor_id'); // ou o campo correto
+}
+
 }

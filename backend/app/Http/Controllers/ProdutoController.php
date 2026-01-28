@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Produto;
 use App\Models\Categoria;
+use App\Models\Fornecedor;
 
 class ProdutoController extends Controller
 {
@@ -15,10 +16,16 @@ class ProdutoController extends Controller
         $this->authorizeResource(Produto::class, 'produto');
     }
 
-    // LISTAR PRODUTOS
-    public function index()
+    // LISTAR PRODUTOS COM PAGINAÇÃO
+    public function index(Request $request)
     {
-        return response()->json(Produto::all());
+        $perPage = $request->query('per_page', 10); // permite customizar itens por página
+
+        // Carrega categoria e fornecedor junto
+        $produtos = Produto::with(['categoria', 'fornecedor'])
+            ->paginate($perPage);
+
+        return response()->json($produtos);
     }
 
     // CRIAR PRODUTO
@@ -26,6 +33,7 @@ class ProdutoController extends Controller
     {
         $dados = $request->validate([
             'categoria_id' => 'required|uuid',
+            'fornecedor_id' => 'required|uuid',
             'nome' => 'required|string|max:255',
             'descricao' => 'nullable|string',
             'preco_compra' => 'required|numeric|min:0',
@@ -39,13 +47,23 @@ class ProdutoController extends Controller
             return response()->json(['message' => 'Categoria não encontrada'], 422);
         }
 
+        // Validação manual do fornecedor
+        if (!Fornecedor::find($dados['fornecedor_id'])) {
+            return response()->json(['message' => 'Fornecedor não encontrado'], 422);
+        }
+
         $produto = Produto::create($dados);
+
+        // Retorna produto completo com relacionamento
+        $produto->load(['categoria', 'fornecedor']);
+
         return response()->json($produto, 201);
     }
 
     // MOSTRAR PRODUTO
     public function show(Produto $produto)
     {
+        $produto->load(['categoria', 'fornecedor']);
         return response()->json($produto);
     }
 
@@ -54,6 +72,7 @@ class ProdutoController extends Controller
     {
         $dados = $request->validate([
             'categoria_id' => 'sometimes|required|uuid',
+            'fornecedor_id' => 'sometimes|required|uuid',
             'nome' => 'sometimes|required|string|max:255',
             'descricao' => 'nullable|string',
             'preco_compra' => 'sometimes|required|numeric|min:0',
@@ -67,7 +86,16 @@ class ProdutoController extends Controller
             return response()->json(['message' => 'Categoria não encontrada'], 422);
         }
 
+        // Validação manual do fornecedor caso seja alterado
+        if (isset($dados['fornecedor_id']) && !Fornecedor::find($dados['fornecedor_id'])) {
+            return response()->json(['message' => 'Fornecedor não encontrado'], 422);
+        }
+
         $produto->update($dados);
+
+        // Retorna produto completo com relacionamento
+        $produto->load(['categoria', 'fornecedor']);
+
         return response()->json($produto);
     }
 
