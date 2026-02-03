@@ -2,64 +2,109 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\Cliente;
+use Illuminate\Http\Request;
 
 class ClienteController extends Controller
 {
-    // LISTAR CLIENTES
+    public function __construct()
+    {
+        // Aplica automaticamente as policies do modelo Cliente
+        $this->authorizeResource(Cliente::class, 'cliente');
+    }
+
+    /**
+     * Listar todos os clientes
+     */
     public function index()
     {
-        return response()->json(Cliente::all());
+        $this->authorize('viewAny', Cliente::class);
+
+        $clientes = Cliente::all();
+
+        return response()->json([
+            'message' => 'Lista de clientes carregada com sucesso',
+            'clientes' => $clientes
+        ]);
     }
 
-    // CRIAR CLIENTE
+    /**
+     * Mostrar cliente específico
+     */
+    public function show(Cliente $cliente)
+    {
+        $this->authorize('view', $cliente);
+
+        return response()->json([
+            'message' => 'Cliente carregado com sucesso',
+            'cliente' => $cliente
+        ]);
+    }
+
+    /**
+     * Criar novo cliente
+     */
     public function store(Request $request)
     {
+        $this->authorize('create', Cliente::class);
+
         $dados = $request->validate([
             'nome' => 'required|string|max:255',
-            'nif' => 'nullable|string|unique:clientes',
-            'tipo' => 'required|in:consumidor_final,empresa',
+            'nif' => 'nullable|string|max:50|unique:clientes,nif',
+            'tipo' => 'nullable|in:consumidor_final,empresa',
             'telefone' => 'nullable|string|max:20',
-            'email' => 'nullable|email|unique:clientes',
-            'endereco' => 'nullable|string|max:255',
+            'email' => 'nullable|email|max:255|unique:clientes,email',
+            'endereco' => 'nullable|string',
+            'data_registro' => 'nullable|date',
         ]);
 
+        // Valor padrão para data de registro
+        $dados['data_registro'] = $dados['data_registro'] ?? now();
+
         $cliente = Cliente::create($dados);
-        return response()->json($cliente, 201);
+
+        return response()->json([
+            'message' => 'Cliente criado com sucesso',
+            'cliente' => $cliente
+        ]);
     }
 
-    // MOSTRAR CLIENTE
-    public function show($id)
+    /**
+     * Atualizar cliente
+     */
+    public function update(Request $request, Cliente $cliente)
     {
-        $cliente = Cliente::findOrFail($id);
-        return response()->json($cliente);
-    }
-
-    // ATUALIZAR CLIENTE
-    public function update(Request $request, $id)
-    {
-        $cliente = Cliente::findOrFail($id);
+        $this->authorize('update', $cliente);
 
         $dados = $request->validate([
             'nome' => 'sometimes|required|string|max:255',
-            'nif' => 'nullable|string|unique:clientes,nif,' . $cliente->id,
-            'tipo' => 'sometimes|required|in:consumidor_final,empresa',
+            'nif' => 'sometimes|nullable|string|max:50|unique:clientes,nif,' . $cliente->id,
+            'tipo' => 'nullable|in:consumidor_final,empresa',
             'telefone' => 'nullable|string|max:20',
-            'email' => 'nullable|email|unique:clientes,email,' . $cliente->id,
-            'endereco' => 'nullable|string|max:255',
+            'email' => 'nullable|email|max:255|unique:clientes,email,' . $cliente->id,
+            'endereco' => 'nullable|string',
+            'data_registro' => 'nullable|date',
         ]);
 
         $cliente->update($dados);
-        return response()->json($cliente);
+
+        return response()->json([
+            'message' => 'Cliente atualizado com sucesso',
+            'cliente' => $cliente
+        ]);
     }
 
-    // DELETAR CLIENTE
-    public function destroy($id)
+    /**
+     * Deletar cliente
+     */
+    public function destroy(Cliente $cliente)
     {
-        $cliente = Cliente::findOrFail($id);
+        $this->authorize('delete', $cliente);
+
         $cliente->delete();
-        return response()->json(null, 204);
+
+        return response()->json([
+            'message' => 'Cliente deletado com sucesso'
+        ]);
     }
 }

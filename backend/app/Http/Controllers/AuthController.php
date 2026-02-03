@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
-use App\Models\TenantUser;
+use App\Models\User;
 
 class AuthController extends Controller
 {
@@ -31,7 +31,7 @@ class AuthController extends Controller
         $tenant = app('tenant');
 
         // Busca usuário no tenant atual
-        $user = TenantUser::where('email', $request->email)->first();
+        $user = User::where('email', $request->email)->first();
 
         if (!$user) {
             return back()->withErrors(['email' => 'Usuário não encontrado no tenant: ' . $tenant->name])->withInput();

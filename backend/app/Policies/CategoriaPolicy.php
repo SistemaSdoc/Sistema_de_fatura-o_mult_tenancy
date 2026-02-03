@@ -15,12 +15,12 @@ class CategoriaPolicy
 
     public function create(User $user)
     {
-        return $user->role === 'admin';
+        return in_array($user->role, ['admin', 'operador','contablista']);
     }
 
     public function update(User $user)
     {
-        return $user->role === 'admin';
+        return in_array($user->role, ['admin', 'operador','contablista']);
     }
 
     public function delete(User $user)

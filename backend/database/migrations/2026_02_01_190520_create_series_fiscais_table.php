@@ -8,19 +8,16 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('logs_fiscais', function (Blueprint $table) {
+        Schema::create('series_fiscais', function (Blueprint $table) {
             $table->uuid('id')->primary();
 
             $table->uuid('user_id');
             $table->foreign('user_id')->references('id')->on('users');
 
-            $table->string('entidade');         // tabela afetada
-            $table->uuid('entidade_id')->nullable(); // registro afetado
-
-            $table->enum('acao', ['criar','emitir','anular','fechar']); 
-
-            $table->ipAddress('ip')->nullable();
-            $table->text('detalhe')->nullable(); // informações adicionais
+            $table->enum('tipo_documento', ['FT','NC','ND','FR']);
+            $table->string('serie', 10);
+            $table->year('ano');
+            $table->integer('ultimo_numero')->default(0);
 
             $table->timestamps();
         });
@@ -28,6 +25,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('logs_fiscais');
+        Schema::dropIfExists('series_fiscais');
     }
 };

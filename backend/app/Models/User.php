@@ -21,11 +21,13 @@ class User extends Authenticatable implements MustVerifyEmail
     protected $keyType = 'string';  // chave primária é UUID
 
     protected $fillable = [
+        'empresa_id',
         'name',
         'email',
         'password',
         'role', 
-        'email_verified_at',
+        'ativo',
+        'ultimo_login',
     ];
 
     protected $hidden = [

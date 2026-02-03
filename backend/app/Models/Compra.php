@@ -16,6 +16,17 @@ class Compra extends Model
         'fornecedor_id',
         'data',
         'total',
+        'status',
+        'user_id',
+        'data_registro',
+        'produto_id',
+        'quantidade',
+        'preco_compra',
+        'subtotal',
+        'base_tributavel',
+        'valor_iva',
+        
+
     ];
 
     protected $casts = [

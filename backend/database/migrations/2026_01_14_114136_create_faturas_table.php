@@ -4,41 +4,79 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-
 return new class extends Migration
 {
-    public function up()
+    public function up(): void
     {
-        // Faturas
-Schema::create('faturas', function (Blueprint $table) {
-    $table->uuid('id')->primary();
-    $table->foreignUuid('cliente_id')->nullable()->constrained('clientes')->onDelete('set null');
-    $table->foreignUuid('venda_id')->references('id')->on('vendas')->onDelete('cascade');
-    $table->string('numero')->unique();
-    $table->decimal('total', 12, 2)->default(0.00);
-    $table->enum('status', ['emitida', 'cancelada'])->default('emitida');
-    $table->string('hash')->nullable(); 
-    $table->timestamps();
-});
+        // Tabela de Faturas (Documentos Fiscais)
+        Schema::create('faturas', function (Blueprint $table) {
+            $table->uuid('id')->primary();
 
+            $table->uuid('user_id');
+            $table->foreign('user_id')->references('id')->on('users');
 
-        // Itens da fatura
-Schema::create('itens_fatura', function (Blueprint $table) {
-    $table->uuid('id')->primary();
-    $table->foreignUuid('fatura_id')->references('id')->on('faturas')->onDelete('cascade');
-    $table->string('descricao');
-    $table->integer('quantidade')->default(1);
-    $table->decimal('preco', 12, 2)->default(0.00);
-    $table->decimal('iva', 12, 2)->default(0.00);
-    $table->decimal('desconto', 12,2)->default(0); // valor absoluto do desconto
-    $table->decimal('subtotal', 12, 2)->default(0.00);
-    $table->timestamps();
-});
+            $table->uuid('venda_id');
+            $table->foreign('venda_id')->references('id')->on('vendas');
 
+            $table->uuid('cliente_id')->nullable();
+            $table->foreign('cliente_id')->references('id')->on('clientes');
 
+            $table->string('serie', 10)->default('A'); // Série fiscal
+            $table->string('numero')->unique(); // Número sequencial
+
+            $table->enum('tipo_documento', ['FT', 'FR', 'NC', 'ND'])->default('FT');
+
+            $table->date('data_emissao');
+            $table->time('hora_emissao');
+            $table->date('data_vencimento')->nullable();
+
+            $table->decimal('base_tributavel', 12, 2)->default(0); // soma das linhas antes do IVA
+            $table->decimal('total_iva', 12, 2)->default(0);
+            $table->decimal('total_retenção', 12, 2)->default(0);
+            $table->decimal('total_liquido', 12, 2)->default(0);
+
+            $table->enum('estado', ['emitido', 'anulado', 'pago','pendente'])->default('emitido');
+            $table->text('motivo_anulacao')->nullable();
+
+            $table->string('hash_fiscal')->nullable(); // integridade fiscal
+
+            $table->timestamps();
+            $table->timestamp('criado_em')->useCurrent(); // auditoria
+        });
+
+        // Tabela de Itens da Fatura
+        Schema::create('itens_fatura', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+
+            $table->uuid('fatura_id');
+            $table->foreign('fatura_id')
+                  ->references('id')
+                  ->on('faturas')
+                  ->onDelete('cascade');
+
+            $table->uuid('produto_id')->nullable();
+            $table->foreign('produto_id')
+                  ->references('id')
+                  ->on('produtos')
+                  ->nullOnDelete();
+
+            $table->string('descricao'); // imutável
+            $table->integer('quantidade');
+            $table->decimal('preco_unitario', 12, 2);
+
+            $table->decimal('base_tributavel', 12, 2); // quantidade * preço - desconto
+            $table->decimal('taxa_iva', 5, 2)->default(0);
+            $table->decimal('valor_iva', 12, 2)->default(0);
+            $table->decimal('valor_retenção', 12, 2)->default(0);
+            $table->decimal('desconto', 12, 2)->default(0);
+
+            $table->decimal('total_linha', 12, 2); // base + IVA - retenção - desconto
+
+            $table->timestamps();
+        });
     }
 
-    public function down()
+    public function down(): void
     {
         Schema::dropIfExists('itens_fatura');
         Schema::dropIfExists('faturas');

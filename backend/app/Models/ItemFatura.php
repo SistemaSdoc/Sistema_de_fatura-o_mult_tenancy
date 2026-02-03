@@ -17,8 +17,17 @@ class ItemFatura extends Model
         'descricao',
         'quantidade',
         'preco_unitario',
-        'iva',
-        'subtotal'
+        'subtotal',
+        'taxa_iva',
+        'valor_iva',
+        'valor_redencao',
+        'total_com_iva',
+        'produto_id',
+        'created_at',
+        'updated_at',
+        'desconto',
+
+        
     ];
 
     protected $casts = [

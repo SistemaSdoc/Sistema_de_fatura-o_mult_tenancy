@@ -17,7 +17,13 @@ class Categoria extends Model
 
     protected $fillable = [
         'nome',
-        'descricao'
+        'user_id',
+        'descricao',
+        'status',
+        'data_registro',
+        'tipo',
+
+        
     ];
 
     protected static function boot(): void

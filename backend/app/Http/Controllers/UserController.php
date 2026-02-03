@@ -2,68 +2,113 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use App\Models\User;
-use Illuminate\Support\Str;
-use App\Http\Resources\UserResource;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Auth;
 
 class UserController extends Controller
 {
-    /**
-     * LISTAR USUÁRIOS
-     */
-    public function index()
+    public function __construct()
     {
-        $this->authorize('viewAny', User::class);
-
-        $users = User::latest()->get();
-        return UserResource::collection($users);
+        // Aplica automaticamente as policies do modelo User
+        $this->authorizeResource(User::class, 'user');
     }
 
     /**
-     * CRIAR USUÁRIO
+     * Listar todos os usuários (com filtros opcionais)
+     */
+    public function index(Request $request)
+    {
+        $this->authorize('viewAny', User::class);
+
+        $query = User::query();
+
+        // Filtrar por empresa (se o usuário não for admin, limita à empresa dele)
+        if (Auth::user()->role !== 'admin') {
+            $query->where('empresa_id', Auth::user()->empresa_id);
+        }
+
+        // Filtro por status ativo/inativo
+        if ($request->has('ativo')) {
+            $query->where('ativo', $request->boolean('ativo'));
+        }
+
+        // Filtro por role
+        if ($request->has('role')) {
+            $query->where('role', $request->role);
+        }
+
+        $users = $query->orderBy('name')->get();
+
+        return response()->json([
+            'message' => 'Lista de usuários carregada com sucesso',
+            'users' => $users
+        ]);
+    }
+
+    /**
+     * Mostrar usuário específico
+     */
+    public function show(User $user)
+    {
+        return response()->json([
+            'message' => 'Usuário carregado com sucesso',
+            'user' => $user
+        ]);
+    }
+
+    /**
+     * Criar novo usuário
      */
     public function store(Request $request)
     {
         $this->authorize('create', User::class);
 
         $dados = $request->validate([
-            'name'     => 'required|string|max:255',
-            'email'    => 'required|email|unique:users,email', // removido tenant
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:6',
-            'role'     => 'required|in:admin,operador,caixa',
+            'role' => 'required|in:admin,operador,contablista',
+            'ativo' => 'nullable|boolean',
+            'empresa_id' => 'nullable|uuid|exists:empresas,id',
         ]);
 
-        $user = User::create([
-            'id'       => (string) Str::uuid(),
-            'name'     => $dados['name'],
-            'email'    => $dados['email'],
-            'password' => $dados['password'], // mutator do modelo criptografa
-            'role'     => $dados['role'],
-        ]);
+        $dados['password'] = Hash::make($dados['password']);
+        $dados['ativo'] = $dados['ativo'] ?? true;
+
+        // Define empresa_id do usuário logado se não fornecido
+        if (!isset($dados['empresa_id'])) {
+            $dados['empresa_id'] = Auth::user()->empresa_id;
+        }
+
+        $user = User::create($dados);
 
         return response()->json([
             'message' => 'Usuário criado com sucesso',
-            'user'    => new UserResource($user),
-        ], 201);
+            'user' => $user
+        ]);
     }
 
     /**
-     * ATUALIZAR USUÁRIO
+     * Atualizar usuário
      */
-    public function update(Request $request, string $id)
+    public function update(Request $request, User $user)
     {
-        $user = User::findOrFail($id);
         $this->authorize('update', $user);
 
         $dados = $request->validate([
-            'name'     => 'sometimes|required|string|max:255',
-            'email'    => "sometimes|required|email|unique:users,email,{$user->id}", // removido tenant
-            'password' => 'sometimes|nullable|string|min:6',
-            'role'     => 'sometimes|required|in:admin,operador,caixa',
+            'name' => 'sometimes|required|string|max:255',
+            'email' => 'sometimes|required|email|unique:users,email,' . $user->id,
+            'password' => 'nullable|string|min:6',
+            'role' => 'sometimes|required|in:admin,operador,contablista',
+            'ativo' => 'nullable|boolean',
+            'empresa_id' => 'nullable|uuid|exists:empresas,id',
         ]);
 
-        if (isset($dados['password']) && empty($dados['password'])) {
+        if (!empty($dados['password'])) {
+            $dados['password'] = Hash::make($dados['password']);
+        } else {
             unset($dados['password']);
         }
 
@@ -71,29 +116,37 @@ class UserController extends Controller
 
         return response()->json([
             'message' => 'Usuário atualizado com sucesso',
-            'user'    => new UserResource($user),
+            'user' => $user
         ]);
     }
 
     /**
-     * DELETAR USUÁRIO
+     * Deletar usuário
      */
-    public function destroy(string $id, Request $request)
+    public function destroy(User $user)
     {
-        $user = User::findOrFail($id);
         $this->authorize('delete', $user);
-
-        // Impedir auto-delete
-        if ($request->user()->id === $user->id) {
-            return response()->json([
-                'message' => 'Não pode apagar o próprio usuário'
-            ], 403);
-        }
 
         $user->delete();
 
         return response()->json([
-            'message' => 'Usuário deletado com sucesso',
+            'message' => 'Usuário deletado com sucesso'
+        ]);
+    }
+
+    /**
+     * Atualizar último login (audit)
+     */
+    public function atualizarUltimoLogin(User $user)
+    {
+        $this->authorize('update', $user);
+
+        $user->ultimo_login = now();
+        $user->save();
+
+        return response()->json([
+            'message' => 'Último login atualizado com sucesso',
+            'user' => $user
         ]);
     }
 }

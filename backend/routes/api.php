@@ -1,7 +1,6 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\ApiAuthController;
 use App\Http\Controllers\ProdutoController;
 use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\FornecedorController;
@@ -13,6 +12,7 @@ use App\Http\Controllers\FaturaController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ClienteController;
+use App\Http\Controllers\RelatoriosController;
 
 /*
 |--------------------------------------------------------------------------
@@ -21,8 +21,7 @@ use App\Http\Controllers\ClienteController;
 */
 Route::middleware(['auth:sanctum'])->group(function () {
 
-
-    // Dashboard (todos usuários logados)
+    // ---------------------- DASHBOARD ----------------------
     Route::get('/dashboard', [DashboardController::class, 'index']);
 
     // ---------------------- ADMIN ----------------------
@@ -36,20 +35,37 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::apiResource('/produtos', ProdutoController::class);
         Route::apiResource('/categorias', CategoriaController::class);
         Route::apiResource('/fornecedores', FornecedorController::class);
-        Route::post('/compras', [CompraController::class, 'store']);
+
+        // Compras
+        Route::apiResource('/compras', CompraController::class)->only(['index', 'show', 'store']);
+
+        // Movimentos de stock
         Route::apiResource('/movimentos-stock', MovimentoStockController::class);
+        Route::post('/movimentos-stock/ajuste', [MovimentoStockController::class, 'ajuste']);
     });
 
-    // ---------------------- ADMIN + OPERADOR + CAIXA ----------------------
-    Route::middleware('role:admin,operador,caixa')->group(function () {
-        Route::get('/vendas/listar', [VendaController::class, 'index']);
-        Route::get('/vendas/create-data', [VendaController::class, 'createData']);
+    // ---------------------- ADMIN + OPERADOR + CONTABILISTA ----------------------
+    Route::middleware('role:admin,operador,contabilista')->group(function () {
+
+        // Vendas
+        Route::get('/vendas', [VendaController::class, 'index']);
+        Route::get('/vendas/create-data', [VendaController::class, 'create']);
         Route::post('/vendas', [VendaController::class, 'store']);
-        Route::get('/vendas/{id}', [VendaController::class, 'show']);
+        Route::get('/vendas/{venda}', [VendaController::class, 'show']);
+        Route::post('/vendas/{venda}/cancelar', [VendaController::class, 'cancelar']);
+
+        // Pagamentos
         Route::apiResource('/pagamentos', PagamentoController::class);
+
+        // Faturas
         Route::get('/faturas', [FaturaController::class, 'index']);
+        Route::get('/faturas/{fatura}', [FaturaController::class, 'show']);
         Route::post('/faturas/gerar', [FaturaController::class, 'gerarFatura']);
+
+        // Relatórios
+        Route::get('/relatorios/vendas', [RelatoriosController::class, 'vendas']);
+        Route::get('/relatorios/compras', [RelatoriosController::class, 'compras']);
+        Route::get('/relatorios/faturamento', [RelatoriosController::class, 'faturamento']);
+        Route::get('/relatorios/stock', [RelatoriosController::class, 'stock']);
     });
-
-
 });

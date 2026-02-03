@@ -10,11 +10,11 @@ class CompraPolicy
 {
     public function viewAny(User $user)
     {
-        return $user->role === 'admin';
+        return in_array($user->role, ['admin', 'operador','contablista']);
     }
 
     public function create(User $user)
     {
-        return $user->role === 'admin';
+        return in_array($user->role, ['admin', 'operador','contablista']);
     }
 }

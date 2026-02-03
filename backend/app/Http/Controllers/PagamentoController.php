@@ -2,85 +2,130 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\Pagamento;
-use App\Models\Venda;
-use App\Models\User; // Substituí TenantUser por User padrão
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class PagamentoController extends Controller
 {
-    // Aplica a policy de Pagamento para todas as ações do CRUD
     public function __construct()
     {
+        // Aplica automaticamente as policies do modelo Pagamento
         $this->authorizeResource(Pagamento::class, 'pagamento');
     }
 
-    // LISTAR PAGAMENTOS
-    public function index()
+    /**
+     * Listar todos os pagamentos
+     */
+    public function index(Request $request)
     {
-        return response()->json(Pagamento::all());
-    }
+        $this->authorize('viewAny', Pagamento::class);
 
-    // CRIAR PAGAMENTO
-    public function store(Request $request)
-    {
-        $dados = $request->validate([
-            'venda_id' => 'required|uuid',
-            'user_id' => 'required|uuid',
-            'metodo' => 'required|string|max:50',
-            'valor_pago' => 'required|numeric|min:0',
-            'troco' => 'nullable|numeric|min:0',
-            'data' => 'nullable|date',
+        $query = Pagamento::with('user', 'fatura')->orderBy('data_pagamento', 'desc');
+
+        // Filtros opcionais
+        if ($request->has('fatura_id')) {
+            $query->where('fatura_id', $request->fatura_id);
+        }
+
+        if ($request->has('user_id')) {
+            $query->where('user_id', $request->user_id);
+        }
+
+        if ($request->has('metodo')) {
+            $query->where('metodo', $request->metodo);
+        }
+
+        $pagamentos = $query->get();
+
+        return response()->json([
+            'message' => 'Lista de pagamentos carregada com sucesso',
+            'pagamentos' => $pagamentos
         ]);
-
-        // Validação manual das relações
-        if (!Venda::find($dados['venda_id'])) {
-            return response()->json(['message' => 'Venda não encontrada'], 422);
-        }
-
-        if (!User::find($dados['user_id'])) {
-            return response()->json(['message' => 'Usuário não encontrado'], 422);
-        }
-
-        $pagamento = Pagamento::create($dados);
-        return response()->json($pagamento, 201);
     }
 
-    // MOSTRAR PAGAMENTO
+    /**
+     * Mostrar pagamento específico
+     */
     public function show(Pagamento $pagamento)
     {
-        return response()->json($pagamento);
+        $this->authorize('view', $pagamento);
+
+        return response()->json([
+            'message' => 'Pagamento carregado com sucesso',
+            'pagamento' => $pagamento->load('user', 'fatura')
+        ]);
     }
 
-    // ATUALIZAR PAGAMENTO
-    public function update(Request $request, Pagamento $pagamento)
+    /**
+     * Criar novo pagamento
+     */
+    public function store(Request $request)
     {
+        $this->authorize('create', Pagamento::class);
+
         $dados = $request->validate([
-            'venda_id' => 'sometimes|required|uuid',
-            'user_id' => 'sometimes|required|uuid',
-            'metodo' => 'sometimes|required|string|max:50',
-            'valor_pago' => 'sometimes|required|numeric|min:0',
+            'user_id' => 'required|uuid|exists:users,id',
+            'fatura_id' => 'required|uuid|exists:faturas,id',
+            'metodo' => 'required|in:dinheiro,cartao,transferencia',
+            'valor_pago' => 'required|numeric|min:0',
             'troco' => 'nullable|numeric|min:0',
-            'data' => 'nullable|date',
+            'referencia' => 'nullable|string|max:255',
+            'data_pagamento' => 'required|date',
+            'hora_pagamento' => 'required|date_format:H:i:s',
         ]);
 
-        if (isset($dados['venda_id']) && !Venda::find($dados['venda_id'])) {
-            return response()->json(['message' => 'Venda não encontrada'], 422);
-        }
+        $dados['troco'] = $dados['troco'] ?? 0;
 
-        if (isset($dados['user_id']) && !User::find($dados['user_id'])) {
-            return response()->json(['message' => 'Usuário não encontrado'], 422);
+        $pagamento = Pagamento::create($dados);
+
+        return response()->json([
+            'message' => 'Pagamento registrado com sucesso',
+            'pagamento' => $pagamento->load('user', 'fatura')
+        ]);
+    }
+
+    /**
+     * Atualizar pagamento
+     */
+    public function update(Request $request, Pagamento $pagamento)
+    {
+        $this->authorize('update', $pagamento);
+
+        $dados = $request->validate([
+            'user_id' => 'sometimes|required|uuid|exists:users,id',
+            'fatura_id' => 'sometimes|required|uuid|exists:faturas,id',
+            'metodo' => 'sometimes|required|in:dinheiro,cartao,transferencia',
+            'valor_pago' => 'sometimes|required|numeric|min:0',
+            'troco' => 'nullable|numeric|min:0',
+            'referencia' => 'nullable|string|max:255',
+            'data_pagamento' => 'sometimes|required|date',
+            'hora_pagamento' => 'sometimes|required|date_format:H:i:s',
+        ]);
+
+        if (!isset($dados['troco'])) {
+            $dados['troco'] = $pagamento->troco ?? 0;
         }
 
         $pagamento->update($dados);
-        return response()->json($pagamento);
+
+        return response()->json([
+            'message' => 'Pagamento atualizado com sucesso',
+            'pagamento' => $pagamento->load('user', 'fatura')
+        ]);
     }
 
-    // DELETAR PAGAMENTO
+    /**
+     * Deletar pagamento
+     */
     public function destroy(Pagamento $pagamento)
     {
+        $this->authorize('delete', $pagamento);
+
         $pagamento->delete();
-        return response()->json(null, 204);
+
+        return response()->json([
+            'message' => 'Pagamento deletado com sucesso'
+        ]);
     }
 }

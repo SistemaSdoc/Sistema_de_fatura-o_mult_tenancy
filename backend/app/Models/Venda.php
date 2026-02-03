@@ -15,8 +15,21 @@ class Venda extends Model
     protected $fillable = [
         'cliente_id',
         'user_id',
-        'data',
         'total',
+        'status',
+        'hash_fiscal',
+        'tipo_documento',
+        'hora_venda',
+        'data_venda',
+        'descricao',
+        'serie',
+        'numero',
+        'total_iva',
+        'total_retenção',
+        'total_pagar',
+        'base_tributavel',
+
+
     ];
 
     protected $casts = [

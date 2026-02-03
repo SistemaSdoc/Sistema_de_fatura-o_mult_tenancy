@@ -5,7 +5,7 @@ namespace App\Policies;
 use App\Models\User;
 use Illuminate\Auth\Access\Response;
 
-class TenantUserPolicy
+class UserPolicy
 {
     public function viewAny(User $user)
     {

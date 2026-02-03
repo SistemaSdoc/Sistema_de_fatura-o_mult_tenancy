@@ -13,6 +13,7 @@ function handleAxiosError(err: unknown, prefix: string) {
 
 /* ================== TIPOS ================== */
 
+/* -------- Paginacao Genérica -------- */
 export interface Paginacao<T> {
   data: T[];
   current_page: number;
@@ -26,183 +27,40 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: string;
+  role: 'admin' | 'operador' | 'contablista';
+  ativo: boolean;
+  ultimo_login?: string | null;
 }
+
+
+export interface CriarItemVendaPayload {
+  produto_id: string;
+  quantidade: number;
+  preco_venda: number;
+  desconto?: number;
+}
+
+export interface CriarVendaPayload {
+  cliente_id: string | null;
+  tipo_documento?: 'fatura' | 'recibo' | 'nota_credito' | 'nota_debito';
+  faturar?: boolean;
+  itens: CriarItemVendaPayload[];
+}
+
 
 /* -------- Cliente -------- */
 export interface Cliente {
   id: string;
-  nome?: string;
-  nif?: string; 
-}
-
-/* -------- Produto -------- */
-export interface Produto {
-  id: string;
   nome: string;
-  descricao?: string;
-  categoria_id: string;
-  preco_compra: number;
-  preco_venda: number;
-  estoque_atual: number;
-  estoque_minimo: number;
-  Categoria: { 
-    id: string;
-    nome: string;
-  };
-  Fornecedor: {
-    id: string;
-    nome: string;
-  };
-}
-
-export interface ProdutoPayload {
-  nome: string;
-  descricao?: string;
-  categoria_id: string;
-  fornecedor_id: string;
-  preco_compra: number;
-  preco_venda: number;
-  estoque_atual: number;
-  estoque_minimo: number;
-}
-
-
-
-/* -------- Item de Venda -------- */
-export interface ItemVenda {
-  id: string;
-  produto_id: string;
-  produto_nome: string;
-  quantidade: number;
-  preco_venda: number;
-  subtotal: number;
-  desconto?: number; // desconto informado pelo usuário
-  iva?: number;  
-}
-
-/* -------- Venda -------- */
-export interface Venda {
-  id: string;
-  cliente_id: string;
-  cliente_nome: string;
-  user_id: string;
-  user_nome: string;
-  data: string;
-  total: number;
-  itens: ItemVenda[];  
-  cliente: {
-    id: string;
-    nome: string;
-  };
-  user: {
-    id: string;
-    name: string;
-  };
-  fatura?: {
-    id: string;
-    status: "emitida" | "cancelada";
-    total: number;
-  };
-}
-
-export interface ProdutoVenda {
-  id: string;
-  nome: string;
-  preco_venda: number;
-  estoque_atual: number;
-  isento_iva: boolean;
-}
-
-
-export interface CriarVendaPayload {
-  cliente_id: string;
-  itens: {
-    produto_id: string;
-    quantidade: number;
-    desconto?: number; // desconto informado pelo usuário
-    iva?: number;      // IVA informado pelo usuário, ou 0 se isento
-  }[];
-}
-
-/* -------- Fatura -------- */
-export interface Fatura {
-  id: string;
-  venda_id: string;
-  numero: string;
-  total: string;
-  status: "emitida" | "cancelada";
-  hash: string;
-  data: string;
-  venda?: {
-    id: string;
-    cliente: {
-      id: string;
-      nome: string;
-      nif: string;
-    };
-    }
-}
-
-
-/* -------- Dashboard -------- */
-
-export interface DashboardData {
-  user: {
-    id: number;
-    name: string;
-    email: string;
-    role: string;
-  };
-
-  faturasEmitidas: number;
-  clientesAtivos: number;
-
-  receitaMensal: number;
-  receitaMesAtual: number;
-  receitaMesAnterior: number;
-
-  vendasPorMes: {
-    mes: string;
-    total: number;
-  }[];
-
-  produtosMaisVendidos: {
-    produto: string;
-    quantidade: number;
-  }[];
-
-  ultimasFaturas: {
-    id: number;
-    cliente: string;
-    data: string;
-    total: number;
-    status: string;
-  }[];
-}
-
-
-export interface Cliente {
-  id: string;
-  name: string;
-  nif?: string;
+  nif?: string | null;
   tipo: 'consumidor_final' | 'empresa';
   telefone?: string | null;
   email?: string | null;
   endereco?: string | null;
+  data_registro?: string;
   created_at?: string;
   updated_at?: string;
-  
 }
-
-export type Fornecedor = {
-  id: string;
-  nome: string;
-  nif?: string;
-  telefone?: string | null;
-  email?: string;
-  endereco?: string | null;
-};
 
 export interface ClientePayload {
   nome: string;
@@ -213,56 +71,577 @@ export interface ClientePayload {
   endereco?: string | null;
 }
 
-
-
-/* -------- Nova Venda (Clientes + Produtos) -------- */
-export interface NovaVendaData {
-  clientes: Cliente[];
-  produtos: ProdutoVenda[];
-}
-  
-
-
+/* -------- Categoria -------- */
 export interface Categoria {
   id: string;
   nome: string;
   descricao?: string;
+  tipo: 'produto' | 'servico';
+  status: 'ativo' | 'inativo';
+  user_id: string;
 }
 
 export interface CategoriaPayload {
   nome: string;
   descricao?: string;
+  tipo?: 'produto' | 'servico';
 }
 
+/* -------- Fornecedor -------- */
+export interface Fornecedor {
+  id: string;
+  nome: string;
+  tipo: 'nacional' | 'internacional';
+  nif?: string;
+  telefone?: string | null;
+  email?: string | null;
+  endereco?: string | null;
+  status: 'ativo' | 'inativo';
+  user_id: string;
+}
 
-/* ================== TIPOS ================== */
+/* -------- Produto -------- */
+export interface Produto {
+  id: string;
+  nome: string;
+  descricao?: string | null;
+  codigo?: string | null;
+  categoria_id: string;
+  user_id: string;
+  preco_compra: number;
+  preco_venda: number;
+  sujeito_iva: boolean;
+  isento_iva: boolean;
+  taxa_iva: number;
+  estoque_atual: number;
+  estoque_minimo: number;
+  custo_medio?: number;
+  tipo: 'produto' | 'servico';
+  status: 'ativo' | 'inativo';
+}
+
+export interface ProdutoPayload {
+  nome: string;
+  descricao?: string | null;
+  codigo?: string | null;
+  categoria_id: string;
+  user_id: string;
+  preco_compra: number;
+  preco_venda: number;
+  sujeito_iva?: boolean;
+  taxa_iva?: number;
+  estoque_atual: number;
+  estoque_minimo: number;
+  tipo?: 'produto' | 'servico';
+  status?: 'ativo' | 'inativo';
+}
+
+/* -------- Venda -------- */
+export interface ItemVenda {
+  id: string;
+  produto_id: string;
+  descricao: string;
+  quantidade: number;
+  preco_venda: number;
+  desconto: number;
+  base_tributavel: number;
+  valor_iva: number;
+  valor_retenção: number;
+  subtotal: number;
+}
+
+export interface Venda {
+  id: string;
+  cliente_id?: string | null;
+  user_id: string;
+  tipo_documento: 'fatura' | 'recibo' | 'nota_credito' | 'nota_debito';
+  serie?: string;
+  numero: string;
+  base_tributavel: number;
+  total_iva: number;
+  total_retenção: number;
+  total_pagar: number;
+  total: number;
+  data_venda: string;
+  hora_venda: string;
+  status: 'aberta' | 'faturada' | 'cancelada';
+  hash_fiscal?: string | null;
+  itens?: ItemVenda[];
+}
+
+/* -------- Compra -------- */
+export interface ItemCompra {
+  id: string;
+  compra_id: string;
+  produto_id: string;
+  quantidade: number;
+  preco_compra: number;
+  subtotal: number;
+  base_tributavel: number;
+  valor_iva: number;
+}
+
+export interface Compra {
+  id: string;
+  user_id: string;
+  fornecedor_id: string;
+  data: string;
+  tipo_documento: 'fatura' | 'nota_credito';
+  numero_documento: string;
+  data_emissao: string;
+  base_tributavel: number;
+  total_iva: number;
+  total_fatura: number;
+  total: number;
+  validado_fiscalmente: boolean;
+  itens?: ItemCompra[];
+}
+
+/* -------- Fatura -------- */
+export interface ItemFatura {
+  id: string;
+  fatura_id: string;
+  produto_id?: string | null;
+  descricao: string;
+  quantidade: number;
+  preco_unitario: number;
+  base_tributavel: number;
+  taxa_iva: number;
+  valor_iva: number;
+  valor_retenção: number;
+  desconto: number;
+  total_linha: number;
+}
+
+export interface Fatura {
+  id: string;
+  user_id: string;
+  venda_id: string;
+  cliente_id?: string | null;
+  serie: string;
+  numero: string;
+  tipo_documento: 'FT' | 'FR' | 'NC' | 'ND';
+  data_emissao: string;
+  hora_emissao: string;
+  data_vencimento?: string | null;
+  base_tributavel: number;
+  total_iva: number;
+  total_retenção: number;
+  total_liquido: number;
+  estado: 'emitido' | 'anulado' | 'pago';
+  motivo_anulacao?: string | null;
+  hash_fiscal?: string | null;
+  itens?: ItemFatura[];
+  cliente?: Cliente;
+}
+
+/* -------- Pagamento -------- */
+export interface Pagamento {
+  id: string;
+  fatura_id: string;
+  user_id: string;
+  metodo: 'dinheiro' | 'cartao' | 'transferencia';
+  valor_pago: number;
+  troco: number;
+  referencia?: string | null;
+  data_pagamento: string;
+  hora_pagamento: string;
+}
+
+/* -------- Movimento de Stock -------- */
 export interface MovimentoStock {
   id: string;
   produto_id: string;
-  tipo: "entrada" | "saida";
+  user_id: string;
+  tipo: 'entrada' | 'saida';
+  tipo_movimento: 'compra' | 'venda' | 'ajuste' | 'nota_credito';
   quantidade: number;
-  origem?: string;
+  custo_medio: number;
+  stock_minimo: number;
   referencia?: string;
-  data?: string;
+  observacao?: string;
   created_at?: string;
   updated_at?: string;
 }
 
 export interface CriarMovimentoPayload {
   produto_id: string;
-  tipo: "entrada" | "saida";
+  tipo: 'entrada' | 'saida';
+  tipo_movimento?: 'compra' | 'venda' | 'ajuste' | 'nota_credito';
   quantidade: number;
-  origem?: string;
+  custo_medio?: number;
+  stock_minimo?: number;
   referencia?: string;
+  observacao?: string;
   data?: string;
 }
 
+/* -------- Dashboard -------- */
+export interface DashboardData {
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+  };
+
+  clientesAtivos: number;
+
+  produtos: {
+    total: number;
+    ativos: number;
+    inativos: number;
+    stock_baixo: number;
+  };
+  vendas: {
+    total: number;
+    abertas: number;
+    faturadas: number;
+    canceladas: number;
+
+    ultimas: Array<{
+      id: number;
+      cliente: string;
+      total: number;
+      status: string;
+      data: string;
+    }>;
+
+    vendasPorMes: Array<{
+      mes: string;
+      total: number;
+    }>;
+  };
+
+  faturas: {
+    total: number;
+    pendentes: number;
+    pagas: number;
+
+    receitaMesAtual: number;
+    receitaMesAnterior: number;
+
+    ultimas: Array<{
+      id: number;
+      venda_id: number;
+      total: number;
+      status: string;
+      data: string;
+      cliente: string | null;
+    }>;
+  };
+
+  pagamentos: {
+    total: number;
+    dinheiro: number;
+    cartao: number;
+    transferencia: number;
+  };
+
+  indicadores: {
+    produtosMaisVendidos: Array<{
+      produto: string;
+      quantidade: number;
+    }>;
+  };
+}
+
+export interface UltimaVenda {
+  id: number;
+  cliente: string;
+  total: number;
+  status: string;
+  data: string;
+}
+
+export interface UltimaFatura {
+  id: number;
+  venda_id: number;
+  total: number;
+  estado: string;
+  data: string;
+}
+
+export interface VendaPorMes {
+  mes: string;
+  total: number;
+}
+
+export interface ProdutoMaisVendido {
+  produto: string;
+  quantidade: number;
+}
+
+export interface ProdutosResumo {
+  total: number;
+  ativos: number;
+  inativos: number;
+  stock_baixo: number;
+}
+
+export interface VendasResumo {
+  total: number;
+  abertas: number;
+  faturadas: number;
+  canceladas: number;
+  ultimas: UltimaVenda[];
+  vendasPorMes: VendaPorMes[];
+}
+
+export interface FaturasResumo {
+  total: number;
+  pendentes: number;
+  pagas: number;
+  ultimas: UltimaFatura[];
+  receitaMesAtual: number;
+  receitaMesAnterior: number;
+}
+
+export interface PagamentosResumo {
+  total: number;
+  
+  dinheiro: number;
+  cartao: number;
+  transferencia: number;
+}
+
+export interface Indicadores {
+  produtosMaisVendidos: ProdutoMaisVendido[];
+}
+
+export interface DashboardResponse {
+  produtos: ProdutosResumo;
+  vendas: VendasResumo;
+  faturas: FaturasResumo;
+  pagamentos: PagamentosResumo;
+  indicadores: Indicadores;
+  
+  clientesAtivos: number;
+}
 
 
-/* ================== STOCK SERVICE ================== */
+/* ================== SERVIÇOS ================== */
+
+export async function obterDadosNovaVenda(): Promise<{
+  clientes: Cliente[];
+  produtos: Produto[];
+}> {
+  const { data } = await api.get("/api/vendas/create");
+  return data;
+}
+
+
+export async function criarVenda(payload: CriarVendaPayload) {
+  const response = await api.post("/api/vendas", payload);
+  return response.data;
+}
+
+
+/* ================== CLIENTES ================== */
+export const clienteService = {
+  listar: async (): Promise<Cliente[]> => {
+    try {
+      const { data } = await api.get<{ data: Cliente[] }>("/api/clientes");
+      return data.data ?? [];
+    } catch (err) {
+      handleAxiosError(err, "[CLIENTE] Erro ao listar clientes");
+      return [];
+    }
+  },
+
+  criar: async (payload: ClientePayload): Promise<Cliente | null> => {
+    try {
+      const { data } = await api.post<Cliente>("/api/clientes", payload);
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[CLIENTE] Erro ao criar cliente");
+      return null;
+    }
+  },
+
+  buscar: async (id: string): Promise<Cliente | null> => {
+    try {
+      const { data } = await api.get<Cliente>(`/api/clientes/${id}`);
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[CLIENTE] Erro ao buscar cliente");
+      return null;
+    }
+  },
+
+  atualizar: async (id: string, payload: Partial<ClientePayload>): Promise<Cliente | null> => {
+    try {
+      const { data } = await api.put<Cliente>(`/api/clientes/${id}`, payload);
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[CLIENTE] Erro ao atualizar cliente");
+      return null;
+    }
+  },
+
+  deletar: async (id: string): Promise<boolean> => {
+    try {
+      await api.delete(`/api/clientes/${id}`);
+      return true;
+    } catch (err) {
+      handleAxiosError(err, "[CLIENTE] Erro ao deletar cliente");
+      return false;
+    }
+  }
+};
+
+/* ================== FORNECEDORES ================== */
+export const fornecedorService = {
+  listar: async (): Promise<Fornecedor[]> => {
+    try {
+      const { data } = await api.get<Fornecedor[]>("/api/fornecedores");
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[FORNECEDOR] Erro ao listar fornecedores");
+      return [];
+    }
+  },
+
+  buscar: async (id: string): Promise<Fornecedor | null> => {
+    try {
+      const { data } = await api.get<Fornecedor>(`/api/fornecedores/${id}`);
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[FORNECEDOR] Erro ao buscar fornecedor");
+      return null;
+    }
+  },
+
+  criar: async (payload: Omit<Fornecedor, "id">): Promise<Fornecedor | null> => {
+    try {
+      const { data } = await api.post<Fornecedor>("/api/fornecedores", payload);
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[FORNECEDOR] Erro ao criar fornecedor");
+      return null;
+    }
+  },
+
+  atualizar: async (id: string, payload: Partial<Omit<Fornecedor, "id">>): Promise<Fornecedor | null> => {
+    try {
+      const { data } = await api.put<Fornecedor>(`/api/fornecedores/${id}`, payload);
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[FORNECEDOR] Erro ao atualizar fornecedor");
+      return null;
+    }
+  },
+
+  deletar: async (id: string): Promise<boolean> => {
+    try {
+      await api.delete(`/api/fornecedores/${id}`);
+      return true;
+    } catch (err) {
+      handleAxiosError(err, "[FORNECEDOR] Erro ao deletar fornecedor");
+      return false;
+    }
+  }
+};
+
+/* ================== PRODUTOS ================== */
+export const produtoService = {
+  listarPaginado: async (page = 1): Promise<Paginacao<Produto>> => {
+    try {
+      const { data } = await api.get<Paginacao<Produto>>(`/api/produtos?page=${page}`);
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[PRODUTO] Erro ao listar produtos");
+      return { data: [], current_page: 1, last_page: 1, per_page: 0, total: 0 };
+    }
+  },
+
+  criar: async (payload: ProdutoPayload): Promise<Produto | null> => {
+    try {
+      const { data } = await api.post<Produto>("/api/produtos", payload);
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[PRODUTO] Erro ao criar produto");
+      return null;
+    }
+  },
+
+  atualizar: async (id: string, payload: ProdutoPayload): Promise<Produto | null> => {
+    try {
+      const { data } = await api.put<Produto>(`/api/produtos/${id}`, payload);
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[PRODUTO] Erro ao atualizar produto");
+      return null;
+    }
+  },
+
+  deletar: async (id: string): Promise<boolean> => {
+    try {
+      await api.delete(`/api/produtos/${id}`);
+      return true;
+    } catch (err) {
+      handleAxiosError(err, "[PRODUTO] Erro ao deletar produto");
+      return false;
+    }
+  }
+};
+
+/* ================== CATEGORIAS ================== */
+export const categoriaService = {
+  listar: async (): Promise<Categoria[]> => {
+    try {
+      const { data } = await api.get<Categoria[]>("/api/categorias");
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[CATEGORIA] Erro ao listar categorias");
+      return [];
+    }
+  },
+
+  criar: async (payload: CategoriaPayload): Promise<Categoria | null> => {
+    try {
+      const { data } = await api.post<Categoria>("/api/categorias", payload);
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[CATEGORIA] Erro ao criar categoria");
+      return null;
+    }
+  },
+
+  atualizar: async (id: string, payload: Partial<CategoriaPayload>): Promise<Categoria | null> => {
+    try {
+      const { data } = await api.put<Categoria>(`/api/categorias/${id}`, payload);
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[CATEGORIA] Erro ao atualizar categoria");
+      return null;
+    }
+  },
+
+  deletar: async (id: string): Promise<boolean> => {
+    try {
+      await api.delete(`/api/categorias/${id}`);
+      return true;
+    } catch (err) {
+      handleAxiosError(err, "[CATEGORIA] Erro ao deletar categoria");
+      return false;
+    }
+  },
+
+  buscar: async (id: string): Promise<Categoria | null> => {
+    try {
+      const { data } = await api.get<Categoria>(`/api/categorias/${id}`);
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[CATEGORIA] Erro ao buscar categoria");
+      return null;
+    }
+  }
+};
+
+/* ================== MOVIMENTOS DE STOCK ================== */
 export const stockService = {
-  // LISTAR MOVIMENTOS
-  async listar(): Promise<MovimentoStock[]> {
+  listar: async (): Promise<MovimentoStock[]> => {
     try {
       const { data } = await api.get<MovimentoStock[]>("/api/movimentos-stock");
       return data;
@@ -272,8 +651,7 @@ export const stockService = {
     }
   },
 
-  // CRIAR MOVIMENTO
-  async criar(payload: CriarMovimentoPayload): Promise<MovimentoStock | null> {
+  criar: async (payload: CriarMovimentoPayload): Promise<MovimentoStock | null> => {
     try {
       const { data } = await api.post<MovimentoStock>("/api/movimentos-stock", payload);
       return data;
@@ -283,8 +661,7 @@ export const stockService = {
     }
   },
 
-  // OBTER UM MOVIMENTO
-  async obter(id: string): Promise<MovimentoStock | null> {
+  obter: async (id: string): Promise<MovimentoStock | null> => {
     try {
       const { data } = await api.get<MovimentoStock>(`/api/movimentos-stock/${id}`);
       return data;
@@ -294,8 +671,7 @@ export const stockService = {
     }
   },
 
-  // ATUALIZAR MOVIMENTO
-  async atualizar(id: string, payload: Partial<CriarMovimentoPayload>): Promise<MovimentoStock | null> {
+  atualizar: async (id: string, payload: Partial<CriarMovimentoPayload>): Promise<MovimentoStock | null> => {
     try {
       const { data } = await api.put<MovimentoStock>(`/api/movimentos-stock/${id}`, payload);
       return data;
@@ -305,8 +681,7 @@ export const stockService = {
     }
   },
 
-  // DELETAR MOVIMENTO
-  async deletar(id: string): Promise<boolean> {
+  deletar: async (id: string): Promise<boolean> => {
     try {
       await api.delete(`/api/movimentos-stock/${id}`);
       return true;
@@ -316,19 +691,15 @@ export const stockService = {
     }
   },
 
-  
-
-  // CALCULAR STOCK ATUAL DE UM PRODUTO
-  async calcularStock(produto_id: string): Promise<number> {
+  calcularStock: async (produto_id: string): Promise<number> => {
     try {
-      const movimentos = await this.listar();
+      const movimentos = await stockService.listar();
       const entradas = movimentos
         .filter(m => m.produto_id === produto_id && m.tipo === "entrada")
         .reduce((sum, m) => sum + m.quantidade, 0);
       const saidas = movimentos
         .filter(m => m.produto_id === produto_id && m.tipo === "saida")
         .reduce((sum, m) => sum + m.quantidade, 0);
-
       return entradas - saidas;
     } catch (err) {
       handleAxiosError(err, "[STOCK] Erro ao calcular stock");
@@ -337,231 +708,88 @@ export const stockService = {
   }
 };
 
-export const categoriaService = {
-  listar: async (): Promise<Categoria[]> => {
+/* ================== VENDAS E FATURAS ================== */
+export const vendaService = {
+  criarVenda: async (payload: CriarVendaPayload): Promise<{ venda: Venda; fatura: Fatura } | null> => {
     try {
-      const res = await api.get("/api/categorias");
-      return res.data;
+      const { data } = await api.post<{ venda: Venda; fatura: Fatura }>("/api/vendas", payload);
+      return data;
     } catch (err) {
-      console.error("Erro ao listar categorias:", err);
-      return [];
+      handleAxiosError(err, "[VENDAS] Erro ao criar venda");
+      return null;
     }
   },
 
-  criar: async (payload: CategoriaPayload): Promise<Categoria> => {
+  obterVenda: async (id: string): Promise<Venda | null> => {
     try {
-      const res = await api.post("/api/categorias", payload);
-      return res.data;
+      const { data } = await api.get<Venda>(`/api/vendas/${id}`);
+      return data;
     } catch (err) {
-      console.error("Erro ao criar categoria:", err);
-      throw err;
+      handleAxiosError(err, "[VENDAS] Erro ao obter venda");
+      return null;
     }
   },
 
-  atualizar: async (id: string, payload: Partial<CategoriaPayload>): Promise<Categoria> => {
+  cancelarVenda: async (id: string): Promise<boolean> => {
     try {
-      const res = await api.put(`/api/categorias/${id}`, payload);
-      return res.data;
-    } catch (err) {
-      console.error("Erro ao atualizar categoria:", err);
-      throw err;
-    }
-  },
-
-  deletar: async (id: string): Promise<boolean> => {
-    try {
-      await api.delete(`/api/categorias/${id}`);
+      await api.post(`/api/vendas/${id}/cancelar`);
       return true;
     } catch (err) {
-      console.error("Erro ao deletar categoria:", err);
+      handleAxiosError(err, "[VENDAS] Erro ao cancelar venda");
       return false;
     }
   },
 
-  buscar: async (id: string): Promise<Categoria> => {
+  listarVendas: async (): Promise<Venda[]> => {
     try {
-      const res = await api.get(`/api/categorias/${id}`);
-      return res.data;
+      const { data } = await api.get<{ data: Venda[] }>("/api/vendas/listar");
+      return data.data ?? [];
     } catch (err) {
-      console.error("Erro ao buscar categoria:", err);
-      throw err;
+      handleAxiosError(err, "[VENDAS] Erro ao listar vendas");
+      return [];
     }
   },
+
+  obterDadosNovaVenda: async (): Promise<{ clientes: Cliente[]; produtos: Produto[] }> => {
+    try {
+      const { data } = await api.get<{ clientes: Cliente[]; produtos: Produto[] }>("/api/vendas/create-data");
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[VENDAS] Erro ao obter dados da nova venda");
+      return { clientes: [], produtos: [] };
+    }
+  },
+
+  emitirFatura: async (vendaId: string): Promise<Fatura | null> => {
+    try {
+      const { data } = await api.post<{ fatura: Fatura }>("/api/faturas/gerar", { venda_id: vendaId });
+      return data.fatura;
+    } catch (err) {
+      handleAxiosError(err, "[FATURA] Erro ao gerar fatura");
+      return null;
+    }
+  },
+
+  listarFaturas: async (): Promise<Fatura[]> => {
+    try {
+      const { data } = await api.get<Fatura[]>("/api/faturas");
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[FATURA] Erro ao listar faturas");
+      return [];
+    }
+  }
 };
 
-
-
-/* ================== VENDAS ================== */
-export async function criarVenda(
-  payload: CriarVendaPayload
-): Promise<{ venda: Venda; fatura: Fatura } | null> {
-  try {
-    const { data } = await api.post<{ venda: Venda; fatura: Fatura }>("/api/vendas", payload);
-    return data;
-  } catch (err) {
-    handleAxiosError(err, "[VENDAS] Erro ao criar venda");
-    return null;
-  }
-}
-
-export async function obterVenda(vendaId: string): Promise<Venda | null> {
-  try {
-    const { data } = await api.get<Venda>(`/api/vendas/${vendaId}`);
-    return data;
-  } catch (err) {
-    handleAxiosError(err, "[VENDAS] Erro ao obter venda");
-    return null;
-  }
-}
-
-export async function cancelarVenda(vendaId: string): Promise<boolean> {
-  try {
-    await api.post(`/api/vendas/${vendaId}/cancelar`);
-    return true;
-  } catch (err) {
-    handleAxiosError(err, "[VENDAS] Erro ao cancelar venda");
-    return false;
-  }
-}
-
-export async function listarVendas(): Promise<Venda[]> {
-  try {
-    const { data } = await api.get<{ data: Venda[] }>("/api/vendas/listar");
-    return data.data ?? [];
-  } catch (err) {
-    handleAxiosError(err, "[VENDAS] Erro ao listar vendas");
-    return [];
-  }
-}
-
-
-/* ================== NOVA VENDA ================== */
-export async function obterDadosNovaVenda(): Promise<NovaVendaData> {
-  try {
-    const { data } = await api.get<NovaVendaData>("/api/vendas/create-data");
-    return data;
-  } catch (err) {
-    handleAxiosError(err, "[NOVA VENDA] Erro ao obter dados para nova venda");
-    return { clientes: [], produtos: [] };
-  }
-}
-
-/* ================== DASHBOARD ================== */
-export async function fetchDashboardData(): Promise<DashboardData> {
-  try {
-    const { data } = await api.get<DashboardData>("/api/dashboard");
-    return data;
-  } catch (err) {
-    handleAxiosError(err, "[DASHBOARD] Erro ao carregar dados");
-    throw err;
-  }
-}
-
-// services/vendas.ts
-export async function emitirFatura(vendaId: string): Promise<Fatura | null> {
-  try {
-    const { data } = await api.post<{ fatura: Fatura }>("/api/faturas/gerar", { venda_id: vendaId });
-    return data.fatura;
-  } catch (err) {
-    handleAxiosError(err, "[FATURA] Erro ao gerar fatura");
-    return null;
-  }
-}
-export async function listarFaturas(): Promise<Fatura[]> {
-  try {
-    const { data } = await api.get<Fatura[]>("/api/faturas");
-    return data;
-  } catch (err) {
-    handleAxiosError(err, "[FATURA] Erro ao listar faturas");
-    return [];
-  }
-}
-
-export const clienteService = {
-
-  // LISTAR
-  async listar(): Promise<Cliente[]> {
-    const response = await api.get('/api/clientes')
-    return response.data
-  },
-
-  // CRIAR
-  async criar(payload: ClientePayload): Promise<Cliente> {
-    const response = await api.post('/api/clientes', payload)
-    return response.data
-  },
-
-  // MOSTRAR
-  async buscar(id: string): Promise<Cliente> {
-    const response = await api.get(`/api/clientes/${id}`)
-    return response.data
-  },
-
-  // ATUALIZAR
-  async atualizar(id: string, payload: Partial<ClientePayload>): Promise<Cliente> {
-    const response = await api.put(`/api/clientes/${id}`, payload)
-    return response.data
-  },
-
-  // DELETAR
-  async deletar(id: string): Promise<void> {
-    await api.delete(`/api/clientes/${id}`)
-  }
-}
-
-
-export const fornecedorService = {
-  // LISTAR
-  async listar(): Promise<Fornecedor[]> {
-    const response = await api.get("/api/fornecedores");
-    return response.data;
-  },
-
-  // BUSCAR POR ID
-  async buscar(id: string): Promise<Fornecedor> {
-    const response = await api.get(`/api/fornecedores/${id}`);
-    return response.data;
-  },
-
-  // CRIAR
-  async criar(data: Omit<Fornecedor, "id">): Promise<Fornecedor> {
-    const response = await api.post("/api/fornecedores", data);
-    return response.data;
-  },
-
-  // ATUALIZAR
-  async atualizar(id: string, data: Partial<Omit<Fornecedor, "id">>): Promise<Fornecedor> {
-    const response = await api.put(`/api/fornecedores/${id}`, data);
-    return response.data;
-  },
-
-  // DELETAR
-  async deletar(id: string): Promise<void> {
-    await api.delete(`/api/fornecedores/${id}`);
-  },
-};
-
-
-/* ================== PRODUTO SERVICE ================== */
-export const produtoService = {
-  // LISTAR COM PAGINAÇÃO
-  async listarPaginado(page = 1): Promise<Paginacao<Produto>> {
-    const { data } = await api.get(`/api/produtos?page=${page}`);
-    return data;
-  },
-
-  async criar(payload: ProdutoPayload): Promise<Produto | null> {
-    const { data } = await api.post("/api/produtos", payload);
-    return data;
-  },
-
-  async atualizar(id: string, payload: ProdutoPayload): Promise<Produto | null> {
-    const { data } = await api.put(`/api/produtos/${id}`, payload);
-    return data;
-  },
-
-  async deletar(id: string): Promise<boolean> {
-    await api.delete(`/api/produtos/${id}`);
-    return true;
+/* ================= DASHBOARD SERVICE ================= */
+export const dashboardService = {
+  fetch: async (): Promise<DashboardResponse | null> => {
+    try {
+      const { data } = await api.get<DashboardResponse>("/api/dashboard");
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[DASHBOARD]");
+      return null;
+    }
   },
 };

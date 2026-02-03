@@ -16,8 +16,16 @@ class ItemVenda extends Model
         'venda_id',
         'produto_id',
         'quantidade',
+        'descricao',
         'preco_venda',
+        'desconto',
+        'valor_iva',
+        'base_tributavel',
+        'valor_retenção',
         'subtotal',
+        'created_at',
+        'updated_at',
+
     ];
 
     protected $casts = [

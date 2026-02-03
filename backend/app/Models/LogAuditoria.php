@@ -14,11 +14,14 @@ class LogAuditoria extends Model
 
     protected $fillable = [
         'user_id',
-        'acao',          // exemplo: 'criou', 'atualizou', 'deletou'
-        'entidade',      // exemplo: 'Produto', 'Venda', 'Fatura'
-        'referencia_id', // id da entidade afetada
-        'ip',            // endereço IP do usuário
+        'entidade',
+        'registro_id',
+        'acao',
+        'ip',
         'created_at',
+        
+        
+
     ];
 
     protected $casts = [

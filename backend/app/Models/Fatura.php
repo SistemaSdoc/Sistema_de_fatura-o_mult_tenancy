@@ -16,14 +16,21 @@ class Fatura extends Model
         'venda_id',
         'cliente_id',
         'numero',
-        'total',
         'status',
         'hash',
-        'data'
+        'tipo_documento',
+        'hora_emissao',
+        'total_bruto',
+        'total_iva',
+        'total_liquido',
+        'motivo_anulacao',
+        'data_emissao',
+        'hora_emissao',
+        'total_redencao',
+
     ];
 
     protected $casts = [
-        'data' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

@@ -4,7 +4,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
-class Tenant extends Model
+class Empresa extends Model
 {
     protected $table = 'empresas';
 
@@ -16,6 +16,12 @@ class Tenant extends Model
         'email',
         'logo',
         'status',
+        'endereco',
+        'telefone',
+        'regime_fiscal',
+        'sujeito_iva',
+        'data_registro',
+
     ];
 
     protected static function boot(): void
@@ -28,4 +34,7 @@ class Tenant extends Model
             }
         });
     }
+
+
+
 }

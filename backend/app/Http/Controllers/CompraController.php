@@ -2,10 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
+use App\Models\Compra;
 use Illuminate\Http\Request;
 use App\Services\CompraService;
-use App\Models\Compra;
 
 class CompraController extends Controller
 {
@@ -15,44 +14,65 @@ class CompraController extends Controller
     {
         $this->compraService = $compraService;
 
-        // Aplica a policy de Compra em todas as ações do CRUD
+        // Aplica automaticamente as policies do modelo Compra
         $this->authorizeResource(Compra::class, 'compra');
     }
 
-    // LISTAR TODAS AS COMPRAS
+    /**
+     * Listar todas as compras
+     */
     public function index()
     {
-        $compras = Compra::all();
-        return response()->json($compras);
+        $this->authorize('viewAny', Compra::class);
+
+        $compras = $this->compraService->listarCompras();
+
+        return response()->json([
+            'message' => 'Lista de compras carregada com sucesso',
+            'compras' => $compras
+        ]);
     }
 
-    // CRIAR NOVA COMPRA
+    /**
+     * Mostrar uma compra específica
+     */
+    public function show(Compra $compra)
+    {
+        $this->authorize('view', $compra);
+
+        $compraDetalhe = $this->compraService->buscarCompra($compra->id);
+
+        return response()->json([
+            'message' => 'Compra carregada com sucesso',
+            'compra' => $compraDetalhe
+        ]);
+    }
+
+    /**
+     * Criar nova compra
+     */
     public function store(Request $request)
     {
+        $this->authorize('create', Compra::class);
+
         $dados = $request->validate([
-            'fornecedor_id' => 'required|uuid',
+            'fornecedor_id' => 'required|uuid|exists:fornecedores,id',
+            'data' => 'required|date',
+            'tipo_documento' => 'nullable|string|max:50',
+            'numero_documento' => 'nullable|string|max:50',
+            'data_emissao' => 'nullable|date',
+            'validado_fiscalmente' => 'nullable|boolean',
             'itens' => 'required|array|min:1',
-            'itens.*.produto_id' => 'required|uuid',
+            'itens.*.produto_id' => 'required|uuid|exists:produtos,id',
             'itens.*.quantidade' => 'required|integer|min:1',
+            'itens.*.preco_compra' => 'required|numeric|min:0',
         ]);
 
         $compra = $this->compraService->criarCompra($dados);
 
         return response()->json([
-            'compra' => $compra,
-        ], 201);
-    }
-
-    // MOSTRAR COMPRA
-    public function show(Compra $compra)
-    {
-        return response()->json($compra);
-    }
-
-    // EXCLUIR COMPRA
-    public function destroy(Compra $compra)
-    {
-        $compra->delete();
-        return response()->json(null, 204);
+            'message' => 'Compra criada com sucesso',
+            'compra' => $compra
+        ]);
     }
 }

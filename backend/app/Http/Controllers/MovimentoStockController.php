@@ -2,74 +2,156 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use App\Services\StockService;
 use App\Models\MovimentoStock;
-use App\Models\Produto;
 
 class MovimentoStockController extends Controller
 {
-    // LISTAR MOVIMENTOS DE STOCK
+    protected $stockService;
+
+    public function __construct(StockService $stockService)
+    {
+        $this->stockService = $stockService;
+    }
+
+    /**
+     * Listar todos os movimentos de stock
+     */
     public function index()
     {
-        return response()->json(MovimentoStock::all());
+        $movimentos = MovimentoStock::with('produto', 'user')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'message' => 'Movimentos de stock carregados com sucesso',
+            'movimentos' => $movimentos
+        ]);
     }
 
-    // CRIAR NOVO MOVIMENTO
-    public function store(Request $request)
+    /**
+     * Entrada de compra
+     */
+    public function entradaCompra(Request $request)
     {
         $dados = $request->validate([
-            'produto_id' => 'required|uuid',
-            'tipo' => 'required|in:entrada,saida',
+            'produto_id' => 'required|uuid|exists:produtos,id',
             'quantidade' => 'required|integer|min:1',
-            'origem' => 'nullable|string',
-            'referencia' => 'nullable|string',
-            'data' => 'nullable|date',
+            'preco' => 'required|numeric|min:0',
+            'compra_id' => 'nullable|uuid|exists:compras,id',
+            'observacao' => 'nullable|string',
         ]);
 
-        // Validação manual do produto
-        if (!Produto::find($dados['produto_id'])) {
-            return response()->json(['message' => 'Produto não encontrado'], 422);
+        try {
+            $this->stockService->entradaCompra(
+                $dados['produto_id'],
+                $dados['quantidade'],
+                (float) $dados['preco'],
+                $dados['compra_id'] ?? null
+            );
+
+            return response()->json([
+                'message' => 'Entrada de stock registrada com sucesso'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
         }
-
-        $movimento = MovimentoStock::create($dados);
-        return response()->json($movimento, 201);
     }
 
-    // MOSTRAR MOVIMENTO
-    public function show($id)
+    /**
+     * Saída de venda
+     */
+    public function saidaVenda(Request $request)
     {
-        $movimento = MovimentoStock::findOrFail($id);
-        return response()->json($movimento);
-    }
-
-    // ATUALIZAR MOVIMENTO
-    public function update(Request $request, $id)
-    {
-        $movimento = MovimentoStock::findOrFail($id);
-
         $dados = $request->validate([
-            'produto_id' => 'sometimes|required|uuid',
-            'tipo' => 'sometimes|required|in:entrada,saida',
-            'quantidade' => 'sometimes|required|integer|min:1',
-            'origem' => 'nullable|string',
-            'referencia' => 'nullable|string',
-            'data' => 'nullable|date',
+            'produto_id' => 'required|uuid|exists:produtos,id',
+            'quantidade' => 'required|integer|min:1',
+            'venda_id' => 'nullable|uuid|exists:vendas,id',
+            'observacao' => 'nullable|string',
         ]);
 
-        if (isset($dados['produto_id']) && !Produto::find($dados['produto_id'])) {
-            return response()->json(['message' => 'Produto não encontrado'], 422);
-        }
+        try {
+            $this->stockService->saidaVenda(
+                $dados['produto_id'],
+                $dados['quantidade'],
+                $dados['venda_id'] ?? null
+            );
 
-        $movimento->update($dados);
-        return response()->json($movimento);
+            return response()->json([
+                'message' => 'Saída de stock registrada com sucesso'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
     }
 
-    // DELETAR MOVIMENTO
-    public function destroy($id)
+    /**
+     * Ajuste manual de stock
+     */
+    public function ajusteManual(Request $request)
     {
-        $movimento = MovimentoStock::findOrFail($id);
-        $movimento->delete();
-        return response()->json(null, 204);
+        $dados = $request->validate([
+            'produto_id' => 'required|uuid|exists:produtos,id',
+            'quantidade' => 'required|integer|min:0',
+            'tipo' => 'required|in:entrada,saida',
+            'referencia' => 'nullable|string|max:255',
+            'observacao' => 'nullable|string',
+        ]);
+
+        try {
+            $this->stockService->ajusteManual(
+                $dados['produto_id'],
+                $dados['quantidade'],
+                $dados['tipo'],
+                $dados['referencia'] ?? null,
+                $dados['observacao'] ?? null
+            );
+
+            return response()->json([
+                'message' => 'Ajuste de stock registrado com sucesso'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    /**
+     * Relatório de stock
+     */
+    public function relatorio()
+    {
+        $relatorio = $this->stockService->relatorio(); // método correto do service
+
+        return response()->json([
+            'message' => 'Relatório de stock carregado com sucesso',
+            'relatorio' => $relatorio
+        ]);
+    }
+
+    /**
+     * Dashboard de stock
+     */
+    public function dashboard()
+    {
+        $dashboard = $this->stockService->dashboard(); // método correto do service
+
+        return response()->json([
+            'message' => 'Dashboard de stock carregado com sucesso',
+            'dashboard' => $dashboard
+        ]);
+    }
+
+    /**
+     * Produtos com stock abaixo do mínimo
+     */
+    public function produtosEmRisco()
+    {
+        $produtos = $this->stockService->produtosEmRisco(); // método correto do service
+
+        return response()->json([
+            'message' => 'Produtos com stock abaixo do mínimo',
+            'produtos' => $produtos
+        ]);
     }
 }

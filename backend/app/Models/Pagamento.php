@@ -13,12 +13,17 @@ class Pagamento extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
-        'venda_id',
         'user_id',
+        'fatura_id',
         'metodo',
         'valor_pago',
         'troco',
+        'data_pagamento',
+        'hora_pagamento',
+        'referencia',
         'data',
+        'venda_id',
+        
     ];
 
     protected $casts = [

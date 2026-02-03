@@ -2,95 +2,112 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\Fornecedor;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class FornecedorController extends Controller
 {
-    // LISTAR FORNECEDORES
-public function index()
-{
-    $fornecedores = Fornecedor::paginate(10);
+    public function __construct()
+    {
+        // Aplica automaticamente as policies do modelo Fornecedor
+        $this->authorizeResource(Fornecedor::class, 'fornecedor');
+    }
 
-    return response()->json([
-        'data' => $fornecedores->items(),
-        'meta' => [
-            'current_page' => $fornecedores->currentPage(),
-            'last_page' => $fornecedores->lastPage(),
-            'per_page' => $fornecedores->perPage(),
-            'total' => $fornecedores->total(),
-        ]
-    ]);
-}
+    /**
+     * Listar todos os fornecedores
+     */
+    public function index()
+    {
+        $this->authorize('viewAny', Fornecedor::class);
 
+        $fornecedores = Fornecedor::all();
 
-    // CRIAR FORNECEDOR
+        return response()->json([
+            'message' => 'Lista de fornecedores carregada com sucesso',
+            'fornecedores' => $fornecedores
+        ]);
+    }
+
+    /**
+     * Mostrar fornecedor específico
+     */
+    public function show(Fornecedor $fornecedor)
+    {
+        return response()->json([
+            'message' => 'Fornecedor carregado com sucesso',
+            'fornecedor' => $fornecedor
+        ]);
+    }
+
+    /**
+     * Criar novo fornecedor
+     */
     public function store(Request $request)
     {
+        $this->authorize('create', Fornecedor::class);
+
         $dados = $request->validate([
             'nome' => 'required|string|max:255',
-            'nif' => 'nullable|string',
+            'nif' => 'required|string|max:50|unique:fornecedores,nif',
             'telefone' => 'nullable|string|max:20',
-            'email' => 'nullable|email',
-            'endereco' => 'nullable|string|max:255',
+            'email' => 'nullable|email|max:255|unique:fornecedores,email',
+            'endereco' => 'nullable|string',
+            'tipo' => 'nullable|in:Nacional,Internacional',
+            'status' => 'nullable|in:ativo,inativo',
         ]);
 
-        // Validação manual de unicidade
-        if ($dados['nif'] && Fornecedor::where('nif', $dados['nif'])->exists()) {
-            return response()->json(['message' => 'NIF já existe'], 422);
-        }
+        // Relacionar fornecedor ao usuário autenticado
+        $dados['user_id'] = Auth::id();
 
-        if ($dados['email'] && Fornecedor::where('email', $dados['email'])->exists()) {
-            return response()->json(['message' => 'Email já existe'], 422);
-        }
+        // Valores padrão
+        $dados['tipo'] = $dados['tipo'] ?? 'Nacional';
+        $dados['status'] = $dados['status'] ?? 'ativo';
 
         $fornecedor = Fornecedor::create($dados);
-        return response()->json($fornecedor, 201);
+
+        return response()->json([
+            'message' => 'Fornecedor criado com sucesso',
+            'fornecedor' => $fornecedor
+        ]);
     }
 
-    // MOSTRAR FORNECEDOR
-    public function show($id)
+    /**
+     * Atualizar fornecedor
+     */
+    public function update(Request $request, Fornecedor $fornecedor)
     {
-        $fornecedor = Fornecedor::findOrFail($id);
-        return response()->json($fornecedor);
-    }
-
-    // ATUALIZAR FORNECEDOR
-    public function update(Request $request, $id)
-    {
-        $fornecedor = Fornecedor::findOrFail($id);
+        $this->authorize('update', $fornecedor);
 
         $dados = $request->validate([
             'nome' => 'sometimes|required|string|max:255',
-            'nif' => 'nullable|string',
+            'nif' => 'sometimes|required|string|max:50|unique:fornecedores,nif,' . $fornecedor->id,
             'telefone' => 'nullable|string|max:20',
-            'email' => 'nullable|email',
-            'endereco' => 'nullable|string|max:255',
+            'email' => 'nullable|email|max:255|unique:fornecedores,email,' . $fornecedor->id,
+            'endereco' => 'nullable|string',
+            'tipo' => 'nullable|in:Nacional,Internacional',
+            'status' => 'nullable|in:ativo,inativo',
         ]);
 
-        // Validação manual de unicidade
-        if (isset($dados['nif']) && $dados['nif'] !== $fornecedor->nif &&
-            Fornecedor::where('nif', $dados['nif'])->exists()
-        ) {
-            return response()->json(['message' => 'NIF já existe'], 422);
-        }
-
-        if (isset($dados['email']) && $dados['email'] !== $fornecedor->email &&
-            Fornecedor::where('email', $dados['email'])->exists()
-        ) {
-            return response()->json(['message' => 'Email já existe'], 422);
-        }
-
         $fornecedor->update($dados);
-        return response()->json($fornecedor);
+
+        return response()->json([
+            'message' => 'Fornecedor atualizado com sucesso',
+            'fornecedor' => $fornecedor
+        ]);
     }
 
-    // DELETAR FORNECEDOR
-    public function destroy($id)
+    /**
+     * Deletar fornecedor
+     */
+    public function destroy(Fornecedor $fornecedor)
     {
-        $fornecedor = Fornecedor::findOrFail($id);
+        $this->authorize('delete', $fornecedor);
+
         $fornecedor->delete();
-        return response()->json(null, 204);
+
+        return response()->json([
+            'message' => 'Fornecedor deletado com sucesso'
+        ]);
     }
 }

@@ -13,11 +13,13 @@ class Fornecedor extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'user_id',
         'nome',
         'nif',
         'telefone',
         'email',
-        'endereco'
+        'endereco',
+        'tipo',
     ];
 
     protected static function boot(): void

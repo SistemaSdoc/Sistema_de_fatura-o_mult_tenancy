@@ -6,24 +6,26 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
-Schema::create('categorias', function (Blueprint $table) {
-    $table->uuid('id')->primary();
-    $table->string('nome');
-    $table->text('descricao')->nullable();
-    $table->timestamps();
-});
+        Schema::create('categorias', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+
+            // Dados da categoria
+            $table->string('nome');
+            $table->text('descricao')->nullable();
+            $table->uuid('user_id');
+            $table->foreign('user_id')->references('id')->on('users');
+
+            // Estado
+            $table->enum('status', ['ativo', 'inativo'])->default('ativo');
+            $table->enum('tipo', ['produto','servico'])->default('produto');
 
 
+            $table->timestamps();
+        });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('categorias');

@@ -15,11 +15,16 @@ class MovimentoStock extends Model
     protected $fillable = [
         'produto_id',
         'tipo',        // entrada | saida | ajuste
-        'quantidade',
-        'origem',      // compra | venda | nota_credito | ajuste_manual
+        'quantidade',      // compra | venda | nota_credito | ajuste_manual
         'referencia',  // id da compra/venda/fatura
-        'data',
         'user_id',     // quem executou
+        'tipo_movimento', // compra | venda | ajuste | nota_credito
+        'custo_medio',
+        'stock_minimo',
+        'tipo_movimento',
+        'observacao',
+        
+
     ];
 
     protected $casts = [

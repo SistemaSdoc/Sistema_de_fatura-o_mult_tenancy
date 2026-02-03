@@ -20,7 +20,7 @@ use App\Policies\CompraPolicy;
 use App\Policies\PagamentoPolicy;
 use App\Policies\FaturaPolicy;
 use App\Policies\CategoriaPolicy;
-use App\Policies\TenantUserPolicy;
+use App\Policies\UserPolicy;
 
 class AuthServiceProvider extends ServiceProvider
 {
@@ -36,7 +36,7 @@ class AuthServiceProvider extends ServiceProvider
         Pagamento::class  => PagamentoPolicy::class,
         Fatura::class     => FaturaPolicy::class,
         Categoria::class  => CategoriaPolicy::class,
-        User::class       => User::class,
+        User::class       => UserPolicy::class,
     ];
 
     /**

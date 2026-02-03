@@ -10,11 +10,11 @@ class PagamentoPolicy
 {
     public function viewAny(User $user)
     {
-        return in_array($user->role, ['admin', 'caixa']);
+        return in_array($user->role, ['admin', 'contablista', 'operador']);
     }
 
     public function create(User $user)
     {
-        return in_array($user->role, ['admin', 'caixa']);
+        return in_array($user->role, ['admin', 'operador']);
     }
 }

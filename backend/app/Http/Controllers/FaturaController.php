@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Fatura;
 use App\Services\FaturaService;
@@ -14,46 +13,81 @@ class FaturaController extends Controller
     public function __construct(FaturaService $faturaService)
     {
         $this->faturaService = $faturaService;
-
-        // Aplica a policy de Fatura em todas as ações do CRUD
         $this->authorizeResource(Fatura::class, 'fatura');
     }
 
-    // LISTAR TODAS AS FATURAS
+    /**
+     * Listar todas as faturas
+     */
     public function index()
     {
-        $faturas = Fatura::all();
-        return response()->json($faturas);
-    }
+        $this->authorize('viewAny', Fatura::class);
 
-    // GERAR FATURA PARA UMA VENDA
-    public function gerarFatura(Request $request)
-    {
-        $dados = $request->validate([
-            'venda_id' => 'required|uuid',
+        $faturas = $this->faturaService->listarFaturas();
+
+        return response()->json([
+            'message' => 'Lista de faturas carregada com sucesso',
+            'faturas' => $faturas
         ]);
-
-        $fatura = $this->faturaService->gerarFatura($dados['venda_id']);
-
-        if (!$fatura) {
-            return response()->json([
-                'message' => 'Venda não encontrada ou fatura não pôde ser gerada.'
-            ], 404);
-        }
-
-        return response()->json($fatura, 201);
     }
 
-    // MOSTRAR FATURA
+    /**
+     * Mostrar fatura específica
+     */
     public function show(Fatura $fatura)
     {
-        return response()->json($fatura);
+        $this->authorize('view', $fatura);
+
+        $fatura = $this->faturaService->buscarFatura($fatura->id);
+
+        return response()->json([
+            'message' => 'Fatura carregada com sucesso',
+            'fatura' => $fatura
+        ]);
     }
 
-    // EXCLUIR FATURA
-    public function destroy(Fatura $fatura)
+    /**
+     * Gerar fatura a partir de uma venda
+     */
+    public function gerar(Request $request)
     {
-        $fatura->delete();
-        return response()->json(null, 204);
+        $this->authorize('create', Fatura::class);
+
+        $dados = $request->validate([
+            'venda_id' => 'required|uuid|exists:vendas,id',
+            'tipo_documento' => 'nullable|in:FT,FR,NC,ND'
+        ]);
+
+        $fatura = $this->faturaService->gerarFatura(
+            $dados['venda_id'],
+            $dados['tipo_documento'] ?? 'FT'
+        );
+
+        return response()->json([
+            'message' => 'Fatura gerada com sucesso',
+            'fatura' => $fatura
+        ]);
+    }
+
+    /**
+     * Anular fatura
+     */
+    public function anular(Fatura $fatura, Request $request)
+    {
+        $this->authorize('delete', $fatura);
+
+        $motivo = $request->validate([
+            'motivo' => 'required|string|max:255'
+        ])['motivo'];
+
+        $fatura->update([
+            'estado' => 'anulado',
+            'motivo_anulacao' => $motivo
+        ]);
+
+        return response()->json([
+            'message' => 'Fatura anulada com sucesso',
+            'fatura' => $fatura
+        ]);
     }
 }

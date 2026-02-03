@@ -18,6 +18,11 @@ class ItemCompra extends Model
         'quantidade',
         'preco_compra',
         'subtotal',
+        'base_tributavel',
+        'valor_iva',
+        'created_at',
+        'updated_at',
+        
     ];
 
     protected $casts = [

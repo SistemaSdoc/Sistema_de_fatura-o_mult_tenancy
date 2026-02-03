@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
+use App\Models\MovimentoStock;
 
 class Produto extends Model
 {
@@ -14,10 +15,15 @@ class Produto extends Model
 
     protected $fillable = [
         'categoria_id',
+        'user_id',
         'nome',
+        'codigo',
+        'status',
         'descricao',
+        'custo_medio',
         'preco_compra',
         'preco_venda',
+        'taxa_iva',
         'estoque_atual',
         'estoque_minimo',
     ];
@@ -39,6 +45,13 @@ class Produto extends Model
             }
         });
     }
+    public function margemLucro()
+{
+    if ($this->custo_medio == 0) return 0;
+
+    return (($this->preco_venda - $this->custo_medio) / $this->custo_medio) * 100;
+}
+
 
     // ================= RELAÇÕES =================
 
@@ -57,11 +70,6 @@ class Produto extends Model
         return $this->hasMany(ItemVenda::class, 'produto_id');
     }
 
-    // (opcional, para o próximo passo)
-    public function movimentosStock()
-    {
-        return $this->hasMany(MovimentoStock::class);
-    }
     public function fornecedor()
 {
     return $this->belongsTo(Fornecedor::class, 'fornecedor_id'); // ou o campo correto

@@ -10,16 +10,11 @@ class FaturaPolicy
 {
     public function viewAny(User $user)
     {
-        return in_array($user->role, ['admin', 'operador','caixa']);
+        return in_array($user->role, ['admin', 'operador','contablista']);
     }
 
     public function create(User $user)
     {
-        return in_array($user->role, ['admin', 'operador', 'caixa']);
-    }
-
-    public function notaCredito(User $user)
-    {
-        return in_array($user->role, ['admin', 'operador']);
+        return in_array($user->role, ['admin', 'operador', 'contablista']);
     }
 }

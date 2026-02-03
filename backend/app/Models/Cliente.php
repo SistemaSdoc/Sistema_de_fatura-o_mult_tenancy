@@ -21,7 +21,8 @@ class Cliente extends Model
         'tipo', 
         'telefone', 
         'email', 
-        'endereco'
+        'endereco',
+        'data_registro',
     ];
 
     protected static function boot(): void

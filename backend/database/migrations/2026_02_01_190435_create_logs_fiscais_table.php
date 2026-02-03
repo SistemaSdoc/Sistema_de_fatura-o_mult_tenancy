@@ -11,16 +11,15 @@ return new class extends Migration
         Schema::create('logs_fiscais', function (Blueprint $table) {
             $table->uuid('id')->primary();
 
+            $table->string('entidade');       // tabela afetada
+            $table->uuid('entidade_id');      // registro afetado
+
+            $table->enum('acao', ['criar','emitir','anular','fechar','pagar']);
             $table->uuid('user_id');
             $table->foreign('user_id')->references('id')->on('users');
 
-            $table->string('entidade');         // tabela afetada
-            $table->uuid('entidade_id')->nullable(); // registro afetado
-
-            $table->enum('acao', ['criar','emitir','anular','fechar']); 
-
-            $table->ipAddress('ip')->nullable();
-            $table->text('detalhe')->nullable(); // informações adicionais
+            $table->timestamp('data_acao')->useCurrent();
+            $table->text('detalhe')->nullable();
 
             $table->timestamps();
         });

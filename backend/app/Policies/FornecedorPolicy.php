@@ -2,31 +2,46 @@
 
 namespace App\Policies;
 
-use App\Models\Produto;
+use App\Models\Fornecedor;
 use App\Models\User;
-use Illuminate\Auth\Access\Response;
-class ProdutoPolicy
+
+class FornecedorPolicy
 {
+    /**
+     * Ver todos os fornecedores
+     */
     public function viewAny(User $user)
     {
         return in_array($user->role, ['admin', 'operador', 'contablista']);
     }
 
+    /**
+     * Ver fornecedor específico
+     */
     public function view(User $user)
     {
         return $this->viewAny($user);
     }
 
+    /**
+     * Criar fornecedor
+     */
     public function create(User $user)
     {
-        return $user->role === 'admin';
+        return in_array($user->role, ['admin', 'operador']);
     }
 
+    /**
+     * Atualizar fornecedor
+     */
     public function update(User $user)
     {
-        return $user->role === 'admin';
+        return in_array($user->role, ['admin', 'operador']);
     }
 
+    /**
+     * Deletar fornecedor
+     */
     public function delete(User $user)
     {
         return $user->role === 'admin';
