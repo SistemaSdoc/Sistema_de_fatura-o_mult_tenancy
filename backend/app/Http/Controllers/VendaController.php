@@ -44,7 +44,7 @@ public function create() {
 
         return response()->json([
             'message' => 'Lista de vendas carregada',
-            'vendas' => $vendas->map(function ($venda) {
+            'data' => $vendas->map(function ($venda) {
                 return [
                     'id' => $venda->id,
                     'cliente' => $venda->cliente,

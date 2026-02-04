@@ -759,14 +759,15 @@ export const vendaService = {
     }
   },
 
-  listarVendas: async (): Promise<Venda[]> => {
-    try {
-      const { data } = await api.get<{ data: Venda[] }>("/api/vendas/listar");
-      return data.data ?? [];
-    } catch (err) {
-      handleAxiosError(err, "[VENDAS] Erro ao listar vendas");
-      return [];
-    }
+ listarVendas: async (): Promise<Venda[]> => {
+  try {
+    const { data } = await api.get<{ message: string; vendas: Venda[] }>("/api/vendas/listar");
+    return data.vendas ?? [];
+  } catch (err) {
+    handleAxiosError(err, "[VENDAS] Erro ao listar vendas");
+    return [];
+  }
+
   },
 
   obterDadosNovaVenda: async (): Promise<{ clientes: Cliente[]; produtos: Produto[] }> => {

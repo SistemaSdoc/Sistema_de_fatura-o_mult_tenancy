@@ -26,6 +26,10 @@ class ItemFatura extends Model
         'created_at',
         'updated_at',
         'desconto',
+        'base_tributavel',
+        'valor_retencao',
+        'total_linha',
+
 
         
     ];
@@ -50,4 +54,9 @@ class ItemFatura extends Model
     {
         return $this->belongsTo(Fatura::class, 'fatura_id');
     }
+    public function produto()
+    {
+        return $this->belongsTo(Produto::class, 'produto_id');
+    }
+    
 }

@@ -48,7 +48,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::middleware('role:admin,operador,contabilista')->group(function () {
 
         // Vendas
-        Route::get('/vendas', [VendaController::class, 'index']);
+        Route::get('/vendas/listar', [VendaController::class, 'index']);
         Route::get('/vendas/create', [VendaController::class, 'create']);
         Route::post('/vendas', [VendaController::class, 'store']);
         Route::get('/vendas/{venda}', [VendaController::class, 'show']);
