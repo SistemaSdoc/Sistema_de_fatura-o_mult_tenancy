@@ -54,7 +54,7 @@ public function create() {
                     'total' => $venda->total,
                     'base_tributavel' => $venda->base_tributavel,
                     'total_iva' => $venda->total_iva,
-                    'total_retenção' => $venda->total_retenção,
+                    'total_retencao' => $venda->total_retencao,
                     'status' => $venda->status,
                     'itens' => $venda->itens->map(function ($item) {
                         return [
@@ -65,7 +65,7 @@ public function create() {
                             'subtotal' => $item->subtotal,
                             'base_tributavel' => $item->base_tributavel,
                             'valor_iva' => $item->valor_iva,
-                            'valor_retenção' => $item->valor_retenção,
+                            'valor_retencao' => $item->valor_retencao,
                         ];
                     }),
                 ];
@@ -91,7 +91,7 @@ public function create() {
                 'total' => $venda->total,
                 'base_tributavel' => $venda->base_tributavel,
                 'total_iva' => $venda->total_iva,
-                'total_retenção' => $venda->total_retenção,
+                'total_retencao' => $venda->total_retencao,
                 'status' => $venda->status,
                 'itens' => $venda->itens->map(function ($item) {
                     return [
@@ -102,7 +102,7 @@ public function create() {
                         'subtotal' => $item->subtotal,
                         'base_tributavel' => $item->base_tributavel,
                         'valor_iva' => $item->valor_iva,
-                        'valor_retenção' => $item->valor_retenção,
+                        'valor_retencao' => $item->valor_retencao,
                     ];
                 }),
             ],
@@ -139,7 +139,7 @@ public function create() {
                 'total' => $venda->total,
                 'base_tributavel' => $venda->base_tributavel,
                 'total_iva' => $venda->total_iva,
-                'total_retenção' => $venda->total_retenção,
+                'total_retencao' => $venda->total_retencao,
                 'status' => $venda->status,
                 'itens' => $venda->itens->map(function ($item) {
                     return [
@@ -150,7 +150,7 @@ public function create() {
                         'subtotal' => $item->subtotal,
                         'base_tributavel' => $item->base_tributavel,
                         'valor_iva' => $item->valor_iva,
-                        'valor_retenção' => $item->valor_retenção,
+                        'valor_retencao' => $item->valor_retencao,
                     ];
                 }),
             ],

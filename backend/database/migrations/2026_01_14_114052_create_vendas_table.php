@@ -24,7 +24,7 @@ Schema::create('vendas', function (Blueprint $table) {
 
     $table->decimal('base_tributavel', 14, 2);
     $table->decimal('total_iva', 14, 2);
-    $table->decimal('total_retenção', 14, 2)->default(0);
+    $table->decimal('total_retencao', 14, 2)->default(0);
     $table->decimal('total_pagar', 14, 2);
 
     $table->date('data_venda');
@@ -60,7 +60,7 @@ Schema::create('vendas', function (Blueprint $table) {
     $table->decimal('desconto', 12, 2)->default(0);
     $table->decimal('base_tributavel', 14, 2);
     $table->decimal('valor_iva', 14, 2);
-    $table->decimal('valor_retenção', 14, 2)->default(0);
+    $table->decimal('valor_retencao', 14, 2)->default(0);
 
     $table->decimal('subtotal', 12, 2);
 

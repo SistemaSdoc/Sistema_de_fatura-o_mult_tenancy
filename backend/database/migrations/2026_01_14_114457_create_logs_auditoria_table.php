@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('logs_fiscais', function (Blueprint $table) {
+        Schema::create('logs_auditoria', function (Blueprint $table) {
             $table->uuid('id')->primary();
 
             $table->uuid('user_id');

@@ -197,7 +197,7 @@ class EmpresaSeeder extends Seeder
             'numero' => '00001',
             'base_tributavel' => (8000*2) / 1.14,
             'total_iva' => (8000*2) - ((8000*2) / 1.14),
-            'total_retenção' => ((8000*2) * 0.06), // 6% retenção
+            'total_retencao' => ((8000*2) * 0.06), // 6% retenção
             'total_pagar' => (8000*2) - ((8000*2) * 0.06),
 
             'created_at' => $now,
@@ -214,7 +214,7 @@ class EmpresaSeeder extends Seeder
             'desconto' => 0,
             'base_tributavel' => (8000*2) / 1.14,
             'valor_iva' => (8000*2) - ((8000*2) / 1.14),
-            'valor_retenção' => (8000*2) * 0.06, // 6% retenção
+            'valor_retencao' => (8000*2) * 0.06, // 6% retenção
             'descricao' => 'Creme Facial',
             'created_at' => $now,
             'updated_at' => $now,
@@ -239,7 +239,7 @@ class EmpresaSeeder extends Seeder
             'data_vencimento' => $now->addDays(30)->toDateString(),
             'base_tributavel' => $totalBruto / 1.14,
             'total_iva' => $iva,
-            'total_retenção' => $retencao,
+            'total_retencao' => $retencao,
             'total_liquido' => $totalLiquido,
             'estado' => 'emitido',
             'hash_fiscal' => sha1(Str::uuid()),
@@ -256,7 +256,7 @@ class EmpresaSeeder extends Seeder
             'preco_unitario' => 8000,
             'taxa_iva' => 14,
             'valor_iva' => $iva,
-            'valor_retenção' => $retencao,
+            'valor_retencao' => $retencao,
             'desconto' => 0,
             'total_linha' => $totalLiquido,
             'base_tributavel' => $totalBruto,    
@@ -322,5 +322,20 @@ class EmpresaSeeder extends Seeder
                 'updated_at' => $now,
             ]
         );
+
+        /* ================= SÉRIES FISCAIS ================= */
+$serieFiscalId = Str::uuid();
+DB::table('series_fiscais')->insert([
+    'id' => $serieFiscalId,
+    'user_id' => $adminUserId,
+    'tipo_documento' => 'FT',  // Fatura
+    'serie' => 'A',            // Série padrão
+    'ano' => date('Y'),        // Ano corrente
+    'ultimo_numero' => 0,      // Começa do 0
+    'ativa' => true,           // Série ativa
+    'created_at' => $now,
+    'updated_at' => $now,
+]);
+
     }
 }

@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
-
+import { AxiosError } from "axios";
 import MainEmpresa from "../../../components/MainEmpresa";
 import { useAuth } from "@/context/authprovider";
 
@@ -16,7 +16,7 @@ import {
   CriarVendaPayload,
 } from "@/services/vendas";
 
-/* ================= TIPOS (UI) ================= */
+/* ================= TIPOS ================= */
 interface ItemVendaUI {
   id: string;
   produto_id: string;
@@ -24,7 +24,10 @@ interface ItemVendaUI {
   quantidade: number;
   preco_venda: number;
   desconto: number;
-  subtotal: number;
+  base_tributavel: number;
+  valor_iva: number;
+  valor_retencao: number;
+  subtotal: number; // base + IVA - retenção
 }
 
 export default function NovaVendaPage() {
@@ -33,9 +36,7 @@ export default function NovaVendaPage() {
 
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
-  const [clienteSelecionado, setClienteSelecionado] =
-    useState<Cliente | null>(null);
-
+  const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
   const [itens, setItens] = useState<ItemVendaUI[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +76,9 @@ export default function NovaVendaPage() {
         quantidade: 1,
         preco_venda: 0,
         desconto: 0,
+        base_tributavel: 0,
+        valor_iva: 0,
+        valor_retencao: 0,
         subtotal: 0,
       },
     ]);
@@ -103,8 +107,20 @@ export default function NovaVendaPage() {
         item[campo] = Number(valor);
       }
 
-      item.subtotal =
-        item.preco_venda * item.quantidade - item.desconto;
+      // ================= CÁLCULO FISCAL =================
+      const base = item.preco_venda * item.quantidade - item.desconto;
+      const taxaIva = item.produto_id
+        ? produtos.find(p => p.id === item.produto_id)?.taxa_iva ?? 14
+        : 0;
+      const valorIva = (base * taxaIva) / 100;
+      const valorRetencao = produtos.find(p => p.id === item.produto_id)?.tipo === "servico"
+        ? base * 0.1
+        : 0;
+
+      item.base_tributavel = base;
+      item.valor_iva = valorIva;
+      item.valor_retencao = valorRetencao;
+      item.subtotal = base + valorIva - valorRetencao;
 
       novos[index] = item;
       return novos;
@@ -115,57 +131,83 @@ export default function NovaVendaPage() {
     setItens(prev => prev.filter((_, i) => i !== index));
   };
 
-  const totalPreview = itens.reduce((acc, i) => acc + i.subtotal, 0);
+  /* ================= TOTAIS ================= */
+  const totalBase = itens.reduce((acc, i) => acc + i.base_tributavel, 0);
+  const totalIva = itens.reduce((acc, i) => acc + i.valor_iva, 0);
+  const totalRetencao = itens.reduce((acc, i) => acc + i.valor_retencao, 0);
+  const totalLiquido = totalBase + totalIva - totalRetencao;
 
   /* ================= SALVAR ================= */
-  const salvarVenda = async () => {
-    if (!clienteSelecionado) {
-      setError("Selecione um cliente");
+
+
+const salvarVenda = async () => {
+  if (!clienteSelecionado) {
+    setError("Selecione um cliente");
+    return;
+  }
+
+  if (itens.length === 0) {
+    setError("Adicione itens à venda");
+    return;
+  }
+
+  if (itens.some(i => !i.produto_id)) {
+    setError("Selecione todos os produtos");
+    return;
+  }
+
+  for (const item of itens) {
+    const produto = produtos.find(p => p.id === item.produto_id);
+    if (produto && item.quantidade > produto.estoque_atual) {
+      setError(`Estoque insuficiente para ${produto.nome}`);
       return;
     }
+  }
 
-    if (itens.length === 0) {
-      setError("Adicione itens à venda");
-      return;
-    }
+  setLoading(true);
+  setError(null);
 
-    if (itens.some(i => !i.produto_id)) {
-      setError("Selecione todos os produtos");
-      return;
-    }
+  try {
+    // ================= LOGS PARA ANÁLISE =================
+    console.log("Itens antes de enviar:", itens);
 
-    for (const item of itens) {
-      const produto = produtos.find(p => p.id === item.produto_id);
-      if (produto && item.quantidade > produto.estoque_atual) {
-        setError(`Estoque insuficiente para ${produto.nome}`);
-        return;
-      }
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const payload: CriarVendaPayload = {
-        cliente_id: clienteSelecionado.id,
-        tipo_documento: "fatura",
-        faturar: true,
-        itens: itens.map(item => ({
+    const payload: CriarVendaPayload = {
+      cliente_id: clienteSelecionado.id,
+      tipo_documento: "fatura",
+      faturar: true,
+      itens: itens.map(item => {
+        const obj = {
           produto_id: item.produto_id,
-          quantidade: item.quantidade,
-          preco_venda: item.preco_venda,
-          desconto: item.desconto,
-        })),
-      };
+          quantidade: Number(item.quantidade),
+          preco_venda: Number(item.preco_venda),
+          desconto: Number(item.desconto),
+          base_tributavel: Number(item.base_tributavel),
+          valor_iva: Number(item.valor_iva),
+          valor_retencao: Number(item.valor_retencao),
+          subtotal: Number(item.subtotal),
+        };
+        console.log("Item enviado ao backend:", obj);
+        return obj;
+      }),
+    };
 
-      await criarVenda(payload);
-      router.push("/dashboard/Faturas/Faturas");
-    } catch {
-      setError("Erro ao salvar venda");
-    } finally {
-      setLoading(false);
+    console.log("Payload completo a enviar:", payload);
+
+    await criarVenda(payload);
+    router.push("/dashboard/Faturas/Faturas");
+  } catch (err: unknown) {
+    if (err instanceof AxiosError) {
+      console.error("Erro Axios ao salvar venda:", err.response ?? err.message);
+    } else {
+      console.error("Erro inesperado ao salvar venda:", err);
     }
-  };
+    setError("Erro ao salvar venda. Veja o console para detalhes.");
+  } finally {
+    setLoading(false);
+  }
+};
+
+
 
   /* ================= RENDER ================= */
   return (
@@ -181,9 +223,7 @@ export default function NovaVendaPage() {
 
         {/* CLIENTE */}
         <div className="bg-white p-4 rounded shadow">
-          <label htmlFor="cliente" className="font-semibold">
-            Cliente
-          </label>
+          <label htmlFor="cliente" className="font-semibold">Cliente</label>
           <select
             id="cliente"
             title="Selecionar cliente"
@@ -228,9 +268,7 @@ export default function NovaVendaPage() {
                 title="Selecionar produto"
                 className="w-full border p-2 rounded"
                 value={item.produto_id}
-                onChange={e =>
-                  atualizarItem(index, "produto_id", e.target.value)
-                }
+                onChange={e => atualizarItem(index, "produto_id", e.target.value)}
               >
                 <option value="">Selecione</option>
                 {produtos.map(p => (
@@ -240,7 +278,7 @@ export default function NovaVendaPage() {
                 ))}
               </select>
 
-              <div className="grid grid-cols-5 gap-3 items-end">
+              <div className="grid grid-cols-6 gap-3 items-end">
                 <div>
                   <label htmlFor={`qtd-${item.id}`}>Qtd</label>
                   <input
@@ -269,9 +307,9 @@ export default function NovaVendaPage() {
                 </div>
 
                 <div>
-                  <label htmlFor='preco'>Preço</label>
+                  <label htmlFor="preco">Preço</label>
                   <input
-                  id ='preco'
+                  id="preco"
                     disabled
                     className="border p-2 rounded bg-gray-100 w-full"
                     value={item.preco_venda.toLocaleString("pt-AO")}
@@ -279,9 +317,29 @@ export default function NovaVendaPage() {
                 </div>
 
                 <div>
-                  <label htmlFor='sub'>Subtotal</label>
+                  <label htmlFor="base">Base</label>
                   <input
-                  id='sub'
+                  id="base"
+                    disabled
+                    className="border p-2 rounded bg-gray-100 w-full"
+                    value={item.base_tributavel.toLocaleString("pt-AO")}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="iva">IVA</label>
+                  <input
+                  id="iva"
+                    disabled
+                    className="border p-2 rounded bg-gray-100 w-full"
+                    value={item.valor_iva.toLocaleString("pt-AO")}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="sub">Subtotal</label>
+                  <input
+                  id="sub"
                     disabled
                     className="border p-2 rounded bg-gray-100 w-full"
                     value={item.subtotal.toLocaleString("pt-AO")}
@@ -302,9 +360,15 @@ export default function NovaVendaPage() {
           ))}
         </div>
 
-        {/* TOTAL */}
+        {/* TOTAIS FINAIS */}
         <div className="text-right font-bold text-xl text-[#F9941F]">
-          Total (preview): {totalPreview.toLocaleString("pt-AO")} Kz
+          Base: {totalBase.toLocaleString("pt-AO")} Kz
+          <br />
+          IVA: {totalIva.toLocaleString("pt-AO")} Kz
+          <br />
+          Retenção: {totalRetencao.toLocaleString("pt-AO")} Kz
+          <br />
+          Total Líquido: {totalLiquido.toLocaleString("pt-AO")} Kz
         </div>
 
         <button

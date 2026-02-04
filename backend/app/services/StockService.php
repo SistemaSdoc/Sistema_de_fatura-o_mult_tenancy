@@ -4,33 +4,40 @@ namespace App\Services;
 
 use App\Models\MovimentoStock;
 use App\Models\Produto;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class StockService
 {
     /**
-     * Movimentação genérica (entrada ou saída)
+     * Movimentação genérica de stock (entrada / saída)
      */
     public function movimentar(
         string $produtoId,
         int $quantidade,
-        string $tipo, // entrada ou saida
-        string $tipoMovimento, // compra, venda, ajuste, nota_credito
+        string $tipo, // entrada | saida
+        string $tipoMovimento, // compra | venda | ajuste | nota_credito
         ?string $referencia = null,
         ?string $observacao = null
-    ) {
-        $produto = Produto::findOrFail($produtoId);
+    ): void {
+        $produto = Produto::lockForUpdate()->findOrFail($produtoId);
 
-        // Atualizar stock
+        if ($quantidade <= 0) {
+            throw new \Exception('Quantidade inválida para movimentação de stock.');
+        }
+
+        // Atualizar estoque
         if ($tipo === 'entrada') {
-            $produto->stock += $quantidade;
+            $produto->estoque_atual += $quantidade;
         } else {
-            if ($produto->stock < $quantidade) {
-                throw new \Exception("Stock insuficiente do produto {$produto->nome}");
+            if ($produto->estoque_atual < $quantidade) {
+                throw new \Exception(
+                    "Stock insuficiente do produto {$produto->nome}. Disponível: {$produto->estoque_atual}"
+                );
             }
-            $produto->stock -= $quantidade;
+
+            $produto->estoque_atual -= $quantidade;
         }
 
         $produto->save();
@@ -38,33 +45,46 @@ class StockService
         // Registrar movimento
         MovimentoStock::create([
             'id' => Str::uuid(),
-            'produto_id' => $produtoId,
+            'produto_id' => $produto->id,
             'user_id' => Auth::id(),
             'tipo' => $tipo,
             'tipo_movimento' => $tipoMovimento,
             'quantidade' => $quantidade,
             'custo_medio' => $produto->custo_medio,
-            'stock_minimo' => $produto->stock_minimo,
+            'stock_minimo' => $produto->estoque_minimo,
             'referencia' => $referencia,
             'observacao' => $observacao,
         ]);
     }
 
     /**
-     * Entrada de compra com custo médio ponderado
+     * Entrada de compra com cálculo de custo médio ponderado
      */
-    public function entradaCompra(string $produtoId, int $quantidade, float $preco, ?string $compraId = null)
-    {
-        return DB::transaction(function () use ($produtoId, $quantidade, $preco, $compraId) {
-            $produto = Produto::findOrFail($produtoId);
+    public function entradaCompra(
+        string $produtoId,
+        int $quantidade,
+        float $precoCompra,
+        ?string $compraId = null
+    ): void {
+        DB::transaction(function () use ($produtoId, $quantidade, $precoCompra, $compraId) {
+            $produto = Produto::lockForUpdate()->findOrFail($produtoId);
 
-            $novoStock = $produto->stock + $quantidade;
+            if ($quantidade <= 0 || $precoCompra <= 0) {
+                throw new \Exception('Quantidade ou preço de compra inválidos.');
+            }
 
-            // Cálculo do custo médio ponderado
-            $novoCusto = (($produto->stock * $produto->custo_medio) + ($quantidade * $preco)) / max($novoStock, 1);
+            $stockAnterior = $produto->estoque_atual;
+            $novoStock = $stockAnterior + $quantidade;
 
-            $produto->stock = $novoStock;
-            $produto->custo_medio = round($novoCusto, 2);
+            // Custo médio ponderado
+            $custoAnterior = $produto->custo_medio ?? 0;
+            $novoCustoMedio = (
+                ($stockAnterior * $custoAnterior) +
+                ($quantidade * $precoCompra)
+            ) / max($novoStock, 1);
+
+            $produto->estoque_atual = $novoStock;
+            $produto->custo_medio = round($novoCustoMedio, 2);
             $produto->save();
 
             $this->movimentar(
@@ -73,24 +93,27 @@ class StockService
                 'entrada',
                 'compra',
                 $compraId,
-                "Entrada de compra com custo médio atualizado"
+                'Entrada de compra com custo médio atualizado'
             );
         });
     }
 
     /**
-     * Saída de venda
+     * Saída de stock por venda
      */
-    public function saidaVenda(string $produtoId, int $quantidade, ?string $vendaId = null)
-    {
-        return DB::transaction(function () use ($produtoId, $quantidade, $vendaId) {
+    public function saidaVenda(
+        string $produtoId,
+        int $quantidade,
+        ?string $vendaId = null
+    ): void {
+        DB::transaction(function () use ($produtoId, $quantidade, $vendaId) {
             $this->movimentar(
                 $produtoId,
                 $quantidade,
                 'saida',
                 'venda',
                 $vendaId,
-                "Saída de venda"
+                'Saída de stock por venda'
             );
         });
     }
@@ -98,9 +121,20 @@ class StockService
     /**
      * Ajuste manual de stock
      */
-    public function ajusteManual(string $produtoId, int $quantidade, string $tipo, ?string $referencia = null, ?string $observacao = null)
-    {
-        return DB::transaction(function () use ($produtoId, $quantidade, $tipo, $referencia, $observacao) {
+    public function ajusteManual(
+        string $produtoId,
+        int $quantidade,
+        string $tipo, // entrada | saida
+        ?string $referencia = null,
+        ?string $observacao = null
+    ): void {
+        DB::transaction(function () use (
+            $produtoId,
+            $quantidade,
+            $tipo,
+            $referencia,
+            $observacao
+        ) {
             $this->movimentar(
                 $produtoId,
                 $quantidade,
@@ -113,11 +147,15 @@ class StockService
     }
 
     /**
-     * Produtos abaixo do stock mínimo
+     * Produtos com stock em risco (<= estoque mínimo)
      */
     public function produtosEmRisco()
     {
-        return Produto::whereColumn('stock', '<=', 'stock_minimo')->get();
+        return Produto::whereColumn(
+            'estoque_atual',
+            '<=',
+            'estoque_minimo'
+        )->get();
     }
 
     /**
@@ -128,25 +166,28 @@ class StockService
         return Produto::select(
             'id',
             'nome',
-            'stock',
-            'stock_minimo',
+            'estoque_atual',
+            'estoque_minimo',
             'custo_medio',
-            'preco_venda'
+            'preco_venda',
+            'status'
         )->get();
     }
 
     /**
      * Dashboard de stock
      */
-    public function dashboard()
+    public function dashboard(): array
     {
         $produtosEmRisco = $this->produtosEmRisco();
 
         return [
             'produtos_total' => Produto::count(),
             'stock_baixo' => $produtosEmRisco->count(),
-            'valor_stock' => Produto::sum(DB::raw('stock * custo_medio')),
-            'produtos_em_risco' => $produtosEmRisco->pluck('nome')->toArray()
+            'valor_stock' => Produto::sum(
+                DB::raw('estoque_atual * IFNULL(custo_medio, 0)')
+            ),
+            'produtos_em_risco' => $produtosEmRisco->pluck('nome')->toArray(),
         ];
     }
 }

@@ -155,19 +155,34 @@ export interface Venda {
   cliente_id?: string | null;
   user_id: string;
   tipo_documento: 'fatura' | 'recibo' | 'nota_credito' | 'nota_debito';
-  serie?: string;
-  numero: string;
-  base_tributavel: number;
-  total_iva: number;
-  total_retencao: number;
-  total_pagar: number;
-  total: number;
-  data_venda: string;
-  hora_venda: string;
+  serie: string;                  // Série fiscal (ex: "A")
+  numero: number;                 // Número sequencial da fatura
+  base_tributavel: number;        // Soma das bases tributáveis
+  total_iva: number;              // Soma do IVA
+  total_retencao: number;         // Soma da retenção
+  total_pagar: number;            // base + IVA - retenção
+  total: number;                  // mesmo valor de total_pagar
+  data_venda: string;             // YYYY-MM-DD
+  hora_venda: string;             // HH:mm:ss
   status: 'aberta' | 'faturada' | 'cancelada';
-  hash_fiscal?: string | null;
-  itens?: ItemVenda[];
+  hash_fiscal?: string | null;    // SHA1 do número + data + total
+  itens?: ItemVenda[];            // Itens da venda
+  cliente?: {
+    id: string;
+    nome: string;
+    nif?: string | null;
+    tipo: string;
+    telefone?: string;
+    email?: string;
+    endereco?: string;
+  };
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+  };
 }
+
 
 /* -------- Compra -------- */
 export interface ItemCompra {
@@ -434,7 +449,6 @@ export async function obterDadosNovaVenda(): Promise<{
   const { data } = await api.get("/api/vendas/create");
   return data;
 }
-
 
 export async function criarVenda(payload: CriarVendaPayload) {
   const response = await api.post("/api/vendas", payload);
