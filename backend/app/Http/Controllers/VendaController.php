@@ -23,7 +23,6 @@ class VendaController extends Controller
 
 public function create() {
     
-    $this->authorize('create', Venda::class);
     
     $clientes = Cliente::all();
     $produtos = Produto::all();

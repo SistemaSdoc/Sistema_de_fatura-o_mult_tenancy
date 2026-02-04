@@ -13,24 +13,34 @@ class Fatura extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'id',
+        'user_id',
         'venda_id',
         'cliente_id',
+
+        'serie',
+        'sequencial',
         'numero',
-        'status',
-        'hash',
         'tipo_documento',
-        'hora_emissao',
-        'total_bruto',
-        'total_iva',
-        'total_liquido',
-        'motivo_anulacao',
+
         'data_emissao',
         'hora_emissao',
-        'total_redencao',
+        'data_vencimento',
 
+        'base_tributavel',
+        'total_iva',
+        'total_retencao',
+        'total_liquido',
+
+        'estado',
+        'motivo_anulacao',
+
+        'hash_fiscal',
     ];
 
     protected $casts = [
+        'data_emissao' => 'date',
+        'data_vencimento' => 'date',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
@@ -46,18 +56,25 @@ class Fatura extends Model
         });
     }
 
+    /* ================= RELACOES ================= */
+
     public function venda()
     {
-        return $this->belongsTo(Venda::class, 'venda_id');
+        return $this->belongsTo(Venda::class);
     }
 
     public function cliente()
     {
-        return $this->belongsTo(Cliente::class, 'cliente_id');
+        return $this->belongsTo(Cliente::class);
     }
 
     public function itens()
     {
-        return $this->hasMany(ItemFatura::class, 'fatura_id');
+        return $this->hasMany(ItemFatura::class);
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
     }
 }

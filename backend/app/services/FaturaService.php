@@ -20,26 +20,43 @@ class FaturaService
         return DB::transaction(function () use ($vendaId, $tipo) {
 
             $venda = Venda::with('itens.produto', 'cliente')->findOrFail($vendaId);
-            $empresa = Empresa::first(); 
+            $empresa = Empresa::firstOrFail();
 
             $aplicaIva = $empresa->sujeito_iva;
             $regime = $empresa->regime_fiscal;
 
-            $numero = $this->gerarNumero($tipo);
+            // =================== NUMERO SEQUENCIAL SEGURO ===================
+            $ano = now()->year;
+
+            $ultimoSequencial = Fatura::where('tipo_documento', $tipo)
+                ->whereYear('created_at', $ano)
+                ->lockForUpdate()
+                ->max('sequencial') ?? 0;
+
+            $sequencial = $ultimoSequencial + 1;
             $serie = 'A';
-            $dataVencimento = now()->addDays(30)->toDateString(); // opcional 30 dias
+
+            $numero = sprintf(
+                '%s/%s/%05d',
+                $tipo,
+                $ano,
+                $sequencial
+            );
+
+            $dataVencimento = now()->addDays(30)->toDateString();
 
             $totalBase = 0;
             $totalIva = 0;
             $totalRetencao = 0;
 
-            // Criar fatura
+            // =================== CRIAR FATURA ===================
             $fatura = Fatura::create([
                 'id' => Str::uuid(),
                 'user_id' => Auth::id(),
                 'venda_id' => $venda->id,
                 'cliente_id' => $venda->cliente_id,
                 'serie' => $serie,
+                'sequencial' => $sequencial,
                 'numero' => $numero,
                 'tipo_documento' => $tipo,
                 'data_emissao' => now()->toDateString(),
@@ -47,27 +64,33 @@ class FaturaService
                 'data_vencimento' => $dataVencimento,
                 'base_tributavel' => 0,
                 'total_iva' => 0,
-                'total_retenção' => 0,
+                'total_retencao' => 0,
                 'total_liquido' => 0,
                 'estado' => 'emitido',
                 'hash_fiscal' => null,
             ]);
 
+            // =================== ITENS ===================
             foreach ($venda->itens as $item) {
 
                 $desconto = 0;
+
                 $baseTributavel = $item->quantidade * $item->preco_venda - $desconto;
 
                 // IVA
-                $taxaIva = ($aplicaIva && $regime === 'geral') ? $item->produto->taxa_iva : 0;
+                $taxaIva = ($aplicaIva && $regime === 'geral')
+                    ? $item->produto->taxa_iva
+                    : 0;
+
                 $valorIva = round(($baseTributavel * $taxaIva) / 100, 2);
 
-                // Retenção somente para serviços
-                $valorRetencao = ($item->produto->tipo === 'serviço') ? round(($baseTributavel * 10) / 100, 2) : 0;
+                // Retenção (serviços)
+                $valorRetencao = ($item->produto->tipo === 'serviço')
+                    ? round(($baseTributavel * 10) / 100, 2)
+                    : 0;
 
                 $totalLinha = $baseTributavel + $valorIva - $valorRetencao - $desconto;
 
-                // Criar item da fatura
                 ItemFatura::create([
                     'id' => Str::uuid(),
                     'fatura_id' => $fatura->id,
@@ -78,7 +101,7 @@ class FaturaService
                     'base_tributavel' => $baseTributavel,
                     'taxa_iva' => $taxaIva,
                     'valor_iva' => $valorIva,
-                    'valor_retenção' => $valorRetencao,
+                    'valor_retencao' => $valorRetencao,
                     'desconto' => $desconto,
                     'total_linha' => $totalLinha,
                 ]);
@@ -90,41 +113,37 @@ class FaturaService
 
             $totalLiquido = $totalBase + $totalIva - $totalRetencao;
 
-            // Gerar hash fiscal
-            $hash = sha1($fatura->numero . $totalLiquido . now());
+            // =================== HASH FISCAL ===================
+            $hash = sha1(
+                $fatura->numero .
+                $fatura->data_emissao .
+                number_format($totalLiquido, 2, '.', '')
+            );
 
             $fatura->update([
                 'base_tributavel' => $totalBase,
                 'total_iva' => $totalIva,
-                'total_retenção' => $totalRetencao,
+                'total_retencao' => $totalRetencao,
                 'total_liquido' => $totalLiquido,
                 'hash_fiscal' => $hash,
             ]);
 
-            return $fatura->load('itens');
+            return $fatura->load('itens.produto', 'cliente');
         });
     }
+
+    // =================== CONSULTAS ===================
 
     public function listarFaturas()
     {
         return Fatura::with('cliente', 'venda', 'itens.produto')
-                     ->orderBy('data_emissao', 'desc')
-                     ->get();
+            ->orderBy('data_emissao', 'desc')
+            ->get();
     }
 
     public function buscarFatura(string $faturaId)
     {
         return Fatura::with('cliente', 'venda', 'itens.produto')
-                     ->findOrFail($faturaId);
-    }
-
-    private function gerarNumero(string $tipo)
-    {
-        $ano = date('Y');
-        $ultima = Fatura::where('tipo_documento', $tipo)
-                        ->whereYear('created_at', $ano)
-                        ->count() + 1;
-
-        return "{$tipo}/{$ano}/" . str_pad($ultima, 5, '0', STR_PAD_LEFT);
+            ->findOrFail($faturaId);
     }
 }

@@ -4,9 +4,7 @@ namespace App\Services;
 
 use App\Models\Venda;
 use App\Models\ItemVenda;
-use App\Models\Produto;
 use App\Models\Empresa;
-use App\Models\SerieFiscal;
 use App\Models\LogFiscal;
 use App\Models\ApuramentoIva;
 use App\Services\StockService;
@@ -18,47 +16,34 @@ use Carbon\Carbon;
 
 class VendaService
 {
-    protected $stockService;
-    protected $faturaService;
+    protected StockService $stockService;
+    protected FaturaService $faturaService;
 
-    public function __construct(StockService $stockService, FaturaService $faturaService)
-    {
+    public function __construct(
+        StockService $stockService,
+        FaturaService $faturaService
+    ) {
         $this->stockService = $stockService;
         $this->faturaService = $faturaService;
     }
 
     /**
-     * Criar venda com itens, aplicando IVA, retenção, logs fiscais e apuramento de IVA
+     * Criar venda (movimento comercial)
      */
     public function criarVenda(array $dados, bool $faturar = false)
     {
         return DB::transaction(function () use ($dados, $faturar) {
 
-            $empresa = Empresa::first();
+            $empresa = Empresa::firstOrFail();
             $aplicaIva = $empresa->sujeito_iva;
             $regime = $empresa->regime_fiscal;
 
-            // Série fiscal ativa
-            $serieFiscal = SerieFiscal::where('tipo_documento', 'fatura')
-                                       ->where('ativo', 1)
-                                       ->first();
-            if (!$serieFiscal) {
-                throw new \Exception("Nenhuma série fiscal ativa encontrada.");
-            }
-
-            $numero = $serieFiscal->numero_atual + 1;
-            $numeroDocumento = $serieFiscal->serie . '-' . str_pad($numero, 4, '0', STR_PAD_LEFT);
-
-            $serieFiscal->update(['numero_atual' => $numero]);
-
-            // Criar venda
+            // ================== CRIAR VENDA ==================
             $venda = Venda::create([
                 'id' => Str::uuid(),
                 'cliente_id' => $dados['cliente_id'] ?? null,
                 'user_id' => Auth::id(),
-                'tipo_documento' => $dados['tipo_documento'] ?? 'fatura',
-                'serie' => $serieFiscal->serie,
-                'numero' => $numero,
+                'tipo_documento' => 'FT',
                 'base_tributavel' => 0,
                 'total_iva' => 0,
                 'total_retenção' => 0,
@@ -69,13 +54,14 @@ class VendaService
                 'status' => 'aberta',
             ]);
 
-            $totalBruto = 0;
-            $totalIva = 0;
             $totalBase = 0;
+            $totalIva = 0;
             $totalRetencao = 0;
 
+            // ================== ITENS ==================
             foreach ($dados['itens'] as $item) {
-                $produto = $item['produto']; // objeto Produto
+
+                $produto = $item['produto'];
                 $quantidade = $item['quantidade'];
                 $preco = $item['preco_venda'];
                 $desconto = $item['desconto'] ?? 0;
@@ -83,42 +69,50 @@ class VendaService
                 $subtotal = ($preco * $quantidade) - $desconto;
 
                 // IVA
-                $taxaIva = ($aplicaIva && $regime === 'geral') ? ($produto->taxa_iva ?? 14) : 0;
+                $taxaIva = ($aplicaIva && $regime === 'geral')
+                    ? ($produto->taxa_iva ?? 14)
+                    : 0;
+
                 $valorIva = round(($subtotal * $taxaIva) / 100, 2);
 
-                // Retenção apenas se for serviço
-                $valorRetencao = ($produto->tipo === 'servico') ? round($subtotal * 0.1, 2) : 0; // 10% retenção como exemplo
+                // Retenção (ex: serviços)
+                $valorRetencao = ($produto->tipo === 'servico')
+                    ? round($subtotal * 0.1, 2)
+                    : 0;
 
                 $baseTributavel = round($subtotal, 2);
 
-                // Criar item da venda
                 ItemVenda::create([
                     'id' => Str::uuid(),
                     'venda_id' => $venda->id,
                     'produto_id' => $produto->id,
-                    'quantidade' => $quantidade,
                     'descricao' => $produto->nome,
+                    'quantidade' => $quantidade,
                     'preco_venda' => $preco,
                     'desconto' => $desconto,
                     'base_tributavel' => $baseTributavel,
                     'valor_iva' => $valorIva,
                     'valor_retenção' => $valorRetencao,
-                    'subtotal' => $subtotal + $valorIva - $valorRetencao,
+                    'subtotal' => $baseTributavel + $valorIva - $valorRetencao,
                 ]);
 
-                // Atualizar stock apenas para produtos físicos
+                // Stock (só produtos físicos)
                 if ($produto->tipo !== 'servico') {
-                    $this->stockService->saidaVenda($produto->id, $quantidade, $venda->id);
+                    $this->stockService->saidaVenda(
+                        $produto->id,
+                        $quantidade,
+                        $venda->id
+                    );
                 }
 
-                $totalBruto += $subtotal;
-                $totalIva += $valorIva;
                 $totalBase += $baseTributavel;
+                $totalIva += $valorIva;
                 $totalRetencao += $valorRetencao;
             }
 
-            $totalPagar = $totalBruto + $totalIva - $totalRetencao;
+            $totalPagar = $totalBase + $totalIva - $totalRetencao;
 
+            // ================== ATUALIZAR TOTAIS ==================
             $venda->update([
                 'base_tributavel' => $totalBase,
                 'total_iva' => $totalIva,
@@ -127,36 +121,45 @@ class VendaService
                 'total' => $totalPagar,
             ]);
 
-            // Registrar log fiscal
+            // ================== LOG ==================
             LogFiscal::create([
                 'id' => Str::uuid(),
                 'user_id' => Auth::id(),
-                'fatura_id' => $venda->id,
-                'acao' => 'criação',
+                'fatura_id' => null, // ainda não é fatura
+                'acao' => 'criação_venda',
                 'status' => 'sucesso',
-                'descricao' => "Venda criada com valor total {$totalPagar} e número {$numeroDocumento}",
+                'descricao' => "Venda criada no valor {$totalPagar}",
             ]);
 
-            // Atualizar apuramento de IVA
-            $periodo = Carbon::parse($venda->data_venda)->startOfMonth()->toDateString();
+            // ================== APURAMENTO IVA ==================
+            $periodo = Carbon::parse($venda->data_venda)
+                ->startOfMonth()
+                ->toDateString();
+
             $apuramento = ApuramentoIva::firstOrCreate(
                 ['periodo_inicio' => $periodo],
-                ['total_base_tributavel' => 0, 'total_iva' => 0, 'total_faturas' => 0]
+                [
+                    'total_base_tributavel' => 0,
+                    'total_iva' => 0,
+                    'total_faturas' => 0
+                ]
             );
+
             $apuramento->increment('total_base_tributavel', $totalBase);
             $apuramento->increment('total_iva', $totalIva);
-            $apuramento->increment('total_faturas', 1);
 
-            // Faturar automaticamente se necessário
+            // ================== FATURAR ==================
             if ($faturar) {
                 $this->faturaService->gerarFatura($venda->id);
                 $venda->update(['status' => 'faturada']);
+                $apuramento->increment('total_faturas', 1);
             }
 
             return $venda->load('itens.produto', 'cliente', 'user');
         });
     }
 
+    
     /**
      * Cancelar venda e devolver stock
      */
@@ -194,4 +197,5 @@ class VendaService
     {
         return Venda::with('cliente', 'itens.produto')->get();
     }
+
 }

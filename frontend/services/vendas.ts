@@ -146,7 +146,7 @@ export interface ItemVenda {
   desconto: number;
   base_tributavel: number;
   valor_iva: number;
-  valor_retenção: number;
+  valor_retencao: number;
   subtotal: number;
 }
 
@@ -159,7 +159,7 @@ export interface Venda {
   numero: string;
   base_tributavel: number;
   total_iva: number;
-  total_retenção: number;
+  total_retencao: number;
   total_pagar: number;
   total: number;
   data_venda: string;
@@ -397,12 +397,9 @@ export interface FaturasResumo {
   receitaMesAnterior: number;
 }
 
-export interface PagamentosResumo {
+export interface PagamentoMetodo {
+  metodo: string; // dinheiro | cartao | transferencia
   total: number;
-  
-  dinheiro: number;
-  cartao: number;
-  transferencia: number;
 }
 
 export interface Indicadores {
@@ -413,10 +410,18 @@ export interface DashboardResponse {
   produtos: ProdutosResumo;
   vendas: VendasResumo;
   faturas: FaturasResumo;
-  pagamentos: PagamentosResumo;
+  pagamentos: PagamentoMetodo[];
   indicadores: Indicadores;
+  kpis: {
+    ticketMedio: number;
+    crescimentoPercentual: number;
+    ivaArrecadado: number;
+  };
   
+  receitaMesAtual: number;
+  receitaMesAnterior: number;
   clientesAtivos: number;
+
 }
 
 
@@ -785,8 +790,14 @@ export const vendaService = {
 export const dashboardService = {
   fetch: async (): Promise<DashboardResponse | null> => {
     try {
-      const { data } = await api.get<DashboardResponse>("/api/dashboard");
-      return data;
+      // 1️⃣ Faz a chamada
+      const { data } = await api.get<{
+        message: string;
+        dados: DashboardResponse;
+      }>("/api/dashboard");
+
+      // 2️⃣ Retorna apenas "dados", que é do tipo DashboardResponse
+      return data.dados;
     } catch (err) {
       handleAxiosError(err, "[DASHBOARD]");
       return null;

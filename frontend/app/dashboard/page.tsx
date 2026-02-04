@@ -2,14 +2,16 @@
 
 import { useEffect, useState } from "react";
 import MainEmpresa from "@/app/components/MainEmpresa";
-import { dashboardService, DashboardResponse } from "@/services/vendas";
+import { dashboardService } from "@/services/vendas";
+import type { DashboardResponse, PagamentoMetodo } from "@/services/vendas";
+
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
   LineChart, Line, PieChart, Pie, Cell,
   ResponsiveContainer, Legend
 } from "recharts";
 
-type ChartDataInput = { [key: string]: string | number };
+const PIE_COLORS = ["#123859", "#F9941F", "#C9B6E4"];
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardResponse | null>(null);
@@ -17,21 +19,24 @@ export default function DashboardPage() {
 
   useEffect(() => {
     dashboardService.fetch()
-      .then(res => res && setData(res))
+      .then(res => {
+        console.log("DASHBOARD:", res); // res já é DashboardResponse
+        if (res) setData(res);
+      })
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <MainEmpresa>Carregando dashboard...</MainEmpresa>;
   if (!data) return <MainEmpresa>Erro ao carregar dashboard</MainEmpresa>;
 
-  // ================= FUNÇÕES AUX =================
-  const formatKz = (valor: number) =>
-    new Intl.NumberFormat("pt-AO").format(valor) + " Kz";
+  /* ================= FORMATADORES ================= */
+  const formatKz = (v: number | string) =>
+    new Intl.NumberFormat("pt-AO").format(Number(v)) + " Kz";
 
-  const formatDate = (dataStr: string) =>
-    new Date(dataStr).toLocaleDateString("pt-AO");
+  const formatDate = (d: string) =>
+    new Date(d).toLocaleDateString("pt-AO");
 
-  // ================= CAMPOS BLINDADOS =================
+  /* ================= BLINDAGEM ================= */
   const faturas = data.faturas ?? {
     receitaMesAtual: 0,
     receitaMesAnterior: 0,
@@ -50,61 +55,62 @@ export default function DashboardPage() {
     vendasPorMes: [],
   };
 
-  const pagamentos = data.pagamentos ?? {
-    total: 0,
-    dinheiro: 0,
-    cartao: 0,
-    transferencia: 0,
-  };
-
   const indicadores = data.indicadores ?? {
     produtosMaisVendidos: [],
   };
 
-const clientesAtivos = data?.clientesAtivos ?? 0;
-console.log(clientesAtivos);
+  const clientesAtivos = data.clientesAtivos ?? 0;
 
+  const kpis = data.kpis ?? {
+    ticketMedio: 0,
+    crescimentoPercentual: 0,
+    ivaArrecadado: 0,
+  };
 
-  // ================= KPIs =================
-  const receitaAtual = faturas.receitaMesAtual ?? 0;
-  const receitaAnterior = faturas.receitaMesAnterior ?? 0;
+  /* ================= PAGAMENTOS ================= */
+  const pagamentosArray: PagamentoMetodo[] = Array.isArray(data.pagamentos)
+    ? data.pagamentos
+    : [];
 
-  const crescimento = receitaAnterior > 0
-    ? (((receitaAtual - receitaAnterior) / receitaAnterior) * 100).toFixed(1)
-    : "0";
+  const pagamentosMap = pagamentosArray.reduce(
+    (acc: Record<string, number>, p) => {
+      acc[p.metodo] = Number(p.total);
+      return acc;
+    },
+    { dinheiro: 0, cartao: 0, transferencia: 0 }
+  );
 
-  const ticketMedio = vendas.total > 0
-    ? (receitaAtual / vendas.total).toFixed(2)
-    : "0";
-
-  const pagamentosData: ChartDataInput[] = [
-    { name: "Dinheiro", value: pagamentos.dinheiro ?? 0 },
-    { name: "Cartão", value: pagamentos.cartao ?? 0 },
-    { name: "Transferência", value: pagamentos.transferencia ?? 0 },
+  const pagamentosData = [
+    { name: "Dinheiro", value: pagamentosMap.dinheiro },
+    { name: "Cartão", value: pagamentosMap.cartao },
+    { name: "Transferência", value: pagamentosMap.transferencia },
   ];
 
-  const pieColors = ["#123859", "#F9941F", "#C9B6E4"];
+  /* ================= KPIs ================= */
+  const receitaAtual = Number(faturas.receitaMesAtual ?? 0);
+  const receitaAnterior = Number(faturas.receitaMesAnterior ?? 0);
+  const crescimento = kpis.crescimentoPercentual;
+  const ticketMedio = kpis.ticketMedio;
 
-  // ================= RENDER =================
+  /* ================= RENDER ================= */
   return (
     <MainEmpresa>
       <div className="p-6 space-y-8">
 
         {/* 🔹 KPIs */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <KPI title="Receita do Mês" value={formatKz(receitaAtual)} />
           <KPI title="Crescimento" value={`${crescimento}%`} />
-          <KPI title="Ticket Médio" value={formatKz(Number(ticketMedio))} />
+          <KPI title="Ticket Médio" value={formatKz(ticketMedio)} />
           <KPI title="Vendas Totais" value={vendas.total} />
           <KPI title="Clientes Ativos" value={clientesAtivos} />
-
         </div>
 
         {/* 🔹 Receita últimos 12 meses */}
         <div className="bg-white p-4 rounded-xl shadow">
           <h3 className="font-semibold mb-4">📈 Receita Últimos 12 Meses</h3>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={vendas.vendasPorMes ?? []}>
+            <LineChart data={vendas.vendasPorMes}>
               <XAxis dataKey="mes" />
               <YAxis />
               <Tooltip formatter={(v?: number) => formatKz(v ?? 0)} />
@@ -116,14 +122,14 @@ console.log(clientesAtivos);
         {/* 🔹 Gráficos secundários */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-          {/* Faturação por pagamento */}
+          {/* Pagamentos */}
           <div className="bg-white p-4 rounded-xl shadow">
-            <h3 className="font-semibold mb-4">💳 Faturação por Pagamento</h3>
+            <h3 className="font-semibold mb-4">💳 Pagamentos</h3>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie data={pagamentosData} dataKey="value" nameKey="name" label>
                   {pagamentosData.map((_, i) => (
-                    <Cell key={i} fill={pieColors[i % pieColors.length]} />
+                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip formatter={(v?: number) => formatKz(v ?? 0)} />
@@ -136,11 +142,15 @@ console.log(clientesAtivos);
           <div className="bg-white p-4 rounded-xl shadow">
             <h3 className="font-semibold mb-4">🔥 Produtos Mais Vendidos</h3>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={indicadores.produtosMaisVendidos ?? []}>
+              <BarChart data={indicadores.produtosMaisVendidos}>
                 <XAxis dataKey="produto" />
                 <YAxis />
-                <Tooltip formatter={(v?: number) => formatKz(v ?? 0)} />
-                <Bar dataKey="quantidade" fill="#F9941F" radius={[6, 6, 0, 0]} />
+                <Tooltip formatter={(v?: number) => v} />
+                <Bar
+                  dataKey="quantidade"
+                  fill="#F9941F"
+                  radius={[6, 6, 0, 0]}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -153,22 +163,22 @@ console.log(clientesAtivos);
           <Tabela
             titulo="🧾 Últimas Vendas"
             colunas={["Cliente", "Total", "Status", "Data"]}
-            dados={(vendas.ultimas ?? []).map(v => [
-              v.cliente ?? "Desconhecido",
-              formatKz(v.total ?? 0),
-              v.status ?? "Desconhecido",
-              formatDate(v.data ?? ""),
+            dados={vendas.ultimas.map(v => [
+              v.cliente,
+              formatKz(v.total),
+              v.status,
+              formatDate(v.data),
             ])}
           />
 
           <Tabela
             titulo="📄 Últimas Faturas"
             colunas={["Venda", "Total", "Estado", "Data"]}
-            dados={(faturas.ultimas ?? []).map(f => [
-              `#${f.venda_id ?? 0}`,
-              formatKz(f.total ?? 0),
-              f.estado ?? "Desconhecido",
-              formatDate(f.data ?? ""),
+            dados={faturas.ultimas.map(f => [
+              `#${f.venda_id}`,
+              formatKz(f.total),
+              f.estado,
+              formatDate(f.data),
             ])}
           />
 
@@ -180,12 +190,7 @@ console.log(clientesAtivos);
 }
 
 /* ================= COMPONENTES ================= */
-
-interface KPIProps {
-  title: string;
-  value: string | number;
-}
-function KPI({ title, value }: KPIProps) {
+function KPI({ title, value }: { title: string; value: string | number }) {
   return (
     <div className="bg-white p-4 rounded-xl shadow">
       <p className="text-sm text-gray-500">{title}</p>
@@ -194,20 +199,23 @@ function KPI({ title, value }: KPIProps) {
   );
 }
 
-interface TabelaProps {
+function Tabela({
+  titulo,
+  colunas,
+  dados,
+}: {
   titulo: string;
   colunas: string[];
   dados: (string | number)[][];
-}
-function Tabela({ titulo, colunas, dados }: TabelaProps) {
+}) {
   return (
     <div className="bg-white p-4 rounded-xl shadow overflow-x-auto">
       <h3 className="font-semibold mb-3">{titulo}</h3>
       <table className="w-full text-sm">
         <thead>
           <tr>
-            {colunas.map(col => (
-              <th key={col} className="text-left p-2 border-b">{col}</th>
+            {colunas.map(c => (
+              <th key={c} className="text-left p-2 border-b">{c}</th>
             ))}
           </tr>
         </thead>

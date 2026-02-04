@@ -32,7 +32,7 @@ return new class extends Migration
 
             $table->decimal('base_tributavel', 12, 2)->default(0); // soma das linhas antes do IVA
             $table->decimal('total_iva', 12, 2)->default(0);
-            $table->decimal('total_retenção', 12, 2)->default(0);
+            $table->decimal('total_retencao', 12, 2)->default(0);
             $table->decimal('total_liquido', 12, 2)->default(0);
 
             $table->enum('estado', ['emitido', 'anulado', 'pago','pendente'])->default('emitido');
@@ -67,7 +67,7 @@ return new class extends Migration
             $table->decimal('base_tributavel', 12, 2); // quantidade * preço - desconto
             $table->decimal('taxa_iva', 5, 2)->default(0);
             $table->decimal('valor_iva', 12, 2)->default(0);
-            $table->decimal('valor_retenção', 12, 2)->default(0);
+            $table->decimal('valor_retencao', 12, 2)->default(0);
             $table->decimal('desconto', 12, 2)->default(0);
 
             $table->decimal('total_linha', 12, 2); // base + IVA - retenção - desconto

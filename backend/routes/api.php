@@ -49,7 +49,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
         // Vendas
         Route::get('/vendas', [VendaController::class, 'index']);
-        Route::get('/vendas/create-data', [VendaController::class, 'create']);
+        Route::get('/vendas/create', [VendaController::class, 'create']);
         Route::post('/vendas', [VendaController::class, 'store']);
         Route::get('/vendas/{venda}', [VendaController::class, 'show']);
         Route::post('/vendas/{venda}/cancelar', [VendaController::class, 'cancelar']);
