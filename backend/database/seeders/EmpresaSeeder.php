@@ -259,7 +259,7 @@ class EmpresaSeeder extends Seeder
             'valor_retencao' => $retencao,
             'desconto' => 0,
             'total_linha' => $totalLiquido,
-            'base_tributavel' => $totalBruto,    
+            'base_tributavel' => $totalBruto,
             'created_at' => $now,
             'updated_at' => $now,
         ]);

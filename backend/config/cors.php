@@ -10,6 +10,8 @@ return [
     'allowed_origins' => [
         'http://127.0.0.1:3000',
         'http://192.168.5.184:3000',
+        'http://10.173.190.204:3000',
+        'http://192.168.1.31:3000',
     ],
 
     'allowed_origins_patterns' => [],

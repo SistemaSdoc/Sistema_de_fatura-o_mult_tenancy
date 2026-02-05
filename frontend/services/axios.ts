@@ -8,7 +8,7 @@ export interface ApiErrorResponse {
 }
 
 const api = axios.create({
-  baseURL: "http://192.168.5.184:8000", //backend Laravel
+  baseURL: "http://192.168.1.31:8000", //backend Laravel
   withCredentials: true,            //envia cookies
   headers: {
     Accept: "application/json",
