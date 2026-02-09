@@ -351,8 +351,8 @@ const allFeaturesData = [
 
 const processSteps = [
   { number: 1, title: "Registo Rápido", description: "Comece em minutos! Crie sua conta sem papelada e esteja pronto para faturar hoje mesmo." },
-  { number: 2, title: "Personalização", description: "Sua empresa, do seu jeito! Personalize dados fiscais, logótipo e templates de faturas em segundos." },
-  { number: 3, title: "Fature Já", description: "Fature em um clique! Crie e envie sua primeira fatura sem complicações.                         " },
+  { number: 2, title: "Produtividade Garantida", description: "Otimize processos internos e dedique mais tempo ao crescimento do negócio." },
+  { number: 3, title: "Fature Já", description: "Fature em um clique! Crie e envie sua primeira fatura sem complicações." },
 ];
 
 const faqData = [
@@ -460,7 +460,7 @@ export default function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   // Simulação do Contact Form
-  const [contactForm, setContactForm] = useState({ name: '', email: '', type: 'Cliente', message: '' });
+  const [contactForm, setContactForm] = useState({ name: '', type: 'Cliente', message: '' });
   const [isContactLoading, setIsContactLoading] = useState(false);
   const [contactMessage, setContactMessage] = useState({ type: '', text: '' });
 
@@ -478,7 +478,7 @@ export default function App() {
 
     if (contactForm.message.length > 10) {
       setContactMessage({ type: 'success', text: 'Mensagem enviada com sucesso! Responderemos brevemente.' });
-      setContactForm({ name: '', email: '', type: 'Cliente', message: '' });
+      setContactForm({ name: '', type: 'Cliente', message: '' });
     } else {
       setContactMessage({ type: 'error', text: 'Ocorreu um erro. Por favor, preencha a mensagem com mais detalhes.' });
     }
@@ -602,7 +602,7 @@ export default function App() {
               </a>
             ))}
             <a
-              onClick={() => { console.log('Simulação de Navegação: Ir para /cadastro'); setIsMenuOpen(false); }}
+              onClick={() => { window.location.href = '/login'; setIsMenuOpen(false); }}
               className={TAILWIND_CLASSES.buttonPrimary + " w-full text-center py-2 px-4 text-sm cursor-pointer mt-2 block"}
               style={{ backgroundColor: COLOR_PRIMARY, color: 'white' }}
             >
@@ -782,21 +782,6 @@ export default function App() {
                       id="contact-name"
                       name="name"
                       value={contactForm.name}
-                      onChange={handleContactChange}
-                      required
-                      className={`w-full border rounded-lg p-3 outline-none transition duration-150 ${TAILWIND_CLASSES.inputFocus}`}
-                      disabled={isContactLoading}
-                    />
-                  </div>
-
-                  {/* Email */}
-                  <div>
-                    <label htmlFor="contact-email" className={`block text-sm font-medium mb-1 ${TAILWIND_CLASSES.textDefault}`} style={{ color: COLOR_DARK_TEXT }}>Email</label>
-                    <input
-                      type="email"
-                      id="contact-email"
-                      name="email"
-                      value={contactForm.email}
                       onChange={handleContactChange}
                       required
                       className={`w-full border rounded-lg p-3 outline-none transition duration-150 ${TAILWIND_CLASSES.inputFocus}`}

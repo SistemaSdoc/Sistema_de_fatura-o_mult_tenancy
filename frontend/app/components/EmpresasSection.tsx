@@ -3,8 +3,7 @@ import { motion } from "framer-motion";
 import Image from "next/image";
 
 const empresas = [
-    { name: "SDOC", logo: "/images/Gestão de Clientes.webp", website: "https://sdoca.it.ao/" },
-    { name: "Cabenda Corp", logo: "/images/Relatórios e Estatísticas.webp", website: "https://cabenda.ao" },
+    { name: "SDOCA", logo: "/images/Gestão de Clientes.webp", website: "https://sdoca.it.ao/" },
     { name: "CONTAI-CONTABILIDADE & COMÉRCIO", logo: "/images/Pingodagua.jpeg", website: "https://technova.ao" },
 ];
 

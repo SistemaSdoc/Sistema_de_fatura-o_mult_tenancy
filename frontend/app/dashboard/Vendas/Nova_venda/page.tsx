@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, ShoppingCart } from "lucide-react";
+import { Plus, Trash2, ShoppingCart, CreditCard, Banknote, Smartphone, CheckCircle2, Calculator, ArrowLeft, AlertTriangle } from "lucide-react";
 import { AxiosError } from "axios";
 import MainEmpresa from "../../../components/MainEmpresa";
 import { useAuth } from "@/context/authprovider";
@@ -15,6 +15,12 @@ import {
   obterDadosNovaVenda,
   CriarVendaPayload,
 } from "@/services/vendas";
+
+// Novo serviço de pagamentos
+import { pagamentoService, MetodoPagamento, CriarPagamentoInput } from "@/services/pagamentos";
+
+/* ================= CONSTANTES ================= */
+const ESTOQUE_MINIMO = 5; // Produtos com estoque <= 5 são considerados baixos
 
 /* ================= TIPOS ================= */
 interface ItemVendaUI {
@@ -36,26 +42,49 @@ interface FormItemState {
   desconto: number;
 }
 
+// Dados do pagamento - ATUALIZADO para corresponder ao backend
+interface PagamentoUI {
+  id: string;
+  metodo: MetodoPagamento;
+  valor_pago: number;
+  troco: number; // Adicionado campo troco
+  referencia?: string;
+  data_pagamento: string;
+  hora_pagamento: string;
+}
+
 export default function NovaVendaPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
 
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [produtosDisponiveis, setProdutosDisponiveis] = useState<Produto[]>([]);
+  const [produtosEstoqueBaixo, setProdutosEstoqueBaixo] = useState<Produto[]>([]);
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
   const [itens, setItens] = useState<ItemVendaUI[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sucesso, setSucesso] = useState<string | null>(null);
 
-  // Estado único do formulário (não cria múltiplos)
+  // Estado do formulário de item
   const [formItem, setFormItem] = useState<FormItemState>({
     produto_id: "",
     quantidade: 1,
     desconto: 0,
   });
 
-  // Estado para preview do cálculo em tempo real
+  // Preview do cálculo
   const [previewItem, setPreviewItem] = useState<ItemVendaUI | null>(null);
+
+  // ===== ESTADO DE PAGAMENTO =====
+  const [pagamentos, setPagamentos] = useState<PagamentoUI[]>([]);
+  const [mostrarPagamento, setMostrarPagamento] = useState(false);
+  const [formPagamento, setFormPagamento] = useState({
+    metodo: "dinheiro" as MetodoPagamento,
+    valor_pago: "",
+    referencia: "",
+  });
 
   /* ================= PROTEÇÃO ================= */
   useEffect(() => {
@@ -73,6 +102,13 @@ export default function NovaVendaPage() {
         const data = await obterDadosNovaVenda();
         setClientes(data.clientes);
         setProdutos(data.produtos);
+
+        // Separar produtos disponíveis (estoque > ESTOQUE_MINIMO) dos de estoque baixo
+        const disponiveis = data.produtos.filter(p => p.estoque_atual > ESTOQUE_MINIMO);
+        const estoqueBaixo = data.produtos.filter(p => p.estoque_atual > 0 && p.estoque_atual <= ESTOQUE_MINIMO);
+
+        setProdutosDisponiveis(disponiveis);
+        setProdutosEstoqueBaixo(estoqueBaixo);
       } catch {
         setError("Erro ao carregar dados iniciais");
       }
@@ -159,7 +195,7 @@ export default function NovaVendaPage() {
 
     setItens(prev => [...prev, novoItem]);
 
-    // Resetar formulário mantendo apenas a estrutura
+    // Resetar formulário
     setFormItem({
       produto_id: "",
       quantidade: 1,
@@ -167,10 +203,57 @@ export default function NovaVendaPage() {
     });
     setPreviewItem(null);
     setError(null);
+
+    // Mostrar seção de pagamento se for o primeiro item
+    if (itens.length === 0) {
+      setMostrarPagamento(true);
+      // Inicializar o valor do pagamento com o total da venda
+      setFormPagamento(prev => ({
+        ...prev,
+        valor_pago: novoItem.subtotal.toFixed(2)
+      }));
+    }
   };
 
   const removerItem = (id: string) => {
-    setItens(prev => prev.filter(item => item.id !== id));
+    const novosItens = itens.filter(item => item.id !== id);
+    setItens(novosItens);
+
+    // Se não houver mais itens, limpar pagamentos
+    if (novosItens.length === 0) {
+      setMostrarPagamento(false);
+      setPagamentos([]);
+    } else {
+      // Recalcular pagamentos se necessário
+      const novoTotal = novosItens.reduce((acc, item) => acc + item.subtotal, 0);
+      const totalPagoAtual = pagamentos.reduce((acc, p) => acc + p.valor_pago, 0);
+
+      if (totalPagoAtual > novoTotal) {
+        // Ajustar o último pagamento ou remover pagamentos excedentes
+        setPagamentos(prev => {
+          let acumulado = 0;
+          const novosPagamentos: PagamentoUI[] = [];
+
+          for (const pag of prev) {
+            if (acumulado + pag.valor_pago <= novoTotal) {
+              novosPagamentos.push(pag);
+              acumulado += pag.valor_pago;
+            } else {
+              const valorRestante = novoTotal - acumulado;
+              if (valorRestante > 0) {
+                novosPagamentos.push({
+                  ...pag,
+                  valor_pago: valorRestante,
+                  troco: pag.valor_pago - valorRestante
+                });
+              }
+              break;
+            }
+          }
+          return novosPagamentos;
+        });
+      }
+    }
   };
 
   /* ================= TOTAIS ================= */
@@ -178,6 +261,96 @@ export default function NovaVendaPage() {
   const totalIva = itens.reduce((acc, i) => acc + i.valor_iva, 0);
   const totalRetencao = itens.reduce((acc, i) => acc + i.valor_retencao, 0);
   const totalLiquido = totalBase + totalIva - totalRetencao;
+
+  /* ================= GESTÃO DE PAGAMENTOS ================= */
+
+  // Calcular total já pago
+  const totalPago = pagamentos.reduce((acc, p) => acc + p.valor_pago, 0);
+
+  // Calcular troco (quando o pago é maior que o total)
+  const troco = Math.max(0, totalPago - totalLiquido);
+
+  // Valor efetivamente aplicado à venda (sem o troco)
+  const totalEfetivo = Math.min(totalPago, totalLiquido);
+
+  // Valor restante a pagar
+  const totalRestante = Math.max(0, totalLiquido - totalPago);
+
+  // Status do pagamento
+  const pagamentoCompleto = totalPago >= totalLiquido;
+  const pagamentoParcial = totalPago > 0 && totalPago < totalLiquido;
+  const pagamentoExcedente = totalPago > totalLiquido;
+
+  const adicionarPagamento = () => {
+    const valor = parseFloat(formPagamento.valor_pago);
+
+    if (isNaN(valor) || valor <= 0) {
+      setError("Valor de pagamento inválido");
+      return;
+    }
+
+    // Permitir valor maior que o restante (para calcular troco)
+    // Mas alertar se for muito excedente (mais de 10x o valor)
+    if (valor > totalRestante * 10 && totalRestante > 0) {
+      setError("Valor muito acima do necessário. Verifique o valor digitado.");
+      return;
+    }
+
+    // Calcular troco para este pagamento específico
+    const valorAnterior = totalPago;
+    const novoTotalPago = valorAnterior + valor;
+    const trocoDestePagamento = Math.max(0, novoTotalPago - totalLiquido);
+
+    const novoPagamento: PagamentoUI = {
+      id: uuidv4(),
+      metodo: formPagamento.metodo,
+      valor_pago: valor,
+      troco: trocoDestePagamento,
+      referencia: formPagamento.referencia || undefined,
+      data_pagamento: new Date().toISOString().split('T')[0],
+      hora_pagamento: new Date().toTimeString().split(' ')[0],
+    };
+
+    setPagamentos(prev => [...prev, novoPagamento]);
+
+    // Resetar formulário de pagamento com valor sugerido do restante
+    setFormPagamento({
+      metodo: "dinheiro",
+      valor_pago: totalRestante > 0 ? totalRestante.toFixed(2) : "",
+      referencia: "",
+    });
+    setError(null);
+  };
+
+  const removerPagamento = (id: string) => {
+    setPagamentos(prev => prev.filter(p => p.id !== id));
+  };
+
+  const getIconeMetodo = (metodo: MetodoPagamento) => {
+    switch (metodo) {
+      case "dinheiro": return <Banknote className="w-4 h-4" />;
+      case "cartao": return <CreditCard className="w-4 h-4" />;
+      case "transferencia": return <Smartphone className="w-4 h-4" />;
+      default: return <CreditCard className="w-4 h-4" />;
+    }
+  };
+
+  const getLabelMetodo = (metodo: MetodoPagamento) => {
+    const labels: Record<MetodoPagamento, string> = {
+      dinheiro: "Dinheiro",
+      cartao: "Cartão",
+      transferencia: "Transferência",
+    };
+    return labels[metodo];
+  };
+
+  // Calcular valor sugerido para o próximo pagamento
+  const getValorSugerido = () => {
+    if (totalRestante > 0) {
+      return totalRestante.toFixed(2);
+    }
+    return "";
+  };
 
   /* ================= SALVAR ================= */
   const salvarVenda = async () => {
@@ -191,13 +364,21 @@ export default function NovaVendaPage() {
       return;
     }
 
+    // Validar pagamento se houver
+    if (pagamentos.length > 0 && totalRestante > 0) {
+      setError(`Falta pagar ${totalRestante.toLocaleString("pt-AO")} Kz`);
+      return;
+    }
+
     setLoading(true);
     setError(null);
+    setSucesso(null);
 
     try {
+      // 1. Criar a venda
       const payload: CriarVendaPayload = {
         cliente_id: clienteSelecionado.id,
-        tipo_documento: "fatura",
+        tipo_documento: pagamentoCompleto ? "FR" : "FT", // FR se pago, FT se pendente
         faturar: true,
         itens: itens.map(item => ({
           produto_id: item.produto_id,
@@ -211,15 +392,71 @@ export default function NovaVendaPage() {
         })),
       };
 
-      await criarVenda(payload);
-      router.push("/dashboard/Faturas/Faturas");
+      console.log("Criando venda com payload:", payload);
+      const vendaCriada = await criarVenda(payload);
+      console.log("Venda criada:", vendaCriada);
+
+      // 2. Se houver pagamentos, registrar no backend
+      if (pagamentos.length > 0 && vendaCriada.fatura?.id && user) {
+        console.log("Registrando pagamentos...", pagamentos);
+
+        // Usar Promise.all para aguardar todos os pagamentos
+        const resultadosPagamentos = await Promise.all(
+          pagamentos.map(async (pag, index) => {
+            // Calcular troco apenas para o último pagamento se houver excedente
+            const ehUltimo = index === pagamentos.length - 1;
+            const trocoCalculado = ehUltimo && totalPago > totalLiquido
+              ? totalPago - totalLiquido
+              : 0;
+
+            const pagamentoData: CriarPagamentoInput = {
+              user_id: user.id,
+              fatura_id: vendaCriada.fatura!.id,
+              metodo: pag.metodo,
+              valor_pago: pag.valor_pago,
+              troco: trocoCalculado,
+              referencia: pag.referencia,
+              data_pagamento: pag.data_pagamento,
+              hora_pagamento: pag.hora_pagamento,
+            };
+
+            try {
+              console.log(`Enviando pagamento ${index + 1}:`, pagamentoData);
+              const resultado = await pagamentoService.criarPagamento(pagamentoData);
+              console.log(`Pagamento ${index + 1} registrado:`, resultado);
+              return { sucesso: true, resultado };
+            } catch (err) {
+              console.error(`Erro ao registrar pagamento ${index + 1}:`, err);
+              return { sucesso: false, erro: err };
+            }
+          })
+        );
+
+        // Verificar se todos os pagamentos foram registrados
+        const falhas = resultadosPagamentos.filter(r => !r.sucesso);
+        if (falhas.length > 0) {
+          console.warn(`${falhas.length} pagamento(s) falharam ao registrar`);
+          setSucesso("Venda criada, mas alguns pagamentos não foram registrados. Verifique manualmente.");
+        } else {
+          setSucesso("Venda e pagamentos registrados com sucesso!");
+        }
+      } else {
+        setSucesso("Venda criada com sucesso!");
+      }
+
+      // Redirecionar após breve delay para mostrar mensagem
+      setTimeout(() => {
+        router.push("/dashboard/Faturas/Faturas");
+      }, 1500);
+
     } catch (err: unknown) {
       if (err instanceof AxiosError) {
-        console.error("Erro Axios:", err.response ?? err.message);
+        console.error("Erro Axios:", err.response?.data || err.message);
+        setError(err.response?.data?.message || "Erro ao salvar venda");
       } else {
         console.error("Erro:", err);
+        setError("Erro ao salvar venda");
       }
-      setError("Erro ao salvar venda");
     } finally {
       setLoading(false);
     }
@@ -231,11 +468,27 @@ export default function NovaVendaPage() {
   return (
     <MainEmpresa>
       <div className="p-6 space-y-6">
-        <h1 className="text-3xl font-bold text-[#123859]">Nova Venda</h1>
+        {/* Header com botão voltar */}
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => router.back()}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            title="Voltar"
+          >
+            <ArrowLeft className="w-6 h-6 text-[#123859]" />
+          </button>
+          <h1 className="text-3xl font-bold text-[#123859]">Nova Venda</h1>
+        </div>
 
         {error && (
           <div role="alert" className="bg-red-100 border border-red-400 text-red-700 p-3 rounded">
             {error}
+          </div>
+        )}
+
+        {sucesso && (
+          <div role="alert" className="bg-green-100 border border-green-400 text-green-700 p-3 rounded">
+            {sucesso}
           </div>
         )}
 
@@ -262,17 +515,48 @@ export default function NovaVendaPage() {
           </select>
         </div>
 
-        {/* FORMULÁRIO ÚNICO - ADICIONAR ITEM */}
+        {/* FORMULÁRIO - ADICIONAR ITEM */}
         <div className="bg-white p-6 rounded shadow border-2 border-[#123859]/20">
           <div className="flex items-center gap-2 mb-4">
             <ShoppingCart className="text-[#123859]" size={24} />
             <h2 className="font-bold text-[#123859] text-xl">Adicionar Item</h2>
           </div>
 
+          {/* Alerta de produtos com estoque baixo */}
+          {produtosEstoqueBaixo.length > 0 && (
+            <div className="mb-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <h3 className="font-semibold text-orange-800 mb-2">
+                    Produtos com Estoque Baixo ({produtosEstoqueBaixo.length})
+                  </h3>
+                  <p className="text-sm text-orange-700 mb-2">
+                    Os seguintes produtos não estão disponíveis para venda porque o estoque está baixo (≤ {ESTOQUE_MINIMO} unidades):
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {produtosEstoqueBaixo.map(p => (
+                      <span
+                        key={p.id}
+                        className="inline-flex items-center px-2 py-1 rounded text-xs bg-orange-100 text-orange-800"
+                      >
+                        {p.nome} ({p.estoque_atual} unid.)
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-4">
-            {/* PRODUTO */}
             <div>
-              <label htmlFor="produto-form" className="font-semibold text-sm">Produto</label>
+              <label htmlFor="produto-form" className="font-semibold text-sm">
+                Produto
+                <span className="text-gray-500 font-normal ml-2">
+                  ({produtosDisponiveis.length} disponíveis)
+                </span>
+              </label>
               <select
                 id="produto-form"
                 title="Selecionar produto"
@@ -280,16 +564,25 @@ export default function NovaVendaPage() {
                 value={formItem.produto_id}
                 onChange={e => handleProdutoChange(e.target.value)}
               >
-                <option value="">Selecione um produto</option>
-                {produtos.map(p => (
+                <option value="">
+                  {produtosDisponiveis.length === 0
+                    ? "Nenhum produto disponível em estoque"
+                    : "Selecione um produto"}
+                </option>
+                {produtosDisponiveis.map(p => (
                   <option key={p.id} value={p.id}>
                     {p.nome} (Stock: {p.estoque_atual} | {p.preco_venda.toLocaleString("pt-AO")} Kz)
                   </option>
                 ))}
               </select>
+              {produtosDisponiveis.length === 0 && produtos.length > 0 && (
+                <p className="text-sm text-orange-600 mt-2 flex items-center gap-1">
+                  <AlertTriangle size={14} />
+                  Todos os produtos estão com estoque baixo ou esgotado
+                </p>
+              )}
             </div>
 
-            {/* CAMPOS EDITÁVEIS */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label htmlFor="qtd-form" className="font-semibold text-sm">Quantidade</label>
@@ -334,7 +627,6 @@ export default function NovaVendaPage() {
               </div>
             </div>
 
-            {/* PREVIEW DOS CÁLCULOS */}
             {previewItem && (
               <div className="bg-[#123859]/5 p-4 rounded-lg grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
@@ -364,13 +656,12 @@ export default function NovaVendaPage() {
               </div>
             )}
 
-            {/* BOTÃO ADICIONAR */}
             <button
               type="button"
               title="Adicionar ao carrinho"
               aria-label="Adicionar ao carrinho"
               onClick={adicionarAoCarrinho}
-              disabled={!formItem.produto_id}
+              disabled={!formItem.produto_id || produtosDisponiveis.length === 0}
               className="w-full bg-[#123859] hover:bg-[#0d2840] disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-3 rounded font-semibold flex items-center justify-center gap-2 transition-colors"
             >
               <Plus size={20} />
@@ -379,7 +670,7 @@ export default function NovaVendaPage() {
           </div>
         </div>
 
-        {/* LISTA DE ITENS ADICIONADOS (CARRINHO) */}
+        {/* LISTA DE ITENS */}
         {itens.length > 0 && (
           <div className="bg-white p-4 rounded shadow space-y-3">
             <h2 className="font-semibold text-[#123859] flex items-center gap-2">
@@ -425,6 +716,174 @@ export default function NovaVendaPage() {
           </div>
         )}
 
+        {/* SEÇÃO DE PAGAMENTO */}
+        {mostrarPagamento && itens.length > 0 && (
+          <div className="bg-white p-6 rounded shadow border-2 border-green-200">
+            <div className="flex items-center gap-2 mb-4">
+              <CreditCard className="text-green-600" size={24} />
+              <h2 className="font-bold text-green-700 text-xl">Pagamento</h2>
+            </div>
+
+            {/* Resumo do pagamento - ATUALIZADO COM TROCO */}
+            <div className="bg-green-50 p-4 rounded-lg mb-4 grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div>
+                <span className="text-sm text-gray-600">Total da Venda:</span>
+                <p className="font-bold text-[#123859] text-lg">
+                  {totalLiquido.toLocaleString("pt-AO")} Kz
+                </p>
+              </div>
+              <div>
+                <span className="text-sm text-gray-600">Total Pago:</span>
+                <p className="font-bold text-green-600 text-lg">
+                  {totalPago.toLocaleString("pt-AO")} Kz
+                </p>
+              </div>
+              <div>
+                <span className="text-sm text-gray-600">Aplicado:</span>
+                <p className="font-bold text-blue-600 text-lg">
+                  {totalEfetivo.toLocaleString("pt-AO")} Kz
+                </p>
+              </div>
+              {!pagamentoCompleto && (
+                <div>
+                  <span className="text-sm text-gray-600">Restante:</span>
+                  <p className="font-bold text-orange-600 text-lg">
+                    {totalRestante.toLocaleString("pt-AO")} Kz
+                  </p>
+                </div>
+              )}
+              {pagamentoExcedente && (
+                <div className="bg-blue-100 p-2 rounded">
+                  <span className="text-sm text-blue-700 font-semibold">TROCO:</span>
+                  <p className="font-bold text-blue-700 text-xl">
+                    {troco.toLocaleString("pt-AO")} Kz
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Formulário de pagamento - SEMPRE VISÍVEL PARA ADICIONAR MAIS */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
+              <div>
+                <label className="text-sm font-semibold text-gray-700">Método</label>
+                <select
+                  value={formPagamento.metodo}
+                  onChange={e => setFormPagamento(prev => ({ ...prev, metodo: e.target.value as MetodoPagamento }))}
+                  className="w-full border p-2 rounded mt-1"
+                >
+                  <option value="dinheiro">Dinheiro</option>
+                  <option value="cartao">Cartão</option>
+                  <option value="transferencia">Transferência</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sm font-semibold text-gray-700">
+                  Valor (Kz) {totalRestante > 0 && <span className="text-orange-600">(Falta: {totalRestante.toLocaleString("pt-AO")})</span>}
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder={getValorSugerido() || "0,00"}
+                  value={formPagamento.valor_pago}
+                  onChange={e => setFormPagamento(prev => ({ ...prev, valor_pago: e.target.value }))}
+                  className="w-full border p-2 rounded mt-1"
+                />
+                {pagamentoExcedente && (
+                  <p className="text-xs text-blue-600 mt-1">
+                    Troco: {troco.toLocaleString("pt-AO")} Kz
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="text-sm font-semibold text-gray-700">Referência</label>
+                <input
+                  type="text"
+                  placeholder="Nº comprovativo, etc."
+                  value={formPagamento.referencia}
+                  onChange={e => setFormPagamento(prev => ({ ...prev, referencia: e.target.value }))}
+                  className="w-full border p-2 rounded mt-1"
+                />
+              </div>
+
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={adicionarPagamento}
+                  disabled={!formPagamento.valor_pago || parseFloat(formPagamento.valor_pago) <= 0}
+                  className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-2 rounded font-semibold flex items-center justify-center gap-2 transition-colors"
+                >
+                  <Plus size={18} />
+                  Adicionar
+                </button>
+              </div>
+            </div>
+
+            {/* Lista de pagamentos */}
+            {pagamentos.length > 0 && (
+              <div className="space-y-2 mb-4">
+                <h3 className="font-semibold text-gray-700 text-sm">Pagamentos Registrados:</h3>
+                {pagamentos.map((pag, index) => (
+                  <div key={pag.id} className="flex items-center justify-between p-3 bg-gray-50 rounded border">
+                    <div className="flex items-center gap-3">
+                      <span className={`p-2 rounded-full ${pag.metodo === "dinheiro" ? "bg-green-100 text-green-700" :
+                        pag.metodo === "cartao" ? "bg-blue-100 text-blue-700" :
+                          "bg-purple-100 text-purple-700"
+                        }`}>
+                        {getIconeMetodo(pag.metodo)}
+                      </span>
+                      <div>
+                        <div className="font-medium">#{index + 1} - {getLabelMetodo(pag.metodo)}</div>
+                        {pag.referencia && <div className="text-xs text-gray-500">Ref: {pag.referencia}</div>}
+                        {pag.troco > 0 && <div className="text-xs text-blue-600 font-semibold">Troco: {pag.troco.toLocaleString("pt-AO")} Kz</div>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="font-bold text-[#123859]">
+                        {pag.valor_pago.toLocaleString("pt-AO")} Kz
+                      </span>
+                      <button
+                        onClick={() => removerPagamento(pag.id)}
+                        className="text-red-500 hover:text-red-700 p-1"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Status do pagamento */}
+            {pagamentoCompleto && (
+              <div className="mt-4 p-4 bg-green-100 text-green-700 rounded-lg flex items-center gap-3">
+                <CheckCircle2 size={24} />
+                <div>
+                  <p className="font-semibold">Pagamento Completo!</p>
+                  {troco > 0 ? (
+                    <p className="text-sm">Troco a devolver: <strong>{troco.toLocaleString("pt-AO")} Kz</strong></p>
+                  ) : (
+                    <p className="text-sm">A venda será registrada como Fatura-Recibo (FR)</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {pagamentoParcial && (
+              <div className="mt-4 p-4 bg-orange-100 text-orange-700 rounded-lg flex items-center gap-3">
+                <Calculator size={24} />
+                <div>
+                  <p className="font-semibold">Pagamento Parcial</p>
+                  <p className="text-sm">Falta pagar: <strong>{totalRestante.toLocaleString("pt-AO")} Kz</strong></p>
+                  <p className="text-xs mt-1">A venda será registrada como Fatura (FT) - pendente de pagamento</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* TOTAIS FINAIS */}
         <div className="bg-[#123859] text-white p-6 rounded-lg shadow-lg">
           <h3 className="font-semibold mb-4 text-lg">Resumo da Venda</h3>
@@ -448,6 +907,28 @@ export default function NovaVendaPage() {
               </p>
             </div>
           </div>
+
+          {/* Resumo do pagamento no footer */}
+          {pagamentos.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-white/20 grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div>
+                <span className="text-gray-300">Total Pago:</span>
+                <p className="font-bold text-green-400">{totalPago.toLocaleString("pt-AO")} Kz</p>
+              </div>
+              {troco > 0 && (
+                <div>
+                  <span className="text-gray-300">Troco:</span>
+                  <p className="font-bold text-blue-400">{troco.toLocaleString("pt-AO")} Kz</p>
+                </div>
+              )}
+              {totalRestante > 0 && (
+                <div>
+                  <span className="text-gray-300">Pendente:</span>
+                  <p className="font-bold text-orange-400">{totalRestante.toLocaleString("pt-AO")} Kz</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <button
@@ -458,7 +939,7 @@ export default function NovaVendaPage() {
           disabled={loading || itens.length === 0}
           className="w-full bg-[#F9941F] hover:bg-[#d9831a] disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-4 rounded font-bold text-lg shadow-lg transition-colors"
         >
-          {loading ? "Salvando..." : `Finalizar Venda (${itens.length} itens)`}
+          {loading ? "Salvando..." : `Finalizar Venda ${pagamentos.length > 0 ? `(${pagamentos.length} pagamento${pagamentos.length > 1 ? 's' : ''})` : ''}`}
         </button>
       </div>
     </MainEmpresa>

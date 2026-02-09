@@ -12,6 +12,8 @@ use App\Models\Pagamento;
 use App\Models\Fatura;
 use App\Models\Categoria;
 use App\Models\User;
+use App\Models\Cliente;
+
 
 // Policies
 use App\Policies\ProdutoPolicy;
@@ -21,6 +23,7 @@ use App\Policies\PagamentoPolicy;
 use App\Policies\FaturaPolicy;
 use App\Policies\CategoriaPolicy;
 use App\Policies\UserPolicy;
+use App\Policies\ClientePolicy;
 
 class AuthServiceProvider extends ServiceProvider
 {
@@ -37,11 +40,10 @@ class AuthServiceProvider extends ServiceProvider
         Fatura::class     => FaturaPolicy::class,
         Categoria::class  => CategoriaPolicy::class,
         User::class       => UserPolicy::class,
+        Cliente::class    => ClientePolicy::class, // ← ADICIONAR AQUI!
+        // Fornecedor::class => FornecedorPolicy::class, // ← se aplicável
     ];
 
-    /**
-     * Register any authentication / authorization services.
-     */
     public function boot(): void
     {
         $this->registerPolicies();

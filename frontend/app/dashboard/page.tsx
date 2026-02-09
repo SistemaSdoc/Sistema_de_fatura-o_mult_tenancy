@@ -1,234 +1,688 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
+import { motion, AnimatePresence, Variants } from "framer-motion";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip,
+  PieChart, Pie, Cell,
+  ResponsiveContainer, Legend, CartesianGrid, Area, AreaChart
+} from "recharts";
+import {
+  TrendingUp, Users, ShoppingCart,
+  CreditCard, DollarSign, Package, AlertCircle,
+  ArrowUpRight, ArrowDownRight, Receipt
+} from "lucide-react";
+
 import MainEmpresa from "@/app/components/MainEmpresa";
 import { dashboardService } from "@/services/vendas";
-import type { DashboardResponse, PagamentoMetodo } from "@/services/vendas";
+import type { DashboardResponse, PagamentoMetodo, UltimaVenda, UltimaFatura } from "@/services/vendas";
 
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip,
-  LineChart, Line, PieChart, Pie, Cell,
-  ResponsiveContainer, Legend
-} from "recharts";
+/* ================= CORES DO SISTEMA (APENAS 2) ================= */
+const COLORS = {
+  primary: "#123859",      // Azul escuro
+  secondary: "#F9941F",    // Laranja âmbra
+};
 
-const PIE_COLORS = ["#123859", "#F9941F", "#C9B6E4"];
+// Cores para gráficos usando apenas as duas cores do sistema + variações
+const CHART_COLORS = [
+  COLORS.primary,
+  COLORS.secondary,
+  "#0f2b4c",      // Azul mais escuro
+  "#ffb347",      // Laranja mais claro
+  "#1a4a73",      // Azul médio
+];
 
-export default function DashboardPage() {
-  const [data, setData] = useState<DashboardResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+const PIE_COLORS = [COLORS.primary, COLORS.secondary, "#0f2b4c"];
 
-  useEffect(() => {
-    dashboardService.fetch()
-      .then(res => {
-        console.log("DASHBOARD:", res); // res já é DashboardResponse
-        if (res) setData(res);
-      })
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) return <MainEmpresa>Carregando dashboard...</MainEmpresa>;
-  if (!data) return <MainEmpresa>Erro ao carregar dashboard</MainEmpresa>;
-
-  /* ================= FORMATADORES ================= */
-  const formatKz = (v: number | string) =>
-    new Intl.NumberFormat("pt-AO").format(Number(v)) + " Kz";
-
-  const formatDate = (d: string) =>
-    new Date(d).toLocaleDateString("pt-AO");
-
-  /* ================= BLINDAGEM ================= */
-  const faturas = data.faturas ?? {
-    receitaMesAtual: 0,
-    receitaMesAnterior: 0,
-    total: 0,
-    pendentes: 0,
-    pagas: 0,
-    ultimas: [],
-  };
-
-  const vendas = data.vendas ?? {
-    total: 0,
-    abertas: 0,
-    faturadas: 0,
-    canceladas: 0,
-    ultimas: [],
-    vendasPorMes: [],
-  };
-
-  const indicadores = data.indicadores ?? {
-    produtosMaisVendidos: [],
-  };
-
-  const clientesAtivos = data.clientesAtivos ?? 0;
-
-  const kpis = data.kpis ?? {
-    ticketMedio: 0,
-    crescimentoPercentual: 0,
-    ivaArrecadado: 0,
-  };
-
-  /* ================= PAGAMENTOS ================= */
-  const pagamentosArray: PagamentoMetodo[] = Array.isArray(data.pagamentos)
-    ? data.pagamentos
-    : [];
-
-  const pagamentosMap = pagamentosArray.reduce(
-    (acc: Record<string, number>, p) => {
-      acc[p.metodo] = Number(p.total);
-      return acc;
-    },
-    { dinheiro: 0, cartao: 0, transferencia: 0 }
-  );
-
-  const pagamentosData = [
-    { name: "Dinheiro", value: pagamentosMap.dinheiro },
-    { name: "Cartão", value: pagamentosMap.cartao },
-    { name: "Transferência", value: pagamentosMap.transferencia },
-  ];
-
-  /* ================= KPIs ================= */
-  const receitaAtual = Number(faturas.receitaMesAtual ?? 0);
-  const receitaAnterior = Number(faturas.receitaMesAnterior ?? 0);
-  const crescimento = kpis.crescimentoPercentual;
-  const ticketMedio = kpis.ticketMedio;
-
-  /* ================= RENDER ================= */
-  return (
-    <MainEmpresa>
-      <div className="p-6 space-y-8">
-
-        {/* 🔹 KPIs */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <KPI title="Receita do Mês" value={formatKz(receitaAtual)} />
-          <KPI title="Crescimento" value={`${crescimento}%`} />
-          <KPI title="Ticket Médio" value={formatKz(ticketMedio)} />
-          <KPI title="Vendas Totais" value={vendas.total} />
-          <KPI title="Clientes Ativos" value={clientesAtivos} />
-        </div>
-
-        {/* 🔹 Receita últimos 12 meses */}
-        <div className="bg-white p-4 rounded-xl shadow">
-          <h3 className="font-semibold mb-4">📈 Receita Últimos 12 Meses</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={vendas.vendasPorMes}>
-              <XAxis dataKey="mes" />
-              <YAxis />
-              <Tooltip formatter={(v?: number) => formatKz(v ?? 0)} />
-              <Line type="monotone" dataKey="total" stroke="#123859" />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* 🔹 Gráficos secundários */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-          {/* Pagamentos */}
-          <div className="bg-white p-4 rounded-xl shadow">
-            <h3 className="font-semibold mb-4">💳 Pagamentos</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie data={pagamentosData} dataKey="value" nameKey="name" label>
-                  {pagamentosData.map((_, i) => (
-                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(v?: number) => formatKz(v ?? 0)} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Produtos mais vendidos */}
-          <div className="bg-white p-4 rounded-xl shadow">
-            <h3 className="font-semibold mb-4">🔥 Produtos Mais Vendidos</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={indicadores.produtosMaisVendidos}>
-                <XAxis dataKey="produto" />
-                <YAxis />
-                <Tooltip formatter={(v?: number) => v} />
-                <Bar
-                  dataKey="quantidade"
-                  fill="#F9941F"
-                  radius={[6, 6, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-        </div>
-
-        {/* 🔹 Tabelas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-          <Tabela
-            titulo="🧾 Últimas Vendas"
-            colunas={["Cliente", "Total", "Status", "Data"]}
-            dados={vendas.ultimas.map(v => [
-              v.cliente,
-              formatKz(v.total),
-              v.status,
-              formatDate(v.data),
-            ])}
-          />
-
-          <Tabela
-            titulo="📄 Últimas Faturas"
-            colunas={["Venda", "Total", "Estado", "Data"]}
-            dados={faturas.ultimas.map(f => [
-              `#${f.venda_id}`,
-              formatKz(f.total),
-              f.estado,
-              formatDate(f.data),
-            ])}
-          />
-
-        </div>
-
-      </div>
-    </MainEmpresa>
-  );
+/* ================= TIPOS AUXILIARES ================= */
+interface KPIData {
+  title: string;
+  value: string | number;
+  change?: number;
+  icon: React.ElementType;
 }
+
+interface ChartCardProps {
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+  icon?: React.ElementType;
+}
+
+interface TooltipProps {
+  active?: boolean;
+  payload?: Array<{ value: number }>;
+  label?: string;
+}
+
+/* ================= ANIMAÇÕES ================= */
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1,
+      delayChildren: 0.2,
+    },
+  },
+};
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: "spring",
+      stiffness: 100,
+      damping: 15,
+    },
+  },
+};
 
 /* ================= COMPONENTES ================= */
-function KPI({ title, value }: { title: string; value: string | number }) {
-  return (
-    <div className="bg-white p-4 rounded-xl shadow">
-      <p className="text-sm text-gray-500">{title}</p>
-      <p className="text-2xl font-bold">{value}</p>
-    </div>
-  );
-}
 
-function Tabela({
-  titulo,
-  colunas,
-  dados,
-}: {
-  titulo: string;
-  colunas: string[];
-  dados: (string | number)[][];
-}) {
+const SkeletonCard: React.FC = () => (
+  <motion.div
+    className="bg-white rounded-2xl p-4 md:p-6 shadow-sm border border-[#E5E5E5]"
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+  >
+    <div className="animate-pulse space-y-3 md:space-y-4">
+      <div className="h-3 md:h-4 bg-[#123859]/10 rounded w-1/3"></div>
+      <div className="h-6 md:h-8 bg-[#123859]/10 rounded w-2/3"></div>
+      <div className="h-16 md:h-20 bg-[#123859]/10 rounded"></div>
+    </div>
+  </motion.div>
+);
+
+const KPICard: React.FC<KPIData> = ({ title, value, change, icon: Icon }) => {
+  const isPositive = change !== undefined && change > 0;
+  const isNegative = change !== undefined && change < 0;
+
   return (
-    <div className="bg-white p-4 rounded-xl shadow overflow-x-auto">
-      <h3 className="font-semibold mb-3">{titulo}</h3>
-      <table className="w-full text-sm">
-        <thead>
-          <tr>
-            {colunas.map(c => (
-              <th key={c} className="text-left p-2 border-b">{c}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {dados.map((row, i) => (
-            <tr key={i} className="border-b hover:bg-gray-50">
-              {row.map((cell, j) => (
-                <td key={j} className="p-2">{cell}</td>
+    <motion.div
+      variants={itemVariants}
+      whileHover={{ scale: 1.02, y: -5 }}
+      whileTap={{ scale: 0.98 }}
+      className="bg-white rounded-2xl p-4 md:p-6 shadow-sm border border-[#E5E5E5] relative overflow-hidden group cursor-pointer"
+    >
+      <div className="absolute inset-0 opacity-0 group-hover:opacity-5 bg-[#123859] transition-opacity duration-300" />
+
+      <div className="flex items-start justify-between mb-2 md:mb-4">
+        <div className="p-2 md:p-3 rounded-xl bg-[#123859]/10">
+          <Icon size={20} className="text-[#123859] md:w-6 md:h-6" />
+        </div>
+
+        {change !== undefined && (
+          <motion.div
+            className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${isPositive ? "bg-[#123859] text-white" :
+                isNegative ? "bg-[#F9941F] text-white" : "bg-[#E5E5E5] text-[#123859]"
+              }`}
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ delay: 0.5, type: "spring" }}
+          >
+            {isPositive ? <ArrowUpRight size={12} /> :
+              isNegative ? <ArrowDownRight size={12} /> : null}
+            {Math.abs(change)}%
+          </motion.div>
+        )}
+      </div>
+
+      <h3 className="text-[#123859]/60 text-xs md:text-sm font-medium mb-1">{title}</h3>
+      <motion.p
+        className="text-lg md:text-2xl font-bold text-[#123859] truncate"
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ delay: 0.3 }}
+      >
+        {value}
+      </motion.p>
+    </motion.div>
+  );
+};
+
+const ChartCard: React.FC<ChartCardProps> = ({ title, children, className = "", icon: Icon }) => (
+  <motion.div
+    variants={itemVariants}
+    className={`bg-white rounded-2xl p-4 md:p-6 shadow-sm border border-[#E5E5E5] ${className}`}
+    whileHover={{ boxShadow: "0 20px 25px -5px rgba(18, 56, 89, 0.1)" }}
+    transition={{ duration: 0.3 }}
+  >
+    <div className="flex items-center gap-2 mb-4 md:mb-6">
+      {Icon && <Icon size={18} className="text-[#F9941F] md:w-5 md:h-5" />}
+      <h3 className="font-semibold text-[#123859] text-base md:text-lg">{title}</h3>
+    </div>
+    {children}
+  </motion.div>
+);
+
+const DataTable: React.FC<{
+  title: string;
+  columns: string[];
+  data: (string | number)[][];
+  maxRows?: number;
+}> = ({ title, columns, data, maxRows = 5 }) => {
+  const safeData = Array.isArray(data) ? data : [];
+  const displayData = safeData.slice(0, maxRows);
+
+  return (
+    <motion.div
+      variants={itemVariants}
+      className="bg-white rounded-2xl p-4 md:p-6 shadow-sm border border-[#E5E5E5] overflow-hidden"
+      whileHover={{ y: -2 }}
+    >
+      <h3 className="font-semibold text-[#123859] mb-4 flex items-center gap-2 text-sm md:text-base">
+        <Receipt size={16} className="text-[#F9941F] md:w-[18px] md:h-[18px]" />
+        {title}
+      </h3>
+
+      <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
+        <table className="w-full text-xs md:text-sm min-w-[350px]">
+          <thead>
+            <tr className="border-b border-[#123859]/10">
+              {columns.map((col, idx) => (
+                <th
+                  key={idx}
+                  className="text-left p-2 md:p-3 font-medium text-[#123859]/60 uppercase text-[10px] md:text-xs tracking-wider"
+                >
+                  {col}
+                </th>
               ))}
             </tr>
+          </thead>
+          <tbody>
+            <AnimatePresence>
+              {displayData.length > 0 ? (
+                displayData.map((row, rowIdx) => (
+                  <motion.tr
+                    key={rowIdx}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: rowIdx * 0.05 }}
+                    className="border-b border-[#123859]/5 hover:bg-[#123859]/5 transition-colors"
+                  >
+                    {row.map((cell, cellIdx) => (
+                      <td key={cellIdx} className="p-2 md:p-3 text-[#123859]">
+                        {cellIdx === 2 && typeof cell === 'string' ? (
+                          <span className={`px-2 py-1 rounded-full text-[10px] md:text-xs font-medium ${cell.toLowerCase().includes('pago') || cell.toLowerCase().includes('faturada')
+                              ? 'bg-green-100 text-green-700' :
+                              cell.toLowerCase().includes('pendente') || cell.toLowerCase().includes('aberta')
+                                ? 'bg-[#F9941F] text-white' :
+                                cell.toLowerCase().includes('cancelada') || cell.toLowerCase().includes('anulado')
+                                  ? 'bg-[#E5E5E5] text-[#123859]'
+                                  : 'bg-[#E5E5E5] text-[#123859]'
+                            }`}>
+                            {cell}
+                          </span>
+                        ) : (
+                          <span className="truncate block max-w-[100px] md:max-w-none">{cell}</span>
+                        )}
+                      </td>
+                    ))}
+                  </motion.tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={columns.length} className="p-6 md:p-8 text-center text-[#123859]/40">
+                    Nenhum dado disponível
+                  </td>
+                </tr>
+              )}
+            </AnimatePresence>
+          </tbody>
+        </table>
+
+        {safeData.length > maxRows && (
+          <motion.div
+            className="text-center mt-4 text-xs md:text-sm text-[#F9941F] cursor-pointer hover:underline font-medium"
+            whileHover={{ scale: 1.05 }}
+          >
+            Ver mais {safeData.length - maxRows} registros
+          </motion.div>
+        )}
+      </div>
+    </motion.div>
+  );
+};
+
+/* ================= PÁGINA PRINCIPAL ================= */
+export default function DashboardPage(): React.ReactElement {
+  const [data, setData] = useState<DashboardResponse | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchData = async (): Promise<void> => {
+      try {
+        setLoading(true);
+        setError(null);
+        const response = await dashboardService.fetch();
+
+        if (response) {
+          setData(response);
+        } else {
+          setError("Não foi possível carregar os dados do dashboard");
+        }
+      } catch (err) {
+        setError("Erro ao conectar com o servidor");
+        console.error("[DASHBOARD] Erro:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const processedData = useMemo(() => {
+    if (!data) return null;
+
+    const faturas = data.faturas ?? {
+      receitaMesAtual: 0,
+      receitaMesAnterior: 0,
+      total: 0,
+      pendentes: 0,
+      pagas: 0,
+      ultimas: [] as UltimaFatura[],
+    };
+
+    const vendas = data.vendas ?? {
+      total: 0,
+      abertas: 0,
+      faturadas: 0,
+      canceladas: 0,
+      ultimas: [] as UltimaVenda[],
+      vendasPorMes: [],
+    };
+
+    const indicadores = data.indicadores ?? {
+      produtosMaisVendidos: [],
+    };
+
+    const kpis = data.kpis ?? {
+      ticketMedio: 0,
+      crescimentoPercentual: 0,
+      ivaArrecadado: 0,
+    };
+
+    const ultimasVendas = Array.isArray(vendas.ultimas) ? vendas.ultimas : [];
+    const ultimasFaturas = Array.isArray(faturas.ultimas) ? faturas.ultimas : [];
+    const produtosMaisVendidos = Array.isArray(indicadores.produtosMaisVendidos)
+      ? indicadores.produtosMaisVendidos
+      : [];
+    const vendasPorMes = Array.isArray(vendas.vendasPorMes) ? vendas.vendasPorMes : [];
+
+    const pagamentosArray: PagamentoMetodo[] = Array.isArray(data.pagamentos)
+      ? data.pagamentos
+      : [];
+
+    const pagamentosMap = pagamentosArray.reduce<Record<string, number>>(
+      (acc, p) => {
+        if (p && p.metodo) {
+          acc[p.metodo] = Number(p.total) || 0;
+        }
+        return acc;
+      },
+      { dinheiro: 0, cartao: 0, transferencia: 0 }
+    );
+
+    const pagamentosData = [
+      { name: "Dinheiro", value: pagamentosMap.dinheiro, color: PIE_COLORS[0] },
+      { name: "Cartão", value: pagamentosMap.cartao, color: PIE_COLORS[1] },
+      { name: "Transferência", value: pagamentosMap.transferencia, color: PIE_COLORS[2] },
+    ].filter(p => p.value > 0);
+
+    const receitaAtual = Number(faturas.receitaMesAtual) || 0;
+    const receitaAnterior = Number(faturas.receitaMesAnterior) || 0;
+    const crescimentoReal = receitaAnterior > 0
+      ? ((receitaAtual - receitaAnterior) / receitaAnterior) * 100
+      : 0;
+
+    return {
+      faturas: {
+        ...faturas,
+        ultimas: ultimasFaturas,
+      },
+      vendas: {
+        ...vendas,
+        ultimas: ultimasVendas,
+        vendasPorMes,
+      },
+      indicadores: {
+        produtosMaisVendidos,
+      },
+      kpis,
+      clientesAtivos: Number(data.clientesAtivos) || 0,
+      pagamentosData,
+      receitaAtual,
+      crescimento: kpis.crescimentoPercentual || crescimentoReal,
+    };
+  }, [data]);
+
+  const formatKz = (v: number | string): string =>
+    new Intl.NumberFormat("pt-AO", {
+      style: "currency",
+      currency: "AOA",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(Number(v) || 0).replace("AOA", "Kz");
+
+  const formatDate = (d: string): string => {
+    if (!d) return "-";
+    try {
+      return new Date(d).toLocaleDateString("pt-AO", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return d;
+    }
+  };
+
+  const formatNumber = (n: number): string =>
+    new Intl.NumberFormat("pt-AO").format(n || 0);
+
+  // Formatter seguro para o Recharts
+  const formatTooltipValue = (value: number): string => formatKz(value);
+  
+  const formatYAxisTick = (value: number): string => `Kz ${(Number(value) / 1000).toFixed(0)}k`;
+
+  if (loading) {
+    return (
+      <MainEmpresa>
+        <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
+            {[...Array(5)].map((_, i) => (
+              <SkeletonCard key={i} />
+            ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+            <SkeletonCard />
+            <SkeletonCard />
+          </div>
+        </div>
+      </MainEmpresa>
+    );
+  }
+
+  if (error || !processedData) {
+    return (
+      <MainEmpresa>
+        <motion.div
+          className="flex flex-col items-center justify-center min-h-[60vh] p-4 md:p-6"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+        >
+          <div className="bg-white p-6 rounded-2xl text-center max-w-md shadow-sm border border-[#E5E5E5]">
+            <AlertCircle size={48} className="text-[#F9941F] mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-[#123859] mb-2">Erro ao carregar dashboard</h3>
+            <p className="text-[#123859]/60 mb-4">{error || "Dados indisponíveis"}</p>
+            <motion.button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-[#123859] text-white rounded-lg font-medium hover:bg-[#0f2b4c] transition-colors"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              Tentar novamente
+            </motion.button>
+          </div>
+        </motion.div>
+      </MainEmpresa>
+    );
+  }
+
+  const { faturas, vendas, indicadores, kpis, clientesAtivos, pagamentosData, receitaAtual, crescimento } = processedData;
+
+  const kpisConfig: KPIData[] = [
+    {
+      title: "Receita do Mês",
+      value: formatKz(receitaAtual),
+      change: Number(crescimento.toFixed(1)),
+      icon: DollarSign,
+    },
+    {
+      title: "Ticket Médio",
+      value: formatKz(kpis.ticketMedio),
+      icon: CreditCard,
+    },
+    {
+      title: "Vendas Totais",
+      value: formatNumber(vendas.total),
+      icon: ShoppingCart,
+    },
+    {
+      title: "Clientes Ativos",
+      value: formatNumber(clientesAtivos),
+      icon: Users,
+    },
+    {
+      title: "IVA Arrecadado",
+      value: formatKz(kpis.ivaArrecadado),
+      icon: Receipt,
+    },
+  ];
+
+  return (
+    <MainEmpresa>
+      <motion.div
+        className="p-4 md:p-6 lg:p-8 space-y-4 md:space-y-6 max-w-[1600px] mx-auto"
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+      >
+        {/* Header */}
+        <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
+          <div>
+            <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-[#123859]">Dashboard</h1>
+            <p className="text-[#123859]/60 mt-1 text-sm md:text-base">Visão geral do sistema em tempo real</p>
+          </div>
+          <motion.div
+            className="flex items-center gap-2 px-3 py-2 bg-white rounded-full shadow-sm border border-[#E5E5E5] text-xs md:text-sm text-[#123859] w-fit"
+            whileHover={{ scale: 1.05 }}
+          >
+            <div className="w-2 h-2 rounded-full bg-[#123859] animate-pulse" />
+            Sistema Online
+          </motion.div>
+        </motion.div>
+
+        {/* KPIs Grid - Responsivo */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
+          {kpisConfig.map((kpi, index) => (
+            <KPICard key={index} {...kpi} />
           ))}
-        </tbody>
-      </table>
-    </div>
+        </div>
+
+        {/* Gráfico Principal - Receita */}
+        <ChartCard
+          title="Receita Últimos 12 Meses"
+          className="w-full"
+          icon={TrendingUp}
+        >
+          <div className="h-[250px] md:h-[300px] lg:h-[400px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={vendas.vendasPorMes}>
+                <defs>
+                  <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#12385920" vertical={false} />
+                <XAxis
+                  dataKey="mes"
+                  stroke="#12385960"
+                  fontSize={11}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  stroke="#12385960"
+                  fontSize={11}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={formatYAxisTick}
+                />
+                <RechartsTooltip
+                  formatter={(value: number) => [formatTooltipValue(value), "Receita"]}
+                  contentStyle={{
+                    backgroundColor: "white",
+                    borderRadius: "12px",
+                    border: "1px solid #E5E5E5",
+                    boxShadow: "0 10px 15px -3px rgba(18, 56, 89, 0.1)",
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="total"
+                  stroke={COLORS.primary}
+                  fillOpacity={1}
+                  fill="url(#colorTotal)"
+                  strokeWidth={2}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </ChartCard>
+
+        {/* Grid Secundário */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+          {/* Pagamentos - Pie Chart */}
+          <ChartCard title="Métodos de Pagamento" icon={CreditCard}>
+            <div className="h-[250px] md:h-[300px] w-full">
+              {pagamentosData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pagamentosData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={80}
+                      paddingAngle={5}
+                      dataKey="value"
+                    >
+                      {pagamentosData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <RechartsTooltip
+                      formatter={(value: number) => formatTooltipValue(value)}
+                      contentStyle={{
+                        backgroundColor: "white",
+                        borderRadius: "12px",
+                        border: "1px solid #E5E5E5",
+                        boxShadow: "0 10px 15px -3px rgba(18, 56, 89, 0.1)",
+                      }}
+                    />
+                    <Legend
+                      verticalAlign="bottom"
+                      height={36}
+                      iconType="circle"
+                      formatter={(value: string) => (
+                        <span className="text-[#123859] text-xs md:text-sm">{value}</span>
+                      )}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-full text-[#123859]/40">
+                  Sem dados de pagamento
+                </div>
+              )}
+            </div>
+
+            {/* Resumo numérico abaixo do gráfico */}
+            <div className="grid grid-cols-3 gap-2 md:gap-4 mt-4 pt-4 border-t border-[#123859]/10">
+              {pagamentosData.map((item, idx) => (
+                <div key={idx} className="text-center">
+                  <p className="text-[10px] md:text-xs text-[#123859]/60 mb-1">{item.name}</p>
+                  <p className="font-semibold text-[#123859] text-xs md:text-base">{formatKz(item.value)}</p>
+                </div>
+              ))}
+            </div>
+          </ChartCard>
+
+          {/* Produtos Mais Vendidos - Bar Chart */}
+          <ChartCard title="Top Produtos Mais Vendidos" icon={Package}>
+            <div className="h-[250px] md:h-[300px] w-full">
+              {indicadores.produtosMaisVendidos.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={indicadores.produtosMaisVendidos.slice(0, 5)}
+                    layout="vertical"
+                    margin={{ left: 10, right: 20, top: 10, bottom: 10 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#12385920" />
+                    <XAxis type="number" hide />
+                    <YAxis
+                      dataKey="produto"
+                      type="category"
+                      width={80}
+                      tick={{ fontSize: 10, fill: COLORS.primary }}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <RechartsTooltip
+                      cursor={{ fill: "transparent" }}
+                      contentStyle={{
+                        backgroundColor: "white",
+                        borderRadius: "12px",
+                        border: "1px solid #E5E5E5",
+                        boxShadow: "0 10px 15px -3px rgba(18, 56, 89, 0.1)",
+                      }}
+                    />
+                    <Bar
+                      dataKey="quantidade"
+                      fill={COLORS.secondary}
+                      radius={[0, 6, 6, 0]}
+                      barSize={24}
+                    >
+                      {indicadores.produtosMaisVendidos.slice(0, 5).map((_, index) => (
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={index === 0 ? COLORS.secondary : `${COLORS.secondary}${Math.max(40, 90 - index * 15)}`} 
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-full text-[#123859]/40">
+                  Sem dados de produtos
+                </div>
+              )}
+            </div>
+          </ChartCard>
+        </div>
+
+        {/* Tabelas */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+          <DataTable
+            title="Últimas Vendas"
+            columns={["Cliente", "Total", "Status", "Data"]}
+            data={vendas.ultimas.map(v => [
+              v?.cliente || "-",
+              formatKz(v?.total || 0),
+              v?.status || "-",
+              formatDate(v?.data || ""),
+            ])}
+          />
+
+          <DataTable
+            title="Últimas Faturas"
+            columns={["Venda", "Total", "Estado", "Data"]}
+            data={faturas.ultimas.map(f => [
+              f?.venda_id ? `#${f.venda_id}` : "-",
+              formatKz(f?.total || 0),
+              f?.estado || "-",
+              formatDate(f?.data || ""),
+            ])}
+          />
+        </div>
+      </motion.div>
+    </MainEmpresa>
   );
 }

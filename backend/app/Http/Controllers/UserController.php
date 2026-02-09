@@ -16,6 +16,24 @@ class UserController extends Controller
     }
 
     /**
+     * Retorna o usuário logado (formato simplificado)
+     */
+    public function me(Request $request)
+    {
+        $user = $request->user();
+
+        return response()->json([
+            'message' => 'Usuário logado carregado com sucesso',
+            'user' => [
+                'id'    => $user->id,
+                'name'  => $user->name,
+                'email' => $user->email,
+                'role'  => $user->role,
+            ],
+        ]);
+    }
+
+    /**
      * Listar todos os usuários (com filtros opcionais)
      */
     public function index(Request $request)

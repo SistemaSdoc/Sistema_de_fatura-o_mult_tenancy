@@ -1,4 +1,4 @@
-// src/app/(empresa)/clientes/page.tsx
+
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -27,7 +27,6 @@ import {
   MapPin,
   Calendar,
   X,
-  CheckCircle2,
   AlertCircle,
   Loader2,
 } from "lucide-react";
@@ -160,7 +159,7 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
       newErrors.email = "Email inválido";
     }
     if (formData.nif && formData.nif.length < 10) {
-      newErrors.nif = "NIF/NIF inválido";
+      newErrors.nif = "NIF inválido";
     }
 
     setErrors(newErrors);
@@ -182,10 +181,11 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
         </label>
         <div className="grid grid-cols-2 gap-4">
           <label
-            className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${formData.tipo === "consumidor_final"
+            className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+              formData.tipo === "consumidor_final"
                 ? "border-[#123859] bg-[#123859]/5"
                 : "border-gray-200 hover:border-gray-300"
-              }`}
+            }`}
           >
             <input
               type="radio"
@@ -205,10 +205,11 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
           </label>
 
           <label
-            className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${formData.tipo === "empresa"
+            className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+              formData.tipo === "empresa"
                 ? "border-[#F9941F] bg-[#F9941F]/5"
                 : "border-gray-200 hover:border-gray-300"
-              }`}
+            }`}
           >
             <input
               type="radio"
@@ -240,8 +241,9 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
           value={formData.nome}
           onChange={handleChange}
           placeholder={formData.tipo === "empresa" ? "Ex: Empresa XYZ, Lda" : "Ex: João Silva"}
-          className={`w-full px-4 py-2.5 rounded-lg border ${errors.nome ? "border-red-500" : "border-gray-300"
-            } focus:ring-2 focus:ring-[#123859] outline-none transition-all`}
+          className={`w-full px-4 py-2.5 rounded-lg border ${
+            errors.nome ? "border-red-500" : "border-gray-300"
+          } focus:ring-2 focus:ring-[#123859] outline-none transition-all`}
         />
         {errors.nome && <p className="mt-1 text-sm text-red-500">{errors.nome}</p>}
       </div>
@@ -258,8 +260,9 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
             value={formData.nif}
             onChange={handleChange}
             placeholder="000000000LA000"
-            className={`w-full px-4 py-2.5 rounded-lg border ${errors.nif ? "border-red-500" : "border-gray-300"
-              } focus:ring-2 focus:ring-[#123859] outline-none transition-all`}
+            className={`w-full px-4 py-2.5 rounded-lg border ${
+              errors.nif ? "border-red-500" : "border-gray-300"
+            } focus:ring-2 focus:ring-[#123859] outline-none transition-all`}
           />
           {errors.nif && <p className="mt-1 text-sm text-red-500">{errors.nif}</p>}
         </div>
@@ -296,8 +299,9 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
             value={formData.email}
             onChange={handleChange}
             placeholder="email@exemplo.com"
-            className={`w-full pl-10 pr-4 py-2.5 rounded-lg border ${errors.email ? "border-red-500" : "border-gray-300"
-              } focus:ring-2 focus:ring-[#123859] outline-none transition-all`}
+            className={`w-full pl-10 pr-4 py-2.5 rounded-lg border ${
+              errors.email ? "border-red-500" : "border-gray-300"
+            } focus:ring-2 focus:ring-[#123859] outline-none transition-all`}
           />
         </div>
         {errors.email && <p className="mt-1 text-sm text-red-500">{errors.email}</p>}
@@ -382,11 +386,13 @@ export default function ClientesPage() {
   async function carregarClientes() {
     setLoading(true);
     try {
+      console.log('[PAGE] Carregando clientes...');
       const data = await clienteService.listarClientes();
+      console.log('[PAGE] Clientes recebidos:', data.length);
       setClientes(data);
       setClientesFiltrados(data);
     } catch (error) {
-      console.error("Erro ao carregar clientes:", error);
+      console.error('[PAGE] Erro ao carregar clientes:', error);
     } finally {
       setLoading(false);
     }
@@ -434,10 +440,24 @@ export default function ClientesPage() {
 
     setLoadingAcao(true);
     try {
+      console.log('[PAGE] Iniciando exclusão do cliente:', clienteSelecionado.id);
+      
       await clienteService.deletarCliente(clienteSelecionado.id);
-      setModalConfirmAberto(false);
+      
+      console.log('[PAGE] Cliente deletado com sucesso, aguardando...');
+      
+      // Aguarda para garantir que o backend processou
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      console.log('[PAGE] Recarregando lista de clientes...');
       await carregarClientes();
+      
+      console.log('[PAGE] Lista recarregada. Total:', clientes.length);
+      
+      setModalConfirmAberto(false);
+      setClienteSelecionado(null);
     } catch (error: any) {
+      console.error('[PAGE] Erro ao excluir:', error);
       alert(error.response?.data?.message || "Erro ao excluir cliente");
     } finally {
       setLoadingAcao(false);
@@ -540,8 +560,9 @@ export default function ClientesPage() {
                     <tr key={cliente.id} className="hover:bg-gray-50 transition-colors">
                       <td className="py-4 px-6">
                         <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${cliente.tipo === "empresa" ? "bg-blue-100" : "bg-gray-100"
-                            }`}>
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                            cliente.tipo === "empresa" ? "bg-blue-100" : "bg-gray-100"
+                          }`}>
                             {cliente.tipo === "empresa" ? (
                               <Building2 className="w-5 h-5 text-blue-600" />
                             ) : (
@@ -648,8 +669,9 @@ export default function ClientesPage() {
         {clienteSelecionado && (
           <div className="space-y-6">
             <div className="flex items-center gap-4 pb-6 border-b border-gray-200">
-              <div className={`w-16 h-16 rounded-full flex items-center justify-center ${clienteSelecionado.tipo === "empresa" ? "bg-blue-100" : "bg-gray-100"
-                }`}>
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
+                clienteSelecionado.tipo === "empresa" ? "bg-blue-100" : "bg-gray-100"
+              }`}>
                 {clienteSelecionado.tipo === "empresa" ? (
                   <Building2 className="w-8 h-8 text-blue-600" />
                 ) : (

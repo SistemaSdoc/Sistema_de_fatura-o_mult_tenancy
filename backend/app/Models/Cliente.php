@@ -4,11 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes; // Import necessário
 use Illuminate\Support\Str;
 
 class Cliente extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes; // Ativando SoftDeletes
 
     protected $table = 'clientes';
 
@@ -16,13 +17,19 @@ class Cliente extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
-        'nome', 
-        'nif', 
-        'tipo', 
-        'telefone', 
-        'email', 
+        'nome',
+        'nif',
+        'tipo',
+        'telefone',
+        'email',
         'endereco',
         'data_registro',
+    ];
+
+    // Cast para data
+    protected $dates = [
+        'data_registro',
+        'deleted_at', // necessário para SoftDeletes
     ];
 
     protected static function boot(): void
