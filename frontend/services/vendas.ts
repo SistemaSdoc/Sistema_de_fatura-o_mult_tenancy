@@ -41,9 +41,10 @@ export interface CriarItemVendaPayload {
   desconto?: number;
 }
 
+// CORREÇÃO: cliente_nome só deve existir quando for cliente avulso
 export interface CriarVendaPayload {
-  cliente_id?: string | null;      // Opcional agora
-  cliente_nome?: string;           // Novo campo
+  cliente_id?: string | null;
+  cliente_nome?: string;           // Opcional, só enviar quando for avulso
   tipo_documento?: 'fatura' | 'recibo' | 'nota_credito' | 'nota_debito';
   faturar?: boolean;
   itens: CriarItemVendaPayload[];
@@ -506,8 +507,41 @@ export async function obterDadosNovaVenda(): Promise<{
   return data;
 }
 
+// CORREÇÃO: Função helper para criar payload limpo
+function criarPayloadVenda(payload: CriarVendaPayload): Record<string, unknown> {
+  const cleanPayload: Record<string, unknown> = {
+    itens: payload.itens,
+  };
+
+  // Só adiciona cliente_id se existir e não for null
+  if (payload.cliente_id && payload.cliente_id !== null) {
+    cleanPayload.cliente_id = payload.cliente_id;
+  }
+
+  // Só adiciona cliente_nome se existir e não for string vazia
+  if (payload.cliente_nome && payload.cliente_nome.trim() !== '') {
+    cleanPayload.cliente_nome = payload.cliente_nome.trim();
+  }
+
+  // Adiciona campos opcionais se existirem
+  if (payload.tipo_documento) {
+    cleanPayload.tipo_documento = payload.tipo_documento;
+  }
+  
+  if (payload.faturar !== undefined) {
+    cleanPayload.faturar = payload.faturar;
+  }
+
+  return cleanPayload;
+}
+
 export async function criarVenda(payload: CriarVendaPayload) {
-  const response = await api.post("/api/vendas", payload);
+  // Usar o helper para limpar o payload antes de enviar
+  const cleanPayload = criarPayloadVenda(payload);
+  
+  console.log('[VENDA SERVICE] Payload limpo:', cleanPayload);
+  
+  const response = await api.post("/api/vendas", cleanPayload);
   return response.data;
 }
 
@@ -1301,7 +1335,9 @@ export const stockService = {
 export const vendaService = {
   criarVenda: async (payload: CriarVendaPayload): Promise<{ venda: Venda; fatura: Fatura } | null> => {
     try {
-      const { data } = await api.post<{ venda: Venda; fatura: Fatura }>("/api/vendas", payload);
+      // Usar a mesma função de limpeza do serviço principal
+      const cleanPayload = criarPayloadVenda(payload);
+      const { data } = await api.post<{ venda: Venda; fatura: Fatura }>("/api/vendas", cleanPayload);
       return data;
     } catch (err) {
       handleAxiosError(err, "[VENDAS] Erro ao criar venda");

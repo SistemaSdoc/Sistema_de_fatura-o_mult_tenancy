@@ -316,7 +316,16 @@ export default function NovaVendaPage() {
   const pagamentoParcial = totalPago > 0 && totalPago < totalLiquido;
   const pagamentoExcedente = totalPago > totalLiquido;
 
+  // VERIFICAR SE JÁ EXISTE PAGAMENTO (apenas 1 permitido)
+  const pagamentoJaAdicionado = pagamentos.length > 0;
+
   const adicionarPagamento = () => {
+    // BLOQUEAR se já existe um pagamento
+    if (pagamentoJaAdicionado) {
+      setError("Apenas um pagamento é permitido por venda. Remova o pagamento existente para adicionar outro.");
+      return;
+    }
+
     const valor = parseFloat(formPagamento.valor_pago);
 
     if (isNaN(valor) || valor <= 0) {
@@ -324,34 +333,25 @@ export default function NovaVendaPage() {
       return;
     }
 
-    // Permitir valor maior que o restante (para calcular troco)
-    // Mas alertar se for muito excedente (mais de 10x o valor)
-    if (valor > totalRestante * 10 && totalRestante > 0) {
-      setError("Valor muito acima do necessário. Verifique o valor digitado.");
-      return;
-    }
-
     // Calcular troco para este pagamento específico
-    const valorAnterior = totalPago;
-    const novoTotalPago = valorAnterior + valor;
-    const trocoDestePagamento = Math.max(0, novoTotalPago - totalLiquido);
+    const trocoCalculado = Math.max(0, valor - totalLiquido);
 
     const novoPagamento: PagamentoUI = {
       id: uuidv4(),
       metodo: formPagamento.metodo,
       valor_pago: valor,
-      troco: trocoDestePagamento,
+      troco: trocoCalculado,
       referencia: formPagamento.referencia || undefined,
       data_pagamento: new Date().toISOString().split('T')[0],
       hora_pagamento: new Date().toTimeString().split(' ')[0],
     };
 
-    setPagamentos(prev => [...prev, novoPagamento]);
+    setPagamentos([novoPagamento]); // Sempre substitui, mas agora só permite um
 
-    // Resetar formulário de pagamento com valor sugerido do restante
+    // Resetar formulário de pagamento
     setFormPagamento({
       metodo: "dinheiro",
-      valor_pago: totalRestante > 0 ? totalRestante.toFixed(2) : "",
+      valor_pago: "",
       referencia: "",
     });
     setError(null);
@@ -359,6 +359,8 @@ export default function NovaVendaPage() {
 
   const removerPagamento = (id: string) => {
     setPagamentos(prev => prev.filter(p => p.id !== id));
+    // Limpar erro quando remove o pagamento
+    setError(null);
   };
 
   const getIconeMetodo = (metodo: MetodoPagamento) => {
@@ -384,7 +386,7 @@ export default function NovaVendaPage() {
     if (totalRestante > 0) {
       return totalRestante.toFixed(2);
     }
-    return "";
+    return totalLiquido.toFixed(2);
   };
 
   /* ================= SALVAR ================= */
@@ -438,45 +440,29 @@ export default function NovaVendaPage() {
       if (pagamentos.length > 0 && vendaCriada.fatura?.id && user) {
         console.log("Registrando pagamentos...", pagamentos);
 
-        // Usar Promise.all para aguardar todos os pagamentos
-        const resultadosPagamentos = await Promise.all(
-          pagamentos.map(async (pag, index) => {
-            // Calcular troco apenas para o último pagamento se houver excedente
-            const ehUltimo = index === pagamentos.length - 1;
-            const trocoCalculado = ehUltimo && totalPago > totalLiquido
-              ? totalPago - totalLiquido
-              : 0;
+        // Como agora só temos 1 pagamento, simplificamos o processo
+        const pag = pagamentos[0];
+        const trocoCalculado = totalPago > totalLiquido ? totalPago - totalLiquido : 0;
 
-            const pagamentoData: CriarPagamentoInput = {
-              user_id: user.id,
-              fatura_id: vendaCriada.fatura!.id,
-              metodo: pag.metodo,
-              valor_pago: pag.valor_pago,
-              troco: trocoCalculado,
-              referencia: pag.referencia,
-              data_pagamento: pag.data_pagamento,
-              hora_pagamento: pag.hora_pagamento,
-            };
+        const pagamentoData: CriarPagamentoInput = {
+          user_id: user.id,
+          fatura_id: vendaCriada.fatura!.id,
+          metodo: pag.metodo,
+          valor_pago: pag.valor_pago,
+          troco: trocoCalculado,
+          referencia: pag.referencia,
+          data_pagamento: pag.data_pagamento,
+          hora_pagamento: pag.hora_pagamento,
+        };
 
-            try {
-              console.log(`Enviando pagamento ${index + 1}:`, pagamentoData);
-              const resultado = await pagamentoService.criarPagamento(pagamentoData);
-              console.log(`Pagamento ${index + 1} registrado:`, resultado);
-              return { sucesso: true, resultado };
-            } catch (err) {
-              console.error(`Erro ao registrar pagamento ${index + 1}:`, err);
-              return { sucesso: false, erro: err };
-            }
-          })
-        );
-
-        // Verificar se todos os pagamentos foram registrados
-        const falhas = resultadosPagamentos.filter(r => !r.sucesso);
-        if (falhas.length > 0) {
-          console.warn(`${falhas.length} pagamento(s) falharam ao registrar`);
-          setSucesso("Venda criada, mas alguns pagamentos não foram registrados. Verifique manualmente.");
-        } else {
-          setSucesso("Venda e pagamentos registrados com sucesso!");
+        try {
+          console.log("Enviando pagamento:", pagamentoData);
+          await pagamentoService.criarPagamento(pagamentoData);
+          console.log("Pagamento registrado com sucesso");
+          setSucesso("Venda e pagamento registrados com sucesso!");
+        } catch (err) {
+          console.error("Erro ao registrar pagamento:", err);
+          setSucesso("Venda criada, mas o pagamento não foi registrado. Verifique manualmente.");
         }
       } else {
         setSucesso("Venda criada com sucesso!");
@@ -826,6 +812,11 @@ export default function NovaVendaPage() {
             <div className="flex items-center gap-2 mb-4">
               <CreditCard className="text-[#F9941F]" size={24} />
               <h2 className="font-bold text-[#F9941F] text-xl">Pagamento</h2>
+              {pagamentoJaAdicionado && (
+                <span className="ml-2 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-semibold">
+                  ✓ Pago
+                </span>
+              )}
             </div>
 
             {/* Resumo do pagamento - ATUALIZADO COM TROCO */}
@@ -848,7 +839,7 @@ export default function NovaVendaPage() {
                   {formatarPreco(totalEfetivo)}
                 </p>
               </div>
-              {!pagamentoCompleto && (
+              {!pagamentoCompleto && !pagamentoJaAdicionado && (
                 <div>
                   <span className="text-sm text-gray-600">Restante:</span>
                   <p className="font-bold text-[#F9941F] text-lg">
@@ -866,14 +857,15 @@ export default function NovaVendaPage() {
               )}
             </div>
 
-            {/* Formulário de pagamento - SEMPRE VISÍVEL PARA ADICIONAR MAIS */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
+            {/* Formulário de pagamento - DESABILITADO SE JÁ EXISTIR PAGAMENTO */}
+            <div className={`grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 p-4 rounded-lg ${pagamentoJaAdicionado ? 'bg-gray-100 opacity-60' : 'bg-gray-50'}`}>
               <div>
                 <label className="text-sm font-semibold text-gray-700">Método</label>
                 <select
                   value={formPagamento.metodo}
                   onChange={e => setFormPagamento(prev => ({ ...prev, metodo: e.target.value as MetodoPagamento }))}
                   className="w-full border p-2 rounded mt-1"
+                  disabled={pagamentoJaAdicionado}
                 >
                   <option value="dinheiro">Dinheiro</option>
                   <option value="cartao">Cartão</option>
@@ -883,18 +875,19 @@ export default function NovaVendaPage() {
 
               <div>
                 <label className="text-sm font-semibold text-gray-700">
-                  Valor (Kz) {totalRestante > 0 && <span className="text-[#F9941F]">(Falta: {formatarPreco(totalRestante)})</span>}
+                  Valor (Kz) {!pagamentoJaAdicionado && totalRestante > 0 && <span className="text-[#F9941F]">(Falta: {formatarPreco(totalRestante)})</span>}
                 </label>
                 <input
                   type="number"
                   min="0"
                   step="0.01"
-                  placeholder={getValorSugerido() || "0,00"}
+                  placeholder={!pagamentoJaAdicionado ? (getValorSugerido() || "0,00") : "Pagamento já registrado"}
                   value={formPagamento.valor_pago}
                   onChange={e => setFormPagamento(prev => ({ ...prev, valor_pago: e.target.value }))}
                   className="w-full border p-2 rounded mt-1"
+                  disabled={pagamentoJaAdicionado}
                 />
-                {pagamentoExcedente && (
+                {!pagamentoJaAdicionado && pagamentoExcedente && (
                   <p className="text-xs text-blue-600 mt-1">
                     Troco: {formatarPreco(troco)}
                   </p>
@@ -909,6 +902,7 @@ export default function NovaVendaPage() {
                   value={formPagamento.referencia}
                   onChange={e => setFormPagamento(prev => ({ ...prev, referencia: e.target.value }))}
                   className="w-full border p-2 rounded mt-1"
+                  disabled={pagamentoJaAdicionado}
                 />
               </div>
 
@@ -916,21 +910,38 @@ export default function NovaVendaPage() {
                 <button
                   type="button"
                   onClick={adicionarPagamento}
-                  disabled={!formPagamento.valor_pago || parseFloat(formPagamento.valor_pago) <= 0}
+                  disabled={!formPagamento.valor_pago || parseFloat(formPagamento.valor_pago) <= 0 || pagamentoJaAdicionado}
                   className="w-full bg-[#123859] hover:bg-[#123859]/80 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-2 rounded font-semibold flex items-center justify-center gap-2 transition-colors"
                 >
-                  <Plus size={18} />
-                  Adicionar
+                  {pagamentoJaAdicionado ? (
+                    <>
+                      <CheckCircle2 size={18} />
+                      Pago
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={18} />
+                      Adicionar
+                    </>
+                  )}
                 </button>
               </div>
             </div>
 
+            {/* Mensagem informativa quando pagamento já existe */}
+            {pagamentoJaAdicionado && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700 flex items-center gap-2">
+                <AlertTriangle size={16} />
+                <span>Para alterar o pagamento, remova o atual primeiro.</span>
+              </div>
+            )}
+
             {/* Lista de pagamentos */}
             {pagamentos.length > 0 && (
               <div className="space-y-2 mb-4">
-                <h3 className="font-semibold text-gray-700 text-sm">Pagamentos Registrados:</h3>
+                <h3 className="font-semibold text-gray-700 text-sm">Pagamento Registrado:</h3>
                 {pagamentos.map((pag, index) => (
-                  <div key={pag.id} className="flex items-center justify-between p-3 bg-gray-50 rounded border">
+                  <div key={pag.id} className="flex items-center justify-between p-3 bg-green-50 rounded border border-green-200">
                     <div className="flex items-center gap-3">
                       <span className={`p-2 rounded-full ${pag.metodo === "dinheiro" ? "bg-green-100 text-green-700" :
                         pag.metodo === "cartao" ? "bg-blue-100 text-blue-700" :
@@ -939,7 +950,7 @@ export default function NovaVendaPage() {
                         {getIconeMetodo(pag.metodo)}
                       </span>
                       <div>
-                        <div className="font-medium">#{index + 1} - {getLabelMetodo(pag.metodo)}</div>
+                        <div className="font-medium text-green-900">#{index + 1} - {getLabelMetodo(pag.metodo)}</div>
                         {pag.referencia && <div className="text-xs text-gray-500">Ref: {pag.referencia}</div>}
                         {pag.troco > 0 && <div className="text-xs text-blue-600 font-semibold">Troco: {formatarPreco(pag.troco)}</div>}
                       </div>
@@ -950,7 +961,8 @@ export default function NovaVendaPage() {
                       </span>
                       <button
                         onClick={() => removerPagamento(pag.id)}
-                        className="text-[#F9941F] hover:text-[#F9941F]-700 p-1"
+                        className="text-[#F9941F] hover:text-[#d9831a] p-1 hover:bg-orange-50 rounded transition-colors"
+                        title="Remover pagamento para adicionar outro"
                       >
                         <Trash2 size={16} />
                       </button>
@@ -1043,7 +1055,7 @@ export default function NovaVendaPage() {
           disabled={loading || itens.length === 0}
           className="w-full bg-[#F9941F] hover:bg-[#d9831a] disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-4 rounded font-bold text-lg shadow-lg transition-colors"
         >
-          {loading ? "Salvando..." : `Finalizar Venda ${pagamentos.length > 0 ? `(${pagamentos.length} pagamento${pagamentos.length > 1 ? 's' : ''})` : ''}`}
+          {loading ? "Salvando..." : `Finalizar Venda ${pagamentos.length > 0 ? `(Pago)` : ''}`}
         </button>
       </div>
     </MainEmpresa>
