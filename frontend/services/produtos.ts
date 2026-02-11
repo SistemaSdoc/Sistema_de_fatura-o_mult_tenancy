@@ -6,6 +6,7 @@ import api from "./axios";
 
 export type TipoProduto = "produto" | "servico";
 export type StatusProduto = "ativo" | "inativo";
+export type UnidadeMedida = "hora" | "dia" | "semana" | "mes";
 
 // ===== INTERFACES =====
 
@@ -13,43 +14,156 @@ export interface Categoria {
     id: string;
     nome: string;
     descricao?: string;
+    created_at?: string;
+    updated_at?: string;
+    deleted_at?: string | null;
+}
+
+export interface Fornecedor {
+    id: string;
+    nome: string;
+    email?: string;
+    telefone?: string;
+    // ... outros campos do fornecedor
+}
+
+export interface MovimentoStock {
+    id: string;
+    produto_id: string;
+    user_id: string;
+    tipo: "entrada" | "saida";
+    tipo_movimento: "compra" | "venda" | "ajuste" | "nota_credito" | "devolucao";
+    quantidade: number;
+    observacao?: string;
+    referencia?: string;
+    custo_medio?: number;
+    custo_unitario?: number;
+    estoque_anterior: number;
+    estoque_novo: number;
+    created_at: string;
+    updated_at: string;
+    user?: {
+        id: string;
+        name: string;
+    };
 }
 
 export interface Produto {
     id: string;
-    categoria_id: string;
+    categoria_id: string | null;
     categoria?: Categoria;
-    codigo?: string;
+    fornecedor_id?: string | null;
+    fornecedor?: Fornecedor;
+    user_id?: string;
+    codigo?: string | null;
     nome: string;
     descricao?: string;
     preco_compra: number;
     preco_venda: number;
+    custo_medio?: number;
     taxa_iva: number;
-    sujeito_iva: boolean;
+    sujeito_iva?: boolean;
     estoque_atual: number;
     estoque_minimo: number;
     status: StatusProduto;
     tipo: TipoProduto;
+    // Campos de serviço
+    retencao?: number;
+    duracao_estimada?: string;
+    unidade_medida?: UnidadeMedida;
+    // Soft delete
+    deleted_at?: string | null;
     created_at?: string;
     updated_at?: string;
+    // Relacionamentos
+    movimentosStock?: MovimentoStock[];
+    // Campos adicionais para listagem
+    data_exclusao?: string;
+    esta_deletado?: boolean;
 }
 
 export interface CriarProdutoInput {
-    categoria_id: string;
-    codigo?: string;
+    tipo: TipoProduto;
+    categoria_id?: string | null;
+    fornecedor_id?: string | null;
+    codigo?: string | null;
     nome: string;
     descricao?: string;
-    preco_compra: number;
     preco_venda: number;
+    preco_compra?: number;
     taxa_iva?: number;
     sujeito_iva?: boolean;
     estoque_atual?: number;
     estoque_minimo?: number;
     status?: StatusProduto;
-    tipo: TipoProduto;
+    // Campos de serviço
+    retencao?: number;
+    duracao_estimada?: string;
+    unidade_medida?: UnidadeMedida;
 }
 
 export interface AtualizarProdutoInput extends Partial<CriarProdutoInput> { }
+
+// ===== PARÂMETROS DE LISTAGEM =====
+
+export interface ListarProdutosParams {
+    tipo?: TipoProduto;
+    status?: StatusProduto;
+    categoria_id?: string;
+    busca?: string;
+    estoque_baixo?: boolean;
+    sem_estoque?: boolean;
+    ordenar?: string;
+    direcao?: "asc" | "desc";
+    paginar?: boolean;
+    per_page?: number;
+    with_trashed?: boolean;
+}
+
+export interface PaginatedResponse<T> {
+    data: T[];
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+    from?: number;
+    to?: number;
+}
+
+// ===== RESPOSTAS =====
+
+export interface ListarProdutosResponse {
+    message: string;
+    produtos: Produto[] | PaginatedResponse<Produto>;
+}
+
+export interface ListarCompletosResponse {
+    message: string;
+    produtos: Produto[];
+    total: number;
+    ativos: number;
+    deletados: number;
+    produtos_fisicos: number;
+    servicos: number;
+}
+
+export interface ListarDeletadosResponse {
+    message: string;
+    produtos: Produto[] | PaginatedResponse<Produto>;
+    total_deletados: number;
+}
+
+export interface ProdutoResponse {
+    message: string;
+    produto: Produto;
+}
+
+export interface DeletarResponse {
+    message: string;
+    soft_deleted: boolean;
+    id: string;
+    deleted_at?: string;
+}
 
 // ===== SERVIÇO =====
 
@@ -57,51 +171,116 @@ const API_PREFIX = "/api";
 
 export const produtoService = {
     /**
-     * Listar todos os produtos
+     * Listar produtos ativos (não deletados) com filtros e paginação opcional
      */
-    async listarProdutos(apenasAtivos = true): Promise<Produto[]> {
-        const params = apenasAtivos ? "?ativos=true" : "";
-        const response = await api.get(`${API_PREFIX}/produtos${params}`);
-        return response.data.produtos || [];
+    async listarProdutos(params: ListarProdutosParams = {}): Promise<ListarProdutosResponse> {
+        const queryParams = new URLSearchParams();
+
+        if (params.tipo) queryParams.append("tipo", params.tipo);
+        if (params.status) queryParams.append("status", params.status);
+        if (params.categoria_id) queryParams.append("categoria_id", params.categoria_id);
+        if (params.busca) queryParams.append("busca", params.busca);
+        if (params.estoque_baixo) queryParams.append("estoque_baixo", "true");
+        if (params.sem_estoque) queryParams.append("sem_estoque", "true");
+        if (params.ordenar) queryParams.append("ordenar", params.ordenar);
+        if (params.direcao) queryParams.append("direcao", params.direcao);
+        if (params.paginar) queryParams.append("paginar", "true");
+        if (params.per_page) queryParams.append("per_page", params.per_page.toString());
+
+        const queryString = queryParams.toString();
+        const url = `${API_PREFIX}/produtos${queryString ? `?${queryString}` : ""}`;
+
+        const response = await api.get(url);
+        return response.data;
     },
 
     /**
-     * Buscar produto por ID
+     * Listar todos os produtos (ativos + deletados) - para admin
      */
-    async buscarProduto(id: string): Promise<Produto> {
+    async listarTodosCompletos(params: Omit<ListarProdutosParams, "with_trashed" | "status" | "estoque_baixo" | "sem_estoque"> = {}): Promise<ListarCompletosResponse> {
+        const queryParams = new URLSearchParams();
+
+        if (params.tipo) queryParams.append("tipo", params.tipo);
+        if (params.busca) queryParams.append("busca", params.busca);
+
+        const queryString = queryParams.toString();
+        const url = `${API_PREFIX}/produtos/all${queryString ? `?${queryString}` : ""}`;
+
+        const response = await api.get(url);
+        return response.data;
+    },
+
+    /**
+     * Listar APENAS produtos deletados (lixeira) com filtros
+     */
+    async listarDeletados(params: Omit<ListarProdutosParams, "with_trashed" | "status" | "estoque_baixo" | "sem_estoque" | "categoria_id"> = {}): Promise<ListarDeletadosResponse> {
+        const queryParams = new URLSearchParams();
+
+        if (params.busca) queryParams.append("busca", params.busca);
+        if (params.paginar) queryParams.append("paginar", "true");
+        if (params.per_page) queryParams.append("per_page", params.per_page.toString());
+
+        const queryString = queryParams.toString();
+        const url = `${API_PREFIX}/produtos/trashed${queryString ? `?${queryString}` : ""}`;
+
+        const response = await api.get(url);
+        return response.data;
+    },
+
+    /**
+     * Buscar produto por ID com todos os relacionamentos
+     */
+    async buscarProduto(id: string): Promise<ProdutoResponse> {
         const response = await api.get(`${API_PREFIX}/produtos/${id}`);
-        return response.data.produto;
+        return response.data;
     },
 
     /**
      * Criar novo produto/serviço
      */
-    async criarProduto(dados: CriarProdutoInput): Promise<Produto> {
+    async criarProduto(dados: CriarProdutoInput): Promise<ProdutoResponse> {
         const response = await api.post(`${API_PREFIX}/produtos`, dados);
-        return response.data.produto;
+        return response.data;
     },
 
     /**
      * Atualizar produto
      */
-    async atualizarProduto(id: string, dados: AtualizarProdutoInput): Promise<Produto> {
+    async atualizarProduto(id: string, dados: AtualizarProdutoInput): Promise<ProdutoResponse> {
         const response = await api.put(`${API_PREFIX}/produtos/${id}`, dados);
-        return response.data.produto;
+        return response.data;
     },
 
     /**
      * Alterar status (ativo/inativo)
      */
-    async alterarStatus(id: string, status: StatusProduto): Promise<Produto> {
-        const response = await api.patch(`${API_PREFIX}/produtos/${id}/status`, { status });
-        return response.data.produto;
+    async alterarStatus(id: string, status: StatusProduto): Promise<ProdutoResponse> {
+        const response = await api.post(`${API_PREFIX}/produtos/${id}/status`, { status });
+        return response.data;
     },
 
     /**
-     * Deletar produto
+     * Mover para lixeira (soft delete)
      */
-    async deletarProduto(id: string): Promise<void> {
-        await api.delete(`${API_PREFIX}/produtos/${id}`);
+    async moverParaLixeira(id: string): Promise<DeletarResponse> {
+        const response = await api.delete(`${API_PREFIX}/produtos/${id}`);
+        return response.data;
+    },
+
+    /**
+     * Restaurar produto da lixeira
+     */
+    async restaurarProduto(id: string): Promise<ProdutoResponse> {
+        const response = await api.post(`${API_PREFIX}/produtos/${id}/restore`);
+        return response.data;
+    },
+
+    /**
+     * Deletar permanentemente (force delete) - apenas admin
+     */
+    async deletarPermanentemente(id: string): Promise<{ message: string; id: string }> {
+        const response = await api.delete(`${API_PREFIX}/produtos/${id}/force`);
+        return response.data;
     },
 
     /**
@@ -110,6 +289,202 @@ export const produtoService = {
     async listarCategorias(): Promise<Categoria[]> {
         const response = await api.get(`${API_PREFIX}/categorias`);
         return response.data.categorias || [];
+    },
+
+    /**
+     * Verificar se produto está na lixeira
+     */
+    async verificarStatus(id: string): Promise<{ existe: boolean; deletado: boolean; produto?: Produto }> {
+        try {
+            const { produto } = await this.buscarProduto(id);
+            return {
+                existe: true,
+                deletado: !!produto.deleted_at,
+                produto
+            };
+        } catch (error) {
+            return { existe: false, deletado: false };
+        }
+    },
+};
+
+// ===== SERVIÇO DE MOVIMENTOS DE STOCK =====
+
+export interface CriarMovimentoInput {
+    produto_id: string;
+    tipo: "entrada" | "saida";
+    tipo_movimento: "compra" | "venda" | "ajuste" | "nota_credito" | "devolucao";
+    quantidade: number;
+    motivo: string;
+    referencia?: string;
+    custo_unitario?: number;
+}
+
+export interface AjusteStockInput {
+    produto_id: string;
+    quantidade: number;
+    motivo: string;
+    custo_medio?: number;
+}
+
+export interface TransferenciaInput {
+    produto_origem_id: string;
+    produto_destino_id: string;
+    quantidade: number;
+    motivo: string;
+}
+
+export interface MovimentoResponse {
+    message: string;
+    movimento: MovimentoStock;
+    estoque_atualizado?: {
+        anterior: number;
+        atual: number;
+        diferenca: number;
+    };
+    ajuste?: {
+        anterior: number;
+        novo: number;
+        diferenca: number;
+    };
+    transferencia?: {
+        origem: {
+            id: string;
+            nome: string;
+            estoque_anterior: number;
+            estoque_novo: number;
+        };
+        destino: {
+            id: string;
+            nome: string;
+            estoque_anterior: number;
+            estoque_novo: number;
+        };
+        quantidade: number;
+    };
+}
+
+export interface ResumoStockResponse {
+    totalProdutos: number;
+    produtosAtivos: number;
+    produtosEstoqueBaixo: number;
+    produtosSemEstoque: number;
+    valorTotalEstoque: number;
+    movimentacoesHoje: number;
+    entradasHoje: number;
+    saidasHoje: number;
+    produtos_criticos: Produto[];
+}
+
+export interface EstatisticasMovimento {
+    total_movimentos: number;
+    total_entradas: number;
+    total_saidas: number;
+    por_tipo: Array<{ tipo_movimento: string; total: number }>;
+    por_mes: Array<{ mes: string; entradas: number; saidas: number }>;
+}
+
+export const movimentoStockService = {
+    /**
+     * Listar todos os movimentos de stock
+     */
+    async listarMovimentos(params: {
+        produto_id?: string;
+        tipo?: "entrada" | "saida";
+        tipo_movimento?: string;
+        data_inicio?: string;
+        data_fim?: string;
+        paginar?: boolean;
+        per_page?: number;
+    } = {}): Promise<{ message: string; movimentos: MovimentoStock[] | PaginatedResponse<MovimentoStock> }> {
+        const queryParams = new URLSearchParams();
+
+        if (params.produto_id) queryParams.append("produto_id", params.produto_id);
+        if (params.tipo) queryParams.append("tipo", params.tipo);
+        if (params.tipo_movimento) queryParams.append("tipo_movimento", params.tipo_movimento);
+        if (params.data_inicio) queryParams.append("data_inicio", params.data_inicio);
+        if (params.data_fim) queryParams.append("data_fim", params.data_fim);
+        if (params.paginar) queryParams.append("paginar", "true");
+        if (params.per_page) queryParams.append("per_page", params.per_page.toString());
+
+        const queryString = queryParams.toString();
+        const url = `${API_PREFIX}/movimentos-stock${queryString ? `?${queryString}` : ""}`;
+
+        const response = await api.get(url);
+        return response.data;
+    },
+
+    /**
+     * Resumo do estoque (para dashboard)
+     */
+    async resumo(): Promise<ResumoStockResponse> {
+        const response = await api.get(`${API_PREFIX}/movimentos-stock/resumo`);
+        return response.data;
+    },
+
+    /**
+     * Histórico de movimentos de um produto específico
+     */
+    async historicoProduto(produtoId: string, page = 1): Promise<{
+        message: string;
+        produto: { id: string; nome: string; estoque_atual: number };
+        movimentos: PaginatedResponse<MovimentoStock>;
+    }> {
+        const response = await api.get(`${API_PREFIX}/movimentos-stock/produto/${produtoId}?page=${page}`);
+        return response.data;
+    },
+
+    /**
+     * Criar novo movimento de stock (entrada/saída)
+     */
+    async criarMovimento(dados: CriarMovimentoInput): Promise<MovimentoResponse> {
+        const response = await api.post(`${API_PREFIX}/movimentos-stock`, dados);
+        return response.data;
+    },
+
+    /**
+     * Ajuste manual de stock (correção de inventário)
+     */
+    async ajuste(dados: AjusteStockInput): Promise<MovimentoResponse> {
+        const response = await api.post(`${API_PREFIX}/movimentos-stock/ajuste`, dados);
+        return response.data;
+    },
+
+    /**
+     * Transferência entre produtos
+     */
+    async transferencia(dados: TransferenciaInput): Promise<MovimentoResponse> {
+        const response = await api.post(`${API_PREFIX}/movimentos-stock/transferencia`, dados);
+        return response.data;
+    },
+
+    /**
+     * Mostrar movimento específico
+     */
+    async buscarMovimento(id: string): Promise<{ message: string; movimento: MovimentoStock }> {
+        const response = await api.get(`${API_PREFIX}/movimentos-stock/${id}`);
+        return response.data;
+    },
+
+    /**
+     * Estatísticas de movimentos (relatório)
+     */
+    async estatisticas(params: {
+        data_inicio?: string;
+        data_fim?: string;
+        produto_id?: string;
+    } = {}): Promise<{ message: string; estatisticas: EstatisticasMovimento }> {
+        const queryParams = new URLSearchParams();
+
+        if (params.data_inicio) queryParams.append("data_inicio", params.data_inicio);
+        if (params.data_fim) queryParams.append("data_fim", params.data_fim);
+        if (params.produto_id) queryParams.append("produto_id", params.produto_id);
+
+        const queryString = queryParams.toString();
+        const url = `${API_PREFIX}/movimentos-stock/estatisticas${queryString ? `?${queryString}` : ""}`;
+
+        const response = await api.get(url);
+        return response.data;
     },
 };
 
@@ -124,8 +499,108 @@ export function formatarPreco(valor: number): string {
 }
 
 export function calcularMargemLucro(precoCompra: number, precoVenda: number): number {
-    if (!precoCompra) return 0;
+    if (!precoCompra || precoCompra <= 0) return 0;
     return ((precoVenda - precoCompra) / precoCompra) * 100;
+}
+
+export function calcularValorEstoque(produto: Produto): number {
+    return produto.estoque_atual * (produto.custo_medio || produto.preco_compra || 0);
+}
+
+export function estaEstoqueBaixo(produto: Produto): boolean {
+    return produto.estoque_atual > 0 && produto.estoque_atual <= produto.estoque_minimo;
+}
+
+export function estaSemEstoque(produto: Produto): boolean {
+    return produto.estoque_atual === 0;
+}
+
+export function formatarData(data: string | null): string {
+    if (!data) return "-";
+    return new Date(data).toLocaleDateString("pt-PT");
+}
+
+export function formatarDataHora(data: string | null): string {
+    if (!data) return "-";
+    return new Date(data).toLocaleString("pt-PT");
+}
+
+export function formatarDuracao(duracao: string, unidade: string): string {
+    return `${duracao} ${unidade}`;
+}
+
+/**
+ * Verifica se o produto está na lixeira
+ */
+export function estaNaLixeira(produto: Produto): boolean {
+    return !!produto.deleted_at;
+}
+
+/**
+ * Verifica se é um serviço (não tem controle de stock)
+ */
+export function isServico(produto: Produto): boolean {
+    return produto.tipo === "servico";
+}
+
+/**
+ * Retorna badge de status para o produto
+ */
+export function getStatusBadge(produto: Produto): { texto: string; cor: string } {
+    if (produto.deleted_at) {
+        return { texto: "Na Lixeira", cor: "bg-red-100 text-red-800" };
+    }
+    if (produto.status === "inativo") {
+        return { texto: "Inativo", cor: "bg-gray-100 text-gray-800" };
+    }
+    return { texto: "Ativo", cor: "bg-green-100 text-green-800" };
+}
+
+/**
+ * Retorna badge de tipo (produto vs serviço)
+ */
+export function getTipoBadge(tipo: TipoProduto): { texto: string; cor: string } {
+    if (tipo === "servico") {
+        return { texto: "Serviço", cor: "bg-blue-100 text-blue-800" };
+    }
+    return { texto: "Produto", cor: "bg-purple-100 text-purple-800" };
+}
+
+/**
+ * Formata a unidade de medida para exibição
+ */
+export function formatarUnidadeMedida(unidade: UnidadeMedida | undefined): string {
+    if (!unidade) return "-";
+    const map: Record<UnidadeMedida, string> = {
+        hora: "Hora(s)",
+        dia: "Dia(s)",
+        semana: "Semana(s)",
+        mes: "Mês(es)",
+    };
+    return map[unidade] || unidade;
+}
+
+/**
+ * Calcula o valor total do estoque de uma lista de produtos
+ */
+export function calcularValorTotalEstoque(produtos: Produto[]): number {
+    return produtos.reduce((total, produto) => {
+        if (produto.tipo === "servico") return total;
+        return total + calcularValorEstoque(produto);
+    }, 0);
+}
+
+/**
+ * Conta produtos por status de estoque
+ */
+export function contarStatusEstoque(produtos: Produto[]) {
+    const fisicos = produtos.filter(p => p.tipo === "produto");
+    return {
+        total: fisicos.length,
+        estoqueBaixo: fisicos.filter(estaEstoqueBaixo).length,
+        semEstoque: fisicos.filter(estaSemEstoque).length,
+        normal: fisicos.filter(p => !estaEstoqueBaixo(p) && !estaSemEstoque(p)).length,
+    };
 }
 
 export default produtoService;

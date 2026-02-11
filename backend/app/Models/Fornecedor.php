@@ -3,10 +3,13 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
 class Fornecedor extends Model
 {
+    use SoftDeletes;
+
     protected $table = 'fornecedores';
 
     public $incrementing = false;
@@ -20,7 +23,10 @@ class Fornecedor extends Model
         'email',
         'endereco',
         'tipo',
+        'status',
     ];
+
+    protected $dates = ['deleted_at'];
 
     protected static function boot(): void
     {
@@ -36,5 +42,10 @@ class Fornecedor extends Model
     public function compras()
     {
         return $this->hasMany(Compra::class, 'fornecedor_id');
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
     }
 }

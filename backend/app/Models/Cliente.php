@@ -4,12 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\SoftDeletes; // Import necessário
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
 class Cliente extends Model
 {
-    use HasFactory, SoftDeletes; // Ativando SoftDeletes
+    use HasFactory, SoftDeletes;
 
     protected $table = 'clientes';
 
@@ -26,10 +26,9 @@ class Cliente extends Model
         'data_registro',
     ];
 
-    // Cast para data
     protected $dates = [
         'data_registro',
-        'deleted_at', // necessário para SoftDeletes
+        'deleted_at',
     ];
 
     protected static function boot(): void
@@ -42,8 +41,6 @@ class Cliente extends Model
             }
         });
     }
-
-    // ================= RELAÇÕES =================
 
     public function vendas()
     {

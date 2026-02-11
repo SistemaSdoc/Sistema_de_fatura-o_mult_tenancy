@@ -14,48 +14,122 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\RelatoriosController;
 
-Route::middleware(['auth:sanctum'])->group(function () {
+// Padrão UUID para validação de rotas
+$uuidPattern = '[0-9a-fA-F-]{36}';
 
+Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
+
+    // Rotas públicas para usuários autenticados
     Route::get('/me', [UserController::class, 'me']);
     Route::get('/dashboard', [DashboardController::class, 'index']);
 
     // ==================== ADMIN (acesso total) ====================
-    Route::middleware('role:admin')->group(function () {
+    Route::middleware('role:admin')->group(function () use ($uuidPattern) {
         Route::apiResource('/users', UserController::class);
+
+        // ===== ROTAS CLIENTES - ADMIN =====
+        Route::get('/clientes/todos', [ClienteController::class, 'indexWithTrashed']);
+        Route::post('/clientes/{id}/restore', [ClienteController::class, 'restore'])
+            ->where('id', $uuidPattern);
+        Route::delete('/clientes/{id}/force', [ClienteController::class, 'forceDelete'])
+            ->where('id', $uuidPattern);
         Route::apiResource('/clientes', ClienteController::class);
     });
 
     // ==================== ADMIN + OPERADOR ====================
-    Route::middleware('role:admin,operador')->group(function () {
-        // CRUD completo
-        Route::apiResource('/produtos', ProdutoController::class);
-        Route::apiResource('/categorias', CategoriaController::class);
-        Route::apiResource('/fornecedores', FornecedorController::class);
-        Route::apiResource('/clientes', ClienteController::class)->only(['index', 'show']); // Se operador pode ver clientes
+    Route::middleware('role:admin,operador')->group(function () use ($uuidPattern) {
 
-        // Compras e Stock
-        Route::apiResource('/compras', CompraController::class)->only(['index', 'show', 'store']);
-        Route::apiResource('/movimentos-stock', MovimentoStockController::class);
+        // ===== ROTAS PRODUTOS =====
+        Route::get('/produtos/todos', [ProdutoController::class, 'indexWithTrashed']);
+        Route::get('/produtos/trashed', [ProdutoController::class, 'indexOnlyTrashed']);
+        Route::get('/produtos/deletados', [ProdutoController::class, 'indexOnlyTrashed']);
+        Route::post('/produtos/{id}/restore', [ProdutoController::class, 'restore'])
+            ->where('id', $uuidPattern);
+        Route::delete('/produtos/{id}/force', [ProdutoController::class, 'forceDelete'])
+            ->where('id', $uuidPattern);
+        Route::patch('/produtos/{id}/status', [ProdutoController::class, 'alterarStatus'])
+            ->where('id', $uuidPattern);
+        Route::apiResource('/produtos', ProdutoController::class);
+
+        // ===== RESUMO DO ESTOQUE =====
+        Route::get('/estoque/resumo', [MovimentoStockController::class, 'resumo']);
+        Route::get('/movimentos-stock/resumo', [MovimentoStockController::class, 'resumo']);
+
+        // ===== CATEGORIAS =====
+        Route::get('/categorias/todas', [CategoriaController::class, 'indexWithTrashed']);
+        Route::get('/categorias/deletadas', [CategoriaController::class, 'indexOnlyTrashed']);
+        Route::post('/categorias/{id}/restore', [CategoriaController::class, 'restore'])
+            ->where('id', $uuidPattern);
+        Route::delete('/categorias/{id}/force', [CategoriaController::class, 'forceDelete'])
+            ->where('id', $uuidPattern);
+        Route::apiResource('/categorias', CategoriaController::class);
+
+        // ===== FORNECEDORES (COM SOFT DELETE) =====
+        // Rotas específicas PRIMEIRO (evita conflito com show/{id})
+        Route::get('/fornecedores/todos', [FornecedorController::class, 'indexWithTrashed']);
+        Route::get('/fornecedores/trashed', [FornecedorController::class, 'indexOnlyTrashed']);
+        Route::get('/fornecedores/deletados', [FornecedorController::class, 'indexOnlyTrashed']); // Compatibilidade
+        Route::post('/fornecedores/{id}/restore', [FornecedorController::class, 'restore'])
+            ->where('id', $uuidPattern);
+        Route::delete('/fornecedores/{id}/force', [FornecedorController::class, 'forceDelete'])
+            ->where('id', $uuidPattern);
+
+        // Rotas padrão do resource (DEPOIS das específicas)
+        Route::apiResource('/fornecedores', FornecedorController::class);
+
+        // ===== CLIENTES (Operador: apenas visualização) =====
+        Route::get('/clientes', [ClienteController::class, 'index']);
+        Route::get('/clientes/{id}', [ClienteController::class, 'show'])
+            ->where('id', $uuidPattern);
+        Route::post('/clientes', [ClienteController::class, 'store']);
+        Route::put('/clientes/{id}', [ClienteController::class, 'update'])
+            ->where('id', $uuidPattern);
+        Route::delete('/clientes/{id}', [ClienteController::class, 'destroy'])
+            ->where('id', $uuidPattern);
+
+        // ===== COMPRAS =====
+        Route::get('/compras', [CompraController::class, 'index']);
+        Route::post('/compras', [CompraController::class, 'store']);
+        Route::get('/compras/{id}', [CompraController::class, 'show'])
+            ->where('id', $uuidPattern);
+
+        // ===== MOVIMENTOS DE STOCK =====
+        Route::get('/movimentos-stock', [MovimentoStockController::class, 'index']);
+        Route::post('/movimentos-stock', [MovimentoStockController::class, 'store']);
         Route::post('/movimentos-stock/ajuste', [MovimentoStockController::class, 'ajuste']);
+        Route::get('/movimentos-stock/{id}', [MovimentoStockController::class, 'show'])
+            ->where('id', $uuidPattern);
     });
 
     // ==================== ADMIN + OPERADOR + CONTABILISTA ====================
-    Route::middleware('role:admin,operador,contabilista')->group(function () {
+    Route::middleware('role:admin,operador,contabilista')->group(function () use ($uuidPattern) {
 
-        // Vendas
-        Route::get('/vendas/listar', [VendaController::class, 'index']);
-        Route::get('/vendas/create', [VendaController::class, 'create']);
+        // ===== VENDAS =====
+        Route::get('/vendas', [VendaController::class, 'index']);
         Route::post('/vendas', [VendaController::class, 'store']);
-        Route::get('/vendas/{venda}', [VendaController::class, 'show']);
-        Route::post('/vendas/{venda}/cancelar', [VendaController::class, 'cancelar']);
+        Route::get('/vendas/{venda}', [VendaController::class, 'show'])
+            ->where('venda', $uuidPattern);
+        Route::post('/vendas/{venda}/cancelar', [VendaController::class, 'cancelar'])
+            ->where('venda', $uuidPattern);
 
-        // Pagamentos e Faturas
-        Route::apiResource('/pagamentos', PagamentoController::class);
+        // ===== PAGAMENTOS =====
+        Route::get('/pagamentos', [PagamentoController::class, 'index']);
+        Route::post('/pagamentos', [PagamentoController::class, 'store']);
+        Route::get('/pagamentos/{id}', [PagamentoController::class, 'show'])
+            ->where('id', $uuidPattern);
+        Route::put('/pagamentos/{id}', [PagamentoController::class, 'update'])
+            ->where('id', $uuidPattern);
+        Route::delete('/pagamentos/{id}', [PagamentoController::class, 'destroy'])
+            ->where('id', $uuidPattern);
+        Route::get('/vendas/listar', [VendaController::class, 'index']);
+
+        // ===== FATURAS =====
         Route::get('/faturas', [FaturaController::class, 'index']);
-        Route::get('/faturas/{fatura}', [FaturaController::class, 'show']);
+        Route::get('/faturas/{fatura}', [FaturaController::class, 'show'])
+            ->where('fatura', $uuidPattern);
         Route::post('/faturas/gerar', [FaturaController::class, 'gerarFatura']);
 
-        // Relatórios
+        // ===== RELATÓRIOS =====
         Route::get('/relatorios/dashboard', [RelatoriosController::class, 'dashboard']);
         Route::get('/relatorios/vendas', [RelatoriosController::class, 'vendas']);
         Route::get('/relatorios/compras', [RelatoriosController::class, 'compras']);

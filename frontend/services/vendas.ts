@@ -1,3 +1,5 @@
+// src/services/vendas.ts
+
 import api from "./axios";
 import { AxiosError } from "axios";
 
@@ -32,7 +34,6 @@ export interface User {
   ultimo_login?: string | null;
 }
 
-
 export interface CriarItemVendaPayload {
   produto_id: string;
   quantidade: number;
@@ -41,35 +42,41 @@ export interface CriarItemVendaPayload {
 }
 
 export interface CriarVendaPayload {
-  cliente_id: string | null;
+  cliente_id?: string | null;      // Opcional agora
+  cliente_nome?: string;           // Novo campo
   tipo_documento?: 'fatura' | 'recibo' | 'nota_credito' | 'nota_debito';
   faturar?: boolean;
   itens: CriarItemVendaPayload[];
 }
 
+/* -------- Cliente (ATUALIZADO) -------- */
+export type TipoCliente = "consumidor_final" | "empresa";
 
-/* -------- Cliente -------- */
 export interface Cliente {
   id: string;
   nome: string;
-  nif?: string | null;
-  tipo: 'consumidor_final' | 'empresa';
-  telefone?: string | null;
-  email?: string | null;
-  endereco?: string | null;
-  data_registro?: string;
+  nif: string | null;
+  tipo: TipoCliente;
+  telefone: string | null;
+  email: string | null;
+  endereco: string | null;
+  data_registro: string;
   created_at?: string;
   updated_at?: string;
+  deleted_at?: string | null;
 }
 
-export interface ClientePayload {
+export interface CriarClienteInput {
   nome: string;
-  nif?: string | null;
-  tipo: 'consumidor_final' | 'empresa';
-  telefone?: string | null;
-  email?: string | null;
-  endereco?: string | null;
+  nif?: string;
+  tipo?: TipoCliente;
+  telefone?: string;
+  email?: string;
+  endereco?: string;
+  data_registro?: string;
 }
+
+export interface AtualizarClienteInput extends Partial<CriarClienteInput> { }
 
 /* -------- Categoria -------- */
 export interface Categoria {
@@ -100,40 +107,89 @@ export interface Fornecedor {
   user_id: string;
 }
 
-/* -------- Produto -------- */
+/* -------- Produto (ATUALIZADO) -------- */
+export type TipoProduto = "produto" | "servico";
+export type StatusProduto = "ativo" | "inativo";
+export type UnidadeMedida = "hora" | "dia" | "semana" | "mes";
+
 export interface Produto {
   id: string;
-  nome: string;
-  descricao?: string | null;
+  categoria_id: string | null;
+  categoria?: Categoria;
+  fornecedor_id?: string | null;
+  fornecedor?: Fornecedor;
+  user_id?: string;
   codigo?: string | null;
-  categoria_id: string;
-  user_id: string;
+  nome: string;
+  descricao?: string;
   preco_compra: number;
   preco_venda: number;
-  sujeito_iva: boolean;
-  isento_iva: boolean;
+  custo_medio?: number;
   taxa_iva: number;
+  sujeito_iva?: boolean;
   estoque_atual: number;
   estoque_minimo: number;
-  custo_medio?: number;
-  tipo: 'produto' | 'servico';
-  status: 'ativo' | 'inativo';
+  status: StatusProduto;
+  tipo: TipoProduto;
+  // Campos de serviço
+  retencao?: number;
+  duracao_estimada?: string;
+  unidade_medida?: UnidadeMedida;
+  // Soft delete
+  deleted_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  // Relacionamentos
+  movimentosStock?: MovimentoStock[];
+  // Campos adicionais para listagem
+  data_exclusao?: string;
+  esta_deletado?: boolean;
 }
 
-export interface ProdutoPayload {
-  nome: string;
-  descricao?: string | null;
+export interface CriarProdutoInput {
+  tipo: TipoProduto;
+  categoria_id?: string | null;
+  fornecedor_id?: string | null;
   codigo?: string | null;
-  categoria_id: string;
-  user_id: string;
-  preco_compra: number;
+  nome: string;
+  descricao?: string;
   preco_venda: number;
-  sujeito_iva?: boolean;
+  preco_compra?: number;
   taxa_iva?: number;
-  estoque_atual: number;
-  estoque_minimo: number;
-  tipo?: 'produto' | 'servico';
-  status?: 'ativo' | 'inativo';
+  sujeito_iva?: boolean;
+  estoque_atual?: number;
+  estoque_minimo?: number;
+  status?: StatusProduto;
+  // Campos de serviço
+  retencao?: number;
+  duracao_estimada?: string;
+  unidade_medida?: UnidadeMedida;
+}
+
+export interface AtualizarProdutoInput extends Partial<CriarProdutoInput> { }
+
+export interface ListarProdutosParams {
+  tipo?: TipoProduto;
+  status?: StatusProduto;
+  categoria_id?: string;
+  busca?: string;
+  estoque_baixo?: boolean;
+  sem_estoque?: boolean;
+  ordenar?: string;
+  direcao?: "asc" | "desc";
+  paginar?: boolean;
+  per_page?: number;
+  with_trashed?: boolean;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  current_page: number;
+  last_page: number;
+  per_page: number;
+  total: number;
+  from?: number;
+  to?: number;
 }
 
 /* -------- Venda -------- */
@@ -155,18 +211,18 @@ export interface Venda {
   cliente_id?: string | null;
   user_id: string;
   tipo_documento: 'fatura' | 'recibo' | 'nota_credito' | 'nota_debito';
-  serie: string;                  // Série fiscal (ex: "A")
-  numero: number;                 // Número sequencial da fatura
-  base_tributavel: number;        // Soma das bases tributáveis
-  total_iva: number;              // Soma do IVA
-  total_retencao: number;         // Soma da retenção
-  total_pagar: number;            // base + IVA - retenção
-  total: number;                  // mesmo valor de total_pagar
-  data_venda: string;             // YYYY-MM-DD
-  hora_venda: string;             // HH:mm:ss
+  serie: string;
+  numero: number;
+  base_tributavel: number;
+  total_iva: number;
+  total_retencao: number;
+  total_pagar: number;
+  total: number;
+  data_venda: string;
+  hora_venda: string;
   status: 'aberta' | 'faturada' | 'cancelada';
-  hash_fiscal?: string | null;    // SHA1 do número + data + total
-  itens?: ItemVenda[];            // Itens da venda
+  hash_fiscal?: string | null;
+  itens?: ItemVenda[];
   cliente?: {
     id: string;
     nome: string;
@@ -182,7 +238,6 @@ export interface Venda {
     email: string;
   };
 }
-
 
 /* -------- Compra -------- */
 export interface ItemCompra {
@@ -263,13 +318,13 @@ export interface Pagamento {
   hora_pagamento: string;
 }
 
-/* -------- Movimento de Stock -------- */
+/* -------- Movimento de Stock (ATUALIZADO) -------- */
 export interface MovimentoStock {
   id: string;
   produto_id: string;
   user_id: string;
   tipo: 'entrada' | 'saida';
-  tipo_movimento: 'compra' | 'venda' | 'ajuste' | 'nota_credito';
+  tipo_movimento: 'compra' | 'venda' | 'ajuste' | 'nota_credito' | 'devolucao';
   quantidade: number;
   custo_medio: number;
   stock_minimo: number;
@@ -277,18 +332,31 @@ export interface MovimentoStock {
   observacao?: string;
   created_at?: string;
   updated_at?: string;
+  // Campos adicionais do novo serviço
+  estoque_anterior?: number;
+  estoque_novo?: number;
+  custo_unitario?: number;
+  motivo?: string;
+  user?: {
+    id: string;
+    name: string;
+  };
+  produto?: Produto;
 }
 
 export interface CriarMovimentoPayload {
   produto_id: string;
   tipo: 'entrada' | 'saida';
-  tipo_movimento?: 'compra' | 'venda' | 'ajuste' | 'nota_credito';
+  tipo_movimento?: 'compra' | 'venda' | 'ajuste' | 'nota_credito' | 'devolucao';
   quantidade: number;
   custo_medio?: number;
   stock_minimo?: number;
   referencia?: string;
   observacao?: string;
   data?: string;
+  // Campos adicionais do novo serviço
+  motivo?: string;
+  custo_unitario?: number;
 }
 
 /* -------- Dashboard -------- */
@@ -299,9 +367,7 @@ export interface DashboardData {
     email: string;
     role: string;
   };
-
   clientesAtivos: number;
-
   produtos: {
     total: number;
     ativos: number;
@@ -313,7 +379,6 @@ export interface DashboardData {
     abertas: number;
     faturadas: number;
     canceladas: number;
-
     ultimas: Array<{
       id: number;
       cliente: string;
@@ -321,21 +386,17 @@ export interface DashboardData {
       status: string;
       data: string;
     }>;
-
     vendasPorMes: Array<{
       mes: string;
       total: number;
     }>;
   };
-
   faturas: {
     total: number;
     pendentes: number;
     pagas: number;
-
     receitaMesAtual: number;
     receitaMesAnterior: number;
-
     ultimas: Array<{
       id: number;
       venda_id: number;
@@ -345,14 +406,12 @@ export interface DashboardData {
       cliente: string | null;
     }>;
   };
-
   pagamentos: {
     total: number;
     dinheiro: number;
     cartao: number;
     transferencia: number;
   };
-
   indicadores: {
     produtosMaisVendidos: Array<{
       produto: string;
@@ -413,7 +472,7 @@ export interface FaturasResumo {
 }
 
 export interface PagamentoMetodo {
-  metodo: string; // dinheiro | cartao | transferencia
+  metodo: string;
   total: number;
 }
 
@@ -432,13 +491,10 @@ export interface DashboardResponse {
     crescimentoPercentual: number;
     ivaArrecadado: number;
   };
-  
   receitaMesAtual: number;
   receitaMesAnterior: number;
   clientesAtivos: number;
-
 }
-
 
 /* ================== SERVIÇOS ================== */
 
@@ -455,59 +511,141 @@ export async function criarVenda(payload: CriarVendaPayload) {
   return response.data;
 }
 
+/* ================== CLIENTES (ATUALIZADO) ================== */
+const API_PREFIX = "/api";
 
-/* ================== CLIENTES ================== */
+// Configuração para evitar cache
+const noCacheConfig = {
+  headers: {
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0'
+  }
+};
+
 export const clienteService = {
-  listar: async (): Promise<Cliente[]> => {
-    try {
-      const { data } = await api.get<{ data: Cliente[] }>("/api/clientes");
-      return data.data ?? [];
-    } catch (err) {
-      handleAxiosError(err, "[CLIENTE] Erro ao listar clientes");
-      return [];
-    }
+  async listar(): Promise<Cliente[]> {
+    console.log('[CLIENTE SERVICE] Listar clientes - Iniciando...');
+    const timestamp = new Date().getTime();
+    const response = await api.get(`${API_PREFIX}/clientes?t=${timestamp}`, noCacheConfig);
+    console.log('[CLIENTE SERVICE] Listar clientes - Sucesso:', response.data);
+    return response.data.clientes || [];
   },
 
-  criar: async (payload: ClientePayload): Promise<Cliente | null> => {
-    try {
-      const { data } = await api.post<Cliente>("/api/clientes", payload);
-      return data;
-    } catch (err) {
-      handleAxiosError(err, "[CLIENTE] Erro ao criar cliente");
-      return null;
-    }
+  async listarTodos(): Promise<Cliente[]> {
+    console.log('[CLIENTE SERVICE] Listar todos clientes (com deletados) - Iniciando...');
+    const timestamp = new Date().getTime();
+    const response = await api.get(`${API_PREFIX}/clientes/todos?t=${timestamp}`, noCacheConfig);
+    console.log('[CLIENTE SERVICE] Listar todos clientes - Sucesso:', response.data);
+    return response.data.clientes || [];
   },
 
-  buscar: async (id: string): Promise<Cliente | null> => {
+  async buscar(id: string): Promise<Cliente | null> {
+    console.log('[CLIENTE SERVICE] Buscar cliente - ID:', id);
+    const timestamp = new Date().getTime();
     try {
-      const { data } = await api.get<Cliente>(`/api/clientes/${id}`);
-      return data;
+      const response = await api.get(`${API_PREFIX}/clientes/${id}?t=${timestamp}`, noCacheConfig);
+      console.log('[CLIENTE SERVICE] Buscar cliente - Sucesso:', response.data);
+      return response.data.cliente;
     } catch (err) {
       handleAxiosError(err, "[CLIENTE] Erro ao buscar cliente");
       return null;
     }
   },
 
-  atualizar: async (id: string, payload: Partial<ClientePayload>): Promise<Cliente | null> => {
+  async criar(dados: CriarClienteInput): Promise<Cliente | null> {
+    console.log('[CLIENTE SERVICE] Criar cliente - Dados:', dados);
     try {
-      const { data } = await api.put<Cliente>(`/api/clientes/${id}`, payload);
-      return data;
+      const response = await api.post(`${API_PREFIX}/clientes`, dados);
+      console.log('[CLIENTE SERVICE] Criar cliente - Sucesso:', response.data);
+      return response.data.cliente;
+    } catch (err) {
+      handleAxiosError(err, "[CLIENTE] Erro ao criar cliente");
+      return null;
+    }
+  },
+
+  async atualizar(id: string, dados: AtualizarClienteInput): Promise<Cliente | null> {
+    console.log('╔══════════════════════════════════════════════════════════╗');
+    console.log('║ [CLIENTE SERVICE] ATUALIZAR CLIENTE - INÍCIO            ║');
+    console.log('╚══════════════════════════════════════════════════════════╝');
+    console.log('[CLIENTE SERVICE] ID recebido:', id);
+    console.log('[CLIENTE SERVICE] Dados:', dados);
+
+    const url = `${API_PREFIX}/clientes/${id}`;
+    console.log('[CLIENTE SERVICE] URL completa:', url);
+
+    try {
+      const response = await api.put(url, dados);
+      console.log('[CLIENTE SERVICE] Resposta sucesso:', response.status, response.data);
+      return response.data.cliente;
     } catch (err) {
       handleAxiosError(err, "[CLIENTE] Erro ao atualizar cliente");
       return null;
     }
   },
 
-  deletar: async (id: string): Promise<boolean> => {
+  async deletar(id: string): Promise<boolean> {
+    console.log('╔══════════════════════════════════════════════════════════╗');
+    console.log('║ [CLIENTE SERVICE] DELETAR CLIENTE - INÍCIO              ║');
+    console.log('╚══════════════════════════════════════════════════════════╝');
+    console.log('[CLIENTE SERVICE] ID recebido:', id);
+
     try {
-      await api.delete(`/api/clientes/${id}`);
+      const response = await api.delete(`${API_PREFIX}/clientes/${id}`);
+      console.log('[CLIENTE SERVICE] Resposta sucesso:', response.status, response.data);
       return true;
     } catch (err) {
       handleAxiosError(err, "[CLIENTE] Erro ao deletar cliente");
       return false;
     }
+  },
+
+  async restaurar(id: string): Promise<Cliente | null> {
+    console.log('[CLIENTE SERVICE] Restaurar cliente - ID:', id);
+    try {
+      const response = await api.post(`${API_PREFIX}/clientes/${id}/restore`);
+      console.log('[CLIENTE SERVICE] Cliente restaurado - Sucesso:', response.data);
+      return response.data.cliente;
+    } catch (err) {
+      handleAxiosError(err, "[CLIENTE] Erro ao restaurar cliente");
+      return null;
+    }
+  },
+
+  async removerPermanentemente(id: string): Promise<boolean> {
+    console.log('[CLIENTE SERVICE] Remover cliente permanentemente - ID:', id);
+    try {
+      const response = await api.delete(`${API_PREFIX}/clientes/${id}/force`);
+      console.log('[CLIENTE SERVICE] Cliente removido permanentemente - Sucesso:', response.data);
+      return true;
+    } catch (err) {
+      handleAxiosError(err, "[CLIENTE] Erro ao remover cliente permanentemente");
+      return false;
+    }
   }
 };
+
+// Funções utilitárias para clientes
+export function formatarNIF(nif: string | null): string {
+  if (!nif) return "-";
+  if (nif.length === 14) {
+    return `${nif.slice(0, 9)} ${nif.slice(9, 11)} ${nif.slice(11)}`;
+  }
+  return nif;
+}
+
+export function getTipoClienteLabel(tipo: TipoCliente): string {
+  const labels: Record<TipoCliente, string> = {
+    consumidor_final: "Consumidor Final",
+    empresa: "Empresa",
+  };
+  return labels[tipo] || tipo;
+}
+
+export function getTipoClienteColor(tipo: TipoCliente): string {
+  return tipo === "empresa" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-700";
+}
 
 /* ================== FORNECEDORES ================== */
 export const fornecedorService = {
@@ -562,35 +700,220 @@ export const fornecedorService = {
   }
 };
 
-/* ================== PRODUTOS ================== */
+/* ================== PRODUTOS (ATUALIZADO) ================== */
 export const produtoService = {
-  listarPaginado: async (page = 1): Promise<Paginacao<Produto>> => {
+  /**
+   * Listar produtos ativos (não deletados) com filtros e paginação opcional
+   */
+  async listar(params: ListarProdutosParams = {}): Promise<{ message: string; produtos: Produto[] | PaginatedResponse<Produto> }> {
     try {
-      const { data } = await api.get<Paginacao<Produto>>(`/api/produtos?page=${page}`);
-      return data;
+      const queryParams = new URLSearchParams();
+
+      if (params.tipo) queryParams.append("tipo", params.tipo);
+      if (params.status) queryParams.append("status", params.status);
+      if (params.categoria_id) queryParams.append("categoria_id", params.categoria_id);
+      if (params.busca) queryParams.append("busca", params.busca);
+      if (params.estoque_baixo) queryParams.append("estoque_baixo", "true");
+      if (params.sem_estoque) queryParams.append("sem_estoque", "true");
+      if (params.ordenar) queryParams.append("ordenar", params.ordenar);
+      if (params.direcao) queryParams.append("direcao", params.direcao);
+      if (params.paginar) queryParams.append("paginar", "true");
+      if (params.per_page) queryParams.append("per_page", params.per_page.toString());
+
+      const queryString = queryParams.toString();
+      const url = `${API_PREFIX}/produtos${queryString ? `?${queryString}` : ""}`;
+
+      const response = await api.get(url);
+      return response.data;
     } catch (err) {
       handleAxiosError(err, "[PRODUTO] Erro ao listar produtos");
-      return { data: [], current_page: 1, last_page: 1, per_page: 0, total: 0 };
+      return { message: "Erro", produtos: [] };
     }
   },
 
-  criar: async (payload: ProdutoPayload): Promise<Produto | null> => {
+  /**
+   * Listar todos os produtos (ativos + deletados) - para admin
+   */
+  async listarTodos(params: Omit<ListarProdutosParams, "with_trashed" | "status" | "estoque_baixo" | "sem_estoque"> = {}): Promise<{
+    message: string;
+    produtos: Produto[];
+    total: number;
+    ativos: number;
+    deletados: number;
+    produtos_fisicos: number;
+    servicos: number;
+  }> {
     try {
-      const { data } = await api.post<Produto>("/api/produtos", payload);
-      return data;
+      const queryParams = new URLSearchParams();
+
+      if (params.tipo) queryParams.append("tipo", params.tipo);
+      if (params.busca) queryParams.append("busca", params.busca);
+
+      const queryString = queryParams.toString();
+      const url = `${API_PREFIX}/produtos/all${queryString ? `?${queryString}` : ""}`;
+
+      const response = await api.get(url);
+      return response.data;
+    } catch (err) {
+      handleAxiosError(err, "[PRODUTO] Erro ao listar todos produtos");
+      return { message: "Erro", produtos: [], total: 0, ativos: 0, deletados: 0, produtos_fisicos: 0, servicos: 0 };
+    }
+  },
+
+  /**
+   * Listar APENAS produtos deletados (lixeira) com filtros
+   */
+  async listarDeletados(params: Omit<ListarProdutosParams, "with_trashed" | "status" | "estoque_baixo" | "sem_estoque" | "categoria_id"> = {}): Promise<{
+    message: string;
+    produtos: Produto[] | PaginatedResponse<Produto>;
+    total_deletados: number;
+  }> {
+    try {
+      const queryParams = new URLSearchParams();
+
+      if (params.busca) queryParams.append("busca", params.busca);
+      if (params.paginar) queryParams.append("paginar", "true");
+      if (params.per_page) queryParams.append("per_page", params.per_page.toString());
+
+      const queryString = queryParams.toString();
+      const url = `${API_PREFIX}/produtos/trashed${queryString ? `?${queryString}` : ""}`;
+
+      const response = await api.get(url);
+      return response.data;
+    } catch (err) {
+      handleAxiosError(err, "[PRODUTO] Erro ao listar produtos deletados");
+      return { message: "Erro", produtos: [], total_deletados: 0 };
+    }
+  },
+
+  /**
+   * Buscar produto por ID com todos os relacionamentos
+   */
+  async buscar(id: string): Promise<Produto | null> {
+    try {
+      const response = await api.get(`${API_PREFIX}/produtos/${id}`);
+      return response.data.produto;
+    } catch (err) {
+      handleAxiosError(err, "[PRODUTO] Erro ao buscar produto");
+      return null;
+    }
+  },
+
+  /**
+   * Criar novo produto/serviço
+   */
+  async criar(dados: CriarProdutoInput): Promise<Produto | null> {
+    try {
+      const response = await api.post(`${API_PREFIX}/produtos`, dados);
+      return response.data.produto;
     } catch (err) {
       handleAxiosError(err, "[PRODUTO] Erro ao criar produto");
       return null;
     }
   },
 
-  atualizar: async (id: string, payload: ProdutoPayload): Promise<Produto | null> => {
+  /**
+   * Atualizar produto
+   */
+  async atualizar(id: string, dados: AtualizarProdutoInput): Promise<Produto | null> {
     try {
-      const { data } = await api.put<Produto>(`/api/produtos/${id}`, payload);
-      return data;
+      const response = await api.put(`${API_PREFIX}/produtos/${id}`, dados);
+      return response.data.produto;
     } catch (err) {
       handleAxiosError(err, "[PRODUTO] Erro ao atualizar produto");
       return null;
+    }
+  },
+
+  /**
+   * Alterar status (ativo/inativo)
+   */
+  async alterarStatus(id: string, status: StatusProduto): Promise<Produto | null> {
+    try {
+      const response = await api.post(`${API_PREFIX}/produtos/${id}/status`, { status });
+      return response.data.produto;
+    } catch (err) {
+      handleAxiosError(err, "[PRODUTO] Erro ao alterar status");
+      return null;
+    }
+  },
+
+  /**
+   * Mover para lixeira (soft delete)
+   */
+  async moverParaLixeira(id: string): Promise<{ message: string; soft_deleted: boolean; id: string; deleted_at?: string } | null> {
+    try {
+      const response = await api.delete(`${API_PREFIX}/produtos/${id}`);
+      return response.data;
+    } catch (err) {
+      handleAxiosError(err, "[PRODUTO] Erro ao mover para lixeira");
+      return null;
+    }
+  },
+
+  /**
+   * Restaurar produto da lixeira
+   */
+  async restaurar(id: string): Promise<Produto | null> {
+    try {
+      const response = await api.post(`${API_PREFIX}/produtos/${id}/restore`);
+      return response.data.produto;
+    } catch (err) {
+      handleAxiosError(err, "[PRODUTO] Erro ao restaurar produto");
+      return null;
+    }
+  },
+
+  /**
+   * Deletar permanentemente (force delete) - apenas admin
+   */
+  async deletarPermanentemente(id: string): Promise<{ message: string; id: string } | null> {
+    try {
+      const response = await api.delete(`${API_PREFIX}/produtos/${id}/force`);
+      return response.data;
+    } catch (err) {
+      handleAxiosError(err, "[PRODUTO] Erro ao deletar permanentemente");
+      return null;
+    }
+  },
+
+  /**
+   * Listar categorias (para o select)
+   */
+  async listarCategorias(): Promise<Categoria[]> {
+    try {
+      const response = await api.get(`${API_PREFIX}/categorias`);
+      return response.data.categorias || [];
+    } catch (err) {
+      handleAxiosError(err, "[PRODUTO] Erro ao listar categorias");
+      return [];
+    }
+  },
+
+  /**
+   * Verificar se produto está na lixeira
+   */
+  async verificarStatus(id: string): Promise<{ existe: boolean; deletado: boolean; produto?: Produto }> {
+    try {
+      const produto = await this.buscar(id);
+      return {
+        existe: !!produto,
+        deletado: !!produto?.deleted_at,
+        produto: produto || undefined
+      };
+    } catch (error) {
+      return { existe: false, deletado: false };
+    }
+  },
+
+  // Método legado para compatibilidade
+  listarPaginado: async (page = 1): Promise<Paginacao<Produto>> => {
+    try {
+      const { data } = await api.get<Paginacao<Produto>>(`/api/produtos?page=${page}`);
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[PRODUTO] Erro ao listar produtos paginados");
+      return { data: [], current_page: 1, last_page: 1, per_page: 0, total: 0 };
     }
   },
 
@@ -604,6 +927,78 @@ export const produtoService = {
     }
   }
 };
+
+// Funções utilitárias para produtos
+export function formatarPreco(valor: number): string {
+  return valor.toLocaleString("pt-PT", {
+    style: "currency",
+    currency: "AOA",
+    minimumFractionDigits: 2,
+  });
+}
+
+export function calcularMargemLucro(precoCompra: number, precoVenda: number): number {
+  if (!precoCompra || precoCompra <= 0) return 0;
+  return ((precoVenda - precoCompra) / precoCompra) * 100;
+}
+
+export function calcularValorEstoque(produto: Produto): number {
+  return produto.estoque_atual * (produto.custo_medio || produto.preco_compra || 0);
+}
+
+export function estaEstoqueBaixo(produto: Produto): boolean {
+  return produto.estoque_atual > 0 && produto.estoque_atual <= produto.estoque_minimo;
+}
+
+export function estaSemEstoque(produto: Produto): boolean {
+  return produto.estoque_atual === 0;
+}
+
+export function formatarData(data: string | null): string {
+  if (!data) return "-";
+  return new Date(data).toLocaleDateString("pt-PT");
+}
+
+export function formatarDataHora(data: string | null): string {
+  if (!data) return "-";
+  return new Date(data).toLocaleString("pt-PT");
+}
+
+export function estaNaLixeira(produto: Produto): boolean {
+  return !!produto.deleted_at;
+}
+
+export function isServico(produto: Produto): boolean {
+  return produto.tipo === "servico";
+}
+
+export function getStatusBadge(produto: Produto): { texto: string; cor: string } {
+  if (produto.deleted_at) {
+    return { texto: "Na Lixeira", cor: "bg-red-100 text-red-800" };
+  }
+  if (produto.status === "inativo") {
+    return { texto: "Inativo", cor: "bg-gray-100 text-gray-800" };
+  }
+  return { texto: "Ativo", cor: "bg-green-100 text-green-800" };
+}
+
+export function getTipoBadge(tipo: TipoProduto): { texto: string; cor: string } {
+  if (tipo === "servico") {
+    return { texto: "Serviço", cor: "bg-blue-100 text-blue-800" };
+  }
+  return { texto: "Produto", cor: "bg-purple-100 text-purple-800" };
+}
+
+export function formatarUnidadeMedida(unidade: UnidadeMedida | undefined): string {
+  if (!unidade) return "-";
+  const map: Record<UnidadeMedida, string> = {
+    hora: "Hora(s)",
+    dia: "Dia(s)",
+    semana: "Semana(s)",
+    mes: "Mês(es)",
+  };
+  return map[unidade] || unidade;
+}
 
 /* ================== CATEGORIAS ================== */
 export const categoriaService = {
@@ -658,38 +1053,213 @@ export const categoriaService = {
   }
 };
 
-/* ================== MOVIMENTOS DE STOCK ================== */
+/* ================== MOVIMENTOS DE STOCK (ATUALIZADO) ================== */
 export const stockService = {
-  listar: async (): Promise<MovimentoStock[]> => {
+  /**
+   * Listar todos os movimentos de stock
+   */
+  async listar(params: {
+    produto_id?: string;
+    tipo?: "entrada" | "saida";
+    tipo_movimento?: string;
+    data_inicio?: string;
+    data_fim?: string;
+    paginar?: boolean;
+    per_page?: number;
+  } = {}): Promise<MovimentoStock[]> {
     try {
-      const { data } = await api.get<MovimentoStock[]>("/api/movimentos-stock");
-      return data;
+      const queryParams = new URLSearchParams();
+
+      if (params.produto_id) queryParams.append("produto_id", params.produto_id);
+      if (params.tipo) queryParams.append("tipo", params.tipo);
+      if (params.tipo_movimento) queryParams.append("tipo_movimento", params.tipo_movimento);
+      if (params.data_inicio) queryParams.append("data_inicio", params.data_inicio);
+      if (params.data_fim) queryParams.append("data_fim", params.data_fim);
+      if (params.paginar) queryParams.append("paginar", "true");
+      if (params.per_page) queryParams.append("per_page", params.per_page.toString());
+
+      const queryString = queryParams.toString();
+      const url = `${API_PREFIX}/movimentos-stock${queryString ? `?${queryString}` : ""}`;
+
+      const response = await api.get(url);
+      return response.data.movimentos || [];
     } catch (err) {
       handleAxiosError(err, "[STOCK] Erro ao listar movimentos");
       return [];
     }
   },
 
-  criar: async (payload: CriarMovimentoPayload): Promise<MovimentoStock | null> => {
+  /**
+   * Resumo do estoque (para dashboard)
+   */
+  async resumo(): Promise<{
+    totalProdutos: number;
+    produtosAtivos: number;
+    produtosEstoqueBaixo: number;
+    produtosSemEstoque: number;
+    valorTotalEstoque: number;
+    movimentacoesHoje: number;
+    entradasHoje: number;
+    saidasHoje: number;
+    produtos_criticos: Produto[];
+  }> {
     try {
-      const { data } = await api.post<MovimentoStock>("/api/movimentos-stock", payload);
-      return data;
+      const response = await api.get(`${API_PREFIX}/movimentos-stock/resumo`);
+      return response.data;
+    } catch (err) {
+      handleAxiosError(err, "[STOCK] Erro ao obter resumo");
+      return {
+        totalProdutos: 0,
+        produtosAtivos: 0,
+        produtosEstoqueBaixo: 0,
+        produtosSemEstoque: 0,
+        valorTotalEstoque: 0,
+        movimentacoesHoje: 0,
+        entradasHoje: 0,
+        saidasHoje: 0,
+        produtos_criticos: []
+      };
+    }
+  },
+
+  /**
+   * Histórico de movimentos de um produto específico
+   */
+  async historicoProduto(produtoId: string, page = 1): Promise<{
+    message: string;
+    produto: { id: string; nome: string; estoque_atual: number };
+    movimentos: PaginatedResponse<MovimentoStock>;
+  }> {
+    try {
+      const response = await api.get(`${API_PREFIX}/movimentos-stock/produto/${produtoId}?page=${page}`);
+      return response.data;
+    } catch (err) {
+      handleAxiosError(err, "[STOCK] Erro ao obter histórico");
+      return {
+        message: "Erro",
+        produto: { id: produtoId, nome: "", estoque_atual: 0 },
+        movimentos: { data: [], current_page: 1, last_page: 1, per_page: 20, total: 0 }
+      };
+    }
+  },
+
+  /**
+   * Criar novo movimento de stock (entrada/saída)
+   */
+  async criar(payload: CriarMovimentoPayload): Promise<MovimentoStock | null> {
+    try {
+      const response = await api.post(`${API_PREFIX}/movimentos-stock`, {
+        produto_id: payload.produto_id,
+        tipo: payload.tipo,
+        tipo_movimento: payload.tipo_movimento || "ajuste",
+        quantidade: Math.abs(payload.quantidade),
+        motivo: payload.observacao || payload.motivo,
+        referencia: payload.referencia,
+        custo_unitario: payload.custo_unitario,
+      });
+      return response.data.movimento;
     } catch (err) {
       handleAxiosError(err, "[STOCK] Erro ao criar movimento");
       return null;
     }
   },
 
-  obter: async (id: string): Promise<MovimentoStock | null> => {
+  /**
+   * Ajuste manual de stock (correção de inventário)
+   */
+  async ajuste(produto_id: string, quantidade: number, motivo: string, custo_medio?: number): Promise<{
+    message: string;
+    movimento?: MovimentoStock;
+    ajuste: {
+      anterior: number;
+      novo: number;
+      diferenca: number;
+    };
+  } | null> {
     try {
-      const { data } = await api.get<MovimentoStock>(`/api/movimentos-stock/${id}`);
-      return data;
+      const response = await api.post(`${API_PREFIX}/movimentos-stock/ajuste`, {
+        produto_id,
+        quantidade,
+        motivo,
+        custo_medio,
+      });
+      return response.data;
+    } catch (err) {
+      handleAxiosError(err, "[STOCK] Erro ao realizar ajuste");
+      return null;
+    }
+  },
+
+  /**
+   * Transferência entre produtos
+   */
+  async transferencia(produto_origem_id: string, produto_destino_id: string, quantidade: number, motivo: string): Promise<{
+    message: string;
+    transferencia: {
+      origem: { id: string; nome: string; estoque_anterior: number; estoque_novo: number };
+      destino: { id: string; nome: string; estoque_anterior: number; estoque_novo: number };
+      quantidade: number;
+    };
+  } | null> {
+    try {
+      const response = await api.post(`${API_PREFIX}/movimentos-stock/transferencia`, {
+        produto_origem_id,
+        produto_destino_id,
+        quantidade,
+        motivo,
+      });
+      return response.data;
+    } catch (err) {
+      handleAxiosError(err, "[STOCK] Erro ao realizar transferência");
+      return null;
+    }
+  },
+
+  /**
+   * Mostrar movimento específico
+   */
+  async obter(id: string): Promise<MovimentoStock | null> {
+    try {
+      const response = await api.get(`${API_PREFIX}/movimentos-stock/${id}`);
+      return response.data.movimento;
     } catch (err) {
       handleAxiosError(err, "[STOCK] Erro ao obter movimento");
       return null;
     }
   },
 
+  /**
+   * Estatísticas de movimentos (relatório)
+   */
+  async estatisticas(params: {
+    data_inicio?: string;
+    data_fim?: string;
+    produto_id?: string;
+  } = {}): Promise<{
+    total_movimentos: number;
+    total_entradas: number;
+    total_saidas: number;
+    por_tipo: Array<{ tipo_movimento: string; total: number }>;
+    por_mes: Array<{ mes: string; entradas: number; saidas: number }>;
+  } | null> {
+    try {
+      const queryParams = new URLSearchParams();
+      if (params.data_inicio) queryParams.append("data_inicio", params.data_inicio);
+      if (params.data_fim) queryParams.append("data_fim", params.data_fim);
+      if (params.produto_id) queryParams.append("produto_id", params.produto_id);
+
+      const queryString = queryParams.toString();
+      const url = `${API_PREFIX}/movimentos-stock/estatisticas${queryString ? `?${queryString}` : ""}`;
+
+      const response = await api.get(url);
+      return response.data.estatisticas;
+    } catch (err) {
+      handleAxiosError(err, "[STOCK] Erro ao obter estatísticas");
+      return null;
+    }
+  },
+
+  // Métodos legados para compatibilidade
   atualizar: async (id: string, payload: Partial<CriarMovimentoPayload>): Promise<MovimentoStock | null> => {
     try {
       const { data } = await api.put<MovimentoStock>(`/api/movimentos-stock/${id}`, payload);
@@ -712,13 +1282,13 @@ export const stockService = {
 
   calcularStock: async (produto_id: string): Promise<number> => {
     try {
-      const movimentos = await stockService.listar();
+      const movimentos = await stockService.listar({ produto_id });
       const entradas = movimentos
-        .filter(m => m.produto_id === produto_id && m.tipo === "entrada")
+        .filter(m => m.tipo === "entrada")
         .reduce((sum, m) => sum + m.quantidade, 0);
       const saidas = movimentos
-        .filter(m => m.produto_id === produto_id && m.tipo === "saida")
-        .reduce((sum, m) => sum + m.quantidade, 0);
+        .filter(m => m.tipo === "saida")
+        .reduce((sum, m) => sum + Math.abs(m.quantidade), 0);
       return entradas - saidas;
     } catch (err) {
       handleAxiosError(err, "[STOCK] Erro ao calcular stock");
@@ -759,15 +1329,14 @@ export const vendaService = {
     }
   },
 
- listarVendas: async (): Promise<Venda[]> => {
-  try {
-    const { data } = await api.get<{ message: string; vendas: Venda[] }>("/api/vendas/listar");
-    return data.vendas ?? [];
-  } catch (err) {
-    handleAxiosError(err, "[VENDAS] Erro ao listar vendas");
-    return [];
-  }
-
+  listarVendas: async (): Promise<Venda[]> => {
+    try {
+      const { data } = await api.get<{ message: string; vendas: Venda[] }>("/api/vendas");
+      return data.vendas ?? [];
+    } catch (err) {
+      handleAxiosError(err, "[VENDAS] Erro ao listar vendas");
+      return [];
+    }
   },
 
   obterDadosNovaVenda: async (): Promise<{ clientes: Cliente[]; produtos: Produto[] }> => {
@@ -805,13 +1374,10 @@ export const vendaService = {
 export const dashboardService = {
   fetch: async (): Promise<DashboardResponse | null> => {
     try {
-      // 1️⃣ Faz a chamada
       const { data } = await api.get<{
         message: string;
         dados: DashboardResponse;
       }>("/api/dashboard");
-
-      // 2️⃣ Retorna apenas "dados", que é do tipo DashboardResponse
       return data.dados;
     } catch (err) {
       handleAxiosError(err, "[DASHBOARD]");

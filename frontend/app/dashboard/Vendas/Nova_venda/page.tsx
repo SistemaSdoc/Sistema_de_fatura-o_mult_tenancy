@@ -8,12 +8,21 @@ import { AxiosError } from "axios";
 import MainEmpresa from "../../../components/MainEmpresa";
 import { useAuth } from "@/context/authprovider";
 
+// Serviços atualizados
 import {
   criarVenda,
   Produto,
   Cliente,
-  obterDadosNovaVenda,
+  clienteService,
+  produtoService,
   CriarVendaPayload,
+  TipoCliente,
+  formatarNIF,
+  getTipoClienteLabel,
+  estaEstoqueBaixo,
+  estaSemEstoque,
+  isServico,
+  formatarPreco,
 } from "@/services/vendas";
 
 // Novo serviço de pagamentos
@@ -53,6 +62,9 @@ interface PagamentoUI {
   hora_pagamento: string;
 }
 
+// Tipo para modo de cliente
+type ModoCliente = 'cadastrado' | 'avulso';
+
 export default function NovaVendaPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
@@ -66,6 +78,10 @@ export default function NovaVendaPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
+
+  // ===== ESTADO PARA CLIENTE AVULSO =====
+  const [modoCliente, setModoCliente] = useState<ModoCliente>('cadastrado');
+  const [clienteAvulso, setClienteAvulso] = useState('');
 
   // Estado do formulário de item
   const [formItem, setFormItem] = useState<FormItemState>({
@@ -99,17 +115,30 @@ export default function NovaVendaPage() {
 
     async function carregarDados() {
       try {
-        const data = await obterDadosNovaVenda();
-        setClientes(data.clientes);
-        setProdutos(data.produtos);
+        // Usar os novos serviços
+        const [clientesData, produtosData] = await Promise.all([
+          clienteService.listar(),
+          produtoService.listar({ status: "ativo", paginar: false }).then(res =>
+            Array.isArray(res.produtos) ? res.produtos : []
+          ),
+        ]);
+
+        setClientes(clientesData);
+        setProdutos(produtosData);
 
         // Separar produtos disponíveis (estoque > ESTOQUE_MINIMO) dos de estoque baixo
-        const disponiveis = data.produtos.filter(p => p.estoque_atual > ESTOQUE_MINIMO);
-        const estoqueBaixo = data.produtos.filter(p => p.estoque_atual > 0 && p.estoque_atual <= ESTOQUE_MINIMO);
+        // Ignorar serviços (não têm controle de stock)
+        const produtosFisicos = produtosData.filter(p => !isServico(p));
+
+        const disponiveis = produtosFisicos.filter(p => p.estoque_atual > ESTOQUE_MINIMO);
+        const estoqueBaixo = produtosFisicos.filter(p =>
+          p.estoque_atual > 0 && p.estoque_atual <= ESTOQUE_MINIMO
+        );
 
         setProdutosDisponiveis(disponiveis);
         setProdutosEstoqueBaixo(estoqueBaixo);
-      } catch {
+      } catch (err) {
+        console.error("Erro ao carregar dados:", err);
         setError("Erro ao carregar dados iniciais");
       }
     }
@@ -131,7 +160,9 @@ export default function NovaVendaPage() {
     }
 
     const preco_venda = produto.preco_venda;
-    const quantidade = Math.min(formItem.quantidade, produto.estoque_atual);
+    // Para serviços, não limitar pela quantidade em estoque
+    const maxQuantidade = isServico(produto) ? Infinity : produto.estoque_atual;
+    const quantidade = Math.min(formItem.quantidade, maxQuantidade);
     const desconto = formItem.desconto;
 
     const base = preco_venda * quantidade - desconto;
@@ -159,7 +190,7 @@ export default function NovaVendaPage() {
     setFormItem(prev => ({
       ...prev,
       produto_id: produtoId,
-      quantidade: produto ? Math.min(1, produto.estoque_atual) : 1,
+      quantidade: produto ? (isServico(produto) ? 1 : Math.min(1, produto.estoque_atual)) : 1,
       desconto: 0,
     }));
   };
@@ -167,7 +198,8 @@ export default function NovaVendaPage() {
   const handleQuantidadeChange = (valor: number) => {
     const produto = produtos.find(p => p.id === formItem.produto_id);
     if (produto) {
-      const maxEstoque = produto.estoque_atual;
+      // Serviços não têm limite de estoque
+      const maxEstoque = isServico(produto) ? Infinity : produto.estoque_atual;
       const qtd = Math.max(1, Math.min(valor, maxEstoque));
       setFormItem(prev => ({ ...prev, quantidade: qtd }));
     }
@@ -183,7 +215,10 @@ export default function NovaVendaPage() {
     if (!previewItem) return;
 
     const produto = produtos.find(p => p.id === formItem.produto_id);
-    if (produto && formItem.quantidade > produto.estoque_atual) {
+    if (!produto) return;
+
+    // Validar estoque apenas para produtos físicos
+    if (!isServico(produto) && formItem.quantidade > produto.estoque_atual) {
       setError(`Estoque insuficiente. Disponível: ${produto.estoque_atual}`);
       return;
     }
@@ -354,8 +389,14 @@ export default function NovaVendaPage() {
 
   /* ================= SALVAR ================= */
   const salvarVenda = async () => {
-    if (!clienteSelecionado) {
-      setError("Selecione um cliente");
+    // Validação do cliente atualizada
+    if (modoCliente === 'cadastrado' && !clienteSelecionado) {
+      setError("Selecione um cliente cadastrado");
+      return;
+    }
+
+    if (modoCliente === 'avulso' && !clienteAvulso.trim()) {
+      setError("Digite o nome do cliente");
       return;
     }
 
@@ -366,7 +407,7 @@ export default function NovaVendaPage() {
 
     // Validar pagamento se houver
     if (pagamentos.length > 0 && totalRestante > 0) {
-      setError(`Falta pagar ${totalRestante.toLocaleString("pt-AO")} Kz`);
+      setError(`Falta pagar ${formatarPreco(totalRestante)}`);
       return;
     }
 
@@ -375,20 +416,17 @@ export default function NovaVendaPage() {
     setSucesso(null);
 
     try {
-      // 1. Criar a venda
+      // 1. Criar a venda com cliente_id ou cliente_nome
       const payload: CriarVendaPayload = {
-        cliente_id: clienteSelecionado.id,
-        tipo_documento: pagamentoCompleto ? "FR" : "FT", // FR se pago, FT se pendente
+        cliente_id: modoCliente === 'cadastrado' ? clienteSelecionado!.id : null,
+        cliente_nome: modoCliente === 'avulso' ? clienteAvulso.trim() : null,
+        tipo_documento: pagamentoCompleto ? "recibo" : "fatura", // recibo se pago, fatura se pendente
         faturar: true,
         itens: itens.map(item => ({
           produto_id: item.produto_id,
           quantidade: Number(item.quantidade),
           preco_venda: Number(item.preco_venda),
           desconto: Number(item.desconto),
-          base_tributavel: Number(item.base_tributavel),
-          valor_iva: Number(item.valor_iva),
-          valor_retencao: Number(item.valor_retencao),
-          subtotal: Number(item.subtotal),
         })),
       };
 
@@ -469,15 +507,15 @@ export default function NovaVendaPage() {
     <MainEmpresa>
       <div className="p-6 space-y-6">
         {/* Header com botão voltar */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 ">
           <button
             onClick={() => router.back()}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            className="p-2  hover:bg-gray-100 rounded-full transition-colors"
             title="Voltar"
           >
             <ArrowLeft className="w-6 h-6 text-[#123859]" />
           </button>
-          <h1 className="text-3xl font-bold text-[#123859]">Nova Venda</h1>
+          <h1 className="text-3xl font-bold text-[#F9941F]">Nova Venda</h1>
         </div>
 
         {error && (
@@ -492,27 +530,85 @@ export default function NovaVendaPage() {
           </div>
         )}
 
-        {/* CLIENTE */}
-        <div className="bg-white p-4 rounded shadow">
-          <label htmlFor="cliente" className="font-semibold">Cliente</label>
-          <select
-            id="cliente"
-            title="Selecionar cliente"
-            className="w-full border p-2 rounded mt-1"
-            value={clienteSelecionado?.id ?? ""}
-            onChange={e =>
-              setClienteSelecionado(
-                clientes.find(c => c.id === e.target.value) ?? null
-              )
-            }
-          >
-            <option value="">Selecione</option>
-            {clientes.map(c => (
-              <option key={c.id} value={c.id}>
-                {c.nome} {c.nif ? `(${c.nif})` : ""}
-              </option>
-            ))}
-          </select>
+        {/* CLIENTE - ATUALIZADO COM MODO AVULSO */}
+        <div className="bg-white p-4 rounded shadow space-y-4">
+          <div className="flex items-center justify-between">
+            <label className="font-semibold">Cliente</label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setModoCliente('cadastrado');
+                  setClienteAvulso('');
+                  setClienteSelecionado(null);
+                }}
+                className={`px-3 py-1 text-sm rounded transition-colors ${
+                  modoCliente === 'cadastrado'
+                    ? 'bg-[#123859] text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                Cadastrado
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setModoCliente('avulso');
+                  setClienteSelecionado(null);
+                }}
+                className={`px-3 py-1 text-sm rounded transition-colors ${
+                  modoCliente === 'avulso'
+                    ? 'bg-[#123859] text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                Avulso
+              </button>
+            </div>
+          </div>
+
+          {modoCliente === 'cadastrado' ? (
+            <div>
+              <label htmlFor="cliente" className="text-sm text-gray-600 block mb-1">
+                Selecione um cliente cadastrado
+              </label>
+              <select
+                id="cliente"
+                title="Selecionar cliente"
+                className="w-full border p-2 rounded"
+                value={clienteSelecionado?.id ?? ""}
+                onChange={e =>
+                  setClienteSelecionado(
+                    clientes.find(c => c.id === e.target.value) ?? null
+                  )
+                }
+              >
+                <option value="">Selecione</option>
+                {clientes.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.nome} {c.nif ? `(${formatarNIF(c.nif)})` : ""} - {getTipoClienteLabel(c.tipo)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div>
+              <label htmlFor="cliente-avulso" className="text-sm text-gray-600 block mb-1">
+                Digite o nome do cliente
+              </label>
+              <input
+                id="cliente-avulso"
+                type="text"
+                placeholder="Nome do cliente"
+                className="w-full border p-2 rounded"
+                value={clienteAvulso}
+                onChange={e => setClienteAvulso(e.target.value)}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Este cliente não será cadastrado no sistema, apenas o nome será salvo na venda.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* FORMULÁRIO - ADICIONAR ITEM */}
@@ -571,7 +667,7 @@ export default function NovaVendaPage() {
                 </option>
                 {produtosDisponiveis.map(p => (
                   <option key={p.id} value={p.id}>
-                    {p.nome} (Stock: {p.estoque_atual} | {p.preco_venda.toLocaleString("pt-AO")} Kz)
+                    {p.nome} {p.codigo ? `(${p.codigo})` : ""} (Stock: {p.estoque_atual} | {formatarPreco(p.preco_venda)})
                   </option>
                 ))}
               </select>
@@ -590,15 +686,23 @@ export default function NovaVendaPage() {
                   id="qtd-form"
                   type="number"
                   min={1}
-                  max={produtoSelecionado?.estoque_atual ?? 1}
+                  max={produtoSelecionado && !isServico(produtoSelecionado) ? produtoSelecionado.estoque_atual : undefined}
                   className="border p-3 rounded w-full mt-1"
                   value={formItem.quantidade}
                   onChange={e => handleQuantidadeChange(Number(e.target.value))}
                   disabled={!formItem.produto_id}
                 />
-                {produtoSelecionado && (
+                {produtoSelecionado && !isServico(produtoSelecionado) && (
                   <p className="text-xs text-gray-500 mt-1">
                     Disponível: {produtoSelecionado.estoque_atual}
+                    {estaEstoqueBaixo(produtoSelecionado) && (
+                      <span className="text-orange-600 ml-1">(Estoque baixo!)</span>
+                    )}
+                  </p>
+                )}
+                {produtoSelecionado && isServico(produtoSelecionado) && (
+                  <p className="text-xs text-blue-500 mt-1">
+                    Serviço - Sem controle de stock
                   </p>
                 )}
               </div>
@@ -622,7 +726,7 @@ export default function NovaVendaPage() {
                   id="preco-form"
                   disabled
                   className="border p-3 rounded bg-gray-100 w-full mt-1 font-mono"
-                  value={previewItem ? `${previewItem.preco_venda.toLocaleString("pt-AO")} Kz` : "-"}
+                  value={previewItem ? formatarPreco(previewItem.preco_venda) : "-"}
                 />
               </div>
             </div>
@@ -632,25 +736,25 @@ export default function NovaVendaPage() {
                 <div>
                   <span className="text-gray-600">Base:</span>
                   <p className="font-semibold text-[#123859]">
-                    {previewItem.base_tributavel.toLocaleString("pt-AO")} Kz
+                    {formatarPreco(previewItem.base_tributavel)}
                   </p>
                 </div>
                 <div>
                   <span className="text-gray-600">IVA:</span>
                   <p className="font-semibold text-[#123859]">
-                    {previewItem.valor_iva.toLocaleString("pt-AO")} Kz
+                    {formatarPreco(previewItem.valor_iva)}
                   </p>
                 </div>
                 <div>
                   <span className="text-gray-600">Retenção:</span>
                   <p className="font-semibold text-[#123859]">
-                    {previewItem.valor_retencao.toLocaleString("pt-AO")} Kz
+                    {formatarPreco(previewItem.valor_retencao)}
                   </p>
                 </div>
                 <div>
                   <span className="text-gray-600">Subtotal:</span>
                   <p className="font-bold text-[#F9941F] text-lg">
-                    {previewItem.subtotal.toLocaleString("pt-AO")} Kz
+                    {formatarPreco(previewItem.subtotal)}
                   </p>
                 </div>
               </div>
@@ -685,20 +789,20 @@ export default function NovaVendaPage() {
                     <div className="font-semibold text-[#123859]">{item.descricao}</div>
                     <div className="text-sm text-gray-600 space-x-4">
                       <span>Qtd: {item.quantidade}</span>
-                      <span>Preço: {item.preco_venda.toLocaleString("pt-AO")} Kz</span>
+                      <span>Preço: {formatarPreco(item.preco_venda)}</span>
                       {item.desconto > 0 && (
-                        <span className="text-red-600">Desc: -{item.desconto.toLocaleString("pt-AO")} Kz</span>
+                        <span className="text-red-600">Desc: -{formatarPreco(item.desconto)}</span>
                       )}
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
-                      Base: {item.base_tributavel.toLocaleString("pt-AO")} |
-                      IVA: {item.valor_iva.toLocaleString("pt-AO")} |
-                      Ret: {item.valor_retencao.toLocaleString("pt-AO")}
+                      Base: {formatarPreco(item.base_tributavel)} |
+                      IVA: {formatarPreco(item.valor_iva)} |
+                      Ret: {formatarPreco(item.valor_retencao)}
                     </div>
                   </div>
                   <div className="text-right flex items-center gap-4">
                     <div className="font-bold text-[#F9941F]">
-                      {item.subtotal.toLocaleString("pt-AO")} Kz
+                      {formatarPreco(item.subtotal)}
                     </div>
                     <button
                       type="button"
@@ -718,45 +822,45 @@ export default function NovaVendaPage() {
 
         {/* SEÇÃO DE PAGAMENTO */}
         {mostrarPagamento && itens.length > 0 && (
-          <div className="bg-white p-6 rounded shadow border-2 border-green-200">
+          <div className="bg-white p-6 rounded shadow border-2 ">
             <div className="flex items-center gap-2 mb-4">
-              <CreditCard className="text-green-600" size={24} />
-              <h2 className="font-bold text-green-700 text-xl">Pagamento</h2>
+              <CreditCard className="text-[#F9941F]" size={24} />
+              <h2 className="font-bold text-[#F9941F] text-xl">Pagamento</h2>
             </div>
 
             {/* Resumo do pagamento - ATUALIZADO COM TROCO */}
-            <div className="bg-green-50 p-4 rounded-lg mb-4 grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="bg-[#F9941F]/5 p-4 rounded-lg mb-4 grid grid-cols-2 md:grid-cols-5 gap-4">
               <div>
-                <span className="text-sm text-gray-600">Total da Venda:</span>
+                <span className="text-sm text-[#123859]">Total da Venda:</span>
                 <p className="font-bold text-[#123859] text-lg">
-                  {totalLiquido.toLocaleString("pt-AO")} Kz
+                  {formatarPreco(totalLiquido)}
                 </p>
               </div>
               <div>
                 <span className="text-sm text-gray-600">Total Pago:</span>
-                <p className="font-bold text-green-600 text-lg">
-                  {totalPago.toLocaleString("pt-AO")} Kz
+                <p className="font-bold text-[#123859] text-lg">
+                  {formatarPreco(totalPago)}
                 </p>
               </div>
               <div>
                 <span className="text-sm text-gray-600">Aplicado:</span>
-                <p className="font-bold text-blue-600 text-lg">
-                  {totalEfetivo.toLocaleString("pt-AO")} Kz
+                <p className="font-bold text-[#123859] text-lg">
+                  {formatarPreco(totalEfetivo)}
                 </p>
               </div>
               {!pagamentoCompleto && (
                 <div>
                   <span className="text-sm text-gray-600">Restante:</span>
-                  <p className="font-bold text-orange-600 text-lg">
-                    {totalRestante.toLocaleString("pt-AO")} Kz
+                  <p className="font-bold text-[#F9941F] text-lg">
+                    {formatarPreco(totalRestante)}
                   </p>
                 </div>
               )}
               {pagamentoExcedente && (
-                <div className="bg-blue-100 p-2 rounded">
-                  <span className="text-sm text-blue-700 font-semibold">TROCO:</span>
-                  <p className="font-bold text-blue-700 text-xl">
-                    {troco.toLocaleString("pt-AO")} Kz
+                <div className=" p-2 rounded">
+                  <span className="text-sm text-[#123859] font-semibold">TROCO:</span>
+                  <p className="font-bold text-[#123859] text-xl">
+                    {formatarPreco(troco)}
                   </p>
                 </div>
               )}
@@ -779,7 +883,7 @@ export default function NovaVendaPage() {
 
               <div>
                 <label className="text-sm font-semibold text-gray-700">
-                  Valor (Kz) {totalRestante > 0 && <span className="text-orange-600">(Falta: {totalRestante.toLocaleString("pt-AO")})</span>}
+                  Valor (Kz) {totalRestante > 0 && <span className="text-[#F9941F]">(Falta: {formatarPreco(totalRestante)})</span>}
                 </label>
                 <input
                   type="number"
@@ -792,7 +896,7 @@ export default function NovaVendaPage() {
                 />
                 {pagamentoExcedente && (
                   <p className="text-xs text-blue-600 mt-1">
-                    Troco: {troco.toLocaleString("pt-AO")} Kz
+                    Troco: {formatarPreco(troco)}
                   </p>
                 )}
               </div>
@@ -813,7 +917,7 @@ export default function NovaVendaPage() {
                   type="button"
                   onClick={adicionarPagamento}
                   disabled={!formPagamento.valor_pago || parseFloat(formPagamento.valor_pago) <= 0}
-                  className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-2 rounded font-semibold flex items-center justify-center gap-2 transition-colors"
+                  className="w-full bg-[#123859] hover:bg-[#123859]/80 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-2 rounded font-semibold flex items-center justify-center gap-2 transition-colors"
                 >
                   <Plus size={18} />
                   Adicionar
@@ -837,16 +941,16 @@ export default function NovaVendaPage() {
                       <div>
                         <div className="font-medium">#{index + 1} - {getLabelMetodo(pag.metodo)}</div>
                         {pag.referencia && <div className="text-xs text-gray-500">Ref: {pag.referencia}</div>}
-                        {pag.troco > 0 && <div className="text-xs text-blue-600 font-semibold">Troco: {pag.troco.toLocaleString("pt-AO")} Kz</div>}
+                        {pag.troco > 0 && <div className="text-xs text-blue-600 font-semibold">Troco: {formatarPreco(pag.troco)}</div>}
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
                       <span className="font-bold text-[#123859]">
-                        {pag.valor_pago.toLocaleString("pt-AO")} Kz
+                        {formatarPreco(pag.valor_pago)}
                       </span>
                       <button
                         onClick={() => removerPagamento(pag.id)}
-                        className="text-red-500 hover:text-red-700 p-1"
+                        className="text-[#F9941F] hover:text-[#F9941F]-700 p-1"
                       >
                         <Trash2 size={16} />
                       </button>
@@ -858,14 +962,14 @@ export default function NovaVendaPage() {
 
             {/* Status do pagamento */}
             {pagamentoCompleto && (
-              <div className="mt-4 p-4 bg-green-100 text-green-700 rounded-lg flex items-center gap-3">
+              <div className="mt-4 p-4  text-[#123859] rounded-lg flex items-center gap-3">
                 <CheckCircle2 size={24} />
                 <div>
                   <p className="font-semibold">Pagamento Completo!</p>
                   {troco > 0 ? (
-                    <p className="text-sm">Troco a devolver: <strong>{troco.toLocaleString("pt-AO")} Kz</strong></p>
+                    <p className="text-sm">Troco a devolver: <strong>{formatarPreco(troco)}</strong></p>
                   ) : (
-                    <p className="text-sm">A venda será registrada como Fatura-Recibo (FR)</p>
+                    <p className="text-sm">A venda será registrada</p>
                   )}
                 </div>
               </div>
@@ -876,7 +980,7 @@ export default function NovaVendaPage() {
                 <Calculator size={24} />
                 <div>
                   <p className="font-semibold">Pagamento Parcial</p>
-                  <p className="text-sm">Falta pagar: <strong>{totalRestante.toLocaleString("pt-AO")} Kz</strong></p>
+                  <p className="text-sm">Falta pagar: <strong>{formatarPreco(totalRestante)}</strong></p>
                   <p className="text-xs mt-1">A venda será registrada como Fatura (FT) - pendente de pagamento</p>
                 </div>
               </div>
@@ -890,20 +994,20 @@ export default function NovaVendaPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div>
               <span className="text-gray-300">Total Base:</span>
-              <p className="font-bold text-xl">{totalBase.toLocaleString("pt-AO")} Kz</p>
+              <p className="font-bold text-xl">{formatarPreco(totalBase)}</p>
             </div>
             <div>
               <span className="text-gray-300">Total IVA:</span>
-              <p className="font-bold text-xl">{totalIva.toLocaleString("pt-AO")} Kz</p>
+              <p className="font-bold text-xl">{formatarPreco(totalIva)}</p>
             </div>
             <div>
               <span className="text-gray-300">Retenção:</span>
-              <p className="font-bold text-xl">{totalRetencao.toLocaleString("pt-AO")} Kz</p>
+              <p className="font-bold text-xl">{formatarPreco(totalRetencao)}</p>
             </div>
             <div>
               <span className="text-[#F9941F]">TOTAL LÍQUIDO:</span>
               <p className="font-bold text-2xl text-[#F9941F]">
-                {totalLiquido.toLocaleString("pt-AO")} Kz
+                {formatarPreco(totalLiquido)}
               </p>
             </div>
           </div>
@@ -913,18 +1017,18 @@ export default function NovaVendaPage() {
             <div className="mt-4 pt-4 border-t border-white/20 grid grid-cols-2 md:grid-cols-3 gap-4">
               <div>
                 <span className="text-gray-300">Total Pago:</span>
-                <p className="font-bold text-green-400">{totalPago.toLocaleString("pt-AO")} Kz</p>
+                <p className="font-bold text-[#F9941F]">{formatarPreco(totalPago)}</p>
               </div>
               {troco > 0 && (
                 <div>
                   <span className="text-gray-300">Troco:</span>
-                  <p className="font-bold text-blue-400">{troco.toLocaleString("pt-AO")} Kz</p>
+                  <p className="font-bold text-[#F9941F]">{formatarPreco(troco)}</p>
                 </div>
               )}
               {totalRestante > 0 && (
                 <div>
                   <span className="text-gray-300">Pendente:</span>
-                  <p className="font-bold text-orange-400">{totalRestante.toLocaleString("pt-AO")} Kz</p>
+                  <p className="font-bold text-[#F9941F]">{formatarPreco(totalRestante)}</p>
                 </div>
               )}
             </div>

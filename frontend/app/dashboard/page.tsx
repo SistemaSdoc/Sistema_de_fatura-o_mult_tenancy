@@ -476,20 +476,20 @@ export default function DashboardPage(): React.ReactElement {
         {/* Header */}
         <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
           <div>
-            <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-[#123859]">Dashboard</h1>
+            <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-[#F9941F]">Dashboard</h1>
             <p className="text-[#123859]/60 mt-1 text-sm md:text-base">Visão geral do sistema em tempo real</p>
           </div>
           <motion.div
             className="flex items-center gap-2 px-3 py-2 bg-white rounded-full shadow-sm border border-[#E5E5E5] text-xs md:text-sm text-[#123859] w-fit"
             whileHover={{ scale: 1.05 }}
           >
-            <div className="w-2 h-2 rounded-full bg-[#123859] animate-pulse" />
+            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
             Sistema Online
           </motion.div>
         </motion.div>
 
         {/* KPIs Grid - Responsivo */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 text-[#F9941F]">
           {kpisConfig.map((kpi, index) => (
             <KPICard key={index} {...kpi} />
           ))}

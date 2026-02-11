@@ -297,9 +297,6 @@ export default function RelatorioFaturas() {
                                 <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                                 Dados em tempo real
                             </div>
-                            <button className="px-4 py-2 bg-[#F9941F] text-white rounded-lg hover:bg-[#e08516] transition-colors text-sm font-medium">
-                                Exportar PDF
-                            </button>
                         </div>
                     </div>
                 </header>

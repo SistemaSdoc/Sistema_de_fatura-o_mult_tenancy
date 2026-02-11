@@ -14,22 +14,26 @@ class MovimentoStock extends Model
 
     protected $fillable = [
         'produto_id',
-        'tipo',        // entrada | saida | ajuste
-        'quantidade',      // compra | venda | nota_credito | ajuste_manual
-        'referencia',  // id da compra/venda/fatura
-        'user_id',     // quem executou
-        'tipo_movimento', // compra | venda | ajuste | nota_credito
-        'custo_medio',
-        'stock_minimo',
+        'user_id',
+        'tipo',
         'tipo_movimento',
+        'quantidade',
+        'estoque_anterior',
+        'estoque_novo',
+        'custo_medio',
+        'custo_unitario',
+        'referencia',
         'observacao',
-        
-
     ];
 
     protected $casts = [
         'quantidade' => 'integer',
-        'data'       => 'datetime',
+        'estoque_anterior' => 'integer',
+        'estoque_novo' => 'integer',
+        'custo_medio' => 'decimal:2',
+        'custo_unitario' => 'decimal:2',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
     ];
 
     protected static function boot(): void
@@ -43,15 +47,36 @@ class MovimentoStock extends Model
         });
     }
 
-    // ================= RELAÇÕES =================
-
+    // Relações
     public function produto()
     {
-        return $this->belongsTo(Produto::class);
+        return $this->belongsTo(Produto::class)->withTrashed();
     }
 
     public function user()
     {
-        return $this->belongsTo(User::class, 'user_id');
+        return $this->belongsTo(User::class);
+    }
+
+    // Scopes
+    public function scopeEntradas($query)
+    {
+        return $query->where('tipo', 'entrada');
+    }
+
+    public function scopeSaidas($query)
+    {
+        return $query->where('tipo', 'saida');
+    }
+
+    // Acessors
+    public function getValorTotalAttribute()
+    {
+        return abs($this->quantidade) * ($this->custo_unitario ?? $this->custo_medio ?? 0);
+    }
+
+    public function getTipoFormatadoAttribute()
+    {
+        return $this->tipo === 'entrada' ? 'Entrada' : 'Saída';
     }
 }

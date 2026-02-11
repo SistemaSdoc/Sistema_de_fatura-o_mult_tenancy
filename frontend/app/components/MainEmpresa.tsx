@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { LucideIcon } from "lucide-react";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation"; // Adicionado useRouter
 import { useAuth } from "@/hooks/useAuth";
 import { estoqueService, Produto } from "@/services/estoque";
 
@@ -39,6 +39,8 @@ interface MenuItem {
     icon: LucideIcon;
     path: string;
     links: DropdownLink[];
+    // Novo campo para indicar se é apenas um grupo (não tem link próprio)
+    isGroup?: boolean;
 }
 
 interface MainEmpresaProps {
@@ -54,6 +56,7 @@ export default function MainEmpresa({
     companyName = "Minha Empresa",
 }: MainEmpresaProps) {
     const pathname = usePathname();
+    const router = useRouter(); // Para navegação programática
     const { user, loading: userLoading, isAdmin } = useAuth();
 
     const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -61,7 +64,7 @@ export default function MainEmpresa({
     const [hoveredItem, setHoveredItem] = useState<string | null>(null);
     const [isLoaded, setIsLoaded] = useState(false);
 
-    // Estados para notificações de estoque - APENAS PRODUTOS COM ESTOQUE BAIXO
+    // Estados para notificações de estoque
     const [notificacoesAberto, setNotificacoesAberto] = useState(false);
     const [produtosEstoqueBaixo, setProdutosEstoqueBaixo] = useState<Produto[]>([]);
     const [loadingNotificacoes, setLoadingNotificacoes] = useState(false);
@@ -76,12 +79,10 @@ export default function MainEmpresa({
         setIsLoaded(true);
     }, []);
 
-    // Buscar APENAS produtos com estoque baixo
-    // Buscar APENAS produtos com estoque baixo
+    // Buscar produtos com estoque baixo
     useEffect(() => {
         if (user) {
             buscarProdutosEstoqueBaixo();
-            // Atualizar a cada 5 minutos
             const interval = setInterval(buscarProdutosEstoqueBaixo, 300000);
             return () => clearInterval(interval);
         }
@@ -90,14 +91,12 @@ export default function MainEmpresa({
     const buscarProdutosEstoqueBaixo = async () => {
         setLoadingNotificacoes(true);
         try {
-            // Chama o endpoint específico para estoque baixo
             const produtos = await estoqueService.listarProdutosEstoque({
                 estoque_baixo: true
             });
 
-            // Filtra novamente no frontend para garantir (defesa extra)
             const apenasEstoqueBaixo = produtos.filter(p => {
-                const estoqueMinimo = p.estoque_minimo || 5; // fallback para 5 se não tiver definido
+                const estoqueMinimo = p.estoque_minimo || 5;
                 return p.estoque_atual <= estoqueMinimo;
             });
 
@@ -117,83 +116,105 @@ export default function MainEmpresa({
         }
     };
 
-    const toggleDropdown = (label: string) => {
+    // FUNÇÃO MELHORADA: Toggle do dropdown
+    const toggleDropdown = (label: string, e?: React.MouseEvent) => {
+        e?.preventDefault(); // Previne navegação se for um evento de click
+        e?.stopPropagation(); // Evita propagação
+
         setDropdownOpen((prev) => ({
             ...prev,
             [label]: !prev[label],
         }));
     };
 
+    // NOVA FUNÇÃO: Handler para clique no item principal
+    const handleMainItemClick = (item: MenuItem, e: React.MouseEvent) => {
+        if (item.links.length > 0) {
+            // Se tem sublinks, apenas toggle do dropdown
+            e.preventDefault();
+            toggleDropdown(item.label);
+        } else {
+            // Se não tem sublinks, navega normalmente (Link já cuida disso)
+            // Mas garantimos que dropdown feche se estiver aberto
+            setDropdownOpen(prev => ({ ...prev, [item.label]: false }));
+        }
+    };
+
     const toggleNotificacoes = () => {
         setNotificacoesAberto(!notificacoesAberto);
         if (!notificacoesAberto) {
-            // Recarregar ao abrir
             buscarProdutosEstoqueBaixo();
         }
     };
 
     const isActive = (path: string) => pathname === path;
+
     const isParentActive = (item: MenuItem) => {
-        if (pathname === item.path) return true;
+        if (pathname === item.path && !item.isGroup) return true;
         return item.links.some(link => pathname === link.path);
     };
 
-    // Menu filtrado por permissões
+    // Menu atualizado com isGroup para itens que são apenas grupos
     const menuItems: MenuItem[] = [
         { label: "Dashboard", icon: Home, path: "/dashboard", links: [] },
         {
             label: "Vendas",
             icon: ShoppingCart,
-            path: "#",
+            path: "/dashboard/Vendas", // Path real para navegação direta
             links: [
                 { label: "Nova venda", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart },
                 { label: "Relatórios de vendas", path: "/dashboard/Vendas/relatorios", icon: BarChart2 },
             ],
+            isGroup: true, // Marca como grupo (não navega diretamente)
         },
         {
             label: "Faturas",
             icon: FileText,
-            path: "#",
+            path: "/dashboard/Faturas",
             links: [
                 { label: "Faturas", path: "/dashboard/Faturas/Faturas", icon: FileText },
                 { label: "Relatório das faturas", path: "/dashboard/Faturas/relatorios", icon: BarChart2 },
             ],
+            isGroup: true,
         },
         {
             label: "Clientes",
             icon: Users,
-            path: "#",
+            path: "/dashboard/Clientes",
             links: [
                 { label: "Clientes", path: "/dashboard/Clientes/Novo_cliente", icon: Users },
             ],
+            isGroup: true,
         },
         {
             label: "Produtos / Serviços",
             icon: Archive,
-            path: "#",
+            path: "/dashboard/Produtos_servicos",
             links: [
                 { label: "Novo produto/serviço", path: "/dashboard/Produtos_servicos/Novo_produto_servico", icon: Package },
                 { label: "Stock", path: "/dashboard/Produtos_servicos/Stock", icon: Package },
                 { label: "Nova categoria", path: "/dashboard/Produtos_servicos/categorias", icon: Package },
             ],
+            isGroup: true,
         },
         {
             label: "Fornecedores",
             icon: Truck,
-            path: "#",
+            path: "/dashboard/Fornecedores",
             links: [
                 { label: "Fornecedores", path: "/dashboard/Fornecedores/Novo_fornecedor", icon: Truck },
             ],
+            isGroup: true,
         },
         {
             label: "Relatórios",
             icon: BarChart2,
-            path: "#",
+            path: "/dashboard/relatorios",
             links: [
                 { label: "Diário", path: "/dashboard/relatorios/diario", icon: BarChart2 },
             ],
+            isGroup: true,
         },
-        // Só mostra Configurações se for admin
         ...(isAdmin ? [{
             label: "Configurações",
             icon: Settings,
@@ -202,7 +223,7 @@ export default function MainEmpresa({
         }] : []),
     ];
 
-    // Variantes de animação
+    // Variantes de animação (mantidas iguais)
     const sidebarVariants = {
         open: { width: 260 },
         closed: { width: 80 },
@@ -275,7 +296,6 @@ export default function MainEmpresa({
         }
     };
 
-    // Loading state
     if (userLoading) {
         return (
             <div className="flex h-screen items-center justify-center bg-[#F2F2F2]">
@@ -344,6 +364,7 @@ export default function MainEmpresa({
                         {isLoaded && menuItems.map((item, index) => {
                             const active = isParentActive(item);
                             const isOpen = dropdownOpen[item.label];
+                            const hasLinks = item.links.length > 0;
 
                             return (
                                 <motion.div
@@ -356,6 +377,7 @@ export default function MainEmpresa({
                                     onMouseEnter={() => setHoveredItem(item.label)}
                                     onMouseLeave={() => setHoveredItem(null)}
                                 >
+                                    {/* Item Principal - Agora com onClick handler */}
                                     <motion.div
                                         whileHover={{ scale: 1.02, x: 4 }}
                                         whileTap={{ scale: 0.98 }}
@@ -364,27 +386,61 @@ export default function MainEmpresa({
                                             : "hover:bg-[#F9941F]/10"
                                             }`}
                                     >
-                                        <Link href={item.path} className="flex items-center gap-3 flex-1 min-w-0">
-                                            <item.icon
-                                                size={20}
-                                                className={`transition-colors duration-300 ${active ? "text-white" : "text-[#123859] group-hover:text-[#F9941F]"
-                                                    }`}
-                                            />
+                                        {/* Link ou div clicável baseado em hasLinks */}
+                                        {hasLinks ? (
+                                            // Se tem sublinks, usa div com onClick (não navega)
+                                            <div
+                                                className="flex items-center gap-3 flex-1 min-w-0"
+                                                onClick={(e) => handleMainItemClick(item, e)}
+                                            >
+                                                <item.icon
+                                                    size={20}
+                                                    className={`transition-colors duration-300 ${active ? "text-white" : "text-[#123859] group-hover:text-[#F9941F]"
+                                                        }`}
+                                                />
 
-                                            <AnimatePresence>
-                                                {sidebarOpen && (
-                                                    <motion.span
-                                                        initial={{ opacity: 0, width: 0 }}
-                                                        animate={{ opacity: 1, width: "auto" }}
-                                                        exit={{ opacity: 0, width: 0 }}
-                                                        className={`text-sm font-medium whitespace-nowrap overflow-hidden ${active ? "text-white" : "text-[#123859]"
-                                                            }`}
-                                                    >
-                                                        {item.label}
-                                                    </motion.span>
-                                                )}
-                                            </AnimatePresence>
-                                        </Link>
+                                                <AnimatePresence>
+                                                    {sidebarOpen && (
+                                                        <motion.span
+                                                            initial={{ opacity: 0, width: 0 }}
+                                                            animate={{ opacity: 1, width: "auto" }}
+                                                            exit={{ opacity: 0, width: 0 }}
+                                                            className={`text-sm font-medium whitespace-nowrap overflow-hidden ${active ? "text-white" : "text-[#123859]"
+                                                                }`}
+                                                        >
+                                                            {item.label}
+                                                        </motion.span>
+                                                    )}
+                                                </AnimatePresence>
+                                            </div>
+                                        ) : (
+                                            // Se não tem sublinks, usa Link normal
+                                            <Link
+                                                href={item.path}
+                                                className="flex items-center gap-3 flex-1 min-w-0"
+                                                onClick={(e) => handleMainItemClick(item, e)}
+                                            >
+                                                <item.icon
+                                                    size={20}
+                                                    className={`transition-colors duration-300 ${active ? "text-white" : "text-[#123859] group-hover:text-[#F9941F]"
+                                                        }`}
+                                                />
+
+                                                <AnimatePresence>
+                                                    {sidebarOpen && (
+                                                        <motion.span
+                                                            initial={{ opacity: 0, width: 0 }}
+                                                            animate={{ opacity: 1, width: "auto" }}
+                                                            exit={{ opacity: 0, width: 0 }}
+                                                            className={`text-sm font-medium whitespace-nowrap overflow-hidden ${active ? "text-white" : "text-[#123859]"
+                                                                }`}
+                                                        >
+                                                            {item.label}
+                                                        </motion.span>
+                                                    )}
+                                                </AnimatePresence>
+                                            </Link>
+                                        )}
 
                                         {active && (
                                             <motion.div
@@ -393,14 +449,18 @@ export default function MainEmpresa({
                                             />
                                         )}
 
-                                        {item.links.length > 0 && sidebarOpen && (
+                                        {/* Botão de chevron - agora é apenas indicador visual quando sidebar está fechada */}
+                                        {hasLinks && sidebarOpen && (
                                             <motion.button
-                                                onClick={() => toggleDropdown(item.label)}
+                                                onClick={(e) => {
+                                                    e.stopPropagation(); // Evita double toggle
+                                                    toggleDropdown(item.label);
+                                                }}
                                                 whileHover={{ scale: 1.2 }}
                                                 whileTap={{ scale: 0.9 }}
                                                 animate={{ rotate: isOpen ? 180 : 0 }}
                                                 transition={{ duration: 0.3 }}
-                                                className={`p-1 rounded-full hover:bg-white/20 ${active ? "text-white" : "text-[#123859]"
+                                                className={`p-1 rounded-full hover:bg-white/20 ml-1 ${active ? "text-white" : "text-[#123859]"
                                                     }`}
                                             >
                                                 <ChevronDown size={16} />
@@ -408,6 +468,7 @@ export default function MainEmpresa({
                                         )}
                                     </motion.div>
 
+                                    {/* Dropdown de sublinks */}
                                     <AnimatePresence>
                                         {isOpen && sidebarOpen && (
                                             <motion.div
@@ -526,14 +587,13 @@ export default function MainEmpresa({
 
             {/* MAIN CONTENT */}
             <div className="flex-1 flex flex-col min-w-0">
-                {/* Header com dados do usuário logado */}
+                {/* Header */}
                 <motion.header
                     initial={{ y: -50, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
                     className="h-16 bg-white border-b px-6 flex items-center justify-between shadow-sm relative"
                 >
-                    {/* Breadcrumb / Título */}
                     <div className="flex items-center gap-4">
                         <motion.h1
                             key={pathname}
@@ -545,9 +605,8 @@ export default function MainEmpresa({
                         </motion.h1>
                     </div>
 
-                    {/* Ações do header */}
                     <div className="flex items-center gap-4">
-                        {/* Notificações - SÓ APARECE SE HOUVER PRODUTOS COM ESTOQUE BAIXO */}
+                        {/* Notificações */}
                         {produtosEstoqueBaixo.length > 0 && (
                             <div className="relative">
                                 <motion.button
@@ -557,8 +616,6 @@ export default function MainEmpresa({
                                     className="relative p-2 rounded-full hover:bg-gray-100 transition-colors"
                                 >
                                     <Bell size={20} className="text-[#123859]" />
-
-                                    {/* Badge com quantidade */}
                                     <motion.span
                                         initial={{ scale: 0 }}
                                         animate={{ scale: 1 }}
@@ -568,7 +625,6 @@ export default function MainEmpresa({
                                     </motion.span>
                                 </motion.button>
 
-                                {/* Dropdown de Notificações */}
                                 <AnimatePresence>
                                     {notificacoesAberto && (
                                         <motion.div
@@ -595,7 +651,7 @@ export default function MainEmpresa({
                                                 </button>
                                             </div>
 
-                                            {/* Lista de produtos com estoque baixo */}
+                                            {/* Lista */}
                                             <div className="max-h-96 overflow-y-auto">
                                                 {loadingNotificacoes ? (
                                                     <div className="p-8 flex items-center justify-center">
@@ -603,14 +659,12 @@ export default function MainEmpresa({
                                                     </div>
                                                 ) : (
                                                     <div className="divide-y divide-gray-100">
-                                                        {/* Alerta */}
-                                                        <div className="p-3 bg-[#F9941F]-50 border-b border-red-100">
-                                                            <p className="text-xs text-[#F9941F] text-center font-medium">
+                                                        <div className="p-3 bg-orange-50 border-b border-orange-100">
+                                                            <p className="text-xs text-orange-600 text-center font-medium">
                                                                 Os seguintes produtos precisam de reposição
                                                             </p>
                                                         </div>
 
-                                                        {/* Produtos */}
                                                         {produtosEstoqueBaixo.map((produto, index) => (
                                                             <motion.div
                                                                 key={produto.id}
@@ -621,7 +675,7 @@ export default function MainEmpresa({
                                                             >
                                                                 <Link href="/dashboard/Produtos_servicos/Stock">
                                                                     <div className="flex items-start gap-3">
-                                                                        <div className="w-10 h-10 rounded-lg bg-[#F9941F]-10 text-[#F9941F] flex items-center justify-center flex-shrink-0">
+                                                                        <div className="w-10 h-10 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center flex-shrink-0">
                                                                             <Package size={18} />
                                                                         </div>
                                                                         <div className="flex-1 min-w-0">
@@ -633,7 +687,7 @@ export default function MainEmpresa({
                                                                                     {produto.estoque_atual} unidades
                                                                                 </span>
                                                                                 <span className="text-xs text-gray-400">•</span>
-                                                                                <span className="text-xs text-[#F9941F] font-medium">
+                                                                                <span className="text-xs text-orange-600 font-medium">
                                                                                     Estoque crítico
                                                                                 </span>
                                                                             </div>
@@ -648,7 +702,6 @@ export default function MainEmpresa({
                                                             </motion.div>
                                                         ))}
 
-                                                        {/* Footer */}
                                                         <div className="p-3 bg-gray-50 border-t border-gray-100">
                                                             <Link href="/dashboard/Produtos_servicos/Stock">
                                                                 <motion.div
@@ -669,7 +722,7 @@ export default function MainEmpresa({
                             </div>
                         )}
 
-                        {/* Perfil do usuário */}
+                        {/* Perfil */}
                         <motion.div
                             whileHover={{ scale: 1.05 }}
                             className="flex items-center gap-3 pl-4 border-l border-gray-200 cursor-pointer"
@@ -689,7 +742,7 @@ export default function MainEmpresa({
                     </div>
                 </motion.header>
 
-                {/* Conteúdo principal */}
+                {/* Conteúdo */}
                 <main className="flex-1 overflow-auto p-6 relative">
                     <motion.div
                         key={pathname}
@@ -703,7 +756,7 @@ export default function MainEmpresa({
                 </main>
             </div>
 
-            {/* Overlay para mobile */}
+            {/* Overlays */}
             <AnimatePresence>
                 {sidebarOpen && (
                     <motion.div
@@ -716,7 +769,6 @@ export default function MainEmpresa({
                 )}
             </AnimatePresence>
 
-            {/* Overlay para fechar notificações */}
             <AnimatePresence>
                 {notificacoesAberto && (
                     <motion.div

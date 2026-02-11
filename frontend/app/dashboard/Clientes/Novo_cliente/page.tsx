@@ -1,14 +1,13 @@
-
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import MainEmpresa from "../../../components/MainEmpresa";
 import {
   clienteService,
   Cliente,
   TipoCliente,
   CriarClienteInput,
+  AtualizarClienteInput,
   formatarNIF,
   getTipoClienteLabel,
   getTipoClienteColor
@@ -29,6 +28,8 @@ import {
   X,
   AlertCircle,
   Loader2,
+  RefreshCw,
+  Trash
 } from "lucide-react";
 
 // ===== COMPONENTES AUXILIARES =====
@@ -111,7 +112,7 @@ function ConfirmModal({ isOpen, onClose, onConfirm, title, message, loading }: C
 
 interface FormClienteProps {
   cliente?: Cliente | null;
-  onSubmit: (dados: CriarClienteInput) => void;
+  onSubmit: (dados: CriarClienteInput | AtualizarClienteInput) => void;
   onCancel: () => void;
   loading?: boolean;
 }
@@ -137,6 +138,15 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
         telefone: cliente.telefone || "",
         email: cliente.email || "",
         endereco: cliente.endereco || "",
+      });
+    } else {
+      setFormData({
+        nome: "",
+        nif: "",
+        tipo: "consumidor_final",
+        telefone: "",
+        email: "",
+        endereco: "",
       });
     }
   }, [cliente]);
@@ -181,11 +191,10 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
         </label>
         <div className="grid grid-cols-2 gap-4">
           <label
-            className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
-              formData.tipo === "consumidor_final"
+            className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${formData.tipo === "consumidor_final"
                 ? "border-[#123859] bg-[#123859]/5"
                 : "border-gray-200 hover:border-gray-300"
-            }`}
+              }`}
           >
             <input
               type="radio"
@@ -205,11 +214,10 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
           </label>
 
           <label
-            className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
-              formData.tipo === "empresa"
+            className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${formData.tipo === "empresa"
                 ? "border-[#F9941F] bg-[#F9941F]/5"
                 : "border-gray-200 hover:border-gray-300"
-            }`}
+              }`}
           >
             <input
               type="radio"
@@ -241,9 +249,8 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
           value={formData.nome}
           onChange={handleChange}
           placeholder={formData.tipo === "empresa" ? "Ex: Empresa XYZ, Lda" : "Ex: João Silva"}
-          className={`w-full px-4 py-2.5 rounded-lg border ${
-            errors.nome ? "border-red-500" : "border-gray-300"
-          } focus:ring-2 focus:ring-[#123859] outline-none transition-all`}
+          className={`w-full px-4 py-2.5 rounded-lg border ${errors.nome ? "border-red-500" : "border-gray-300"
+            } focus:ring-2 focus:ring-[#123859] outline-none transition-all`}
         />
         {errors.nome && <p className="mt-1 text-sm text-red-500">{errors.nome}</p>}
       </div>
@@ -260,9 +267,8 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
             value={formData.nif}
             onChange={handleChange}
             placeholder="000000000LA000"
-            className={`w-full px-4 py-2.5 rounded-lg border ${
-              errors.nif ? "border-red-500" : "border-gray-300"
-            } focus:ring-2 focus:ring-[#123859] outline-none transition-all`}
+            className={`w-full px-4 py-2.5 rounded-lg border ${errors.nif ? "border-red-500" : "border-gray-300"
+              } focus:ring-2 focus:ring-[#123859] outline-none transition-all`}
           />
           {errors.nif && <p className="mt-1 text-sm text-red-500">{errors.nif}</p>}
         </div>
@@ -299,9 +305,8 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
             value={formData.email}
             onChange={handleChange}
             placeholder="email@exemplo.com"
-            className={`w-full pl-10 pr-4 py-2.5 rounded-lg border ${
-              errors.email ? "border-red-500" : "border-gray-300"
-            } focus:ring-2 focus:ring-[#123859] outline-none transition-all`}
+            className={`w-full pl-10 pr-4 py-2.5 rounded-lg border ${errors.email ? "border-red-500" : "border-gray-300"
+              } focus:ring-2 focus:ring-[#123859] outline-none transition-all`}
           />
         </div>
         {errors.email && <p className="mt-1 text-sm text-red-500">{errors.email}</p>}
@@ -350,11 +355,11 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
 // ===== PÁGINA PRINCIPAL =====
 
 export default function ClientesPage() {
-  const router = useRouter();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clientesFiltrados, setClientesFiltrados] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
+  const [mostrarDeletados, setMostrarDeletados] = useState(false);
 
   // Modais
   const [modalFormAberto, setModalFormAberto] = useState(false);
@@ -369,7 +374,7 @@ export default function ClientesPage() {
 
   useEffect(() => {
     carregarClientes();
-  }, []);
+  }, [mostrarDeletados]);
 
   useEffect(() => {
     const termo = busca.toLowerCase();
@@ -387,7 +392,12 @@ export default function ClientesPage() {
     setLoading(true);
     try {
       console.log('[PAGE] Carregando clientes...');
-      const data = await clienteService.listarClientes();
+      let data;
+      if (mostrarDeletados) {
+        data = await clienteService.listarTodosClientes();
+      } else {
+        data = await clienteService.listarClientes();
+      }
       console.log('[PAGE] Clientes recebidos:', data.length);
       setClientes(data);
       setClientesFiltrados(data);
@@ -418,17 +428,21 @@ export default function ClientesPage() {
     setModalConfirmAberto(true);
   }
 
-  async function handleSubmit(dados: CriarClienteInput) {
+  async function handleSubmit(dados: CriarClienteInput | AtualizarClienteInput) {
     setLoadingAcao(true);
     try {
       if (clienteSelecionado) {
-        await clienteService.atualizarCliente(clienteSelecionado.id, dados);
+        console.log('[PAGE] Atualizando cliente:', clienteSelecionado.id, dados);
+        await clienteService.atualizarCliente(clienteSelecionado.id, dados as AtualizarClienteInput);
       } else {
-        await clienteService.criarCliente(dados);
+        console.log('[PAGE] Criando novo cliente:', dados);
+        await clienteService.criarCliente(dados as CriarClienteInput);
       }
       setModalFormAberto(false);
+      setClienteSelecionado(null);
       await carregarClientes();
     } catch (error: any) {
+      console.error('[PAGE] Erro ao salvar:', error);
       alert(error.response?.data?.message || "Erro ao salvar cliente");
     } finally {
       setLoadingAcao(false);
@@ -441,26 +455,33 @@ export default function ClientesPage() {
     setLoadingAcao(true);
     try {
       console.log('[PAGE] Iniciando exclusão do cliente:', clienteSelecionado.id);
-      
+
+      // Chama o backend para deletar
       await clienteService.deletarCliente(clienteSelecionado.id);
-      
-      console.log('[PAGE] Cliente deletado com sucesso, aguardando...');
-      
-      // Aguarda para garantir que o backend processou
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      console.log('[PAGE] Recarregando lista de clientes...');
-      await carregarClientes();
-      
-      console.log('[PAGE] Lista recarregada. Total:', clientes.length);
-      
+
+      console.log('[PAGE] Cliente deletado com sucesso no backend');
+
+      // Fecha modal e limpa seleção
       setModalConfirmAberto(false);
       setClienteSelecionado(null);
+
+      // Recarrega a lista do servidor para confirmar
+      await carregarClientes();
+
     } catch (error: any) {
       console.error('[PAGE] Erro ao excluir:', error);
       alert(error.response?.data?.message || "Erro ao excluir cliente");
     } finally {
       setLoadingAcao(false);
+    }
+  }
+
+  async function handleRestaurar(id: string) {
+    try {
+      await clienteService.restaurarCliente(id);
+      await carregarClientes();
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Erro ao restaurar cliente");
     }
   }
 
@@ -471,15 +492,41 @@ export default function ClientesPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-[#123859]">Clientes</h1>
-            <p className="text-gray-500 mt-1">Gerencie seus clientes e empresas</p>
+            <p className="text-gray-500 mt-1">
+              {mostrarDeletados
+                ? "Mostrando todos os clientes (incluindo deletados)"
+                : "Gerencie seus clientes e empresas"}
+            </p>
           </div>
-          <button
-            onClick={abrirCriar}
-            className="flex items-center gap-2 px-4 py-2 bg-[#F9941F] text-white rounded-lg hover:bg-[#e08516] transition-colors font-medium"
-          >
-            <Plus className="w-5 h-5" />
-            Novo Cliente
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setMostrarDeletados(!mostrarDeletados)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors font-medium ${mostrarDeletados
+                  ? "bg-red-100 text-red-700 hover:bg-red-200"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              title={mostrarDeletados ? "Ver apenas ativos" : "Ver todos incluindo deletados"}
+            >
+              <Trash className="w-5 h-5" />
+              {mostrarDeletados ? "Ver Ativos" : "Ver Todos"}
+            </button>
+            <button
+              onClick={carregarClientes}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+              title="Recarregar lista"
+            >
+              <RefreshCw className="w-5 h-5" />
+            </button>
+            {!mostrarDeletados && (
+              <button
+                onClick={abrirCriar}
+                className="flex items-center gap-2 px-4 py-2 bg-[#F9941F] text-white rounded-lg hover:bg-[#e08516] transition-colors font-medium"
+              >
+                <Plus className="w-5 h-5" />
+                Novo Cliente
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Estatísticas rápidas */}
@@ -491,7 +538,9 @@ export default function ClientesPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold text-gray-900">{clientes.length}</p>
-                <p className="text-sm text-gray-500">Total de Clientes</p>
+                <p className="text-sm text-gray-500">
+                  {mostrarDeletados ? "Total (com deletados)" : "Clientes Ativos"}
+                </p>
               </div>
             </div>
           </div>
@@ -543,6 +592,29 @@ export default function ClientesPage() {
             <div className="flex items-center justify-center py-16">
               <Loader2 className="w-8 h-8 animate-spin text-[#123859]" />
             </div>
+          ) : clientes.length === 0 ? (
+            <div className="text-center py-16">
+              <Users className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+              <p className="text-gray-500 mb-4">
+                {mostrarDeletados
+                  ? "Nenhum cliente encontrado"
+                  : "Nenhum cliente ativo. Verifique se há clientes deletados."}
+              </p>
+              {!mostrarDeletados && (
+                <button
+                  onClick={() => setMostrarDeletados(true)}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors mr-2"
+                >
+                  Ver clientes deletados
+                </button>
+              )}
+              <button
+                onClick={abrirCriar}
+                className="px-4 py-2 bg-[#123859] text-white rounded-lg hover:bg-[#1a4d7a] transition-colors"
+              >
+                Cadastrar primeiro cliente
+              </button>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -557,12 +629,15 @@ export default function ClientesPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {clientesFiltrados.map((cliente) => (
-                    <tr key={cliente.id} className="hover:bg-gray-50 transition-colors">
+                    <tr
+                      key={cliente.id}
+                      className={`hover:bg-gray-50 transition-colors ${cliente.deleted_at ? 'bg-[#F9941F] opacity-60' : ''
+                        }`}
+                    >
                       <td className="py-4 px-6">
                         <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                            cliente.tipo === "empresa" ? "bg-blue-100" : "bg-gray-100"
-                          }`}>
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${cliente.tipo === "empresa" ? "bg-blue-100" : "bg-gray-100"
+                            }`}>
                             {cliente.tipo === "empresa" ? (
                               <Building2 className="w-5 h-5 text-blue-600" />
                             ) : (
@@ -570,7 +645,12 @@ export default function ClientesPage() {
                             )}
                           </div>
                           <div>
-                            <div className="font-medium text-gray-900">{cliente.nome}</div>
+                            <div className="font-medium text-gray-900">
+                              {cliente.nome}
+                              {cliente.deleted_at && (
+                                <span className="ml-2 text-xs text-red-600 font-normal">(Deletado)</span>
+                              )}
+                            </div>
                             {cliente.email && (
                               <div className="text-xs text-gray-500">{cliente.email}</div>
                             )}
@@ -597,27 +677,39 @@ export default function ClientesPage() {
                       </td>
                       <td className="py-4 px-6">
                         <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => abrirDetalhes(cliente)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Ver detalhes"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => abrirEditar(cliente)}
-                            className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                            title="Editar"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => abrirExcluir(cliente)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Excluir"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {cliente.deleted_at ? (
+                            <button
+                              onClick={() => handleRestaurar(cliente.id)}
+                              className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                              title="Restaurar cliente"
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => abrirDetalhes(cliente)}
+                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Ver detalhes"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => abrirEditar(cliente)}
+                                className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                                title="Editar"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => abrirExcluir(cliente)}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Excluir"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -625,20 +717,16 @@ export default function ClientesPage() {
                 </tbody>
               </table>
 
-              {clientesFiltrados.length === 0 && (
+              {clientesFiltrados.length === 0 && busca && (
                 <div className="text-center py-16">
-                  <Users className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-                  <p className="text-gray-500">
-                    {busca ? "Nenhum cliente encontrado para a busca" : "Nenhum cliente cadastrado"}
-                  </p>
-                  {busca && (
-                    <button
-                      onClick={() => setBusca("")}
-                      className="mt-2 text-[#123859] hover:underline"
-                    >
-                      Limpar busca
-                    </button>
-                  )}
+                  <Search className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+                  <p className="text-gray-500">Nenhum cliente encontrado para "{busca}"</p>
+                  <button
+                    onClick={() => setBusca("")}
+                    className="mt-2 text-[#123859] hover:underline"
+                  >
+                    Limpar busca
+                  </button>
                 </div>
               )}
             </div>
@@ -649,13 +737,19 @@ export default function ClientesPage() {
       {/* Modal de Formulário (Criar/Editar) */}
       <Modal
         isOpen={modalFormAberto}
-        onClose={() => setModalFormAberto(false)}
+        onClose={() => {
+          setModalFormAberto(false);
+          setClienteSelecionado(null);
+        }}
         title={clienteSelecionado ? "Editar Cliente" : "Novo Cliente"}
       >
         <FormCliente
           cliente={clienteSelecionado}
           onSubmit={handleSubmit}
-          onCancel={() => setModalFormAberto(false)}
+          onCancel={() => {
+            setModalFormAberto(false);
+            setClienteSelecionado(null);
+          }}
           loading={loadingAcao}
         />
       </Modal>
@@ -663,15 +757,17 @@ export default function ClientesPage() {
       {/* Modal de Detalhes */}
       <Modal
         isOpen={modalDetalhesAberto}
-        onClose={() => setModalDetalhesAberto(false)}
+        onClose={() => {
+          setModalDetalhesAberto(false);
+          setClienteSelecionado(null);
+        }}
         title="Detalhes do Cliente"
       >
         {clienteSelecionado && (
           <div className="space-y-6">
             <div className="flex items-center gap-4 pb-6 border-b border-gray-200">
-              <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
-                clienteSelecionado.tipo === "empresa" ? "bg-blue-100" : "bg-gray-100"
-              }`}>
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center ${clienteSelecionado.tipo === "empresa" ? "bg-blue-100" : "bg-gray-100"
+                }`}>
                 {clienteSelecionado.tipo === "empresa" ? (
                   <Building2 className="w-8 h-8 text-blue-600" />
                 ) : (
@@ -752,7 +848,10 @@ export default function ClientesPage() {
       {/* Modal de Confirmação de Exclusão */}
       <ConfirmModal
         isOpen={modalConfirmAberto}
-        onClose={() => setModalConfirmAberto(false)}
+        onClose={() => {
+          setModalConfirmAberto(false);
+          setClienteSelecionado(null);
+        }}
         onConfirm={handleExcluir}
         title="Excluir Cliente"
         message={`Tem certeza que deseja excluir o cliente "${clienteSelecionado?.nome}"? Esta ação não pode ser desfeita.`}

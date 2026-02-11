@@ -1,4 +1,3 @@
-// src/app/(dashboard)/fornecedores/page.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -7,7 +6,6 @@ import {
   Search,
   Filter,
   Edit2,
-  Trash2,
   MoreVertical,
   Building2,
   Globe,
@@ -17,7 +15,11 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
-  Truck
+  Truck,
+  Archive,
+  RotateCcw,
+  Trash,
+  History
 } from "lucide-react";
 import MainEmpresa from "../../../components/MainEmpresa";
 import {
@@ -57,6 +59,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface FormFornecedorData {
   nome: string;
@@ -80,14 +83,18 @@ const INITIAL_FORM_DATA: FormFornecedorData = {
 
 export default function FornecedoresPage() {
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
+  const [fornecedoresDeletados, setFornecedoresDeletados] = useState<Fornecedor[]>([]);
   const [fornecedoresFiltrados, setFornecedoresFiltrados] = useState<Fornecedor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
   const [filtroTipo, setFiltroTipo] = useState<string>("todos");
+  const [abaAtiva, setAbaAtiva] = useState<string>("ativos");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
+  const [isForceDeleteModalOpen, setIsForceDeleteModalOpen] = useState(false);
   const [fornecedorSelecionado, setFornecedorSelecionado] = useState<Fornecedor | null>(null);
   const [formData, setFormData] = useState<FormFornecedorData>(INITIAL_FORM_DATA);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -96,9 +103,12 @@ export default function FornecedoresPage() {
   const carregarFornecedores = async () => {
     try {
       setIsLoading(true);
-      const data = await fornecedorService.listarFornecedores();
-      setFornecedores(data);
-      setFornecedoresFiltrados(data);
+      const [ativos, deletados] = await Promise.all([
+        fornecedorService.listarFornecedores(),
+        fornecedorService.listarFornecedoresDeletados()
+      ]);
+      setFornecedores(ativos);
+      setFornecedoresDeletados(deletados);
     } catch (error: any) {
       toast.error("Erro ao carregar fornecedores", {
         description: error.response?.data?.message || "Tente novamente mais tarde",
@@ -113,7 +123,7 @@ export default function FornecedoresPage() {
   }, []);
 
   useEffect(() => {
-    let filtrados = fornecedores;
+    let filtrados = abaAtiva === "ativos" ? fornecedores : fornecedoresDeletados;
 
     if (searchTerm) {
       filtrados = filtrados.filter((f) =>
@@ -132,7 +142,7 @@ export default function FornecedoresPage() {
     }
 
     setFornecedoresFiltrados(filtrados);
-  }, [searchTerm, filtroStatus, filtroTipo, fornecedores]);
+  }, [searchTerm, filtroStatus, filtroTipo, fornecedores, fornecedoresDeletados, abaAtiva]);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -201,6 +211,16 @@ export default function FornecedoresPage() {
     setIsDeleteModalOpen(true);
   };
 
+  const handleConfirmarRestore = (fornecedor: Fornecedor) => {
+    setFornecedorSelecionado(fornecedor);
+    setIsRestoreModalOpen(true);
+  };
+
+  const handleConfirmarForceDelete = (fornecedor: Fornecedor) => {
+    setFornecedorSelecionado(fornecedor);
+    setIsForceDeleteModalOpen(true);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -245,7 +265,7 @@ export default function FornecedoresPage() {
 
     try {
       await fornecedorService.deletarFornecedor(fornecedorSelecionado.id);
-      toast.success("Fornecedor deletado com sucesso!");
+      toast.success("Fornecedor movido para a lixeira!");
       setIsDeleteModalOpen(false);
       carregarFornecedores();
     } catch (error: any) {
@@ -255,13 +275,190 @@ export default function FornecedoresPage() {
     }
   };
 
+  const handleRestaurar = async () => {
+    if (!fornecedorSelecionado) return;
+
+    try {
+      await fornecedorService.restaurarFornecedor(fornecedorSelecionado.id);
+      toast.success("Fornecedor restaurado com sucesso!");
+      setIsRestoreModalOpen(false);
+      carregarFornecedores();
+    } catch (error: any) {
+      toast.error("Erro ao restaurar", {
+        description: error.response?.data?.message || "Não foi possível restaurar",
+      });
+    }
+  };
+
+  const handleForceDelete = async () => {
+    if (!fornecedorSelecionado) return;
+
+    try {
+      await fornecedorService.deletarFornecedorPermanente(fornecedorSelecionado.id);
+      toast.success("Fornecedor removido permanentemente!");
+      setIsForceDeleteModalOpen(false);
+      carregarFornecedores();
+    } catch (error: any) {
+      toast.error("Erro ao deletar", {
+        description: error.response?.data?.message || "Não foi possível remover permanentemente",
+      });
+    }
+  };
+
   const stats = {
-    total: fornecedores.length,
+    total: fornecedores.length + fornecedoresDeletados.length,
     ativos: fornecedores.filter((f) => f.status === "ativo").length,
     inativos: fornecedores.filter((f) => f.status === "inativo").length,
     nacionais: fornecedores.filter((f) => f.tipo === "Nacional").length,
     internacionais: fornecedores.filter((f) => f.tipo === "Internacional").length,
+    deletados: fornecedoresDeletados.length,
   };
+
+  const renderTabelaFornecedores = () => (
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead className="bg-slate-50 dark:bg-slate-800/50">
+          <tr className="border-b border-slate-200 dark:border-slate-700">
+            <th className="text-left py-3 px-4 font-medium text-slate-700 dark:text-slate-300 text-sm">
+              Nome / NIF
+            </th>
+            <th className="text-left py-3 px-4 font-medium text-slate-700 dark:text-slate-300 text-sm">
+              Tipo
+            </th>
+            <th className="text-left py-3 px-4 font-medium text-slate-700 dark:text-slate-300 text-sm">
+              Status
+            </th>
+            <th className="text-left py-3 px-4 font-medium text-slate-700 dark:text-slate-300 text-sm hidden lg:table-cell">
+              Contato
+            </th>
+            <th className="text-right py-3 px-4 font-medium text-slate-700 dark:text-slate-300 text-sm">
+              Ações
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+          {fornecedoresFiltrados.map((fornecedor) => (
+            <tr
+              key={fornecedor.id}
+              className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+            >
+              <td className="py-3 px-4">
+                <div className="font-medium text-slate-900 dark:text-slate-100">
+                  {fornecedor.nome}
+                </div>
+                <div className="text-sm text-slate-500 dark:text-slate-400 font-mono">
+                  {formatarNIF(fornecedor.nif)}
+                </div>
+                {fornecedor.deleted_at && (
+                  <div className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                    <History className="h-3 w-3" />
+                    Deletado em: {new Date(fornecedor.deleted_at).toLocaleDateString('pt-BR')}
+                  </div>
+                )}
+              </td>
+              <td className="py-3 px-4">
+                <Badge
+                  variant="secondary"
+                  className={`${getTipoColor(fornecedor.tipo)} border-0 font-medium`}
+                >
+                  {fornecedor.tipo === "Nacional" ? (
+                    <Building2 className="mr-1 h-3 w-3" />
+                  ) : (
+                    <Globe className="mr-1 h-3 w-3" />
+                  )}
+                  {getTipoLabel(fornecedor.tipo)}
+                </Badge>
+              </td>
+              <td className="py-3 px-4">
+                <Badge
+                  variant="secondary"
+                  className={`${getStatusColor(fornecedor.status)} border-0 font-medium`}
+                >
+                  {fornecedor.status === "ativo" ? (
+                    <CheckCircle2 className="mr-1 h-3 w-3" />
+                  ) : (
+                    <XCircle className="mr-1 h-3 w-3" />
+                  )}
+                  {getStatusLabel(fornecedor.status)}
+                </Badge>
+              </td>
+              <td className="py-3 px-4 hidden lg:table-cell">
+                <div className="space-y-1 text-sm">
+                  {fornecedor.telefone && (
+                    <div className="flex items-center text-slate-600 dark:text-slate-400">
+                      <Phone className="h-3 w-3 mr-2 text-slate-400" />
+                      {fornecedor.telefone}
+                    </div>
+                  )}
+                  {fornecedor.email && (
+                    <div className="flex items-center text-slate-600 dark:text-slate-400">
+                      <Mail className="h-3 w-3 mr-2 text-slate-400" />
+                      <span className="truncate max-w-[200px]">{fornecedor.email}</span>
+                    </div>
+                  )}
+                  {!fornecedor.telefone && !fornecedor.email && (
+                    <span className="text-slate-400 dark:text-slate-600 italic text-sm">
+                      Sem contato
+                    </span>
+                  )}
+                </div>
+              </td>
+              <td className="py-3 px-4 text-right">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    {abaAtiva === "ativos" ? (
+                      <>
+                        <DropdownMenuItem
+                          onClick={() => handleEditar(fornecedor)}
+                          className="gap-2 cursor-pointer"
+                        >
+                          <Edit2 className="h-4 w-4 text-blue-500" />
+                          Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleConfirmarDelete(fornecedor)}
+                          className="gap-2 cursor-pointer text-amber-600 focus:text-amber-600 focus:bg-amber-50"
+                        >
+                          <Archive className="h-4 w-4" />
+                          Mover para Lixeira
+                        </DropdownMenuItem>
+                      </>
+                    ) : (
+                      <>
+                        <DropdownMenuItem
+                          onClick={() => handleConfirmarRestore(fornecedor)}
+                          className="gap-2 cursor-pointer text-emerald-600 focus:text-emerald-600 focus:bg-emerald-50"
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                          Restaurar
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleConfirmarForceDelete(fornecedor)}
+                          className="gap-2 cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
+                        >
+                          <Trash className="h-4 w-4" />
+                          Excluir Permanentemente
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 
   return (
     <MainEmpresa>
@@ -287,11 +484,11 @@ export default function FornecedoresPage() {
         </div>
 
         {/* Cards de Estatísticas */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <Card className="border-slate-200 dark:border-slate-700">
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
               <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">
-                Total Fornecedores
+                Total
               </CardTitle>
               <Truck className="h-4 w-4 text-slate-500" />
             </CardHeader>
@@ -343,13 +540,38 @@ export default function FornecedoresPage() {
               </div>
             </CardContent>
           </Card>
+
+          <Card className="border-slate-200 dark:border-slate-700 border-red-200 dark:border-red-800">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-sm font-medium text-red-600 dark:text-red-400">
+                Na Lixeira
+              </CardTitle>
+              <Archive className="h-4 w-4 text-red-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-red-600">
+                {stats.deletados}
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Filtros */}
-        <Card className="border-slate-200 dark:border-slate-700">
-          <CardContent className="pt-6">
-            <div className="flex flex-col gap-4 md:flex-row">
-              <div className="relative flex-1">
+        {/* Tabs e Filtros */}
+        <Tabs value={abaAtiva} onValueChange={setAbaAtiva} className="w-full">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+            <TabsList className="bg-slate-100 dark:bg-slate-800">
+              <TabsTrigger value="ativos" className="gap-2">
+                <CheckCircle2 className="h-4 w-4" />
+                Ativos ({fornecedores.length})
+              </TabsTrigger>
+              <TabsTrigger value="lixeira" className="gap-2 text-red-600 data-[state=active]:bg-red-50 data-[state=active]:text-red-700">
+                <Archive className="h-4 w-4" />
+                Lixeira ({fornecedoresDeletados.length})
+              </TabsTrigger>
+            </TabsList>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="relative flex-1 min-w-[250px]">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <Input
                   placeholder="Buscar por nome, NIF ou email..."
@@ -358,182 +580,99 @@ export default function FornecedoresPage() {
                   className="pl-10 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
                 />
               </div>
-              <div className="flex gap-2">
-                <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-                  <SelectTrigger className="w-[140px] bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                    <Filter className="mr-2 h-4 w-4 text-slate-500" />
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos Status</SelectItem>
-                    <SelectItem value="ativo">Ativo</SelectItem>
-                    <SelectItem value="inativo">Inativo</SelectItem>
-                  </SelectContent>
-                </Select>
+              <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+                <SelectTrigger className="w-[140px] bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                  <Filter className="mr-2 h-4 w-4 text-slate-500" />
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos Status</SelectItem>
+                  <SelectItem value="ativo">Ativo</SelectItem>
+                  <SelectItem value="inativo">Inativo</SelectItem>
+                </SelectContent>
+              </Select>
 
-                <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-                  <SelectTrigger className="w-[160px] bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                    <Filter className="mr-2 h-4 w-4 text-slate-500" />
-                    <SelectValue placeholder="Tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos Tipos</SelectItem>
-                    <SelectItem value="Nacional">Nacional</SelectItem>
-                    <SelectItem value="Internacional">Internacional</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+                <SelectTrigger className="w-[160px] bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                  <Filter className="mr-2 h-4 w-4 text-slate-500" />
+                  <SelectValue placeholder="Tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos Tipos</SelectItem>
+                  <SelectItem value="Nacional">Nacional</SelectItem>
+                  <SelectItem value="Internacional">Internacional</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* Lista de Fornecedores */}
-        <Card className="border-slate-200 dark:border-slate-700">
-          <CardHeader className="border-b border-slate-100 dark:border-slate-800">
-            <CardTitle className="text-lg text-slate-900 dark:text-slate-100">
-              Lista de Fornecedores
-              <span className="ml-2 text-sm font-normal text-slate-500">
-                ({fornecedoresFiltrados.length})
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" />
-              </div>
-            ) : fornecedoresFiltrados.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <Truck className="h-12 w-12 text-slate-300 dark:text-slate-600 mb-4" />
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                  Nenhum fornecedor encontrado
-                </h3>
-                <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">
-                  {searchTerm || filtroStatus !== "todos" || filtroTipo !== "todos"
-                    ? "Tente ajustar os filtros de busca"
-                    : "Clique em 'Novo Fornecedor' para começar"}
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-slate-50 dark:bg-slate-800/50">
-                    <tr className="border-b border-slate-200 dark:border-slate-700">
-                      <th className="text-left py-3 px-4 font-medium text-slate-700 dark:text-slate-300 text-sm">
-                        Nome / NIF
-                      </th>
-                      <th className="text-left py-3 px-4 font-medium text-slate-700 dark:text-slate-300 text-sm">
-                        Tipo
-                      </th>
-                      <th className="text-left py-3 px-4 font-medium text-slate-700 dark:text-slate-300 text-sm">
-                        Status
-                      </th>
-                      <th className="text-left py-3 px-4 font-medium text-slate-700 dark:text-slate-300 text-sm hidden lg:table-cell">
-                        Contato
-                      </th>
-                      <th className="text-right py-3 px-4 font-medium text-slate-700 dark:text-slate-300 text-sm">
-                        Ações
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {fornecedoresFiltrados.map((fornecedor) => (
-                      <tr
-                        key={fornecedor.id}
-                        className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
-                      >
-                        <td className="py-3 px-4">
-                          <div className="font-medium text-slate-900 dark:text-slate-100">
-                            {fornecedor.nome}
-                          </div>
-                          <div className="text-sm text-slate-500 dark:text-slate-400 font-mono">
-                            {formatarNIF(fornecedor.nif)}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <Badge
-                            variant="secondary"
-                            className={`${getTipoColor(fornecedor.tipo)} border-0 font-medium`}
-                          >
-                            {fornecedor.tipo === "Nacional" ? (
-                              <Building2 className="mr-1 h-3 w-3" />
-                            ) : (
-                              <Globe className="mr-1 h-3 w-3" />
-                            )}
-                            {getTipoLabel(fornecedor.tipo)}
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-4">
-                          <Badge
-                            variant="secondary"
-                            className={`${getStatusColor(fornecedor.status)} border-0 font-medium`}
-                          >
-                            {fornecedor.status === "ativo" ? (
-                              <CheckCircle2 className="mr-1 h-3 w-3" />
-                            ) : (
-                              <XCircle className="mr-1 h-3 w-3" />
-                            )}
-                            {getStatusLabel(fornecedor.status)}
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-4 hidden lg:table-cell">
-                          <div className="space-y-1 text-sm">
-                            {fornecedor.telefone && (
-                              <div className="flex items-center text-slate-600 dark:text-slate-400">
-                                <Phone className="h-3 w-3 mr-2 text-slate-400" />
-                                {fornecedor.telefone}
-                              </div>
-                            )}
-                            {fornecedor.email && (
-                              <div className="flex items-center text-slate-600 dark:text-slate-400">
-                                <Mail className="h-3 w-3 mr-2 text-slate-400" />
-                                <span className="truncate max-w-[200px]">{fornecedor.email}</span>
-                              </div>
-                            )}
-                            {!fornecedor.telefone && !fornecedor.email && (
-                              <span className="text-slate-400 dark:text-slate-600 italic text-sm">
-                                Sem contato
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
-                              >
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-40">
-                              <DropdownMenuItem
-                                onClick={() => handleEditar(fornecedor)}
-                                className="gap-2 cursor-pointer"
-                              >
-                                <Edit2 className="h-4 w-4 text-blue-500" />
-                                Editar
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => handleConfirmarDelete(fornecedor)}
-                                className="gap-2 cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                Excluir
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          <TabsContent value="ativos" className="mt-0">
+            <Card className="border-slate-200 dark:border-slate-700">
+              <CardHeader className="border-b border-slate-100 dark:border-slate-800">
+                <CardTitle className="text-lg text-slate-900 dark:text-slate-100">
+                  Fornecedores Ativos
+                  <span className="ml-2 text-sm font-normal text-slate-500">
+                    ({fornecedoresFiltrados.length})
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" />
+                  </div>
+                ) : fornecedoresFiltrados.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <Truck className="h-12 w-12 text-slate-300 dark:text-slate-600 mb-4" />
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                      Nenhum fornecedor encontrado
+                    </h3>
+                    <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">
+                      {searchTerm || filtroStatus !== "todos" || filtroTipo !== "todos"
+                        ? "Tente ajustar os filtros de busca"
+                        : "Clique em 'Novo Fornecedor' para começar"}
+                    </p>
+                  </div>
+                ) : (
+                  renderTabelaFornecedores()
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="lixeira" className="mt-0">
+            <Card className="border-red-200 dark:border-red-800">
+              <CardHeader className="border-b border-red-100 dark:border-red-800/50 bg-red-50/50 dark:bg-red-900/20">
+                <CardTitle className="text-lg text-red-900 dark:text-red-100 flex items-center gap-2">
+                  <Archive className="h-5 w-5" />
+                  Lixeira
+                  <span className="ml-2 text-sm font-normal text-red-600 dark:text-red-400">
+                    ({fornecedoresFiltrados.length} itens)
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-red-600" />
+                  </div>
+                ) : fornecedoresFiltrados.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <Archive className="h-12 w-12 text-slate-300 dark:text-slate-600 mb-4" />
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                      Lixeira vazia
+                    </h3>
+                    <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">
+                      Não há fornecedores deletados
+                    </p>
+                  </div>
+                ) : (
+                  renderTabelaFornecedores()
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Modal de Formulário */}
@@ -739,19 +878,22 @@ export default function FornecedoresPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Confirmação de Delete */}
+      {/* Modal de Confirmação de Soft Delete */}
       <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
-        <DialogContent className="sm:max-w-[400px] border-slate-200 dark:border-slate-700">
+        <DialogContent className="sm:max-w-[400px] border-amber-200 dark:border-amber-800">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600">
-              <AlertTriangle className="h-5 w-5" />
-              Confirmar Exclusão
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <Archive className="h-5 w-5" />
+              Mover para Lixeira
             </DialogTitle>
             <DialogDescription className="text-slate-600 dark:text-slate-400">
-              Tem certeza que deseja excluir o fornecedor{" "}
-              <strong className="text-slate-900 dark:text-slate-100">"{fornecedorSelecionado?.nome}"</strong>?
+              Tem certeza que deseja mover o fornecedor{" "}
+              <strong className="text-slate-900 dark:text-slate-100">"{fornecedorSelecionado?.nome}"</strong>{" "}
+              para a lixeira?
               <br />
-              Esta ação não pode ser desfeita.
+              <span className="text-sm text-slate-500">
+                Você poderá restaurá-lo posteriormente.
+              </span>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="pt-4 gap-2">
@@ -763,12 +905,86 @@ export default function FornecedoresPage() {
               Cancelar
             </Button>
             <Button
-              variant="destructive"
+              variant="default"
               onClick={handleDeletar}
+              className="gap-2 bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              <Archive className="h-4 w-4" />
+              Mover para Lixeira
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Restauração */}
+      <Dialog open={isRestoreModalOpen} onOpenChange={setIsRestoreModalOpen}>
+        <DialogContent className="sm:max-w-[400px] border-emerald-200 dark:border-emerald-800">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-600">
+              <RotateCcw className="h-5 w-5" />
+              Restaurar Fornecedor
+            </DialogTitle>
+            <DialogDescription className="text-slate-600 dark:text-slate-400">
+              Tem certeza que deseja restaurar o fornecedor{" "}
+              <strong className="text-slate-900 dark:text-slate-100">"{fornecedorSelecionado?.nome}"</strong>?
+              <br />
+              <span className="text-sm text-slate-500">
+                O fornecedor voltará a aparecer na lista de ativos.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="pt-4 gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsRestoreModalOpen(false)}
+              className="border-slate-200 dark:border-slate-700"
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="default"
+              onClick={handleRestaurar}
+              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Restaurar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Exclusão Permanente */}
+      <Dialog open={isForceDeleteModalOpen} onOpenChange={setIsForceDeleteModalOpen}>
+        <DialogContent className="sm:max-w-[400px] border-red-200 dark:border-red-800">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="h-5 w-5" />
+              Excluir Permanentemente
+            </DialogTitle>
+            <DialogDescription className="text-slate-600 dark:text-slate-400">
+              Tem certeza que deseja excluir permanentemente o fornecedor{" "}
+              <strong className="text-slate-900 dark:text-slate-100">"{fornecedorSelecionado?.nome}"</strong>?
+              <br />
+              <span className="text-sm text-red-500 font-medium">
+                ⚠️ Esta ação não pode ser desfeita!
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="pt-4 gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsForceDeleteModalOpen(false)}
+              className="border-slate-200 dark:border-slate-700"
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleForceDelete}
               className="gap-2 bg-red-600 hover:bg-red-700"
             >
-              <Trash2 className="h-4 w-4" />
-              Excluir
+              <Trash className="h-4 w-4" />
+              Excluir Permanentemente
             </Button>
           </DialogFooter>
         </DialogContent>

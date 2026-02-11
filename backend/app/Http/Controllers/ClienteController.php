@@ -9,12 +9,9 @@ use Illuminate\Support\Facades\Log;
 
 class ClienteController extends Controller
 {
-    /**
-     * Listar apenas clientes ATIVOS (não deletados)
-     */
     public function index()
     {
-        $clientes = Cliente::all(); // retorna apenas registros ativos
+        $clientes = Cliente::whereNull('deleted_at')->get();
 
         return response()->json([
             'message' => 'Lista de clientes carregada com sucesso',
@@ -23,20 +20,16 @@ class ClienteController extends Controller
         ]);
     }
 
-    /**
-     * Mostrar cliente específico (ativo)
-     */
-    public function show(Cliente $cliente)
+    public function show($id)
     {
+        $cliente = Cliente::findOrFail($id);
+
         return response()->json([
             'message' => 'Cliente carregado com sucesso',
             'cliente' => $cliente,
         ]);
     }
 
-    /**
-     * Criar cliente
-     */
     public function store(Request $request)
     {
         $dados = $request->validate([
@@ -59,11 +52,10 @@ class ClienteController extends Controller
         ], 201);
     }
 
-    /**
-     * Atualizar cliente
-     */
-    public function update(Request $request, Cliente $cliente)
+    public function update(Request $request, $id)
     {
+        $cliente = Cliente::findOrFail($id);
+
         $dados = $request->validate([
             'nome' => 'sometimes|required|string|max:255',
             'nif' => 'sometimes|nullable|string|max:50|unique:clientes,nif,' . $cliente->id,
@@ -75,6 +67,7 @@ class ClienteController extends Controller
         ]);
 
         $cliente->update($dados);
+        $cliente->refresh();
 
         return response()->json([
             'message' => 'Cliente atualizado com sucesso',
@@ -83,12 +76,29 @@ class ClienteController extends Controller
     }
 
     /**
-     * Deletar cliente (SOFT DELETE)
+     * Deletar cliente (SOFT DELETE) - CORRIGIDO
      */
-    public function destroy(Cliente $cliente)
+    public function destroy($id)
     {
         try {
             DB::beginTransaction();
+
+            // Busca o cliente pelo ID (incluindo soft deleted se necessário)
+            $cliente = Cliente::find($id);
+
+            if (!$cliente) {
+                return response()->json([
+                    'message' => 'Cliente não encontrado',
+                ], 404);
+            }
+
+            // Verifica se já está deletado
+            if ($cliente->trashed()) {
+                return response()->json([
+                    'message' => 'Cliente já está deletado',
+                    'soft_deleted' => true,
+                ], 400);
+            }
 
             // Regra: cliente com faturas não pode ser deletado
             if ($cliente->faturas()->exists()) {
@@ -97,20 +107,33 @@ class ClienteController extends Controller
                 ], 409);
             }
 
-            $cliente->delete(); // soft delete
+            // FORÇA o soft delete
+            $cliente->delete();
+
+            // Verifica se foi deletado
+            $cliente->refresh();
+
+            Log::info('[CLIENTE DELETE]', [
+                'id' => $cliente->id,
+                'deleted_at' => $cliente->deleted_at,
+                'trashed' => $cliente->trashed()
+            ]);
 
             DB::commit();
 
             return response()->json([
                 'message' => 'Cliente deletado com sucesso',
                 'soft_deleted' => true,
+                'id' => $cliente->id,
+                'deleted_at' => $cliente->deleted_at,
             ]);
         } catch (\Throwable $e) {
             DB::rollBack();
 
             Log::error('[CLIENTE DELETE ERROR]', [
-                'cliente_id' => $cliente->id ?? null,
+                'cliente_id' => $id,
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
 
             return response()->json([
@@ -120,9 +143,6 @@ class ClienteController extends Controller
         }
     }
 
-    /**
-     * Listar clientes (ATIVOS + DELETADOS) — ADMIN / DEBUG
-     */
     public function indexWithTrashed()
     {
         $clientes = Cliente::withTrashed()->get();
@@ -136,10 +156,7 @@ class ClienteController extends Controller
         ]);
     }
 
-    /**
-     * Restaurar cliente soft deleted
-     */
-    public function restore(string $id)
+    public function restore($id)
     {
         $cliente = Cliente::withTrashed()->findOrFail($id);
 
@@ -157,10 +174,7 @@ class ClienteController extends Controller
         ]);
     }
 
-    /**
-     * Remover cliente permanentemente (FORCE DELETE)
-     */
-    public function forceDelete(string $id)
+    public function forceDelete($id)
     {
         $cliente = Cliente::withTrashed()->findOrFail($id);
 

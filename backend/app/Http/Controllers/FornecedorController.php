@@ -15,7 +15,7 @@ class FornecedorController extends Controller
     }
 
     /**
-     * Listar todos os fornecedores
+     * Listar fornecedores ativos (não deletados)
      */
     public function index()
     {
@@ -25,6 +25,36 @@ class FornecedorController extends Controller
 
         return response()->json([
             'message' => 'Lista de fornecedores carregada com sucesso',
+            'fornecedores' => $fornecedores
+        ]);
+    }
+
+    /**
+     * Listar TODOS os fornecedores (ativos + deletados)
+     */
+    public function indexWithTrashed()
+    {
+        $this->authorize('viewAny', Fornecedor::class);
+
+        $fornecedores = Fornecedor::withTrashed()->get();
+
+        return response()->json([
+            'message' => 'Lista completa de fornecedores (incluindo deletados)',
+            'fornecedores' => $fornecedores
+        ]);
+    }
+
+    /**
+     * Listar APENAS fornecedores deletados (lixeira)
+     */
+    public function indexOnlyTrashed()
+    {
+        $this->authorize('viewAny', Fornecedor::class);
+
+        $fornecedores = Fornecedor::onlyTrashed()->get();
+
+        return response()->json([
+            'message' => 'Lista de fornecedores na lixeira',
             'fornecedores' => $fornecedores
         ]);
     }
@@ -57,10 +87,7 @@ class FornecedorController extends Controller
             'status' => 'nullable|in:ativo,inativo',
         ]);
 
-        // Relacionar fornecedor ao usuário autenticado
         $dados['user_id'] = Auth::id();
-
-        // Valores padrão
         $dados['tipo'] = $dados['tipo'] ?? 'Nacional';
         $dados['status'] = $dados['status'] ?? 'ativo';
 
@@ -98,16 +125,56 @@ class FornecedorController extends Controller
     }
 
     /**
-     * Deletar fornecedor
+     * Soft Delete - "Deletar" fornecedor (mantém no banco)
      */
     public function destroy(Fornecedor $fornecedor)
     {
         $this->authorize('delete', $fornecedor);
 
-        $fornecedor->delete();
+        // Verifica se há compras associadas antes de "deletar"
+        if ($fornecedor->compras()->count() > 0) {
+            return response()->json([
+                'message' => 'Não é possível deletar fornecedor com compras associadas',
+                'error' => 'fornecedor_has_compras'
+            ], 422);
+        }
+
+        $fornecedor->delete(); // Soft delete
 
         return response()->json([
-            'message' => 'Fornecedor deletado com sucesso'
+            'message' => 'Fornecedor movido para a lixeira com sucesso',
+            'fornecedor' => $fornecedor
+        ]);
+    }
+
+    /**
+     * Restaurar fornecedor deletado
+     */
+    public function restore($id)
+    {
+        $this->authorize('restore', Fornecedor::class);
+
+        $fornecedor = Fornecedor::onlyTrashed()->findOrFail($id);
+        $fornecedor->restore();
+
+        return response()->json([
+            'message' => 'Fornecedor restaurado com sucesso',
+            'fornecedor' => $fornecedor
+        ]);
+    }
+
+    /**
+     * Deletar permanentemente (force delete)
+     */
+    public function forceDelete($id)
+    {
+        $this->authorize('forceDelete', Fornecedor::class);
+
+        $fornecedor = Fornecedor::onlyTrashed()->findOrFail($id);
+        $fornecedor->forceDelete();
+
+        return response()->json([
+            'message' => 'Fornecedor removido permanentemente'
         ]);
     }
 }

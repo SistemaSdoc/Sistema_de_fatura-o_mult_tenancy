@@ -14,7 +14,7 @@ export interface Cliente {
     data_registro: string;
     created_at?: string;
     updated_at?: string;
-    deleted_at?: string | null; // <- Importante para soft deletes
+    deleted_at?: string | null;
 }
 
 export interface CriarClienteInput {
@@ -27,30 +27,41 @@ export interface CriarClienteInput {
     data_registro?: string;
 }
 
-export interface AtualizarClienteInput extends Partial<CriarClienteInput> {}
+export interface AtualizarClienteInput extends Partial<CriarClienteInput> { }
 
 const API_PREFIX = "/api";
 
+// Configuração para evitar cache
+const noCacheConfig = {
+    headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+    }
+};
+
 export const clienteService = {
-    // Listar apenas clientes ativos (não deletados)
     async listarClientes(): Promise<Cliente[]> {
         console.log('[CLIENTE SERVICE] Listar clientes - Iniciando...');
-        const response = await api.get(`${API_PREFIX}/clientes`);
+        const timestamp = new Date().getTime();
+        const response = await api.get(`${API_PREFIX}/clientes?t=${timestamp}`, noCacheConfig);
         console.log('[CLIENTE SERVICE] Listar clientes - Sucesso:', response.data);
         return response.data.clientes || [];
     },
 
-    // Listar todos os clientes, incluindo deletados (para admin/debug)
     async listarTodosClientes(): Promise<Cliente[]> {
         console.log('[CLIENTE SERVICE] Listar todos clientes (com deletados) - Iniciando...');
-        const response = await api.get(`${API_PREFIX}/clientes/with-trashed`);
+        const timestamp = new Date().getTime();
+        // MUDEI: de 'with-trashed' para 'todos'
+        const response = await api.get(`${API_PREFIX}/clientes/todos?t=${timestamp}`, noCacheConfig);
         console.log('[CLIENTE SERVICE] Listar todos clientes - Sucesso:', response.data);
         return response.data.clientes || [];
     },
 
     async buscarCliente(id: string): Promise<Cliente> {
         console.log('[CLIENTE SERVICE] Buscar cliente - ID:', id);
-        const response = await api.get(`${API_PREFIX}/clientes/${id}`);
+        const timestamp = new Date().getTime();
+        const response = await api.get(`${API_PREFIX}/clientes/${id}?t=${timestamp}`, noCacheConfig);
         console.log('[CLIENTE SERVICE] Buscar cliente - Sucesso:', response.data);
         return response.data.cliente;
     },
@@ -110,8 +121,6 @@ export const clienteService = {
         console.log('[CLIENTE SERVICE] Cliente removido permanentemente - Sucesso:', response.data);
     },
 };
-
-// =================== UTILITÁRIOS ===================
 
 export function formatarNIF(nif: string | null): string {
     if (!nif) return "-";
