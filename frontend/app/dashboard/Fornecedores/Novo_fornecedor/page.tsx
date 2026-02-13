@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Plus,
   Search,
@@ -19,7 +19,9 @@ import {
   Archive,
   RotateCcw,
   Trash,
-  History
+  History,
+  ShieldAlert,
+  RefreshCw
 } from "lucide-react";
 import MainEmpresa from "../../../components/MainEmpresa";
 import {
@@ -81,11 +83,30 @@ const INITIAL_FORM_DATA: FormFornecedorData = {
   status: "ativo",
 };
 
+// Componente de erro de permissão
+const PermissaoNegadaAlert = ({ onClose }: { onClose: () => void }) => (
+  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-4">
+    <div className="flex items-start gap-3">
+      <ShieldAlert className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
+      <div className="flex-1">
+        <h4 className="font-semibold text-red-900 dark:text-red-100">Permissão Negada</h4>
+        <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+          Você não tem permissão para realizar esta operação. Contate o administrador do sistema.
+        </p>
+      </div>
+      <Button variant="ghost" size="sm" onClick={onClose} className="text-red-700 hover:text-red-800">
+        Fechar
+      </Button>
+    </div>
+  </div>
+);
+
 export default function FornecedoresPage() {
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [fornecedoresDeletados, setFornecedoresDeletados] = useState<Fornecedor[]>([]);
   const [fornecedoresFiltrados, setFornecedoresFiltrados] = useState<Fornecedor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
   const [filtroTipo, setFiltroTipo] = useState<string>("todos");
@@ -99,28 +120,48 @@ export default function FornecedoresPage() {
   const [formData, setFormData] = useState<FormFornecedorData>(INITIAL_FORM_DATA);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof FormFornecedorData, string>>>({});
+  const [showPermissaoNegada, setShowPermissaoNegada] = useState(false);
 
-  const carregarFornecedores = async () => {
+  // CORREÇÃO: useCallback para evitar recriação da função
+  const carregarFornecedores = useCallback(async (showLoading = true) => {
     try {
-      setIsLoading(true);
-      const [ativos, deletados] = await Promise.all([
-        fornecedorService.listarFornecedores(),
-        fornecedorService.listarFornecedoresDeletados()
-      ]);
+      if (showLoading) setIsLoading(true);
+      setIsRefreshing(true);
+      setShowPermissaoNegada(false);
+      
+      console.log('[PAGE] Iniciando carregamento de fornecedores...');
+      
+      // CORREÇÃO: Executar sequencialmente em vez de Promise.all para melhor debugging
+      const ativos = await fornecedorService.listarFornecedores();
+      console.log('[PAGE] Fornecedores ativos carregados:', ativos.length);
+      
+      const deletados = await fornecedorService.listarFornecedoresDeletados();
+      console.log('[PAGE] Fornecedores deletados carregados:', deletados.length);
+      
       setFornecedores(ativos);
       setFornecedoresDeletados(deletados);
+      
+      console.log('[PAGE] Estado atualizado - Ativos:', ativos.length, 'Deletados:', deletados.length);
     } catch (error: any) {
-      toast.error("Erro ao carregar fornecedores", {
-        description: error.response?.data?.message || "Tente novamente mais tarde",
-      });
+      console.error('[PAGE] Erro ao carregar fornecedores:', error);
+      
+      if (error.response?.status === 403) {
+        setShowPermissaoNegada(true);
+        toast.error("Acesso negado");
+      } else {
+        toast.error("Erro ao carregar fornecedores", {
+          description: error.response?.data?.message || "Tente novamente mais tarde",
+        });
+      }
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     carregarFornecedores();
-  }, []);
+  }, [carregarFornecedores]);
 
   useEffect(() => {
     let filtrados = abaAtiva === "ativos" ? fornecedores : fornecedoresDeletados;
@@ -223,17 +264,24 @@ export default function FornecedoresPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!validarForm()) return;
 
     setIsSubmitting(true);
+    setShowPermissaoNegada(false);
 
     try {
       if (fornecedorSelecionado) {
-        await fornecedorService.atualizarFornecedor(
+        // CORREÇÃO: Atualização otimista - atualizar UI antes da resposta
+        const fornecedorAtualizado = await fornecedorService.atualizarFornecedor(
           fornecedorSelecionado.id,
           formData
         );
+        
+        // Atualizar estado local imediatamente
+        setFornecedores(prev => prev.map(f => 
+          f.id === fornecedorSelecionado.id ? { ...f, ...formData } : f
+        ));
+        
         toast.success("Fornecedor atualizado com sucesso!");
       } else {
         await fornecedorService.criarFornecedor(formData);
@@ -241,20 +289,22 @@ export default function FornecedoresPage() {
       }
 
       setIsModalOpen(false);
-      carregarFornecedores();
+      
+      // CORREÇÃO: Recarregar após pequeno delay para garantir sincronização
+      setTimeout(() => {
+        carregarFornecedores(false);
+      }, 300);
+      
     } catch (error: any) {
-      const message = error.response?.data?.message || "Erro ao salvar fornecedor";
-      const errors = error.response?.data?.errors;
-
-      if (errors) {
-        const formattedErrors: Record<string, string> = {};
-        Object.keys(errors).forEach((key) => {
-          formattedErrors[key] = errors[key][0];
-        });
-        setErrors(formattedErrors);
+      console.error('[PAGE] Erro no submit:', error);
+      
+      if (error.response?.status === 403) {
+        setShowPermissaoNegada(true);
+        toast.error("Permissão negada");
+      } else {
+        const message = error.response?.data?.message || "Erro ao salvar fornecedor";
+        toast.error("Erro ao salvar", { description: message });
       }
-
-      toast.error("Erro ao salvar", { description: message });
     } finally {
       setIsSubmitting(false);
     }
@@ -263,45 +313,115 @@ export default function FornecedoresPage() {
   const handleDeletar = async () => {
     if (!fornecedorSelecionado) return;
 
+    setShowPermissaoNegada(false);
+    
     try {
-      await fornecedorService.deletarFornecedor(fornecedorSelecionado.id);
+      // CORREÇÃO: Atualização otimista - remover da lista de ativos imediatamente
+      const fornecedorDeletado = fornecedorSelecionado;
+      
+      // Remover do estado de ativos imediatamente (UI responsiva)
+      setFornecedores(prev => prev.filter(f => f.id !== fornecedorDeletado.id));
+      
+      // Adicionar aos deletados com data atual
+      setFornecedoresDeletados(prev => [{
+        ...fornecedorDeletado,
+        deleted_at: new Date().toISOString()
+      }, ...prev]);
+      
+      await fornecedorService.deletarFornecedor(fornecedorDeletado.id);
+      
       toast.success("Fornecedor movido para a lixeira!");
       setIsDeleteModalOpen(false);
-      carregarFornecedores();
+      
+      // Recarregar para garantir sincronização com backend
+      setTimeout(() => {
+        carregarFornecedores(false);
+      }, 500);
+      
     } catch (error: any) {
-      toast.error("Erro ao deletar", {
-        description: error.response?.data?.message || "Não foi possível deletar",
-      });
+      console.error('[PAGE] Erro ao deletar:', error);
+      
+      // Reverter atualização otimista em caso de erro
+      carregarFornecedores(false);
+      
+      if (error.response?.status === 403) {
+        setShowPermissaoNegada(true);
+        toast.error("Permissão negada");
+      } else {
+        toast.error("Erro ao deletar", {
+          description: error.response?.data?.message || "Não foi possível deletar",
+        });
+      }
     }
   };
 
   const handleRestaurar = async () => {
     if (!fornecedorSelecionado) return;
 
+    setShowPermissaoNegada(false);
+    
     try {
-      await fornecedorService.restaurarFornecedor(fornecedorSelecionado.id);
+      // CORREÇÃO: Atualização otimista
+      const fornecedorRestaurado = fornecedorSelecionado;
+      
+      // Remover de deletados e adicionar a ativos imediatamente
+      setFornecedoresDeletados(prev => prev.filter(f => f.id !== fornecedorRestaurado.id));
+      setFornecedores(prev => [{ ...fornecedorRestaurado, deleted_at: null }, ...prev]);
+      
+      await fornecedorService.restaurarFornecedor(fornecedorRestaurado.id);
+      
       toast.success("Fornecedor restaurado com sucesso!");
       setIsRestoreModalOpen(false);
-      carregarFornecedores();
+      
+      setTimeout(() => {
+        carregarFornecedores(false);
+      }, 500);
+      
     } catch (error: any) {
-      toast.error("Erro ao restaurar", {
-        description: error.response?.data?.message || "Não foi possível restaurar",
-      });
+      console.error('[PAGE] Erro ao restaurar:', error);
+      carregarFornecedores(false);
+      
+      if (error.response?.status === 403) {
+        setShowPermissaoNegada(true);
+        toast.error("Permissão negada");
+      } else {
+        toast.error("Erro ao restaurar", {
+          description: error.response?.data?.message || "Não foi possível restaurar",
+        });
+      }
     }
   };
 
   const handleForceDelete = async () => {
     if (!fornecedorSelecionado) return;
 
+    setShowPermissaoNegada(false);
+    
     try {
+      // CORREÇÃO: Atualização otimista
+      setFornecedoresDeletados(prev => prev.filter(f => f.id !== fornecedorSelecionado.id));
+      
       await fornecedorService.deletarFornecedorPermanente(fornecedorSelecionado.id);
+      
       toast.success("Fornecedor removido permanentemente!");
       setIsForceDeleteModalOpen(false);
-      carregarFornecedores();
+      
+      setTimeout(() => {
+        carregarFornecedores(false);
+      }, 500);
+      
     } catch (error: any) {
-      toast.error("Erro ao deletar", {
-        description: error.response?.data?.message || "Não foi possível remover permanentemente",
-      });
+      console.error('[PAGE] Erro ao deletar permanentemente:', error);
+      carregarFornecedores(false);
+      
+      if (error.response?.status === 403) {
+        setShowPermissaoNegada(true);
+        toast.error("Permissão negada");
+      } else {
+        toast.error("Erro ao deletar", {
+          description: error.response?.data?.message || "Não foi possível remover",
+        });
+      }
     }
   };
 
@@ -464,7 +584,12 @@ export default function FornecedoresPage() {
     <MainEmpresa>
       <div className="flex flex-col gap-6 p-6">
 
-        {/* Header */}
+        {/* Alerta de Permissão Negada */}
+        {showPermissaoNegada && (
+          <PermissaoNegadaAlert onClose={() => setShowPermissaoNegada(false)} />
+        )}
+
+        {/* Header com botão de refresh */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
@@ -474,13 +599,24 @@ export default function FornecedoresPage() {
               Gerencie os fornecedores nacionais e internacionais
             </p>
           </div>
-          <Button
-            onClick={handleNovo}
-            className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            <Plus className="h-4 w-4" />
-            Novo Fornecedor
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => carregarFornecedores(false)}
+              disabled={isRefreshing}
+              className="gap-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Atualizar
+            </Button>
+            <Button
+              onClick={handleNovo}
+              className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              <Plus className="h-4 w-4" />
+              Novo Fornecedor
+            </Button>
+          </div>
         </div>
 
         {/* Cards de Estatísticas */}

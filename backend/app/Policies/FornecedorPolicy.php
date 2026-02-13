@@ -41,25 +41,28 @@ class FornecedorPolicy
 
     /**
      * Soft Delete - mover para lixeira
+     * CORREÇÃO: Agora permite operador também (alinhado com rotas)
      */
     public function delete(User $user, Fornecedor $fornecedor): bool
     {
-        return $user->role === 'admin';
+        return in_array($user->role, ['admin', 'operador']);
     }
 
     /**
      * Restaurar fornecedor da lixeira
+     * CORREÇÃO: Agora permite operador também
      */
     public function restore(User $user): bool
     {
-        return $user->role === 'admin';
+        return in_array($user->role, ['admin', 'operador']);
     }
 
     /**
      * Deletar permanentemente
+     * CORREÇÃO: Agora permite operador também
      */
     public function forceDelete(User $user): bool
     {
-        return $user->role === 'admin';
+        return in_array($user->role, ['admin', 'operador']);
     }
 }

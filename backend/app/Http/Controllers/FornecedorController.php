@@ -5,14 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\Fornecedor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class FornecedorController extends Controller
 {
-    public function __construct()
-    {
-        // Aplica automaticamente as policies do modelo Fornecedor
-        $this->authorizeResource(Fornecedor::class, 'fornecedor');
-    }
+    // REMOVIDO: $this->authorizeResource do construtor para evitar dupla autorização
+    // A autorização manual em cada método é mais explícita e controlável
 
     /**
      * Listar fornecedores ativos (não deletados)
@@ -64,6 +62,8 @@ class FornecedorController extends Controller
      */
     public function show(Fornecedor $fornecedor)
     {
+        $this->authorize('view', $fornecedor);
+
         return response()->json([
             'message' => 'Fornecedor carregado com sucesso',
             'fornecedor' => $fornecedor
@@ -104,6 +104,13 @@ class FornecedorController extends Controller
      */
     public function update(Request $request, Fornecedor $fornecedor)
     {
+        // Log para debug - remova após resolver
+        Log::info('Tentativa de UPDATE fornecedor', [
+            'user_id' => Auth::id(),
+            'user_role' => Auth::user()?->role,
+            'fornecedor_id' => $fornecedor->id
+        ]);
+
         $this->authorize('update', $fornecedor);
 
         $dados = $request->validate([
@@ -129,6 +136,13 @@ class FornecedorController extends Controller
      */
     public function destroy(Fornecedor $fornecedor)
     {
+        // Log para debug - remova após resolver
+        Log::info('Tentativa de DELETE fornecedor', [
+            'user_id' => Auth::id(),
+            'user_role' => Auth::user()?->role,
+            'fornecedor_id' => $fornecedor->id
+        ]);
+
         $this->authorize('delete', $fornecedor);
 
         // Verifica se há compras associadas antes de "deletar"

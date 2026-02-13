@@ -32,6 +32,59 @@ const TIPO_LABEL: Record<string, string> = {
 
 type TipoFiltro = "todas" | "FT" | "FR" | "NC" | "ND";
 
+// ================= SKELETON COMPONENTS =================
+function TableSkeleton() {
+  return (
+    <div className="animate-pulse">
+      {/* Header Skeleton */}
+      <div className="hidden md:grid grid-cols-8 gap-4 bg-gray-200 p-4 rounded-t-lg">
+        {[...Array(8)].map((_, i) => (
+          <div key={i} className="h-4 bg-gray-300 rounded w-full" />
+        ))}
+      </div>
+
+      {/* Rows Skeleton */}
+      {[...Array(5)].map((_, rowIdx) => (
+        <div key={rowIdx} className="hidden md:grid grid-cols-8 gap-4 p-4 border-b border-gray-100">
+          {[...Array(8)].map((_, colIdx) => (
+            <div key={colIdx} className="h-4 bg-gray-200 rounded w-full" />
+          ))}
+        </div>
+      ))}
+
+      {/* Mobile Cards Skeleton */}
+      <div className="md:hidden space-y-3">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="bg-white p-4 rounded-lg border border-gray-100 space-y-3">
+            <div className="flex justify-between">
+              <div className="h-5 bg-gray-200 rounded w-1/3" />
+              <div className="h-5 bg-gray-200 rounded w-1/4" />
+            </div>
+            <div className="h-4 bg-gray-200 rounded w-2/3" />
+            <div className="flex justify-between">
+              <div className="h-4 bg-gray-200 rounded w-1/4" />
+              <div className="h-4 bg-gray-200 rounded w-1/4" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StatsSkeleton() {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 md:gap-4 animate-pulse">
+      {[...Array(5)].map((_, i) => (
+        <div key={i} className="bg-white p-3 sm:p-4 rounded-xl shadow border border-gray-100 space-y-2">
+          <div className="h-3 bg-gray-200 rounded w-2/3" />
+          <div className="h-8 bg-gray-300 rounded w-full" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function FaturasPage() {
   const [vendas, setVendas] = useState<Venda[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -39,6 +92,7 @@ export default function FaturasPage() {
   const [filtro, setFiltro] = useState<TipoFiltro>("todas");
   const [modalAberto, setModalAberto] = useState(false);
   const [vendaSelecionada, setVendaSelecionada] = useState<Venda | null>(null);
+  const [modalTalaoAberto, setModalTalaoAberto] = useState(false);
 
   /* ================== CARREGAR APENAS VENDAS FATURADAS ================== */
   const carregarFaturas = useCallback(async (): Promise<void> => {
@@ -99,18 +153,28 @@ export default function FaturasPage() {
     }).format(num);
   };
 
-  /* ================== MODAL ================== */
+  /* ================== MODAIS ================== */
   const abrirModal = (venda: Venda) => {
     setVendaSelecionada(venda);
     setModalAberto(true);
   };
 
-  const fecharModal = () => {
+  const abrirModalTalao = (venda: Venda) => {
+    setVendaSelecionada(venda);
+    setModalTalaoAberto(true);
+  };
+
+  const fecharModais = () => {
     setModalAberto(false);
+    setModalTalaoAberto(false);
     setVendaSelecionada(null);
   };
 
   const imprimirFatura = () => {
+    window.print();
+  };
+
+  const imprimirTalao = () => {
     window.print();
   };
 
@@ -125,7 +189,7 @@ export default function FaturasPage() {
               Faturas / Documentos Fiscais
             </h1>
             <p className="text-xs sm:text-sm text-gray-500">
-              Total: {estatisticas.total} documentos fiscais emitidos
+              Total: {loading ? "..." : estatisticas.total} documentos fiscais emitidos
             </p>
           </div>
 
@@ -154,8 +218,8 @@ export default function FaturasPage() {
         {error && (
           <div className="p-3 sm:p-4 bg-red-50 border border-red-200 rounded-lg">
             <p className="text-red-700 text-sm sm:text-base">{error}</p>
-            <button 
-              onClick={carregarFaturas} 
+            <button
+              onClick={carregarFaturas}
               className="mt-2 text-red-600 hover:underline text-sm font-medium"
             >
               Tentar novamente
@@ -163,64 +227,64 @@ export default function FaturasPage() {
           </div>
         )}
 
-        {/* Estatísticas - Grid Responsivo Otimizado */}
-        {!loading && !error && (
+        {/* Estatísticas - Skeleton ou Conteúdo */}
+        {loading ? (
+          <StatsSkeleton />
+        ) : !error && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 md:gap-4">
             <StatCard title="Total" value={estatisticas.total} color="text-[#F9941F]" />
             <StatCard title="Faturas (FT)" value={estatisticas.FT} color="text-[#123859]" />
             <StatCard title="Faturas-Recibo (FR)" value={estatisticas.FR} color="text-[#F9941F]" />
             <StatCard title="Notas Crédito" value={estatisticas.NC} color="text-[#123859]" />
-            <StatCard 
-              title="Total Geral" 
-              value={formatKz(estatisticas.totalGeral)} 
-              color="text-[#F9941F]" 
-              isCurrency 
+            <StatCard
+              title="Total Geral"
+              value={formatKz(estatisticas.totalGeral)}
+              color="text-[#F9941F]"
+              isCurrency
               className="col-span-2 sm:col-span-1"
             />
           </div>
         )}
 
         {/* Filtros - Scroll Horizontal em Mobile */}
-        <div className="bg-white p-3 sm:p-4 rounded-xl shadow border border-gray-100">
-          <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0 sm:flex-wrap scrollbar-hide">
-            {[
-              { key: "todas" as TipoFiltro, label: "Todas", count: estatisticas.total },
-              { key: "FT" as TipoFiltro, label: "Faturas", count: estatisticas.FT },
-              { key: "FR" as TipoFiltro, label: "Faturas-Recibo", count: estatisticas.FR },
-              { key: "NC" as TipoFiltro, label: "Notas Crédito", count: estatisticas.NC },
-              { key: "ND" as TipoFiltro, label: "Notas Débito", count: estatisticas.ND },
-            ].map(({ key, label, count }) => (
-              <button
-                key={key}
-                onClick={() => setFiltro(key)}
-                className={`flex-shrink-0 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all min-h-[44px] touch-manipulation ${
-                  filtro === key 
-                    ? "bg-[#123859] text-white shadow-md" 
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                }`}
-              >
-                <span className="whitespace-nowrap">{label}</span>
-                <span className={`ml-1.5 px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${
-                  filtro === key ? "bg-white/20" : "bg-white"
-                }`}>
-                  {count}
-                </span>
-              </button>
-            ))}
+        {!loading && (
+          <div className="bg-white p-3 sm:p-4 rounded-xl shadow border border-gray-100">
+            <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0 sm:flex-wrap scrollbar-hide">
+              {[
+                { key: "todas" as TipoFiltro, label: "Todas", count: estatisticas.total },
+                { key: "FT" as TipoFiltro, label: "Faturas-Recibo", count: estatisticas.FT },
+                { key: "FR" as TipoFiltro, label: "Faturas", count: estatisticas.FR },
+                { key: "NC" as TipoFiltro, label: "Notas Crédito", count: estatisticas.NC },
+                { key: "ND" as TipoFiltro, label: "Notas Débito", count: estatisticas.ND },
+              ].map(({ key, label, count }) => (
+                <button
+                  key={key}
+                  onClick={() => setFiltro(key)}
+                  className={`flex-shrink-0 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all min-h-[44px] touch-manipulation ${filtro === key
+                      ? "bg-[#123859] text-white shadow-md"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                >
+                  <span className="whitespace-nowrap">{label}</span>
+                  <span className={`ml-1.5 px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${filtro === key ? "bg-white/20" : "bg-white"
+                    }`}>
+                    {count}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Tabela/Lista Responsiva */}
         <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
           {loading ? (
-            <div className="flex items-center justify-center h-48 sm:h-64">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 border-4 border-[#123859]/20 border-t-[#123859] rounded-full animate-spin" />
-            </div>
+            <TableSkeleton />
           ) : (
             <>
               {/* Desktop: Tabela com Scroll Horizontal */}
               <div className="hidden md:block overflow-x-auto">
-                <table className="w-full min-w-[800px]">
+                <table className="w-full min-w-[900px]">
                   <thead className="bg-[#123859] text-white">
                     <tr>
                       <th className="p-3 lg:p-4 text-left font-semibold text-sm whitespace-nowrap">Nº Documento</th>
@@ -230,7 +294,7 @@ export default function FaturasPage() {
                       <th className="p-3 lg:p-4 text-left font-semibold text-sm whitespace-nowrap">Data</th>
                       <th className="p-3 lg:p-4 text-right font-semibold text-sm whitespace-nowrap">Total</th>
                       <th className="p-3 lg:p-4 text-center font-semibold text-sm whitespace-nowrap">Estado</th>
-                      <th className="p-3 lg:p-4 text-center font-semibold text-sm whitespace-nowrap">Ações</th>
+                      <th className="p-3 lg:p-4 text-center font-semibold text-sm whitespace-nowrap min-w-[140px]">Ações</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -268,16 +332,27 @@ export default function FaturasPage() {
                             <EstadoBadge estado={venda.fatura?.estado || venda.status} />
                           </td>
                           <td className="p-3 lg:p-4 text-center">
-                            <button 
-                              onClick={() => abrirModal(venda)} 
-                              className="p-2 text-[#123859] hover:bg-[#123859]/10 rounded-lg transition-colors touch-manipulation"
-                              title="Ver detalhes"
-                            >
-                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                              </svg>
-                            </button>
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => abrirModal(venda)}
+                                className="p-2 text-[#123859] hover:bg-[#123859]/10 rounded-lg transition-colors touch-manipulation"
+                                title="Ver detalhes"
+                              >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => abrirModalTalao(venda)}
+                                className="p-2 text-[#F9941F] hover:bg-[#F9941F]/10 rounded-lg transition-colors touch-manipulation"
+                                title="Gerar Talão"
+                              >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                                </svg>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -293,8 +368,8 @@ export default function FaturasPage() {
                   const numeroFatura = venda.fatura?.numero || venda.numero;
 
                   return (
-                    <div 
-                      key={venda.fatura?.id || venda.id} 
+                    <div
+                      key={venda.fatura?.id || venda.id}
                       className="p-3 sm:p-4 hover:bg-gray-50 transition-colors active:bg-gray-100"
                     >
                       <div className="flex justify-between items-start mb-2">
@@ -338,9 +413,9 @@ export default function FaturasPage() {
                         </div>
                       </div>
 
-                      <div className="mt-3 pt-2 border-t border-gray-100 flex justify-end">
-                        <button 
-                          onClick={() => abrirModal(venda)} 
+                      <div className="mt-3 pt-2 border-t border-gray-100 flex justify-end gap-2">
+                        <button
+                          onClick={() => abrirModal(venda)}
                           className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-[#123859] hover:bg-[#123859]/10 rounded-lg transition-colors touch-manipulation min-h-[44px]"
                         >
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -348,6 +423,15 @@ export default function FaturasPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                           </svg>
                           Ver detalhes
+                        </button>
+                        <button
+                          onClick={() => abrirModalTalao(venda)}
+                          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-[#F9941F] hover:bg-[#F9941F]/10 rounded-lg transition-colors touch-manipulation min-h-[44px]"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                          </svg>
+                          Talão
                         </button>
                       </div>
                     </div>
@@ -371,14 +455,14 @@ export default function FaturasPage() {
           )}
         </div>
 
-        {/* ================== MODAL 100% RESPONSIVO ================== */}
+        {/* ================== MODAL DETALHES (A4) ================== */}
         {modalAberto && vendaSelecionada && (
-          <div 
-            className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm" 
-            onClick={fecharModal}
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm"
+            onClick={fecharModais}
           >
-            <div 
-              className="bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col" 
+            <div
+              className="bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header do Modal - Responsivo */}
@@ -390,8 +474,8 @@ export default function FaturasPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-                  <button 
-                    onClick={imprimirFatura} 
+                  <button
+                    onClick={imprimirFatura}
                     className="p-1.5 sm:p-2 hover:bg-white/20 rounded-lg transition-colors touch-manipulation"
                     title="Imprimir"
                   >
@@ -399,8 +483,8 @@ export default function FaturasPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                     </svg>
                   </button>
-                  <button 
-                    onClick={fecharModal} 
+                  <button
+                    onClick={fecharModais}
                     className="p-1.5 sm:p-2 hover:bg-white/20 rounded-lg transition-colors touch-manipulation"
                     title="Fechar"
                   >
@@ -414,7 +498,7 @@ export default function FaturasPage() {
               {/* Conteúdo do Modal - Scrollável */}
               <div id="area-impressao" className="flex-1 overflow-y-auto p-3 sm:p-6 bg-gray-50">
                 <div className="bg-white p-4 sm:p-6 md:p-8 rounded-lg sm:rounded-xl shadow-sm border border-gray-200 max-w-3xl mx-auto">
-                  
+
                   {/* Cabeçalho da Fatura - Responsivo */}
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-start gap-4 mb-6 sm:mb-8 pb-4 sm:pb-6 border-b-2 border-[#123859]">
                     <div className="space-y-1">
@@ -541,14 +625,14 @@ export default function FaturasPage() {
 
               {/* Botões de ação - Responsivo */}
               <div className="bg-gray-100 px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row justify-end gap-2 sm:gap-3 print:hidden shrink-0">
-                <button 
-                  onClick={fecharModal} 
+                <button
+                  onClick={fecharModais}
                   className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors text-sm font-medium min-h-[44px] touch-manipulation"
                 >
                   Fechar
                 </button>
-                <button 
-                  onClick={imprimirFatura} 
+                <button
+                  onClick={imprimirFatura}
                   className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-2 bg-[#F9941F] text-white rounded-lg hover:bg-[#d9831a] transition-colors flex items-center justify-center gap-2 text-sm font-medium min-h-[44px] touch-manipulation"
                 >
                   <svg className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -561,12 +645,172 @@ export default function FaturasPage() {
           </div>
         )}
 
+        {/* ================== MODAL TALÃO (TICKET) ================== */}
+        {modalTalaoAberto && vendaSelecionada && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm"
+            onClick={fecharModais}
+          >
+            <div
+              className="bg-white rounded-xl shadow-2xl w-full max-w-[80mm] max-h-[95vh] overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header do Modal */}
+              <div className="bg-[#123859] text-white px-4 py-3 flex justify-between items-center shrink-0">
+                <div className="min-w-0 flex-1 mr-2">
+                  <h2 className="text-lg font-bold truncate">Talão Fiscal</h2>
+                  <p className="text-xs text-blue-200 truncate">
+                    {vendaSelecionada.fatura?.numero || vendaSelecionada.numero}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={imprimirTalao}
+                    className="p-2 hover:bg-white/20 rounded-lg transition-colors touch-manipulation"
+                    title="Imprimir Talão"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={fecharModais}
+                    className="p-2 hover:bg-white/20 rounded-lg transition-colors touch-manipulation"
+                    title="Fechar"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Conteúdo do Talão - Formato Estreito */}
+              <div id="area-talao" className="flex-1 overflow-y-auto p-0 bg-gray-100">
+                <div className="bg-white mx-auto" style={{ width: '80mm', minHeight: '100%' }}>
+                  {/* Conteúdo do Talão */}
+                  <div className="p-4 font-mono text-xs leading-tight">
+
+                    {/* Cabeçalho do Talão */}
+                    <div className="text-center border-b-2 border-dashed border-gray-400 pb-3 mb-3">
+                      <h1 className="text-lg font-bold uppercase mb-1">MINHA EMPRESA</h1>
+                      <p className="text-[10px]">NIF: 123456789</p>
+                      <p className="text-[10px]">Endereço da Empresa</p>
+                      <p className="text-[10px]">Tel: +244 900 000 000</p>
+                    </div>
+
+                    {/* Info Documento */}
+                    <div className="border-b border-dashed border-gray-400 pb-2 mb-2">
+                      <div className="flex justify-between font-bold">
+                        <span>{TIPO_LABEL[vendaSelecionada.fatura?.tipo_documento || ""]}</span>
+                        <span>Nº {vendaSelecionada.fatura?.numero || vendaSelecionada.numero}</span>
+                      </div>
+                      <div className="flex justify-between text-[10px]">
+                        <span>Série: {vendaSelecionada.fatura?.serie || vendaSelecionada.serie}</span>
+                        <span>{new Date(vendaSelecionada.data_venda).toLocaleDateString("pt-AO")} {vendaSelecionada.hora_venda}</span>
+                      </div>
+                    </div>
+
+                    {/* Cliente */}
+                    <div className="border-b border-dashed border-gray-400 pb-2 mb-2">
+                      <p className="font-bold">Cliente:</p>
+                      <p className="truncate">{vendaSelecionada.cliente?.nome || "Consumidor Final"}</p>
+                      {vendaSelecionada.cliente?.nif && (
+                        <p className="text-[10px]">NIF: {vendaSelecionada.cliente.nif}</p>
+                      )}
+                    </div>
+
+                    {/* Itens */}
+                    <div className="border-b-2 border-dashed border-gray-400 pb-2 mb-2">
+                      <div className="flex justify-between font-bold border-b border-gray-300 pb-1 mb-1">
+                        <span className="w-1/2">Descrição</span>
+                        <span className="w-1/6 text-center">Qtd</span>
+                        <span className="w-1/3 text-right">Total</span>
+                      </div>
+                      {vendaSelecionada.itens?.map((item, idx) => (
+                        <div key={idx} className="mb-1">
+                          <div className="truncate">{item.produto?.nome || item.descricao}</div>
+                          <div className="flex justify-between text-[10px]">
+                            <span className="w-1/2 truncate">{formatKz(item.preco_venda)} x {item.quantidade}</span>
+                            <span className="w-1/6 text-center"></span>
+                            <span className="w-1/3 text-right font-semibold">{formatKz(item.subtotal)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Totais */}
+                    <div className="border-b border-dashed border-gray-400 pb-2 mb-2">
+                      <div className="flex justify-between">
+                        <span>Base Tributável:</span>
+                        <span>{formatKz(vendaSelecionada.base_tributavel)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Total IVA:</span>
+                        <span>{formatKz(vendaSelecionada.total_iva)}</span>
+                      </div>
+                      {vendaSelecionada.total_retencao > 0 && (
+                        <div className="flex justify-between">
+                          <span>Retenção:</span>
+                          <span>-{formatKz(vendaSelecionada.total_retencao)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between font-bold text-base border-t-2 border-gray-800 pt-1 mt-1">
+                        <span>TOTAL:</span>
+                        <span>{formatKz(vendaSelecionada.total)}</span>
+                      </div>
+                    </div>
+
+                    {/* Hash Fiscal */}
+                    {vendaSelecionada.fatura?.hash_fiscal && (
+                      <div className="text-center text-[9px] break-all mb-2">
+                        <p className="font-bold">Hash:</p>
+                        <p>{vendaSelecionada.fatura.hash_fiscal}</p>
+                      </div>
+                    )}
+
+                    {/* Footer */}
+                    <div className="text-center text-[10px] pt-2 border-t border-dashed border-gray-400">
+                      <p>Documento processado por software validado</p>
+                      <p>IVA não sujeito a retenção na fonte</p>
+                      <p className="mt-2 font-bold">Obrigado pela preferência!</p>
+                      <p className="mt-2">*** Fim do Documento ***</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Botões de ação */}
+              <div className="bg-gray-100 px-4 py-3 flex flex-col sm:flex-row justify-end gap-2 print:hidden shrink-0">
+                <button
+                  onClick={fecharModais}
+                  className="w-full sm:w-auto px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors text-sm font-medium min-h-[44px] touch-manipulation"
+                >
+                  Fechar
+                </button>
+                <button
+                  onClick={imprimirTalao}
+                  className="w-full sm:w-auto px-4 py-2 bg-[#F9941F] text-white rounded-lg hover:bg-[#d9831a] transition-colors flex items-center justify-center gap-2 text-sm font-medium min-h-[44px] touch-manipulation"
+                >
+                  <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  <span>Imprimir Talão</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Estilos de impressão otimizados */}
         <style jsx global>{`
           @media print {
+            /* Esconder tudo exceto o conteúdo de impressão */
             body * {
               visibility: hidden;
             }
+            
+            /* Estilos para impressão A4 (modal detalhes) */
             #area-impressao, #area-impressao * {
               visibility: visible;
             }
@@ -582,6 +826,33 @@ export default function FaturasPage() {
               box-shadow: none;
               border: none;
               max-width: none;
+            }
+
+            /* Estilos para impressão de Talão (80mm) */
+            #area-talao, #area-talao * {
+              visibility: visible;
+            }
+            #area-talao {
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 80mm !important;
+              padding: 0;
+              margin: 0;
+              background: white;
+            }
+            #area-talao .bg-white {
+              box-shadow: none;
+              border: none;
+              width: 80mm !important;
+              max-width: 80mm !important;
+              margin: 0 auto;
+            }
+            
+            /* Configuração da página para talão */
+            @page {
+              size: 80mm auto;
+              margin: 0;
             }
           }
           
@@ -608,16 +879,16 @@ export default function FaturasPage() {
 
 /* ================= COMPONENTES AUXILIARES RESPONSIVOS ================= */
 
-function StatCard({ 
-  title, 
-  value, 
-  color, 
+function StatCard({
+  title,
+  value,
+  color,
   isCurrency = false,
   className = ""
-}: { 
-  title: string; 
-  value: string | number; 
-  color: string; 
+}: {
+  title: string;
+  value: string | number;
+  color: string;
   isCurrency?: boolean;
   className?: string;
 }) {

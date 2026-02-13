@@ -17,6 +17,11 @@ use App\Http\Controllers\RelatoriosController;
 // Padrão UUID para validação de rotas
 $uuidPattern = '[0-9a-fA-F-]{36}';
 
+// ==================== ROTAS PÚBLICAS (sem auth) ====================
+// Cadastro de usuários - qualquer um pode acessar
+Route::post('/users', [UserController::class, 'store']);
+
+// ==================== ROTAS PROTEGIDAS (com auth:sanctum) ====================
 Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
 
     // Rotas públicas para usuários autenticados
@@ -25,7 +30,10 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
 
     // ==================== ADMIN (acesso total) ====================
     Route::middleware('role:admin')->group(function () use ($uuidPattern) {
-        Route::apiResource('/users', UserController::class);
+        Route::apiResource('/users', UserController::class)->except(['store']);
+
+        // Rota alternativa de create (já tem store pública acima)
+        Route::get('/users/create', [UserController::class, 'create']);
 
         // ===== ROTAS CLIENTES - ADMIN =====
         Route::get('/clientes/todos', [ClienteController::class, 'indexWithTrashed']);
@@ -64,17 +72,20 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
             ->where('id', $uuidPattern);
         Route::apiResource('/categorias', CategoriaController::class);
 
-        // ===== FORNECEDORES (COM SOFT DELETE) =====
+        // ===== FORNECEDORES (COM SOFT DELETE) - CORRIGIDO =====
         // Rotas específicas PRIMEIRO (evita conflito com show/{id})
         Route::get('/fornecedores/todos', [FornecedorController::class, 'indexWithTrashed']);
         Route::get('/fornecedores/trashed', [FornecedorController::class, 'indexOnlyTrashed']);
-        Route::get('/fornecedores/deletados', [FornecedorController::class, 'indexOnlyTrashed']); // Compatibilidade
+        Route::get('/fornecedores/deletados', [FornecedorController::class, 'indexOnlyTrashed']);
+
+        // IMPORTANTE: restore e forceDelete agora no mesmo middleware das outras operações
         Route::post('/fornecedores/{id}/restore', [FornecedorController::class, 'restore'])
             ->where('id', $uuidPattern);
         Route::delete('/fornecedores/{id}/force', [FornecedorController::class, 'forceDelete'])
             ->where('id', $uuidPattern);
 
         // Rotas padrão do resource (DEPOIS das específicas)
+        // Inclui: GET /fornecedores, POST /fornecedores, GET /fornecedores/{id}, PUT /fornecedores/{id}, DELETE /fornecedores/{id}
         Route::apiResource('/fornecedores', FornecedorController::class);
 
         // ===== CLIENTES (Operador: apenas visualização) =====

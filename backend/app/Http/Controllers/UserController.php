@@ -9,12 +9,6 @@ use Illuminate\Support\Facades\Auth;
 
 class UserController extends Controller
 {
-    public function __construct()
-    {
-        // Aplica automaticamente as policies do modelo User
-        $this->authorizeResource(User::class, 'user');
-    }
-
     /**
      * Retorna o usuário logado (formato simplificado)
      */
@@ -34,7 +28,7 @@ class UserController extends Controller
     }
 
     /**
-     * Listar todos os usuários (com filtros opcionais)
+     * Listar todos os usuários (com filtros opcionais) - REQUER AUTH
      */
     public function index(Request $request)
     {
@@ -66,10 +60,12 @@ class UserController extends Controller
     }
 
     /**
-     * Mostrar usuário específico
+     * Mostrar usuário específico - REQUER AUTH
      */
     public function show(User $user)
     {
+        $this->authorize('view', $user);
+
         return response()->json([
             'message' => 'Usuário carregado com sucesso',
             'user' => $user
@@ -77,11 +73,12 @@ class UserController extends Controller
     }
 
     /**
-     * Criar novo usuário
+     * Criar novo usuário - PÚBLICO (não requer autenticação)
      */
     public function store(Request $request)
     {
-        $this->authorize('create', User::class);
+        // NÃO verifica autorização - qualquer um pode criar conta
+        // $this->authorize('create', User::class);
 
         $dados = $request->validate([
             'name' => 'required|string|max:255',
@@ -95,9 +92,9 @@ class UserController extends Controller
         $dados['password'] = Hash::make($dados['password']);
         $dados['ativo'] = $dados['ativo'] ?? true;
 
-        // Define empresa_id do usuário logado se não fornecido
+        // Se usuário estiver logado, usa empresa dele, senão fica null
         if (!isset($dados['empresa_id'])) {
-            $dados['empresa_id'] = Auth::user()->empresa_id;
+            $dados['empresa_id'] = Auth::check() ? Auth::user()->empresa_id : null;
         }
 
         $user = User::create($dados);
@@ -105,11 +102,11 @@ class UserController extends Controller
         return response()->json([
             'message' => 'Usuário criado com sucesso',
             'user' => $user
-        ]);
+        ], 201);
     }
 
     /**
-     * Atualizar usuário
+     * Atualizar usuário - REQUER AUTH
      */
     public function update(Request $request, User $user)
     {
@@ -139,7 +136,7 @@ class UserController extends Controller
     }
 
     /**
-     * Deletar usuário
+     * Deletar usuário - REQUER AUTH
      */
     public function destroy(User $user)
     {
@@ -153,7 +150,7 @@ class UserController extends Controller
     }
 
     /**
-     * Atualizar último login (audit)
+     * Atualizar último login (audit) - REQUER AUTH
      */
     public function atualizarUltimoLogin(User $user)
     {
