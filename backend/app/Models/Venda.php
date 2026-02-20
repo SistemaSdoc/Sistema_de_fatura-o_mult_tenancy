@@ -13,28 +13,32 @@ class Venda extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'id',
         'cliente_id',
         'user_id',
+        'documento_fiscal_id',
         'total',
         'status',
+        'estado_pagamento', // ATUALIZADO: pendente, paga, parcial, cancelada
         'hash_fiscal',
         'tipo_documento',
         'hora_venda',
         'data_venda',
-        'descricao',
         'serie',
         'numero',
         'total_iva',
-        'total_retenção',
+        'total_retencao',
         'total_pagar',
         'base_tributavel',
-
-
     ];
 
     protected $casts = [
-        'data' => 'datetime',
+        'data_venda' => 'date',
         'total' => 'decimal:2',
+        'total_iva' => 'decimal:2',
+        'total_retencao' => 'decimal:2',
+        'total_pagar' => 'decimal:2',
+        'base_tributavel' => 'decimal:2',
     ];
 
     protected static function boot(): void
@@ -65,8 +69,44 @@ class Venda extends Model
         return $this->hasMany(ItemVenda::class, 'venda_id');
     }
 
-    public function fatura()
+    /**
+     * Documento fiscal associado à venda
+     * Apenas FT e FR são vendas válidas
+     */
+    public function documentoFiscal()
     {
-        return $this->hasOne(Fatura::class);
+        return $this->hasOne(DocumentoFiscal::class, 'venda_id');
+    }
+
+    // ================= ACESSORES =================
+
+    /**
+     * Verificar se é uma venda válida (tem FT ou FR)
+     */
+    public function getEhVendaAttribute(): bool
+    {
+        if (!$this->documentoFiscal) {
+            return false;
+        }
+        return in_array($this->documentoFiscal->tipo_documento, ['FT', 'FR']);
+    }
+
+    /**
+     * Verificar se está paga
+     */
+    public function getEstaPagaAttribute(): bool
+    {
+        return $this->estado_pagamento === 'paga';
+    }
+
+    /**
+     * Verificar se pode receber pagamento
+     */
+    public function getPodeReceberPagamentoAttribute(): bool
+    {
+        if (!$this->documentoFiscal || $this->documentoFiscal->tipo_documento !== 'FT') {
+            return false;
+        }
+        return in_array($this->estado_pagamento, ['pendente', 'parcial']);
     }
 }

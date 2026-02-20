@@ -8,7 +8,7 @@ use App\Http\Controllers\CompraController;
 use App\Http\Controllers\VendaController;
 use App\Http\Controllers\PagamentoController;
 use App\Http\Controllers\MovimentoStockController;
-use App\Http\Controllers\FaturaController;
+use App\Http\Controllers\DocumentoFiscalController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ClienteController;
@@ -26,7 +26,13 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
 
     // Rotas públicas para usuários autenticados
     Route::get('/me', [UserController::class, 'me']);
+
+    // ===== DASHBOARD =====
     Route::get('/dashboard', [DashboardController::class, 'index']);
+    Route::get('/dashboard/documentos-fiscais', [DashboardController::class, 'resumoDocumentosFiscais']);
+    Route::get('/dashboard/pagamentos', [DashboardController::class, 'estatisticasPagamentos']);
+    Route::get('/dashboard/alertas', [DashboardController::class, 'alertasPendentes']);
+    Route::get('/dashboard/evolucao-mensal', [DashboardController::class, 'evolucaoMensal']);
 
     // ==================== ADMIN (acesso total) ====================
     Route::middleware('role:admin')->group(function () use ($uuidPattern) {
@@ -122,8 +128,68 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
             ->where('venda', $uuidPattern);
         Route::post('/vendas/{venda}/cancelar', [VendaController::class, 'cancelar'])
             ->where('venda', $uuidPattern);
+        Route::post('/vendas/{venda}/pagar', [VendaController::class, 'pagar'])
+            ->where('venda', $uuidPattern);
+        Route::post('/vendas/{venda}/converter', [VendaController::class, 'converter'])
+            ->where('venda', $uuidPattern);
 
-        // ===== PAGAMENTOS =====
+        // ===== DOCUMENTOS FISCAIS (NOVO - substitui Faturas) =====
+        Route::get('/documentos-fiscais', [DocumentoFiscalController::class, 'index']);
+        Route::get('/documentos-fiscais/{documento}', [DocumentoFiscalController::class, 'show'])
+            ->where('documento', $uuidPattern);
+        Route::post('/documentos-fiscais/emitir', [DocumentoFiscalController::class, 'emitir']);
+        Route::post('/documentos-fiscais/{documento}/pagar', [DocumentoFiscalController::class, 'pagar'])
+            ->where('documento', $uuidPattern);
+        Route::post('/documentos-fiscais/{documento}/converter', [DocumentoFiscalController::class, 'converter'])
+            ->where('documento', $uuidPattern);
+        Route::post('/documentos-fiscais/{documento}/vincular', [DocumentoFiscalController::class, 'vincular'])
+            ->where('documento', $uuidPattern);
+        Route::post('/documentos-fiscais/{documento}/anular', [DocumentoFiscalController::class, 'anular'])
+            ->where('documento', $uuidPattern);
+        Route::get('/documentos-fiscais/{documento}/recibos', [DocumentoFiscalController::class, 'recibos'])
+            ->where('documento', $uuidPattern);
+        Route::get('/documentos-fiscais/{documento}/estado-at', [DocumentoFiscalController::class, 'consultarEstado'])
+            ->where('documento', $uuidPattern);
+
+        // ===== ROTAS ESPECÍFICAS PARA NOTAS DE CRÉDITO E DÉBITO =====
+        // Rota para criar Nota de Crédito a partir de um documento FT/FR
+        Route::post('/documentos-fiscais/{id}/nota-credito', [DocumentoFiscalController::class, 'criarNotaCredito'])
+            ->where('id', $uuidPattern);
+
+        // Rota para criar Nota de Débito a partir de um documento FT/FR
+        Route::post('/documentos-fiscais/{id}/nota-debito', [DocumentoFiscalController::class, 'criarNotaDebito'])
+            ->where('id', $uuidPattern);
+
+        // Rota para gerar recibo para uma fatura FT
+        Route::post('/documentos-fiscais/{id}/recibo', [DocumentoFiscalController::class, 'gerarRecibo'])
+            ->where('id', $uuidPattern);
+
+        // Rota para vincular adiantamento a fatura
+        Route::post('/documentos-fiscais/{id}/vincular-adiantamento', [DocumentoFiscalController::class, 'vincularAdiantamento'])
+            ->where('id', $uuidPattern);
+
+        // Rota para cancelar documento fiscal (substitui anular)
+        Route::post('/documentos-fiscais/{id}/cancelar', [DocumentoFiscalController::class, 'cancelar'])
+            ->where('id', $uuidPattern);
+
+        // ===== ROTAS ADICIONAIS PARA DOCUMENTOS FISCAIS =====
+        // Listar recibos de uma fatura
+        Route::get('/documentos-fiscais/{faturaId}/recibos', [DocumentoFiscalController::class, 'listarRecibos'])
+            ->where('faturaId', $uuidPattern);
+
+        // Listar adiantamentos pendentes de um cliente
+        Route::get('/documentos-fiscais/adiantamentos-pendentes', [DocumentoFiscalController::class, 'adiantamentosPendentes']);
+
+        // Alertas de documentos fiscais
+        Route::get('/documentos-fiscais/alertas', [DocumentoFiscalController::class, 'alertasAdiantamentos']);
+
+        // Processar adiantamentos expirados (endpoint para cron/job)
+        Route::post('/documentos-fiscais/processar-expirados', [DocumentoFiscalController::class, 'processarExpirados']);
+
+        // Dashboard de documentos fiscais
+        Route::get('/documentos-fiscais/dashboard', [DocumentoFiscalController::class, 'dashboard']);
+
+        // ===== PAGAMENTOS (mantido para compatibilidade, mas usar documentos-fiscais/{id}/pagar preferencialmente) =====
         Route::get('/pagamentos', [PagamentoController::class, 'index']);
         Route::post('/pagamentos', [PagamentoController::class, 'store']);
         Route::get('/pagamentos/{id}', [PagamentoController::class, 'show'])
@@ -132,13 +198,6 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
             ->where('id', $uuidPattern);
         Route::delete('/pagamentos/{id}', [PagamentoController::class, 'destroy'])
             ->where('id', $uuidPattern);
-        Route::get('/vendas/listar', [VendaController::class, 'index']);
-
-        // ===== FATURAS =====
-        Route::get('/faturas', [FaturaController::class, 'index']);
-        Route::get('/faturas/{fatura}', [FaturaController::class, 'show'])
-            ->where('fatura', $uuidPattern);
-        Route::post('/faturas/gerar', [FaturaController::class, 'gerarFatura']);
 
         // ===== RELATÓRIOS =====
         Route::get('/relatorios/dashboard', [RelatoriosController::class, 'dashboard']);
@@ -146,5 +205,9 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
         Route::get('/relatorios/compras', [RelatoriosController::class, 'compras']);
         Route::get('/relatorios/faturacao', [RelatoriosController::class, 'faturacao']);
         Route::get('/relatorios/stock', [RelatoriosController::class, 'stock']);
+
+        // Novos relatórios de documentos fiscais
+        Route::get('/relatorios/documentos-fiscais', [RelatoriosController::class, 'documentosFiscais']);
+        Route::get('/relatorios/pagamentos-pendentes', [RelatoriosController::class, 'pagamentosPendentes']);
     });
 });

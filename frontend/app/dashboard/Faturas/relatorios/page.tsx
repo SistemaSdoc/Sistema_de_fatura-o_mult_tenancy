@@ -32,8 +32,8 @@ import {
     CheckCircle2,
 } from "lucide-react";
 
-import { dashboardService, faturaService } from "@/services/faturas";
-import { DashboardFaturasResponse, Fatura, EstadoFatura, TipoDocumento } from "@/services/faturas";
+import { dashboardService, faturaService } from "@/services/DocumentoFiscal";
+import { DashboardFaturasResponse, Fatura, EstadoFatura, TipoDocumento } from "@/services/DocumentoFiscal";
 
 /* 🎨 Paleta FacturaJá */
 const COLORS = {

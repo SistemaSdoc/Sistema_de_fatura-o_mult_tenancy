@@ -55,13 +55,15 @@ class EmpresaSeeder extends Seeder
         /* ================= CATEGORIAS ================= */
         $cosmeticosId = Str::uuid();
         $alimentacaoId = Str::uuid();
+        $servicosId = Str::uuid();
+
         DB::table('categorias')->insert([
             [
                 'id' => $cosmeticosId,
                 'nome' => 'Cosméticos',
                 'descricao' => 'Produtos de cosmética',
                 'status' => 'ativo',
-                'tipo' => 'Produto',
+                'tipo' => 'produto',
                 'user_id' => $adminUserId,
                 'created_at' => $now,
                 'updated_at' => $now,
@@ -71,7 +73,17 @@ class EmpresaSeeder extends Seeder
                 'nome' => 'Alimentação',
                 'descricao' => 'Produtos alimentares',
                 'status' => 'ativo',
-                'tipo' => 'Produto',
+                'tipo' => 'produto',
+                'user_id' => $adminUserId,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+            [
+                'id' => $servicosId,
+                'nome' => 'Serviços',
+                'descricao' => 'Serviços diversos',
+                'status' => 'ativo',
+                'tipo' => 'servico',
                 'user_id' => $adminUserId,
                 'created_at' => $now,
                 'updated_at' => $now,
@@ -79,9 +91,13 @@ class EmpresaSeeder extends Seeder
         ]);
 
         /* ================= PRODUTOS ================= */
+        $cremeId = Str::uuid();
+        $arrozId = Str::uuid();
+        $servicoId = Str::uuid();
+
         $produtos = [
             [
-                'id' => $cremeId = Str::uuid(),
+                'id' => $cremeId,
                 'categoria_id' => $cosmeticosId,
                 'nome' => 'Creme Facial',
                 'descricao' => 'Creme hidratante para rosto',
@@ -92,10 +108,11 @@ class EmpresaSeeder extends Seeder
                 'estoque_minimo' => 10,
                 'custo_medio' => 5000,
                 'status' => 'ativo',
+                'tipo' => 'produto',
                 'user_id' => $adminUserId,
             ],
             [
-                'id' => $arrozId = Str::uuid(),
+                'id' => $arrozId,
                 'categoria_id' => $alimentacaoId,
                 'nome' => 'Arroz Premium 5kg',
                 'descricao' => 'Arroz importado premium',
@@ -106,6 +123,25 @@ class EmpresaSeeder extends Seeder
                 'estoque_minimo' => 20,
                 'custo_medio' => 12000,
                 'status' => 'ativo',
+                'tipo' => 'produto',
+                'user_id' => $adminUserId,
+            ],
+            [
+                'id' => $servicoId,
+                'categoria_id' => $servicosId,
+                'nome' => 'Consultoria',
+                'descricao' => 'Serviço de consultoria empresarial',
+                'preco_compra' => 0,
+                'preco_venda' => 50000,
+                'taxa_iva' => 14,
+                'estoque_atual' => 0,
+                'estoque_minimo' => 0,
+                'custo_medio' => 0,
+                'status' => 'ativo',
+                'tipo' => 'servico',
+                'retencao' => 6.5,
+                'duracao_estimada' => '01:00',
+                'unidade_medida' => 'hora',
                 'user_id' => $adminUserId,
             ],
         ];
@@ -135,38 +171,56 @@ class EmpresaSeeder extends Seeder
 
         /* ================= CLIENTES ================= */
         $clienteId = Str::uuid();
+        $clienteEmpresaId = Str::uuid();
+
         DB::table('clientes')->insert([
-            'id' => $clienteId,
-            'nome' => 'Cliente Final',
-            'nif' => null,
-            'tipo' => 'consumidor_final',
-            'telefone' => '911234567',
-            'email' => 'cliente@teste.com',
-            'endereco' => 'Bairro Central, Luanda',
-            'data_registro' => $now->toDateString(),
-            'created_at' => $now,
-            'updated_at' => $now,
+            [
+                'id' => $clienteId,
+                'nome' => 'Cliente Final',
+                'nif' => null,
+                'tipo' => 'consumidor_final',
+                'telefone' => '911234567',
+                'email' => 'cliente@teste.com',
+                'endereco' => 'Bairro Central, Luanda',
+                'data_registro' => $now->toDateString(),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+            [
+                'id' => $clienteEmpresaId,
+                'nome' => 'Empresa Teste Lda',
+                'nif' => '5009876543',
+                'tipo' => 'empresa',
+                'telefone' => '922345678',
+                'email' => 'empresa@teste.com',
+                'endereco' => 'Av. Empresarial, Luanda',
+                'data_registro' => $now->toDateString(),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
         ]);
 
         /* ================= COMPRA ================= */
         $compraId = Str::uuid();
+        $totalCompra = 5000 * 10;
+        $baseTributavelCompra = round($totalCompra / 1.14, 2);
+        $ivaCompra = round($totalCompra - $baseTributavelCompra, 2);
+
         DB::table('compras')->insert([
             'id' => $compraId,
             'fornecedor_id' => $fornecedorId,
-            'data' => $now->toDateString(),
-            'total' => 5000 * 10, // Creme Facial x10
-            'created_at' => $now,
-            'updated_at' => $now,
             'user_id' => $adminUserId,
+            'data' => $now->toDateString(),
             'tipo_documento' => 'fatura',
             'numero_documento' => 'FC/2024/0001',
             'data_emissao' => $now->toDateString(),
-            'base_tributavel' => 5000 * 10 / 1.14,
-            'total_iva' => (5000 * 10) - (5000 * 10 / 1.14),
-            'total_fatura' => 5000 * 10,
+            'base_tributavel' => $baseTributavelCompra,
+            'total_iva' => $ivaCompra,
+            'total_fatura' => $totalCompra,
             'validado_fiscalmente' => true,
-            'total' => 5000 * 10,
-
+            'total' => $totalCompra,
+            'created_at' => $now,
+            'updated_at' => $now,
         ]);
 
         DB::table('itens_compras')->insert([
@@ -175,119 +229,449 @@ class EmpresaSeeder extends Seeder
             'produto_id' => $cremeId,
             'quantidade' => 10,
             'preco_compra' => 5000,
-            'subtotal' => 5000*10,
-            'base_tributavel' => 5000 * 10 / 1.14,
-            'valor_iva' => (5000 * 10) - (5000 * 10 / 1.14),
+            'subtotal' => $totalCompra,
+            'base_tributavel' => $baseTributavelCompra,
+            'valor_iva' => $ivaCompra,
             'created_at' => $now,
             'updated_at' => $now,
         ]);
 
-        /* ================= VENDAS ================= */
-        $vendaId = Str::uuid();
+        /* ================= SÉRIES FISCAIS ================= */
+        $seriesFiscais = [
+            ['tipo_documento' => 'FT', 'serie' => 'A', 'descricao' => 'Fatura'],
+            ['tipo_documento' => 'FR', 'serie' => 'B', 'descricao' => 'Fatura-Recibo'],
+            ['tipo_documento' => 'FA', 'serie' => 'F', 'descricao' => 'Fatura de Adiantamento'],
+            ['tipo_documento' => 'NC', 'serie' => 'D', 'descricao' => 'Nota de Crédito'],
+            ['tipo_documento' => 'ND', 'serie' => 'E', 'descricao' => 'Nota de Débito'],
+            ['tipo_documento' => 'RC', 'serie' => 'C', 'descricao' => 'Recibo'],
+            ['tipo_documento' => 'FRt', 'serie' => 'R', 'descricao' => 'Fatura de Retificação'],
+        ];
+
+        foreach ($seriesFiscais as $serie) {
+            DB::table('series_fiscais')->insert([
+                'id' => Str::uuid(),
+                'user_id' => $adminUserId,
+                'tipo_documento' => $serie['tipo_documento'],
+                'serie' => $serie['serie'],
+                'ano' => date('Y'),
+                'ultimo_numero' => 0,
+                'ativa' => true,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
+
+        /* ================= VENDA 1 - Fatura Normal (FT) ================= */
+        $venda1Id = Str::uuid();
+        $quantidade1 = 2;
+        $precoUnitario1 = 8000;
+        $totalBruto1 = $precoUnitario1 * $quantidade1;
+        $desconto1 = 0;
+        $baseTributavel1 = $totalBruto1 - $desconto1;
+        $taxaIva1 = 14;
+        $valorIva1 = round($baseTributavel1 * $taxaIva1 / 100, 2);
+        $valorRetencao1 = 0;
+        $totalLiquido1 = $baseTributavel1 + $valorIva1 - $valorRetencao1;
+
         DB::table('vendas')->insert([
-            'id' => $vendaId,
+            'id' => $venda1Id,
             'cliente_id' => $clienteId,
             'user_id' => $adminUserId,
+            'documento_fiscal_id' => null,
             'data_venda' => $now->toDateString(),
             'hora_venda' => $now->toTimeString(),
-            'total' => 8000*2, // Creme Facial x2
-            'status' => 'aberta',
-            'tipo_documento' => 'fatura',
-            'serie' => 'FT',
+            'total' => $totalLiquido1,
+            'status' => 'faturada',
+            'estado_pagamento' => 'pendente',
+            'tipo_documento' => 'venda',
+            'serie' => 'A',
             'numero' => '00001',
-            'base_tributavel' => (8000*2) / 1.14,
-            'total_iva' => (8000*2) - ((8000*2) / 1.14),
-            'total_retencao' => ((8000*2) * 0.06), // 6% retenção
-            'total_pagar' => (8000*2) - ((8000*2) * 0.06),
-
+            'base_tributavel' => $baseTributavel1,
+            'total_iva' => $valorIva1,
+            'total_retencao' => $valorRetencao1,
+            'total_pagar' => $totalLiquido1,
             'created_at' => $now,
             'updated_at' => $now,
         ]);
 
         DB::table('itens_venda')->insert([
             'id' => Str::uuid(),
-            'venda_id' => $vendaId,
+            'venda_id' => $venda1Id,
             'produto_id' => $cremeId,
-            'quantidade' => 2,
-            'preco_venda' => 8000,
-            'subtotal' => 8000*2,
-            'desconto' => 0,
-            'base_tributavel' => (8000*2) / 1.14,
-            'valor_iva' => (8000*2) - ((8000*2) / 1.14),
-            'valor_retencao' => (8000*2) * 0.06, // 6% retenção
             'descricao' => 'Creme Facial',
+            'quantidade' => $quantidade1,
+            'preco_venda' => $precoUnitario1,
+            'desconto' => $desconto1,
+            'base_tributavel' => $baseTributavel1,
+            'valor_iva' => $valorIva1,
+            'valor_retencao' => $valorRetencao1,
+            'subtotal' => $totalLiquido1,
             'created_at' => $now,
             'updated_at' => $now,
         ]);
 
-        /* ================= FATURAS ================= */
-        $faturaId = Str::uuid();
-        $totalBruto = 8000*2;
-        $iva = $totalBruto*0.14; // 14%
-        $retencao = $totalBruto*0.06; // 6%
-        $totalLiquido = $totalBruto + $iva - $retencao;
+        // Documento Fiscal FT (Fatura)
+        $documentoFtId = Str::uuid();
+        $numeroFt = 1;
+        $numeroDocumentoFt = 'A-' . str_pad($numeroFt, 5, '0', STR_PAD_LEFT);
 
-        DB::table('faturas')->insert([
-            'id' => $faturaId,
-            'venda_id' => $vendaId,
-            'cliente_id' => $clienteId,
+        DB::table('documentos_fiscais')->insert([
+            'id' => $documentoFtId,
             'user_id' => $adminUserId,
-            'numero' => 'FT/' . date('Y') . '/00001',
+            'venda_id' => $venda1Id,
+            'cliente_id' => $clienteId,
+            'fatura_id' => null,
+            'serie' => 'A',
+            'numero' => $numeroFt,
+            'numero_documento' => $numeroDocumentoFt,
             'tipo_documento' => 'FT',
             'data_emissao' => $now->toDateString(),
             'hora_emissao' => $now->toTimeString(),
-            'data_vencimento' => $now->addDays(30)->toDateString(),
-            'base_tributavel' => $totalBruto / 1.14,
-            'total_iva' => $iva,
-            'total_retencao' => $retencao,
-            'total_liquido' => $totalLiquido,
+            'data_vencimento' => $now->copy()->addDays(30)->toDateString(),
+            'data_cancelamento' => null,
+            'base_tributavel' => $baseTributavel1,
+            'total_iva' => $valorIva1,
+            'total_retencao' => $valorRetencao1,
+            'total_liquido' => $totalLiquido1,
             'estado' => 'emitido',
-            'hash_fiscal' => sha1(Str::uuid()),
+            'motivo' => null,
+            'motivo_cancelamento' => null,
+            'user_cancelamento_id' => null,
+            'metodo_pagamento' => null,
+            'referencia_pagamento' => null,
+            'hash_fiscal' => sha1($numeroDocumentoFt . $now->toDateString() . number_format($totalLiquido1, 2, '.', '')),
+            'referencia_externa' => null,
             'created_at' => $now,
             'updated_at' => $now,
         ]);
 
-        DB::table('itens_fatura')->insert([
+        // Item do Documento Fiscal FT
+        DB::table('itens_documento_fiscal')->insert([
             'id' => Str::uuid(),
-            'fatura_id' => $faturaId,
+            'documento_fiscal_id' => $documentoFtId,
             'produto_id' => $cremeId,
+            'item_origem_id' => null,
             'descricao' => 'Creme Facial',
-            'quantidade' => 2,
-            'preco_unitario' => 8000,
-            'taxa_iva' => 14,
-            'valor_iva' => $iva,
-            'valor_retencao' => $retencao,
-            'desconto' => 0,
-            'total_linha' => $totalLiquido,
-            'base_tributavel' => $totalBruto,
+            'referencia' => 'CREME001',
+            'quantidade' => $quantidade1,
+            'unidade' => 'UN',
+            'preco_unitario' => $precoUnitario1,
+            'desconto' => $desconto1,
+            'base_tributavel' => $baseTributavel1,
+            'taxa_iva' => $taxaIva1,
+            'valor_iva' => $valorIva1,
+            'taxa_retencao' => 0,
+            'valor_retencao' => 0,
+            'total_linha' => $totalLiquido1,
+            'ordem' => 1,
+            'motivo_alteracao' => null,
+            'observacoes' => null,
             'created_at' => $now,
             'updated_at' => $now,
         ]);
 
-        /* ================= PAGAMENTOS ================= */
-        DB::table('pagamentos')->insert([
-            'id' => Str::uuid(),
-            'fatura_id' => $faturaId,
+        // Atualizar venda com documento_fiscal_id
+        DB::table('vendas')->where('id', $venda1Id)->update([
+            'documento_fiscal_id' => $documentoFtId,
+        ]);
+
+        // Atualizar série fiscal
+        DB::table('series_fiscais')
+            ->where('tipo_documento', 'FT')
+            ->where('serie', 'A')
+            ->where('ano', date('Y'))
+            ->update(['ultimo_numero' => $numeroFt]);
+
+        /* ================= VENDA 2 - Fatura-Recibo (FR) ================= */
+        $venda2Id = Str::uuid();
+        $quantidade2 = 1;
+        $precoUnitario2 = 50000;
+        $totalBruto2 = $precoUnitario2 * $quantidade2;
+        $desconto2 = 0;
+        $baseTributavel2 = $totalBruto2 - $desconto2;
+        $taxaIva2 = 14;
+        $valorIva2 = round($baseTributavel2 * $taxaIva2 / 100, 2);
+        $taxaRetencao2 = 6.5;
+        $valorRetencao2 = round($baseTributavel2 * $taxaRetencao2 / 100, 2);
+        $totalLiquido2 = $baseTributavel2 + $valorIva2 - $valorRetencao2;
+
+        DB::table('vendas')->insert([
+            'id' => $venda2Id,
+            'cliente_id' => $clienteEmpresaId,
             'user_id' => $adminUserId,
-            'metodo' => 'dinheiro',
-            'valor_pago' => $totalLiquido,
-            'troco' => 0,
-            'data_pagamento' => $now->toDateString(),
-            'hora_pagamento' => $now->toTimeString(),
-            'referencia' => 'Pagamento Seed',
+            'documento_fiscal_id' => null,
+            'data_venda' => $now->toDateString(),
+            'hora_venda' => $now->toTimeString(),
+            'total' => $totalLiquido2,
+            'status' => 'faturada',
+            'estado_pagamento' => 'paga',
+            'tipo_documento' => 'venda',
+            'serie' => 'B',
+            'numero' => '00001',
+            'base_tributavel' => $baseTributavel2,
+            'total_iva' => $valorIva2,
+            'total_retencao' => $valorRetencao2,
+            'total_pagar' => $totalLiquido2,
             'created_at' => $now,
             'updated_at' => $now,
         ]);
 
-        /* ================= MOVIMENTO DE STOCK ================= */
+        DB::table('itens_venda')->insert([
+            'id' => Str::uuid(),
+            'venda_id' => $venda2Id,
+            'produto_id' => $servicoId,
+            'descricao' => 'Consultoria Empresarial',
+            'quantidade' => $quantidade2,
+            'preco_venda' => $precoUnitario2,
+            'desconto' => $desconto2,
+            'base_tributavel' => $baseTributavel2,
+            'valor_iva' => $valorIva2,
+            'valor_retencao' => $valorRetencao2,
+            'subtotal' => $totalLiquido2,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        // Documento Fiscal FR (Fatura-Recibo)
+        $documentoFrId = Str::uuid();
+        $numeroFr = 1;
+        $numeroDocumentoFr = 'B-' . str_pad($numeroFr, 5, '0', STR_PAD_LEFT);
+
+        DB::table('documentos_fiscais')->insert([
+            'id' => $documentoFrId,
+            'user_id' => $adminUserId,
+            'venda_id' => $venda2Id,
+            'cliente_id' => $clienteEmpresaId,
+            'fatura_id' => null,
+            'serie' => 'B',
+            'numero' => $numeroFr,
+            'numero_documento' => $numeroDocumentoFr,
+            'tipo_documento' => 'FR',
+            'data_emissao' => $now->toDateString(),
+            'hora_emissao' => $now->toTimeString(),
+            'data_vencimento' => null,
+            'data_cancelamento' => null,
+            'base_tributavel' => $baseTributavel2,
+            'total_iva' => $valorIva2,
+            'total_retencao' => $valorRetencao2,
+            'total_liquido' => $totalLiquido2,
+            'estado' => 'paga',
+            'motivo' => null,
+            'motivo_cancelamento' => null,
+            'user_cancelamento_id' => null,
+            'metodo_pagamento' => 'transferencia',
+            'referencia_pagamento' => 'REF/2024/001',
+            'hash_fiscal' => sha1($numeroDocumentoFr . $now->toDateString() . number_format($totalLiquido2, 2, '.', '')),
+            'referencia_externa' => null,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        // Item do Documento Fiscal FR
+        DB::table('itens_documento_fiscal')->insert([
+            'id' => Str::uuid(),
+            'documento_fiscal_id' => $documentoFrId,
+            'produto_id' => $servicoId,
+            'item_origem_id' => null,
+            'descricao' => 'Consultoria Empresarial',
+            'referencia' => 'SERV001',
+            'quantidade' => $quantidade2,
+            'unidade' => 'HORA',
+            'preco_unitario' => $precoUnitario2,
+            'desconto' => $desconto2,
+            'base_tributavel' => $baseTributavel2,
+            'taxa_iva' => $taxaIva2,
+            'valor_iva' => $valorIva2,
+            'taxa_retencao' => $taxaRetencao2,
+            'valor_retencao' => $valorRetencao2,
+            'total_linha' => $totalLiquido2,
+            'ordem' => 1,
+            'motivo_alteracao' => null,
+            'observacoes' => null,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        // Atualizar venda com documento_fiscal_id
+        DB::table('vendas')->where('id', $venda2Id)->update([
+            'documento_fiscal_id' => $documentoFrId,
+        ]);
+
+        // Atualizar série fiscal
+        DB::table('series_fiscais')
+            ->where('tipo_documento', 'FR')
+            ->where('serie', 'B')
+            ->where('ano', date('Y'))
+            ->update(['ultimo_numero' => $numeroFr]);
+
+        /* ================= RECIBO DO PAGAMENTO DA FT ================= */
+        $reciboId = Str::uuid();
+        $numeroRc = 1;
+        $numeroDocumentoRc = 'C-' . str_pad($numeroRc, 5, '0', STR_PAD_LEFT);
+
+        DB::table('documentos_fiscais')->insert([
+            'id' => $reciboId,
+            'user_id' => $adminUserId,
+            'venda_id' => null,
+            'cliente_id' => $clienteId,
+            'fatura_id' => $documentoFtId,
+            'serie' => 'C',
+            'numero' => $numeroRc,
+            'numero_documento' => $numeroDocumentoRc,
+            'tipo_documento' => 'RC',
+            'data_emissao' => $now->copy()->addDays(5)->toDateString(),
+            'hora_emissao' => $now->toTimeString(),
+            'data_vencimento' => null,
+            'data_cancelamento' => null,
+            'base_tributavel' => 0,
+            'total_iva' => 0,
+            'total_retencao' => 0,
+            'total_liquido' => $totalLiquido1,
+            'estado' => 'paga',
+            'motivo' => null,
+            'motivo_cancelamento' => null,
+            'user_cancelamento_id' => null,
+            'metodo_pagamento' => 'dinheiro',
+            'referencia_pagamento' => 'Pagamento em espécie',
+            'hash_fiscal' => sha1($numeroDocumentoRc . $now->copy()->addDays(5)->toDateString() . number_format($totalLiquido1, 2, '.', '')),
+            'referencia_externa' => null,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        // Atualizar estado da FT para paga após recibo
+        DB::table('documentos_fiscais')
+            ->where('id', $documentoFtId)
+            ->update(['estado' => 'paga']);
+
+        // Atualizar estado de pagamento da venda 1
+        DB::table('vendas')
+            ->where('id', $venda1Id)
+            ->update(['estado_pagamento' => 'paga']);
+
+        // Atualizar série fiscal
+        DB::table('series_fiscais')
+            ->where('tipo_documento', 'RC')
+            ->where('serie', 'C')
+            ->where('ano', date('Y'))
+            ->update(['ultimo_numero' => $numeroRc]);
+
+        /* ================= VENDA 3 - Fatura de Adiantamento (FA) ================= */
+        $venda3Id = Str::uuid();
+        $valorAdiantamento = 30000;
+
+        DB::table('vendas')->insert([
+            'id' => $venda3Id,
+            'cliente_id' => $clienteEmpresaId,
+            'user_id' => $adminUserId,
+            'documento_fiscal_id' => null,
+            'data_venda' => $now->toDateString(),
+            'hora_venda' => $now->toTimeString(),
+            'total' => $valorAdiantamento,
+            'status' => 'faturada',
+            'estado_pagamento' => 'paga',
+            'tipo_documento' => 'venda', // ← CORRIGIDO: era 'adiantamento', agora é 'venda'
+            'serie' => 'F',
+            'numero' => '00001',
+            'base_tributavel' => $valorAdiantamento,
+            'total_iva' => 0,
+            'total_retencao' => 0,
+            'total_pagar' => $valorAdiantamento,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        // Documento Fiscal FA (Fatura de Adiantamento)
+        $documentoFaId = Str::uuid();
+        $numeroFa = 1;
+        $numeroDocumentoFa = 'F-' . str_pad($numeroFa, 5, '0', STR_PAD_LEFT);
+
+        DB::table('documentos_fiscais')->insert([
+            'id' => $documentoFaId,
+            'user_id' => $adminUserId,
+            'venda_id' => $venda3Id,
+            'cliente_id' => $clienteEmpresaId,
+            'fatura_id' => null,
+            'serie' => 'F',
+            'numero' => $numeroFa,
+            'numero_documento' => $numeroDocumentoFa,
+            'tipo_documento' => 'FA',
+            'data_emissao' => $now->toDateString(),
+            'hora_emissao' => $now->toTimeString(),
+            'data_vencimento' => $now->copy()->addDays(15)->toDateString(),
+            'data_cancelamento' => null,
+            'base_tributavel' => $valorAdiantamento,
+            'total_iva' => 0,
+            'total_retencao' => 0,
+            'total_liquido' => $valorAdiantamento,
+            'estado' => 'emitido',
+            'motivo' => null,
+            'motivo_cancelamento' => null,
+            'user_cancelamento_id' => null,
+            'metodo_pagamento' => 'transferencia',
+            'referencia_pagamento' => 'ADIANT/2024/001',
+            'hash_fiscal' => sha1($numeroDocumentoFa . $now->toDateString() . number_format($valorAdiantamento, 2, '.', '')),
+            'referencia_externa' => null,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        // Item do Documento Fiscal FA
+        DB::table('itens_documento_fiscal')->insert([
+            'id' => Str::uuid(),
+            'documento_fiscal_id' => $documentoFaId,
+            'produto_id' => null,
+            'item_origem_id' => null,
+            'descricao' => 'Adiantamento para futura aquisição de produtos',
+            'referencia' => 'ADIANT',
+            'quantidade' => 1,
+            'unidade' => 'UN',
+            'preco_unitario' => $valorAdiantamento,
+            'desconto' => 0,
+            'base_tributavel' => $valorAdiantamento,
+            'taxa_iva' => 0,
+            'valor_iva' => 0,
+            'taxa_retencao' => 0,
+            'valor_retencao' => 0,
+            'total_linha' => $valorAdiantamento,
+            'ordem' => 1,
+            'motivo_alteracao' => null,
+            'observacoes' => 'Válido por 15 dias',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        // Atualizar venda com documento_fiscal_id
+        DB::table('vendas')->where('id', $venda3Id)->update([
+            'documento_fiscal_id' => $documentoFaId,
+        ]);
+
+        // Atualizar série fiscal
+        DB::table('series_fiscais')
+            ->where('tipo_documento', 'FA')
+            ->where('serie', 'F')
+            ->where('ano', date('Y'))
+            ->update(['ultimo_numero' => $numeroFa]);
+
+        /* ================= VÍNCULO ADIANTAMENTO -> FATURA ================= */
+        DB::table('adiantamento_fatura')->insert([
+            'id' => Str::uuid(),
+            'adiantamento_id' => $documentoFaId,
+            'fatura_id' => $documentoFtId,
+            'valor_utilizado' => min($valorAdiantamento, $totalLiquido1),
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        /* ================= MOVIMENTOS DE STOCK ================= */
         DB::table('movimentos_stock')->insert([
             'id' => Str::uuid(),
             'produto_id' => $cremeId,
             'user_id' => $adminUserId,
             'tipo' => 'saida',
             'tipo_movimento' => 'venda',
-            'quantidade' => 2,
-            'referencia' => $vendaId,
+            'quantidade' => $quantidade1,
+            'referencia' => $venda1Id,
             'custo_medio' => 5000,
             'stock_minimo' => 10,
             'created_at' => $now,
@@ -295,47 +679,45 @@ class EmpresaSeeder extends Seeder
         ]);
 
         /* ================= LOGS FISCAIS ================= */
-        DB::table('logs_fiscais')->insert([
+        $logsFiscais = [
+            ['entidade' => 'documento_fiscal', 'entidade_id' => $documentoFtId, 'acao' => 'emitir', 'detalhe' => 'Fatura FT emitida'],
+            ['entidade' => 'documento_fiscal', 'entidade_id' => $documentoFrId, 'acao' => 'emitir', 'detalhe' => 'Fatura-Recibo FR emitida'],
+            ['entidade' => 'documento_fiscal', 'entidade_id' => $reciboId, 'acao' => 'emitir', 'detalhe' => 'Recibo RC emitido para pagamento da FT'],
+            ['entidade' => 'documento_fiscal', 'entidade_id' => $documentoFaId, 'acao' => 'emitir', 'detalhe' => 'Fatura de Adiantamento FA emitida'],
+            // CORRIGIDO: 'vincular' → 'emitir' (ou outra ação válida do seu enum)
+            ['entidade' => 'adiantamento_fatura', 'entidade_id' => $documentoFaId, 'acao' => 'emitir', 'detalhe' => 'FA vinculada parcialmente à FT'],
+        ];
+
+        foreach ($logsFiscais as $log) {
+            DB::table('logs_fiscais')->insert([
+                'id' => Str::uuid(),
+                'user_id' => $adminUserId,
+                'entidade' => $log['entidade'],
+                'entidade_id' => $log['entidade_id'],
+                'acao' => $log['acao'],
+                'data_acao' => $now,
+                'detalhe' => $log['detalhe'],
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
+
+        /* ================= APURAMENTO IVA ================= */
+        $ivaLiquidado = $valorIva1 + $valorIva2;
+        $ivaDedutivel = $ivaCompra;
+        $ivaAPagar = $ivaLiquidado - $ivaDedutivel;
+
+        DB::table('apuramento_iva')->insert([
             'id' => Str::uuid(),
             'user_id' => $adminUserId,
-            'entidade' => 'fatura',
-            'entidade_id' => $faturaId,
-            'acao' => 'emitir',
-            'data_acao' => $now,
-            'detalhe' => 'Seed inicial de fatura com IVA e retenção',
+            'periodo' => now()->format('m/Y'),
+            'iva_liquidado' => $ivaLiquidado,
+            'iva_dedutivel' => $ivaDedutivel,
+            'iva_a_pagar' => max($ivaAPagar, 0),
+            'estado' => 'aberto',
+            'data_fecho' => null,
             'created_at' => $now,
             'updated_at' => $now,
         ]);
-
-        /* ================= APURAMENTO_IVA ================= */
-        DB::table('apuramento_iva')->updateOrInsert(
-            ['periodo' => now()->format('m/Y')],
-            [
-                'id' => Str::uuid(),
-                'user_id' => $adminUserId,
-                'iva_liquidado' => $iva,
-                'iva_dedutivel' => 5000*10*0.14, // Exemplo: compra do creme x10
-                'iva_a_pagar' => $iva - (5000*10*0.14),
-                'estado' => 'aberto',
-                'data_fecho' => null,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]
-        );
-
-        /* ================= SÉRIES FISCAIS ================= */
-$serieFiscalId = Str::uuid();
-DB::table('series_fiscais')->insert([
-    'id' => $serieFiscalId,
-    'user_id' => $adminUserId,
-    'tipo_documento' => 'FT',  // Fatura
-    'serie' => 'A',            // Série padrão
-    'ano' => date('Y'),        // Ano corrente
-    'ultimo_numero' => 0,      // Começa do 0
-    'ativa' => true,           // Série ativa
-    'created_at' => $now,
-    'updated_at' => $now,
-]);
-
     }
 }

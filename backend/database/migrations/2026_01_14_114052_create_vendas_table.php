@@ -8,65 +8,85 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // Vendas
-Schema::create('vendas', function (Blueprint $table) {
-    $table->uuid('id')->primary();
+        // Vendas - SEM FK para documentos_fiscais (evita circular)
+        Schema::create('vendas', function (Blueprint $table) {
+            $table->uuid('id')->primary();
 
-    $table->uuid('cliente_id')->nullable();
-    $table->foreign('cliente_id')->references('id')->on('clientes');
+            $table->foreignUuid('cliente_id')
+                  ->nullable()
+                  ->constrained('clientes');
 
-    $table->uuid('user_id');
-    $table->foreign('user_id')->references('id')->on('users');
+            $table->foreignUuid('user_id')
+                  ->constrained('users');
 
-    $table->enum('tipo_documento', ['fatura','recibo','nota_credito','nota_debito']);
-    $table->string('serie')->nullable();
-    $table->string('numero')->unique();
+            // documento_fiscal_id SEM foreign key (será adicionada depois)
+            $table->uuid('documento_fiscal_id')->nullable();
+            $table->index('documento_fiscal_id');
 
-    $table->decimal('base_tributavel', 14, 2);
-    $table->decimal('total_iva', 14, 2);
-    $table->decimal('total_retencao', 14, 2)->default(0);
-    $table->decimal('total_pagar', 14, 2);
+            // Tipo interno da venda
+            $table->enum('tipo_documento', ['venda'])->default('venda');
 
-    $table->date('data_venda');
-    $table->time('hora_venda');
-    $table->decimal('total', 12, 2);
+            // Numeração interna da venda
+            $table->string('serie')->nullable();
+            $table->string('numero');
 
-    $table->enum('status', ['aberta', 'faturada', 'cancelada'])->default('aberta');
-    $table->string('hash_fiscal')->nullable();
-    $table->timestamps();
-});
+            // Totais
+            $table->decimal('base_tributavel', 15, 2)->default(0);
+            $table->decimal('total_iva', 15, 2)->default(0);
+            $table->decimal('total_retencao', 15, 2)->default(0);
+            $table->decimal('total_pagar', 15, 2)->default(0);
 
+            // Datas
+            $table->date('data_venda');
+            $table->time('hora_venda');
+            $table->decimal('total', 15, 2)->default(0);
+
+            // Status da venda
+            $table->enum('status', ['aberta', 'faturada', 'cancelada'])->default('aberta');
+
+            // ATUALIZADO: Estado de pagamento (adicionado 'cancelada', removido valores obsoletos)
+            $table->enum('estado_pagamento', ['pendente', 'paga', 'parcial', 'cancelada'])
+                  ->default('pendente');
+
+            $table->string('hash_fiscal')->nullable();
+            $table->timestamps();
+
+            // Índices
+            $table->index('cliente_id');
+            $table->index('status');
+            $table->index('estado_pagamento');
+            $table->index('data_venda');
+            $table->index(['status', 'estado_pagamento']); // Índice composto para consultas comuns
+        });
 
         // Itens da venda
         Schema::create('itens_venda', function (Blueprint $table) {
-    $table->uuid('id')->primary();
+            $table->uuid('id')->primary();
 
-    $table->uuid('venda_id');
-    $table->foreign('venda_id')
-          ->references('id')
-          ->on('vendas')
-          ->onDelete('cascade');
+            $table->foreignUuid('venda_id')
+                  ->constrained('vendas')
+                  ->onDelete('cascade');
 
-    $table->uuid('produto_id');
-    $table->foreign('produto_id')
-          ->references('id')
-          ->on('produtos');
+            $table->foreignUuid('produto_id')
+                  ->constrained('produtos');
 
-    $table->integer('quantidade');
-    $table->string('descricao');
+            $table->integer('quantidade');
+            $table->string('descricao', 255);
 
-    // Preço no momento da venda
-    $table->decimal('preco_venda', 12, 2);
-    $table->decimal('desconto', 12, 2)->default(0);
-    $table->decimal('base_tributavel', 14, 2);
-    $table->decimal('valor_iva', 14, 2);
-    $table->decimal('valor_retencao', 14, 2)->default(0);
+            // Preço no momento da venda
+            $table->decimal('preco_venda', 15, 4);
+            $table->decimal('desconto', 15, 2)->default(0);
+            $table->decimal('base_tributavel', 15, 2)->default(0);
+            $table->decimal('valor_iva', 15, 2)->default(0);
+            $table->decimal('valor_retencao', 15, 2)->default(0);
+            $table->decimal('subtotal', 15, 2)->default(0);
 
-    $table->decimal('subtotal', 12, 2);
+            $table->timestamps();
 
-    $table->timestamps();
-});
-
+            // Índices
+            $table->index('venda_id');
+            $table->index('produto_id');
+        });
     }
 
     public function down(): void

@@ -80,6 +80,12 @@ class MovimentoStockController extends Controller
             ->where('tipo', 'saida')
             ->sum(DB::raw('ABS(quantidade)'));
 
+        // ATUALIZADO: Movimentos por documentos fiscais hoje
+        $saidasPorDocumentoFiscal = MovimentoStock::whereDate('created_at', today())
+            ->where('tipo', 'saida')
+            ->whereIn('tipo_movimento', ['venda', 'nota_credito'])
+            ->count();
+
         return response()->json([
             'totalProdutos' => $produtos->count(),
             'produtosAtivos' => $produtosAtivos->count(),
@@ -89,6 +95,7 @@ class MovimentoStockController extends Controller
             'movimentacoesHoje' => $movimentacoesHoje,
             'entradasHoje' => $entradasHoje,
             'saidasHoje' => $saidasHoje,
+            'saidasPorDocumentoFiscal' => $saidasPorDocumentoFiscal, // NOVO
             'produtos_criticos' => $estoqueBaixo->values(),
         ]);
     }
@@ -128,8 +135,8 @@ class MovimentoStockController extends Controller
             'tipo_movimento' => 'required|in:compra,venda,ajuste,nota_credito,devolucao',
             'quantidade' => 'required|integer|min:1',
             'motivo' => 'required|string|max:255',
-            'referencia' => 'nullable|string|max:100', // Nº documento, nota, etc.
-            'custo_unitario' => 'nullable|numeric|min:0', // Para entradas com novo custo
+            'referencia' => 'nullable|string|max:100',
+            'custo_unitario' => 'nullable|numeric|min:0',
         ]);
 
         try {
@@ -165,7 +172,6 @@ class MovimentoStockController extends Controller
             // Calcular novo custo médio se for entrada com custo
             $novoCustoMedio = $produto->custo_medio;
             if ($dados['tipo'] === 'entrada' && isset($dados['custo_unitario']) && $dados['custo_unitario'] > 0) {
-                // Fórmula: ((EstoqueAtual * CustoAtual) + (Entrada * CustoNovo)) / (EstoqueAtual + Entrada)
                 if ($quantidadeAnterior > 0) {
                     $valorTotalAtual = $quantidadeAnterior * $produto->custo_medio;
                     $valorTotalEntrada = $dados['quantidade'] * $dados['custo_unitario'];
@@ -174,7 +180,6 @@ class MovimentoStockController extends Controller
                     $novoCustoMedio = $dados['custo_unitario'];
                 }
 
-                // Atualizar custo médio do produto
                 $produto->custo_medio = round($novoCustoMedio, 2);
             }
 
@@ -232,7 +237,7 @@ class MovimentoStockController extends Controller
             'produto_id' => 'required|uuid|exists:produtos,id',
             'quantidade' => 'required|integer|min:0',
             'motivo' => 'required|string|max:255',
-            'custo_medio' => 'nullable|numeric|min:0', // Permite atualizar custo médio no ajuste
+            'custo_medio' => 'nullable|numeric|min:0',
         ]);
 
         try {
@@ -457,6 +462,17 @@ class MovimentoStockController extends Controller
                 ])
                 ->groupBy('mes')
                 ->orderBy('mes')
+                ->get(),
+            // ATUALIZADO: Estatísticas por documento fiscal
+            'por_documento_fiscal' => MovimentoStock::selectRaw('tipo_movimento,
+                    count(*) as total,
+                    sum(case when tipo = "saida" then abs(quantidade) else 0 end) as quantidade_saida')
+                ->whereIn('tipo_movimento', ['venda', 'nota_credito'])
+                ->whereBetween('created_at', [
+                    $request->data_inicio ?? now()->subMonth(),
+                    $request->data_fim ?? now()
+                ])
+                ->groupBy('tipo_movimento')
                 ->get()
         ];
 
