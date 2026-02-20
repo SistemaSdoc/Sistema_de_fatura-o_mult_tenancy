@@ -35,20 +35,22 @@ export interface User {
 }
 
 /* -------- Tipos de Documento Fiscal -------- */
-// ATUALIZADO: Removidos NA, PF, PFA | Adicionado FA | Mantidos FT, FR, RC, NC, ND, FRt
+// TODOS os tipos de documento
 export type TipoDocumentoFiscal =
-  | 'FT'   // Fatura
-  | 'FR'   // Fatura-Recibo
-  | 'RC'   // Recibo
-  | 'NC'   // Nota de Crédito
-  | 'ND'   // Nota de Débito
-  | 'FA'   // Fatura de Adiantamento (NOVO - substitui NA)
-  | 'FRt'; // Fatura de Retificação
+  | 'FT'   // Fatura - VENDA
+  | 'FR'   // Fatura-Recibo - VENDA
+  | 'FP'   // Fatura Proforma - NÃO VENDA (pré-documento)
+  | 'RC'   // Recibo - VENDA (pagamento)
+  | 'NC'   // Nota de Crédito - NÃO VENDA
+  | 'ND'   // Nota de Débito - NÃO VENDA
+  | 'FA'   // Fatura de Adiantamento - NÃO VENDA (vira venda com recibo)
+  | 'FRt'; // Fatura de Retificação - NÃO VENDA
 
-// ATUALIZADO: Apenas FT e FR geram vendas (PF e PFA removidos)
+// Nomes dos tipos para exibição
 export const NOMES_TIPO_DOCUMENTO: Record<TipoDocumentoFiscal, string> = {
   FT: 'Fatura',
   FR: 'Fatura-Recibo',
+  FP: 'Fatura Proforma',
   RC: 'Recibo',
   NC: 'Nota de Crédito',
   ND: 'Nota de Débito',
@@ -56,17 +58,19 @@ export const NOMES_TIPO_DOCUMENTO: Record<TipoDocumentoFiscal, string> = {
   FRt: 'Fatura de Retificação',
 };
 
-// ATUALIZADO: Apenas FT e FR são válidos para criar via venda
-export const TIPOS_DOCUMENTO_VENDA: TipoDocumentoFiscal[] = ['FT', 'FR'];
+// Tipos que podem ser criados via venda (FT, FR, FP)
+export const TIPOS_DOCUMENTO_VENDA: TipoDocumentoFiscal[] = ['FT', 'FR', 'FP'];
+
+// Tipos que são considerados VENDAS (FT, FR, RC)
+export const TIPOS_VENDA: TipoDocumentoFiscal[] = ['FT', 'FR', 'RC'];
 
 /* -------- Estados de Documento Fiscal -------- */
-// ATUALIZADO: emitido (não emitida), cancelado (não anulada)
 export type EstadoDocumentoFiscal =
-  | 'emitido'        // era 'emitida'
+  | 'emitido'
   | 'paga'
   | 'parcialmente_paga'
-  | 'cancelado'      // era 'anulada'
-  | 'expirado';      // novo estado para FA
+  | 'cancelado'
+  | 'expirado';
 
 export type EstadoPagamentoVenda = 'paga' | 'pendente' | 'parcial' | 'cancelada';
 
@@ -83,17 +87,20 @@ export interface DadosPagamento {
   metodo: 'transferencia' | 'multibanco' | 'dinheiro' | 'cheque' | 'cartao';
   valor: number;
   referencia?: string;
+  data?: string;
 }
 
 /* -------- Payload de Criação de Venda -------- */
 export interface CriarVendaPayload {
   cliente_id?: string | null;
-  cliente_nome?: string;           // Opcional, só enviar quando for avulso
-  tipo_documento?: TipoDocumentoFiscal; // Apenas FT ou FR
-  faturar?: boolean;              // Sempre true agora
+  cliente_nome?: string;           // Para cliente avulso
+  cliente_nif?: string;            // Para cliente avulso (opcional)
+  tipo_documento?: TipoDocumentoFiscal; // FT, FR ou FP
+  faturar?: boolean;              // false para FP, true para FT/FR
   itens: CriarItemVendaPayload[];
   // Obrigatório para Fatura-Recibo (FR)
   dados_pagamento?: DadosPagamento;
+  observacoes?: string;
 }
 
 /* -------- Cliente -------- */
@@ -270,7 +277,9 @@ export interface DocumentoFiscal {
   venda_id?: string | null;
   cliente_id?: string | null;
   cliente?: Cliente;
-  fatura_id?: string | null; // Documento de origem (para NC, ND, RC, FRt)
+  cliente_nome?: string; // Para cliente avulso
+  cliente_nif?: string;  // Para cliente avulso
+  fatura_id?: string | null;
   documento_origem?: DocumentoFiscal;
 
   serie: string;
@@ -283,7 +292,6 @@ export interface DocumentoFiscal {
   data_emissao: string;
   hora_emissao: string;
   data_vencimento?: string | null;
-  // ATUALIZADO: data_cancelamento (não data_anulacao)
   data_cancelamento?: string | null;
 
   base_tributavel: number;
@@ -293,7 +301,6 @@ export interface DocumentoFiscal {
 
   estado: EstadoDocumentoFiscal;
   motivo?: string | null;
-  // ATUALIZADO: motivo_cancelamento (não motivo_anulacao)
   motivo_cancelamento?: string | null;
 
   hash_fiscal?: string | null;
@@ -309,14 +316,19 @@ export interface DocumentoFiscal {
   notas_credito?: DocumentoFiscal[];
   notas_debito?: DocumentoFiscal[];
   adiantamentos_vinculados?: DocumentoFiscal[];
+  faturas_vinculadas?: DocumentoFiscal[];
 
   // Acessores virtuais
   valor_pendente?: number;
+  valor_pago?: number;
   esta_paga?: boolean;
-  pode_ser_cancelada?: boolean;  // ATUALIZADO: pode_ser_anulada -> pode_ser_cancelada
+  pode_ser_cancelada?: boolean;
   pode_ser_paga?: boolean;
+  pode_gerar_recibo?: boolean;
+  pode_gerar_nota_credito?: boolean;
+  pode_gerar_nota_debito?: boolean;
+  eh_venda?: boolean;
 
-  // ATUALIZADO: user_cancelamento (não user_anulacao)
   user?: User;
   user_cancelamento?: User;
 
@@ -336,17 +348,24 @@ export interface ItemVenda {
   valor_iva: number;
   valor_retencao: number;
   subtotal: number;
+  taxa_iva?: number;
+  taxa_retencao?: number;
+  codigo_produto?: string;
+  unidade?: string;
 }
 
 export interface Venda {
   id: string;
   cliente_id?: string | null;
+  cliente_nome?: string | null; // Para cliente avulso
+  cliente_nif?: string | null;  // Para cliente avulso
   user_id: string;
   documento_fiscal_id?: string | null;
 
   tipo_documento: 'venda';
   serie: string;
   numero: number;
+  numero_documento?: string;
 
   base_tributavel: number;
   total_iva: number;
@@ -360,6 +379,10 @@ export interface Venda {
   status: 'aberta' | 'faturada' | 'cancelada';
   estado_pagamento: EstadoPagamentoVenda;
 
+  tipo_documento_fiscal?: TipoDocumentoFiscal; // FT, FR, FP, etc
+  observacoes?: string;
+  hash_fiscal?: string;
+
   itens?: ItemVenda[];
   cliente?: Cliente;
   user?: User;
@@ -367,6 +390,7 @@ export interface Venda {
 
   created_at?: string;
   updated_at?: string;
+  deleted_at?: string;
 }
 
 /* -------- Compra -------- */
@@ -496,8 +520,12 @@ export interface DashboardData {
       mes: string;
       FT: number;
       FR: number;
+      FP: number;
+      FA: number;
       NC: number;
       ND: number;
+      RC: number;
+      FRt: number;
       total: number;
     }>;
     por_dia: Array<{
@@ -535,7 +563,8 @@ export interface DashboardData {
   alertas: {
     documentos_vencidos: number;
     documentos_proximo_vencimento: number;
-    adiantamentos_pendentes: number;  // ATUALIZADO: proformas_antigas -> adiantamentos_pendentes
+    adiantamentos_pendentes: number;
+    proformas_pendentes: number;
   };
 
   periodo: {
@@ -615,7 +644,20 @@ export interface AlertasPendentes {
       dias_ate_vencimento: number;
     }>;
   };
-  adiantamentos_pendentes: {  // ATUALIZADO: proformas_pendentes -> adiantamentos_pendentes
+  adiantamentos_pendentes: {
+    quantidade: number;
+    valor_total: number;
+    documentos: Array<{
+      id: string;
+      tipo: TipoDocumentoFiscal;
+      numero: string;
+      cliente?: string;
+      valor: number;
+      data_emissao: string;
+      dias_pendentes: number;
+    }>;
+  };
+  proformas_pendentes: {
     quantidade: number;
     valor_total: number;
     documentos: Array<{
@@ -643,6 +685,10 @@ export interface EvolucaoMensal {
     valor_pendente: number;
     notas_credito: number;
     valor_notas_credito: number;
+    proformas: number;
+    valor_proformas: number;
+    adiantamentos: number;
+    valor_adiantamentos: number;
   }>;
 }
 
@@ -654,25 +700,35 @@ function criarPayloadVenda(payload: CriarVendaPayload): Record<string, unknown> 
     itens: payload.itens,
   };
 
-  if (payload.cliente_id && payload.cliente_id !== null) {
+  // Para cliente cadastrado, enviar cliente_id
+  if (payload.cliente_id) {
     cleanPayload.cliente_id = payload.cliente_id;
   }
 
+  // Para cliente avulso, enviar cliente_nome e opcionalmente cliente_nif
   if (payload.cliente_nome && payload.cliente_nome.trim() !== '') {
     cleanPayload.cliente_nome = payload.cliente_nome.trim();
+    if (payload.cliente_nif) {
+      cleanPayload.cliente_nif = payload.cliente_nif;
+    }
   }
 
-  // ATUALIZADO: Apenas FT e FR são válidos
-  if (payload.tipo_documento && TIPOS_DOCUMENTO_VENDA.includes(payload.tipo_documento)) {
+  // Enviar tipo_documento se existir (FT, FR ou FP)
+  if (payload.tipo_documento) {
     cleanPayload.tipo_documento = payload.tipo_documento;
   }
 
-  // Sempre true agora (não há mais pro-formas)
-  cleanPayload.faturar = true;
+  // faturar false para FP, true para FT/FR
+  cleanPayload.faturar = payload.tipo_documento !== 'FP';
 
-  // Obrigatório para FR
-  if (payload.dados_pagamento) {
+  // Dados de pagamento apenas para FR
+  if (payload.dados_pagamento && payload.tipo_documento === 'FR') {
     cleanPayload.dados_pagamento = payload.dados_pagamento;
+  }
+
+  // Observações
+  if (payload.observacoes) {
+    cleanPayload.observacoes = payload.observacoes;
   }
 
   return cleanPayload;
@@ -713,7 +769,11 @@ export const vendaService = {
     status?: string;
     faturadas?: boolean;
     estado_pagamento?: EstadoPagamentoVenda;
-    apenas_vendas?: boolean;  // NOVO: Filtrar apenas FT e FR
+    apenas_vendas?: boolean;  // Filtrar apenas FT, FR, RC
+    tipo_documento?: TipoDocumentoFiscal;
+    cliente_id?: string;
+    data_inicio?: string;
+    data_fim?: string;
   }): Promise<{ message: string; vendas: Venda[] } | null> {
     try {
       const queryParams = new URLSearchParams();
@@ -721,6 +781,10 @@ export const vendaService = {
       if (params?.faturadas) queryParams.append('faturadas', 'true');
       if (params?.estado_pagamento) queryParams.append('estado_pagamento', params.estado_pagamento);
       if (params?.apenas_vendas) queryParams.append('apenas_vendas', 'true');
+      if (params?.tipo_documento) queryParams.append('tipo_documento', params.tipo_documento);
+      if (params?.cliente_id) queryParams.append('cliente_id', params.cliente_id);
+      if (params?.data_inicio) queryParams.append('data_inicio', params.data_inicio);
+      if (params?.data_fim) queryParams.append('data_fim', params.data_fim);
 
       const queryString = queryParams.toString();
       const url = `/api/vendas${queryString ? `?${queryString}` : ''}`;
@@ -743,7 +807,6 @@ export const vendaService = {
     }
   },
 
-  // ATUALIZADO: cancelar (não anular)
   async cancelar(id: string): Promise<{ message: string; venda: Venda } | null> {
     try {
       const { data } = await api.post(`/api/vendas/${id}/cancelar`);
@@ -754,7 +817,6 @@ export const vendaService = {
     }
   },
 
-  // ATUALIZADO: gerarRecibo (endpoint específico para FT)
   async gerarRecibo(id: string, dadosPagamento: {
     valor: number;
     metodo_pagamento: 'transferencia' | 'multibanco' | 'dinheiro' | 'cheque' | 'cartao';
@@ -769,6 +831,21 @@ export const vendaService = {
       return null;
     }
   },
+
+  // NOVO: Converter FP para FT
+  async converterProformaParaFatura(id: string, dadosPagamento?: {
+    valor: number;
+    metodo_pagamento: 'transferencia' | 'multibanco' | 'dinheiro' | 'cheque' | 'cartao';
+    referencia?: string;
+  }): Promise<{ message: string; venda: Venda } | null> {
+    try {
+      const { data } = await api.post(`/api/vendas/${id}/converter`, dadosPagamento);
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[VENDA SERVICE] Erro ao converter proforma");
+      return null;
+    }
+  },
 };
 
 /* -------- Documentos Fiscais -------- */
@@ -777,20 +854,30 @@ export const documentoFiscalService = {
     tipo?: TipoDocumentoFiscal;
     estado?: EstadoDocumentoFiscal;
     cliente_id?: string;
+    cliente_nome?: string; // Para cliente avulso
     data_inicio?: string;
     data_fim?: string;
     pendentes?: boolean;
     adiantamentos_pendentes?: boolean;
+    proformas_pendentes?: boolean;
+    apenas_vendas?: boolean; // Filtrar apenas FT, FR, RC
+    apenas_nao_vendas?: boolean; // Filtrar FP, FA, NC, ND, FRt
+    per_page?: number;
   }): Promise<{ message: string; data: { documentos: DocumentoFiscal[] } } | null> {
     try {
       const queryParams = new URLSearchParams();
       if (params?.tipo) queryParams.append('tipo', params.tipo);
       if (params?.estado) queryParams.append('estado', params.estado);
       if (params?.cliente_id) queryParams.append('cliente_id', params.cliente_id);
+      if (params?.cliente_nome) queryParams.append('cliente_nome', params.cliente_nome);
       if (params?.data_inicio) queryParams.append('data_inicio', params.data_inicio);
       if (params?.data_fim) queryParams.append('data_fim', params.data_fim);
       if (params?.pendentes) queryParams.append('pendentes', 'true');
       if (params?.adiantamentos_pendentes) queryParams.append('adiantamentos_pendentes', 'true');
+      if (params?.proformas_pendentes) queryParams.append('proformas_pendentes', 'true');
+      if (params?.apenas_vendas) queryParams.append('apenas_vendas', 'true');
+      if (params?.apenas_nao_vendas) queryParams.append('apenas_nao_vendas', 'true');
+      if (params?.per_page) queryParams.append('per_page', params.per_page.toString());
 
       const queryString = queryParams.toString();
       const url = `/api/documentos-fiscais${queryString ? `?${queryString}` : ''}`;
@@ -807,6 +894,8 @@ export const documentoFiscalService = {
     tipo_documento: TipoDocumentoFiscal;
     venda_id?: string;
     cliente_id?: string;
+    cliente_nome?: string; // Para cliente avulso
+    cliente_nif?: string;  // Para cliente avulso
     fatura_id?: string;
     itens: Array<{
       produto_id?: string;
@@ -831,53 +920,33 @@ export const documentoFiscalService = {
     }
   },
 
-  // src/services/vendas.ts - modifique a função obter
-
   async obter(id: string): Promise<{ message: string; data: { documento: DocumentoFiscal } } | null> {
     console.log('========== DOCUMENTO FISCAL SERVICE ==========');
     console.log('1. Service obter() chamado com ID:', id);
-    console.log('2. Tipo do ID:', typeof id);
-    console.log('3. ID é válido?', !!id && id.trim() !== '');
 
     if (!id || id.trim() === '') {
-      console.error('4. ERRO: ID inválido no service');
+      console.error('ERRO: ID inválido no service');
       throw new Error('ID do documento não fornecido');
     }
 
     try {
       const url = `/api/documentos-fiscais/${id}`;
-      console.log('5. URL da requisição:', url);
-
       const { data } = await api.get(url);
-      console.log('6. Resposta do backend:', data);
-      console.log('7. Status da resposta:', data?.message);
-      console.log('=============================================');
-
       return data;
     } catch (err) {
-      console.error('8. ERRO no service:', err);
-      if (err instanceof AxiosError) {
-        console.error('9. Detalhes do erro Axios:', {
-          status: err.response?.status,
-          statusText: err.response?.statusText,
-          data: err.response?.data,
-          config: err.config
-        });
-      }
       handleAxiosError(err, "[DOCUMENTO FISCAL SERVICE] Erro ao obter");
       return null;
     }
   },
 
-  // ATUALIZADO: gerarRecibo para FT
-  async gerarRecibo(faturaId: string, dadosPagamento: {
+  async gerarRecibo(documentoId: string, dadosPagamento: {
     valor: number;
     metodo_pagamento: 'transferencia' | 'multibanco' | 'dinheiro' | 'cheque' | 'cartao';
     data_pagamento?: string;
     referencia?: string;
-  }): Promise<{ message: string; recibo: DocumentoFiscal; fatura: DocumentoFiscal } | null> {
+  }): Promise<{ message: string; recibo: DocumentoFiscal; documento: DocumentoFiscal } | null> {
     try {
-      const { data } = await api.post(`/api/documentos-fiscais/${faturaId}/recibo`, dadosPagamento);
+      const { data } = await api.post(`/api/documentos-fiscais/${documentoId}/recibo`, dadosPagamento);
       return data;
     } catch (err) {
       handleAxiosError(err, "[DOCUMENTO FISCAL SERVICE] Erro ao gerar recibo");
@@ -885,7 +954,6 @@ export const documentoFiscalService = {
     }
   },
 
-  // ATUALIZADO: criarNotaCredito
   async criarNotaCredito(documentoId: string, payload: {
     itens: Array<{
       produto_id?: string;
@@ -905,7 +973,6 @@ export const documentoFiscalService = {
     }
   },
 
-  // ATUALIZADO: criarNotaDebito
   async criarNotaDebito(documentoId: string, payload: {
     itens: Array<{
       produto_id?: string;
@@ -917,25 +984,14 @@ export const documentoFiscalService = {
     motivo?: string;
   }): Promise<{ message: string; documento: DocumentoFiscal; data?: any } | null> {
     try {
-      console.log('[DOCUMENTO FISCAL SERVICE] Criando Nota de Débito:', {
-        documentoId,
-        payload
-      });
-
       const url = `/api/documentos-fiscais/${documentoId}/nota-debito`;
-      console.log('URL da requisição:', url);
-
       const { data } = await api.post(url, payload);
-      console.log('Resposta completa do backend:', data);
 
-      // NORMALIZAR A RESPOSTA - independente da estrutura, retornamos um objeto padronizado
       const respostaNormalizada = {
         message: data.message || 'Nota de Débito criada',
         documento: data.documento || data.data?.documento || data.data,
         data: data.data || data
       };
-
-      console.log('Resposta normalizada:', respostaNormalizada);
 
       return respostaNormalizada;
     } catch (err) {
@@ -944,45 +1000,19 @@ export const documentoFiscalService = {
     }
   },
 
-  // ATUALIZADO: vincularAdiantamento (FA -> FT)
-  // src/services/vendas.ts - modifique a função obter
-
-  async obter(id: string): Promise<{ message: string; data: { documento: DocumentoFiscal } } | null> {
-    console.log('========== DOCUMENTO FISCAL SERVICE ==========');
-    console.log('1. Service obter() chamado com ID:', id);
-    console.log('2. Tipo do ID:', typeof id);
-    console.log('3. ID é válido?', !!id && id.trim() !== '');
-
-    if (!id || id.trim() === '') {
-      console.error('4. ERRO: ID inválido no service');
-      throw new Error('ID do documento não fornecido');
-    }
-
+  async vincularAdiantamento(adiantamentoId: string, payload: {
+    fatura_id: string;
+    valor: number;
+  }): Promise<{ message: string; data: { adiantamento: DocumentoFiscal; fatura: DocumentoFiscal } } | null> {
     try {
-      const url = `/api/documentos-fiscais/${id}`;
-      console.log('5. URL da requisição:', url);
-
-      const { data } = await api.get(url);
-      console.log('6. Resposta do backend:', data);
-      console.log('7. Status da resposta:', data?.message);
-      console.log('=============================================');
-
+      const { data } = await api.post(`/api/documentos-fiscais/${adiantamentoId}/vincular`, payload);
       return data;
     } catch (err) {
-      console.error('8. ERRO no service:', err);
-      if (err instanceof AxiosError) {
-        console.error('9. Detalhes do erro Axios:', {
-          status: err.response?.status,
-          statusText: err.response?.statusText,
-          data: err.response?.data,
-          config: err.config
-        });
-      }
-      handleAxiosError(err, "[DOCUMENTO FISCAL SERVICE] Erro ao obter");
+      handleAxiosError(err, "[DOCUMENTO FISCAL SERVICE] Erro ao vincular adiantamento");
       return null;
     }
   },
-  // ATUALIZADO: cancelar (não anular)
+
   async cancelar(id: string, payload: {
     motivo: string;
   }): Promise<{ message: string; documento: DocumentoFiscal } | null> {
@@ -995,9 +1025,9 @@ export const documentoFiscalService = {
     }
   },
 
-  async listarRecibos(faturaId: string): Promise<{ message: string; data: { recibos: DocumentoFiscal[] } } | null> {
+  async listarRecibos(documentoId: string): Promise<{ message: string; data: { recibos: DocumentoFiscal[] } } | null> {
     try {
-      const { data } = await api.get(`/api/documentos-fiscais/${faturaId}/recibos`);
+      const { data } = await api.get(`/api/documentos-fiscais/${documentoId}/recibos`);
       return data;
     } catch (err) {
       handleAxiosError(err, "[DOCUMENTO FISCAL SERVICE] Erro ao listar recibos");
@@ -1005,10 +1035,14 @@ export const documentoFiscalService = {
     }
   },
 
-  // NOVO: Listar adiantamentos pendentes de um cliente
-  async adiantamentosPendentes(clienteId: string): Promise<{ message: string; data: { adiantamentos: DocumentoFiscal[] } } | null> {
+  async adiantamentosPendentes(clienteId?: string, clienteNome?: string): Promise<{ message: string; data: { adiantamentos: DocumentoFiscal[] } } | null> {
     try {
-      const { data } = await api.get(`/api/documentos-fiscais/adiantamentos-pendentes?cliente_id=${clienteId}`);
+      const params = new URLSearchParams();
+      if (clienteId) params.append('cliente_id', clienteId);
+      if (clienteNome) params.append('cliente_nome', clienteNome);
+      
+      const url = `/api/documentos-fiscais/adiantamentos-pendentes${params.toString() ? `?${params.toString()}` : ''}`;
+      const { data } = await api.get(url);
       return data;
     } catch (err) {
       handleAxiosError(err, "[DOCUMENTO FISCAL SERVICE] Erro ao listar adiantamentos pendentes");
@@ -1016,8 +1050,26 @@ export const documentoFiscalService = {
     }
   },
 
-  // NOVO: Alertas de documentos
-  async alertas(): Promise<{ message: string; data: { adiantamentos_vencidos: { total: number; items: DocumentoFiscal[] }; faturas_com_adiantamentos_pendentes: { total: number; items: DocumentoFiscal[] } } } | null> {
+  async proformasPendentes(clienteId?: string, clienteNome?: string): Promise<{ message: string; data: { proformas: DocumentoFiscal[] } } | null> {
+    try {
+      const params = new URLSearchParams();
+      if (clienteId) params.append('cliente_id', clienteId);
+      if (clienteNome) params.append('cliente_nome', clienteNome);
+      
+      const url = `/api/documentos-fiscais/proformas-pendentes${params.toString() ? `?${params.toString()}` : ''}`;
+      const { data } = await api.get(url);
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[DOCUMENTO FISCAL SERVICE] Erro ao listar proformas pendentes");
+      return null;
+    }
+  },
+
+  async alertas(): Promise<{ message: string; data: { 
+    adiantamentos_vencidos: { total: number; items: DocumentoFiscal[] }; 
+    faturas_com_adiantamentos_pendentes: { total: number; items: DocumentoFiscal[] };
+    proformas_pendentes: { total: number; items: DocumentoFiscal[] };
+  } } | null> {
     try {
       const { data } = await api.get('/api/documentos-fiscais/alertas');
       return data;
@@ -1027,7 +1079,6 @@ export const documentoFiscalService = {
     }
   },
 
-  // NOVO: Processar adiantamentos expirados (endpoint para cron/job)
   async processarExpirados(): Promise<{ message: string; expirados: number } | null> {
     try {
       const { data } = await api.post('/api/documentos-fiscais/processar-expirados');
@@ -1038,8 +1089,16 @@ export const documentoFiscalService = {
     }
   },
 
-  // NOVO: Dashboard de documentos
-  async dashboard(): Promise<{ message: string; data: { faturas_emitidas_mes: number; faturas_pendentes: number; total_pendente_cobranca: number; adiantamentos_pendentes: number; documentos_cancelados_mes: number } } | null> {
+  async dashboard(): Promise<{ message: string; data: { 
+    faturas_emitidas_mes: number; 
+    faturas_pendentes: number; 
+    total_pendente_cobranca: number; 
+    adiantamentos_pendentes: number; 
+    proformas_pendentes: number; 
+    documentos_cancelados_mes: number;
+    total_vendas_mes: number;
+    total_nao_vendas_mes: number;
+  } } | null> {
     try {
       const { data } = await api.get('/api/documentos-fiscais/dashboard');
       return data;
@@ -1066,15 +1125,13 @@ export const clienteService = {
     console.log('[CLIENTE SERVICE] Listar clientes - Iniciando...');
     const timestamp = new Date().getTime();
     const response = await api.get(`${API_PREFIX}/clientes?t=${timestamp}`, noCacheConfig);
-    console.log('[CLIENTE SERVICE] Listar clientes - Sucesso:', response.data);
     return response.data.clientes || [];
   },
 
   async listarTodos(): Promise<Cliente[]> {
-    console.log('[CLIENTE SERVICE] Listar todos clientes (com deletados) - Iniciando...');
+    console.log('[CLIENTE SERVICE] Listar todos clientes - Iniciando...');
     const timestamp = new Date().getTime();
     const response = await api.get(`${API_PREFIX}/clientes/todos?t=${timestamp}`, noCacheConfig);
-    console.log('[CLIENTE SERVICE] Listar todos clientes - Sucesso:', response.data);
     return response.data.clientes || [];
   },
 
@@ -1083,7 +1140,6 @@ export const clienteService = {
     const timestamp = new Date().getTime();
     try {
       const response = await api.get(`${API_PREFIX}/clientes/${id}?t=${timestamp}`, noCacheConfig);
-      console.log('[CLIENTE SERVICE] Buscar cliente - Sucesso:', response.data);
       return response.data.cliente;
     } catch (err) {
       handleAxiosError(err, "[CLIENTE] Erro ao buscar cliente");
@@ -1095,7 +1151,6 @@ export const clienteService = {
     console.log('[CLIENTE SERVICE] Criar cliente - Dados:', dados);
     try {
       const response = await api.post(`${API_PREFIX}/clientes`, dados);
-      console.log('[CLIENTE SERVICE] Criar cliente - Sucesso:', response.data);
       return response.data.cliente;
     } catch (err) {
       handleAxiosError(err, "[CLIENTE] Erro ao criar cliente");
@@ -1104,18 +1159,9 @@ export const clienteService = {
   },
 
   async atualizar(id: string, dados: AtualizarClienteInput): Promise<Cliente | null> {
-    console.log('╔══════════════════════════════════════════════════════════╗');
-    console.log('║ [CLIENTE SERVICE] ATUALIZAR CLIENTE - INÍCIO            ║');
-    console.log('╚══════════════════════════════════════════════════════════╝');
-    console.log('[CLIENTE SERVICE] ID recebido:', id);
-    console.log('[CLIENTE SERVICE] Dados:', dados);
-
     const url = `${API_PREFIX}/clientes/${id}`;
-    console.log('[CLIENTE SERVICE] URL completa:', url);
-
     try {
       const response = await api.put(url, dados);
-      console.log('[CLIENTE SERVICE] Resposta sucesso:', response.status, response.data);
       return response.data.cliente;
     } catch (err) {
       handleAxiosError(err, "[CLIENTE] Erro ao atualizar cliente");
@@ -1124,14 +1170,8 @@ export const clienteService = {
   },
 
   async deletar(id: string): Promise<boolean> {
-    console.log('╔══════════════════════════════════════════════════════════╗');
-    console.log('║ [CLIENTE SERVICE] DELETAR CLIENTE - INÍCIO              ║');
-    console.log('╚══════════════════════════════════════════════════════════╝');
-    console.log('[CLIENTE SERVICE] ID recebido:', id);
-
     try {
-      const response = await api.delete(`${API_PREFIX}/clientes/${id}`);
-      console.log('[CLIENTE SERVICE] Resposta sucesso:', response.status, response.data);
+      await api.delete(`${API_PREFIX}/clientes/${id}`);
       return true;
     } catch (err) {
       handleAxiosError(err, "[CLIENTE] Erro ao deletar cliente");
@@ -1140,10 +1180,8 @@ export const clienteService = {
   },
 
   async restaurar(id: string): Promise<Cliente | null> {
-    console.log('[CLIENTE SERVICE] Restaurar cliente - ID:', id);
     try {
       const response = await api.post(`${API_PREFIX}/clientes/${id}/restore`);
-      console.log('[CLIENTE SERVICE] Cliente restaurado - Sucesso:', response.data);
       return response.data.cliente;
     } catch (err) {
       handleAxiosError(err, "[CLIENTE] Erro ao restaurar cliente");
@@ -1152,10 +1190,8 @@ export const clienteService = {
   },
 
   async removerPermanentemente(id: string): Promise<boolean> {
-    console.log('[CLIENTE SERVICE] Remover cliente permanentemente - ID:', id);
     try {
-      const response = await api.delete(`${API_PREFIX}/clientes/${id}/force`);
-      console.log('[CLIENTE SERVICE] Cliente removido permanentemente - Sucesso:', response.data);
+      await api.delete(`${API_PREFIX}/clientes/${id}/force`);
       return true;
     } catch (err) {
       handleAxiosError(err, "[CLIENTE] Erro ao remover cliente permanentemente");
@@ -1406,7 +1442,6 @@ export const produtoService = {
     }
   },
 
-  // Métodos legados
   listarPaginado: async (page = 1): Promise<Paginacao<Produto>> => {
     try {
       const { data } = await api.get<Paginacao<Produto>>(`/api/produtos?page=${page}`);
@@ -1735,7 +1770,6 @@ export const stockService = {
     }
   },
 
-  // Métodos legados
   atualizar: async (id: string, payload: Partial<CriarMovimentoPayload>): Promise<MovimentoStock | null> => {
     try {
       const { data } = await api.put<MovimentoStock>(`/api/movimentos-stock/${id}`, payload);
@@ -1849,6 +1883,7 @@ export const relatorioService = {
     data_fim?: string;
     tipo?: TipoDocumentoFiscal;
     cliente_id?: string;
+    cliente_nome?: string;
   }): Promise<any | null> {
     try {
       const queryParams = new URLSearchParams();
@@ -1856,6 +1891,7 @@ export const relatorioService = {
       if (params?.data_fim) queryParams.append('data_fim', params.data_fim);
       if (params?.tipo) queryParams.append('tipo', params.tipo);
       if (params?.cliente_id) queryParams.append('cliente_id', params.cliente_id);
+      if (params?.cliente_nome) queryParams.append('cliente_nome', params.cliente_nome);
 
       const queryString = queryParams.toString();
       const url = `/api/relatorios/documentos-fiscais${queryString ? `?${queryString}` : ''}`;
@@ -1881,11 +1917,13 @@ export const relatorioService = {
   async vendas(params?: {
     data_inicio?: string;
     data_fim?: string;
+    apenas_vendas?: boolean; // FT, FR, RC
   }): Promise<any | null> {
     try {
       const queryParams = new URLSearchParams();
       if (params?.data_inicio) queryParams.append('data_inicio', params.data_inicio);
       if (params?.data_fim) queryParams.append('data_fim', params.data_fim);
+      if (params?.apenas_vendas) queryParams.append('apenas_vendas', 'true');
 
       const queryString = queryParams.toString();
       const url = `/api/relatorios/vendas${queryString ? `?${queryString}` : ''}`;
@@ -1927,6 +1965,30 @@ export const relatorioService = {
       return null;
     }
   },
+
+  async proformas(params?: {
+    data_inicio?: string;
+    data_fim?: string;
+    cliente_id?: string;
+    pendentes?: boolean;
+  }): Promise<any | null> {
+    try {
+      const queryParams = new URLSearchParams();
+      if (params?.data_inicio) queryParams.append('data_inicio', params.data_inicio);
+      if (params?.data_fim) queryParams.append('data_fim', params.data_fim);
+      if (params?.cliente_id) queryParams.append('cliente_id', params.cliente_id);
+      if (params?.pendentes) queryParams.append('pendentes', 'true');
+
+      const queryString = queryParams.toString();
+      const url = `/api/relatorios/proformas${queryString ? `?${queryString}` : ''}`;
+
+      const { data } = await api.get(url);
+      return data;
+    } catch (err) {
+      handleAxiosError(err, "[RELATÓRIO] Erro ao obter relatório de proformas");
+      return null;
+    }
+  },
 };
 
 /* -------- Exportações legadas (para compatibilidade) -------- */
@@ -1956,20 +2018,37 @@ export function getEstadoPagamentoColor(estado: EstadoPagamentoVenda): string {
   return colors[estado] || 'bg-gray-100 text-gray-800';
 }
 
-// ATUALIZADO: Cores para novos estados
 export function getEstadoDocumentoColor(estado: EstadoDocumentoFiscal): string {
   const colors: Record<EstadoDocumentoFiscal, string> = {
-    emitido: 'bg-blue-100 text-blue-800',      // era emitida
+    emitido: 'bg-blue-100 text-blue-800',
     paga: 'bg-green-100 text-green-800',
     parcialmente_paga: 'bg-teal-100 text-teal-800',
-    cancelado: 'bg-red-100 text-red-800',      // era anulada
-    expirado: 'bg-gray-100 text-gray-800',     // novo
+    cancelado: 'bg-red-100 text-red-800',
+    expirado: 'bg-gray-100 text-gray-800',
   };
   return colors[estado] || 'bg-gray-100 text-gray-800';
 }
 
+export function getTipoDocumentoColor(tipo: TipoDocumentoFiscal): string {
+  const colors: Partial<Record<TipoDocumentoFiscal, string>> = {
+    FT: 'bg-blue-100 text-blue-800',
+    FR: 'bg-green-100 text-green-800',
+    FP: 'bg-orange-100 text-orange-800',
+    FA: 'bg-purple-100 text-purple-800',
+    NC: 'bg-red-100 text-red-800',
+    ND: 'bg-amber-100 text-amber-800',
+    RC: 'bg-teal-100 text-teal-800',
+    FRt: 'bg-pink-100 text-pink-800',
+  };
+  return colors[tipo] || 'bg-gray-100 text-gray-800';
+}
+
 export function podeGerarNaVenda(tipo: TipoDocumentoFiscal): boolean {
   return TIPOS_DOCUMENTO_VENDA.includes(tipo);
+}
+
+export function ehVenda(tipo: TipoDocumentoFiscal): boolean {
+  return TIPOS_VENDA.includes(tipo);
 }
 
 export function getMetodoPagamentoNome(metodo?: string): string {
@@ -1985,6 +2064,12 @@ export function getMetodoPagamentoNome(metodo?: string): string {
 
 // Função helper para validar payload de venda
 export function validarPayloadVenda(payload: CriarVendaPayload): string | null {
+  // Validar cliente
+  if (!payload.cliente_id && !payload.cliente_nome) {
+    return 'É necessário informar um cliente (selecionado ou avulso)';
+  }
+
+  // Validações específicas por tipo
   if (payload.tipo_documento === 'FR') {
     if (!payload.dados_pagamento) {
       return 'Fatura-Recibo requer dados de pagamento';
@@ -1996,5 +2081,6 @@ export function validarPayloadVenda(payload: CriarVendaPayload): string | null {
       return 'Valor de pagamento deve ser maior que zero';
     }
   }
+
   return null;
 }

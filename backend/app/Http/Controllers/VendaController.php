@@ -10,6 +10,7 @@ use App\Models\Cliente;
 use App\Models\Produto;
 use App\Models\DocumentoFiscal;
 use App\Services\VendaService;
+use Illuminate\Support\Facades\DB;
 
 class VendaController extends Controller
 {
@@ -79,7 +80,7 @@ class VendaController extends Controller
         return response()->json([
             'message' => 'Lista de vendas carregada',
             'vendas' => $vendas->map(function ($venda) {
-                // Determinar se é venda válida (FT ou FR)
+                // Determinar se é venda válida (FT, FR ou RC)
                 $ehVenda = $this->ehVendaValida($venda->documentoFiscal);
 
                 return [
@@ -124,9 +125,9 @@ class VendaController extends Controller
                     // Status da venda
                     'status' => $venda->status,
                     'faturado' => !is_null($venda->documentoFiscal),
-                    'eh_venda' => $ehVenda, // NOVO: Indica se é venda válida (FT/FR)
+                    'eh_venda' => $ehVenda,
 
-                    // Estado de pagamento da venda (ATUALIZADO)
+                    // Estado de pagamento da venda
                     'estado_pagamento' => $this->determinarEstadoPagamentoVenda($venda),
                     'paga' => $this->determinarEstadoPagamentoVenda($venda) === 'paga',
 
@@ -142,13 +143,13 @@ class VendaController extends Controller
                         'data_vencimento' => $venda->documentoFiscal->data_vencimento,
                         'estado' => $venda->documentoFiscal->estado,
                         'hash_fiscal' => $venda->documentoFiscal->hash_fiscal,
-                        'motivo_cancelamento' => $venda->documentoFiscal->motivo_cancelamento, // ATUALIZADO
+                        'motivo_cancelamento' => $venda->documentoFiscal->motivo_cancelamento,
 
-                        // Estado de pagamento do documento (ATUALIZADO)
+                        // Estado de pagamento do documento
                         'estado_pagamento' => $this->determinarEstadoPagamentoDocumento($venda->documentoFiscal),
                         'valor_pendente' => $this->calcularValorPendente($venda->documentoFiscal),
 
-                        // Recibos associados (ATUALIZADO: RC sempre pago)
+                        // Recibos associados
                         'recibos' => $venda->documentoFiscal->recibos->map(function($recibo) {
                             return [
                                 'id' => $recibo->id,
@@ -156,7 +157,7 @@ class VendaController extends Controller
                                 'valor' => $recibo->total_liquido,
                                 'metodo_pagamento' => $recibo->metodo_pagamento,
                                 'data_emissao' => $recibo->data_emissao,
-                                'estado' => 'paga', // RC sempre está pago
+                                'estado' => 'paga',
                             ];
                         }),
 
@@ -202,7 +203,7 @@ class VendaController extends Controller
                     }),
                 ];
             })->filter(function($venda) {
-                // Se solicitado, filtra apenas vendas válidas (FT/FR)
+                // Se solicitado, filtra apenas vendas válidas (FT/FR/RC)
                 if (request()->has('apenas_vendas') && request()->input('apenas_vendas') === 'true') {
                     return $venda['eh_venda'];
                 }
@@ -267,7 +268,7 @@ class VendaController extends Controller
                 'faturado' => !is_null($venda->documentoFiscal),
                 'eh_venda' => $this->ehVendaValida($venda->documentoFiscal),
 
-                // Estado de pagamento (ATUALIZADO)
+                // Estado de pagamento
                 'estado_pagamento' => $estadoPagamento,
                 'paga' => $estadoPagamento === 'paga',
                 'pode_receber_pagamento' => $this->podeReceberPagamento($venda),
@@ -285,13 +286,13 @@ class VendaController extends Controller
                     'estado' => $venda->documentoFiscal->estado,
                     'hash_fiscal' => $venda->documentoFiscal->hash_fiscal,
 
-                    // Pagamento (ATUALIZADO)
+                    // Pagamento
                     'estado_pagamento' => $this->determinarEstadoPagamentoDocumento($venda->documentoFiscal),
                     'valor_total' => $venda->documentoFiscal->total_liquido,
                     'valor_pago' => $this->calcularValorPago($venda->documentoFiscal),
                     'valor_pendente' => $this->calcularValorPendente($venda->documentoFiscal),
 
-                    // Recibos (ATUALIZADO)
+                    // Recibos
                     'recibos' => $venda->documentoFiscal->recibos->map(function($recibo) {
                         return [
                             'id' => $recibo->id,
@@ -301,7 +302,7 @@ class VendaController extends Controller
                             'referencia_pagamento' => $recibo->referencia_pagamento,
                             'data_emissao' => $recibo->data_emissao,
                             'hora_emissao' => $recibo->hora_emissao,
-                            'estado' => 'paga', // RC sempre pago
+                            'estado' => 'paga',
                         ];
                     }),
                 ] : null,
@@ -336,18 +337,18 @@ class VendaController extends Controller
             'faturar' => $request->input('faturar')
         ]);
 
-        // ATUALIZADO: Removido PF/PFA, adicionado FA (mas FA não é venda, é documento fiscal separado)
+        // ATUALIZADO: Adicionado FP (Fatura Proforma) - mas FP não é venda, é documento prévio
         $dados = $request->validate([
             'cliente_id' => 'nullable|uuid|exists:clientes,id',
-            'cliente_nome' => 'required_without:cliente_id|string|max:255',
+            'cliente_nome' => 'nullable|string|max:255',
             'itens' => 'required|array|min:1',
             'itens.*.produto_id' => 'required|uuid|exists:produtos,id',
             'itens.*.quantidade' => 'required|integer|min:1',
             'itens.*.preco_venda' => 'required|numeric|min:0',
             'itens.*.desconto' => 'nullable|numeric|min:0',
             'faturar' => 'nullable|boolean',
-            // ATUALIZADO: Apenas FT e FR geram vendas. FA é documento fiscal separado (não é venda)
-            'tipo_documento' => 'nullable|in:FT,FR',
+            // Tipos permitidos: FT, FR, FP (FP é proforma, não é venda fiscal)
+            'tipo_documento' => 'nullable|in:FT,FR,FP',
             'dados_pagamento' => 'nullable|array',
             'dados_pagamento.metodo' => 'required_with:dados_pagamento|in:transferencia,multibanco,dinheiro,cheque,cartao',
             'dados_pagamento.valor' => 'required_with:dados_pagamento|numeric|min:0',
@@ -360,6 +361,14 @@ class VendaController extends Controller
             'dados_completos' => $dados
         ]);
 
+        // VALIDAÇÃO PARA CLIENTE AVULSO
+        // Verificar se tem pelo menos uma forma de identificar o cliente
+        if (empty($dados['cliente_id']) && empty($dados['cliente_nome'])) {
+            return response()->json([
+                'message' => 'É necessário informar um cliente (selecionado ou avulso).'
+            ], 422);
+        }
+
         // FR obrigatoriamente precisa de dados_pagamento
         if (($dados['tipo_documento'] ?? 'FT') === 'FR') {
             if (empty($dados['dados_pagamento'])) {
@@ -367,11 +376,29 @@ class VendaController extends Controller
                     'message' => 'Campo dados_pagamento é obrigatório para Fatura-Recibo (FR).'
                 ], 422);
             }
+
+            // Validar valor do pagamento
+            if ($dados['dados_pagamento']['valor'] <= 0) {
+                return response()->json([
+                    'message' => 'Valor do pagamento deve ser maior que zero.'
+                ], 422);
+            }
+        }
+
+        // Para FP, faturar deve ser false (é proforma)
+        if (($dados['tipo_documento'] ?? 'FT') === 'FP') {
+            $dados['faturar'] = false;
+        }
+
+        // Para FT normal, faturar pode ser true ou false conforme necessidade
+        // Se não especificado, assume true para FT e FR, false para FP
+        if (!isset($dados['faturar'])) {
+            $dados['faturar'] = ($dados['tipo_documento'] ?? 'FT') !== 'FP';
         }
 
         $venda = $this->vendaService->criarVenda(
             $dados,
-            $dados['faturar'] ?? false,
+            $dados['faturar'],
             $dados['tipo_documento'] ?? 'FT'
         );
 
@@ -381,7 +408,8 @@ class VendaController extends Controller
         Log::info('VendaController::store - Venda criada', [
             'venda_id' => $venda->id,
             'tipo_documento_gerado' => $venda->documentoFiscal?->tipo_documento ?? 'N/A',
-            'estado_pagamento' => $estadoPagamento
+            'estado_pagamento' => $estadoPagamento,
+            'cliente_tipo' => $venda->cliente_id ? 'cadastrado' : 'avulso'
         ]);
 
         return response()->json([
@@ -400,7 +428,7 @@ class VendaController extends Controller
                 'total_retencao' => $venda->total_retencao,
                 'status' => $venda->status,
 
-                // Estado de pagamento (ATUALIZADO)
+                // Estado de pagamento
                 'estado_pagamento' => $estadoPagamento,
                 'paga' => $estadoPagamento === 'paga',
 
@@ -437,7 +465,7 @@ class VendaController extends Controller
     {
         $this->authorize('cancel', $venda);
 
-        // ATUALIZADO: Verificar se pode ser cancelada
+        // Verificar se pode ser cancelada
         if ($venda->estado_pagamento === 'paga') {
             return response()->json([
                 'message' => 'Não é possível cancelar uma venda já paga. Cancele o documento fiscal primeiro.'
@@ -511,18 +539,19 @@ class VendaController extends Controller
     /* ================= MÉTODOS AUXILIARES PRIVADOS ================= */
 
     /**
-     * Verificar se é venda válida (FT ou FR)
-     * NC, ND, FA, RC, FRt NÃO são vendas
+     * Verificar se é venda válida (FT, FR ou RC)
+     * NC, ND, FA, FP, FRt NÃO são vendas
+     * FA (Fatura de Adiantamento) só se torna venda quando gerado recibo
      */
     private function ehVendaValida(?DocumentoFiscal $documento): bool
     {
         if (!$documento) return false;
-        return in_array($documento->tipo_documento, ['FT', 'FR']);
+        return in_array($documento->tipo_documento, ['FT', 'FR', 'RC']);
     }
 
     /**
      * Determinar estado de pagamento da venda baseado no documento fiscal
-     * ATUALIZADO: Estados = pendente, paga, cancelada
+     * Estados = pendente, paga, cancelada, parcial
      */
     private function determinarEstadoPagamentoVenda(Venda $venda): string
     {
@@ -535,8 +564,27 @@ class VendaController extends Controller
             return 'cancelada';
         }
 
+        // FP (Fatura Proforma) não é venda fiscal, sempre pendente
+        if ($venda->documentoFiscal->tipo_documento === 'FP') {
+            return 'pendente';
+        }
+
+        // FA (Fatura de Adiantamento) não é venda até gerar recibo
+        if ($venda->documentoFiscal->tipo_documento === 'FA') {
+            // Verificar se já tem recibos (se tiver, virou venda)
+            if ($venda->documentoFiscal->recibos()->where('estado', '!=', 'cancelado')->exists()) {
+                return 'paga';
+            }
+            return 'pendente';
+        }
+
         // FR é sempre paga
         if ($venda->documentoFiscal->tipo_documento === 'FR') {
+            return 'paga';
+        }
+
+        // RC é sempre pago (é o próprio pagamento)
+        if ($venda->documentoFiscal->tipo_documento === 'RC') {
             return 'paga';
         }
 
@@ -551,13 +599,26 @@ class VendaController extends Controller
 
     /**
      * Determinar estado de pagamento de um documento fiscal
-     * ATUALIZADO: Estados = pendente, paga, parcial
+     * Estados = pendente, paga, parcial
      */
     private function determinarEstadoPagamentoDocumento(DocumentoFiscal $documento): string
     {
         // FR sempre paga
         if ($documento->tipo_documento === 'FR') {
             return 'paga';
+        }
+
+        // FP sempre pendente (proforma)
+        if ($documento->tipo_documento === 'FP') {
+            return 'pendente';
+        }
+
+        // FA depende de recibos
+        if ($documento->tipo_documento === 'FA') {
+            if ($documento->recibos()->where('estado', '!=', 'cancelado')->exists()) {
+                return 'paga';
+            }
+            return 'pendente';
         }
 
         // RC sempre pago
@@ -593,13 +654,23 @@ class VendaController extends Controller
      */
     private function calcularValorPago(DocumentoFiscal $documento): float
     {
-        if (!in_array($documento->tipo_documento, ['FT'])) {
-            return $documento->tipo_documento === 'FR' ? $documento->total_liquido : 0;
+        if (in_array($documento->tipo_documento, ['FR', 'RC'])) {
+            return $documento->total_liquido;
         }
 
-        return $documento->recibos()
-            ->where('estado', '!=', 'cancelado')
-            ->sum('total_liquido') ?? 0;
+        if ($documento->tipo_documento === 'FA') {
+            return $documento->recibos()
+                ->where('estado', '!=', 'cancelado')
+                ->sum('total_liquido') ?? 0;
+        }
+
+        if ($documento->tipo_documento === 'FT') {
+            return $documento->recibos()
+                ->where('estado', '!=', 'cancelado')
+                ->sum('total_liquido') ?? 0;
+        }
+
+        return 0;
     }
 
     /**
@@ -607,23 +678,41 @@ class VendaController extends Controller
      */
     private function calcularValorPendente(DocumentoFiscal $documento): float
     {
-        if (!in_array($documento->tipo_documento, ['FT', 'FR'])) {
+        // FP sempre tem valor pendente total
+        if ($documento->tipo_documento === 'FP') {
+            return $documento->total_liquido;
+        }
+
+        // FA só tem pendente se não tiver recibos
+        if ($documento->tipo_documento === 'FA') {
+            $totalPago = $this->calcularValorPago($documento);
+            return max(0, $documento->total_liquido - $totalPago);
+        }
+
+        // FR e RC não tem valor pendente
+        if (in_array($documento->tipo_documento, ['FR', 'RC'])) {
             return 0;
         }
 
-        $totalPago = $this->calcularValorPago($documento);
+        // FT tem pendente baseado em recibos
+        if ($documento->tipo_documento === 'FT') {
+            $totalPago = $this->calcularValorPago($documento);
 
-        // Considerar adiantamentos vinculados
-        $totalAdiantamentos = \DB::table('adiantamento_fatura')
-            ->where('fatura_id', $documento->id)
-            ->sum('valor_utilizado');
+            // Considerar adiantamentos vinculados
+            $totalAdiantamentos = DB::table('adiantamento_fatura')
+                ->where('fatura_id', $documento->id)
+                ->sum('valor_utilizado');
 
-        return max(0, $documento->total_liquido - $totalPago - $totalAdiantamentos);
+            return max(0, $documento->total_liquido - $totalPago - $totalAdiantamentos);
+        }
+
+        return 0;
     }
 
     /**
      * Verificar se a venda pode receber pagamento
-     * ATUALIZADO: Apenas FT pendente ou parcial pode receber recibo
+     * Apenas FT pendente ou parcial pode receber recibo
+     * FA pode receber recibo (se transforma em venda)
      */
     private function podeReceberPagamento(Venda $venda): bool
     {
@@ -631,8 +720,8 @@ class VendaController extends Controller
             return false;
         }
 
-        // Apenas FT pode receber recibo (FR já está paga)
-        if ($venda->documentoFiscal->tipo_documento !== 'FT') {
+        // FT e FA podem receber pagamento via recibo
+        if (!in_array($venda->documentoFiscal->tipo_documento, ['FT', 'FA'])) {
             return false;
         }
 

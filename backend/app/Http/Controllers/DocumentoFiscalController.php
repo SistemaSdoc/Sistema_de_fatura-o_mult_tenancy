@@ -24,13 +24,16 @@ class DocumentoFiscalController extends Controller
     {
         try {
             $filtros = $request->validate([
-                'tipo' => 'nullable|in:FT,FR,FA,NC,ND,RC,FRt',
+                'tipo' => 'nullable|in:FT,FR,FP,FA,NC,ND,RC,FRt',
                 'estado' => 'nullable|in:emitido,paga,parcialmente_paga,cancelado,expirado',
                 'cliente_id' => 'nullable|uuid|exists:clientes,id',
+                'cliente_nome' => 'nullable|string|max:255', // Para cliente avulso
                 'data_inicio' => 'nullable|date',
                 'data_fim' => 'nullable|date',
                 'pendentes' => 'nullable|boolean',
                 'adiantamentos_pendentes' => 'nullable|boolean',
+                'proformas_pendentes' => 'nullable|boolean', // NOVO
+                'apenas_vendas' => 'nullable|boolean', // Filtrar apenas FT, FR, RC
                 'per_page' => 'nullable|integer|min:1|max:100'
             ]);
 
@@ -55,8 +58,6 @@ class DocumentoFiscalController extends Controller
     /**
      * Mostrar documento específico
      */
-    // app/Http/Controllers/DocumentoFiscalController.php
-
     public function show($id)
     {
         Log::channel('single')->info('========== DOCUMENTO FISCAL CONTROLLER ==========');
@@ -83,7 +84,8 @@ class DocumentoFiscalController extends Controller
             Log::channel('single')->info('4. Documento encontrado', [
                 'id' => $documento->id,
                 'tipo' => $documento->tipo_documento,
-                'numero' => $documento->numero_documento
+                'numero' => $documento->numero_documento,
+                'cliente' => $documento->cliente ? 'cadastrado' : ($documento->cliente_nome ? 'avulso' : 'não informado')
             ]);
 
             return response()->json([
@@ -123,9 +125,11 @@ class DocumentoFiscalController extends Controller
     {
         try {
             $dados = $request->validate([
-                'tipo_documento' => 'required|in:FT,FR,FA,NC,ND,RC,FRt',
+                'tipo_documento' => 'required|in:FT,FR,FP,FA,NC,ND,RC,FRt',
                 'venda_id' => 'nullable|uuid|exists:vendas,id',
                 'cliente_id' => 'nullable|uuid|exists:clientes,id',
+                'cliente_nome' => 'nullable|string|max:255', // Para cliente avulso
+                'cliente_nif' => 'nullable|string|max:20',   // Para cliente avulso
                 'fatura_id' => 'nullable|uuid|exists:documentos_fiscais,id',
                 'itens' => 'required_unless:tipo_documento,FA|array',
                 'itens.*.produto_id' => 'nullable|uuid|exists:produtos,id',
@@ -144,6 +148,19 @@ class DocumentoFiscalController extends Controller
                 'referencia_externa' => 'nullable|string|max:100'
             ]);
 
+            // Validação específica para cliente
+            if (empty($dados['cliente_id']) && empty($dados['cliente_nome'])) {
+                // Para FR, cliente é obrigatório
+                if ($dados['tipo_documento'] === 'FR') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Fatura-Recibo (FR) requer um cliente (selecionado ou avulso)'
+                    ], 422);
+                }
+                // Para outros tipos, cliente é opcional mas registramos como "Consumidor Final" se não informado
+                $dados['cliente_nome'] = 'Consumidor Final';
+            }
+
             $documento = $this->documentoService->emitirDocumento($dados);
 
             return response()->json([
@@ -158,47 +175,50 @@ class DocumentoFiscalController extends Controller
                 'errors' => $e->errors()
             ], 422);
         } catch (\Exception $e) {
-            Log::error('Erro ao emitir documento:', ['error' => $e->getMessage()]);
+            Log::error('Erro ao emitir documento:', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao emitir documento',
-                'error' => $e->getMessage()
+                'message' => 'Erro ao emitir documento: ' . $e->getMessage()
             ], 500);
         }
     }
 
     /**
-     * Gerar recibo para fatura (FT)
+     * Gerar recibo para fatura (FT) ou adiantamento (FA)
      */
-    public function gerarRecibo(Request $request, $faturaId)
+    public function gerarRecibo(Request $request, $documentoId)
     {
         try {
-            // Buscar a fatura
-            $fatura = $this->documentoService->buscarDocumento($faturaId);
+            // Buscar o documento origem
+            $documento = $this->documentoService->buscarDocumento($documentoId);
 
-            if ($fatura->tipo_documento !== 'FT') {
+            // FT e FA podem receber recibo
+            if (!in_array($documento->tipo_documento, ['FT', 'FA'])) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Apenas Faturas (FT) podem receber recibo'
+                    'message' => 'Apenas Faturas (FT) e Faturas de Adiantamento (FA) podem receber recibo. Tipo recebido: ' . $documento->tipo_documento
                 ], 422);
             }
 
-            if (in_array($fatura->estado, ['paga', 'cancelado'])) {
+            if (in_array($documento->estado, ['paga', 'cancelado'])) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Fatura já se encontra paga ou cancelada'
+                    'message' => 'Documento já se encontra pago ou cancelado'
                 ], 422);
             }
 
             $dados = $request->validate([
-                'valor' => 'required|numeric|min:0.01|max:' . $this->documentoService->calcularValorPendente($fatura),
+                'valor' => 'required|numeric|min:0.01|max:' . $this->documentoService->calcularValorPendente($documento),
                 'metodo_pagamento' => 'required|in:transferencia,multibanco,dinheiro,cheque,cartao',
                 'data_pagamento' => 'nullable|date',
                 'referencia' => 'nullable|string|max:100'
             ]);
 
-            $recibo = $this->documentoService->gerarRecibo($fatura, $dados);
+            $recibo = $this->documentoService->gerarRecibo($documento, $dados);
 
             return response()->json([
                 'success' => true,
@@ -208,15 +228,17 @@ class DocumentoFiscalController extends Controller
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Fatura não encontrada'
+                'message' => 'Documento não encontrado'
             ], 404);
         } catch (\Exception $e) {
-            Log::error('Erro ao gerar recibo:', ['error' => $e->getMessage()]);
+            Log::error('Erro ao gerar recibo:', [
+                'documento_id' => $documentoId,
+                'error' => $e->getMessage()
+            ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao gerar recibo',
-                'error' => $e->getMessage()
+                'message' => 'Erro ao gerar recibo: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -233,7 +255,7 @@ class DocumentoFiscalController extends Controller
             if (!in_array($documento->tipo_documento, ['FT', 'FR'])) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Nota de Crédito só pode ser gerada a partir de FT ou FR'
+                    'message' => 'Nota de Crédito só pode ser gerada a partir de FT ou FR. Tipo recebido: ' . $documento->tipo_documento
                 ], 422);
             }
 
@@ -264,8 +286,7 @@ class DocumentoFiscalController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao emitir Nota de Crédito',
-                'error' => $e->getMessage()
+                'message' => 'Erro ao emitir Nota de Crédito: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -354,7 +375,7 @@ class DocumentoFiscalController extends Controller
             if ($adiantamento->tipo_documento !== 'FA') {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Apenas Faturas de Adiantamento (FA) podem ser vinculadas'
+                    'message' => 'Apenas Faturas de Adiantamento (FA) podem ser vinculadas. Tipo recebido: ' . $adiantamento->tipo_documento
                 ], 422);
             }
 
@@ -364,6 +385,13 @@ class DocumentoFiscalController extends Controller
             ]);
 
             $fatura = $this->documentoService->buscarDocumento($dados['fatura_id']);
+
+            if ($fatura->tipo_documento !== 'FT') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'O destino deve ser uma Fatura (FT). Tipo recebido: ' . $fatura->tipo_documento
+                ], 422);
+            }
 
             $resultado = $this->documentoService->vincularAdiantamento($adiantamento, $fatura, $dados['valor']);
 
@@ -377,8 +405,7 @@ class DocumentoFiscalController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao vincular adiantamento',
-                'error' => $e->getMessage()
+                'message' => 'Erro ao vincular adiantamento: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -421,21 +448,21 @@ class DocumentoFiscalController extends Controller
     }
 
     /**
-     * Listar recibos de uma fatura
+     * Listar recibos de um documento (FT ou FA)
      */
-    public function listarRecibos($faturaId)
+    public function listarRecibos($documentoId)
     {
         try {
-            $fatura = $this->documentoService->buscarDocumento($faturaId);
+            $documento = $this->documentoService->buscarDocumento($documentoId);
 
-            if ($fatura->tipo_documento !== 'FT') {
+            if (!in_array($documento->tipo_documento, ['FT', 'FA'])) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Apenas Faturas (FT) possuem recibos'
+                    'message' => 'Apenas Faturas (FT) e Faturas de Adiantamento (FA) possuem recibos. Tipo recebido: ' . $documento->tipo_documento
                 ], 422);
             }
 
-            $recibos = $fatura->recibos()->with('user')->get();
+            $recibos = $documento->recibos()->with('user')->get();
 
             return response()->json([
                 'success' => true,
@@ -447,8 +474,7 @@ class DocumentoFiscalController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao carregar recibos',
-                'error' => $e->getMessage()
+                'message' => 'Erro ao carregar recibos: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -460,13 +486,20 @@ class DocumentoFiscalController extends Controller
     {
         try {
             $dados = $request->validate([
-                'cliente_id' => 'required|uuid|exists:clientes,id'
+                'cliente_id' => 'nullable|uuid|exists:clientes,id',
+                'cliente_nome' => 'nullable|string|max:255' // Para cliente avulso
             ]);
 
-            $adiantamentos = DocumentoFiscal::where('tipo_documento', 'FA')
-                ->where('cliente_id', $dados['cliente_id'])
-                ->where('estado', 'emitido')
-                ->get();
+            $query = DocumentoFiscal::where('tipo_documento', 'FA')
+                ->whereIn('estado', ['emitido', 'parcialmente_paga']);
+
+            if (!empty($dados['cliente_id'])) {
+                $query->where('cliente_id', $dados['cliente_id']);
+            } elseif (!empty($dados['cliente_nome'])) {
+                $query->where('cliente_nome', 'like', '%' . $dados['cliente_nome'] . '%');
+            }
+
+            $adiantamentos = $query->get();
 
             return response()->json([
                 'success' => true,
@@ -478,32 +511,75 @@ class DocumentoFiscalController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao carregar adiantamentos',
-                'error' => $e->getMessage()
+                'message' => 'Erro ao carregar adiantamentos: ' . $e->getMessage()
             ], 500);
         }
     }
 
     /**
-     * Verificar alertas de adiantamentos expirados/vencidos
+     * Listar proformas pendentes de um cliente
      */
-    public function alertasAdiantamentos()
+    public function proformasPendentes(Request $request)
     {
         try {
-            // FA emitidos com data de vencimento (entrega) ultrapassada
+            $dados = $request->validate([
+                'cliente_id' => 'nullable|uuid|exists:clientes,id',
+                'cliente_nome' => 'nullable|string|max:255' // Para cliente avulso
+            ]);
+
+            $query = DocumentoFiscal::where('tipo_documento', 'FP')
+                ->where('estado', 'emitido');
+
+            if (!empty($dados['cliente_id'])) {
+                $query->where('cliente_id', $dados['cliente_id']);
+            } elseif (!empty($dados['cliente_nome'])) {
+                $query->where('cliente_nome', 'like', '%' . $dados['cliente_nome'] . '%');
+            }
+
+            $proformas = $query->get();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Proformas pendentes carregadas',
+                'data' => $proformas
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Erro ao listar proformas:', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao carregar proformas: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Verificar alertas de documentos
+     */
+    public function alertas()
+    {
+        try {
+            // FA emitidos com data de vencimento ultrapassada
             $vencidos = DocumentoFiscal::where('tipo_documento', 'FA')
                 ->where('estado', 'emitido')
                 ->where('data_vencimento', '<', now())
                 ->with('cliente')
                 ->get();
 
-            // FT/FR pendentes com adiantamentos vinculados mas não totalmente pagas
-            $faturasComAdiantamentosPendentes = DocumentoFiscal::whereIn('tipo_documento', ['FT', 'FR'])
+            // FT pendentes com adiantamentos vinculados
+            $faturasComAdiantamentosPendentes = DocumentoFiscal::whereIn('tipo_documento', ['FT'])
                 ->whereIn('estado', ['emitido', 'parcialmente_paga'])
                 ->whereHas('faturasAdiantamento', function ($q) {
                     $q->where('estado', 'emitido');
                 })
                 ->with(['cliente', 'faturasAdiantamento'])
+                ->get();
+
+            // Proformas pendentes
+            $proformasPendentes = DocumentoFiscal::where('tipo_documento', 'FP')
+                ->where('estado', 'emitido')
+                ->where('data_emissao', '<', now()->subDays(30)) // Proformas com mais de 30 dias
+                ->with('cliente')
                 ->get();
 
             return response()->json([
@@ -517,6 +593,10 @@ class DocumentoFiscalController extends Controller
                     'faturas_com_adiantamentos_pendentes' => [
                         'total' => $faturasComAdiantamentosPendentes->count(),
                         'items' => $faturasComAdiantamentosPendentes
+                    ],
+                    'proformas_pendentes' => [
+                        'total' => $proformasPendentes->count(),
+                        'items' => $proformasPendentes
                     ]
                 ]
             ]);
@@ -525,8 +605,7 @@ class DocumentoFiscalController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao gerar alertas',
-                'error' => $e->getMessage()
+                'message' => 'Erro ao gerar alertas: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -549,8 +628,7 @@ class DocumentoFiscalController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao processar adiantamentos expirados',
-                'error' => $e->getMessage()
+                'message' => 'Erro ao processar adiantamentos expirados: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -583,9 +661,21 @@ class DocumentoFiscalController extends Controller
                     ->where('estado', 'emitido')
                     ->count(),
 
+                'proformas_pendentes' => DocumentoFiscal::where('tipo_documento', 'FP')
+                    ->where('estado', 'emitido')
+                    ->count(),
+
                 'documentos_cancelados_mes' => DocumentoFiscal::where('estado', 'cancelado')
                     ->whereBetween('data_cancelamento', [$inicioMes, $hoje])
-                    ->count()
+                    ->count(),
+
+                'total_vendas_mes' => DocumentoFiscal::whereIn('tipo_documento', ['FT', 'FR', 'RC'])
+                    ->whereBetween('data_emissao', [$inicioMes, $hoje])
+                    ->count(),
+
+                'total_nao_vendas_mes' => DocumentoFiscal::whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FRt'])
+                    ->whereBetween('data_emissao', [$inicioMes, $hoje])
+                    ->count(),
             ];
 
             return response()->json([
@@ -598,8 +688,7 @@ class DocumentoFiscalController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao carregar dashboard',
-                'error' => $e->getMessage()
+                'message' => 'Erro ao carregar dashboard: ' . $e->getMessage()
             ], 500);
         }
     }

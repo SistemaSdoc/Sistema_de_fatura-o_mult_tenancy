@@ -12,9 +12,17 @@ return new class extends Migration
         Schema::create('vendas', function (Blueprint $table) {
             $table->uuid('id')->primary();
 
+            // Cliente pode ser nulo para vendas com cliente avulso
             $table->foreignUuid('cliente_id')
                   ->nullable()
-                  ->constrained('clientes');
+                  ->constrained('clientes')
+                  ->nullOnDelete();
+
+            // Nome do cliente para vendas com cliente avulso
+            $table->string('cliente_nome')->nullable();
+
+            // NIF para cliente avulso (opcional)
+            $table->string('cliente_nif', 20)->nullable();
 
             $table->foreignUuid('user_id')
                   ->constrained('users');
@@ -27,8 +35,11 @@ return new class extends Migration
             $table->enum('tipo_documento', ['venda'])->default('venda');
 
             // Numeração interna da venda
-            $table->string('serie')->nullable();
-            $table->string('numero');
+            $table->string('serie', 20)->nullable();
+            $table->string('numero', 20);
+
+            // Número do documento completo (para facilitar buscas)
+            $table->string('numero_documento', 50)->nullable()->index();
 
             // Totais
             $table->decimal('base_tributavel', 15, 2)->default(0);
@@ -44,19 +55,31 @@ return new class extends Migration
             // Status da venda
             $table->enum('status', ['aberta', 'faturada', 'cancelada'])->default('aberta');
 
-            // ATUALIZADO: Estado de pagamento (adicionado 'cancelada', removido valores obsoletos)
+            // Estado de pagamento
             $table->enum('estado_pagamento', ['pendente', 'paga', 'parcial', 'cancelada'])
                   ->default('pendente');
 
+            // Tipo de documento fiscal associado (FT, FR, RC, FP, FA, etc)
+            $table->string('tipo_documento_fiscal', 10)->nullable();
+            // NOTA: O índice será criado abaixo junto com os outros
+
+            // Observações
+            $table->text('observacoes')->nullable();
+
             $table->string('hash_fiscal')->nullable();
             $table->timestamps();
+            $table->softDeletes(); // Soft delete para permitir recuperação
 
-            // Índices
+            // Índices - TODOS OS ÍNDICES AQUI (SEM DUPLICAÇÕES)
             $table->index('cliente_id');
+            $table->index('cliente_nome');
             $table->index('status');
             $table->index('estado_pagamento');
             $table->index('data_venda');
+            $table->index('tipo_documento_fiscal'); // ÚNICA DECLARAÇÃO DO ÍNDICE
             $table->index(['status', 'estado_pagamento']); // Índice composto para consultas comuns
+            $table->index(['data_venda', 'tipo_documento_fiscal']); // Para relatórios por período e tipo
+            $table->index(['cliente_id', 'estado_pagamento']); // Para consultas de cliente
         });
 
         // Itens da venda
@@ -68,24 +91,35 @@ return new class extends Migration
                   ->onDelete('cascade');
 
             $table->foreignUuid('produto_id')
-                  ->constrained('produtos');
+                  ->nullable() // Pode ser nulo para itens personalizados
+                  ->constrained('produtos')
+                  ->nullOnDelete();
 
             $table->integer('quantidade');
             $table->string('descricao', 255);
+
+            // Código do produto no momento da venda
+            $table->string('codigo_produto', 50)->nullable();
 
             // Preço no momento da venda
             $table->decimal('preco_venda', 15, 4);
             $table->decimal('desconto', 15, 2)->default(0);
             $table->decimal('base_tributavel', 15, 2)->default(0);
             $table->decimal('valor_iva', 15, 2)->default(0);
+            $table->decimal('taxa_iva', 5, 2)->default(14);
             $table->decimal('valor_retencao', 15, 2)->default(0);
+            $table->decimal('taxa_retencao', 5, 2)->default(0);
             $table->decimal('subtotal', 15, 2)->default(0);
+
+            // Unidade de medida
+            $table->string('unidade', 10)->default('UN');
 
             $table->timestamps();
 
             // Índices
             $table->index('venda_id');
             $table->index('produto_id');
+            $table->index('codigo_produto');
         });
     }
 

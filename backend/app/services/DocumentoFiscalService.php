@@ -20,13 +20,86 @@ class DocumentoFiscalService
      * Mapeamento de tipos de documento para suas características
      */
     protected $configuracoesTipo = [
-        'FT' => ['nome' => 'Fatura', 'afeta_stock' => true, 'eh_venda' => true, 'gera_recibo' => true, 'estado_inicial' => 'emitido'],
-        'FR' => ['nome' => 'Fatura-Recibo', 'afeta_stock' => true, 'eh_venda' => true, 'gera_recibo' => false, 'estado_inicial' => 'paga'],
-        'FA' => ['nome' => 'Fatura de Adiantamento', 'afeta_stock' => false, 'eh_venda' => false, 'gera_recibo' => false, 'estado_inicial' => 'emitido'],
-        'NC' => ['nome' => 'Nota de Crédito', 'afeta_stock' => true, 'eh_venda' => false, 'gera_recibo' => false, 'estado_inicial' => 'emitido'],
-        'ND' => ['nome' => 'Nota de Débito', 'afeta_stock' => false, 'eh_venda' => false, 'gera_recibo' => false, 'estado_inicial' => 'emitido'],
-        'RC' => ['nome' => 'Recibo', 'afeta_stock' => false, 'eh_venda' => false, 'gera_recibo' => false, 'estado_inicial' => 'paga'],
-        'FRt' => ['nome' => 'Fatura de Retificação', 'afeta_stock' => false, 'eh_venda' => false, 'gera_recibo' => false, 'estado_inicial' => 'emitido'],
+        'FT' => [
+            'nome' => 'Fatura',
+            'afeta_stock' => true,
+            'eh_venda' => true,
+            'gera_recibo' => true,
+            'estado_inicial' => 'emitido',
+            'exige_cliente' => false, // Pode ser avulso
+            'aceita_pagamento' => true,
+            'pode_ter_adiantamento' => true,
+        ],
+        'FR' => [
+            'nome' => 'Fatura-Recibo',
+            'afeta_stock' => true,
+            'eh_venda' => true,
+            'gera_recibo' => false,
+            'estado_inicial' => 'paga',
+            'exige_cliente' => true, // FR exige cliente (cadastrado ou avulso)
+            'aceita_pagamento' => false,
+            'pode_ter_adiantamento' => false,
+        ],
+        'FP' => [
+            'nome' => 'Fatura Proforma',
+            'afeta_stock' => false, // Não afeta stock (apenas reserva)
+            'eh_venda' => false,
+            'gera_recibo' => false,
+            'estado_inicial' => 'emitido',
+            'exige_cliente' => false,
+            'aceita_pagamento' => false,
+            'pode_ter_adiantamento' => false,
+        ],
+        'FA' => [
+            'nome' => 'Fatura de Adiantamento',
+            'afeta_stock' => false,
+            'eh_venda' => false,
+            'gera_recibo' => false,
+            'estado_inicial' => 'emitido',
+            'exige_cliente' => true,
+            'aceita_pagamento' => true,
+            'pode_ter_adiantamento' => false,
+        ],
+        'NC' => [
+            'nome' => 'Nota de Crédito',
+            'afeta_stock' => true, // Reverte stock
+            'eh_venda' => false,
+            'gera_recibo' => false,
+            'estado_inicial' => 'emitido',
+            'exige_cliente' => false,
+            'aceita_pagamento' => false,
+            'pode_ter_adiantamento' => false,
+        ],
+        'ND' => [
+            'nome' => 'Nota de Débito',
+            'afeta_stock' => false,
+            'eh_venda' => false,
+            'gera_recibo' => false,
+            'estado_inicial' => 'emitido',
+            'exige_cliente' => false,
+            'aceita_pagamento' => false,
+            'pode_ter_adiantamento' => false,
+        ],
+        'RC' => [
+            'nome' => 'Recibo',
+            'afeta_stock' => false,
+            'eh_venda' => true,
+            'gera_recibo' => false,
+            'estado_inicial' => 'paga',
+            'exige_cliente' => false,
+            'aceita_pagamento' => false,
+            'pode_ter_adiantamento' => false,
+        ],
+        'FRt' => [
+            'nome' => 'Fatura de Retificação',
+            'afeta_stock' => false,
+            'eh_venda' => false,
+            'gera_recibo' => false,
+            'estado_inicial' => 'emitido',
+            'exige_cliente' => false,
+            'aceita_pagamento' => false,
+            'pode_ter_adiantamento' => false,
+        ],
     ];
 
     /**
@@ -51,7 +124,13 @@ class DocumentoFiscalService
 
         $config = $this->configuracoesTipo[$tipo];
 
-        Log::info("Iniciando emissão de {$config['nome']}", ['tipo' => $tipo, 'dados' => $dados]);
+        Log::info("Iniciando emissão de {$config['nome']}", [
+            'tipo' => $tipo,
+            'cliente_tipo' => isset($dados['cliente_id']) ? 'cadastrado' : (isset($dados['cliente_nome']) ? 'avulso' : 'não informado'),
+            'cliente_id' => $dados['cliente_id'] ?? null,
+            'cliente_nome' => $dados['cliente_nome'] ?? null,
+            'cliente_nif' => $dados['cliente_nif'] ?? null,
+        ]);
 
         return DB::transaction(function () use ($dados, $tipo, $config) {
 
@@ -60,12 +139,12 @@ class DocumentoFiscalService
             $regime = $empresa->regime_fiscal;
 
             // Validações específicas por tipo
-            $this->validarDadosPorTipo($dados, $tipo);
+            $this->validarDadosPorTipo($dados, $tipo, $config);
 
             // Obter série fiscal
             $serieFiscal = $this->obterSerieFiscal($tipo);
             $numero = $serieFiscal->ultimo_numero + 1;
-            $numeroDocumento = $serieFiscal->serie . '-' . str_pad($numero, 5, '0', STR_PAD_LEFT);
+            $numeroDocumento = $serieFiscal->serie . '-' . str_pad($numero, $serieFiscal->digitos ?? 5, '0', STR_PAD_LEFT);
             $serieFiscal->update(['ultimo_numero' => $numero]);
 
             // Calcular datas
@@ -75,15 +154,24 @@ class DocumentoFiscalService
             // Processar itens e calcular totais
             $totais = $this->processarItens($dados['itens'] ?? [], $aplicaIva, $regime);
 
-            // Resolver cliente
-            $clienteId = $dados['cliente_id'] ?? $this->resolverCliente($dados, $tipo);
+            // Resolver cliente (pode ser cadastrado ou avulso)
+            $clienteId = $this->resolverCliente($dados, $tipo);
+            $clienteNome = $dados['cliente_nome'] ?? null;
+            $clienteNif = $dados['cliente_nif'] ?? null;
 
-            // Criar documento base
-            $documento = DocumentoFiscal::create([
+            // Log para debug do cliente
+            Log::info('Dados do cliente resolvidos', [
+                'cliente_id' => $clienteId,
+                'cliente_nome' => $clienteNome,
+                'cliente_nif' => $clienteNif,
+                'metodo_resolucao' => $clienteId ? 'cadastrado' : ($clienteNome ? 'avulso' : 'não informado')
+            ]);
+
+            // Criar documento base - IMPORTANTE: só incluir cliente_nome se NÃO tiver cliente_id
+            $documentoData = [
                 'id' => Str::uuid(),
                 'user_id' => Auth::id(),
                 'venda_id' => $dados['venda_id'] ?? null,
-                'cliente_id' => $clienteId,
                 'fatura_id' => $dados['fatura_id'] ?? null,
                 'serie' => $serieFiscal->serie,
                 'numero' => $numero,
@@ -100,7 +188,42 @@ class DocumentoFiscalService
                 'motivo' => $dados['motivo'] ?? null,
                 'hash_fiscal' => null,
                 'referencia_externa' => $dados['referencia_externa'] ?? null,
+            ];
+
+            // Adicionar cliente_id APENAS se existir
+            if ($clienteId) {
+                $documentoData['cliente_id'] = $clienteId;
+                Log::info('Adicionando cliente cadastrado', ['cliente_id' => $clienteId]);
+            }
+
+            // Adicionar cliente_nome APENAS se for cliente avulso (não tem cliente_id)
+            if (!$clienteId && $clienteNome) {
+                $documentoData['cliente_nome'] = $clienteNome;
+                Log::info('Adicionando cliente avulso', ['cliente_nome' => $clienteNome]);
+
+                if ($clienteNif) {
+                    $documentoData['cliente_nif'] = $clienteNif;
+                    Log::info('Adicionando NIF para cliente avulso', ['cliente_nif' => $clienteNif]);
+                }
+            }
+
+            Log::info('Dados finais do documento', [
+                'cliente_id' => $documentoData['cliente_id'] ?? null,
+                'cliente_nome' => $documentoData['cliente_nome'] ?? null,
+                'cliente_nif' => $documentoData['cliente_nif'] ?? null,
             ]);
+
+            // Verificar se as colunas existem antes de criar
+            try {
+                $documento = DocumentoFiscal::create($documentoData);
+                Log::info('Documento criado com sucesso', ['id' => $documento->id]);
+            } catch (\Exception $e) {
+                Log::error('Erro ao criar documento', [
+                    'error' => $e->getMessage(),
+                    'documentoData' => $documentoData
+                ]);
+                throw $e;
+            }
 
             // Criar itens do documento
             if (!empty($totais['itens_processados'])) {
@@ -135,7 +258,8 @@ class DocumentoFiscalService
 
             Log::info("{$config['nome']} emitida com sucesso", [
                 'documento_id' => $documento->id,
-                'numero' => $numeroDocumento
+                'numero' => $numeroDocumento,
+                'cliente' => $clienteId ? 'cadastrado' : ($clienteNome ? 'avulso' : 'não informado')
             ]);
 
             return $documento->load('itens.produto', 'cliente', 'documentoOrigem');
@@ -143,37 +267,44 @@ class DocumentoFiscalService
     }
 
     /**
-     * Gerar recibo para fatura (FT)
+     * Gerar recibo para fatura (FT) ou adiantamento (FA)
      */
-    public function gerarRecibo(DocumentoFiscal $fatura, array $dados)
+    public function gerarRecibo(DocumentoFiscal $documentoOrigem, array $dados)
     {
-        if ($fatura->tipo_documento !== 'FT') {
-            throw new \InvalidArgumentException("Apenas Faturas (FT) podem receber recibo.");
+        if (!in_array($documentoOrigem->tipo_documento, ['FT', 'FA'])) {
+            throw new \InvalidArgumentException(
+                "Apenas Faturas (FT) e Faturas de Adiantamento (FA) podem receber recibo. " .
+                "Tipo recebido: {$documentoOrigem->tipo_documento}"
+            );
         }
 
-        if (in_array($fatura->estado, [self::ESTADO_PAGA, self::ESTADO_CANCELADO])) {
-            throw new \InvalidArgumentException("Fatura já se encontra paga ou cancelada.");
+        if (in_array($documentoOrigem->estado, [self::ESTADO_PAGA, self::ESTADO_CANCELADO])) {
+            throw new \InvalidArgumentException(
+                "Documento já se encontra pago ou cancelado. " .
+                "Estado atual: {$documentoOrigem->estado}"
+            );
         }
 
-        return DB::transaction(function () use ($fatura, $dados) {
+        return DB::transaction(function () use ($documentoOrigem, $dados) {
 
             $valorPago = $dados['valor'];
-            $valorPendente = $this->calcularValorPendente($fatura);
+            $valorPendente = $this->calcularValorPendente($documentoOrigem);
 
             if ($valorPago > $valorPendente) {
-                throw new \InvalidArgumentException("Valor do pagamento ({$valorPago}) excede o valor pendente ({$valorPendente}).");
+                throw new \InvalidArgumentException(
+                    "Valor do pagamento ({$valorPago}) excede o valor pendente ({$valorPendente})."
+                );
             }
 
             $serieFiscal = $this->obterSerieFiscal('RC');
             $numero = $serieFiscal->ultimo_numero + 1;
-            $numeroDocumento = $serieFiscal->serie . '-' . str_pad($numero, 5, '0', STR_PAD_LEFT);
+            $numeroDocumento = $serieFiscal->serie . '-' . str_pad($numero, $serieFiscal->digitos ?? 5, '0', STR_PAD_LEFT);
             $serieFiscal->update(['ultimo_numero' => $numero]);
 
-            $recibo = DocumentoFiscal::create([
+            $reciboData = [
                 'id' => Str::uuid(),
                 'user_id' => Auth::id(),
-                'fatura_id' => $fatura->id,
-                'cliente_id' => $fatura->cliente_id,
+                'fatura_id' => $documentoOrigem->id,
                 'serie' => $serieFiscal->serie,
                 'numero' => $numero,
                 'numero_documento' => $numeroDocumento,
@@ -189,18 +320,50 @@ class DocumentoFiscalService
                 'metodo_pagamento' => $dados['metodo_pagamento'],
                 'referencia_pagamento' => $dados['referencia'] ?? null,
                 'hash_fiscal' => null,
-            ]);
+            ];
 
-            // Atualizar estado da fatura
-            $novoTotalPago = $this->calcularTotalPago($fatura) + $valorPago;
+            // Herdar dados do cliente do documento origem
+            if ($documentoOrigem->cliente_id) {
+                $reciboData['cliente_id'] = $documentoOrigem->cliente_id;
+            } elseif ($documentoOrigem->cliente_nome) {
+                $reciboData['cliente_nome'] = $documentoOrigem->cliente_nome;
+                $reciboData['cliente_nif'] = $documentoOrigem->cliente_nif;
+            }
 
-            if ($novoTotalPago >= $fatura->total_liquido) {
-                $fatura->update(['estado' => self::ESTADO_PAGA]);
+            $recibo = DocumentoFiscal::create($reciboData);
+
+            // Atualizar estado do documento origem
+            $novoTotalPago = $this->calcularTotalPago($documentoOrigem) + $valorPago;
+
+            // Se for FA, também considerar adiantamentos vinculados
+            if ($documentoOrigem->tipo_documento === 'FA') {
+                if ($novoTotalPago >= $documentoOrigem->total_liquido) {
+                    $documentoOrigem->update(['estado' => self::ESTADO_PAGA]);
+                } else {
+                    $documentoOrigem->update(['estado' => self::ESTADO_PARCIALMENTE_PAGA]);
+                }
             } else {
-                $fatura->update(['estado' => self::ESTADO_PARCIALMENTE_PAGA]);
+                // Para FT, considerar adiantamentos vinculados
+                $totalAdiantamentos = DB::table('adiantamento_fatura')
+                    ->where('fatura_id', $documentoOrigem->id)
+                    ->sum('valor_utilizado');
+
+                if ($novoTotalPago + $totalAdiantamentos >= $documentoOrigem->total_liquido) {
+                    $documentoOrigem->update(['estado' => self::ESTADO_PAGA]);
+                } else {
+                    $documentoOrigem->update(['estado' => self::ESTADO_PARCIALMENTE_PAGA]);
+                }
             }
 
             $recibo->update(['hash_fiscal' => $this->gerarHashFiscal($recibo)]);
+
+            Log::info('Recibo gerado com sucesso', [
+                'recibo_id' => $recibo->id,
+                'recibo_numero' => $recibo->numero_documento,
+                'documento_origem_id' => $documentoOrigem->id,
+                'documento_origem_tipo' => $documentoOrigem->tipo_documento,
+                'valor' => $valorPago
+            ]);
 
             return $recibo->load('documentoOrigem');
         });
@@ -211,7 +374,6 @@ class DocumentoFiscalService
      */
     public function criarNotaCredito(DocumentoFiscal $documentoOrigem, array $dados)
     {
-        // Log para debug
         Log::info('Iniciando criação de Nota de Crédito', [
             'documento_origem_id' => $documentoOrigem->id,
             'documento_origem_tipo' => $documentoOrigem->tipo_documento
@@ -234,8 +396,15 @@ class DocumentoFiscalService
         // Preparar dados
         $dados['tipo_documento'] = 'NC';
         $dados['fatura_id'] = $documentoOrigem->id;
-        $dados['cliente_id'] = $documentoOrigem->cliente_id;
         $dados['motivo'] = $dados['motivo'] ?? "Correção de {$documentoOrigem->numero_documento}";
+
+        // Herdar dados do cliente do documento origem
+        if ($documentoOrigem->cliente_id) {
+            $dados['cliente_id'] = $documentoOrigem->cliente_id;
+        } elseif ($documentoOrigem->cliente_nome) {
+            $dados['cliente_nome'] = $documentoOrigem->cliente_nome;
+            $dados['cliente_nif'] = $documentoOrigem->cliente_nif;
+        }
 
         return $this->emitirDocumento($dados);
     }
@@ -245,7 +414,6 @@ class DocumentoFiscalService
      */
     public function criarNotaDebito(DocumentoFiscal $documentoOrigem, array $dados)
     {
-        // Log para debug
         Log::info('Iniciando criação de Nota de Débito', [
             'documento_origem_id' => $documentoOrigem->id,
             'documento_origem_tipo' => $documentoOrigem->tipo_documento,
@@ -274,7 +442,14 @@ class DocumentoFiscalService
         // Preparar dados
         $dados['tipo_documento'] = 'ND';
         $dados['fatura_id'] = $documentoOrigem->id;
-        $dados['cliente_id'] = $documentoOrigem->cliente_id;
+
+        // Herdar dados do cliente do documento origem
+        if ($documentoOrigem->cliente_id) {
+            $dados['cliente_id'] = $documentoOrigem->cliente_id;
+        } elseif ($documentoOrigem->cliente_nome) {
+            $dados['cliente_nome'] = $documentoOrigem->cliente_nome;
+            $dados['cliente_nif'] = $documentoOrigem->cliente_nif;
+        }
 
         // Garantir motivo
         if (empty($dados['motivo'])) {
@@ -290,23 +465,44 @@ class DocumentoFiscalService
     public function vincularAdiantamento(DocumentoFiscal $adiantamento, DocumentoFiscal $fatura, float $valor)
     {
         if ($adiantamento->tipo_documento !== 'FA') {
-            throw new \InvalidArgumentException("Apenas Faturas de Adiantamento (FA) podem ser vinculadas.");
+            throw new \InvalidArgumentException(
+                "Apenas Faturas de Adiantamento (FA) podem ser vinculadas. " .
+                "Tipo recebido: {$adiantamento->tipo_documento}"
+            );
         }
 
         if ($adiantamento->estado !== self::ESTADO_EMITIDO) {
-            throw new \InvalidArgumentException("Adiantamento deve estar emitido para ser vinculado.");
+            throw new \InvalidArgumentException(
+                "Adiantamento deve estar emitido para ser vinculado. " .
+                "Estado atual: {$adiantamento->estado}"
+            );
         }
 
         if ($fatura->tipo_documento !== 'FT') {
-            throw new \InvalidArgumentException("Apenas Faturas (FT) podem receber adiantamentos.");
+            throw new \InvalidArgumentException(
+                "Apenas Faturas (FT) podem receber adiantamentos. " .
+                "Tipo recebido: {$fatura->tipo_documento}"
+            );
         }
 
         if (in_array($fatura->estado, [self::ESTADO_CANCELADO, self::ESTADO_PAGA])) {
-            throw new \InvalidArgumentException("Fatura cancelada ou já paga não pode receber adiantamentos.");
+            throw new \InvalidArgumentException(
+                "Fatura cancelada ou já paga não pode receber adiantamentos. " .
+                "Estado atual: {$fatura->estado}"
+            );
         }
 
         if ($valor > $adiantamento->total_liquido) {
-            throw new \InvalidArgumentException("Valor excede o total do adiantamento.");
+            throw new \InvalidArgumentException(
+                "Valor ({$valor}) excede o total do adiantamento ({$adiantamento->total_liquido})."
+            );
+        }
+
+        $valorPendenteFatura = $this->calcularValorPendente($fatura);
+        if ($valor > $valorPendenteFatura) {
+            throw new \InvalidArgumentException(
+                "Valor ({$valor}) excede o pendente da fatura ({$valorPendenteFatura})."
+            );
         }
 
         return DB::transaction(function () use ($adiantamento, $fatura, $valor) {
@@ -335,13 +531,20 @@ class DocumentoFiscalService
                 ->where('fatura_id', $fatura->id)
                 ->sum('valor_utilizado');
 
-            $valorPendente = $fatura->total_liquido - $this->calcularTotalPago($fatura) - $totalAdiantamentos;
+            $totalPago = $this->calcularTotalPago($fatura);
+            $valorPendente = $fatura->total_liquido - $totalPago - $totalAdiantamentos;
 
             if ($valorPendente <= 0) {
                 $fatura->update(['estado' => self::ESTADO_PAGA]);
             } else {
                 $fatura->update(['estado' => self::ESTADO_PARCIALMENTE_PAGA]);
             }
+
+            Log::info('Adiantamento vinculado com sucesso', [
+                'adiantamento_id' => $adiantamento->id,
+                'fatura_id' => $fatura->id,
+                'valor' => $valor
+            ]);
 
             return [
                 'adiantamento' => $adiantamento->fresh(),
@@ -365,7 +568,10 @@ class DocumentoFiscalService
             ->count();
 
         if ($derivadosNaoCancelados > 0) {
-            throw new \InvalidArgumentException("Documento possui documentos derivados ativos. Cancele-os primeiro.");
+            throw new \InvalidArgumentException(
+                "Documento possui documentos derivados ativos. Cancele-os primeiro. " .
+                "Quantidade: {$derivadosNaoCancelados}"
+            );
         }
 
         return DB::transaction(function () use ($documento, $motivo) {
@@ -375,12 +581,18 @@ class DocumentoFiscalService
                 $this->reverterStock($documento);
             }
 
-            // Se for FT ou FR com NC/ND associados, verificar
-            if (in_array($documento->tipo_documento, ['FT', 'FR'])) {
-                // Cancelar recibos associados
-                $documento->recibos()->where('estado', '!=', self::ESTADO_CANCELADO)->each(function ($recibo) use ($motivo) {
-                    $this->cancelarDocumento($recibo, "Cancelamento automático: {$motivo}");
-                });
+            // Se for FT ou FA com recibos associados, verificar
+            if (in_array($documento->tipo_documento, ['FT', 'FA'])) {
+                $recibosAtivos = $documento->recibos()
+                    ->where('estado', '!=', self::ESTADO_CANCELADO)
+                    ->count();
+
+                if ($recibosAtivos > 0) {
+                    throw new \InvalidArgumentException(
+                        "Documento possui recibos ativos. Cancele-os primeiro. " .
+                        "Quantidade: {$recibosAtivos}"
+                    );
+                }
             }
 
             $documento->update([
@@ -392,6 +604,8 @@ class DocumentoFiscalService
 
             Log::info("Documento cancelado", [
                 'documento_id' => $documento->id,
+                'documento_numero' => $documento->numero_documento,
+                'tipo' => $documento->tipo_documento,
                 'motivo' => $motivo
             ]);
 
@@ -416,6 +630,7 @@ class DocumentoFiscalService
 
             Log::info("Adiantamento expirado", [
                 'documento_id' => $fa->id,
+                'documento_numero' => $fa->numero_documento,
                 'data_vencimento' => $fa->data_vencimento
             ]);
         }
@@ -442,6 +657,10 @@ class DocumentoFiscalService
             $query->where('cliente_id', $filtros['cliente_id']);
         }
 
+        if (!empty($filtros['cliente_nome'])) {
+            $query->where('cliente_nome', 'like', '%' . $filtros['cliente_nome'] . '%');
+        }
+
         if (!empty($filtros['data_inicio'])) {
             $query->whereDate('data_emissao', '>=', $filtros['data_inicio']);
         }
@@ -450,15 +669,31 @@ class DocumentoFiscalService
             $query->whereDate('data_emissao', '<=', $filtros['data_fim']);
         }
 
-        // Filtro de documentos pendentes (FT/FR não pagas totalmente)
+        // Filtro apenas vendas (FT, FR, RC)
+        if (!empty($filtros['apenas_vendas'])) {
+            $query->whereIn('tipo_documento', ['FT', 'FR', 'RC']);
+        }
+
+        // Filtro apenas não-vendas (FP, FA, NC, ND, FRt)
+        if (!empty($filtros['apenas_nao_vendas'])) {
+            $query->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FRt']);
+        }
+
+        // Filtro de documentos pendentes (FT não pagas totalmente)
         if (!empty($filtros['pendentes'])) {
-            $query->whereIn('tipo_documento', ['FT', 'FR'])
+            $query->where('tipo_documento', 'FT')
                 ->whereIn('estado', [self::ESTADO_EMITIDO, self::ESTADO_PARCIALMENTE_PAGA]);
         }
 
         // Filtro de adiantamentos pendentes de utilização
         if (!empty($filtros['adiantamentos_pendentes'])) {
             $query->where('tipo_documento', 'FA')
+                ->where('estado', self::ESTADO_EMITIDO);
+        }
+
+        // Filtro de proformas pendentes
+        if (!empty($filtros['proformas_pendentes'])) {
+            $query->where('tipo_documento', 'FP')
                 ->where('estado', self::ESTADO_EMITIDO);
         }
 
@@ -470,10 +705,9 @@ class DocumentoFiscalService
      */
     public function buscarDocumento(string $documentoId): DocumentoFiscal
     {
-        // Log para debug
         Log::info('Buscando documento no service:', ['id' => $documentoId]);
 
-        // Validar se é UUID válido (opcional, mas recomendado)
+        // Validar se é UUID válido
         if (!Str::isUuid($documentoId)) {
             throw new \InvalidArgumentException('ID de documento inválido. Formato UUID esperado.');
         }
@@ -497,7 +731,8 @@ class DocumentoFiscalService
             Log::info('Documento encontrado no service:', [
                 'id' => $documento->id,
                 'tipo' => $documento->tipo_documento,
-                'numero' => $documento->numero_documento
+                'numero' => $documento->numero_documento,
+                'cliente' => $documento->cliente_id ? 'cadastrado' : ($documento->cliente_nome ? 'avulso' : 'não informado')
             ]);
 
             return $documento;
@@ -509,30 +744,69 @@ class DocumentoFiscalService
     }
 
     /**
-     * Calcular valor pendente de uma fatura
+     * Calcular valor pendente de uma fatura (FT) ou adiantamento (FA)
      */
-    public function calcularValorPendente(DocumentoFiscal $fatura): float
+    public function calcularValorPendente(DocumentoFiscal $documento): float
     {
-        if (!in_array($fatura->tipo_documento, ['FT', 'FR'])) {
+        if (!in_array($documento->tipo_documento, ['FT', 'FA'])) {
             return 0;
         }
 
-        $totalPago = $this->calcularTotalPago($fatura);
+        $totalPago = $this->calcularTotalPago($documento);
+
+        if ($documento->tipo_documento === 'FA') {
+            return max(0, $documento->total_liquido - $totalPago);
+        }
+
+        // Para FT, considerar adiantamentos vinculados
         $totalAdiantamentos = DB::table('adiantamento_fatura')
-            ->where('fatura_id', $fatura->id)
+            ->where('fatura_id', $documento->id)
             ->sum('valor_utilizado');
 
-        return max(0, $fatura->total_liquido - $totalPago - $totalAdiantamentos);
+        return max(0, $documento->total_liquido - $totalPago - $totalAdiantamentos);
     }
 
     // =================== MÉTODOS PRIVADOS ===================
 
-    private function validarDadosPorTipo(array $dados, string $tipo)
+    private function validarDadosPorTipo(array $dados, string $tipo, array $config)
     {
+        // Log para debug da validação
+        Log::info('=== VALIDAÇÃO DE DOCUMENTO FISCAL ===', [
+            'tipo' => $tipo,
+            'exige_cliente' => $config['exige_cliente'],
+            'cliente_id' => $dados['cliente_id'] ?? null,
+            'cliente_nome' => $dados['cliente_nome'] ?? null,
+        ]);
+
+        // Validar cliente
+        if ($config['exige_cliente']) {
+            $temClienteCadastrado = !empty($dados['cliente_id']);
+            $temClienteAvulso = !empty($dados['cliente_nome']);
+
+            Log::info('Verificando cliente', [
+                'tem_cliente_cadastrado' => $temClienteCadastrado,
+                'tem_cliente_avulso' => $temClienteAvulso,
+            ]);
+
+            if (!$temClienteCadastrado && !$temClienteAvulso) {
+                $erro = "{$config['nome']} requer um cliente (cadastrado ou avulso).";
+                Log::error('Falha na validação de cliente', [
+                    'erro' => $erro,
+                    'dados_recebidos' => $dados
+                ]);
+                throw new \InvalidArgumentException($erro);
+            }
+
+            Log::info('Validação de cliente aprovada', [
+                'tem_cliente_cadastrado' => $temClienteCadastrado,
+                'tem_cliente_avulso' => $temClienteAvulso,
+            ]);
+        }
+
+        // Validações específicas por tipo
         $regras = [
-            'FT' => ['cliente_id' => 'required'],
-            'FR' => ['cliente_id' => 'required', 'dados_pagamento' => 'required'],
-            'FA' => ['cliente_id' => 'required', 'data_vencimento' => 'required'],
+            'FR' => ['dados_pagamento' => 'required'],
+            'FA' => ['data_vencimento' => 'required'],
             'RC' => ['fatura_id' => 'required'],
             'NC' => ['fatura_id' => 'required', 'motivo' => 'required', 'itens' => 'required'],
             'ND' => ['fatura_id' => 'required', 'itens' => 'required'],
@@ -543,7 +817,7 @@ class DocumentoFiscalService
             foreach ($regras[$tipo] as $campo => $regra) {
                 if ($regra === 'required' && empty($dados[$campo])) {
                     throw new \InvalidArgumentException(
-                        "Campo {$campo} é obrigatório para {$this->configuracoesTipo[$tipo]['nome']}."
+                        "Campo {$campo} é obrigatório para {$config['nome']}."
                     );
                 }
             }
@@ -557,11 +831,17 @@ class DocumentoFiscalService
             }
 
             if (in_array($tipo, ['NC', 'ND']) && !in_array($origem->tipo_documento, ['FT', 'FR'])) {
-                throw new \InvalidArgumentException("NC/ND só podem ser geradas a partir de FT ou FR.");
+                throw new \InvalidArgumentException(
+                    "NC/ND só podem ser geradas a partir de FT ou FR. " .
+                    "Tipo recebido: {$origem->tipo_documento}"
+                );
             }
 
-            if ($tipo === 'RC' && $origem->tipo_documento !== 'FT') {
-                throw new \InvalidArgumentException("Recibo só pode ser gerado a partir de FT.");
+            if ($tipo === 'RC' && !in_array($origem->tipo_documento, ['FT', 'FA'])) {
+                throw new \InvalidArgumentException(
+                    "Recibo só pode ser gerado a partir de FT ou FA. " .
+                    "Tipo recebido: {$origem->tipo_documento}"
+                );
             }
         }
     }
@@ -573,6 +853,7 @@ class DocumentoFiscalService
             ->where(function ($q) {
                 $q->whereNull('ano')->orWhere('ano', now()->year);
             })
+            ->orderBy('padrao', 'desc')
             ->lockForUpdate()
             ->first();
 
@@ -586,7 +867,7 @@ class DocumentoFiscalService
     private function calcularDataVencimento(string $tipo, array $dados, $dataEmissao): ?string
     {
         // Documentos sem vencimento
-        if (in_array($tipo, ['RC', 'NC', 'FRt'])) {
+        if (in_array($tipo, ['RC', 'NC', 'FRt', 'FP'])) {
             return null;
         }
 
@@ -706,9 +987,9 @@ class DocumentoFiscalService
         }
     }
 
-    private function calcularTotalPago(DocumentoFiscal $fatura): float
+    private function calcularTotalPago(DocumentoFiscal $documento): float
     {
-        return DocumentoFiscal::where('fatura_id', $fatura->id)
+        return DocumentoFiscal::where('fatura_id', $documento->id)
             ->where('tipo_documento', 'RC')
             ->where('estado', '!=', self::ESTADO_CANCELADO)
             ->sum('total_liquido');
@@ -716,14 +997,30 @@ class DocumentoFiscalService
 
     private function resolverCliente(array $dados, string $tipo): ?string
     {
-        if (!empty($dados['fatura_id'])) {
-            $faturaOrigem = DocumentoFiscal::find($dados['fatura_id']);
-            return $faturaOrigem?->cliente_id;
+        // Se tem cliente_id, usa ele
+        if (!empty($dados['cliente_id'])) {
+            return $dados['cliente_id'];
         }
 
+        // Se tem cliente_nome, é cliente avulso - não cria ID
+        if (!empty($dados['cliente_nome'])) {
+            return null;
+        }
+
+        // Se tem fatura_id, herda cliente da fatura origem
+        if (!empty($dados['fatura_id'])) {
+            $faturaOrigem = DocumentoFiscal::find($dados['fatura_id']);
+            if ($faturaOrigem) {
+                return $faturaOrigem->cliente_id;
+            }
+        }
+
+        // Se tem venda_id, herda cliente da venda
         if (!empty($dados['venda_id'])) {
             $venda = Venda::find($dados['venda_id']);
-            return $venda?->cliente_id;
+            if ($venda) {
+                return $venda->cliente_id;
+            }
         }
 
         return null;
@@ -734,7 +1031,7 @@ class DocumentoFiscalService
         $dadosHash = $documento->numero_documento .
             $documento->data_emissao .
             number_format($documento->total_liquido, 2, '.', '') .
-            $documento->cliente_id .
+            ($documento->cliente_id ?? $documento->cliente_nome ?? 'consumidor_final') .
             env('APP_KEY');
 
         return hash('sha256', $dadosHash);
@@ -745,7 +1042,13 @@ class DocumentoFiscalService
         // Implementar integração com StockService
         Log::info("Movimentação de stock {$tipoMovimento}", [
             'documento' => $documento->numero_documento,
-            'tipo' => $documento->tipo_documento
+            'tipo' => $documento->tipo_documento,
+            'itens' => $documento->itens->map(function ($item) {
+                return [
+                    'produto_id' => $item->produto_id,
+                    'quantidade' => $item->quantidade
+                ];
+            })
         ]);
 
         // TODO: Implementar lógica real de stock
@@ -761,7 +1064,7 @@ class DocumentoFiscalService
             'tipo_reversao' => $tipoReversao
         ]);
 
-        // TODO: Implementar reversão real de stock
+        $this->movimentarStock($documento, $tipoReversao);
     }
 
     private function atualizarVenda(string $vendaId, DocumentoFiscal $documento)
@@ -771,12 +1074,14 @@ class DocumentoFiscalService
             if ($venda) {
                 $venda->update([
                     'documento_fiscal_id' => $documento->id,
-                    'status' => 'faturado'
+                    'status' => 'faturada',
+                    'tipo_documento_fiscal' => $documento->tipo_documento
                 ]);
 
                 Log::info('Venda atualizada com documento fiscal', [
                     'venda_id' => $vendaId,
-                    'documento_id' => $documento->id
+                    'documento_id' => $documento->id,
+                    'tipo_documento' => $documento->tipo_documento
                 ]);
             }
         } catch (\Exception $e) {

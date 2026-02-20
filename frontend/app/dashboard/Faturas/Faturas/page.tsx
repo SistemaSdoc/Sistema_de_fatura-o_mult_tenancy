@@ -8,10 +8,11 @@ import {
   Venda,
   TipoDocumentoFiscal,
   EstadoDocumentoFiscal,
+  TIPOS_VENDA,
 } from "@/services/vendas";
 
-// Tipos de documentos que podem ser impressos (atualizado: removidos PF, PFA | adicionado FA)
-const TIPOS_IMPRESSAO: TipoDocumentoFiscal[] = ['RC', 'FR', 'NC', 'ND', 'FA', 'FRt'];
+// Tipos de documentos que podem ser impressos
+const TIPOS_IMPRESSAO: TipoDocumentoFiscal[] = ['RC', 'FR', 'NC', 'ND', 'FA', 'FP', 'FRt'];
 
 // Removemos duplicatas baseado no ID da fatura ou da venda
 const removerDuplicatas = (vendas: Venda[]): Venda[] => {
@@ -24,14 +25,15 @@ const removerDuplicatas = (vendas: Venda[]): Venda[] => {
   });
 };
 
-// Mapeamento de tipos atualizado (removidos NA, PF, PFA | adicionado FA)
+// Mapeamento de tipos atualizado com FP
 const TIPO_MAP: Record<string, string> = {
   "FT": "fatura",
   "FR": "fatura_recibo",
+  "FP": "fatura_proforma",
   "RC": "recibo",
   "NC": "nota_credito",
   "ND": "nota_debito",
-  "FA": "fatura_adiantamento",      // NOVO - substitui NA
+  "FA": "fatura_adiantamento",
   "FRt": "fatura_retificacao",
 };
 
@@ -39,31 +41,33 @@ const TIPO_MAP: Record<string, string> = {
 const TIPO_LABEL: Record<TipoDocumentoFiscal, string> = {
   "FT": "Fatura",
   "FR": "Fatura-Recibo",
+  "FP": "Fatura Proforma",
   "RC": "Recibo",
   "NC": "Nota de Crédito",
   "ND": "Nota de Débito",
-  "FA": "Fatura de Adiantamento",   // NOVO
+  "FA": "Fatura de Adiantamento",
   "FRt": "Fatura de Retificação",
 };
 
-// Cores para badges atualizadas
+// Cores para badges atualizadas com FP
 const TIPO_CORES: Record<TipoDocumentoFiscal, string> = {
   "FT": "bg-blue-100 text-blue-700",
   "FR": "bg-purple-100 text-purple-700",
+  "FP": "bg-orange-100 text-orange-700",
   "RC": "bg-green-100 text-green-700",
-  "NC": "bg-orange-100 text-orange-700",
+  "NC": "bg-yellow-100 text-yellow-700",
   "ND": "bg-red-100 text-red-700",
-  "FA": "bg-yellow-100 text-yellow-700",      // NOVO
+  "FA": "bg-teal-100 text-teal-700",
   "FRt": "bg-gray-100 text-gray-700",
 };
 
 // Estados atualizados (emitido, paga, parcialmente_paga, cancelado, expirado)
 const ESTADO_CONFIGS: Record<EstadoDocumentoFiscal, { bg: string; text: string; label: string }> = {
   emitido: { bg: "bg-blue-100", text: "text-blue-700", label: "Emitido" },
-  paga: { bg: "bg-green-100", text: "text-green-700", label: "Paga" },
-  parcialmente_paga: { bg: "bg-teal-100", text: "text-teal-700", label: "Parcialmente Paga" },
-  cancelado: { bg: "bg-red-100", text: "text-red-700", label: "Cancelado" },        // atualizado
-  expirado: { bg: "bg-gray-100", text: "text-gray-700", label: "Expirado" },          // NOVO
+  paga: { bg: "bg-green-100", text: "text-green-700", label: "Pago" },
+  parcialmente_paga: { bg: "bg-teal-100", text: "text-teal-700", label: "Parcial" },
+  cancelado: { bg: "bg-red-100", text: "text-red-700", label: "Cancelado" },
+  expirado: { bg: "bg-gray-100", text: "text-gray-700", label: "Expirado" },
 };
 
 type TipoFiltro = "todas" | TipoDocumentoFiscal;
@@ -172,14 +176,25 @@ export default function FaturasPage() {
     return TIPOS_IMPRESSAO.includes(tipo);
   };
 
-  // NOVO: Verificar se é fatura de adiantamento
+  // Verificar se é fatura de adiantamento
   const isFaturaAdiantamento = (tipo: TipoDocumentoFiscal): boolean => {
     return tipo === "FA";
   };
 
-  // NOVO: Verificar se pode vincular adiantamento
+  // Verificar se é fatura proforma
+  const isFaturaProforma = (tipo: TipoDocumentoFiscal): boolean => {
+    return tipo === "FP";
+  };
+
+  // Verificar se pode vincular adiantamento
   const podeVincularAdiantamento = (venda: Venda): boolean => {
     return venda.documento_fiscal?.tipo_documento === "FT" &&
+      venda.documento_fiscal?.estado !== "cancelado";
+  };
+
+  // Verificar se pode converter proforma para fatura
+  const podeConverterProforma = (venda: Venda): boolean => {
+    return venda.documento_fiscal?.tipo_documento === "FP" &&
       venda.documento_fiscal?.estado !== "cancelado";
   };
 
@@ -196,17 +211,32 @@ export default function FaturasPage() {
     }
   };
 
-
   const gerarRecibo = (venda: Venda) => {
     if (venda.documento_fiscal?.id) {
       router.push(`/documentos-fiscais/${venda.documento_fiscal.id}/recibo`);
     }
   };
 
-  // NOVO: Navegar para vincular adiantamento
+  // Navegar para vincular adiantamento
   const vincularAdiantamento = (venda: Venda) => {
     if (venda.documento_fiscal?.id) {
       router.push(`/documentos-fiscais/${venda.documento_fiscal.id}/vincular-adiantamento`);
+    }
+  };
+
+  // Navegar para converter proforma em fatura
+  const converterProforma = (venda: Venda) => {
+    if (venda.documento_fiscal?.id) {
+      router.push(`/documentos-fiscais/${venda.documento_fiscal.id}/converter`);
+    }
+  };
+
+  // Navegar para detalhes do documento
+  const verDetalhes = (venda: Venda) => {
+    if (venda.documento_fiscal?.id) {
+      router.push(`/dashboard/Faturas/Faturas/${venda.documento_fiscal.id}/Ver`);
+    } else {
+      abrirModal(venda);
     }
   };
 
@@ -221,10 +251,13 @@ export default function FaturasPage() {
     total: vendas.length,
     FT: vendas.filter((v) => getTipo(v) === "FT").length,
     FR: vendas.filter((v) => getTipo(v) === "FR").length,
+    FP: vendas.filter((v) => getTipo(v) === "FP").length,
     RC: vendas.filter((v) => getTipo(v) === "RC").length,
     NC: vendas.filter((v) => getTipo(v) === "NC").length,
     ND: vendas.filter((v) => getTipo(v) === "ND").length,
-    FA: vendas.filter((v) => getTipo(v) === "FA").length,  // NOVO
+    FA: vendas.filter((v) => getTipo(v) === "FA").length,
+    FRt: vendas.filter((v) => getTipo(v) === "FRt").length,
+    totalVendas: vendas.filter((v) => TIPOS_VENDA.includes(getTipo(v))).length,
     totalGeral: vendas.reduce((acc, v) => acc + (Number(v.total) || 0), 0),
   }), [vendas]);
 
@@ -275,6 +308,7 @@ export default function FaturasPage() {
             </h1>
             <p className="text-xs sm:text-sm text-gray-500">
               Total: {loading ? "..." : estatisticas.total} documentos emitidos
+              {estatisticas.totalVendas > 0 && ` (${estatisticas.totalVendas} vendas)`}
             </p>
           </div>
 
@@ -312,16 +346,18 @@ export default function FaturasPage() {
           </div>
         )}
 
-        {/* Estatísticas - Skeleton ou Conteúdo (atualizado para 6 colunas) */}
+        {/* Estatísticas - Skeleton ou Conteúdo */}
         {loading ? (
           <StatsSkeleton />
         ) : !error && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-8 gap-2 sm:gap-3 md:gap-4">
             <StatCard title="Total" value={estatisticas.total} color="text-[#F9941F]" />
             <StatCard title="Faturas (FT)" value={estatisticas.FT} color="text-[#123859]" />
-            <StatCard title="Faturas-Recibo (FR)" value={estatisticas.FR} color="text-[#F9941F]" />
+            <StatCard title="Faturas-Recibo (FR)" value={estatisticas.FR} color="text-purple-600" />
+            <StatCard title="Proformas (FP)" value={estatisticas.FP} color="text-orange-600" />
             <StatCard title="Recibos (RC)" value={estatisticas.RC} color="text-green-600" />
-            <StatCard title="Notas Crédito" value={estatisticas.NC} color="text-orange-600" />
+            <StatCard title="Notas Crédito" value={estatisticas.NC} color="text-yellow-600" />
+            <StatCard title="Adiantamentos" value={estatisticas.FA} color="text-teal-600" />
             <StatCard
               title="Total Geral"
               value={formatKz(estatisticas.totalGeral)}
@@ -332,7 +368,7 @@ export default function FaturasPage() {
           </div>
         )}
 
-        {/* Filtros - Scroll Horizontal em Mobile (atualizado com FA) */}
+        {/* Filtros - Scroll Horizontal em Mobile */}
         {!loading && !error && (
           <div className="bg-white p-3 sm:p-4 rounded-xl shadow border border-gray-100">
             <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0 sm:flex-wrap scrollbar-hide">
@@ -340,22 +376,25 @@ export default function FaturasPage() {
                 { key: "todas" as TipoFiltro, label: "Todas", count: estatisticas.total },
                 { key: "FT" as TipoFiltro, label: "Faturas", count: estatisticas.FT },
                 { key: "FR" as TipoFiltro, label: "Faturas-Recibo", count: estatisticas.FR },
+                { key: "FP" as TipoFiltro, label: "Proformas", count: estatisticas.FP },
                 { key: "RC" as TipoFiltro, label: "Recibos", count: estatisticas.RC },
                 { key: "NC" as TipoFiltro, label: "Notas Crédito", count: estatisticas.NC },
                 { key: "ND" as TipoFiltro, label: "Notas Débito", count: estatisticas.ND },
-                { key: "FA" as TipoFiltro, label: "Adiantamentos", count: estatisticas.FA }, // NOVO
+                { key: "FA" as TipoFiltro, label: "Adiantamentos", count: estatisticas.FA },
               ].map(({ key, label, count }) => (
                 <button
                   key={key}
                   onClick={() => setFiltro(key)}
-                  className={`flex-shrink-0 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all min-h-[44px] touch-manipulation ${filtro === key
-                    ? "bg-[#123859] text-white shadow-md"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                    }`}
+                  className={`flex-shrink-0 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all min-h-[44px] touch-manipulation ${
+                    filtro === key
+                      ? "bg-[#123859] text-white shadow-md"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
                 >
                   <span className="whitespace-nowrap">{label}</span>
-                  <span className={`ml-1.5 px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${filtro === key ? "bg-white/20" : "bg-white"
-                    }`}>
+                  <span className={`ml-1.5 px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${
+                    filtro === key ? "bg-white/20" : "bg-white"
+                  }`}>
                     {count}
                   </span>
                 </button>
@@ -372,7 +411,7 @@ export default function FaturasPage() {
             <>
               {/* Desktop: Tabela com Scroll Horizontal */}
               <div className="hidden md:block overflow-x-auto">
-                <table className="w-full min-w-[900px]">
+                <table className="w-full min-w-[1000px]">
                   <thead className="bg-[#123859] text-white">
                     <tr>
                       <th className="p-3 lg:p-4 text-left font-semibold text-sm whitespace-nowrap">Nº Documento</th>
@@ -382,7 +421,7 @@ export default function FaturasPage() {
                       <th className="p-3 lg:p-4 text-left font-semibold text-sm whitespace-nowrap">Data</th>
                       <th className="p-3 lg:p-4 text-right font-semibold text-sm whitespace-nowrap">Total</th>
                       <th className="p-3 lg:p-4 text-center font-semibold text-sm whitespace-nowrap">Estado</th>
-                      <th className="p-3 lg:p-4 text-center font-semibold text-sm whitespace-nowrap min-w-[180px]">Ações</th>
+                      <th className="p-3 lg:p-4 text-center font-semibold text-sm whitespace-nowrap min-w-[250px]">Ações</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -402,10 +441,10 @@ export default function FaturasPage() {
                           </td>
                           <td className="p-3 lg:p-4">
                             <div className="font-medium text-sm truncate max-w-[150px] lg:max-w-[200px]">
-                              {venda.cliente?.nome || "Consumidor Final"}
+                              {venda.cliente?.nome || venda.cliente_nome || "Consumidor Final"}
                             </div>
-                            {venda.cliente?.nif && (
-                              <div className="text-xs text-gray-500">NIF: {venda.cliente.nif}</div>
+                            {(venda.cliente?.nif || venda.cliente_nif) && (
+                              <div className="text-xs text-gray-500">NIF: {venda.cliente?.nif || venda.cliente_nif}</div>
                             )}
                           </td>
                           <td className="p-3 lg:p-4">
@@ -422,9 +461,9 @@ export default function FaturasPage() {
                             <EstadoBadge estado={estado} />
                           </td>
                           <td className="p-3 lg:p-4 text-center">
-                            <div className="flex items-center justify-center gap-1">
+                            <div className="flex items-center justify-center gap-1 flex-wrap">
                               <button
-                                onClick={() => abrirModal(venda)}
+                                onClick={() => verDetalhes(venda)}
                                 className="p-2 text-[#123859] hover:bg-[#123859]/10 rounded-lg transition-colors touch-manipulation"
                                 title="Ver detalhes"
                               >
@@ -447,15 +486,28 @@ export default function FaturasPage() {
                                 </button>
                               )}
 
-                              {/* NOVO: Botão Vincular Adiantamento para FT */}
+                              {/* Botão Vincular Adiantamento para FT */}
                               {podeVincularAdiantamento(venda) && (
                                 <button
                                   onClick={() => vincularAdiantamento(venda)}
-                                  className="p-2 text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors touch-manipulation"
+                                  className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors touch-manipulation"
                                   title="Vincular Adiantamento"
                                 >
                                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                  </svg>
+                                </button>
+                              )}
+
+                              {/* Botão Converter Proforma para Fatura */}
+                              {podeConverterProforma(venda) && (
+                                <button
+                                  onClick={() => converterProforma(venda)}
+                                  className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors touch-manipulation"
+                                  title="Converter para Fatura"
+                                >
+                                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                                   </svg>
                                 </button>
                               )}
@@ -465,7 +517,7 @@ export default function FaturasPage() {
                                 <>
                                   <button
                                     onClick={() => gerarNotaCredito(venda)}
-                                    className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors touch-manipulation"
+                                    className="p-2 text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors touch-manipulation"
                                     title="Gerar Nota de Crédito"
                                   >
                                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -542,13 +594,13 @@ export default function FaturasPage() {
                         <div className="flex justify-between items-center">
                           <span className="text-gray-600">Cliente:</span>
                           <span className="font-medium text-right truncate max-w-[60%]">
-                            {venda.cliente?.nome || "Consumidor Final"}
+                            {venda.cliente?.nome || venda.cliente_nome || "Consumidor Final"}
                           </span>
                         </div>
-                        {venda.cliente?.nif && (
+                        {(venda.cliente?.nif || venda.cliente_nif) && (
                           <div className="flex justify-between items-center text-xs">
                             <span className="text-gray-500">NIF:</span>
-                            <span className="text-gray-700">{venda.cliente.nif}</span>
+                            <span className="text-gray-700">{venda.cliente?.nif || venda.cliente_nif}</span>
                           </div>
                         )}
                         <div className="flex justify-between items-center">
@@ -561,7 +613,7 @@ export default function FaturasPage() {
 
                       <div className="mt-3 pt-2 border-t border-gray-100 flex flex-wrap justify-end gap-2">
                         <button
-                          onClick={() => abrirModal(venda)}
+                          onClick={() => verDetalhes(venda)}
                           className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-[#123859] hover:bg-[#123859]/10 rounded-lg transition-colors touch-manipulation min-h-[44px]"
                         >
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -584,11 +636,11 @@ export default function FaturasPage() {
                           </button>
                         )}
 
-                        {/* NOVO: Botão Vincular Adiantamento - Mobile */}
+                        {/* Botão Vincular Adiantamento - Mobile */}
                         {podeVincularAdiantamento(venda) && (
                           <button
                             onClick={() => vincularAdiantamento(venda)}
-                            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors touch-manipulation min-h-[44px]"
+                            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-teal-600 hover:bg-teal-50 rounded-lg transition-colors touch-manipulation min-h-[44px]"
                           >
                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -597,12 +649,25 @@ export default function FaturasPage() {
                           </button>
                         )}
 
+                        {/* Botão Converter Proforma - Mobile */}
+                        {podeConverterProforma(venda) && (
+                          <button
+                            onClick={() => converterProforma(venda)}
+                            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-orange-600 hover:bg-orange-50 rounded-lg transition-colors touch-manipulation min-h-[44px]"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                            </svg>
+                            Converter
+                          </button>
+                        )}
+
                         {/* Botões para Notas - Mobile */}
                         {(tipo === "FR" || tipo === "FT") && estado !== "cancelado" && (
                           <>
                             <button
                               onClick={() => gerarNotaCredito(venda)}
-                              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-orange-600 hover:bg-orange-50 rounded-lg transition-colors touch-manipulation min-h-[44px]"
+                              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors touch-manipulation min-h-[44px]"
                             >
                               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
@@ -728,10 +793,10 @@ export default function FaturasPage() {
                     <div className="space-y-1">
                       <h3 className="font-bold text-[#123859] text-sm sm:text-base mb-1 sm:mb-2">Cliente:</h3>
                       <p className="font-semibold text-base sm:text-lg">
-                        {vendaSelecionada.cliente?.nome || "Consumidor Final"}
+                        {vendaSelecionada.cliente?.nome || vendaSelecionada.cliente_nome || "Consumidor Final"}
                       </p>
-                      {vendaSelecionada.cliente?.nif && (
-                        <p className="text-sm text-gray-600">NIF: {vendaSelecionada.cliente.nif}</p>
+                      {(vendaSelecionada.cliente?.nif || vendaSelecionada.cliente_nif) && (
+                        <p className="text-sm text-gray-600">NIF: {vendaSelecionada.cliente?.nif || vendaSelecionada.cliente_nif}</p>
                       )}
                       {vendaSelecionada.cliente?.endereco && (
                         <p className="text-sm text-gray-600">{vendaSelecionada.cliente.endereco}</p>
@@ -767,14 +832,26 @@ export default function FaturasPage() {
                         </div>
                       )}
 
-                      {/* NOVO: Info para Fatura de Adiantamento */}
+                      {/* Info para Fatura de Adiantamento */}
                       {vendaSelecionada.documento_fiscal?.tipo_documento === "FA" && (
-                        <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                          <p className="text-sm text-yellow-800 font-semibold">
+                        <div className="mt-3 p-3 bg-teal-50 border border-teal-200 rounded-lg">
+                          <p className="text-sm text-teal-800 font-semibold">
                             Fatura de Adiantamento
                           </p>
-                          <p className="text-xs text-yellow-600 mt-1">
+                          <p className="text-xs text-teal-600 mt-1">
                             Deve ser vinculada a uma fatura final
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Info para Fatura Proforma */}
+                      {vendaSelecionada.documento_fiscal?.tipo_documento === "FP" && (
+                        <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                          <p className="text-sm text-orange-800 font-semibold">
+                            Fatura Proforma
+                          </p>
+                          <p className="text-xs text-orange-600 mt-1">
+                            Documento prévio - pode ser convertido em fatura
                           </p>
                         </div>
                       )}
@@ -872,16 +949,29 @@ export default function FaturasPage() {
                     </button>
                   )}
 
-                {/* NOVO: Botão Vincular Adiantamento no Modal */}
+                {/* Botão Vincular Adiantamento no Modal */}
                 {podeVincularAdiantamento(vendaSelecionada) && (
                   <button
                     onClick={() => vincularAdiantamento(vendaSelecionada)}
-                    className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors flex items-center justify-center gap-2 text-sm font-medium min-h-[44px] touch-manipulation"
+                    className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors flex items-center justify-center gap-2 text-sm font-medium min-h-[44px] touch-manipulation"
                   >
                     <svg className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                     <span className="whitespace-nowrap">Vincular Adiantamento</span>
+                  </button>
+                )}
+
+                {/* Botão Converter Proforma no Modal */}
+                {podeConverterProforma(vendaSelecionada) && (
+                  <button
+                    onClick={() => converterProforma(vendaSelecionada)}
+                    className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors flex items-center justify-center gap-2 text-sm font-medium min-h-[44px] touch-manipulation"
+                  >
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                    </svg>
+                    <span className="whitespace-nowrap">Converter para Fatura</span>
                   </button>
                 )}
 
@@ -891,7 +981,7 @@ export default function FaturasPage() {
                     <>
                       <button
                         onClick={() => gerarNotaCredito(vendaSelecionada)}
-                        className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors flex items-center justify-center gap-2 text-sm font-medium min-h-[44px] touch-manipulation"
+                        className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors flex items-center justify-center gap-2 text-sm font-medium min-h-[44px] touch-manipulation"
                       >
                         <svg className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
@@ -900,7 +990,7 @@ export default function FaturasPage() {
                       </button>
                       <button
                         onClick={() => gerarNotaDebito(vendaSelecionada)}
-                        className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center gap-2 text-sm font-medium min-h-[44px] touch-manipulation"
+                        className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2 text-sm font-medium min-h-[44px] touch-manipulation"
                       >
                         <svg className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -1002,9 +1092,9 @@ export default function FaturasPage() {
                     {/* Cliente */}
                     <div className="border-b border-dashed border-gray-400 pb-2 mb-2">
                       <p className="font-bold">Cliente:</p>
-                      <p className="truncate">{vendaSelecionada.cliente?.nome || "Consumidor Final"}</p>
-                      {vendaSelecionada.cliente?.nif && (
-                        <p className="text-[10px]">NIF: {vendaSelecionada.cliente.nif}</p>
+                      <p className="truncate">{vendaSelecionada.cliente?.nome || vendaSelecionada.cliente_nome || "Consumidor Final"}</p>
+                      {(vendaSelecionada.cliente?.nif || vendaSelecionada.cliente_nif) && (
+                        <p className="text-[10px]">NIF: {vendaSelecionada.cliente?.nif || vendaSelecionada.cliente_nif}</p>
                       )}
                     </div>
 
@@ -1057,15 +1147,28 @@ export default function FaturasPage() {
                         </div>
                       )}
 
-                      {/* NOVO: Info para Fatura de Adiantamento no Talão */}
+                      {/* Info para Fatura de Adiantamento no Talão */}
                       {vendaSelecionada.documento_fiscal?.tipo_documento === "FA" && (
                         <div className="border-t border-dashed border-gray-400 pt-1 mt-1">
-                          <div className="flex justify-between font-bold text-yellow-700">
+                          <div className="flex justify-between font-bold text-teal-700">
                             <span>ADIANTAMENTO:</span>
                             <span>{formatKz(vendaSelecionada.total)}</span>
                           </div>
                           <div className="text-[9px] text-gray-600 mt-0.5 text-center">
                             Aguardando vinculação
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Info para Fatura Proforma no Talão */}
+                      {vendaSelecionada.documento_fiscal?.tipo_documento === "FP" && (
+                        <div className="border-t border-dashed border-gray-400 pt-1 mt-1">
+                          <div className="flex justify-between font-bold text-orange-700">
+                            <span>PROFORMA:</span>
+                            <span>{formatKz(vendaSelecionada.total)}</span>
+                          </div>
+                          <div className="text-[9px] text-gray-600 mt-0.5 text-center">
+                            Documento prévio
                           </div>
                         </div>
                       )}
@@ -1217,7 +1320,7 @@ function StatCard({
   );
 }
 
-// Atualizado para usar TIPO_LABEL e TIPO_CORES
+// Componente TipoBadge atualizado com TIPO_LABEL e TIPO_CORES
 function TipoBadge({ tipo }: { tipo: TipoDocumentoFiscal }) {
   return (
     <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${TIPO_CORES[tipo] || "bg-gray-100 text-gray-700"}`}>
@@ -1226,7 +1329,7 @@ function TipoBadge({ tipo }: { tipo: TipoDocumentoFiscal }) {
   );
 }
 
-// Atualizado para usar EstadoDocumentoFiscal e ESTADO_CONFIGS
+// Componente EstadoBadge atualizado com ESTADO_CONFIGS
 function EstadoBadge({ estado }: { estado?: EstadoDocumentoFiscal }) {
   const config = estado ? ESTADO_CONFIGS[estado] : { bg: "bg-gray-100", text: "text-gray-700", label: "PENDENTE" };
   return (

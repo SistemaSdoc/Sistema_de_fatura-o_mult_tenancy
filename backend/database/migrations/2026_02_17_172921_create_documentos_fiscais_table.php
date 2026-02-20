@@ -30,22 +30,24 @@ return new class extends Migration
             $table->integer('numero');
             $table->string('numero_documento', 50)->unique();
 
-            // Tipo de documento (NOVO: FA, REMOVIDO: NA, PF, PFA)
+            // Tipo de documento
+            // ATENÇÃO: Apenas FT, FR e RC são considerados documentos de venda
+            // FA (Fatura de Adiantamento) NÃO é venda - torna-se venda quando gerado recibo
             $table->enum('tipo_documento', [
-                'FT',   // Fatura
-                'FR',   // Fatura-Recibo
-                'FA',   // Fatura de Adiantamento (NOVO)
-                'NC',   // Nota de Crédito
-                'ND',   // Nota de Débito
-                'RC',   // Recibo
-                'FRt'   // Fatura de Retificação
+                'FT',   // Fatura - É venda
+                'FR',   // Fatura-Recibo - É venda
+                'RC',   // Recibo - É venda (pagamento)
+                'FA',   // Fatura de Adiantamento - NÃO é venda (pré-pagamento)
+                'NC',   // Nota de Crédito - NÃO é venda (estorno)
+                'ND',   // Nota de Débito - NÃO é venda (acréscimo)
+                'FRt'   // Fatura de Retificação - NÃO é venda (correção)
             ]);
 
             // Datas
             $table->date('data_emissao');
             $table->time('hora_emissao');
             $table->date('data_vencimento')->nullable();
-            $table->date('data_cancelamento')->nullable(); // ALTERADO: data_anulacao -> data_cancelamento
+            $table->date('data_cancelamento')->nullable();
 
             // Totais
             $table->decimal('base_tributavel', 15, 2)->default(0);
@@ -53,19 +55,19 @@ return new class extends Migration
             $table->decimal('total_retencao', 15, 2)->default(0);
             $table->decimal('total_liquido', 15, 2)->default(0);
 
-            // Estados atualizados (NOVOS: emitido, cancelado, expirado | REMOVIDOS: emitida, anulada, convertida, vinculada)
+            // Estados
             $table->enum('estado', [
-                'emitido',           // ALTERADO: emitida -> emitido
-                'paga',              // Mantido
-                'parcialmente_paga', // Mantido
-                'cancelado',         // ALTERADO: anulada -> cancelado
-                'expirado'           // NOVO (para FA com data de entrega vencida)
+                'emitido',
+                'paga',
+                'parcialmente_paga',
+                'cancelado',
+                'expirado'
             ])->default('emitido');
 
-            // Motivos e cancelamento (ALTERADO: motivo_anulacao -> motivo_cancelamento)
-            $table->text('motivo')->nullable(); // Motivo de NC, ND, FRt ou cancelamento
-            $table->text('motivo_cancelamento')->nullable(); // ALTERADO
-            $table->foreignUuid('user_cancelamento_id')->nullable()->constrained('users'); // ALTERADO
+            // Motivos e cancelamento
+            $table->text('motivo')->nullable();
+            $table->text('motivo_cancelamento')->nullable();
+            $table->foreignUuid('user_cancelamento_id')->nullable()->constrained('users');
 
             // Dados de pagamento (para FR e RC)
             $table->enum('metodo_pagamento', [
@@ -88,7 +90,11 @@ return new class extends Migration
             $table->index('cliente_id');
             $table->index('data_emissao');
             $table->index(['serie', 'numero']);
-            $table->index('data_vencimento'); // NOVO: para controle de expiração de FA
+            $table->index('data_vencimento');
+
+            // Índice específico para documentos de venda (FT, FR, RC)
+            $table->index(['tipo_documento', 'created_at'])
+                  ->whereIn('tipo_documento', ['FT', 'FR', 'RC']);
         });
 
         // Adicionar FK de auto-relacionamento depois de criar a tabela

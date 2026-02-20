@@ -3,12 +3,16 @@
 import React, { useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, ShoppingCart, CreditCard, Banknote, Smartphone, CheckCircle2, Calculator, ArrowLeft, AlertTriangle, User, Package, FileText } from "lucide-react";
+import { 
+  Plus, Trash2, ShoppingCart, CreditCard, Banknote, 
+  Smartphone, CheckCircle2, Calculator, ArrowLeft, 
+  AlertTriangle, User, Package, FileText, Info 
+} from "lucide-react";
 import { AxiosError } from "axios";
 import MainEmpresa from "../../../components/MainEmpresa";
 import { useAuth } from "@/context/authprovider";
 
-// Serviços atualizados - IMPORTAÇÕES ATUALIZADAS
+// Serviços atualizados
 import {
   criarVenda,
   Produto,
@@ -27,15 +31,15 @@ import {
   NOMES_TIPO_DOCUMENTO,
   getNomeTipoDocumento,
   DadosPagamento,
-  // NOVO: Função de validação atualizada
   validarPayloadVenda,
+  TIPOS_VENDA,
 } from "@/services/vendas";
 
 /* ================= CONSTANTES ================= */
 const ESTOQUE_MINIMO = 5;
 
-// ATUALIZADO: Tipos de documento válidos para venda (conforme backend)
-const TIPOS_DOCUMENTO_VENDA_ATUALIZADOS: TipoDocumentoFiscal[] = ['FT', 'FR'];
+// Tipos de documento válidos para venda
+const TIPOS_DOCUMENTO_VENDA_ATUALIZADOS: TipoDocumentoFiscal[] = ['FT', 'FR', 'FP'];
 
 /* ================= TIPOS ================= */
 interface ItemVendaUI {
@@ -49,6 +53,8 @@ interface ItemVendaUI {
   valor_iva: number;
   valor_retencao: number;
   subtotal: number;
+  taxa_iva?: number;
+  codigo_produto?: string;
 }
 
 interface FormItemState {
@@ -73,12 +79,13 @@ export default function NovaVendaPage() {
   const [error, setError] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
 
-  // Estado para tipo de documento fiscal - ATUALIZADO: Default FT
-  const [tipoDocumento, setTipoDocumento] = useState<TipoDocumentoFiscal>('FT');
+  // Estado para tipo de documento fiscal - PADRÃO: FR (Fatura-Recibo)
+  const [tipoDocumento, setTipoDocumento] = useState<TipoDocumentoFiscal>('FR');
 
   // Estado para cliente avulso
   const [modoCliente, setModoCliente] = useState<ModoCliente>('cadastrado');
   const [clienteAvulso, setClienteAvulso] = useState('');
+  const [clienteAvulsoNif, setClienteAvulsoNif] = useState(''); // NIF para cliente avulso (opcional)
 
   // Estado do formulário de item
   const [formItem, setFormItem] = useState<FormItemState>({
@@ -90,12 +97,16 @@ export default function NovaVendaPage() {
   // Preview do cálculo
   const [previewItem, setPreviewItem] = useState<ItemVendaUI | null>(null);
 
-  // Estado de pagamento - SIMPLIFICADO
+  // Estado de pagamento - APENAS PARA FATURA-RECIBO
   const [formPagamento, setFormPagamento] = useState({
     metodo: "dinheiro" as DadosPagamento['metodo'],
     valor_pago: "",
     referencia: "",
+    data_pagamento: new Date().toISOString().split('T')[0],
   });
+
+  // Observações da venda
+  const [observacoes, setObservacoes] = useState('');
 
   /* ================= PROTEÇÃO ================= */
   useEffect(() => {
@@ -158,7 +169,6 @@ export default function NovaVendaPage() {
     const base = preco_venda * quantidade - desconto;
     const taxaIva = produto.taxa_iva ?? 14;
     const valorIva = (base * taxaIva) / 100;
-    // ATUALIZADO: Retenção de 6.5% para serviços (conforme backend), não 10%
     const valorRetencao = produto.tipo === "servico" ? base * 0.065 : 0;
 
     setPreviewItem({
@@ -172,6 +182,8 @@ export default function NovaVendaPage() {
       valor_iva: valorIva,
       valor_retencao: valorRetencao,
       subtotal: base + valorIva - valorRetencao,
+      taxa_iva: taxaIva,
+      codigo_produto: produto.codigo || undefined,
     });
   }, [formItem, produtos]);
 
@@ -207,11 +219,17 @@ export default function NovaVendaPage() {
     const produto = produtos.find(p => p.id === formItem.produto_id);
     if (!produto) return;
 
-    // ATUALIZADO: Removida validação de pro-forma (PF/PFA não existem mais)
-    // Agora valida estoque para todos os produtos físicos
     if (!isServico(produto) && formItem.quantidade > produto.estoque_atual) {
       setError(`Estoque insuficiente. Disponível: ${produto.estoque_atual}`);
       return;
+    }
+
+    // Verificar se já existe o mesmo produto (opcional - pode querer permitir duplicados)
+    const itemExistente = itens.find(i => i.produto_id === formItem.produto_id);
+    if (itemExistente) {
+      if (!confirm("Este produto já foi adicionado. Deseja adicionar outra unidade?")) {
+        return;
+      }
     }
 
     const novoItem: ItemVendaUI = {
@@ -235,6 +253,12 @@ export default function NovaVendaPage() {
     setItens(prev => prev.filter(item => item.id !== id));
   };
 
+  const limparCarrinho = () => {
+    if (itens.length > 0 && confirm("Tem certeza que deseja limpar todos os itens?")) {
+      setItens([]);
+    }
+  };
+
   /* ================= TOTAIS ================= */
   const totalBase = itens.reduce((acc, i) => acc + i.base_tributavel, 0);
   const totalIva = itens.reduce((acc, i) => acc + i.valor_iva, 0);
@@ -245,20 +269,35 @@ export default function NovaVendaPage() {
   const valorPagamento = parseFloat(formPagamento.valor_pago) || 0;
   const troco = Math.max(0, valorPagamento - totalLiquido);
 
-  // ATUALIZADO: Apenas FT e FR são válidos agora
   const ehFaturaRecibo = tipoDocumento === 'FR';
   const ehFaturaNormal = tipoDocumento === 'FT';
+  const ehFaturaProforma = tipoDocumento === 'FP';
 
   let pagamentoValido: boolean;
   if (ehFaturaRecibo) {
-    // Fatura-Recibo: pagamento deve ser exatamente igual ao total (não pode ter troco)
+    // Fatura-Recibo: pagamento deve ser exatamente igual ao total
     pagamentoValido = valorPagamento === totalLiquido && totalLiquido > 0;
   } else {
-    // Fatura normal: pode ter troco
-    pagamentoValido = valorPagamento >= totalLiquido && totalLiquido > 0;
+    // Fatura normal e Proforma: não precisam de pagamento
+    pagamentoValido = true;
   }
 
-  /* ================= SALVAR VENDA COM PAGAMENTO ================= */
+  // Verifica se deve mostrar seção de pagamento (apenas para Fatura-Recibo)
+  const mostrarPagamento = itens.length > 0 && ehFaturaRecibo;
+
+  /* ================= VALIDAÇÕES GLOBAIS ================= */
+  const podeFinalizar = (): boolean => {
+    if (itens.length === 0) return false;
+    
+    if (modoCliente === 'cadastrado' && !clienteSelecionado) return false;
+    if (modoCliente === 'avulso' && !clienteAvulso.trim()) return false;
+    
+    if (ehFaturaRecibo && !pagamentoValido) return false;
+    
+    return true;
+  };
+
+  /* ================= SALVAR VENDA ================= */
   const finalizarVenda = async () => {
     // Validações
     if (modoCliente === 'cadastrado' && !clienteSelecionado) {
@@ -276,12 +315,8 @@ export default function NovaVendaPage() {
       return;
     }
 
-    if (!pagamentoValido) {
-      if (ehFaturaRecibo) {
-        setError(`Fatura-Recibo exige pagamento exato de ${formatarPreco(totalLiquido)}. Troco não é permitido.`);
-      } else {
-        setError(`Valor de pagamento inválido. O valor deve ser maior ou igual a ${formatarPreco(totalLiquido)}`);
-      }
+    if (ehFaturaRecibo && !pagamentoValido) {
+      setError(`Fatura-Recibo exige pagamento exato de ${formatarPreco(totalLiquido)}. Troco não é permitido.`);
       return;
     }
 
@@ -290,30 +325,46 @@ export default function NovaVendaPage() {
     setSucesso(null);
 
     try {
-      // ATUALIZADO: Payload simplificado - apenas FT e FR
+      // Construir payload
       const payload: CriarVendaPayload = {
-        cliente_id: modoCliente === 'cadastrado' ? clienteSelecionado!.id : null,
-        cliente_nome: modoCliente === 'avulso' ? clienteAvulso.trim() : undefined,
-        tipo_documento: tipoDocumento,
-        faturar: true, // Sempre true agora (não há pro-forma)
         itens: itens.map(item => ({
           produto_id: item.produto_id,
           quantidade: Number(item.quantidade),
           preco_venda: Number(item.preco_venda),
           desconto: Number(item.desconto),
         })),
+        tipo_documento: tipoDocumento,
+        faturar: tipoDocumento !== 'FP', // false para FP, true para FT/FR
       };
 
-      // Obrigatório para FR
+      // Adicionar dados do cliente conforme o modo
+      if (modoCliente === 'cadastrado' && clienteSelecionado) {
+        payload.cliente_id = clienteSelecionado.id;
+      } else if (modoCliente === 'avulso' && clienteAvulso.trim()) {
+        payload.cliente_nome = clienteAvulso.trim();
+        if (clienteAvulsoNif.trim()) {
+          payload.cliente_nif = clienteAvulsoNif.trim();
+        }
+      }
+
+      // Dados de pagamento apenas para FR
       if (tipoDocumento === 'FR') {
         payload.dados_pagamento = {
           metodo: formPagamento.metodo,
           valor: totalLiquido,
           referencia: formPagamento.referencia || undefined,
+          data: formPagamento.data_pagamento,
         };
       }
 
-      // NOVO: Validação prévia do payload
+      // Observações
+      if (observacoes.trim()) {
+        payload.observacoes = observacoes.trim();
+      }
+
+      console.log("Payload a ser enviado:", JSON.stringify(payload, null, 2));
+
+      // Validação prévia do payload
       const erroValidacao = validarPayloadVenda(payload);
       if (erroValidacao) {
         setError(erroValidacao);
@@ -321,7 +372,6 @@ export default function NovaVendaPage() {
         return;
       }
 
-      console.log("Criando venda com payload:", payload);
       const vendaCriada = await criarVenda(payload);
       console.log("Venda criada:", vendaCriada);
 
@@ -329,11 +379,18 @@ export default function NovaVendaPage() {
         throw new Error("Erro ao criar venda - resposta vazia");
       }
 
-      setSucesso(ehFaturaRecibo
-        ? "Fatura-Recibo criada com sucesso! Pagamento registrado automaticamente."
-        : "Fatura criada com sucesso!"
-      );
+      let mensagemSucesso = "";
+      if (tipoDocumento === 'FR') {
+        mensagemSucesso = "Fatura-Recibo criada com sucesso! Pagamento registrado automaticamente.";
+      } else if (tipoDocumento === 'FP') {
+        mensagemSucesso = "Fatura Proforma criada com sucesso! Aguardando pagamento.";
+      } else {
+        mensagemSucesso = "Fatura criada com sucesso!";
+      }
 
+      setSucesso(mensagemSucesso);
+
+      // Redirecionar após 1.5 segundos
       setTimeout(() => {
         router.push("/dashboard/Faturas/Faturas");
       }, 1500);
@@ -376,54 +433,61 @@ export default function NovaVendaPage() {
 
   const produtoSelecionado = produtos.find(p => p.id === formItem.produto_id);
 
-  // Verifica se deve mostrar seção de pagamento
-  const mostrarPagamento = itens.length > 0;
-
   return (
     <MainEmpresa>
       <div className="p-4 md:p-6 space-y-4 md:space-y-6 w-full max-w-full">
         {/* Header */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.back()}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            title="Voltar"
-          >
-            <ArrowLeft className="w-5 h-5 md:w-6 md:h-6 text-[#123859]" />
-          </button>
-          <h1 className="text-2xl md:text-3xl font-bold text-[#F9941F]">Nova Venda</h1>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.back()}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              title="Voltar"
+            >
+              <ArrowLeft className="w-5 h-5 md:w-6 md:h-6 text-[#123859]" />
+            </button>
+            <h1 className="text-2xl md:text-3xl font-bold text-[#F9941F]">Nova Venda</h1>
+          </div>
+          
+          {/* Badge do tipo de documento */}
+          <div className={`px-3 py-1 rounded-full text-sm font-semibold ${
+            ehFaturaRecibo ? 'bg-green-100 text-green-800' :
+            ehFaturaNormal ? 'bg-blue-100 text-blue-800' :
+            'bg-orange-100 text-orange-800'
+          }`}>
+            {getNomeTipoDocumento(tipoDocumento)}
+          </div>
         </div>
 
         {/* Alertas */}
         {error && (
-          <div role="alert" className="bg-red-100 border border-red-400 text-red-700 p-3 rounded text-sm">
-            {error}
+          <div role="alert" className="bg-red-100 border border-red-400 text-red-700 p-3 rounded text-sm flex items-center gap-2">
+            <AlertTriangle size={18} />
+            <span>{error}</span>
           </div>
         )}
 
         {sucesso && (
-          <div role="alert" className="bg-green-100 border border-green-400 text-green-700 p-3 rounded text-sm">
-            {sucesso}
+          <div role="alert" className="bg-green-100 border border-green-400 text-green-700 p-3 rounded text-sm flex items-center gap-2">
+            <CheckCircle2 size={18} />
+            <span>{sucesso}</span>
           </div>
         )}
 
-        {/* Alerta de estoque baixo - ATUALIZADO: Sempre aparece se houver produtos com estoque baixo */}
+        {/* Alerta de estoque baixo */}
         {produtosEstoqueBaixo.length > 0 && (
-          <div className="p-3 md:p-4 bg-orange-50 border border-orange-200 rounded-lg">
-            <div className="flex items-start gap-2 md:gap-3">
-              <AlertTriangle className="w-4 h-4 md:w-5 md:h-5 text-orange-600 mt-0.5 flex-shrink-0" />
-              <div className="text-sm">
+          <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
+              <div className="text-xs">
                 <h3 className="font-semibold text-orange-800 mb-1">
                   Produtos com Estoque Baixo ({produtosEstoqueBaixo.length})
                 </h3>
-                <p className="text-orange-700 mb-2 text-xs md:text-sm">
-                  Os seguintes produtos têm estoque limitado (≤ {ESTOQUE_MINIMO} unidades):
-                </p>
-                <div className="flex flex-wrap gap-1 md:gap-2">
+                <div className="flex flex-wrap gap-1">
                   {produtosEstoqueBaixo.map(p => (
                     <span
                       key={p.id}
-                      className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-orange-100 text-orange-800"
+                      className="inline-flex items-center px-2 py-0.5 rounded bg-orange-100 text-orange-800"
                     >
                       {p.nome} ({p.estoque_atual})
                     </span>
@@ -434,443 +498,504 @@ export default function NovaVendaPage() {
           </div>
         )}
 
-        {/* FORMULÁRIO UNIFICADO - Layout Responsivo Otimizado */}
-        <div className="bg-white p-4 md:p-6 rounded-lg shadow border-2 border-[#123859]/20">
-          <div className="flex items-center gap-2 mb-4 md:mb-6">
-            <ShoppingCart className="text-[#123859]" size={20} />
-            <h2 className="font-bold text-[#123859] text-lg md:text-xl">Dados da Venda</h2>
+        {/* TABELA PRINCIPAL - DADOS DA VENDA */}
+        <div className="bg-white rounded-lg shadow border-2 border-[#123859]/20 overflow-hidden">
+          <div className="bg-[#123859] text-white px-4 py-2 flex items-center gap-2">
+            <ShoppingCart size={18} />
+            <h2 className="font-bold text-sm">DADOS DA VENDA</h2>
           </div>
 
-          {/* ✅ LAYOUT RESPONSIVO: 1 coluna mobile, 2 colunas tablet, 3 colunas desktop */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
-
-            {/* COLUNA 1 - Tipo de Documento */}
-            <div className="space-y-4 md:space-y-6">
-              {/* SEÇÃO TIPO DE DOCUMENTO - ATUALIZADA */}
-              <div className="bg-blue-50 p-3 md:p-4 rounded-lg border border-blue-200 h-full">
-                <div className="flex items-center gap-2 mb-3">
-                  <FileText className="w-4 h-4 text-[#123859]" />
-                  <h3 className="font-semibold text-[#123859] text-sm">Tipo de Documento</h3>
-                </div>
-
-                <select
-                  id="tipo-documento"
-                  title="Selecionar tipo de documento fiscal"
-                  className="w-full border border-blue-300 p-2.5 rounded text-sm bg-white font-medium text-[#123859]"
-                  value={tipoDocumento}
-                  onChange={e => {
-                    const novoTipo = e.target.value as TipoDocumentoFiscal;
-                    setTipoDocumento(novoTipo);
-                    // Limpar itens ao mudar tipo para evitar inconsistências
-                    setItens([]);
-                    setFormItem({
-                      produto_id: "",
-                      quantidade: 1,
-                      desconto: 0,
-                    });
-                    setPreviewItem(null);
-                    // Resetar pagamento ao mudar tipo
-                    setFormPagamento({
-                      metodo: "dinheiro",
-                      valor_pago: "",
-                      referencia: "",
-                    });
-                  }}
-                >
-                  {/* ATUALIZADO: Apenas FT e FR */}
-                  {TIPOS_DOCUMENTO_VENDA_ATUALIZADOS.map(tipo => (
-                    <option key={tipo} value={tipo}>
-                      {tipo} - {NOMES_TIPO_DOCUMENTO[tipo]}
-                    </option>
-                  ))}
-                </select>
-
-                {ehFaturaNormal && (
-                  <p className="text-xs text-gray-600 mt-2">
-                    Fatura (FT): Documento fiscal válido. O pagamento pode ser feito posteriormente via recibo.
-                  </p>
-                )}
-
-                {ehFaturaRecibo && (
-                  <p className="text-xs text-green-700 mt-2 font-medium">
-                    ✅ Fatura-Recibo (FR): Pagamento imediato obrigatório. O sistema registra automaticamente o recibo.
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* COLUNA 2 - Cliente */}
-            <div className="space-y-4 md:space-y-6">
-              {/* SEÇÃO CLIENTE */}
-              <div className="bg-gray-50 p-3 md:p-4 rounded-lg border border-gray-200 h-full">
-                <div className="flex items-center gap-2 mb-3">
-                  <User className="w-4 h-4 text-[#123859]" />
-                  <h3 className="font-semibold text-[#123859] text-sm">Cliente</h3>
-                </div>
-
-                <div className="flex gap-2 mb-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setModoCliente('cadastrado');
-                      setClienteAvulso('');
-                      setClienteSelecionado(null);
-                    }}
-                    className={`flex-1 px-3 py-2 text-xs md:text-sm rounded transition-colors ${modoCliente === 'cadastrado'
-                      ? 'bg-[#123859] text-white'
-                      : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
-                      }`}
-                  >
-                    Cadastrado
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setModoCliente('avulso');
-                      setClienteSelecionado(null);
-                    }}
-                    className={`flex-1 px-3 py-2 text-xs md:text-sm rounded transition-colors ${modoCliente === 'avulso'
-                      ? 'bg-[#123859] text-white'
-                      : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
-                      }`}
-                  >
-                    Avulso
-                  </button>
-                </div>
-
-                {modoCliente === 'cadastrado' ? (
-                  <select
-                    id="cliente"
-                    title="Selecionar cliente"
-                    className="w-full border border-gray-300 p-2.5 rounded text-sm"
-                    value={clienteSelecionado?.id ?? ""}
-                    onChange={e =>
-                      setClienteSelecionado(
-                        clientes.find(c => c.id === e.target.value) ?? null
-                      )
-                    }
-                  >
-                    <option value="">Selecione um cliente</option>
-                    {clientes.map(c => (
-                      <option key={c.id} value={c.id}>
-                        {c.nome} {c.nif ? `(${formatarNIF(c.nif)})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <div>
-                    <input
-                      id="cliente-avulso"
-                      type="text"
-                      placeholder="Nome do cliente"
-                      className="w-full border border-gray-300 p-2.5 rounded text-sm"
-                      value={clienteAvulso}
-                      onChange={e => setClienteAvulso(e.target.value)}
-                    />
+          <table className="w-full border-collapse">
+            <tbody>
+              {/* Linha 1: Tipo de Documento */}
+              <tr className="border-b border-gray-200">
+                <td className="p-3 bg-gray-50 font-semibold text-[#123859] text-sm w-1/4 border-r border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <FileText size={16} />
+                    <span>Tipo Documento</span>
                   </div>
-                )}
-              </div>
-            </div>
-
-            {/* COLUNA 3 - Produto */}
-            <div className="space-y-4 md:space-y-6 md:col-span-2 xl:col-span-1">
-              {/* SEÇÃO PRODUTO */}
-              <div className="bg-gray-50 p-3 md:p-4 rounded-lg border border-gray-200 h-full">
-                <div className="flex items-center gap-2 mb-3">
-                  <Package className="w-4 h-4 text-[#123859]" />
-                  <h3 className="font-semibold text-[#123859] text-sm">Produto</h3>
-                </div>
-
-                <div className="space-y-3">
+                </td>
+                <td className="p-3 w-3/4">
                   <select
-                    id="produto-form"
-                    title="Selecionar produto"
-                    className="w-full border border-gray-300 p-2.5 rounded text-sm"
-                    value={formItem.produto_id}
-                    onChange={e => handleProdutoChange(e.target.value)}
+                    className="w-full max-w-xs border border-gray-300 p-2 rounded text-sm bg-white"
+                    value={tipoDocumento}
+                    onChange={e => {
+                      const novoTipo = e.target.value as TipoDocumentoFiscal;
+                      setTipoDocumento(novoTipo);
+                      setItens([]);
+                      setFormItem({
+                        produto_id: "",
+                        quantidade: 1,
+                        desconto: 0,
+                      });
+                      setPreviewItem(null);
+                      // Resetar pagamento ao mudar tipo
+                      setFormPagamento({
+                        metodo: "dinheiro",
+                        valor_pago: "",
+                        referencia: "",
+                        data_pagamento: new Date().toISOString().split('T')[0],
+                      });
+                    }}
                   >
-                    <option value="">
-                      {produtosDisponiveis.length === 0
-                        ? "Nenhum produto disponível"
-                        : "Selecione um produto"}
-                    </option>
-                    {/* ATUALIZADO: Mostrar todos os produtos ativos com estoque */}
-                    {produtos.filter(p => p.status === 'ativo').map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.nome} {p.codigo ? `(${p.codigo})` : ""} - {formatarPreco(p.preco_venda)}
-                        {!isServico(p) && ` (Disp: ${p.estoque_atual})`}
+                    {TIPOS_DOCUMENTO_VENDA_ATUALIZADOS.map(tipo => (
+                      <option key={tipo} value={tipo}>
+                        {tipo} - {NOMES_TIPO_DOCUMENTO[tipo] || tipo}
                       </option>
                     ))}
                   </select>
+                  <div className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                    <Info size={12} />
+                    {ehFaturaRecibo && "Pagamento obrigatório no ato da venda"}
+                    {ehFaturaNormal && "Fatura - Pagamento pode ser posterior via recibo"}
+                    {ehFaturaProforma && "Proforma - Documento pré-formal, não faturado"}
+                  </div>
+                </td>
+              </tr>
 
-                  <div className="grid grid-cols-2 gap-3">
+              {/* Linha 2: Cliente */}
+              <tr className="border-b border-gray-200">
+                <td className="p-3 bg-gray-50 font-semibold text-[#123859] text-sm border-r border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <User size={16} />
+                    <span>Cliente</span>
+                  </div>
+                </td>
+                <td className="p-3">
+                  <div className="flex gap-2 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModoCliente('cadastrado');
+                        setClienteAvulso('');
+                        setClienteAvulsoNif('');
+                        setClienteSelecionado(null);
+                      }}
+                      className={`px-3 py-1 text-xs rounded transition-colors ${
+                        modoCliente === 'cadastrado'
+                          ? 'bg-[#123859] text-white'
+                          : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      Cadastrado
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModoCliente('avulso');
+                        setClienteSelecionado(null);
+                      }}
+                      className={`px-3 py-1 text-xs rounded transition-colors ${
+                        modoCliente === 'avulso'
+                          ? 'bg-[#123859] text-white'
+                          : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      Não cadastrado
+                    </button>
+                  </div>
+
+                  {modoCliente === 'cadastrado' ? (
+                    <select
+                      className="w-full max-w-md border border-gray-300 p-2 rounded text-sm"
+                      value={clienteSelecionado?.id ?? ""}
+                      onChange={e =>
+                        setClienteSelecionado(
+                          clientes.find(c => c.id === e.target.value) ?? null
+                        )
+                      }
+                    >
+                      <option value="">Selecione um cliente</option>
+                      {clientes.map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.nome} {c.nif ? `(${formatarNIF(c.nif)})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        placeholder="Nome do cliente *"
+                        className="w-full max-w-md border border-gray-300 p-2 rounded text-sm"
+                        value={clienteAvulso}
+                        onChange={e => setClienteAvulso(e.target.value)}
+                        required
+                      />
+                      <input
+                        type="text"
+                        placeholder="NIF (opcional)"
+                        className="w-full max-w-md border border-gray-300 p-2 rounded text-sm"
+                        value={clienteAvulsoNif}
+                        onChange={e => setClienteAvulsoNif(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </td>
+              </tr>
+
+              {/* Linha 3: Produto */}
+              <tr className="border-b border-gray-200">
+                <td className="p-3 bg-gray-50 font-semibold text-[#123859] text-sm border-r border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <Package size={16} />
+                    <span>Produto</span>
+                  </div>
+                </td>
+                <td className="p-3">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                    <div className="md:col-span-2">
+                      <select
+                        className="w-full border border-gray-300 p-2 rounded text-sm"
+                        value={formItem.produto_id}
+                        onChange={e => handleProdutoChange(e.target.value)}
+                      >
+                        <option value="">
+                          {produtosDisponiveis.length === 0
+                            ? "Nenhum produto disponível"
+                            : "Selecione um produto"}
+                        </option>
+                        {produtos.filter(p => p.status === 'ativo').map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.nome} {p.codigo ? `(${p.codigo})` : ""} - {formatarPreco(p.preco_venda)}
+                            {!isServico(p) && ` (Disp: ${p.estoque_atual})`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
                     <div>
-                      <label className="text-xs text-gray-600 block mb-1">Qtd</label>
                       <input
                         type="number"
                         min={1}
-                        max={produtoSelecionado && !isServico(produtoSelecionado) ? produtoSelecionado.estoque_atual : undefined}
-                        className="border border-gray-300 p-2 rounded w-full text-sm"
+                        placeholder="Qtd"
+                        className="w-full border border-gray-300 p-2 rounded text-sm"
                         value={formItem.quantidade}
                         onChange={e => handleQuantidadeChange(Number(e.target.value))}
                         disabled={!formItem.produto_id}
                       />
                       {produtoSelecionado && !isServico(produtoSelecionado) && (
-                        <p className="text-[10px] text-gray-500 mt-0.5">
+                        <div className="text-[10px] text-gray-500 mt-0.5">
                           Disp: {produtoSelecionado.estoque_atual}
-                        </p>
+                        </div>
                       )}
                     </div>
 
                     <div>
-                      <label className="text-xs text-gray-600 block mb-1">Desconto (Kz)</label>
                       <input
                         type="number"
                         min={0}
-                        className="border border-gray-300 p-2 rounded w-full text-sm"
+                        placeholder="Desc. (Kz)"
+                        className="w-full border border-gray-300 p-2 rounded text-sm"
                         value={formItem.desconto}
                         onChange={e => setFormItem(prev => ({ ...prev, desconto: Number(e.target.value) }))}
                         disabled={!formItem.produto_id}
                       />
                     </div>
+
+                    <div className="md:col-span-1 flex items-end">
+                      <button
+                        type="button"
+                        onClick={adicionarAoCarrinho}
+                        disabled={!formItem.produto_id}
+                        className="w-full bg-[#123859] hover:bg-[#0d2840] disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-2 rounded font-semibold flex items-center justify-center gap-1 text-sm"
+                      >
+                        <Plus size={16} />
+                        Adicionar
+                      </button>
+                    </div>
                   </div>
 
+                  {/* Preview do item */}
                   {previewItem && (
-                    <div className="bg-[#123859]/5 p-3 rounded text-xs space-y-1">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Base:</span>
-                        <span className="font-semibold text-[#123859]">{formatarPreco(previewItem.base_tributavel)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">IVA:</span>
-                        <span className="font-semibold text-[#123859]">{formatarPreco(previewItem.valor_iva)}</span>
-                      </div>
+                    <div className="mt-2 p-2 bg-gray-50 rounded text-xs grid grid-cols-5 gap-2 border border-gray-200">
+                      <div><span className="text-gray-500">Base:</span> {formatarPreco(previewItem.base_tributavel)}</div>
+                      <div><span className="text-gray-500">IVA:</span> {formatarPreco(previewItem.valor_iva)}</div>
                       {previewItem.valor_retencao > 0 && (
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Retenção (6.5%):</span>
-                          <span className="font-semibold text-red-600">-{formatarPreco(previewItem.valor_retencao)}</span>
-                        </div>
+                        <div><span className="text-gray-500">Ret.:</span> -{formatarPreco(previewItem.valor_retencao)}</div>
                       )}
-                      <div className="flex justify-between border-t border-[#123859]/20 pt-1 mt-1">
-                        <span className="text-gray-600">Subtotal:</span>
-                        <span className="font-bold text-[#F9941F]">{formatarPreco(previewItem.subtotal)}</span>
+                      <div><span className="text-gray-500">Subtotal:</span> <span className="font-bold text-[#F9941F]">{formatarPreco(previewItem.subtotal)}</span></div>
+                      <div className="text-right">
+                        <span className="text-xs text-gray-500">Itens: {itens.length}</span>
                       </div>
                     </div>
                   )}
+                </td>
+              </tr>
 
-                  <button
-                    type="button"
-                    onClick={adicionarAoCarrinho}
-                    disabled={!formItem.produto_id}
-                    className="w-full bg-[#123859] hover:bg-[#0d2840] disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-2.5 rounded font-semibold flex items-center justify-center gap-2 transition-colors text-sm"
-                  >
-                    <Plus size={16} />
-                    Adicionar ({itens.length})
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* ✅ SEÇÃO PAGAMENTO - Ocupa largura total em mobile, metade em tablet, 1/3 em desktop */}
-            {mostrarPagamento && (
-              <div className="md:col-span-2 xl:col-span-1">
-                <div className="bg-[#F9941F]/5 p-3 md:p-4 rounded-lg border border-[#F9941F]/20 h-full">
-                  <div className="flex items-center gap-2 mb-3">
-                    <CreditCard className="w-4 h-4 text-[#F9941F]" />
-                    <h3 className="font-semibold text-[#F9941F] text-sm">
-                      Pagamento {ehFaturaRecibo && <span className="text-xs font-normal">(Obrigatório)</span>}
-                    </h3>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-xs text-gray-600 block mb-1">Método</label>
-                      <select
-                        value={formPagamento.metodo}
-                        onChange={e => setFormPagamento(prev => ({ ...prev, metodo: e.target.value as DadosPagamento['metodo'] }))}
-                        className="w-full border border-gray-300 p-2.5 rounded text-sm bg-white"
-                      >
-                        <option value="dinheiro">Dinheiro</option>
-                        <option value="cartao">Cartão</option>
-                        <option value="transferencia">Transferência</option>
-                        <option value="multibanco">Multibanco</option>
-                        <option value="cheque">Cheque</option>
-                      </select>
+              {/* Linha 4: Pagamento (apenas para Fatura-Recibo) */}
+              {mostrarPagamento && (
+                <tr className="border-b border-gray-200">
+                  <td className="p-3 bg-gray-50 font-semibold text-[#F9941F] text-sm border-r border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <CreditCard size={16} />
+                      <span>Pagamento</span>
                     </div>
+                  </td>
+                  <td className="p-3">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                      <div>
+                        <select
+                          value={formPagamento.metodo}
+                          onChange={e => setFormPagamento(prev => ({ ...prev, metodo: e.target.value as DadosPagamento['metodo'] }))}
+                          className="w-full border border-gray-300 p-2 rounded text-sm bg-white"
+                        >
+                          <option value="dinheiro">Dinheiro</option>
+                          <option value="cartao">Cartão</option>
+                          <option value="transferencia">Transferência</option>
+                          <option value="multibanco">Multibanco</option>
+                          <option value="cheque">Cheque</option>
+                        </select>
+                      </div>
 
-                    <div>
-                      <label className="text-xs text-gray-600 block mb-1">
-                        Valor Pago (Kz) {ehFaturaRecibo && <span className="text-red-500">*</span>}
-                      </label>
-                      <input
-                        type="number"
-                        min={totalLiquido}
-                        step="0.01"
-                        placeholder={ehFaturaRecibo ? `Exato: ${formatarPreco(totalLiquido)}` : `Mínimo: ${formatarPreco(totalLiquido)}`}
-                        value={formPagamento.valor_pago}
-                        onChange={e => setFormPagamento(prev => ({ ...prev, valor_pago: e.target.value }))}
-                        className={`w-full border p-2.5 rounded text-sm ${valorPagamento > 0 && valorPagamento < totalLiquido
-                          ? 'border-red-400 bg-red-50'
-                          : valorPagamento === totalLiquido && totalLiquido > 0
-                            ? 'border-green-400 bg-green-50'
-                            : valorPagamento > totalLiquido && !ehFaturaRecibo
-                              ? 'border-blue-400 bg-blue-50'
-                              : 'border-gray-300'
+                      <div>
+                        <input
+                          type="number"
+                          min={totalLiquido}
+                          step="0.01"
+                          placeholder={`Valor (${formatarPreco(totalLiquido)})`}
+                          value={formPagamento.valor_pago}
+                          onChange={e => setFormPagamento(prev => ({ ...prev, valor_pago: e.target.value }))}
+                          className={`w-full border p-2 rounded text-sm ${
+                            valorPagamento > 0 && valorPagamento < totalLiquido
+                              ? 'border-red-400 bg-red-50'
+                              : valorPagamento === totalLiquido && totalLiquido > 0
+                                ? 'border-green-400 bg-green-50'
+                                : valorPagamento > totalLiquido
+                                  ? 'border-red-400 bg-red-50'
+                                  : 'border-gray-300'
                           }`}
-                      />
-                      {valorPagamento > 0 && valorPagamento < totalLiquido && (
-                        <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                          <AlertTriangle size={12} />
-                          Valor insuficiente! Mínimo: {formatarPreco(totalLiquido)}
-                        </p>
-                      )}
-                      {valorPagamento === totalLiquido && totalLiquido > 0 && (
-                        <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
-                          <CheckCircle2 size={12} />
-                          {ehFaturaRecibo ? "Pagamento exato para Fatura-Recibo" : "Pagamento completo"}
-                        </p>
-                      )}
-                      {ehFaturaRecibo && valorPagamento > totalLiquido && (
-                        <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                          <AlertTriangle size={12} />
-                          Fatura-Recibo não permite troco. Ajuste o valor.
-                        </p>
-                      )}
-                      {!ehFaturaRecibo && valorPagamento > totalLiquido && (
-                        <p className="text-xs text-blue-600 mt-1">
-                          Troco: {formatarPreco(troco)}
-                        </p>
-                      )}
+                        />
+                      </div>
+
+                      <div>
+                        <input
+                          type="date"
+                          className="w-full border border-gray-300 p-2 rounded text-sm"
+                          value={formPagamento.data_pagamento}
+                          onChange={e => setFormPagamento(prev => ({ ...prev, data_pagamento: e.target.value }))}
+                        />
+                      </div>
+
+                      <div>
+                        <input
+                          type="text"
+                          placeholder="Referência"
+                          value={formPagamento.referencia}
+                          onChange={e => setFormPagamento(prev => ({ ...prev, referencia: e.target.value }))}
+                          className="w-full border border-gray-300 p-2 rounded text-sm"
+                        />
+                      </div>
                     </div>
 
-                    <div>
-                      <label className="text-xs text-gray-600 block mb-1">Referência (opcional)</label>
-                      <input
-                        type="text"
-                        placeholder="Nº comprovativo"
-                        value={formPagamento.referencia}
-                        onChange={e => setFormPagamento(prev => ({ ...prev, referencia: e.target.value }))}
-                        className="w-full border border-gray-300 p-2.5 rounded text-sm"
-                      />
-                    </div>
+                    {valorPagamento > 0 && valorPagamento < totalLiquido && (
+                      <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                        <AlertTriangle size={12} />
+                        Insuficiente! Mínimo: {formatarPreco(totalLiquido)}
+                      </p>
+                    )}
+                    {valorPagamento === totalLiquido && totalLiquido > 0 && (
+                      <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                        <CheckCircle2 size={12} />
+                        Pagamento exato
+                      </p>
+                    )}
+                    {valorPagamento > totalLiquido && (
+                      <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                        <AlertTriangle size={12} />
+                        FR não permite troco. Ajuste o valor.
+                      </p>
+                    )}
+                  </td>
+                </tr>
+              )}
+
+              {/* Linha 5: Observações (opcional) */}
+              <tr className="border-b border-gray-200">
+                <td className="p-3 bg-gray-50 font-semibold text-[#123859] text-sm border-r border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <FileText size={16} />
+                    <span>Observações</span>
                   </div>
-                </div>
-              </div>
-            )}
-
-            {/* ✅ RESUMO DA VENDA */}
-            {itens.length > 0 && (
-              <div className={`${mostrarPagamento ? 'md:col-span-2 xl:col-span-1' : 'md:col-span-2 xl:col-span-3'}`}>
-                <div className="bg-[#123859] text-white p-3 md:p-4 rounded-lg h-full">
-                  <h3 className="font-semibold mb-3 text-sm border-b border-white/20 pb-2">
-                    Resumo - {getNomeTipoDocumento(tipoDocumento)}
-                  </h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-300">Base Tributável:</span>
-                      <span className="font-semibold">{formatarPreco(totalBase)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-300">IVA (14%):</span>
-                      <span className="font-semibold">{formatarPreco(totalIva)}</span>
-                    </div>
-                    {totalRetencao > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-300">Retenção (6.5%):</span>
-                        <span className="font-semibold text-red-300">-{formatarPreco(totalRetencao)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between border-t border-white/20 pt-2 mt-2">
-                      <span className="text-[#F9941F] font-bold">TOTAL A PAGAR:</span>
-                      <span className="font-bold text-[#F9941F] text-lg">{formatarPreco(totalLiquido)}</span>
-                    </div>
-
-                    {ehFaturaRecibo && (
-                      <div className="mt-3 pt-2 border-t border-white/10">
-                        <p className="text-xs text-green-300 flex items-center gap-1">
-                          <CheckCircle2 size={12} />
-                          Pagamento será registrado automaticamente
-                        </p>
-                      </div>
-                    )}
-
-                    {ehFaturaNormal && (
-                      <div className="mt-3 pt-2 border-t border-white/10">
-                        <p className="text-xs text-blue-300">
-                          Fatura pendente de pagamento. Gere recibo após receber.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+                </td>
+                <td className="p-3">
+                  <textarea
+                    rows={2}
+                    placeholder="Observações adicionais (opcional)"
+                    className="w-full border border-gray-300 p-2 rounded text-sm"
+                    value={observacoes}
+                    onChange={e => setObservacoes(e.target.value)}
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
-        {/* LISTA DE ITENS - Layout responsivo */}
+        {/* TABELA DE ITENS ADICIONADOS */}
         {itens.length > 0 && (
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {itens.map((item) => (
-                <div key={item.id} className="border p-3 rounded flex justify-between items-center bg-gray-50 hover:bg-gray-100 transition-colors">
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-[#123859] text-sm truncate">{item.descricao}</div>
-                    <div className="text-xs text-gray-600">
-                      {item.quantidade}x {formatarPreco(item.preco_venda)}
-                      {item.desconto > 0 && (
-                        <span className="text-red-600 ml-2">- {formatarPreco(item.desconto)}</span>
-                      )}
-                      {item.valor_retencao > 0 && (
-                        <span className="text-orange-600 ml-2">(Ret: {formatarPreco(item.valor_retencao)})</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-right flex items-center gap-3 ml-2">
-                    <div className="font-bold text-[#F9941F] text-sm">
-                      {formatarPreco(item.subtotal)}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removerItem(item.id)}
-                      className="text-red-600 hover:text-red-800 p-1.5 hover:bg-red-50 rounded transition-colors"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-              ))}
+          <div className="bg-white rounded-lg shadow border-2 border-[#123859]/20 overflow-hidden">
+            <div className="bg-[#123859] text-white px-4 py-2 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShoppingCart size={18} />
+                <h2 className="font-bold text-sm">ITENS DA VENDA ({itens.length})</h2>
+              </div>
+              <button
+                onClick={limparCarrinho}
+                className="text-xs bg-[#F9941F]  text-white px-2 py-1 rounded transition-colors"
+              >
+                Limpar Itens
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-sm">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th className="p-2 text-left text-[#123859] font-semibold">Produto</th>
+                    <th className="p-2 text-center text-[#123859] font-semibold">Qtd</th>
+                    <th className="p-2 text-right text-[#123859] font-semibold">Preço</th>
+                    <th className="p-2 text-right text-[#123859] font-semibold">Desc.</th>
+                    <th className="p-2 text-right text-[#123859] font-semibold">IVA</th>
+                    <th className="p-2 text-right text-[#123859] font-semibold">Ret.</th>
+                    <th className="p-2 text-right text-[#123859] font-semibold">Subtotal</th>
+                    <th className="p-2 text-center text-[#123859] font-semibold"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {itens.map((item) => (
+                    <tr key={item.id} className="border-t border-gray-200 hover:bg-gray-50">
+                      <td className="p-2 font-medium text-[#123859]">{item.descricao}</td>
+                      <td className="p-2 text-center">{item.quantidade}</td>
+                      <td className="p-2 text-right">{formatarPreco(item.preco_venda)}</td>
+                      <td className="p-2 text-right text-red-600">{item.desconto > 0 ? formatarPreco(item.desconto) : '-'}</td>
+                      <td className="p-2 text-right">{formatarPreco(item.valor_iva)}</td>
+                      <td className="p-2 text-right text-orange-600">{item.valor_retencao > 0 ? formatarPreco(item.valor_retencao) : '-'}</td>
+                      <td className="p-2 text-right font-bold text-[#F9941F]">{formatarPreco(item.subtotal)}</td>
+                      <td className="p-2 text-center">
+                        <button
+                          type="button"
+                          onClick={() => removerItem(item.id)}
+                          className="text-orange-600 hover:text-red-800 p-1 hover:bg-red-50 rounded transition-colors"
+                          title="Remover item"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
 
-        {/* BOTÃO FINALIZAR VENDA - Responsivo */}
+        {/* TABELA DE RESUMO */}
+        {itens.length > 0 && (
+          <div className="bg-white rounded-lg shadow border-2 border-[#123859]/20 overflow-hidden">
+            <div className="bg-[#123859] text-white px-4 py-2 flex items-center gap-2">
+              <Calculator size={18} />
+              <h2 className="font-bold text-sm">RESUMO - {getNomeTipoDocumento(tipoDocumento)}</h2>
+            </div>
+
+            <table className="w-full border-collapse">
+              <tbody>
+                <tr className="border-b border-gray-200">
+                  <td className="p-3 bg-gray-50 font-medium text-gray-600 w-1/3">Base Tributável</td>
+                  <td className="p-3 font-semibold">{formatarPreco(totalBase)}</td>
+                </tr>
+                <tr className="border-b border-gray-200">
+                  <td className="p-3 bg-gray-50 font-medium text-gray-600">IVA ({((totalIva / totalBase) * 100).toFixed(1)}%)</td>
+                  <td className="p-3 font-semibold">{formatarPreco(totalIva)}</td>
+                </tr>
+                {totalRetencao > 0 && (
+                  <tr className="border-b border-gray-200">
+                    <td className="p-3 bg-gray-50 font-medium text-gray-600">Retenção (6.5%)</td>
+                    <td className="p-3 font-semibold text-red-600">-{formatarPreco(totalRetencao)}</td>
+                  </tr>
+                )}
+                <tr className="bg-[#123859] text-white">
+                  <td className="p-3 font-bold">TOTAL A PAGAR</td>
+                  <td className="p-3 font-bold text-[#F9941F] text-lg">{formatarPreco(totalLiquido)}</td>
+                </tr>
+                {ehFaturaRecibo && (
+                  <tr>
+                    <td colSpan={2} className="p-2 text-xs text-green-600 bg-green-50 flex items-center gap-1">
+                      <CheckCircle2 size={14} />
+                      Pagamento será registrado automaticamente
+                    </td>
+                  </tr>
+                )}
+                {ehFaturaNormal && (
+                  <tr>
+                    <td colSpan={2} className="p-2 text-xs text-blue-600 bg-blue-50 flex items-center gap-1">
+                      <Info size={14} />
+                      Fatura pendente de pagamento. Gere recibo após receber.
+                    </td>
+                  </tr>
+                )}
+                {ehFaturaProforma && (
+                  <tr>
+                    <td colSpan={2} className="p-2 text-xs text-purple-600 bg-purple-50 flex items-center gap-1">
+                      <FileText size={14} />
+                      Fatura Proforma - Documento prévio, não faturado.
+                    </td>
+                  </tr>
+                )}
+                {modoCliente === 'avulso' && (
+                  <tr>
+                    <td colSpan={2} className="p-2 text-xs text-gray-600 bg-gray-50">
+                      Cliente Avulso: {clienteAvulso} {clienteAvulsoNif && `(NIF: ${clienteAvulsoNif})`}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* BOTÃO FINALIZAR VENDA */}
         <button
           type="button"
           onClick={finalizarVenda}
-          disabled={loading || itens.length === 0 || !pagamentoValido}
-          className="w-full bg-[#F9941F] hover:bg-[#d9831a] disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-3 md:py-4 rounded-lg font-bold text-base md:text-lg shadow-lg transition-colors flex items-center justify-center gap-2"
+          disabled={loading || !podeFinalizar()}
+          className="w-full bg-[#F9941F] hover:bg-[#d9831a] disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-3 rounded-lg font-bold text-base shadow-lg transition-colors flex items-center justify-center gap-2"
         >
           {loading ? (
-            "Processando..."
+            <>
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+              Processando...
+            </>
           ) : itens.length === 0 ? (
             "Adicione itens para finalizar"
-          ) : !pagamentoValido ? (
-            ehFaturaRecibo 
-              ? `Informe pagamento exato de ${formatarPreco(totalLiquido)}`
-              : `Informe pagamento válido (mín. ${formatarPreco(totalLiquido)})`
+          ) : ehFaturaRecibo && !pagamentoValido ? (
+            `Informe pagamento exato de ${formatarPreco(totalLiquido)}`
           ) : ehFaturaRecibo ? (
             <>
               <CheckCircle2 size={20} />
-              Finalizar Fatura-Recibo
+              Finalizar
+            </>
+          ) : ehFaturaProforma ? (
+            <>
+              <FileText size={20} />
+              Finalizar
             </>
           ) : (
             <>
               <CheckCircle2 size={20} />
-              Finalizar Fatura {troco > 0 && `(Troco: ${formatarPreco(troco)})`}
+              Finalizar
             </>
           )}
         </button>
+
+        {/* Informações adicionais */}
+        <div className="text-xs text-gray-500 text-center">
+          <p>
+            {ehFaturaRecibo && "✓ Fatura-Recibo: Pagamento registrado automaticamente"}
+            {ehFaturaNormal && "📄 Fatura: Pode gerar recibo posteriormente"}
+            {ehFaturaProforma && "📋 Proforma: Documento não fiscal, pode ser convertido em fatura"}
+          </p>
+        </div>
       </div>
     </MainEmpresa>
   );

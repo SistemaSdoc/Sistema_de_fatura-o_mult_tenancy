@@ -1,12 +1,17 @@
 // src/services/documentoFiscalService.ts
 
-import { api } from 'axios';
+import api from "./axios";
 
 // ==================== TIPOS ====================
 
-export type TipoDocumento = 'FT' | 'FR' | 'FA' | 'NC' | 'ND' | 'RC' | 'FRt';
+export type TipoDocumento = 'FT' | 'FR' | 'FP' | 'FA' | 'NC' | 'ND' | 'RC' | 'FRt';
 export type EstadoDocumento = 'emitido' | 'paga' | 'parcialmente_paga' | 'cancelado' | 'expirado';
 export type MetodoPagamento = 'transferencia' | 'multibanco' | 'dinheiro' | 'cheque' | 'cartao';
+
+// Constantes para tipos de documento
+export const TIPOS_VENDA: TipoDocumento[] = ['FT', 'FR', 'RC'];
+export const TIPOS_NAO_VENDA: TipoDocumento[] = ['FP', 'FA', 'NC', 'ND', 'FRt'];
+export const TIPOS_DOCUMENTO_VENDA: TipoDocumento[] = ['FT', 'FR', 'FP']; // Tipos que podem ser criados via venda
 
 export interface ItemDocumento {
     id?: string;
@@ -18,6 +23,8 @@ export interface ItemDocumento {
     taxa_iva: number;
     valor_iva?: number;
     total_linha?: number;
+    codigo_produto?: string;
+    unidade?: string;
 }
 
 export interface DocumentoFiscal {
@@ -25,6 +32,8 @@ export interface DocumentoFiscal {
     user_id: string;
     venda_id?: string | null;
     cliente_id?: string | null;
+    cliente_nome?: string | null; // Para cliente avulso
+    cliente_nif?: string | null;  // Para cliente avulso
     fatura_id?: string | null;
     serie: string;
     numero: number;
@@ -46,6 +55,7 @@ export interface DocumentoFiscal {
     referencia_pagamento?: string | null;
     hash_fiscal?: string | null;
     referencia_externa?: string | null;
+    observacoes?: string | null;
     created_at: string;
     updated_at: string;
 
@@ -60,6 +70,13 @@ export interface DocumentoFiscal {
     notasDebito?: DocumentoFiscal[];
     faturasAdiantamento?: DocumentoFiscal[];
     faturasVinculadas?: DocumentoFiscal[];
+
+    // Acessores virtuais (calculados)
+    valor_pendente?: number;
+    valor_pago?: number;
+    nome_cliente?: string;
+    tem_cliente_cadastrado?: boolean;
+    eh_venda?: boolean;
 }
 
 export interface Cliente {
@@ -82,12 +99,17 @@ export interface FiltrosDocumento {
     tipo?: TipoDocumento;
     estado?: EstadoDocumento;
     cliente_id?: string;
+    cliente_nome?: string; // Para cliente avulso
     data_inicio?: string;
     data_fim?: string;
     pendentes?: boolean;
     adiantamentos_pendentes?: boolean;
+    proformas_pendentes?: boolean; // NOVO
+    apenas_vendas?: boolean; // Filtrar apenas FT, FR, RC
+    apenas_nao_vendas?: boolean; // Filtrar FP, FA, NC, ND, FRt
     per_page?: number;
     page?: number;
+    search?: string;
 }
 
 export interface DadosPagamento {
@@ -100,6 +122,8 @@ export interface DadosPagamento {
 export interface EmitirDocumentoDTO {
     tipo_documento: TipoDocumento;
     cliente_id?: string;
+    cliente_nome?: string; // Para cliente avulso
+    cliente_nif?: string;  // Para cliente avulso
     venda_id?: string;
     fatura_id?: string;
     itens?: ItemDocumento[];
@@ -107,6 +131,7 @@ export interface EmitirDocumentoDTO {
     motivo?: string;
     data_vencimento?: string;
     referencia_externa?: string;
+    observacoes?: string;
 }
 
 export interface GerarReciboDTO {
@@ -125,12 +150,20 @@ export interface CancelarDocumentoDTO {
     motivo: string;
 }
 
+export interface ConverterProformaDTO {
+    fatura_id?: string;
+    dados_pagamento?: DadosPagamento;
+}
+
 export interface DashboardDocumentos {
     faturas_emitidas_mes: number;
     faturas_pendentes: number;
     total_pendente_cobranca: number;
     adiantamentos_pendentes: number;
+    proformas_pendentes: number; // NOVO
     documentos_cancelados_mes: number;
+    total_vendas_mes: number; // NOVO
+    total_nao_vendas_mes: number; // NOVO
 }
 
 export interface AlertasDocumentos {
@@ -139,6 +172,10 @@ export interface AlertasDocumentos {
         items: DocumentoFiscal[];
     };
     faturas_com_adiantamentos_pendentes: {
+        total: number;
+        items: DocumentoFiscal[];
+    };
+    proformas_pendentes: { // NOVO
         total: number;
         items: DocumentoFiscal[];
     };
@@ -157,12 +194,14 @@ interface PaginatedResponse<T> {
     last_page: number;
     per_page: number;
     total: number;
+    from?: number;
+    to?: number;
 }
 
 // ==================== SERVICE ====================
 
 class DocumentoFiscalService {
-    private baseUrl = '/documentos-fiscais';
+    private baseUrl = '/api/documentos-fiscais';
 
     // ==================== LISTAGEM E CONSULTA ====================
 
@@ -173,7 +212,7 @@ class DocumentoFiscalService {
         const params = new URLSearchParams();
 
         Object.entries(filtros).forEach(([key, value]) => {
-            if (value !== undefined && value !== null) {
+            if (value !== undefined && value !== null && value !== '') {
                 params.append(key, String(value));
             }
         });
@@ -189,15 +228,15 @@ class DocumentoFiscalService {
      */
     async buscarPorId(id: string): Promise<DocumentoFiscal> {
         const response = await api.get<ApiResponse<DocumentoFiscal>>(`${this.baseUrl}/${id}`);
-        return response.data.data;
+        return response.data.data.documento || response.data.data;
     }
 
     /**
      * Buscar documento por número
      */
     async buscarPorNumero(numeroDocumento: string): Promise<DocumentoFiscal> {
-        const documentos = await this.listar({ per_page: 1 });
-        const documento = documentos.data.find(d => d.numero_documento === numeroDocumento);
+        const response = await this.listar({ per_page: 1 });
+        const documento = response.data.find(d => d.numero_documento === numeroDocumento);
         if (!documento) throw new Error('Documento não encontrado');
         return documento;
     }
@@ -208,11 +247,16 @@ class DocumentoFiscalService {
      * Emitir qualquer tipo de documento fiscal
      */
     async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
+        // Validar cliente avulso
+        if (!dados.cliente_id && !dados.cliente_nome && dados.tipo_documento === 'FR') {
+            throw new Error('Fatura-Recibo (FR) requer um cliente (cadastrado ou avulso)');
+        }
+
         const response = await api.post<ApiResponse<DocumentoFiscal>>(
             `${this.baseUrl}/emitir`,
             dados
         );
-        return response.data.data;
+        return response.data.data.documento || response.data.data;
     }
 
     /**
@@ -225,8 +269,15 @@ class DocumentoFiscalService {
     /**
      * Emitir Fatura-Recibo (FR)
      */
-    async emitirFaturaRecibo(dados: Omit<EmitirDocumentoDTO, 'tipo_documento'>): Promise<DocumentoFiscal> {
+    async emitirFaturaRecibo(dados: Omit<EmitirDocumentoDTO, 'tipo_documento'> & { dados_pagamento: DadosPagamento }): Promise<DocumentoFiscal> {
         return this.emitir({ ...dados, tipo_documento: 'FR' });
+    }
+
+    /**
+     * Emitir Fatura Proforma (FP)
+     */
+    async emitirFaturaProforma(dados: Omit<EmitirDocumentoDTO, 'tipo_documento'>): Promise<DocumentoFiscal> {
+        return this.emitir({ ...dados, tipo_documento: 'FP' });
     }
 
     /**
@@ -258,7 +309,7 @@ class DocumentoFiscalService {
             `${this.baseUrl}/${documentoOrigemId}/nota-credito`,
             dados
         );
-        return response.data.data;
+        return response.data.data.documento || response.data.data;
     }
 
     /**
@@ -272,30 +323,30 @@ class DocumentoFiscalService {
             `${this.baseUrl}/${documentoOrigemId}/nota-debito`,
             dados
         );
-        return response.data.data;
+        return response.data.data.documento || response.data.data;
     }
 
     // ==================== RECIBOS ====================
 
     /**
-     * Gerar recibo para fatura (FT)
+     * Gerar recibo para fatura (FT) ou adiantamento (FA)
      */
-    async gerarRecibo(faturaId: string, dados: GerarReciboDTO): Promise<DocumentoFiscal> {
+    async gerarRecibo(documentoId: string, dados: GerarReciboDTO): Promise<DocumentoFiscal> {
         const response = await api.post<ApiResponse<DocumentoFiscal>>(
-            `${this.baseUrl}/${faturaId}/recibo`,
+            `${this.baseUrl}/${documentoId}/recibo`,
             dados
         );
-        return response.data.data;
+        return response.data.data.recibo || response.data.data.documento || response.data.data;
     }
 
     /**
-     * Listar recibos de uma fatura
+     * Listar recibos de um documento (FT ou FA)
      */
-    async listarRecibos(faturaId: string): Promise<DocumentoFiscal[]> {
+    async listarRecibos(documentoId: string): Promise<DocumentoFiscal[]> {
         const response = await api.get<ApiResponse<DocumentoFiscal[]>>(
-            `${this.baseUrl}/${faturaId}/recibos`
+            `${this.baseUrl}/${documentoId}/recibos`
         );
-        return response.data.data;
+        return response.data.data.recibos || response.data.data;
     }
 
     // ==================== ADIANTAMENTOS ====================
@@ -308,7 +359,7 @@ class DocumentoFiscalService {
         dados: VincularAdiantamentoDTO
     ): Promise<{ adiantamento: DocumentoFiscal; fatura: DocumentoFiscal }> {
         const response = await api.post<ApiResponse<{ adiantamento: DocumentoFiscal; fatura: DocumentoFiscal }>>(
-            `${this.baseUrl}/adiantamentos/${adiantamentoId}/vincular`,
+            `${this.baseUrl}/${adiantamentoId}/vincular`,
             dados
         );
         return response.data.data;
@@ -317,15 +368,44 @@ class DocumentoFiscalService {
     /**
      * Listar adiantamentos pendentes de um cliente
      */
-    async listarAdiantamentosPendentes(clienteId: string): Promise<DocumentoFiscal[]> {
+    async listarAdiantamentosPendentes(clienteId?: string, clienteNome?: string): Promise<DocumentoFiscal[]> {
+        const params = new URLSearchParams();
+        if (clienteId) params.append('cliente_id', clienteId);
+        if (clienteNome) params.append('cliente_nome', clienteNome);
+
         const response = await api.get<ApiResponse<DocumentoFiscal[]>>(
-            `${this.baseUrl}/adiantamentos-pendentes?cliente_id=${clienteId}`
+            `${this.baseUrl}/adiantamentos-pendentes${params.toString() ? `?${params.toString()}` : ''}`
         );
-        return response.data.data;
+        return response.data.data.adiantamentos || response.data.data;
     }
 
     /**
-     * Buscar alertas de adiantamentos (vencidos, pendentes)
+     * Listar proformas pendentes de um cliente
+     */
+    async listarProformasPendentes(clienteId?: string, clienteNome?: string): Promise<DocumentoFiscal[]> {
+        const params = new URLSearchParams();
+        if (clienteId) params.append('cliente_id', clienteId);
+        if (clienteNome) params.append('cliente_nome', clienteNome);
+
+        const response = await api.get<ApiResponse<DocumentoFiscal[]>>(
+            `${this.baseUrl}/proformas-pendentes${params.toString() ? `?${params.toString()}` : ''}`
+        );
+        return response.data.data.proformas || response.data.data;
+    }
+
+    /**
+     * Converter Proforma (FP) para Fatura (FT)
+     */
+    async converterProformaParaFatura(proformaId: string, dados?: ConverterProformaDTO): Promise<DocumentoFiscal> {
+        const response = await api.post<ApiResponse<DocumentoFiscal>>(
+            `${this.baseUrl}/${proformaId}/converter`,
+            dados
+        );
+        return response.data.data.documento || response.data.data;
+    }
+
+    /**
+     * Buscar alertas de documentos (vencidos, pendentes)
      */
     async buscarAlertas(): Promise<AlertasDocumentos> {
         const response = await api.get<ApiResponse<AlertasDocumentos>>(
@@ -354,26 +434,48 @@ class DocumentoFiscalService {
             `${this.baseUrl}/${id}/cancelar`,
             dados
         );
-        return response.data.data;
+        return response.data.data.documento || response.data.data;
     }
 
     // ==================== UTILITÁRIOS ====================
 
     /**
-     * Calcular valor pendente de uma fatura
+     * Calcular valor pendente de uma fatura ou adiantamento
      */
     calcularValorPendente(documento: DocumentoFiscal): number {
-        if (!['FT', 'FR'].includes(documento.tipo_documento)) return 0;
+        if (!['FT', 'FA'].includes(documento.tipo_documento)) return 0;
 
         const totalPago = documento.recibos?.reduce((sum, r) =>
             r.estado !== 'cancelado' ? sum + r.total_liquido : sum, 0
         ) || 0;
 
+        if (documento.tipo_documento === 'FA') {
+            return Math.max(0, documento.total_liquido - totalPago);
+        }
+
+        // Para FT, considerar adiantamentos vinculados
         const totalAdiantamentos = documento.faturasAdiantamento?.reduce((sum, a) =>
             sum + (a.total_liquido || 0), 0
         ) || 0;
 
         return Math.max(0, documento.total_liquido - totalPago - totalAdiantamentos);
+    }
+
+    /**
+     * Calcular valor já pago
+     */
+    calcularValorPago(documento: DocumentoFiscal): number {
+        if (['FR', 'RC'].includes(documento.tipo_documento)) {
+            return documento.total_liquido;
+        }
+
+        if (documento.tipo_documento === 'FP') {
+            return 0;
+        }
+
+        return documento.recibos?.reduce((sum, r) =>
+            r.estado !== 'cancelado' ? sum + r.total_liquido : sum, 0
+        ) || 0;
     }
 
     /**
@@ -387,7 +489,7 @@ class DocumentoFiscalService {
      * Verificar se fatura pode gerar recibo
      */
     podeGerarRecibo(documento: DocumentoFiscal): boolean {
-        return documento.tipo_documento === 'FT' &&
+        return ['FT', 'FA'].includes(documento.tipo_documento) &&
             ['emitido', 'parcialmente_paga'].includes(documento.estado);
     }
 
@@ -400,12 +502,50 @@ class DocumentoFiscalService {
     }
 
     /**
+     * Verificar se é venda (FT, FR, RC)
+     */
+    ehVenda(documento: DocumentoFiscal): boolean {
+        return TIPOS_VENDA.includes(documento.tipo_documento);
+    }
+
+    /**
+     * Verificar se é proforma (FP)
+     */
+    ehProforma(documento: DocumentoFiscal): boolean {
+        return documento.tipo_documento === 'FP';
+    }
+
+    /**
+     * Obter nome do cliente (para exibição)
+     */
+    getNomeCliente(documento: DocumentoFiscal): string {
+        if (documento.cliente) {
+            return documento.cliente.nome;
+        }
+        if (documento.cliente_nome) {
+            return documento.cliente_nome;
+        }
+        return 'Consumidor Final';
+    }
+
+    /**
+     * Obter NIF do cliente (para exibição)
+     */
+    getNifCliente(documento: DocumentoFiscal): string | null {
+        if (documento.cliente) {
+            return documento.cliente.nif || null;
+        }
+        return documento.cliente_nif || null;
+    }
+
+    /**
      * Obter nome amigável do tipo de documento
      */
     getTipoDocumentoNome(tipo: TipoDocumento): string {
         const nomes: Record<TipoDocumento, string> = {
             'FT': 'Fatura',
             'FR': 'Fatura-Recibo',
+            'FP': 'Fatura Proforma',
             'FA': 'Fatura de Adiantamento',
             'NC': 'Nota de Crédito',
             'ND': 'Nota de Débito',
@@ -413,6 +553,23 @@ class DocumentoFiscalService {
             'FRt': 'Fatura de Retificação'
         };
         return nomes[tipo] || tipo;
+    }
+
+    /**
+     * Obter cor do tipo para UI
+     */
+    getTipoCor(tipo: TipoDocumento): string {
+        const cores: Record<TipoDocumento, string> = {
+            'FT': 'blue',
+            'FR': 'green',
+            'FP': 'orange',
+            'FA': 'purple',
+            'NC': 'red',
+            'ND': 'amber',
+            'RC': 'teal',
+            'FRt': 'pink'
+        };
+        return cores[tipo] || 'gray';
     }
 
     /**
@@ -435,12 +592,19 @@ class DocumentoFiscalService {
     getEstadoLabel(estado: EstadoDocumento): string {
         const labels: Record<EstadoDocumento, string> = {
             'emitido': 'Emitido',
-            'paga': 'Paga',
-            'parcialmente_paga': 'Parcialmente Paga',
+            'paga': 'Pago',
+            'parcialmente_paga': 'Parcial',
             'cancelado': 'Cancelado',
             'expirado': 'Expirado'
         };
         return labels[estado] || estado;
+    }
+
+    /**
+     * Formatar número do documento para exibição
+     */
+    formatarNumeroDocumento(documento: DocumentoFiscal): string {
+        return documento.numero_documento || `${documento.serie}-${String(documento.numero).padStart(5, '0')}`;
     }
 
     // ==================== DASHBOARD ====================
@@ -460,6 +624,10 @@ class DocumentoFiscalService {
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
+// Criar instância do serviço
+export const documentoFiscalService = new DocumentoFiscalService();
+
+// Hooks
 export const useDocumentosFiscais = (filtros: FiltrosDocumento = {}) => {
     return useQuery({
         queryKey: ['documentos-fiscais', filtros],
@@ -479,10 +647,10 @@ export const useEmitirDocumento = () => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: documentoFiscalService.emitir.bind(documentoFiscalService),
+        mutationFn: (dados: EmitirDocumentoDTO) => documentoFiscalService.emitir(dados),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['documentos-fiscais'] });
-            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard-documentos'] });
         },
     });
 };
@@ -491,11 +659,12 @@ export const useGerarRecibo = () => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ faturaId, dados }: { faturaId: string; dados: GerarReciboDTO }) =>
-            documentoFiscalService.gerarRecibo(faturaId, dados),
+        mutationFn: ({ documentoId, dados }: { documentoId: string; dados: GerarReciboDTO }) =>
+            documentoFiscalService.gerarRecibo(documentoId, dados),
         onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({ queryKey: ['documento-fiscal', variables.faturaId] });
+            queryClient.invalidateQueries({ queryKey: ['documento-fiscal', variables.documentoId] });
             queryClient.invalidateQueries({ queryKey: ['documentos-fiscais'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard-documentos'] });
         },
     });
 };
@@ -506,8 +675,10 @@ export const useCancelarDocumento = () => {
     return useMutation({
         mutationFn: ({ id, dados }: { id: string; dados: CancelarDocumentoDTO }) =>
             documentoFiscalService.cancelar(id, dados),
-        onSuccess: () => {
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['documento-fiscal', variables.id] });
             queryClient.invalidateQueries({ queryKey: ['documentos-fiscais'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard-documentos'] });
         },
     });
 };
@@ -521,6 +692,22 @@ export const useVincularAdiantamento = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['documentos-fiscais'] });
             queryClient.invalidateQueries({ queryKey: ['adiantamentos-pendentes'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard-documentos'] });
+        },
+    });
+};
+
+export const useConverterProforma = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ proformaId, dados }: { proformaId: string; dados?: ConverterProformaDTO }) =>
+            documentoFiscalService.converterProformaParaFatura(proformaId, dados),
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['documento-fiscal', variables.proformaId] });
+            queryClient.invalidateQueries({ queryKey: ['documentos-fiscais'] });
+            queryClient.invalidateQueries({ queryKey: ['proformas-pendentes'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard-documentos'] });
         },
     });
 };
@@ -529,6 +716,7 @@ export const useDashboardDocumentos = () => {
     return useQuery({
         queryKey: ['dashboard-documentos'],
         queryFn: () => documentoFiscalService.getDashboard(),
+        refetchInterval: 5 * 60 * 1000, // Refetch a cada 5 minutos
     });
 };
 
@@ -540,7 +728,22 @@ export const useAlertasDocumentos = () => {
     });
 };
 
-// ==================== EXPORT ====================
+export const useAdiantamentosPendentes = (clienteId?: string, clienteNome?: string) => {
+    return useQuery({
+        queryKey: ['adiantamentos-pendentes', { clienteId, clienteNome }],
+        queryFn: () => documentoFiscalService.listarAdiantamentosPendentes(clienteId, clienteNome),
+        enabled: !!(clienteId || clienteNome),
+    });
+};
 
-export const documentoFiscalService = new DocumentoFiscalService();
+export const useProformasPendentes = (clienteId?: string, clienteNome?: string) => {
+    return useQuery({
+        queryKey: ['proformas-pendentes', { clienteId, clienteNome }],
+        queryFn: () => documentoFiscalService.listarProformasPendentes(clienteId, clienteNome),
+        enabled: !!(clienteId || clienteNome),
+    });
+};
+
+// ==================== EXPORT DEFAULT ====================
+
 export default documentoFiscalService;

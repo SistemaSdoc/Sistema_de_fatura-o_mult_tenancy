@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
-
+use Illuminate\Support\Facades\DB;
 class DocumentoFiscal extends Model
 {
     protected $table = 'documentos_fiscais';
@@ -17,13 +17,15 @@ class DocumentoFiscal extends Model
         'user_id',
         'venda_id',
         'cliente_id',
+        'cliente_nome', // Para cliente avulso
+        'cliente_nif',  // Para cliente avulso
         'fatura_id', // Documento de origem (para NC, ND, RC, FRt)
 
         'serie',
         'numero',
         'numero_documento',
 
-        'tipo_documento', // FT, FR, FA, NC, ND, RC, FRt
+        'tipo_documento', // FT, FR, FP, FA, NC, ND, RC, FRt
 
         'data_emissao',
         'hora_emissao',
@@ -73,6 +75,7 @@ class DocumentoFiscal extends Model
     // Tipos de documento
     const TIPO_FATURA = 'FT';
     const TIPO_FATURA_RECIBO = 'FR';
+    const TIPO_FATURA_PROFORMA = 'FP';
     const TIPO_FATURA_ADIANTAMENTO = 'FA';
     const TIPO_NOTA_CREDITO = 'NC';
     const TIPO_NOTA_DEBITO = 'ND';
@@ -133,7 +136,7 @@ class DocumentoFiscal extends Model
     }
 
     /**
-     * Recibos associados (para FT)
+     * Recibos associados (para FT e FA)
      */
     public function recibos()
     {
@@ -238,6 +241,22 @@ class DocumentoFiscal extends Model
         return $query->whereIn('tipo_documento', [self::TIPO_FATURA, self::TIPO_FATURA_RECIBO]);
     }
 
+    public function scopeVendas($query)
+    {
+        return $query->whereIn('tipo_documento', [self::TIPO_FATURA, self::TIPO_FATURA_RECIBO, self::TIPO_RECIBO]);
+    }
+
+    public function scopeNaoVendas($query)
+    {
+        return $query->whereIn('tipo_documento', [
+            self::TIPO_FATURA_PROFORMA,
+            self::TIPO_FATURA_ADIANTAMENTO,
+            self::TIPO_NOTA_CREDITO,
+            self::TIPO_NOTA_DEBITO,
+            self::TIPO_FATURA_RETIFICACAO
+        ]);
+    }
+
     public function scopeVencidos($query)
     {
         return $query->where('data_vencimento', '<', now())
@@ -253,6 +272,15 @@ class DocumentoFiscal extends Model
             ->where('estado', self::ESTADO_EMITIDO);
     }
 
+    /**
+     * Faturas proforma pendentes
+     */
+    public function scopeProformasPendentes($query)
+    {
+        return $query->where('tipo_documento', self::TIPO_FATURA_PROFORMA)
+            ->where('estado', self::ESTADO_EMITIDO);
+    }
+
     /* ================= ACESSORES ================= */
 
     public function getTipoDocumentoNomeAttribute()
@@ -260,6 +288,7 @@ class DocumentoFiscal extends Model
         $nomes = [
             self::TIPO_FATURA => 'Fatura',
             self::TIPO_FATURA_RECIBO => 'Fatura-Recibo',
+            self::TIPO_FATURA_PROFORMA => 'Fatura Proforma',
             self::TIPO_FATURA_ADIANTAMENTO => 'Fatura de Adiantamento',
             self::TIPO_NOTA_CREDITO => 'Nota de Crédito',
             self::TIPO_NOTA_DEBITO => 'Nota de Débito',
@@ -270,9 +299,30 @@ class DocumentoFiscal extends Model
         return $nomes[$this->tipo_documento] ?? 'Desconhecido';
     }
 
+    public function getNomeClienteAttribute(): ?string
+    {
+        if ($this->cliente) {
+            return $this->cliente->nome;
+        }
+        return $this->cliente_nome;
+    }
+
+    public function getNifClienteAttribute(): ?string
+    {
+        if ($this->cliente) {
+            return $this->cliente->nif;
+        }
+        return $this->cliente_nif;
+    }
+
+    public function getTemClienteCadastradoAttribute(): bool
+    {
+        return !is_null($this->cliente_id);
+    }
+
     public function getValorPendenteAttribute()
     {
-        if (!in_array($this->tipo_documento, [self::TIPO_FATURA, self::TIPO_FATURA_RECIBO])) {
+        if (!in_array($this->tipo_documento, [self::TIPO_FATURA, self::TIPO_FATURA_ADIANTAMENTO])) {
             return 0;
         }
 
@@ -280,7 +330,29 @@ class DocumentoFiscal extends Model
             ->where('estado', '!=', self::ESTADO_CANCELADO)
             ->sum('total_liquido');
 
+        if ($this->tipo_documento === self::TIPO_FATURA) {
+            $totalAdiantamentos = DB::table('adiantamento_fatura')
+                ->where('fatura_id', $this->id)
+                ->sum('valor_utilizado');
+            return max(0, $this->total_liquido - $totalPago - $totalAdiantamentos);
+        }
+
         return max(0, $this->total_liquido - $totalPago);
+    }
+
+    public function getValorPagoAttribute()
+    {
+        if (in_array($this->tipo_documento, [self::TIPO_FATURA_RECIBO, self::TIPO_RECIBO])) {
+            return $this->total_liquido;
+        }
+
+        if ($this->tipo_documento === self::TIPO_FATURA_PROFORMA) {
+            return 0;
+        }
+
+        return $this->recibos()
+            ->where('estado', '!=', self::ESTADO_CANCELADO)
+            ->sum('total_liquido');
     }
 
     public function getEstaPagaAttribute()
@@ -305,13 +377,13 @@ class DocumentoFiscal extends Model
 
     public function getPodeSerPagaAttribute()
     {
-        return $this->tipo_documento === self::TIPO_FATURA
+        return in_array($this->tipo_documento, [self::TIPO_FATURA, self::TIPO_FATURA_ADIANTAMENTO])
             && in_array($this->estado, [self::ESTADO_EMITIDO, self::ESTADO_PARCIALMENTE_PAGA]);
     }
 
     public function getPodeGerarReciboAttribute()
     {
-        return $this->tipo_documento === self::TIPO_FATURA
+        return in_array($this->tipo_documento, [self::TIPO_FATURA, self::TIPO_FATURA_ADIANTAMENTO])
             && in_array($this->estado, [self::ESTADO_EMITIDO, self::ESTADO_PARCIALMENTE_PAGA]);
     }
 
@@ -331,6 +403,38 @@ class DocumentoFiscal extends Model
     {
         return in_array($this->tipo_documento, [self::TIPO_FATURA, self::TIPO_FATURA_RECIBO])
             && in_array($this->estado, [self::ESTADO_EMITIDO, self::ESTADO_PARCIALMENTE_PAGA]);
+    }
+
+    public function getEhVendaAttribute(): bool
+    {
+        return in_array($this->tipo_documento, [self::TIPO_FATURA, self::TIPO_FATURA_RECIBO, self::TIPO_RECIBO]);
+    }
+
+    public function getCorEstadoAttribute(): string
+    {
+        return match($this->estado) {
+            self::ESTADO_EMITIDO => 'blue',
+            self::ESTADO_PAGA => 'green',
+            self::ESTADO_PARCIALMENTE_PAGA => 'yellow',
+            self::ESTADO_CANCELADO => 'red',
+            self::ESTADO_EXPIRADO => 'gray',
+            default => 'gray',
+        };
+    }
+
+    public function getCorTipoAttribute(): string
+    {
+        return match($this->tipo_documento) {
+            self::TIPO_FATURA => 'blue',
+            self::TIPO_FATURA_RECIBO => 'green',
+            self::TIPO_FATURA_PROFORMA => 'orange',
+            self::TIPO_FATURA_ADIANTAMENTO => 'purple',
+            self::TIPO_NOTA_CREDITO => 'red',
+            self::TIPO_NOTA_DEBITO => 'amber',
+            self::TIPO_RECIBO => 'teal',
+            self::TIPO_FATURA_RETIFICACAO => 'pink',
+            default => 'gray',
+        };
     }
 
     /* ================= MÉTODOS ================= */
@@ -357,6 +461,14 @@ class DocumentoFiscal extends Model
     public function ehFaturaRecibo()
     {
         return $this->tipo_documento === self::TIPO_FATURA_RECIBO;
+    }
+
+    /**
+     * Verificar se é fatura proforma (FP)
+     */
+    public function ehFaturaProforma()
+    {
+        return $this->tipo_documento === self::TIPO_FATURA_PROFORMA;
     }
 
     /**
@@ -392,11 +504,24 @@ class DocumentoFiscal extends Model
     }
 
     /**
+     * Verificar se é fatura de retificação
+     */
+    public function ehFaturaRetificacao()
+    {
+        return $this->tipo_documento === self::TIPO_FATURA_RETIFICACAO;
+    }
+
+    /**
      * Verificar se afeta stock
      */
     public function afetaStock()
     {
-        return in_array($this->tipo_documento, [self::TIPO_FATURA, self::TIPO_FATURA_RECIBO, self::TIPO_NOTA_CREDITO]);
+        return in_array($this->tipo_documento, [
+            self::TIPO_FATURA,
+            self::TIPO_FATURA_RECIBO,
+            self::TIPO_FATURA_PROFORMA,
+            self::TIPO_NOTA_CREDITO
+        ]);
     }
 
     /**
@@ -404,7 +529,11 @@ class DocumentoFiscal extends Model
      */
     public function ehVenda()
     {
-        return in_array($this->tipo_documento, [self::TIPO_FATURA, self::TIPO_FATURA_RECIBO]);
+        return in_array($this->tipo_documento, [
+            self::TIPO_FATURA,
+            self::TIPO_FATURA_RECIBO,
+            self::TIPO_RECIBO
+        ]);
     }
 
     /**
@@ -474,5 +603,37 @@ class DocumentoFiscal extends Model
         }
 
         return $this->data_vencimento && $this->data_vencimento->isPast();
+    }
+
+    /**
+     * Converter FP para FT (gerar nova fatura)
+     */
+    public function converterParaFatura(array $dadosPagamento = null)
+    {
+        if (!$this->ehFaturaProforma()) {
+            throw new \Exception("Apenas Faturas Proforma (FP) podem ser convertidas.");
+        }
+
+        if ($this->estado === self::ESTADO_CANCELADO) {
+            throw new \Exception("Não é possível converter uma proforma cancelada.");
+        }
+
+        // Retorna dados para criar a FT
+        return [
+            'cliente_id' => $this->cliente_id,
+            'cliente_nome' => $this->cliente_nome,
+            'cliente_nif' => $this->cliente_nif,
+            'itens' => $this->itens->map(function ($item) {
+                return [
+                    'produto_id' => $item->produto_id,
+                    'descricao' => $item->descricao,
+                    'quantidade' => $item->quantidade,
+                    'preco_venda' => $item->preco_unitario,
+                    'desconto' => $item->desconto,
+                    'taxa_iva' => $item->taxa_iva,
+                ];
+            })->toArray(),
+            'dados_pagamento' => $dadosPagamento,
+        ];
     }
 }
