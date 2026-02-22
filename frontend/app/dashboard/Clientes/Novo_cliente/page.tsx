@@ -5,7 +5,7 @@ import MainEmpresa from "../../../components/MainEmpresa";
 import {
   clienteService,
   Cliente,
-  TipoCliente,
+
   CriarClienteInput,
   AtualizarClienteInput,
   formatarNIF,
@@ -192,8 +192,8 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
         <div className="grid grid-cols-2 gap-4">
           <label
             className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${formData.tipo === "consumidor_final"
-                ? "border-[#123859] bg-[#123859]/5"
-                : "border-gray-200 hover:border-gray-300"
+              ? "border-[#123859] bg-[#123859]/5"
+              : "border-gray-200 hover:border-gray-300"
               }`}
           >
             <input
@@ -215,8 +215,8 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
 
           <label
             className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${formData.tipo === "empresa"
-                ? "border-[#F9941F] bg-[#F9941F]/5"
-                : "border-gray-200 hover:border-gray-300"
+              ? "border-[#F9941F] bg-[#F9941F]/5"
+              : "border-gray-200 hover:border-gray-300"
               }`}
           >
             <input
@@ -499,11 +499,24 @@ export default function ClientesPage() {
             </p>
           </div>
           <div className="flex gap-2">
+            {/* Busca */}
+            <div className=" p-1 rounded-xl border border-gray-100 w-50mx-auto">
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  placeholder="Buscar por nome, NIF, email ou telefone..."
+                  className="w-full pl-12 pr-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#123859] outline-none transition-all"
+                />
+              </div>
+            </div>
             <button
               onClick={() => setMostrarDeletados(!mostrarDeletados)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors font-medium ${mostrarDeletados
-                  ? "bg-red-100 text-red-700 hover:bg-red-200"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                ? "bg-red-100 text-red-700 hover:bg-red-200"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               title={mostrarDeletados ? "Ver apenas ativos" : "Ver todos incluindo deletados"}
             >
@@ -520,7 +533,7 @@ export default function ClientesPage() {
             {!mostrarDeletados && (
               <button
                 onClick={abrirCriar}
-                className="flex items-center gap-2 px-4 py-2 bg-[#F9941F] text-white rounded-lg hover:bg-[#e08516] transition-colors font-medium"
+                className="flex items-center gap-2 px-2 py-1 bg-[#F9941F] text-white rounded-lg hover:bg-[#e08516] transition-colors font-medium"
               >
                 <Plus className="w-5 h-5" />
                 Novo Cliente
@@ -569,20 +582,6 @@ export default function ClientesPage() {
                 <p className="text-sm text-gray-500">Consumidores Finais</p>
               </div>
             </div>
-          </div>
-        </div>
-
-        {/* Busca */}
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar por nome, NIF, email ou telefone..."
-              className="w-full pl-12 pr-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#123859] outline-none transition-all"
-            />
           </div>
         </div>
 
@@ -734,6 +733,7 @@ export default function ClientesPage() {
         </div>
       </div>
 
+
       {/* Modal de Formulário (Criar/Editar) */}
       <Modal
         isOpen={modalFormAberto}
@@ -857,6 +857,6 @@ export default function ClientesPage() {
         message={`Tem certeza que deseja excluir o cliente "${clienteSelecionado?.nome}"? Esta ação não pode ser desfeita.`}
         loading={loadingAcao}
       />
-    </MainEmpresa>
+    </MainEmpresa >
   );
 }

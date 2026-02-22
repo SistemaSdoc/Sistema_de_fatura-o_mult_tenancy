@@ -172,6 +172,8 @@ export default function MainEmpresa({
             icon: FileText,
             path: "/dashboard/Faturas",
             links: [
+                {label: "Nova fatura", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
+                { label: "Nova Fatura Proforma", path: "/dashboard/Faturas/Faturas_Proforma", icon: FileText },
                 { label: "Faturas", path: "/dashboard/Faturas/Faturas", icon: FileText },
                 { label: "Relatório das faturas", path: "/dashboard/Faturas/relatorios", icon: BarChart2 },
             ],

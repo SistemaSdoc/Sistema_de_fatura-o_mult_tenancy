@@ -308,7 +308,6 @@ export default function FaturasPage() {
             </h1>
             <p className="text-xs sm:text-sm text-gray-500">
               Total: {loading ? "..." : estatisticas.total} documentos emitidos
-              {estatisticas.totalVendas > 0 && ` (${estatisticas.totalVendas} vendas)`}
             </p>
           </div>
 
@@ -346,28 +345,6 @@ export default function FaturasPage() {
           </div>
         )}
 
-        {/* Estatísticas - Skeleton ou Conteúdo */}
-        {loading ? (
-          <StatsSkeleton />
-        ) : !error && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-8 gap-2 sm:gap-3 md:gap-4">
-            <StatCard title="Total" value={estatisticas.total} color="text-[#F9941F]" />
-            <StatCard title="Faturas (FT)" value={estatisticas.FT} color="text-[#123859]" />
-            <StatCard title="Faturas-Recibo (FR)" value={estatisticas.FR} color="text-purple-600" />
-            <StatCard title="Proformas (FP)" value={estatisticas.FP} color="text-orange-600" />
-            <StatCard title="Recibos (RC)" value={estatisticas.RC} color="text-green-600" />
-            <StatCard title="Notas Crédito" value={estatisticas.NC} color="text-yellow-600" />
-            <StatCard title="Adiantamentos" value={estatisticas.FA} color="text-teal-600" />
-            <StatCard
-              title="Total Geral"
-              value={formatKz(estatisticas.totalGeral)}
-              color="text-[#F9941F]"
-              isCurrency
-              className="col-span-2 sm:col-span-1"
-            />
-          </div>
-        )}
-
         {/* Filtros - Scroll Horizontal em Mobile */}
         {!loading && !error && (
           <div className="bg-white p-3 sm:p-4 rounded-xl shadow border border-gray-100">
@@ -380,7 +357,6 @@ export default function FaturasPage() {
                 { key: "RC" as TipoFiltro, label: "Recibos", count: estatisticas.RC },
                 { key: "NC" as TipoFiltro, label: "Notas Crédito", count: estatisticas.NC },
                 { key: "ND" as TipoFiltro, label: "Notas Débito", count: estatisticas.ND },
-                { key: "FA" as TipoFiltro, label: "Adiantamentos", count: estatisticas.FA },
               ].map(({ key, label, count }) => (
                 <button
                   key={key}
