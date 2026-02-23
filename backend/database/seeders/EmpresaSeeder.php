@@ -30,6 +30,7 @@ class EmpresaSeeder extends Seeder
 
         /* ================= USUÁRIOS ================= */
         $users = [
+            ['name' => 'SDOCA', 'email' => 'sdoca@gmail.com', 'role' => 'admin'],
             ['name' => 'Diniz', 'email' => 'dinizcabenda@gmail.com', 'role' => 'admin'],
             ['name' => 'Alice', 'email' => 'alicerocha507@gmail.com', 'role' => 'operador'],
             ['name' => 'Stefania', 'email' => 'estefania@gmail.com', 'role' => 'contablista'],
