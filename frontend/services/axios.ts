@@ -9,7 +9,7 @@ export interface ApiErrorResponse {
 }
 
 const api = axios.create({
-  baseURL: "http://192.168.0.146:8000", // URL do backend Laravel
+  baseURL: "http://192.168.1.199:8000", // URL do backend Laravel
   withCredentials: true, // ESSENCIAL: envia cookies de sessão do Sanctum
   headers: {
     Accept: "application/json",
@@ -28,7 +28,7 @@ api.interceptors.request.use(
     const method = config.method?.toLowerCase();
 
     // Sanctum SPA: CSRF token apenas para métodos que modificam estado
-    if (xsrfToken && ["post", "put", "patch", "delete"].includes(method)) {
+    if (xsrfToken && method && ["post", "put", "patch", "delete"].includes(method)) {
       config.headers["X-XSRF-TOKEN"] = xsrfToken;
     }
 

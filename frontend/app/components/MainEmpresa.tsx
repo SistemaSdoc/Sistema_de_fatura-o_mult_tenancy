@@ -1,6 +1,6 @@
 "use client";
 
-import React, { ReactNode, useState, useEffect } from "react";
+import React, { ReactNode, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { LucideIcon } from "lucide-react";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation"; // Adicionado useRouter
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { estoqueService, Produto } from "@/services/estoque";
 
@@ -39,7 +39,6 @@ interface MenuItem {
     icon: LucideIcon;
     path: string;
     links: DropdownLink[];
-    // Novo campo para indicar se é apenas um grupo (não tem link próprio)
     isGroup?: boolean;
 }
 
@@ -49,6 +48,16 @@ interface MainEmpresaProps {
     companyName?: string;
 }
 
+/* ===================== CONSTANTES ===================== */
+const COLORS = {
+    primary: '#123859',
+    secondary: '#F9941F',
+    background: '#F2F2F2',
+    danger: '#dc3545',
+    success: '#28a745',
+    warning: '#ffc107',
+};
+
 /* ===================== COMPONENT ===================== */
 export default function MainEmpresa({
     children,
@@ -56,22 +65,29 @@ export default function MainEmpresa({
     companyName = "Minha Empresa",
 }: MainEmpresaProps) {
     const pathname = usePathname();
-    const router = useRouter(); // Para navegação programática
-    const { user, loading: userLoading, isAdmin } = useAuth();
+    const router = useRouter();
+    const { user, loading: userLoading, isAdmin, logout: authLogout } = useAuth();
 
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [dropdownOpen, setDropdownOpen] = useState<Record<string, boolean>>({});
     const [hoveredItem, setHoveredItem] = useState<string | null>(null);
     const [isLoaded, setIsLoaded] = useState(false);
 
+    // Estados para logout
+    const [logoutLoading, setLogoutLoading] = useState(false);
+    const [logoutModalOpen, setLogoutModalOpen] = useState(false);
+    const [logoutError, setLogoutError] = useState<string | null>(null);
+
     // Estados para notificações de estoque
     const [notificacoesAberto, setNotificacoesAberto] = useState(false);
     const [produtosEstoqueBaixo, setProdutosEstoqueBaixo] = useState<Produto[]>([]);
     const [loadingNotificacoes, setLoadingNotificacoes] = useState(false);
+    const [ultimaAtualizacao, setUltimaAtualizacao] = useState<Date | null>(null);
 
     // Dados do usuário logado
     const userName = user?.name || "Usuário";
     const userRole = user?.role || "operador";
+    const userEmail = user?.email || "";
     const userInitial = userName.charAt(0).toUpperCase();
 
     // Animação de entrada inicial
@@ -80,19 +96,12 @@ export default function MainEmpresa({
     }, []);
 
     // Buscar produtos com estoque baixo
-    useEffect(() => {
-        if (user) {
-            buscarProdutosEstoqueBaixo();
-            const interval = setInterval(buscarProdutosEstoqueBaixo, 300000);
-            return () => clearInterval(interval);
-        }
-    }, [user]);
-
-    const buscarProdutosEstoqueBaixo = async () => {
+    const buscarProdutosEstoqueBaixo = useCallback(async () => {
         setLoadingNotificacoes(true);
         try {
-            const produtos = await estoqueService.listarProdutosEstoque({
-                estoque_baixo: true
+            const produtos = await estoqueService.listarProdutos({
+                estoque_baixo: true,
+                status: 'ativo'
             });
 
             const apenasEstoqueBaixo = produtos.filter(p => {
@@ -101,13 +110,22 @@ export default function MainEmpresa({
             });
 
             setProdutosEstoqueBaixo(apenasEstoqueBaixo);
+            setUltimaAtualizacao(new Date());
         } catch (error) {
             console.error("Erro ao buscar produtos com estoque baixo:", error);
             setProdutosEstoqueBaixo([]);
         } finally {
             setLoadingNotificacoes(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        if (user) {
+            buscarProdutosEstoqueBaixo();
+            const interval = setInterval(buscarProdutosEstoqueBaixo, 300000); // 5 minutos
+            return () => clearInterval(interval);
+        }
+    }, [user, buscarProdutosEstoqueBaixo]);
 
     const toggleSidebar = () => {
         setSidebarOpen(!sidebarOpen);
@@ -116,10 +134,9 @@ export default function MainEmpresa({
         }
     };
 
-    // FUNÇÃO MELHORADA: Toggle do dropdown
     const toggleDropdown = (label: string, e?: React.MouseEvent) => {
-        e?.preventDefault(); // Previne navegação se for um evento de click
-        e?.stopPropagation(); // Evita propagação
+        e?.preventDefault();
+        e?.stopPropagation();
 
         setDropdownOpen((prev) => ({
             ...prev,
@@ -127,15 +144,11 @@ export default function MainEmpresa({
         }));
     };
 
-    // NOVA FUNÇÃO: Handler para clique no item principal
     const handleMainItemClick = (item: MenuItem, e: React.MouseEvent) => {
         if (item.links.length > 0) {
-            // Se tem sublinks, apenas toggle do dropdown
             e.preventDefault();
             toggleDropdown(item.label);
         } else {
-            // Se não tem sublinks, navega normalmente (Link já cuida disso)
-            // Mas garantimos que dropdown feche se estiver aberto
             setDropdownOpen(prev => ({ ...prev, [item.label]: false }));
         }
     };
@@ -146,6 +159,49 @@ export default function MainEmpresa({
             buscarProdutosEstoqueBaixo();
         }
     };
+
+    /* ==================== FUNÇÕES DE LOGOUT ==================== */
+
+    const abrirModalLogout = () => {
+        setLogoutError(null);
+        setLogoutModalOpen(true);
+    };
+
+    const fecharModalLogout = () => {
+        setLogoutModalOpen(false);
+        setLogoutError(null);
+    };
+
+    const handleLogout = async () => {
+        try {
+            setLogoutLoading(true);
+            setLogoutError(null);
+
+            // Usar o método de logout do hook useAuth (que agora usa simpleLogout)
+            const result = await authLogout();
+
+            if (result.success) {
+                // Redirecionar para página de login
+                router.push('/login');
+            } else {
+                setLogoutError(result.message);
+                setTimeout(() => {
+                    router.push('/login');
+                }, 2000);
+            }
+        } catch (error) {
+            console.error('Erro inesperado no logout:', error);
+            setLogoutError('Erro inesperado. Redirecionando...');
+            setTimeout(() => {
+                router.push('/login');
+            }, 2000);
+        } finally {
+            setLogoutLoading(false);
+            setLogoutModalOpen(false);
+        }
+    };
+
+    /* ==================== FUNÇÕES DE NAVEGAÇÃO ==================== */
 
     const isActive = (path: string) => pathname === path;
 
@@ -160,19 +216,19 @@ export default function MainEmpresa({
         {
             label: "Vendas",
             icon: ShoppingCart,
-            path: "/dashboard/Vendas", // Path real para navegação direta
+            path: "/dashboard/Vendas",
             links: [
                 { label: "Nova venda", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart },
                 { label: "Relatórios de vendas", path: "/dashboard/Vendas/relatorios", icon: BarChart2 },
             ],
-            isGroup: true, // Marca como grupo (não navega diretamente)
+            isGroup: true,
         },
         {
             label: "Faturas",
             icon: FileText,
             path: "/dashboard/Faturas",
             links: [
-                {label: "Nova fatura", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
+                { label: "Nova fatura", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
                 { label: "Nova Fatura Proforma", path: "/dashboard/Faturas/Faturas_Proforma", icon: FileText },
                 { label: "Faturas", path: "/dashboard/Faturas/Faturas", icon: FileText },
                 { label: "Relatório das faturas", path: "/dashboard/Faturas/relatorios", icon: BarChart2 },
@@ -225,7 +281,7 @@ export default function MainEmpresa({
         }] : []),
     ];
 
-    // Variantes de animação (mantidas iguais)
+    // Variantes de animação
     const sidebarVariants = {
         open: { width: 260 },
         closed: { width: 80 },
@@ -275,6 +331,32 @@ export default function MainEmpresa({
         },
     };
 
+    const modalVariants = {
+        hidden: {
+            opacity: 0,
+            scale: 0.9,
+            y: 20
+        },
+        visible: {
+            opacity: 1,
+            scale: 1,
+            y: 0,
+            transition: {
+                type: "spring",
+                stiffness: 400,
+                damping: 30
+            }
+        },
+        exit: {
+            opacity: 0,
+            scale: 0.9,
+            y: 20,
+            transition: {
+                duration: 0.2
+            }
+        }
+    };
+
     const notificacaoVariants = {
         hidden: {
             opacity: 0,
@@ -300,14 +382,14 @@ export default function MainEmpresa({
 
     if (userLoading) {
         return (
-            <div className="flex h-screen items-center justify-center bg-[#F2F2F2]">
-                <Loader2 className="h-8 w-8 animate-spin text-[#123859]" />
+            <div className="flex h-screen items-center justify-center" style={{ backgroundColor: COLORS.background }}>
+                <Loader2 className="h-8 w-8 animate-spin" style={{ color: COLORS.primary }} />
             </div>
         );
     }
 
     return (
-        <div className="flex h-screen bg-[#F2F2F2] overflow-hidden">
+        <div className="flex h-screen" style={{ backgroundColor: COLORS.background, overflow: 'hidden' }}>
             {/* SIDEBAR */}
             <motion.aside
                 initial={false}
@@ -321,7 +403,8 @@ export default function MainEmpresa({
                     onClick={toggleSidebar}
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.95 }}
-                    className="absolute -right-3 top-8 bg-[#123859] text-white p-2 rounded-full shadow-lg hover:bg-[#F9941F] transition-colors z-30"
+                    className="absolute -right-3 top-8 text-white p-2 rounded-full shadow-lg hover:opacity-90 transition-colors z-30"
+                    style={{ backgroundColor: COLORS.primary }}
                 >
                     <motion.div
                         animate={{ rotate: sidebarOpen ? 0 : 180 }}
@@ -341,7 +424,8 @@ export default function MainEmpresa({
                     {companyLogo ? (
                         <Image src={companyLogo} alt="Logo" width={32} height={32} className="rounded-lg" />
                     ) : (
-                        <div className="w-8 h-8 bg-[#123859] text-white rounded-lg flex items-center justify-center font-bold shadow-md">
+                        <div className="w-8 h-8 text-white rounded-lg flex items-center justify-center font-bold shadow-md"
+                            style={{ backgroundColor: COLORS.primary }}>
                             {companyName.charAt(0)}
                         </div>
                     )}
@@ -352,7 +436,8 @@ export default function MainEmpresa({
                                 initial={{ opacity: 0, x: -10 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: -10 }}
-                                className="font-semibold text-[#123859] text-sm whitespace-nowrap"
+                                className="font-semibold text-sm whitespace-nowrap"
+                                style={{ color: COLORS.primary }}
                             >
                                 {companyName}
                             </motion.span>
@@ -379,26 +464,25 @@ export default function MainEmpresa({
                                     onMouseEnter={() => setHoveredItem(item.label)}
                                     onMouseLeave={() => setHoveredItem(null)}
                                 >
-                                    {/* Item Principal - Agora com onClick handler */}
+                                    {/* Item Principal */}
                                     <motion.div
                                         whileHover={{ scale: 1.02, x: 4 }}
                                         whileTap={{ scale: 0.98 }}
-                                        className={`group flex items-center justify-between px-3 py-3 rounded-xl cursor-pointer transition-all duration-300 ${active
-                                            ? "bg-[#F9941F] text-white shadow-md"
-                                            : "hover:bg-[#F9941F]/10"
-                                            }`}
+                                        className={`group flex items-center justify-between px-3 py-3 rounded-xl cursor-pointer transition-all duration-300 ${
+                                            active ? "text-white shadow-md" : "hover:bg-opacity-10"
+                                        }`}
+                                        style={active ? { backgroundColor: COLORS.secondary } : {}}
                                     >
                                         {/* Link ou div clicável baseado em hasLinks */}
                                         {hasLinks ? (
-                                            // Se tem sublinks, usa div com onClick (não navega)
                                             <div
                                                 className="flex items-center gap-3 flex-1 min-w-0"
                                                 onClick={(e) => handleMainItemClick(item, e)}
                                             >
                                                 <item.icon
                                                     size={20}
-                                                    className={`transition-colors duration-300 ${active ? "text-white" : "text-[#123859] group-hover:text-[#F9941F]"
-                                                        }`}
+                                                    className={`transition-colors duration-300 ${active ? "text-white" : ""}`}
+                                                    style={!active ? { color: COLORS.primary } : {}}
                                                 />
 
                                                 <AnimatePresence>
@@ -407,8 +491,10 @@ export default function MainEmpresa({
                                                             initial={{ opacity: 0, width: 0 }}
                                                             animate={{ opacity: 1, width: "auto" }}
                                                             exit={{ opacity: 0, width: 0 }}
-                                                            className={`text-sm font-medium whitespace-nowrap overflow-hidden ${active ? "text-white" : "text-[#123859]"
-                                                                }`}
+                                                            className={`text-sm font-medium whitespace-nowrap overflow-hidden ${
+                                                                active ? "text-white" : ""
+                                                            }`}
+                                                            style={!active ? { color: COLORS.primary } : {}}
                                                         >
                                                             {item.label}
                                                         </motion.span>
@@ -416,7 +502,6 @@ export default function MainEmpresa({
                                                 </AnimatePresence>
                                             </div>
                                         ) : (
-                                            // Se não tem sublinks, usa Link normal
                                             <Link
                                                 href={item.path}
                                                 className="flex items-center gap-3 flex-1 min-w-0"
@@ -424,8 +509,8 @@ export default function MainEmpresa({
                                             >
                                                 <item.icon
                                                     size={20}
-                                                    className={`transition-colors duration-300 ${active ? "text-white" : "text-[#123859] group-hover:text-[#F9941F]"
-                                                        }`}
+                                                    className={`transition-colors duration-300 ${active ? "text-white" : ""}`}
+                                                    style={!active ? { color: COLORS.primary } : {}}
                                                 />
 
                                                 <AnimatePresence>
@@ -434,8 +519,10 @@ export default function MainEmpresa({
                                                             initial={{ opacity: 0, width: 0 }}
                                                             animate={{ opacity: 1, width: "auto" }}
                                                             exit={{ opacity: 0, width: 0 }}
-                                                            className={`text-sm font-medium whitespace-nowrap overflow-hidden ${active ? "text-white" : "text-[#123859]"
-                                                                }`}
+                                                            className={`text-sm font-medium whitespace-nowrap overflow-hidden ${
+                                                                active ? "text-white" : ""
+                                                            }`}
+                                                            style={!active ? { color: COLORS.primary } : {}}
                                                         >
                                                             {item.label}
                                                         </motion.span>
@@ -447,23 +534,26 @@ export default function MainEmpresa({
                                         {active && (
                                             <motion.div
                                                 layoutId="activeIndicator"
-                                                className="w-1.5 h-1.5 rounded-full bg-[#F9941F]"
+                                                className="w-1.5 h-1.5 rounded-full"
+                                                style={{ backgroundColor: COLORS.secondary }}
                                             />
                                         )}
 
-                                        {/* Botão de chevron - agora é apenas indicador visual quando sidebar está fechada */}
+                                        {/* Botão de chevron */}
                                         {hasLinks && sidebarOpen && (
                                             <motion.button
                                                 onClick={(e) => {
-                                                    e.stopPropagation(); // Evita double toggle
+                                                    e.stopPropagation();
                                                     toggleDropdown(item.label);
                                                 }}
                                                 whileHover={{ scale: 1.2 }}
                                                 whileTap={{ scale: 0.9 }}
                                                 animate={{ rotate: isOpen ? 180 : 0 }}
                                                 transition={{ duration: 0.3 }}
-                                                className={`p-1 rounded-full hover:bg-white/20 ml-1 ${active ? "text-white" : "text-[#123859]"
-                                                    }`}
+                                                className={`p-1 rounded-full hover:bg-white/20 ml-1 ${
+                                                    active ? "text-white" : ""
+                                                }`}
+                                                style={!active ? { color: COLORS.primary } : {}}
                                             >
                                                 <ChevronDown size={16} />
                                             </motion.button>
@@ -490,12 +580,19 @@ export default function MainEmpresa({
                                                         >
                                                             <Link href={link.path}>
                                                                 <motion.div
-                                                                    whileHover={{ x: 8, backgroundColor: "rgba(249, 148, 31, 0.1)" }}
+                                                                    whileHover={{ x: 8 }}
                                                                     whileTap={{ scale: 0.98 }}
-                                                                    className={`group flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 ${linkActive
-                                                                        ? "bg-[#123859]/10 border-l-2 border-[#F9941F]"
-                                                                        : "hover:bg-gray-50"
-                                                                        }`}
+                                                                    className={`group flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 ${
+                                                                        linkActive ? "border-l-2" : "hover:bg-gray-50"
+                                                                    }`}
+                                                                    style={
+                                                                        linkActive
+                                                                            ? {
+                                                                                  backgroundColor: `${COLORS.primary}10`,
+                                                                                  borderColor: COLORS.secondary,
+                                                                              }
+                                                                            : {}
+                                                                    }
                                                                 >
                                                                     {link.icon && (
                                                                         <motion.div
@@ -505,22 +602,29 @@ export default function MainEmpresa({
                                                                         >
                                                                             <link.icon
                                                                                 size={16}
-                                                                                className={`transition-colors ${linkActive ? "text-[#F9941F]" : "text-[#123859]/60 group-hover:text-[#F9941F]"
-                                                                                    }`}
+                                                                                className="transition-colors"
+                                                                                style={
+                                                                                    linkActive
+                                                                                        ? { color: COLORS.secondary }
+                                                                                        : { color: `${COLORS.primary}60` }
+                                                                                }
                                                                             />
                                                                         </motion.div>
                                                                     )}
-                                                                    <span className={`text-sm transition-colors ${linkActive
-                                                                        ? "text-[#123859] font-semibold"
-                                                                        : "text-[#123859]/70 group-hover:text-[#123859]"
-                                                                        }`}>
+                                                                    <span
+                                                                        className={`text-sm transition-colors ${
+                                                                            linkActive ? "font-semibold" : "opacity-70 group-hover:opacity-100"
+                                                                        }`}
+                                                                        style={linkActive ? { color: COLORS.primary } : { color: COLORS.primary }}
+                                                                    >
                                                                         {link.label}
                                                                     </span>
 
                                                                     {linkActive && (
                                                                         <motion.div
                                                                             layoutId="subActive"
-                                                                            className="ml-auto w-1.5 h-1.5 rounded-full bg-[#F9941F]"
+                                                                            className="ml-auto w-1.5 h-1.5 rounded-full"
+                                                                            style={{ backgroundColor: COLORS.secondary }}
                                                                         />
                                                                     )}
                                                                 </motion.div>
@@ -544,46 +648,41 @@ export default function MainEmpresa({
                     transition={{ delay: 0.5 }}
                     className="p-3 border-t border-gray-100"
                 >
-                    <Link href="/logout">
-                        <motion.div
-                            whileHover={{ scale: 1.02, backgroundColor: "rgba(239, 68, 68, 0.1)" }}
-                            whileTap={{ scale: 0.98 }}
-                            className="group flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-300 cursor-pointer"
-                        >
-                            <motion.div
-                                whileHover={{ rotate: 360 }}
-                                transition={{ duration: 0.5 }}
-                            >
-                                <LogOut
-                                    size={20}
-                                    className="text-red-500 group-hover:text-[#F9941F] transition-colors"
-                                />
-                            </motion.div>
-
-                            <AnimatePresence>
-                                {sidebarOpen && (
-                                    <motion.span
-                                        initial={{ opacity: 0, x: -10 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        exit={{ opacity: 0, x: -10 }}
-                                        className="text-sm font-medium text-[#123859] group-hover:text-[#F9941F] whitespace-nowrap"
-                                    >
-                                        Sair do Sistema
-                                    </motion.span>
-                                )}
-                            </AnimatePresence>
-
-                            {!sidebarOpen && (
-                                <motion.div
-                                    initial={{ opacity: 0, x: 10, scale: 0.8 }}
-                                    whileHover={{ opacity: 1, x: 0, scale: 1 }}
-                                    className="absolute left-full ml-2 px-3 py-1 bg-[#F9941F] text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none"
-                                >
-                                    Sair
-                                </motion.div>
-                            )}
+                    <motion.div
+                        whileHover={{ scale: 1.02, backgroundColor: "rgba(239, 68, 68, 0.1)" }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={abrirModalLogout}
+                        className="group flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-300 cursor-pointer"
+                    >
+                        <motion.div whileHover={{ rotate: 360 }} transition={{ duration: 0.5 }}>
+                            <LogOut size={20} className="text-red-500 group-hover:opacity-80 transition-colors" />
                         </motion.div>
-                    </Link>
+
+                        <AnimatePresence>
+                            {sidebarOpen && (
+                                <motion.span
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: -10 }}
+                                    className="text-sm font-medium whitespace-nowrap"
+                                    style={{ color: COLORS.primary }}
+                                >
+                                    Sair do Sistema
+                                </motion.span>
+                            )}
+                        </AnimatePresence>
+
+                        {!sidebarOpen && (
+                            <motion.div
+                                initial={{ opacity: 0, x: 10, scale: 0.8 }}
+                                whileHover={{ opacity: 1, x: 0, scale: 1 }}
+                                className="absolute left-full ml-2 px-3 py-1 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none"
+                                style={{ backgroundColor: COLORS.secondary }}
+                            >
+                                Sair
+                            </motion.div>
+                        )}
+                    </motion.div>
                 </motion.div>
             </motion.aside>
 
@@ -601,128 +700,167 @@ export default function MainEmpresa({
                             key={pathname}
                             initial={{ opacity: 0, x: -20 }}
                             animate={{ opacity: 1, x: 0 }}
-                            className="text-lg font-bold text-[#123859]"
+                            className="text-lg font-bold"
+                            style={{ color: COLORS.primary }}
                         >
                             {menuItems.find(item => isParentActive(item))?.label || "Dashboard"}
                         </motion.h1>
                     </div>
 
                     <div className="flex items-center gap-4">
-                        {/* Notificações */}
-                        {produtosEstoqueBaixo.length > 0 && (
-                            <div className="relative">
-                                <motion.button
-                                    onClick={toggleNotificacoes}
-                                    whileHover={{ scale: 1.1 }}
-                                    whileTap={{ scale: 0.95 }}
-                                    className="relative p-2 rounded-full hover:bg-gray-100 transition-colors"
-                                >
-                                    <Bell size={20} className="text-[#123859]" />
+                        {/* Notificações de Estoque Baixo */}
+                        <div className="relative">
+                            <motion.button
+                                onClick={toggleNotificacoes}
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.95 }}
+                                className="relative p-2 rounded-full hover:bg-gray-100 transition-colors"
+                                aria-label="Notificações de estoque"
+                            >
+                                <Bell size={20} style={{ color: COLORS.primary }} />
+                                {produtosEstoqueBaixo.length > 0 && (
                                     <motion.span
                                         initial={{ scale: 0 }}
                                         animate={{ scale: 1 }}
-                                        className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-[#F9941F] text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1"
+                                        className="absolute -top-1 -right-1 min-w-[18px] h-[18px] text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1"
+                                        style={{ backgroundColor: COLORS.danger }}
                                     >
                                         {produtosEstoqueBaixo.length > 9 ? '9+' : produtosEstoqueBaixo.length}
                                     </motion.span>
-                                </motion.button>
+                                )}
+                            </motion.button>
 
-                                <AnimatePresence>
-                                    {notificacoesAberto && (
-                                        <motion.div
-                                            variants={notificacaoVariants}
-                                            initial="hidden"
-                                            animate="visible"
-                                            exit="exit"
-                                            className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden z-50"
+                            <AnimatePresence>
+                                {notificacoesAberto && (
+                                    <motion.div
+                                        variants={notificacaoVariants}
+                                        initial="hidden"
+                                        animate="visible"
+                                        exit="exit"
+                                        className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden z-50"
+                                    >
+                                        {/* Header */}
+                                        <div
+                                            className="px-4 py-3 flex items-center justify-between"
+                                            style={{ background: `linear-gradient(135deg, ${COLORS.primary} 0%, #1a4a7a 100%)` }}
                                         >
-                                            {/* Header */}
-                                            <div className="bg-gradient-to-r from-[#123859] to-[#1a4a73] px-4 py-3 flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <AlertTriangle size={16} className="text-white" />
-                                                    <span className="text-white font-semibold text-sm">Estoque Baixo</span>
-                                                    <span className="bg-[#F9941F] text-white text-[10px] px-2 py-0.5 rounded-full font-bold">
-                                                        {produtosEstoqueBaixo.length}
-                                                    </span>
-                                                </div>
-                                                <button
-                                                    onClick={() => setNotificacoesAberto(false)}
-                                                    className="text-white/80 hover:text-white transition-colors"
+                                            <div className="flex items-center gap-2">
+                                                <AlertTriangle size={16} className="text-white" />
+                                                <span className="text-white font-semibold text-sm">Estoque Baixo</span>
+                                                <span
+                                                    className="text-white text-[10px] px-2 py-0.5 rounded-full font-bold"
+                                                    style={{ backgroundColor: COLORS.danger }}
                                                 >
-                                                    <X size={16} />
-                                                </button>
+                                                    {produtosEstoqueBaixo.length}
+                                                </span>
                                             </div>
+                                            <button
+                                                onClick={() => setNotificacoesAberto(false)}
+                                                className="text-white/80 hover:text-white transition-colors"
+                                            >
+                                                <X size={16} />
+                                            </button>
+                                        </div>
 
-                                            {/* Lista */}
-                                            <div className="max-h-96 overflow-y-auto">
-                                                {loadingNotificacoes ? (
-                                                    <div className="p-8 flex items-center justify-center">
-                                                        <Loader2 className="h-6 w-6 animate-spin text-[#123859]" />
+                                        {/* Conteúdo */}
+                                        <div className="max-h-96 overflow-y-auto">
+                                            {loadingNotificacoes ? (
+                                                <div className="p-8 flex items-center justify-center">
+                                                    <Loader2 className="h-6 w-6 animate-spin" style={{ color: COLORS.primary }} />
+                                                </div>
+                                            ) : produtosEstoqueBaixo.length > 0 ? (
+                                                <>
+                                                    <div className="p-3 bg-orange-50 border-b border-orange-100">
+                                                        <p className="text-xs text-orange-600 text-center font-medium">
+                                                            Os seguintes produtos precisam de reposição urgente
+                                                        </p>
                                                     </div>
-                                                ) : (
-                                                    <div className="divide-y divide-gray-100">
-                                                        <div className="p-3 bg-orange-50 border-b border-orange-100">
-                                                            <p className="text-xs text-orange-600 text-center font-medium">
-                                                                Os seguintes produtos precisam de reposição
-                                                            </p>
-                                                        </div>
 
-                                                        {produtosEstoqueBaixo.map((produto, index) => (
-                                                            <motion.div
-                                                                key={produto.id}
-                                                                initial={{ opacity: 0, x: -20 }}
-                                                                animate={{ opacity: 1, x: 0 }}
-                                                                transition={{ delay: index * 0.05 }}
-                                                                className="p-3 hover:bg-gray-50 transition-colors cursor-pointer group"
-                                                            >
-                                                                <Link href="/dashboard/Produtos_servicos/Stock">
-                                                                    <div className="flex items-start gap-3">
-                                                                        <div className="w-10 h-10 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center flex-shrink-0">
-                                                                            <Package size={18} />
-                                                                        </div>
-                                                                        <div className="flex-1 min-w-0">
-                                                                            <p className="text-sm font-medium text-gray-900 truncate group-hover:text-[#123859] transition-colors">
-                                                                                {produto.nome}
-                                                                            </p>
-                                                                            <div className="flex items-center gap-2 mt-1">
-                                                                                <span className="text-xs font-bold text-red-500">
-                                                                                    {produto.estoque_atual} unidades
-                                                                                </span>
-                                                                                <span className="text-xs text-gray-400">•</span>
-                                                                                <span className="text-xs text-orange-600 font-medium">
-                                                                                    Estoque crítico
-                                                                                </span>
-                                                                            </div>
-                                                                        </div>
-                                                                        <motion.div
-                                                                            className="text-[#F9941F] opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                        >
-                                                                            <ChevronLeft size={16} className="rotate-180" />
-                                                                        </motion.div>
+                                                    {produtosEstoqueBaixo.map((produto, index) => (
+                                                        <motion.div
+                                                            key={produto.id}
+                                                            initial={{ opacity: 0, x: -20 }}
+                                                            animate={{ opacity: 1, x: 0 }}
+                                                            transition={{ delay: index * 0.05 }}
+                                                            className="p-3 hover:bg-gray-50 transition-colors cursor-pointer group"
+                                                            onClick={() => {
+                                                                setNotificacoesAberto(false);
+                                                                router.push('/dashboard/Produtos_servicos/Stock');
+                                                            }}
+                                                        >
+                                                            <div className="flex items-start gap-3">
+                                                                <div className="w-10 h-10 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center flex-shrink-0">
+                                                                    <Package size={18} />
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-sm font-medium text-gray-900 truncate group-hover:text-[#123859] transition-colors">
+                                                                        {produto.nome}
+                                                                    </p>
+                                                                    <div className="flex items-center gap-2 mt-1">
+                                                                        <span className="text-xs font-bold" style={{ color: COLORS.danger }}>
+                                                                            {produto.estoque_atual} unidades
+                                                                        </span>
+                                                                        <span className="text-xs text-gray-400">•</span>
+                                                                        <span className="text-xs font-medium" style={{ color: COLORS.secondary }}>
+                                                                            Mín: {produto.estoque_minimo || 5}
+                                                                        </span>
                                                                     </div>
-                                                                </Link>
-                                                            </motion.div>
-                                                        ))}
-
-                                                        <div className="p-3 bg-gray-50 border-t border-gray-100">
-                                                            <Link href="/dashboard/Produtos_servicos/Stock">
+                                                                    {produto.codigo && (
+                                                                        <p className="text-xs text-gray-400 mt-1">Cód: {produto.codigo}</p>
+                                                                    )}
+                                                                </div>
                                                                 <motion.div
-                                                                    whileHover={{ x: 4 }}
-                                                                    className="flex items-center justify-center gap-2 text-sm text-[#123859] hover:text-[#F9941F] transition-colors font-medium"
+                                                                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                    style={{ color: COLORS.secondary }}
                                                                 >
-                                                                    <span>Gerenciar estoque</span>
                                                                     <ChevronLeft size={16} className="rotate-180" />
                                                                 </motion.div>
-                                                            </Link>
+                                                            </div>
+                                                        </motion.div>
+                                                    ))}
+
+                                                    {/* Rodapé com ações */}
+                                                    <div className="p-3 bg-gray-50 border-t border-gray-100">
+                                                        <div className="flex items-center justify-between mb-2">
+                                                            <span className="text-xs text-gray-500">
+                                                                Atualizado: {ultimaAtualizacao?.toLocaleTimeString() || '...'}
+                                                            </span>
+                                                            <button
+                                                                onClick={buscarProdutosEstoqueBaixo}
+                                                                className="text-xs text-[#123859] hover:text-[#F9941F] transition-colors"
+                                                                disabled={loadingNotificacoes}
+                                                            >
+                                                                {loadingNotificacoes ? 'Atualizando...' : 'Atualizar'}
+                                                            </button>
                                                         </div>
+                                                        <Link href="/dashboard/Produtos_servicos/Stock">
+                                                            <motion.div
+                                                                whileHover={{ x: 4 }}
+                                                                className="flex items-center justify-center gap-2 text-sm font-medium transition-colors w-full py-2 rounded-lg"
+                                                                style={{ backgroundColor: COLORS.primary, color: 'white' }}
+                                                            >
+                                                                <span>Gerenciar estoque</span>
+                                                                <ChevronLeft size={16} className="rotate-180" />
+                                                            </motion.div>
+                                                        </Link>
                                                     </div>
-                                                )}
-                                            </div>
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </div>
-                        )}
+                                                </>
+                                            ) : (
+                                                <div className="p-8 text-center">
+                                                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-100 flex items-center justify-center">
+                                                        <Package size={24} className="text-green-600" />
+                                                    </div>
+                                                    <p className="text-sm font-medium text-gray-900">Estoque normal</p>
+                                                    <p className="text-xs text-gray-500 mt-1">
+                                                        Todos os produtos estão com estoque adequado
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
 
                         {/* Perfil */}
                         <motion.div
@@ -730,13 +868,16 @@ export default function MainEmpresa({
                             className="flex items-center gap-3 pl-4 border-l border-gray-200 cursor-pointer"
                         >
                             <div className="text-right hidden sm:block">
-                                <p className="text-sm font-semibold text-[#123859]">{userName}</p>
+                                <p className="text-sm font-semibold" style={{ color: COLORS.primary }}>
+                                    {userName}
+                                </p>
                                 <p className="text-xs text-gray-500 capitalize">{userRole}</p>
                             </div>
                             <motion.div
                                 whileHover={{ rotate: 360 }}
                                 transition={{ duration: 0.5 }}
-                                className="w-10 h-10 rounded-full bg-gradient-to-br from-[#F9941F] to-[#123859] text-white flex items-center justify-center text-sm font-bold shadow-lg"
+                                className="w-10 h-10 rounded-full text-white flex items-center justify-center text-sm font-bold shadow-lg"
+                                style={{ background: `linear-gradient(135deg, ${COLORS.secondary} 0%, ${COLORS.primary} 100%)` }}
                             >
                                 {userInitial}
                             </motion.div>
@@ -780,6 +921,107 @@ export default function MainEmpresa({
                         onClick={() => setNotificacoesAberto(false)}
                         className="fixed inset-0 z-40"
                     />
+                )}
+            </AnimatePresence>
+
+            {/* MODAL DE CONFIRMAÇÃO DE LOGOUT */}
+            <AnimatePresence>
+                {logoutModalOpen && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                        onClick={fecharModalLogout}
+                    >
+                        <motion.div
+                            variants={modalVariants}
+                            initial="hidden"
+                            animate="visible"
+                            exit="exit"
+                            className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            {/* Header do Modal */}
+                            <div className="p-6 pb-4">
+                                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-100 flex items-center justify-center">
+                                    <LogOut size={32} className="text-red-500" />
+                                </div>
+                                <h2 className="text-2xl font-bold text-center mb-2" style={{ color: COLORS.primary }}>
+                                    Confirmar Logout
+                                </h2>
+                                <p className="text-gray-600 text-center text-sm">
+                                    Tem certeza que deseja sair do sistema? Você precisará fazer login novamente para acessar sua conta.
+                                </p>
+                            </div>
+
+                            {/* Mensagem de erro (se houver) */}
+                            {logoutError && (
+                                <div className="mx-6 mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                    <p className="text-xs text-yellow-700 text-center">{logoutError}</p>
+                                </div>
+                            )}
+
+                            {/* Informações do usuário */}
+                            <div className="px-6 py-4 bg-gray-50 border-y border-gray-100">
+                                <div className="flex items-center gap-3">
+                                    <div
+                                        className="w-10 h-10 rounded-full text-white flex items-center justify-center text-sm font-bold shadow-md"
+                                        style={{ background: `linear-gradient(135deg, ${COLORS.secondary} 0%, ${COLORS.primary} 100%)` }}
+                                    >
+                                        {userInitial}
+                                    </div>
+                                    <div>
+                                        <p className="font-medium" style={{ color: COLORS.primary }}>
+                                            {userName}
+                                        </p>
+                                        <p className="text-xs text-gray-500">{userEmail}</p>
+                                        <p className="text-xs text-gray-400 capitalize">Perfil: {userRole}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Ações */}
+                            <div className="p-6 flex gap-3">
+                                <motion.button
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    onClick={fecharModalLogout}
+                                    disabled={logoutLoading}
+                                    className="flex-1 py-3 px-4 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-colors font-medium disabled:opacity-50"
+                                >
+                                    Cancelar
+                                </motion.button>
+                                <motion.button
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    onClick={handleLogout}
+                                    disabled={logoutLoading}
+                                    className="flex-1 py-3 px-4 text-white rounded-xl hover:opacity-90 transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                                    style={{ backgroundColor: COLORS.danger }}
+                                >
+                                    {logoutLoading ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            <span>Saindo...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <LogOut size={18} />
+                                            <span>Sair</span>
+                                        </>
+                                    )}
+                                </motion.button>
+                            </div>
+
+                            {/* Aviso de segurança */}
+                            <div className="px-6 pb-6 text-center">
+                                <p className="text-xs text-gray-400">
+                                    Ao sair, sua sessão será encerrada e todos os dados não salvos serão perdidos.
+                                </p>
+                            </div>
+                        </motion.div>
+                    </motion.div>
                 )}
             </AnimatePresence>
         </div>

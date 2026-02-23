@@ -130,8 +130,6 @@ export interface CriarClienteInput {
   data_registro?: string;
 }
 
-export interface AtualizarClienteInput extends Partial<CriarClienteInput> { }
-
 /* -------- Categoria -------- */
 export interface Categoria {
   id: string;
@@ -220,7 +218,7 @@ export interface CriarProdutoInput {
   unidade_medida?: UnidadeMedida;
 }
 
-export interface AtualizarProdutoInput extends Partial<CriarProdutoInput> { }
+export type AtualizarProdutoInput = Partial<CriarProdutoInput>;
 
 export interface ListarProdutosParams {
   tipo?: TipoProduto;
@@ -575,7 +573,7 @@ export interface DashboardData {
   };
 }
 
-export interface DashboardResponse extends DashboardData { }
+export type DashboardResponse = DashboardData;
 
 /* -------- Resumo de Documentos Fiscais -------- */
 export interface ResumoDocumentosFiscais {
@@ -982,7 +980,7 @@ export const documentoFiscalService = {
       taxa_iva?: number;
     }>;
     motivo?: string;
-  }): Promise<{ message: string; documento: DocumentoFiscal; data?: any } | null> {
+  }): Promise<{ message: string; documento: DocumentoFiscal; data?: { documento: DocumentoFiscal } } | null> {
     try {
       const url = `/api/documentos-fiscais/${documentoId}/nota-debito`;
       const { data } = await api.post(url, payload);
@@ -1158,7 +1156,7 @@ export const clienteService = {
     }
   },
 
-  async atualizar(id: string, dados: AtualizarClienteInput): Promise<Cliente | null> {
+  async atualizar(id: string, dados: Partial<CriarClienteInput>): Promise<Cliente | null> {
     const url = `${API_PREFIX}/clientes/${id}`;
     try {
       const response = await api.put(url, dados);
@@ -1884,7 +1882,7 @@ export const relatorioService = {
     tipo?: TipoDocumentoFiscal;
     cliente_id?: string;
     cliente_nome?: string;
-  }): Promise<any | null> {
+  }): Promise<{ message: string; data: { documentos: DocumentoFiscal[] } } | null> {
     try {
       const queryParams = new URLSearchParams();
       if (params?.data_inicio) queryParams.append('data_inicio', params.data_inicio);
@@ -1904,7 +1902,7 @@ export const relatorioService = {
     }
   },
 
-  async pagamentosPendentes(): Promise<any | null> {
+  async pagamentosPendentes(): Promise<{ message: string; data: EstatisticasPagamentos } | null> {
     try {
       const { data } = await api.get('/api/relatorios/pagamentos-pendentes');
       return data;
@@ -1918,7 +1916,7 @@ export const relatorioService = {
     data_inicio?: string;
     data_fim?: string;
     apenas_vendas?: boolean; // FT, FR, RC
-  }): Promise<any | null> {
+  }): Promise<{ message: string; data: { vendas: Venda[] } } | null> {
     try {
       const queryParams = new URLSearchParams();
       if (params?.data_inicio) queryParams.append('data_inicio', params.data_inicio);
@@ -1939,7 +1937,7 @@ export const relatorioService = {
   async compras(params?: {
     data_inicio?: string;
     data_fim?: string;
-  }): Promise<any | null> {
+  }): Promise<{ message: string; data: { compras: Compra[] } } | null> {
     try {
       const queryParams = new URLSearchParams();
       if (params?.data_inicio) queryParams.append('data_inicio', params.data_inicio);
@@ -1956,7 +1954,7 @@ export const relatorioService = {
     }
   },
 
-  async stock(): Promise<any | null> {
+  async stock(): Promise<{ message: string; data: { produtos: Produto[] } } | null> {
     try {
       const { data } = await api.get('/api/relatorios/stock');
       return data;
@@ -1971,7 +1969,7 @@ export const relatorioService = {
     data_fim?: string;
     cliente_id?: string;
     pendentes?: boolean;
-  }): Promise<any | null> {
+  }): Promise<{ message: string; data: { documentos: DocumentoFiscal[] } } | null> {
     try {
       const queryParams = new URLSearchParams();
       if (params?.data_inicio) queryParams.append('data_inicio', params.data_inicio);

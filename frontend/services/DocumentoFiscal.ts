@@ -1,6 +1,7 @@
 // src/services/documentoFiscalService.ts
 
 import api from "./axios";
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 // ==================== TIPOS ====================
 
@@ -11,7 +12,7 @@ export type MetodoPagamento = 'transferencia' | 'multibanco' | 'dinheiro' | 'che
 // Constantes para tipos de documento
 export const TIPOS_VENDA: TipoDocumento[] = ['FT', 'FR', 'RC'];
 export const TIPOS_NAO_VENDA: TipoDocumento[] = ['FP', 'FA', 'NC', 'ND', 'FRt'];
-export const TIPOS_DOCUMENTO_VENDA: TipoDocumento[] = ['FT', 'FR', 'FP']; // Tipos que podem ser criados via venda
+export const TIPOS_DOCUMENTO_VENDA: TipoDocumento[] = ['FT', 'FR', 'FP'];
 
 export interface ItemDocumento {
     id?: string;
@@ -32,8 +33,8 @@ export interface DocumentoFiscal {
     user_id: string;
     venda_id?: string | null;
     cliente_id?: string | null;
-    cliente_nome?: string | null; // Para cliente avulso
-    cliente_nif?: string | null;  // Para cliente avulso
+    cliente_nome?: string | null;
+    cliente_nif?: string | null;
     fatura_id?: string | null;
     serie: string;
     numero: number;
@@ -70,13 +71,6 @@ export interface DocumentoFiscal {
     notasDebito?: DocumentoFiscal[];
     faturasAdiantamento?: DocumentoFiscal[];
     faturasVinculadas?: DocumentoFiscal[];
-
-    // Acessores virtuais (calculados)
-    valor_pendente?: number;
-    valor_pago?: number;
-    nome_cliente?: string;
-    tem_cliente_cadastrado?: boolean;
-    eh_venda?: boolean;
 }
 
 export interface Cliente {
@@ -93,20 +87,21 @@ export interface User {
     id: string;
     name: string;
     email: string;
+    role?: string;
 }
 
 export interface FiltrosDocumento {
     tipo?: TipoDocumento;
     estado?: EstadoDocumento;
     cliente_id?: string;
-    cliente_nome?: string; // Para cliente avulso
+    cliente_nome?: string;
     data_inicio?: string;
     data_fim?: string;
     pendentes?: boolean;
     adiantamentos_pendentes?: boolean;
-    proformas_pendentes?: boolean; // NOVO
-    apenas_vendas?: boolean; // Filtrar apenas FT, FR, RC
-    apenas_nao_vendas?: boolean; // Filtrar FP, FA, NC, ND, FRt
+    proformas_pendentes?: boolean;
+    apenas_vendas?: boolean;
+    apenas_nao_vendas?: boolean;
     per_page?: number;
     page?: number;
     search?: string;
@@ -122,8 +117,8 @@ export interface DadosPagamento {
 export interface EmitirDocumentoDTO {
     tipo_documento: TipoDocumento;
     cliente_id?: string;
-    cliente_nome?: string; // Para cliente avulso
-    cliente_nif?: string;  // Para cliente avulso
+    cliente_nome?: string;
+    cliente_nif?: string;
     venda_id?: string;
     fatura_id?: string;
     itens?: ItemDocumento[];
@@ -150,42 +145,14 @@ export interface CancelarDocumentoDTO {
     motivo: string;
 }
 
-export interface ConverterProformaDTO {
-    fatura_id?: string;
-    dados_pagamento?: DadosPagamento;
-}
-
-export interface DashboardDocumentos {
-    faturas_emitidas_mes: number;
-    faturas_pendentes: number;
-    total_pendente_cobranca: number;
-    adiantamentos_pendentes: number;
-    proformas_pendentes: number; // NOVO
-    documentos_cancelados_mes: number;
-    total_vendas_mes: number; // NOVO
-    total_nao_vendas_mes: number; // NOVO
-}
-
-export interface AlertasDocumentos {
-    adiantamentos_vencidos: {
-        total: number;
-        items: DocumentoFiscal[];
-    };
-    faturas_com_adiantamentos_pendentes: {
-        total: number;
-        items: DocumentoFiscal[];
-    };
-    proformas_pendentes: { // NOVO
-        total: number;
-        items: DocumentoFiscal[];
-    };
-}
-
 // ==================== API RESPONSES ====================
 
 interface ApiResponse<T> {
+    success: boolean;
     message: string;
     data: T;
+    error?: string;
+    errors?: Record<string, string[]>;
 }
 
 interface PaginatedResponse<T> {
@@ -198,6 +165,58 @@ interface PaginatedResponse<T> {
     to?: number;
 }
 
+// Tipos específicos do Dashboard baseados no Controller
+export interface DashboardDocumentos {
+    faturas_emitidas_mes: number;
+    faturas_pendentes: number;
+    total_pendente_cobranca: number;
+    adiantamentos_pendentes: number;
+    proformas_pendentes: number;
+    documentos_cancelados_mes: number;
+    total_vendas_mes: number;
+    total_nao_vendas_mes: number;
+}
+
+export interface AlertasDocumentos {
+    adiantamentos_vencidos: {
+        total: number;
+        items: DocumentoFiscal[];
+    };
+    faturas_com_adiantamentos_pendentes: {
+        total: number;
+        items: DocumentoFiscal[];
+    };
+    proformas_pendentes: {
+        total: number;
+        items: DocumentoFiscal[];
+    };
+    faturas_vencidas?: {
+        total: number;
+        items: DocumentoFiscal[];
+    };
+}
+
+export interface EvolucaoDados {
+    mes: number;
+    ano: number;
+    total_vendas: number;
+    total_nao_vendas: number;
+    total_pendente: number;
+}
+
+export interface ResumoDashboard {
+    user: {
+        id: string;
+        name: string;
+        role: string;
+    };
+    resumo?: DashboardDocumentos;
+    estatisticas?: Record<string, number | string>;
+    alertas?: AlertasDocumentos;
+    ano?: number;
+    evolucao?: EvolucaoDados[];
+}
+
 // ==================== SERVICE ====================
 
 class DocumentoFiscalService {
@@ -206,7 +225,8 @@ class DocumentoFiscalService {
     // ==================== LISTAGEM E CONSULTA ====================
 
     /**
-     * Listar documentos fiscais com filtros
+     * Listar documentos fiscais com filtros (GET /api/documentos-fiscais)
+     * Suporta todos os tipos: FT, FR, FP, FA, NC, ND, RC, FRt
      */
     async listar(filtros: FiltrosDocumento = {}): Promise<PaginatedResponse<DocumentoFiscal>> {
         const params = new URLSearchParams();
@@ -220,34 +240,35 @@ class DocumentoFiscalService {
         const response = await api.get<ApiResponse<PaginatedResponse<DocumentoFiscal>>>(
             `${this.baseUrl}?${params.toString()}`
         );
+
+        if (!response.data.success) {
+            throw new Error(response.data.message);
+        }
+
         return response.data.data;
     }
 
     /**
-     * Buscar documento específico por ID
+     * Buscar documento específico por ID (GET /api/documentos-fiscais/{id})
      */
     async buscarPorId(id: string): Promise<DocumentoFiscal> {
-        const response = await api.get<ApiResponse<DocumentoFiscal>>(`${this.baseUrl}/${id}`);
-        return response.data.data.documento || response.data.data;
-    }
+        const response = await api.get<ApiResponse<{ documento: DocumentoFiscal }>>(`${this.baseUrl}/${id}`);
 
-    /**
-     * Buscar documento por número
-     */
-    async buscarPorNumero(numeroDocumento: string): Promise<DocumentoFiscal> {
-        const response = await this.listar({ per_page: 1 });
-        const documento = response.data.find(d => d.numero_documento === numeroDocumento);
-        if (!documento) throw new Error('Documento não encontrado');
-        return documento;
+        if (!response.data.success) {
+            throw new Error(response.data.message);
+        }
+
+        return response.data.data.documento;
     }
 
     // ==================== EMISSÃO ====================
 
     /**
-     * Emitir qualquer tipo de documento fiscal
+     * Emitir qualquer tipo de documento fiscal (POST /api/documentos-fiscais/emitir)
+     * Tipos suportados: FT, FR, FP, FA, NC, ND, RC, FRt
      */
     async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
-        // Validar cliente avulso
+        // Validação frontend para FR
         if (!dados.cliente_id && !dados.cliente_nome && dados.tipo_documento === 'FR') {
             throw new Error('Fatura-Recibo (FR) requer um cliente (cadastrado ou avulso)');
         }
@@ -256,7 +277,12 @@ class DocumentoFiscalService {
             `${this.baseUrl}/emitir`,
             dados
         );
-        return response.data.data.documento || response.data.data;
+
+        if (!response.data.success) {
+            throw new Error(response.data.message);
+        }
+
+        return response.data.data;
     }
 
     /**
@@ -269,7 +295,9 @@ class DocumentoFiscalService {
     /**
      * Emitir Fatura-Recibo (FR)
      */
-    async emitirFaturaRecibo(dados: Omit<EmitirDocumentoDTO, 'tipo_documento'> & { dados_pagamento: DadosPagamento }): Promise<DocumentoFiscal> {
+    async emitirFaturaRecibo(
+        dados: Omit<EmitirDocumentoDTO, 'tipo_documento'> & { dados_pagamento: DadosPagamento }
+    ): Promise<DocumentoFiscal> {
         return this.emitir({ ...dados, tipo_documento: 'FR' });
     }
 
@@ -299,9 +327,29 @@ class DocumentoFiscalService {
     }
 
     /**
-     * Emitir Nota de Crédito (NC)
+     * Emitir Recibo (RC) - geralmente gerado automaticamente, mas disponível manualmente
      */
-    async emitirNotaCredito(
+    async emitirRecibo(
+        dados: Omit<EmitirDocumentoDTO, 'tipo_documento'> & { fatura_id: string }
+    ): Promise<DocumentoFiscal> {
+        return this.emitir({ ...dados, tipo_documento: 'RC' });
+    }
+
+    /**
+     * Emitir Fatura de Retificação (FRt)
+     */
+    async emitirFaturaRetificacao(
+        dados: Omit<EmitirDocumentoDTO, 'tipo_documento'> & { fatura_id: string; motivo: string }
+    ): Promise<DocumentoFiscal> {
+        return this.emitir({ ...dados, tipo_documento: 'FRt' });
+    }
+
+    // ==================== NOTAS DE CRÉDITO/DÉBITO ====================
+
+    /**
+     * Criar Nota de Crédito (POST /api/documentos-fiscais/{id}/nota-credito)
+     */
+    async criarNotaCredito(
         documentoOrigemId: string,
         dados: Omit<EmitirDocumentoDTO, 'tipo_documento' | 'fatura_id'>
     ): Promise<DocumentoFiscal> {
@@ -309,13 +357,18 @@ class DocumentoFiscalService {
             `${this.baseUrl}/${documentoOrigemId}/nota-credito`,
             dados
         );
-        return response.data.data.documento || response.data.data;
+
+        if (!response.data.success) {
+            throw new Error(response.data.message);
+        }
+
+        return response.data.data;
     }
 
     /**
-     * Emitir Nota de Débito (ND)
+     * Criar Nota de Débito (POST /api/documentos-fiscais/{id}/nota-debito)
      */
-    async emitirNotaDebito(
+    async criarNotaDebito(
         documentoOrigemId: string,
         dados: Omit<EmitirDocumentoDTO, 'tipo_documento' | 'fatura_id'>
     ): Promise<DocumentoFiscal> {
@@ -323,36 +376,51 @@ class DocumentoFiscalService {
             `${this.baseUrl}/${documentoOrigemId}/nota-debito`,
             dados
         );
-        return response.data.data.documento || response.data.data;
+
+        if (!response.data.success) {
+            throw new Error(response.data.message);
+        }
+
+        return response.data.data;
     }
 
     // ==================== RECIBOS ====================
 
     /**
-     * Gerar recibo para fatura (FT) ou adiantamento (FA)
+     * Gerar recibo para fatura (FT) ou adiantamento (FA) (POST /api/documentos-fiscais/{id}/recibo)
      */
     async gerarRecibo(documentoId: string, dados: GerarReciboDTO): Promise<DocumentoFiscal> {
         const response = await api.post<ApiResponse<DocumentoFiscal>>(
             `${this.baseUrl}/${documentoId}/recibo`,
             dados
         );
-        return response.data.data.recibo || response.data.data.documento || response.data.data;
+
+        if (!response.data.success) {
+            throw new Error(response.data.message);
+        }
+
+        return response.data.data;
     }
 
     /**
-     * Listar recibos de um documento (FT ou FA)
+     * Listar recibos de um documento (GET /api/documentos-fiscais/{id}/recibos)
      */
     async listarRecibos(documentoId: string): Promise<DocumentoFiscal[]> {
         const response = await api.get<ApiResponse<DocumentoFiscal[]>>(
             `${this.baseUrl}/${documentoId}/recibos`
         );
-        return response.data.data.recibos || response.data.data;
+
+        if (!response.data.success) {
+            throw new Error(response.data.message);
+        }
+
+        return response.data.data;
     }
 
     // ==================== ADIANTAMENTOS ====================
 
     /**
-     * Vincular adiantamento (FA) a fatura (FT)
+     * Vincular adiantamento (FA) a fatura (FT) (POST /api/documentos-fiscais/{id}/vincular)
      */
     async vincularAdiantamento(
         adiantamentoId: string,
@@ -362,79 +430,110 @@ class DocumentoFiscalService {
             `${this.baseUrl}/${adiantamentoId}/vincular`,
             dados
         );
-        return response.data.data;
-    }
 
-    /**
-     * Listar adiantamentos pendentes de um cliente
-     */
-    async listarAdiantamentosPendentes(clienteId?: string, clienteNome?: string): Promise<DocumentoFiscal[]> {
-        const params = new URLSearchParams();
-        if (clienteId) params.append('cliente_id', clienteId);
-        if (clienteNome) params.append('cliente_nome', clienteNome);
+        if (!response.data.success) {
+            throw new Error(response.data.message);
+        }
 
-        const response = await api.get<ApiResponse<DocumentoFiscal[]>>(
-            `${this.baseUrl}/adiantamentos-pendentes${params.toString() ? `?${params.toString()}` : ''}`
-        );
-        return response.data.data.adiantamentos || response.data.data;
-    }
-
-    /**
-     * Listar proformas pendentes de um cliente
-     */
-    async listarProformasPendentes(clienteId?: string, clienteNome?: string): Promise<DocumentoFiscal[]> {
-        const params = new URLSearchParams();
-        if (clienteId) params.append('cliente_id', clienteId);
-        if (clienteNome) params.append('cliente_nome', clienteNome);
-
-        const response = await api.get<ApiResponse<DocumentoFiscal[]>>(
-            `${this.baseUrl}/proformas-pendentes${params.toString() ? `?${params.toString()}` : ''}`
-        );
-        return response.data.data.proformas || response.data.data;
-    }
-
-    /**
-     * Converter Proforma (FP) para Fatura (FT)
-     */
-    async converterProformaParaFatura(proformaId: string, dados?: ConverterProformaDTO): Promise<DocumentoFiscal> {
-        const response = await api.post<ApiResponse<DocumentoFiscal>>(
-            `${this.baseUrl}/${proformaId}/converter`,
-            dados
-        );
-        return response.data.data.documento || response.data.data;
-    }
-
-    /**
-     * Buscar alertas de documentos (vencidos, pendentes)
-     */
-    async buscarAlertas(): Promise<AlertasDocumentos> {
-        const response = await api.get<ApiResponse<AlertasDocumentos>>(
-            `${this.baseUrl}/alertas`
-        );
-        return response.data.data;
-    }
-
-    /**
-     * Processar adiantamentos expirados (chamada administrativa)
-     */
-    async processarExpirados(): Promise<{ expirados: number }> {
-        const response = await api.post<ApiResponse<{ expirados: number }>>(
-            `${this.baseUrl}/processar-expirados`
-        );
         return response.data.data;
     }
 
     // ==================== CANCELAMENTO ====================
 
     /**
-     * Cancelar documento fiscal
+     * Cancelar documento fiscal (POST /api/documentos-fiscais/{id}/cancelar)
      */
     async cancelar(id: string, dados: CancelarDocumentoDTO): Promise<DocumentoFiscal> {
         const response = await api.post<ApiResponse<DocumentoFiscal>>(
             `${this.baseUrl}/${id}/cancelar`,
             dados
         );
-        return response.data.data.documento || response.data.data;
+
+        if (!response.data.success) {
+            throw new Error(response.data.message);
+        }
+
+        return response.data.data;
+    }
+
+    // ==================== DASHBOARD E ESTATÍSTICAS ====================
+
+    /**
+     * Obter dashboard completo (GET /api/dashboard)
+     */
+    async getDashboard(): Promise<ResumoDashboard> {
+        const response = await api.get<ApiResponse<ResumoDashboard>>('/api/dashboard');
+
+        if (!response.data.success) {
+            throw new Error(response.data.message);
+        }
+
+        return response.data.data;
+    }
+
+    /**
+     * Obter resumo de documentos fiscais (GET /api/dashboard/documentos-fiscais)
+     */
+    async getResumoDocumentosFiscais(): Promise<DashboardDocumentos> {
+        const response = await api.get<ApiResponse<{ resumo: DashboardDocumentos }>>('/api/dashboard/documentos-fiscais');
+
+        if (!response.data.success) {
+            throw new Error(response.data.message);
+        }
+
+        return response.data.data.resumo;
+    }
+
+    /**
+     * Obter estatísticas de pagamentos (GET /api/dashboard/estatisticas-pagamentos)
+     */
+    async getEstatisticasPagamentos(): Promise<Record<string, number | string>> {
+        const response = await api.get<ApiResponse<{ estatisticas: Record<string, number | string> }>>('/api/dashboard/estatisticas-pagamentos');
+
+        if (!response.data.success) {
+            throw new Error(response.data.message);
+        }
+
+        return response.data.data.estatisticas;
+    }
+
+    /**
+     * Obter alertas de documentos pendentes (GET /api/dashboard/alertas-pendentes)
+     */
+    async getAlertasPendentes(): Promise<AlertasDocumentos> {
+        const response = await api.get<ApiResponse<{ alertas: AlertasDocumentos }>>('/api/dashboard/alertas-pendentes');
+
+        if (!response.data.success) {
+            throw new Error(response.data.message);
+        }
+
+        return response.data.data.alertas;
+    }
+
+    /**
+     * Obter evolução mensal (GET /api/dashboard/evolucao-mensal)
+     * CORRIGIDO: Usa 'meses' em vez de 'evolucao' conforme retorno do backend
+     */
+    async getEvolucaoMensal(ano?: number): Promise<EvolucaoDados[]> {
+        const params = ano ? `?ano=${ano}` : '';
+        const response = await api.get<ApiResponse<{ ano: number; meses: EvolucaoDados[] }>>(
+            `/api/dashboard/evolucao-mensal${params}`
+        );
+
+        if (!response.data.success) {
+            console.error('Erro ao carregar evolução mensal:', response.data.message);
+            return [];
+        }
+
+        // CORREÇÃO: Usa 'meses' em vez de 'evolucao'
+        const meses = response.data.data?.meses;
+
+        if (!Array.isArray(meses)) {
+            console.warn('Dados de evolução não são um array:', meses);
+            return [];
+        }
+
+        return meses;
     }
 
     // ==================== UTILITÁRIOS ====================
@@ -453,7 +552,6 @@ class DocumentoFiscalService {
             return Math.max(0, documento.total_liquido - totalPago);
         }
 
-        // Para FT, considerar adiantamentos vinculados
         const totalAdiantamentos = documento.faturasAdiantamento?.reduce((sum, a) =>
             sum + (a.total_liquido || 0), 0
         ) || 0;
@@ -513,6 +611,34 @@ class DocumentoFiscalService {
      */
     ehProforma(documento: DocumentoFiscal): boolean {
         return documento.tipo_documento === 'FP';
+    }
+
+    /**
+     * Verificar se é adiantamento (FA)
+     */
+    ehAdiantamento(documento: DocumentoFiscal): boolean {
+        return documento.tipo_documento === 'FA';
+    }
+
+    /**
+     * Verificar se é nota de crédito (NC)
+     */
+    ehNotaCredito(documento: DocumentoFiscal): boolean {
+        return documento.tipo_documento === 'NC';
+    }
+
+    /**
+     * Verificar se é nota de débito (ND)
+     */
+    ehNotaDebito(documento: DocumentoFiscal): boolean {
+        return documento.tipo_documento === 'ND';
+    }
+
+    /**
+     * Verificar se é fatura de retificação (FRt)
+     */
+    ehFaturaRetificacao(documento: DocumentoFiscal): boolean {
+        return documento.tipo_documento === 'FRt';
     }
 
     /**
@@ -607,140 +733,262 @@ class DocumentoFiscalService {
         return documento.numero_documento || `${documento.serie}-${String(documento.numero).padStart(5, '0')}`;
     }
 
-    // ==================== DASHBOARD ====================
-
     /**
-     * Obter dashboard/resumo de documentos
+     * Verificar se documento afeta stock
      */
-    async getDashboard(): Promise<DashboardDocumentos> {
-        const response = await api.get<ApiResponse<DashboardDocumentos>>(
-            `${this.baseUrl}/dashboard`
-        );
-        return response.data.data;
+    afetaStock(documento: DocumentoFiscal): boolean {
+        return ['FT', 'FR', 'FP', 'NC'].includes(documento.tipo_documento);
     }
 }
 
-// ==================== HOOKS (React Query) ====================
+// ==================== INSTÂNCIA ÚNICA ====================
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-
-// Criar instância do serviço
 export const documentoFiscalService = new DocumentoFiscalService();
 
-// Hooks
+// ==================== HOOKS REACT QUERY ====================
+
+// Query Keys
+const QUERY_KEYS = {
+    documentos: 'documentos-fiscais',
+    documento: 'documento-fiscal',
+    dashboard: 'dashboard',
+    resumo: 'resumo-documentos',
+    estatisticas: 'estatisticas-pagamentos',
+    alertas: 'alertas-pendentes',
+    evolucao: 'evolucao-mensal',
+    recibos: 'recibos-documento',
+} as const;
+
+/**
+ * Hook para listar documentos fiscais com filtros
+ * Mostra todos os tipos: FT, FR, FP, FA, NC, ND, RC, FRt
+ */
 export const useDocumentosFiscais = (filtros: FiltrosDocumento = {}) => {
     return useQuery({
-        queryKey: ['documentos-fiscais', filtros],
+        queryKey: [QUERY_KEYS.documentos, filtros],
         queryFn: () => documentoFiscalService.listar(filtros),
+        staleTime: 30 * 1000,
     });
 };
 
-export const useDocumentoFiscal = (id: string) => {
+/**
+ * Hook para buscar documento específico
+ */
+export const useDocumentoFiscal = (id: string | null) => {
     return useQuery({
-        queryKey: ['documento-fiscal', id],
-        queryFn: () => documentoFiscalService.buscarPorId(id),
+        queryKey: [QUERY_KEYS.documento, id],
+        queryFn: () => {
+            if (!id) throw new Error('ID não fornecido');
+            return documentoFiscalService.buscarPorId(id);
+        },
         enabled: !!id,
+        staleTime: 60 * 1000,
     });
 };
 
+/**
+ * Hook para emitir documento (qualquer tipo)
+ */
 export const useEmitirDocumento = () => {
     const queryClient = useQueryClient();
 
     return useMutation({
         mutationFn: (dados: EmitirDocumentoDTO) => documentoFiscalService.emitir(dados),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['documentos-fiscais'] });
-            queryClient.invalidateQueries({ queryKey: ['dashboard-documentos'] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.documentos] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.dashboard] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.resumo] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.alertas] });
         },
     });
 };
 
+/**
+ * Hook para criar Nota de Crédito
+ */
+export const useCriarNotaCredito = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({
+            documentoOrigemId,
+            dados
+        }: {
+            documentoOrigemId: string;
+            dados: Omit<EmitirDocumentoDTO, 'tipo_documento' | 'fatura_id'>
+        }) => documentoFiscalService.criarNotaCredito(documentoOrigemId, dados),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.documentos] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.dashboard] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.resumo] });
+        },
+    });
+};
+
+/**
+ * Hook para criar Nota de Débito
+ */
+export const useCriarNotaDebito = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({
+            documentoOrigemId,
+            dados
+        }: {
+            documentoOrigemId: string;
+            dados: Omit<EmitirDocumentoDTO, 'tipo_documento' | 'fatura_id'>
+        }) => documentoFiscalService.criarNotaDebito(documentoOrigemId, dados),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.documentos] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.dashboard] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.resumo] });
+        },
+    });
+};
+
+/**
+ * Hook para gerar recibo
+ */
 export const useGerarRecibo = () => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ documentoId, dados }: { documentoId: string; dados: GerarReciboDTO }) =>
-            documentoFiscalService.gerarRecibo(documentoId, dados),
+        mutationFn: ({
+            documentoId,
+            dados
+        }: {
+            documentoId: string;
+            dados: GerarReciboDTO
+        }) => documentoFiscalService.gerarRecibo(documentoId, dados),
         onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({ queryKey: ['documento-fiscal', variables.documentoId] });
-            queryClient.invalidateQueries({ queryKey: ['documentos-fiscais'] });
-            queryClient.invalidateQueries({ queryKey: ['dashboard-documentos'] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.documento, variables.documentoId] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.documentos] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.dashboard] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.resumo] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.recibos, variables.documentoId] });
         },
     });
 };
 
+/**
+ * Hook para listar recibos
+ */
+export const useListarRecibos = (documentoId: string | null) => {
+    return useQuery({
+        queryKey: [QUERY_KEYS.recibos, documentoId],
+        queryFn: () => {
+            if (!documentoId) throw new Error('ID não fornecido');
+            return documentoFiscalService.listarRecibos(documentoId);
+        },
+        enabled: !!documentoId,
+    });
+};
+
+/**
+ * Hook para cancelar documento
+ */
 export const useCancelarDocumento = () => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ id, dados }: { id: string; dados: CancelarDocumentoDTO }) =>
-            documentoFiscalService.cancelar(id, dados),
+        mutationFn: ({
+            id,
+            dados
+        }: {
+            id: string;
+            dados: CancelarDocumentoDTO
+        }) => documentoFiscalService.cancelar(id, dados),
         onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({ queryKey: ['documento-fiscal', variables.id] });
-            queryClient.invalidateQueries({ queryKey: ['documentos-fiscais'] });
-            queryClient.invalidateQueries({ queryKey: ['dashboard-documentos'] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.documento, variables.id] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.documentos] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.dashboard] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.resumo] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.alertas] });
         },
     });
 };
 
+/**
+ * Hook para vincular adiantamento
+ */
 export const useVincularAdiantamento = () => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ adiantamentoId, dados }: { adiantamentoId: string; dados: VincularAdiantamentoDTO }) =>
-            documentoFiscalService.vincularAdiantamento(adiantamentoId, dados),
+        mutationFn: ({
+            adiantamentoId,
+            dados
+        }: {
+            adiantamentoId: string;
+            dados: VincularAdiantamentoDTO
+        }) => documentoFiscalService.vincularAdiantamento(adiantamentoId, dados),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['documentos-fiscais'] });
-            queryClient.invalidateQueries({ queryKey: ['adiantamentos-pendentes'] });
-            queryClient.invalidateQueries({ queryKey: ['dashboard-documentos'] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.documentos] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.dashboard] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.resumo] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.alertas] });
         },
     });
 };
 
-export const useConverterProforma = () => {
-    const queryClient = useQueryClient();
-
-    return useMutation({
-        mutationFn: ({ proformaId, dados }: { proformaId: string; dados?: ConverterProformaDTO }) =>
-            documentoFiscalService.converterProformaParaFatura(proformaId, dados),
-        onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({ queryKey: ['documento-fiscal', variables.proformaId] });
-            queryClient.invalidateQueries({ queryKey: ['documentos-fiscais'] });
-            queryClient.invalidateQueries({ queryKey: ['proformas-pendentes'] });
-            queryClient.invalidateQueries({ queryKey: ['dashboard-documentos'] });
-        },
-    });
-};
-
-export const useDashboardDocumentos = () => {
+/**
+ * Hook para dashboard completo
+ */
+export const useDashboard = () => {
     return useQuery({
-        queryKey: ['dashboard-documentos'],
+        queryKey: [QUERY_KEYS.dashboard],
         queryFn: () => documentoFiscalService.getDashboard(),
-        refetchInterval: 5 * 60 * 1000, // Refetch a cada 5 minutos
+        refetchInterval: 5 * 60 * 1000,
+        staleTime: 2 * 60 * 1000,
     });
 };
 
-export const useAlertasDocumentos = () => {
+/**
+ * Hook para resumo de documentos fiscais
+ */
+export const useResumoDocumentosFiscais = () => {
     return useQuery({
-        queryKey: ['alertas-documentos'],
-        queryFn: () => documentoFiscalService.buscarAlertas(),
-        refetchInterval: 5 * 60 * 1000, // Refetch a cada 5 minutos
+        queryKey: [QUERY_KEYS.resumo],
+        queryFn: () => documentoFiscalService.getResumoDocumentosFiscais(),
+        refetchInterval: 5 * 60 * 1000,
+        staleTime: 2 * 60 * 1000,
     });
 };
 
-export const useAdiantamentosPendentes = (clienteId?: string, clienteNome?: string) => {
+/**
+ * Hook para estatísticas de pagamentos
+ */
+export const useEstatisticasPagamentos = () => {
     return useQuery({
-        queryKey: ['adiantamentos-pendentes', { clienteId, clienteNome }],
-        queryFn: () => documentoFiscalService.listarAdiantamentosPendentes(clienteId, clienteNome),
-        enabled: !!(clienteId || clienteNome),
+        queryKey: [QUERY_KEYS.estatisticas],
+        queryFn: () => documentoFiscalService.getEstatisticasPagamentos(),
+        refetchInterval: 5 * 60 * 1000,
+        staleTime: 2 * 60 * 1000,
     });
 };
 
-export const useProformasPendentes = (clienteId?: string, clienteNome?: string) => {
+/**
+ * Hook para alertas pendentes
+ */
+export const useAlertasPendentes = () => {
     return useQuery({
-        queryKey: ['proformas-pendentes', { clienteId, clienteNome }],
-        queryFn: () => documentoFiscalService.listarProformasPendentes(clienteId, clienteNome),
-        enabled: !!(clienteId || clienteNome),
+        queryKey: [QUERY_KEYS.alertas],
+        queryFn: () => documentoFiscalService.getAlertasPendentes(),
+        refetchInterval: 5 * 60 * 1000,
+        staleTime: 2 * 60 * 1000,
+    });
+};
+
+/**
+ * Hook para evolução mensal
+ */
+export const useEvolucaoMensal = (ano?: number) => {
+    return useQuery({
+        queryKey: [QUERY_KEYS.evolucao, ano],
+        queryFn: () => documentoFiscalService.getEvolucaoMensal(ano),
+        staleTime: 5 * 60 * 1000,
+        placeholderData: [],
     });
 };
 

@@ -7,6 +7,7 @@ use App\Models\DocumentoFiscal;
 use App\Services\DocumentoFiscalService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class DocumentoFiscalController extends Controller
 {
@@ -34,6 +35,7 @@ class DocumentoFiscalController extends Controller
                 'adiantamentos_pendentes' => 'nullable|boolean',
                 'proformas_pendentes' => 'nullable|boolean', // NOVO
                 'apenas_vendas' => 'nullable|boolean', // Filtrar apenas FT, FR, RC
+                'apenas_nao_vendas' => 'nullable|boolean',
                 'per_page' => 'nullable|integer|min:1|max:100'
             ]);
 
@@ -689,6 +691,233 @@ class DocumentoFiscalController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Erro ao carregar dashboard: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * NOVO: Obter evolução mensal de documentos fiscais
+     * Endpoint: GET /api/dashboard/evolucao-mensal
+     */
+    public function evolucaoMensal(Request $request)
+    {
+        try {
+            $ano = $request->input('ano', now()->year);
+
+            // Validar ano
+            if (!is_numeric($ano) || $ano < 2020 || $ano > 2100) {
+                $ano = now()->year;
+            }
+
+            $evolucao = [];
+
+            // Para cada mês do ano
+            for ($mes = 1; $mes <= 12; $mes++) {
+                $inicioMes = now()->setDate($ano, $mes, 1)->startOfMonth();
+                $fimMes = now()->setDate($ano, $mes, 1)->endOfMonth();
+
+                // Total de vendas (FT, FR, RC) no mês
+                $totalVendas = DocumentoFiscal::whereIn('tipo_documento', ['FT', 'FR', 'RC'])
+                    ->whereBetween('data_emissao', [$inicioMes, $fimMes])
+                    ->where('estado', '!=', 'cancelado')
+                    ->sum('total_liquido');
+
+                // Total de não-vendas (FP, FA, NC, ND, FRt) no mês
+                $totalNaoVendas = DocumentoFiscal::whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FRt'])
+                    ->whereBetween('data_emissao', [$inicioMes, $fimMes])
+                    ->where('estado', '!=', 'cancelado')
+                    ->sum('total_liquido');
+
+                // Total pendente no final do mês (FT e FA emitidas ou parcialmente pagas)
+                $totalPendente = DocumentoFiscal::whereIn('tipo_documento', ['FT', 'FA'])
+                    ->whereIn('estado', ['emitido', 'parcialmente_paga'])
+                    ->where('data_emissao', '<=', $fimMes)
+                    ->sum('total_liquido');
+
+                $evolucao[] = [
+                    'mes' => $mes,
+                    'ano' => (int) $ano,
+                    'total_vendas' => (float) $totalVendas,
+                    'total_nao_vendas' => (float) $totalNaoVendas,
+                    'total_pendente' => (float) $totalPendente
+                ];
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Evolução mensal carregada com sucesso',
+                'data' => [
+                    'ano' => (int) $ano,
+                    'evolucao' => $evolucao
+                ]
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Erro ao carregar evolução mensal:', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao carregar evolução mensal: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * NOVO: Obter estatísticas de pagamentos
+     * Endpoint: GET /api/dashboard/estatisticas-pagamentos
+     */
+    public function estatisticasPagamentos(Request $request)
+    {
+        try {
+            $hoje = now();
+            $inicioMes = $hoje->copy()->startOfMonth();
+            $inicioAno = $hoje->copy()->startOfYear();
+
+            // Por método de pagamento (apenas recibos e faturas-recibo pagas)
+            $porMetodo = DocumentoFiscal::whereIn('tipo_documento', ['RC', 'FR'])
+                ->where('estado', '!=', 'cancelado')
+                ->whereBetween('data_emissao', [$inicioMes, $hoje])
+                ->select('metodo_pagamento', DB::raw('COUNT(*) as quantidade'), DB::raw('SUM(total_liquido) as total'))
+                ->groupBy('metodo_pagamento')
+                ->get()
+                ->mapWithKeys(function ($item) {
+                    $metodo = $item->metodo_pagamento ?? 'nao_informado';
+                    return [$metodo => [
+                        'quantidade' => $item->quantidade,
+                        'total' => (float) $item->total
+                    ]];
+                });
+
+            // Total pago no mês
+            $totalPagoMes = DocumentoFiscal::whereIn('tipo_documento', ['RC', 'FR'])
+                ->where('estado', '!=', 'cancelado')
+                ->whereBetween('data_emissao', [$inicioMes, $hoje])
+                ->sum('total_liquido');
+
+            // Total pago no ano
+            $totalPagoAno = DocumentoFiscal::whereIn('tipo_documento', ['RC', 'FR'])
+                ->where('estado', '!=', 'cancelado')
+                ->whereBetween('data_emissao', [$inicioAno, $hoje])
+                ->sum('total_liquido');
+
+            $estatisticas = [
+                'por_metodo' => $porMetodo,
+                'total_pago_mes' => (float) $totalPagoMes,
+                'total_pago_ano' => (float) $totalPagoAno,
+                'media_por_dia_mes' => (float) round($totalPagoMes / max($hoje->day, 1), 2),
+            ];
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Estatísticas de pagamentos carregadas com sucesso',
+                'data' => ['estatisticas' => $estatisticas]
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Erro ao carregar estatísticas de pagamentos:', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao carregar estatísticas: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * NOVO: Obter alertas de documentos pendentes
+     * Endpoint: GET /api/dashboard/alertas-pendentes
+     */
+    public function alertasPendentes()
+    {
+        try {
+            $hoje = now();
+
+            // Adiantamentos vencidos (FA com data de vencimento ultrapassada)
+            $adiantamentosVencidos = DocumentoFiscal::where('tipo_documento', 'FA')
+                ->where('estado', 'emitido')
+                ->whereNotNull('data_vencimento')
+                ->where('data_vencimento', '<', $hoje)
+                ->with(['cliente'])
+                ->orderBy('data_vencimento', 'asc')
+                ->limit(10)
+                ->get();
+
+            // Faturas com adiantamentos pendentes (FT que têm FA vinculados mas não totalmente utilizados)
+            $faturasComAdiantamentosPendentes = DocumentoFiscal::where('tipo_documento', 'FT')
+                ->whereIn('estado', ['emitido', 'parcialmente_paga'])
+                ->whereHas('faturasAdiantamento', function ($query) {
+                    $query->whereIn('estado', ['emitido', 'parcialmente_paga']);
+                })
+                ->with(['cliente', 'faturasAdiantamento' => function ($query) {
+                    $query->whereIn('estado', ['emitido', 'parcialmente_paga']);
+                }])
+                ->orderBy('data_emissao', 'desc')
+                ->limit(10)
+                ->get();
+
+            // Proformas pendentes (FP emitidas há mais de 7 dias)
+            $proformasPendentes = DocumentoFiscal::where('tipo_documento', 'FP')
+                ->where('estado', 'emitido')
+                ->where('data_emissao', '<', $hoje->copy()->subDays(7))
+                ->with(['cliente'])
+                ->orderBy('data_emissao', 'asc')
+                ->limit(10)
+                ->get();
+
+            // Faturas pendentes de pagamento (vencidas)
+            $faturasVencidas = DocumentoFiscal::where('tipo_documento', 'FT')
+                ->whereIn('estado', ['emitido', 'parcialmente_paga'])
+                ->whereNotNull('data_vencimento')
+                ->where('data_vencimento', '<', $hoje)
+                ->with(['cliente'])
+                ->orderBy('data_vencimento', 'asc')
+                ->limit(10)
+                ->get();
+
+            $alertas = [
+                'adiantamentos_vencidos' => [
+                    'total' => DocumentoFiscal::where('tipo_documento', 'FA')
+                        ->where('estado', 'emitido')
+                        ->whereNotNull('data_vencimento')
+                        ->where('data_vencimento', '<', $hoje)
+                        ->count(),
+                    'items' => $adiantamentosVencidos
+                ],
+                'faturas_com_adiantamentos_pendentes' => [
+                    'total' => DocumentoFiscal::where('tipo_documento', 'FT')
+                        ->whereIn('estado', ['emitido', 'parcialmente_paga'])
+                        ->whereHas('faturasAdiantamento', function ($query) {
+                            $query->whereIn('estado', ['emitido', 'parcialmente_paga']);
+                        })
+                        ->count(),
+                    'items' => $faturasComAdiantamentosPendentes
+                ],
+                'proformas_pendentes' => [
+                    'total' => DocumentoFiscal::where('tipo_documento', 'FP')
+                        ->where('estado', 'emitido')
+                        ->where('data_emissao', '<', $hoje->copy()->subDays(7))
+                        ->count(),
+                    'items' => $proformasPendentes
+                ],
+                'faturas_vencidas' => [
+                    'total' => DocumentoFiscal::where('tipo_documento', 'FT')
+                        ->whereIn('estado', ['emitido', 'parcialmente_paga'])
+                        ->whereNotNull('data_vencimento')
+                        ->where('data_vencimento', '<', $hoje)
+                        ->count(),
+                    'items' => $faturasVencidas
+                ]
+            ];
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Alertas carregados com sucesso',
+                'data' => ['alertas' => $alertas]
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Erro ao carregar alertas pendentes:', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao carregar alertas: ' . $e->getMessage()
             ], 500);
         }
     }

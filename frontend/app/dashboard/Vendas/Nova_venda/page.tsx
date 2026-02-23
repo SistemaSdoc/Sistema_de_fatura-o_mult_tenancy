@@ -534,19 +534,20 @@ export default function NovaFaturaReciboPage() {
                       ))}
                     </select>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2 max-w-md">
                       <input
                         type="text"
-                        placeholder="Nome do cliente *"
-                        className="w-full max-w-md border border-gray-300 p-2 rounded text-sm"
+                        placeholder="Nome do cliente"
+                        className="border border-gray-300 p-2 rounded text-sm w-full"
                         value={clienteAvulso}
                         onChange={e => setClienteAvulso(e.target.value)}
                         required
                       />
+
                       <input
                         type="text"
                         placeholder="NIF (opcional)"
-                        className="w-full max-w-md border border-gray-300 p-2 rounded text-sm"
+                        className="border border-gray-300 p-2 rounded text-sm w-full"
                         value={clienteAvulsoNif}
                         onChange={e => setClienteAvulsoNif(e.target.value)}
                       />

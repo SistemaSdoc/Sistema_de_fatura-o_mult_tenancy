@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use App\Services\DashboardService;
 
 class DashboardController extends Controller
@@ -15,24 +16,38 @@ class DashboardController extends Controller
         $this->dashboardService = $dashboardService;
     }
 
+    /**
+     * Dashboard principal com todos os dados
+     */
     public function index()
     {
-        $user = Auth::user();
+        try {
+            $user = Auth::user();
 
-        // Obtem todos os dados do dashboard via service
-        $dashboardData = $this->dashboardService->getDashboard();
+            // Obtem todos os dados do dashboard via service
+            $dashboardData = $this->dashboardService->getDashboard();
 
-        return response()->json([
-            'message' => 'Dashboard carregado com sucesso',
-            'dados' => array_merge([
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'role' => $user->role
-                ]
-            ], $dashboardData)
-        ]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Dashboard carregado com sucesso',
+                'data' => array_merge([
+                    'user' => [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'role' => $user->role
+                    ]
+                ], $dashboardData)
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Erro ao carregar dashboard:', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao carregar dashboard',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -40,21 +55,32 @@ class DashboardController extends Controller
      */
     public function resumoDocumentosFiscais()
     {
-        $user = Auth::user();
+        try {
+            $user = Auth::user();
 
-        $resumo = $this->dashboardService->getResumoDocumentosFiscais();
+            $resumo = $this->dashboardService->getResumoDocumentosFiscais();
 
-        return response()->json([
-            'message' => 'Resumo de documentos fiscais carregado',
-            'dados' => [
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'role' => $user->role
-                ],
-                'resumo' => $resumo
-            ]
-        ]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Resumo de documentos fiscais carregado',
+                'data' => [
+                    'user' => [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'role' => $user->role
+                    ],
+                    'resumo' => $resumo
+                ]
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Erro ao carregar resumo de documentos:', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao carregar resumo de documentos',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -62,21 +88,32 @@ class DashboardController extends Controller
      */
     public function estatisticasPagamentos()
     {
-        $user = Auth::user();
+        try {
+            $user = Auth::user();
 
-        $estatisticas = $this->dashboardService->getEstatisticasPagamentos();
+            $estatisticas = $this->dashboardService->getEstatisticasPagamentos();
 
-        return response()->json([
-            'message' => 'Estatísticas de pagamentos carregadas',
-            'dados' => [
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'role' => $user->role
-                ],
-                'estatisticas' => $estatisticas
-            ]
-        ]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Estatísticas de pagamentos carregadas',
+                'data' => [
+                    'user' => [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'role' => $user->role
+                    ],
+                    'estatisticas' => $estatisticas
+                ]
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Erro ao carregar estatísticas de pagamentos:', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao carregar estatísticas de pagamentos',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -84,21 +121,32 @@ class DashboardController extends Controller
      */
     public function alertasPendentes()
     {
-        $user = Auth::user();
+        try {
+            $user = Auth::user();
 
-        $alertas = $this->dashboardService->getAlertasPendentes();
+            $alertas = $this->dashboardService->getAlertasPendentes();
 
-        return response()->json([
-            'message' => 'Alertas de documentos pendentes carregados',
-            'dados' => [
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'role' => $user->role
-                ],
-                'alertas' => $alertas
-            ]
-        ]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Alertas de documentos pendentes carregados',
+                'data' => [
+                    'user' => [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'role' => $user->role
+                    ],
+                    'alertas' => $alertas
+                ]
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Erro ao carregar alertas:', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao carregar alertas',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -106,23 +154,44 @@ class DashboardController extends Controller
      */
     public function evolucaoMensal(Request $request)
     {
-        $user = Auth::user();
+        try {
+            $user = Auth::user();
 
-        $ano = $request->input('ano', now()->year);
+            $dados = $request->validate([
+                'ano' => 'nullable|integer|min:2000|max:' . (now()->year + 1)
+            ]);
 
-        $evolucao = $this->dashboardService->getEvolucaoMensal($ano);
+            $ano = $dados['ano'] ?? now()->year;
 
-        return response()->json([
-            'message' => 'Evolução mensal carregada',
-            'dados' => [
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'role' => $user->role
-                ],
-                'ano' => $ano,
-                'evolucao' => $evolucao
-            ]
-        ]);
+            $evolucao = $this->dashboardService->getEvolucaoMensal($ano);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Evolução mensal carregada',
+                'data' => [
+                    'user' => [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'role' => $user->role
+                    ],
+                    'ano' => $ano,
+                    'evolucao' => $evolucao
+                ]
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro de validação',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('Erro ao carregar evolução mensal:', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao carregar evolução mensal',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }

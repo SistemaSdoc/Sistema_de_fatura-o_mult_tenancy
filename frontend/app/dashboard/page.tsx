@@ -14,8 +14,8 @@ import {
 } from "lucide-react";
 
 import MainEmpresa from "@/app/components/MainEmpresa";
-import { dashboardService } from "@/services/vendas";
-import type { DashboardResponse, PagamentoMetodo, UltimaVenda, UltimaFatura } from "@/services/vendas";
+import { dashboardService } from "@/services/Dashboard";
+import type { DashboardData, AlertasPendentes } from "@/services/Dashboard";
 
 /* ================= CORES DO SISTEMA (APENAS 2) ================= */
 const COLORS = {
@@ -47,12 +47,6 @@ interface ChartCardProps {
   children: React.ReactNode;
   className?: string;
   icon?: React.ElementType;
-}
-
-interface TooltipProps {
-  active?: boolean;
-  payload?: Array<{ value: number }>;
-  label?: string;
 }
 
 /* ================= ANIMAÇÕES ================= */
@@ -96,6 +90,48 @@ const SkeletonCard: React.FC = () => (
   </motion.div>
 );
 
+const AlertBanner: React.FC<{ alertas: AlertasPendentes | null }> = ({ alertas }) => {
+  if (!alertas || alertas.total_alertas === 0) return null;
+
+  return (
+    <motion.div
+      variants={itemVariants}
+      className="bg-[#F9941F]/10 border border-[#F9941F] rounded-2xl p-4 mb-6"
+    >
+      <div className="flex items-center gap-3 mb-3">
+        <AlertCircle size={20} className="text-[#F9941F]" />
+        <h3 className="font-semibold text-[#123859]">Alertas do Sistema</h3>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {alertas.vencidos?.quantidade > 0 && (
+          <div className="bg-white rounded-xl p-3 shadow-sm">
+            <p className="text-xs text-[#123859]/60 mb-1">Vencidos</p>
+            <p className="text-lg font-bold text-red-600">{alertas.vencidos.quantidade}</p>
+            <p className="text-xs text-[#123859]/60">{dashboardService._formatarMoeda(alertas.vencidos.valor_total || 0)}</p>
+          </div>
+        )}
+
+        {alertas.proximos_vencimento?.quantidade > 0 && (
+          <div className="bg-white rounded-xl p-3 shadow-sm">
+            <p className="text-xs text-[#123859]/60 mb-1">Próximos (3 dias)</p>
+            <p className="text-lg font-bold text-yellow-600">{alertas.proximos_vencimento.quantidade}</p>
+            <p className="text-xs text-[#123859]/60">{dashboardService._formatarMoeda(alertas.proximos_vencimento.valor_total || 0)}</p>
+          </div>
+        )}
+
+        {alertas.proformas_pendentes?.quantidade > 0 && (
+          <div className="bg-white rounded-xl p-3 shadow-sm">
+            <p className="text-xs text-[#123859]/60 mb-1">Proformas Antigas</p>
+            <p className="text-lg font-bold text-orange-600">{alertas.proformas_pendentes.quantidade}</p>
+            <p className="text-xs text-[#123859]/60">{dashboardService._formatarMoeda(alertas.proformas_pendentes.valor_total || 0)}</p>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+};
+
 const KPICard: React.FC<KPIData> = ({ title, value, change, icon: Icon }) => {
   const isPositive = change !== undefined && change > 0;
   const isNegative = change !== undefined && change < 0;
@@ -125,7 +161,7 @@ const KPICard: React.FC<KPIData> = ({ title, value, change, icon: Icon }) => {
           >
             {isPositive ? <ArrowUpRight size={12} /> :
               isNegative ? <ArrowDownRight size={12} /> : null}
-            {Math.abs(change)}%
+            {Math.abs(change || 0)}%
           </motion.div>
         )}
       </div>
@@ -206,11 +242,16 @@ const DataTable: React.FC<{
                     {row.map((cell, cellIdx) => (
                       <td key={cellIdx} className="p-2 md:p-3 text-[#123859]">
                         {cellIdx === 2 && typeof cell === 'string' ? (
-                          <span className={`px-2 py-1 rounded-full text-[10px] md:text-xs font-medium ${cell.toLowerCase().includes('pago') || cell.toLowerCase().includes('faturada')
+                          <span className={`px-2 py-1 rounded-full text-[10px] md:text-xs font-medium ${cell.toLowerCase().includes('paga') ||
+                              cell.toLowerCase().includes('faturada') ||
+                              (cell.toLowerCase().includes('emitida') && cell.toLowerCase().includes('paga'))
                               ? 'bg-green-100 text-green-700' :
-                              cell.toLowerCase().includes('pendente') || cell.toLowerCase().includes('aberta')
+                              cell.toLowerCase().includes('pendente') ||
+                                cell.toLowerCase().includes('emitida') ||
+                                cell.toLowerCase().includes('aberta')
                                 ? 'bg-[#F9941F] text-white' :
-                                cell.toLowerCase().includes('cancelada') || cell.toLowerCase().includes('anulado')
+                                cell.toLowerCase().includes('cancelada') ||
+                                  cell.toLowerCase().includes('anulado')
                                   ? 'bg-[#E5E5E5] text-[#123859]'
                                   : 'bg-[#E5E5E5] text-[#123859]'
                             }`}>
@@ -249,7 +290,8 @@ const DataTable: React.FC<{
 
 /* ================= PÁGINA PRINCIPAL ================= */
 export default function DashboardPage(): React.ReactElement {
-  const [data, setData] = useState<DashboardResponse | null>(null);
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [alertas, setAlertas] = useState<AlertasPendentes | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -258,12 +300,25 @@ export default function DashboardPage(): React.ReactElement {
       try {
         setLoading(true);
         setError(null);
-        const response = await dashboardService.fetch();
 
-        if (response) {
-          setData(response);
+        // Buscar dados principais do dashboard
+        const dashboardResponse = await dashboardService.fetch();
+
+        if (dashboardResponse) {
+          setData(dashboardResponse);
         } else {
           setError("Não foi possível carregar os dados do dashboard");
+        }
+
+        // Buscar alertas separadamente - não bloqueante
+        try {
+          const alertasResponse = await dashboardService.alertasPendentes();
+          if (alertasResponse) {
+            setAlertas(alertasResponse);
+          }
+        } catch (alertError) {
+          console.warn("[DASHBOARD] Não foi possível carregar alertas:", alertError);
+          // Não definir erro principal, apenas ignorar alertas
         }
       } catch (err) {
         setError("Erro ao conectar com o servidor");
@@ -279,95 +334,26 @@ export default function DashboardPage(): React.ReactElement {
   const processedData = useMemo(() => {
     if (!data) return null;
 
-    const faturas = data.faturas ?? {
-      receitaMesAtual: 0,
-      receitaMesAnterior: 0,
-      total: 0,
-      pendentes: 0,
-      pagas: 0,
-      ultimas: [] as UltimaFatura[],
-    };
-
-    const vendas = data.vendas ?? {
-      total: 0,
-      abertas: 0,
-      faturadas: 0,
-      canceladas: 0,
-      ultimas: [] as UltimaVenda[],
-      vendasPorMes: [],
-    };
-
-    const indicadores = data.indicadores ?? {
-      produtosMaisVendidos: [],
-    };
-
-    const kpis = data.kpis ?? {
-      ticketMedio: 0,
-      crescimentoPercentual: 0,
-      ivaArrecadado: 0,
-    };
-
-    const ultimasVendas = Array.isArray(vendas.ultimas) ? vendas.ultimas : [];
-    const ultimasFaturas = Array.isArray(faturas.ultimas) ? faturas.ultimas : [];
-    const produtosMaisVendidos = Array.isArray(indicadores.produtosMaisVendidos)
-      ? indicadores.produtosMaisVendidos
-      : [];
-    const vendasPorMes = Array.isArray(vendas.vendasPorMes) ? vendas.vendasPorMes : [];
-
-    const pagamentosArray: PagamentoMetodo[] = Array.isArray(data.pagamentos)
-      ? data.pagamentos
-      : [];
-
-    const pagamentosMap = pagamentosArray.reduce<Record<string, number>>(
-      (acc, p) => {
-        if (p && p.metodo) {
-          acc[p.metodo] = Number(p.total) || 0;
-        }
-        return acc;
-      },
-      { dinheiro: 0, cartao: 0, transferencia: 0 }
-    );
-
-    const pagamentosData = [
-      { name: "Dinheiro", value: pagamentosMap.dinheiro, color: PIE_COLORS[0] },
-      { name: "Cartão", value: pagamentosMap.cartao, color: PIE_COLORS[1] },
-      { name: "Transferência", value: pagamentosMap.transferencia, color: PIE_COLORS[2] },
-    ].filter(p => p.value > 0);
-
-    const receitaAtual = Number(faturas.receitaMesAtual) || 0;
-    const receitaAnterior = Number(faturas.receitaMesAnterior) || 0;
-    const crescimentoReal = receitaAnterior > 0
-      ? ((receitaAtual - receitaAnterior) / receitaAnterior) * 100
-      : 0;
+    const metricas = dashboardService.calcularMetricas(data);
+    const graficos = dashboardService.prepararDadosGraficos(data);
+    const kpisCards = dashboardService.getKPIsCards(data);
 
     return {
-      faturas: {
-        ...faturas,
-        ultimas: ultimasFaturas,
-      },
-      vendas: {
-        ...vendas,
-        ultimas: ultimasVendas,
-        vendasPorMes,
-      },
-      indicadores: {
-        produtosMaisVendidos,
-      },
-      kpis,
-      clientesAtivos: Number(data.clientesAtivos) || 0,
-      pagamentosData,
-      receitaAtual,
-      crescimento: kpis.crescimentoPercentual || crescimentoReal,
+      metricas,
+      graficos,
+      kpisCards,
     };
   }, [data]);
 
-  const formatKz = (v: number | string): string =>
-    new Intl.NumberFormat("pt-AO", {
+  const formatKz = (v: number | string): string => {
+    const num = Number(v) || 0;
+    return new Intl.NumberFormat("pt-AO", {
       style: "currency",
       currency: "AOA",
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
-    }).format(Number(v) || 0).replace("AOA", "Kz");
+    }).format(num).replace("AOA", "Kz");
+  };
 
   const formatDate = (d: string): string => {
     if (!d) return "-";
@@ -387,7 +373,7 @@ export default function DashboardPage(): React.ReactElement {
 
   // Formatter seguro para o Recharts
   const formatTooltipValue = (value: number): string => formatKz(value);
-  
+
   const formatYAxisTick = (value: number): string => `Kz ${(Number(value) / 1000).toFixed(0)}k`;
 
   if (loading) {
@@ -408,7 +394,7 @@ export default function DashboardPage(): React.ReactElement {
     );
   }
 
-  if (error || !processedData) {
+  if (error || !processedData || !data) {
     return (
       <MainEmpresa>
         <motion.div
@@ -434,36 +420,7 @@ export default function DashboardPage(): React.ReactElement {
     );
   }
 
-  const { faturas, vendas, indicadores, kpis, clientesAtivos, pagamentosData, receitaAtual, crescimento } = processedData;
-
-  const kpisConfig: KPIData[] = [
-    {
-      title: "Receita do Mês",
-      value: formatKz(receitaAtual),
-      change: Number(crescimento.toFixed(1)),
-      icon: DollarSign,
-    },
-    {
-      title: "Ticket Médio",
-      value: formatKz(kpis.ticketMedio),
-      icon: CreditCard,
-    },
-    {
-      title: "Vendas Totais",
-      value: formatNumber(vendas.total),
-      icon: ShoppingCart,
-    },
-    {
-      title: "Clientes Ativos",
-      value: formatNumber(clientesAtivos),
-      icon: Users,
-    },
-    {
-      title: "IVA Arrecadado",
-      value: formatKz(kpis.ivaArrecadado),
-      icon: Receipt,
-    },
-  ];
+  const { kpisCards } = processedData;
 
   return (
     <MainEmpresa>
@@ -488,22 +445,38 @@ export default function DashboardPage(): React.ReactElement {
           </motion.div>
         </motion.div>
 
+        {/* Alertas */}
+        <AlertBanner alertas={alertas} />
+
         {/* KPIs Grid - Responsivo */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 text-[#F9941F]">
-          {kpisConfig.map((kpi, index) => (
-            <KPICard key={index} {...kpi} />
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
+          {kpisCards.map((kpi, index) => (
+            <KPICard
+              key={index}
+              title={kpi.titulo}
+              value={kpi.valor}
+              change={kpi.variacao !== null ? kpi.variacao : undefined}
+              icon={kpi.titulo === 'Total Faturado' ? DollarSign :
+                kpi.titulo === 'Pendente' ? CreditCard :
+                  kpi.titulo === 'Clientes Ativos' ? Users :
+                    kpi.titulo === 'Ticket Médio' ? ShoppingCart :
+                      Receipt}
+            />
           ))}
         </div>
 
-        {/* Gráfico Principal - Receita */}
+        {/* Gráfico Principal - Evolução Mensal */}
         <ChartCard
-          title="Receita Últimos 12 Meses"
+          title="Evolução Mensal"
           className="w-full"
           icon={TrendingUp}
         >
-          <div className="h-[250px] md:h-[300px] lg:h-[400px] w-full">
+          <div className="h-[250px] md:h-[300px] lg:h-[400px] w-full min-w-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={vendas.vendasPorMes}>
+              <AreaChart
+                data={processedData.graficos.evolucaoMensal}
+                margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+              >
                 <defs>
                   <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.3} />
@@ -524,9 +497,10 @@ export default function DashboardPage(): React.ReactElement {
                   tickLine={false}
                   axisLine={false}
                   tickFormatter={formatYAxisTick}
+                  width={60}
                 />
                 <RechartsTooltip
-                  formatter={(value: number) => [formatTooltipValue(value), "Receita"]}
+                  formatter={(value: number | undefined) => [formatTooltipValue(value || 0), "Total"]}
                   contentStyle={{
                     backgroundColor: "white",
                     borderRadius: "12px",
@@ -536,7 +510,7 @@ export default function DashboardPage(): React.ReactElement {
                 />
                 <Area
                   type="monotone"
-                  dataKey="total"
+                  dataKey="Total"
                   stroke={COLORS.primary}
                   fillOpacity={1}
                   fill="url(#colorTotal)"
@@ -551,25 +525,26 @@ export default function DashboardPage(): React.ReactElement {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
           {/* Pagamentos - Pie Chart */}
           <ChartCard title="Métodos de Pagamento" icon={CreditCard}>
-            <div className="h-[250px] md:h-[300px] w-full">
-              {pagamentosData.length > 0 ? (
+            <div className="h-[250px] md:h-[300px] w-full min-w-[300px]">
+              {processedData.graficos.pagamentosPorMetodo.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={pagamentosData}
+                      data={processedData.graficos.pagamentosPorMetodo}
                       cx="50%"
                       cy="50%"
                       innerRadius={50}
                       outerRadius={80}
                       paddingAngle={5}
-                      dataKey="value"
+                      dataKey="valor"
+                      nameKey="metodo"
                     >
-                      {pagamentosData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      {processedData.graficos.pagamentosPorMetodo.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                       ))}
                     </Pie>
                     <RechartsTooltip
-                      formatter={(value: number) => formatTooltipValue(value)}
+                      formatter={(value: number | undefined) => formatTooltipValue(value || 0)}
                       contentStyle={{
                         backgroundColor: "white",
                         borderRadius: "12px",
@@ -595,23 +570,25 @@ export default function DashboardPage(): React.ReactElement {
             </div>
 
             {/* Resumo numérico abaixo do gráfico */}
-            <div className="grid grid-cols-3 gap-2 md:gap-4 mt-4 pt-4 border-t border-[#123859]/10">
-              {pagamentosData.map((item, idx) => (
-                <div key={idx} className="text-center">
-                  <p className="text-[10px] md:text-xs text-[#123859]/60 mb-1">{item.name}</p>
-                  <p className="font-semibold text-[#123859] text-xs md:text-base">{formatKz(item.value)}</p>
-                </div>
-              ))}
-            </div>
+            {processedData.graficos.pagamentosPorMetodo.length > 0 && (
+              <div className="grid grid-cols-3 gap-2 md:gap-4 mt-4 pt-4 border-t border-[#123859]/10">
+                {processedData.graficos.pagamentosPorMetodo.map((item, idx) => (
+                  <div key={idx} className="text-center">
+                    <p className="text-[10px] md:text-xs text-[#123859]/60 mb-1">{item.metodo}</p>
+                    <p className="font-semibold text-[#123859] text-xs md:text-base">{formatKz(item.valor)}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </ChartCard>
 
           {/* Produtos Mais Vendidos - Bar Chart */}
           <ChartCard title="Top Produtos Mais Vendidos" icon={Package}>
-            <div className="h-[250px] md:h-[300px] w-full">
-              {indicadores.produtosMaisVendidos.length > 0 ? (
+            <div className="h-[250px] md:h-[300px] w-full min-w-[300px]">
+              {data.indicadores.produtosMaisVendidos.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
-                    data={indicadores.produtosMaisVendidos.slice(0, 5)}
+                    data={data.indicadores.produtosMaisVendidos.slice(0, 5)}
                     layout="vertical"
                     margin={{ left: 10, right: 20, top: 10, bottom: 10 }}
                   >
@@ -633,6 +610,10 @@ export default function DashboardPage(): React.ReactElement {
                         border: "1px solid #E5E5E5",
                         boxShadow: "0 10px 15px -3px rgba(18, 56, 89, 0.1)",
                       }}
+                      formatter={(value: number | undefined, name?: string) => {
+                        if (name === 'quantidade') return [value, 'Quantidade'];
+                        return [formatKz(value || 0), 'Valor'];
+                      }}
                     />
                     <Bar
                       dataKey="quantidade"
@@ -640,10 +621,10 @@ export default function DashboardPage(): React.ReactElement {
                       radius={[0, 6, 6, 0]}
                       barSize={24}
                     >
-                      {indicadores.produtosMaisVendidos.slice(0, 5).map((_, index) => (
-                        <Cell 
-                          key={`cell-${index}`} 
-                          fill={index === 0 ? COLORS.secondary : `${COLORS.secondary}${Math.max(40, 90 - index * 15)}`} 
+                      {data.indicadores.produtosMaisVendidos.slice(0, 5).map((_, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={index === 0 ? COLORS.secondary : `${COLORS.secondary}${Math.max(40, 90 - index * 15)}`}
                         />
                       ))}
                     </Bar>
@@ -663,22 +644,22 @@ export default function DashboardPage(): React.ReactElement {
           <DataTable
             title="Últimas Vendas"
             columns={["Cliente", "Total", "Status", "Data"]}
-            data={vendas.ultimas.map(v => [
+            data={data.vendas.ultimas.map(v => [
               v?.cliente || "-",
               formatKz(v?.total || 0),
               v?.status || "-",
-              formatDate(v?.data || ""),
+              v?.data || "-",
             ])}
           />
 
           <DataTable
-            title="Últimas Faturas"
-            columns={["Venda", "Total", "Estado", "Data"]}
-            data={faturas.ultimas.map(f => [
-              f?.venda_id ? `#${f.venda_id}` : "-",
-              formatKz(f?.total || 0),
-              f?.estado || "-",
-              formatDate(f?.data || ""),
+            title="Últimos Documentos"
+            columns={["Tipo", "Nº Documento", "Total", "Estado"]}
+            data={data.documentos_fiscais.ultimos.map(d => [
+              d?.tipo_nome || "-",
+              d?.numero || "-",
+              formatKz(d?.total || 0),
+              d?.estado || "-",
             ])}
           />
         </div>
