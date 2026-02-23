@@ -41,7 +41,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           antialiased
         `}
       >
-        {/* AuthProvider envolve toda a app */}
         <AuthProvider>
           {children}
         </AuthProvider>

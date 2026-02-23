@@ -471,88 +471,99 @@ export default function NovaFaturaReciboPage() {
         <div className="bg-white rounded-lg shadow border-2 border-[#123859]/20 overflow-hidden">
           <div className="bg-[#123859] text-white px-4 py-2 flex items-center gap-2">
             <ShoppingCart size={18} />
-            <h2 className="font-bold text-sm">DADOS DA FATURA-RECIBO</h2>
+            <h2 className="font-bold text-sm">DADOS DA VENDA</h2>
           </div>
 
           <table className="w-full border-collapse">
             <tbody>
               {/* Linha 1: Cliente */}
               <tr className="border-b border-gray-200">
-                <td className="p-3 bg-gray-50 font-semibold text-[#123859] text-sm border-r border-gray-200 w-48">
+                <td className="p-3 bg-gray-50 font-semibold text-[#123859] text-sm border-r border-gray-200 w-40">
                   <div className="flex items-center gap-2">
                     <User size={16} />
                     <span>Cliente</span>
                   </div>
                 </td>
+
                 <td className="p-3">
-                  <div className="flex gap-2 mb-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setModoCliente('cadastrado');
-                        setClienteAvulso('');
-                        setClienteAvulsoNif('');
-                        setClienteSelecionado(null);
-                      }}
-                      className={`px-3 py-1 text-xs rounded transition-colors ${modoCliente === 'cadastrado'
-                        ? 'bg-[#123859] text-white'
-                        : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
-                        }`}
-                    >
-                      Cadastrado
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setModoCliente('avulso');
-                        setClienteSelecionado(null);
-                      }}
-                      className={`px-3 py-1 text-xs rounded transition-colors ${modoCliente === 'avulso'
-                        ? 'bg-[#123859] text-white'
-                        : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
-                        }`}
-                    >
-                      Não cadastrado
-                    </button>
-                  </div>
+                  <div className="flex items-center gap-3 flex-wrap">
 
-                  {modoCliente === 'cadastrado' ? (
-                    <select
-                      className="w-full max-w-md border border-gray-300 p-2 rounded text-sm"
-                      value={clienteSelecionado?.id ?? ""}
-                      onChange={e =>
-                        setClienteSelecionado(
-                          clientes.find(c => c.id === e.target.value) ?? null
-                        )
-                      }
-                    >
-                      <option value="">Selecione um cliente</option>
-                      {clientes.map(c => (
-                        <option key={c.id} value={c.id}>
-                          {c.nome} {c.nif ? `(${formatarNIF(c.nif)})` : ""}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-2 max-w-md">
-                      <input
-                        type="text"
-                        placeholder="Nome do cliente"
-                        className="border border-gray-300 p-2 rounded text-sm w-full"
-                        value={clienteAvulso}
-                        onChange={e => setClienteAvulso(e.target.value)}
-                        required
-                      />
+                    {/* Botões modo cliente */}
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setModoCliente('cadastrado');
+                          setClienteAvulso('');
+                          setClienteAvulsoNif('');
+                          setClienteSelecionado(null);
+                        }}
+                        className={`px-2 py-1 text-xs rounded ${modoCliente === 'cadastrado'
+                            ? 'bg-[#123859] text-white'
+                            : 'bg-white border border-gray-300 text-gray-700'
+                          }`}
+                      >
+                        Cadastrado
+                      </button>
 
-                      <input
-                        type="text"
-                        placeholder="NIF (opcional)"
-                        className="border border-gray-300 p-2 rounded text-sm w-full"
-                        value={clienteAvulsoNif}
-                        onChange={e => setClienteAvulsoNif(e.target.value)}
-                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setModoCliente('avulso');
+                          setClienteSelecionado(null);
+                        }}
+                        className={`px-2 py-1 text-xs rounded ${modoCliente === 'avulso'
+                            ? 'bg-[#123859] text-white'
+                            : 'bg-white border border-gray-300 text-gray-700'
+                          }`}
+                      >
+                        Não cadastrado
+                      </button>
                     </div>
-                  )}
+
+                    {/* Cliente cadastrado */}
+                    {modoCliente === 'cadastrado' && (
+                      <select
+                        className="w-72 border border-gray-300 p-2 rounded text-sm"
+                        value={clienteSelecionado?.id ?? ""}
+                        onChange={e =>
+                          setClienteSelecionado(
+                            clientes.find(c => c.id === e.target.value) ?? null
+                          )
+                        }
+                      >
+                        <option value="">Selecione um cliente</option>
+                        {clientes.map(c => (
+                          <option key={c.id} value={c.id}>
+                            {c.nome} {c.nif ? `(${formatarNIF(c.nif)})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    {/* Cliente avulso */}
+                    {modoCliente === 'avulso' && (
+                      <>
+                        <input
+                          type="text"
+                          placeholder="Nome do cliente"
+                          className="w-60 border border-gray-300 p-2 rounded text-sm"
+                          value={clienteAvulso}
+                          onChange={e => setClienteAvulso(e.target.value)}
+                          required
+                        />
+
+                        <input
+                          type="text"
+                          placeholder="NIF"
+                          className="w-40 border border-gray-300 p-2 rounded text-sm"
+                          value={clienteAvulsoNif}
+                          onChange={e => setClienteAvulsoNif(e.target.value)}
+                        />
+                      </>
+                    )}
+
+                  </div>
                 </td>
               </tr>
 

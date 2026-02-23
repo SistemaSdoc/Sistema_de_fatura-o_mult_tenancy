@@ -346,7 +346,6 @@ const allFeaturesData = [
   { title: "Controle de Produtos", description: "Gerencie produtos e serviços, preços e stock em tempo real, directamente ligados às faturas.", icon: () => <CheckIcon color={COLOR_ACCENT} /> },
   { title: "Relatórios Financeiros", description: "Visualize relatórios detalhados sobre vendas, faturamento e desempenho financeiro da sua empresa.", icon: () => <CheckIcon color={COLOR_ACCENT} /> },
   { title: "Gestão de Utilizadores", description: "Adicione membros da equipa com permissões diferentes, garantindo controlo e colaboração eficiente.", icon: () => <CheckIcon color={COLOR_ACCENT} /> },
-  { title: "Integração com Pagamentos", description: "Aceite pagamentos por transferência bancária, cartão de débito/crédito ou Multicaixa, e acompanhe o estado das faturas (pendente, pago, cancelado).", icon: () => <CheckIcon color={COLOR_ACCENT} /> },
 ];
 
 const processSteps = [

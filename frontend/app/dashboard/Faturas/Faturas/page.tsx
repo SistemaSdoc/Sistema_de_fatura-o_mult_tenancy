@@ -272,7 +272,6 @@ export default function FaturasPage() {
             </h1>
             <p className="text-xs sm:text-sm text-gray-500">
               Total: {loading ? "..." : estatisticas.total} documentos emitidos
-              {estatisticas.totalVendas > 0 && ` (${estatisticas.totalVendas} vendas, ${estatisticas.totalNaoVendas} não-vendas)`}
             </p>
           </div>
 
@@ -297,7 +296,6 @@ export default function FaturasPage() {
           </button>
         </div>
 
-        {/* Erro - Responsivo */}
         {error && (
           <div className="p-3 sm:p-4 bg-red-50 border border-red-200 rounded-lg">
             <p className="text-red-700 text-sm sm:text-base">{error}</p>

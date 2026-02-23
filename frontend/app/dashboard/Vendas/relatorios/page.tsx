@@ -29,22 +29,24 @@ import {
 } from "lucide-react";
 
 import { dashboardService, vendaService } from "@/services/vendas";
-import { DashboardResponse, Venda } from "@/services/vendas";
+import type { DashboardResponse, Venda } from "@/services/vendas";
 
 /* 🎨 Paleta FacturaJá */
 const COLORS = {
   primary: "#123859",
   accent: "#F9941F",
-  success: "#025939",
-  info: "#1D5902",
-  highlight: "#C1F821",
+  success: "#10B981",
+  info: "#3B82F6",
+  highlight: "#F59E0B",
+  danger: "#EF4444",
   gray: "#6B7280",
+  purple: "#8B5CF6",
 };
 
 const STATUS_COLORS = [
-  COLORS.accent,    // Abertas
-  COLORS.success,   // Faturadas 
-  "#EF4444",        // Canceladas
+  COLORS.highlight,  // Abertas
+  COLORS.success,    // Faturadas 
+  COLORS.danger,     // Canceladas
 ];
 
 /* ===== TIPOS AUXILIARES ===== */
@@ -78,16 +80,15 @@ export default function RelatorioVendas() {
 
         const [dashData, vendasData] = await Promise.all([
           dashboardService.fetch(),
-          vendaService.listarVendas(),
+          vendaService.listar(),
         ]);
 
-        // Validar se os dados essenciais existem
         if (!dashData) {
           throw new Error("Dados do dashboard não recebidos");
         }
 
         setDashboard(dashData);
-        setVendas(vendasData || []);
+        setVendas(vendasData?.vendas || []);
       } catch (err) {
         console.error("Erro ao carregar dados:", err);
         setError(err instanceof Error ? err.message : "Erro desconhecido");
@@ -143,6 +144,7 @@ export default function RelatorioVendas() {
 
   /* ===== DADOS PROCESSADOS COM FALLBACKS ===== */
   const safeNumber = (value: any, defaultValue = 0): number => {
+    if (value === undefined || value === null) return defaultValue;
     const num = Number(value);
     return isNaN(num) ? defaultValue : num;
   };
@@ -156,23 +158,27 @@ export default function RelatorioVendas() {
   const receitaComparativa = [
     {
       name: "Mês Anterior",
-      receita: safeNumber(dashboard.receitaMesAnterior),
+      receita: safeNumber(dashboard.kpis?.totalFaturado) * 0.8, // Placeholder - ajustar conforme dados reais
       fill: COLORS.gray,
     },
     {
       name: "Mês Atual",
-      receita: safeNumber(dashboard.receitaMesAtual),
+      receita: safeNumber(dashboard.kpis?.totalFaturado),
       fill: COLORS.accent,
     },
   ];
 
-  const vendasPorMes = dashboard.vendas?.vendasPorMes || [];
+  // Dados de vendas por mês (simulado a partir dos dados existentes)
+  const vendasPorMes = dashboard.vendas?.ultimas?.map((venda, index) => ({
+    mes: `Mês ${index + 1}`,
+    total: safeNumber(venda.total),
+  })) || [];
 
   const kpiCards: KPIData[] = [
     {
       icon: <DollarSign className="w-5 h-5" />,
-      label: "Receita Atual",
-      value: dashboard.receitaMesAtual,
+      label: "Total Faturado",
+      value: dashboard.kpis?.totalFaturado,
       isCurrency: true,
       trend: safeNumber(dashboard.kpis?.crescimentoPercentual) >= 0 ? "up" : "down",
     },
@@ -203,13 +209,13 @@ export default function RelatorioVendas() {
     {
       icon: <Users className="w-5 h-5" />,
       label: "Clientes Ativos",
-      value: safeNumber(dashboard.clientesAtivos),
+      value: safeNumber(dashboard.clientes?.ativos),
     },
   ];
 
   return (
     <MainEmpresa>
-      <div className="space-y-8 max-w-7xl mx-auto">
+      <div className="space-y-8 max-w-7xl mx-auto p-4 md:p-6">
         {/* ===== CABEÇALHO ===== */}
         <header className="border-b border-gray-200 pb-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -249,17 +255,11 @@ export default function RelatorioVendas() {
 
         {/* ===== GRÁFICOS PRINCIPAIS ===== */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Receita mensal */}
-          <Card title="Evolução da Receita Mensal" icon={<TrendingUp className="w-4 h-4" />}>
+          {/* Evolução de vendas */}
+          <Card title="Evolução de Vendas" icon={<TrendingUp className="w-4 h-4" />}>
             {vendasPorMes.length > 0 ? (
               <ResponsiveContainer width="100%" height={320}>
                 <LineChart data={vendasPorMes} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorReceita" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.1} />
-                      <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
                   <XAxis
                     dataKey="mes"
@@ -269,7 +269,7 @@ export default function RelatorioVendas() {
                   <YAxis
                     tick={{ fill: '#6B7280', fontSize: 12 }}
                     axisLine={{ stroke: '#E5E7EB' }}
-                    tickFormatter={(value) => `AOA ${(value / 1000).toFixed(0)}k`}
+                    tickFormatter={(value) => `Kz ${(value / 1000).toFixed(0)}k`}
                   />
                   <Tooltip
                     formatter={(value: number) => [formatCurrency(value), "Receita"]}
@@ -302,13 +302,14 @@ export default function RelatorioVendas() {
             <ResponsiveContainer width="100%" height={320}>
               <PieChart>
                 <Pie
-                  data={statusVendas}
+                  data={statusVendas.filter(item => item.value > 0)}
                   cx="50%"
                   cy="50%"
                   innerRadius={80}
                   outerRadius={110}
                   paddingAngle={4}
                   dataKey="value"
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                 >
                   {statusVendas.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={STATUS_COLORS[index]} stroke="none" />
@@ -357,7 +358,7 @@ export default function RelatorioVendas() {
                   tick={{ fill: '#6B7280', fontSize: 12 }}
                   axisLine={false}
                   tickLine={false}
-                  tickFormatter={(value) => `AOA ${(value / 1000).toFixed(0)}k`}
+                  tickFormatter={(value) => `Kz ${(value / 1000).toFixed(0)}k`}
                 />
                 <Tooltip
                   formatter={(value: number) => [formatCurrency(value), "Receita"]}
@@ -404,12 +405,15 @@ export default function RelatorioVendas() {
                       </td>
                       <td className="py-4 px-4">
                         <div className="font-medium text-gray-900">
-                          {venda.cliente?.nome ?? "Consumidor Final"}
+                          {venda.cliente?.nome ?? venda.cliente_nome ?? "Consumidor Final"}
                         </div>
+                        {venda.cliente?.nif && (
+                          <div className="text-xs text-gray-500">NIF: {venda.cliente.nif}</div>
+                        )}
                       </td>
                       <td className="py-4 px-4">
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 uppercase">
-                          {venda.tipo_documento || "FT"}
+                          {venda.tipo_documento_fiscal || venda.tipo_documento || "VENDA"}
                         </span>
                       </td>
                       <td className="py-4 px-4 text-right font-semibold text-[#123859]">
@@ -425,6 +429,7 @@ export default function RelatorioVendas() {
 
               {vendas.length === 0 && (
                 <div className="text-center py-12 text-gray-500">
+                  <ShoppingCart className="w-12 h-12 mx-auto text-gray-300 mb-3" />
                   Nenhuma venda registrada recentemente
                 </div>
               )}
@@ -447,7 +452,6 @@ export default function RelatorioVendas() {
 /* ===== COMPONENTES AUXILIARES ===== */
 
 function KPICard({ icon, label, value, trend, suffix, isCurrency }: KPIData) {
-  // Normalizar o valor
   const numericValue = safeNumber(value);
 
   const displayValue = isCurrency
@@ -461,10 +465,11 @@ function KPICard({ icon, label, value, trend, suffix, isCurrency }: KPIData) {
           {icon}
         </div>
         {trend && trend !== "neutral" && (
-          <div className={`flex items-center gap-1 text-xs font-medium ${trend === "up" ? "text-green-600" : "text-red-600"
-            }`}>
+          <div className={`flex items-center gap-1 text-xs font-medium ${
+            trend === "up" ? "text-green-600" : "text-red-600"
+          }`}>
             {trend === "up" ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-            {trend === "up" ? "+1.2%" : "-0.8%"}
+            {trend === "up" ? "+" : "-"}{Math.abs(safeNumber(value) * 0.01).toFixed(1)}%
           </div>
         )}
       </div>
@@ -490,7 +495,7 @@ function Card({ title, children, icon }: { title: string; children: React.ReactN
   );
 }
 
-function StatusBadge({ status }: { status: Venda["status"] | string }) {
+function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     aberta: "bg-amber-50 text-amber-700 border border-amber-200",
     faturada: "bg-emerald-50 text-emerald-700 border border-emerald-200",

@@ -21,7 +21,6 @@ import {
     TrendingUp,
     FileText,
     Receipt,
-    Users,
     Calendar,
     ArrowUpRight,
     ArrowDownRight,
@@ -36,9 +35,9 @@ import {
 } from "lucide-react";
 
 import { documentoFiscalService } from "@/services/DocumentoFiscal";
-import type { 
-    DocumentoFiscal, 
-    TipoDocumento, 
+import type {
+    DocumentoFiscal,
+    TipoDocumento,
     EstadoDocumento,
     DashboardDocumentos,
     AlertasDocumentos,
@@ -61,7 +60,7 @@ const COLORS = {
     background: "#F2F2F2",
 };
 
-// Tipos que são considerados VENDAS (FT, FR, RC)
+// Tipos que são considerados VENDAS (FT, FR, RC) - usando constantes do serviço
 const TIPOS_VENDA: TipoDocumento[] = ['FT', 'FR', 'RC'];
 
 // Tipos que são considerados NÃO-VENDAS (FP, FA, NC, ND, FRt)
@@ -139,14 +138,14 @@ export default function RelatorioDocumentosFiscais() {
 
                 // Buscar todos os dados em paralelo
                 const [dashData, docsData, alertasData, evolucaoData] = await Promise.all([
-                    documentoFiscalService.dashboard(),
+                    documentoFiscalService.getResumoDocumentosFiscais(),
                     documentoFiscalService.listar({ per_page: 50 }),
-                    documentoFiscalService.alertasPendentes(),
-                    documentoFiscalService.evolucaoMensal(anoSelecionado),
+                    documentoFiscalService.getAlertasPendentes(),
+                    documentoFiscalService.getEvolucaoMensal(anoSelecionado),
                 ]);
 
                 setDashboard(dashData);
-                setDocumentos(docsData?.data?.documentos || []);
+                setDocumentos(docsData?.data || []);
                 setAlertas(alertasData);
                 setEvolucao(evolucaoData || []);
             } catch (err) {
@@ -187,11 +186,11 @@ export default function RelatorioDocumentosFiscais() {
 
     /* ===== DADOS PROCESSADOS ===== */
     const getNomeCliente = (doc: DocumentoFiscal): string => {
-        return doc.cliente?.nome || doc.cliente_nome || "Consumidor Final";
+        return documentoFiscalService.getNomeCliente(doc);
     };
 
     const getNifCliente = (doc: DocumentoFiscal): string | null => {
-        return doc.cliente?.nif || doc.cliente_nif || null;
+        return documentoFiscalService.getNifCliente(doc);
     };
 
     // Processar documentos por tipo
@@ -244,7 +243,7 @@ export default function RelatorioDocumentosFiscais() {
     const totalVendas = documentos
         .filter(d => TIPOS_VENDA.includes(d.tipo_documento))
         .reduce((sum, d) => sum + safeNumber(d.total_liquido), 0);
-    
+
     const totalNaoVendas = documentos
         .filter(d => TIPOS_NAO_VENDA.includes(d.tipo_documento))
         .reduce((sum, d) => sum + safeNumber(d.total_liquido), 0);
@@ -309,7 +308,7 @@ export default function RelatorioDocumentosFiscais() {
     ];
 
     // Alertas processados
-    const totalAlertas = 
+    const totalAlertas =
         safeNumber(alertas?.adiantamentos_vencidos?.total) +
         safeNumber(alertas?.faturas_com_adiantamentos_pendentes?.total) +
         safeNumber(alertas?.proformas_pendentes?.total);
@@ -529,8 +528,8 @@ export default function RelatorioDocumentosFiscais() {
                                     />
                                     <Tooltip
                                         formatter={(value: number, name: string) => {
-                                            const label = name === "vendas" ? "Vendas" : 
-                                                         name === "naoVendas" ? "Não-Vendas" : "Pendente";
+                                            const label = name === "vendas" ? "Vendas" :
+                                                name === "naoVendas" ? "Não-Vendas" : "Pendente";
                                             return [formatCurrency(value), label];
                                         }}
                                         contentStyle={{
@@ -667,21 +666,21 @@ export default function RelatorioDocumentosFiscais() {
                                                 borderRadius: '8px'
                                             }}
                                         />
-                                        <Bar 
-                                            yAxisId="left" 
-                                            dataKey="quantidade" 
-                                            name="Quantidade" 
-                                            fill={COLORS.primary} 
-                                            radius={[8, 8, 0, 0]} 
-                                            barSize={40} 
+                                        <Bar
+                                            yAxisId="left"
+                                            dataKey="quantidade"
+                                            name="Quantidade"
+                                            fill={COLORS.primary}
+                                            radius={[8, 8, 0, 0]}
+                                            barSize={40}
                                         />
-                                        <Bar 
-                                            yAxisId="right" 
-                                            dataKey="total" 
-                                            name="Total" 
-                                            fill={COLORS.accent} 
-                                            radius={[8, 8, 0, 0]} 
-                                            barSize={40} 
+                                        <Bar
+                                            yAxisId="right"
+                                            dataKey="total"
+                                            name="Total"
+                                            fill={COLORS.accent}
+                                            radius={[8, 8, 0, 0]}
+                                            barSize={40}
                                         />
                                     </BarChart>
                                 </ResponsiveContainer>
@@ -711,12 +710,12 @@ export default function RelatorioDocumentosFiscais() {
                     <Card title="Resumo por Tipo de Documento" icon={<FileText className="w-4 h-4" />}>
                         <div className="space-y-3 max-h-[320px] overflow-y-auto">
                             {documentosPorTipo.map((item) => (
-                                <div 
-                                    key={item.tipo} 
+                                <div
+                                    key={item.tipo}
                                     className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
                                 >
                                     <div className="flex items-center gap-3">
-                                        <div 
+                                        <div
                                             className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-sm"
                                             style={{ backgroundColor: TIPO_COLORS[item.tipo] }}
                                         >
@@ -841,14 +840,14 @@ function KPICard({ icon, label, value, trend, suffix, isCurrency, isInteger, col
             : `${numericValue}${suffix || ''}`;
 
     return (
-        <div 
+        <div
             className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow group"
             style={{ borderLeftWidth: '4px', borderLeftColor: color || COLORS.primary }}
         >
             <div className="flex items-start justify-between">
-                <div 
+                <div
                     className="p-2.5 rounded-lg transition-colors"
-                    style={{ 
+                    style={{
                         backgroundColor: `${color}20` || `${COLORS.primary}20`,
                         color: color || COLORS.primary
                     }}
@@ -856,9 +855,8 @@ function KPICard({ icon, label, value, trend, suffix, isCurrency, isInteger, col
                     {icon}
                 </div>
                 {trend && trend !== "neutral" && (
-                    <div className={`flex items-center gap-1 text-xs font-medium ${
-                        trend === "up" ? "text-green-600" : "text-red-600"
-                    }`}>
+                    <div className={`flex items-center gap-1 text-xs font-medium ${trend === "up" ? "text-green-600" : "text-red-600"
+                        }`}>
                         {trend === "up" ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
                         {trend === "up" ? "+" : "-"}{Math.abs(numericValue * 0.12).toFixed(1)}%
                     </div>
@@ -894,19 +892,19 @@ function EstadoBadge({ estado }: { estado: EstadoDocumento | undefined }) {
         text: ESTADO_COLORS[estado],
         border: ESTADO_COLORS[estado],
         icon: estado === "paga" ? <CheckCircle2 className="w-3 h-3" /> :
-              estado === "cancelado" ? <Ban className="w-3 h-3" /> :
-              estado === "expirado" ? <Clock className="w-3 h-3" /> :
-              estado === "parcialmente_paga" ? <CreditCard className="w-3 h-3" /> :
-              <Clock className="w-3 h-3" />
+            estado === "cancelado" ? <Ban className="w-3 h-3" /> :
+                estado === "expirado" ? <Clock className="w-3 h-3" /> :
+                    estado === "parcialmente_paga" ? <CreditCard className="w-3 h-3" /> :
+                        <Clock className="w-3 h-3" />
     };
 
     return (
-        <span 
+        <span
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold capitalize border"
-            style={{ 
-                backgroundColor: config.bg, 
+            style={{
+                backgroundColor: config.bg,
                 color: config.text,
-                borderColor: config.border 
+                borderColor: config.border
             }}
         >
             {config.icon}
