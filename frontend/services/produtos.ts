@@ -14,6 +14,7 @@ export interface Categoria {
     id: string;
     nome: string;
     descricao?: string;
+    tipo?: "produto" | "servico"; // ✅ NOVO: tipo da categoria
     created_at?: string;
     updated_at?: string;
     deleted_at?: string | null;
@@ -24,6 +25,9 @@ export interface Fornecedor {
     nome: string;
     email?: string;
     telefone?: string;
+    nif?: string;
+    tipo?: "nacional" | "internacional";
+    status?: "ativo" | "inativo";
     // ... outros campos do fornecedor
 }
 
@@ -67,16 +71,24 @@ export interface Produto {
     estoque_minimo: number;
     status: StatusProduto;
     tipo: TipoProduto;
-    // Campos de serviço
-    retencao?: number;
-    duracao_estimada?: string;
-    unidade_medida?: UnidadeMedida;
+    
+    // ✅ Campos de serviço
+    retencao?: number;               // Taxa de retenção (%)
+    duracao_estimada?: string;        // Ex: "2 horas", "1 dia"
+    unidade_medida?: UnidadeMedida;   // hora, dia, semana, mes
+    
+    // ✅ Campos calculados
+    valor_retencao?: number;          // Valor da retenção (calculado)
+    preco_liquido?: number;           // Preço após retenção
+    
     // Soft delete
     deleted_at?: string | null;
     created_at?: string;
     updated_at?: string;
+    
     // Relacionamentos
     movimentosStock?: MovimentoStock[];
+    
     // Campos adicionais para listagem
     data_exclusao?: string;
     esta_deletado?: boolean;
@@ -96,7 +108,8 @@ export interface CriarProdutoInput {
     estoque_atual?: number;
     estoque_minimo?: number;
     status?: StatusProduto;
-    // Campos de serviço
+    
+    // ✅ Campos de serviço
     retencao?: number;
     duracao_estimada?: string;
     unidade_medida?: UnidadeMedida;
@@ -118,6 +131,10 @@ export interface ListarProdutosParams {
     paginar?: boolean;
     per_page?: number;
     with_trashed?: boolean;
+    // ✅ NOVOS FILTROS
+    apenas_servicos?: boolean;
+    apenas_produtos?: boolean;
+    com_retencao?: boolean;
 }
 
 export interface PaginatedResponse<T> {
@@ -186,6 +203,11 @@ export const produtoService = {
         if (params.direcao) queryParams.append("direcao", params.direcao);
         if (params.paginar) queryParams.append("paginar", "true");
         if (params.per_page) queryParams.append("per_page", params.per_page.toString());
+        
+        // ✅ NOVOS FILTROS
+        if (params.apenas_servicos) queryParams.append("apenas_servicos", "true");
+        if (params.apenas_produtos) queryParams.append("apenas_produtos", "true");
+        if (params.com_retencao) queryParams.append("com_retencao", "true");
 
         const queryString = queryParams.toString();
         const url = `${API_PREFIX}/produtos${queryString ? `?${queryString}` : ""}`;
@@ -202,6 +224,8 @@ export const produtoService = {
 
         if (params.tipo) queryParams.append("tipo", params.tipo);
         if (params.busca) queryParams.append("busca", params.busca);
+        if (params.apenas_servicos) queryParams.append("apenas_servicos", "true");
+        if (params.apenas_produtos) queryParams.append("apenas_produtos", "true");
 
         const queryString = queryParams.toString();
         const url = `${API_PREFIX}/produtos/all${queryString ? `?${queryString}` : ""}`;
@@ -239,6 +263,13 @@ export const produtoService = {
      * Criar novo produto/serviço
      */
     async criarProduto(dados: CriarProdutoInput): Promise<ProdutoResponse> {
+        // ✅ Log para debug
+        console.log('[ProdutoService] Criando item:', {
+            tipo: dados.tipo,
+            nome: dados.nome,
+            retencao: dados.retencao
+        });
+        
         const response = await api.post(`${API_PREFIX}/produtos`, dados);
         return response.data;
     },
@@ -247,6 +278,13 @@ export const produtoService = {
      * Atualizar produto
      */
     async atualizarProduto(id: string, dados: AtualizarProdutoInput): Promise<ProdutoResponse> {
+        // ✅ Log para debug
+        console.log('[ProdutoService] Atualizando item:', {
+            id,
+            tipo: dados.tipo,
+            retencao: dados.retencao
+        });
+        
         const response = await api.put(`${API_PREFIX}/produtos/${id}`, dados);
         return response.data;
     },
@@ -286,9 +324,38 @@ export const produtoService = {
     /**
      * Listar categorias (para o select)
      */
-    async listarCategorias(): Promise<Categoria[]> {
-        const response = await api.get(`${API_PREFIX}/categorias`);
+    async listarCategorias(params?: { tipo?: "produto" | "servico" }): Promise<Categoria[]> {
+        let url = `${API_PREFIX}/categorias`;
+        if (params?.tipo) {
+            url += `?tipo=${params.tipo}`;
+        }
+        const response = await api.get(url);
         return response.data.categorias || [];
+    },
+
+    /**
+     * ✅ NOVO: Listar apenas serviços
+     */
+    async listarServicos(params: Omit<ListarProdutosParams, "tipo"> = {}): Promise<ListarProdutosResponse> {
+        return this.listarProdutos({ ...params, tipo: "servico" });
+    },
+
+    /**
+     * ✅ NOVO: Listar apenas produtos
+     */
+    async listarApenasProdutos(params: Omit<ListarProdutosParams, "tipo"> = {}): Promise<ListarProdutosResponse> {
+        return this.listarProdutos({ ...params, tipo: "produto" });
+    },
+
+    /**
+     * ✅ NOVO: Listar serviços com retenção
+     */
+    async listarServicosComRetencao(params: Omit<ListarProdutosParams, "tipo" | "com_retencao"> = {}): Promise<ListarProdutosResponse> {
+        return this.listarProdutos({ 
+            ...params, 
+            tipo: "servico",
+            com_retencao: true 
+        });
     },
 
     /**
@@ -495,7 +562,7 @@ export function formatarPreco(valor: number): string {
         style: "currency",
         currency: "AOA",
         minimumFractionDigits: 2,
-    });
+    }).replace("AOA", "Kz");
 }
 
 export function calcularMargemLucro(precoCompra: number, precoVenda: number): number {
@@ -504,29 +571,57 @@ export function calcularMargemLucro(precoCompra: number, precoVenda: number): nu
 }
 
 export function calcularValorEstoque(produto: Produto): number {
+    if (produto.tipo === "servico") return 0;
     return produto.estoque_atual * (produto.custo_medio || produto.preco_compra || 0);
 }
 
 export function estaEstoqueBaixo(produto: Produto): boolean {
+    if (produto.tipo === "servico") return false;
     return produto.estoque_atual > 0 && produto.estoque_atual <= produto.estoque_minimo;
 }
 
 export function estaSemEstoque(produto: Produto): boolean {
+    if (produto.tipo === "servico") return false;
     return produto.estoque_atual === 0;
 }
 
 export function formatarData(data: string | null): string {
     if (!data) return "-";
-    return new Date(data).toLocaleDateString("pt-PT");
+    try {
+        return new Date(data).toLocaleDateString("pt-PT");
+    } catch {
+        return data;
+    }
 }
 
 export function formatarDataHora(data: string | null): string {
     if (!data) return "-";
-    return new Date(data).toLocaleString("pt-PT");
+    try {
+        return new Date(data).toLocaleString("pt-PT");
+    } catch {
+        return data;
+    }
 }
 
 export function formatarDuracao(duracao: string, unidade: string): string {
     return `${duracao} ${unidade}`;
+}
+
+/**
+ * ✅ NOVO: Calcular valor da retenção de um serviço
+ */
+export function calcularRetencao(produto: Produto, quantidade = 1): number {
+    if (!isServico(produto) || !produto.retencao) return 0;
+    return (produto.preco_venda * quantidade * produto.retencao) / 100;
+}
+
+/**
+ * ✅ NOVO: Calcular preço líquido (após retenção)
+ */
+export function calcularPrecoLiquido(produto: Produto, quantidade = 1): number {
+    const total = produto.preco_venda * quantidade;
+    if (!isServico(produto) || !produto.retencao) return total;
+    return total - (total * produto.retencao) / 100;
 }
 
 /**
@@ -541,6 +636,13 @@ export function estaNaLixeira(produto: Produto): boolean {
  */
 export function isServico(produto: Produto): boolean {
     return produto.tipo === "servico";
+}
+
+/**
+ * Verifica se é um produto (tem controle de stock)
+ */
+export function isProduto(produto: Produto): boolean {
+    return produto.tipo === "produto";
 }
 
 /**
@@ -564,6 +666,17 @@ export function getTipoBadge(tipo: TipoProduto): { texto: string; cor: string } 
         return { texto: "Serviço", cor: "bg-blue-100 text-blue-800" };
     }
     return { texto: "Produto", cor: "bg-purple-100 text-purple-800" };
+}
+
+/**
+ * Retorna badge de retenção para serviços
+ */
+export function getRetencaoBadge(retencao?: number): { texto: string; cor: string } | null {
+    if (!retencao) return null;
+    return {
+        texto: `Retenção ${retencao}%`,
+        cor: "bg-orange-100 text-orange-800"
+    };
 }
 
 /**
@@ -600,6 +713,22 @@ export function contarStatusEstoque(produtos: Produto[]) {
         estoqueBaixo: fisicos.filter(estaEstoqueBaixo).length,
         semEstoque: fisicos.filter(estaSemEstoque).length,
         normal: fisicos.filter(p => !estaEstoqueBaixo(p) && !estaSemEstoque(p)).length,
+    };
+}
+
+/**
+ * ✅ NOVO: Estatísticas de serviços
+ */
+export function estatisticasServicos(servicos: Produto[]) {
+    const ativos = servicos.filter(s => s.status === "ativo");
+    return {
+        total: servicos.length,
+        ativos: ativos.length,
+        inativos: servicos.length - ativos.length,
+        precoMedio: servicos.reduce((acc, s) => acc + s.preco_venda, 0) / (servicos.length || 1),
+        retencaoMedia: servicos.reduce((acc, s) => acc + (s.retencao || 0), 0) / (servicos.length || 1),
+        comRetencao: servicos.filter(s => s.retencao && s.retencao > 0).length,
+        semRetencao: servicos.filter(s => !s.retencao || s.retencao === 0).length,
     };
 }
 

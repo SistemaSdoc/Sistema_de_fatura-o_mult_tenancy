@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
+use App\Services\StockService;
 
 class ItemDocumentoFiscal extends Model
 {
@@ -63,6 +64,21 @@ class ItemDocumentoFiscal extends Model
         static::creating(function ($model) {
             if (! $model->id) {
                 $model->id = (string) Str::uuid();
+            }
+
+            // ✅ Calcular retenção automaticamente se for serviço
+            if ($model->produto && $model->produto->isServico()) {
+                $model->taxa_retencao = $model->taxa_retencao ?? ($model->produto->retencao ?? 6.5);
+                $model->valor_retencao = round(($model->base_tributavel * $model->taxa_retencao) / 100, 2);
+                $model->total_linha = $model->base_tributavel + $model->valor_iva - $model->valor_retencao;
+            }
+        });
+
+        static::updating(function ($model) {
+            // ✅ Recalcular retenção se base tributável mudar e for serviço
+            if ($model->isDirty('base_tributavel') && $model->produto && $model->produto->isServico()) {
+                $model->valor_retencao = round(($model->base_tributavel * $model->taxa_retencao) / 100, 2);
+                $model->total_linha = $model->base_tributavel + $model->valor_iva - $model->valor_retencao;
             }
         });
     }
@@ -129,11 +145,11 @@ class ItemDocumentoFiscal extends Model
     }
 
     /**
-     * Verificar se item afeta stock (apenas FT, FR, NC)
+     * Verificar se item afeta stock (apenas FT, FR, NC e produtos)
      */
     public function getAfetaStockAttribute(): bool
     {
-        if (!$this->documentoFiscal) {
+        if (!$this->documentoFiscal || $this->eh_servico) {
             return false;
         }
 
@@ -150,6 +166,23 @@ class ItemDocumentoFiscal extends Model
         }
 
         return $this->documentoFiscal->tipo_documento === 'NC' ? 'entrada' : 'saida';
+    }
+
+    /**
+     * ✅ NOVO: Valor após retenção
+     */
+    public function getValorAposRetencaoAttribute(): float
+    {
+        return $this->base_tributavel + $this->valor_iva - $this->valor_retencao;
+    }
+
+    /**
+     * ✅ NOVO: Taxa de retenção efetiva
+     */
+    public function getTaxaRetencaoEfetivaAttribute(): float
+    {
+        if ($this->base_tributavel <= 0) return 0;
+        return round(($this->valor_retencao / $this->base_tributavel) * 100, 2);
     }
 
     /* ================= SCOPES ================= */
@@ -180,13 +213,35 @@ class ItemDocumentoFiscal extends Model
     }
 
     /**
-     * Itens que afetam stock (FT, FR, NC)
+     * Apenas serviços
+     */
+    public function scopeApenasServicos($query)
+    {
+        return $query->whereHas('produto', function($q) {
+            $q->where('tipo', 'servico');
+        });
+    }
+
+    /**
+     * Apenas produtos
+     */
+    public function scopeApenasProdutos($query)
+    {
+        return $query->whereHas('produto', function($q) {
+            $q->where('tipo', 'produto');
+        });
+    }
+
+    /**
+     * Itens que afetam stock (FT, FR, NC e produtos)
      */
     public function scopeAfetamStock($query)
     {
         return $query->whereHas('documentoFiscal', function($q) {
             $q->whereIn('tipo_documento', ['FT', 'FR', 'NC'])
               ->where('estado', '!=', 'cancelado');
+        })->whereHas('produto', function($q) {
+            $q->where('tipo', 'produto');
         });
     }
 
@@ -194,13 +249,19 @@ class ItemDocumentoFiscal extends Model
 
     /**
      * Calcular totais do item baseado nos valores base
+     * ATUALIZADO: Com suporte a retenção para serviços
      */
     public function calcularTotais()
     {
         $precoTotal = $this->quantidade * $this->preco_unitario;
         $this->base_tributavel = max($precoTotal - $this->desconto, 0);
         $this->valor_iva = round(($this->base_tributavel * $this->taxa_iva) / 100, 2);
-        $this->valor_retencao = round(($this->base_tributavel * $this->taxa_retencao) / 100, 2);
+
+        // ✅ Calcular retenção (especialmente para serviços)
+        if ($this->taxa_retencao > 0) {
+            $this->valor_retencao = round(($this->base_tributavel * $this->taxa_retencao) / 100, 2);
+        }
+
         $this->total_linha = $this->base_tributavel + $this->valor_iva - $this->valor_retencao;
 
         return $this;
@@ -247,11 +308,12 @@ class ItemDocumentoFiscal extends Model
 
     /**
      * Processar movimento de stock após criar/salvar item
-     * ATUALIZADO: Integração com StockService
+     * ATUALIZADO: Integração com StockService, ignora serviços
      */
     public function processarStock(): void
     {
-        if (!$this->afeta_stock || !$this->produto_id) {
+        // ✅ Ignorar serviços
+        if (!$this->afeta_stock || !$this->produto_id || $this->eh_servico) {
             return;
         }
 
@@ -286,5 +348,21 @@ class ItemDocumentoFiscal extends Model
             $this->documentoFiscal->id,
             "Documento: {$this->documentoFiscal->numero_documento}"
         );
+    }
+
+    /**
+     * ✅ NOVO: Aplicar retenção padrão para serviço
+     */
+    public function aplicarRetencaoServico(): void
+    {
+        if (!$this->eh_servico) {
+            return;
+        }
+
+        if ($this->produto && $this->produto->retencao > 0) {
+            $this->taxa_retencao = $this->produto->retencao;
+            $this->valor_retencao = round(($this->base_tributavel * $this->taxa_retencao) / 100, 2);
+            $this->total_linha = $this->base_tributavel + $this->valor_iva - $this->valor_retencao;
+        }
     }
 }

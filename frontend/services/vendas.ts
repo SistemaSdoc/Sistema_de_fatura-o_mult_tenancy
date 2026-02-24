@@ -80,6 +80,8 @@ export interface CriarItemVendaPayload {
     quantidade: number;
     preco_venda: number;
     desconto?: number;
+    // ✅ NOVO: taxa de retenção para serviços (opcional)
+    taxa_retencao?: number;
 }
 
 /* -------- Dados de Pagamento -------- */
@@ -103,6 +105,29 @@ export interface CriarVendaPayload {
     observacoes?: string;
 }
 
+/* -------- Payload para Documento Fiscal (NOVO) -------- */
+export interface CriarDocumentoFiscalPayload {
+    tipo_documento: TipoDocumentoFiscal; // FT, FR, FP, FA, NC, ND, RC, FRt
+    venda_id?: string;
+    cliente_id?: string | null;
+    cliente_nome?: string;           // Para cliente avulso
+    cliente_nif?: string;            // Para cliente avulso (opcional)
+    fatura_id?: string;
+    itens: Array<{
+        produto_id?: string;
+        descricao: string;
+        quantidade: number;
+        preco_unitario: number;
+        desconto?: number;
+        taxa_iva?: number;
+        taxa_retencao?: number;      // ✅ NOVO: taxa de retenção para serviços
+    }>;
+    dados_pagamento?: DadosPagamento;
+    motivo?: string;
+    data_vencimento?: string;
+    referencia_externa?: string;
+}
+
 /* -------- Cliente -------- */
 export type TipoCliente = "consumidor_final" | "empresa";
 
@@ -111,6 +136,7 @@ export interface Cliente {
     nome: string;
     nif: string | null;
     tipo: TipoCliente;
+    status?: 'ativo' | 'inativo';    // ✅ NOVO
     telefone: string | null;
     email: string | null;
     endereco: string | null;
@@ -124,13 +150,14 @@ export interface CriarClienteInput {
     nome: string;
     nif?: string;
     tipo?: TipoCliente;
+    status?: 'ativo' | 'inativo';    // ✅ NOVO
     telefone?: string;
     email?: string;
     endereco?: string;
     data_registro?: string;
 }
 
-export interface AtualizarClienteInput extends Partial<CriarClienteInput> { }
+export type AtualizarClienteInput = Partial<CriarClienteInput>
 
 /* -------- Categoria -------- */
 export interface Categoria {
@@ -189,6 +216,9 @@ export interface Produto {
     retencao?: number;
     duracao_estimada?: string;
     unidade_medida?: UnidadeMedida;
+    // Campos calculados
+    valor_retencao?: number;
+    preco_liquido?: number;
     // Soft delete
     deleted_at?: string | null;
     created_at?: string;
@@ -234,6 +264,10 @@ export interface ListarProdutosParams {
     paginar?: boolean;
     per_page?: number;
     with_trashed?: boolean;
+    // ✅ NOVOS FILTROS
+    apenas_servicos?: boolean;
+    apenas_produtos?: boolean;
+    com_retencao?: boolean;
 }
 
 export interface PaginatedResponse<T> {
@@ -296,7 +330,7 @@ export interface DocumentoFiscal {
 
     base_tributavel: number;
     total_iva: number;
-    total_retencao: number;
+    total_retencao: number; // ✅ Soma das retenções de serviços
     total_liquido: number;
 
     estado: EstadoDocumentoFiscal;
@@ -336,60 +370,102 @@ export interface DocumentoFiscal {
     updated_at?: string;
 }
 
-/* -------- Venda (atualizado) -------- */
+/* -------- Item de Venda (CORRIGIDO - em conformidade com VendaController) -------- */
 export interface ItemVenda {
     id: string;
     produto_id: string;
+    // ✅ CORRIGIDO: produto é objeto ou null, NÃO boolean
+    produto: {
+        id: string;
+        nome: string;
+        codigo?: string;
+        tipo: TipoProduto;
+    } | null;
     descricao: string;
     quantidade: number;
     preco_venda: number;
     desconto: number;
     base_tributavel: number;
     valor_iva: number;
-    valor_retencao: number;
+    valor_retencao: number;      // Valor retido do serviço (calculado)
+    taxa_retencao?: number;      // Taxa de retenção aplicada (ex: 6.5)
     subtotal: number;
-    taxa_iva?: number;
-    taxa_retencao?: number;
+    subtotal_liquido: number;    // ✅ OBRIGATÓRIO: subtotal - valor_retencao
+    eh_servico: boolean;         // ✅ Flag calculada no backend
     codigo_produto?: string;
     unidade?: string;
 }
 
+/* -------- Totais por Tipo (NOVO - conforme VendaController) -------- */
+export interface TotaisPorTipo {
+    produtos: {
+        quantidade: number;
+        total: number;
+    };
+    servicos: {
+        quantidade: number;
+        total: number;
+        retencao: number;
+    };
+}
+
+/* -------- Venda (CORRIGIDO - em conformidade com VendaController) -------- */
 export interface Venda {
     id: string;
+    // Dados do documento fiscal (se existir)
+    numero: string;
+    serie: string;
+    tipo_documento: TipoDocumentoFiscal | 'venda';
+    tipo_documento_nome: string;
+
+    // Cliente
     cliente_id?: string | null;
+    cliente?: Cliente | null;
     cliente_nome?: string | null; // Para cliente avulso
     cliente_nif?: string | null;  // Para cliente avulso
+
+    // Usuário
     user_id: string;
-    documento_fiscal_id?: string | null;
+    user?: User;
 
-    tipo_documento: 'venda';
-    serie: string;
-    numero: number;
-    numero_documento?: string;
-
-    base_tributavel: number;
-    total_iva: number;
-    total_retencao: number;
-    total_pagar: number;
-    total: number;
-
+    // Datas
     data_venda: string;
     hora_venda: string;
+    created_at?: string;
 
+    // Valores
+    total: number;
+    base_tributavel: number;
+    total_iva: number;
+    total_retencao: number;      // Total das retenções
+
+    // ✅ NOVO: Retenção de serviços (conforme VendaController)
+    total_retencao_servicos: number;
+    tem_servicos: boolean;
+    quantidade_servicos: number;
+
+    // Status
     status: 'aberta' | 'faturada' | 'cancelada';
     estado_pagamento: EstadoPagamentoVenda;
+    faturado: boolean;
+    eh_venda: boolean;           // FT, FR ou RC
+    paga: boolean;               // estado_pagamento === 'paga'
 
-    tipo_documento_fiscal?: TipoDocumentoFiscal; // FT, FR, FP, etc
+    // Documento fiscal completo
+    documento_fiscal?: DocumentoFiscal | null;
+
+    // Itens
+    itens?: ItemVenda[];
+
+    // ✅ NOVO: Totais por tipo (conforme VendaController)
+    totais_por_tipo?: TotaisPorTipo;
+
+    // Campos legados/compatibilidade
+    numero_documento?: string;
+    tipo_documento_fiscal?: TipoDocumentoFiscal;
     observacoes?: string;
     hash_fiscal?: string;
-
-    itens?: ItemVenda[];
-    cliente?: Cliente;
-    user?: User;
-    documento_fiscal?: DocumentoFiscal;
-
-    created_at?: string;
-    updated_at?: string;
+    pode_receber_pagamento?: boolean;
     deleted_at?: string;
 }
 
@@ -468,6 +544,9 @@ export interface DashboardData {
         totalFaturado: number;
         totalNotasCredito: number;
         totalLiquido: number;
+        // ✅ NOVO
+        totalRetencao?: number;
+        totalRetencaoMes?: number;
     };
 
     produtos: {
@@ -475,6 +554,15 @@ export interface DashboardData {
         ativos: number;
         inativos: number;
         stock_baixo: number;
+    };
+
+    // ✅ NOVO: estatísticas de serviços
+    servicos?: {
+        total: number;
+        ativos: number;
+        inativos: number;
+        precoMedio: number;
+        comRetencao: number;
     };
 
     vendas: {
@@ -494,6 +582,9 @@ export interface DashboardData {
                 estado: EstadoDocumentoFiscal;
             };
             data: string;
+            // ✅ NOVO
+            tem_servicos?: boolean;
+            total_retencao?: number;
         }>;
     };
 
@@ -503,12 +594,15 @@ export interface DashboardData {
             nome: string;
             quantidade: number;
             valor: number;
+            // ✅ NOVO
+            retencao?: number;
         }>;
         por_estado: Array<{
             tipo: string;
-            por_estado: Record<string, { quantidade: number; valor: number }>;
+            por_estado: Record<string, { quantidade: number; valor: number; retencao?: number }>;
             total_quantidade: number;
             total_valor: number;
+            total_retencao?: number;
         }>;
         ultimos: Array<{
             id: string;
@@ -520,6 +614,8 @@ export interface DashboardData {
             estado: EstadoDocumentoFiscal;
             estado_pagamento: EstadoPagamentoVenda;
             data: string;
+            // ✅ NOVO
+            retencao?: number;
         }>;
         por_mes: Array<{
             mes: string;
@@ -528,10 +624,13 @@ export interface DashboardData {
             NC: number;
             ND: number;
             total: number;
+            // ✅ NOVO
+            retencao?: number;
         }>;
         por_dia: Array<{
             dia: string;
             total: number;
+            retencao?: number;
         }>;
     };
 
@@ -559,6 +658,14 @@ export interface DashboardData {
             quantidade: number;
             valor_total: number;
         }>;
+        // ✅ NOVO: serviços mais vendidos
+        servicosMaisVendidos?: Array<{
+            produto: string;
+            codigo?: string;
+            quantidade: number;
+            valor_total: number;
+            retencao_total: number;
+        }>;
     };
 
     alertas: {
@@ -566,6 +673,8 @@ export interface DashboardData {
         documentos_proximo_vencimento: number;
         adiantamentos_pendentes: number;
         proformas_pendentes: number;
+        // ✅ NOVO
+        servicos_com_retencao_pendente?: number;
     };
 
     periodo: {
@@ -586,6 +695,8 @@ export interface ResumoDocumentosFiscais {
         quantidade: number;
         valor_total: number;
         mes_atual: number;
+        // ✅ NOVO
+        retencao_total?: number;
     }>;
     por_estado: Record<EstadoDocumentoFiscal, number>;
     periodo: {
@@ -613,6 +724,8 @@ export interface EstatisticasPagamentos {
     };
     prazo_medio_pagamento: number;
     metodos_pagamento: Record<string, number>;
+    // ✅ NOVO
+    recebidos_com_retencao?: number;
 }
 
 /* -------- Alertas Pendentes -------- */
@@ -629,6 +742,8 @@ export interface AlertasPendentes {
             valor_pendente: number;
             data_vencimento: string;
             dias_atraso: number;
+            // ✅ NOVO
+            retencao?: number;
         }>;
     };
     proximos_vencimento: {
@@ -643,6 +758,8 @@ export interface AlertasPendentes {
             valor_pendente: number;
             data_vencimento: string;
             dias_ate_vencimento: number;
+            // ✅ NOVO
+            retencao?: number;
         }>;
     };
     adiantamentos_pendentes: {
@@ -671,6 +788,19 @@ export interface AlertasPendentes {
             dias_pendentes: number;
         }>;
     };
+    // ✅ NOVO
+    servicos_com_retencao_proximos?: {
+        quantidade: number;
+        valor_total: number;
+        documentos: Array<{
+            id: string;
+            numero: string;
+            cliente?: string;
+            valor: number;
+            retencao: number;
+            data_vencimento: string;
+        }>;
+    };
     total_alertas: number;
 }
 
@@ -690,12 +820,14 @@ export interface EvolucaoMensal {
         valor_proformas: number;
         adiantamentos: number;
         valor_adiantamentos: number;
+        // ✅ NOVO
+        retencao?: number;
     }>;
 }
 
 /* ================== SERVIÇOS ================== */
 
-/* -------- Helper para limpar payload -------- */
+/* -------- Helper para limpar payload de venda -------- */
 function criarPayloadVenda(payload: CriarVendaPayload): Record<string, unknown> {
     const cleanPayload: Record<string, unknown> = {
         itens: payload.itens,
@@ -735,17 +867,69 @@ function criarPayloadVenda(payload: CriarVendaPayload): Record<string, unknown> 
     return cleanPayload;
 }
 
+/* -------- Helper para limpar payload de documento fiscal -------- */
+function criarPayloadDocumentoFiscal(payload: CriarDocumentoFiscalPayload): Record<string, unknown> {
+    const cleanPayload: Record<string, unknown> = {
+        tipo_documento: payload.tipo_documento,
+        itens: payload.itens,
+    };
+
+    if (payload.venda_id) {
+        cleanPayload.venda_id = payload.venda_id;
+    }
+
+    // Para cliente cadastrado, enviar cliente_id
+    if (payload.cliente_id) {
+        cleanPayload.cliente_id = payload.cliente_id;
+    }
+
+    // Para cliente avulso, enviar cliente_nome e opcionalmente cliente_nif
+    if (payload.cliente_nome && payload.cliente_nome.trim() !== '') {
+        cleanPayload.cliente_nome = payload.cliente_nome.trim();
+        if (payload.cliente_nif) {
+            cleanPayload.cliente_nif = payload.cliente_nif;
+        }
+    }
+
+    if (payload.fatura_id) {
+        cleanPayload.fatura_id = payload.fatura_id;
+    }
+
+    if (payload.dados_pagamento) {
+        cleanPayload.dados_pagamento = payload.dados_pagamento;
+    }
+
+    if (payload.motivo) {
+        cleanPayload.motivo = payload.motivo;
+    }
+
+    if (payload.data_vencimento) {
+        cleanPayload.data_vencimento = payload.data_vencimento;
+    }
+
+    if (payload.referencia_externa) {
+        cleanPayload.referencia_externa = payload.referencia_externa;
+    }
+
+    return cleanPayload;
+}
+
 /* -------- Vendas -------- */
 export const vendaService = {
     async obterDadosNovaVenda(): Promise<{
         clientes: Cliente[];
         produtos: Produto[];
+        estatisticas?: {
+            total_produtos: number;
+            total_servicos: number;
+        };
     }> {
         try {
             const { data } = await api.get("/api/vendas/create");
             return {
                 clientes: data.clientes || [],
                 produtos: data.produtos || [],
+                estatisticas: data.estatisticas,
             };
         } catch (err) {
             handleAxiosError(err, "[VENDA SERVICE] Erro ao obter dados");
@@ -759,6 +943,12 @@ export const vendaService = {
             console.log('[VENDA SERVICE] Payload:', cleanPayload);
 
             const { data } = await api.post("/api/vendas", cleanPayload);
+            
+            // ✅ Garantir que campos calculados existam na resposta
+            if (data.venda) {
+                data.venda = this.normalizarVenda(data.venda);
+            }
+            
             return data;
         } catch (err) {
             handleAxiosError(err, "[VENDA SERVICE] Erro ao criar venda");
@@ -775,6 +965,9 @@ export const vendaService = {
         cliente_id?: string;
         data_inicio?: string;
         data_fim?: string;
+        // ✅ NOVOS FILTROS
+        tipo_item?: 'produto' | 'servico';
+        com_retencao?: boolean;
     }): Promise<{ message: string; vendas: Venda[] } | null> {
         try {
             const queryParams = new URLSearchParams();
@@ -786,11 +979,19 @@ export const vendaService = {
             if (params?.cliente_id) queryParams.append('cliente_id', params.cliente_id);
             if (params?.data_inicio) queryParams.append('data_inicio', params.data_inicio);
             if (params?.data_fim) queryParams.append('data_fim', params.data_fim);
+            if (params?.tipo_item) queryParams.append('tipo_item', params.tipo_item);
+            if (params?.com_retencao) queryParams.append('com_retencao', 'true');
 
             const queryString = queryParams.toString();
             const url = `/api/vendas${queryString ? `?${queryString}` : ''}`;
 
             const { data } = await api.get(url);
+
+            // ✅ Normalizar vendas para garantir conformidade com VendaController
+            if (data.vendas) {
+                data.vendas = data.vendas.map((venda: Venda) => this.normalizarVenda(venda));
+            }
+
             return data;
         } catch (err) {
             handleAxiosError(err, "[VENDA SERVICE] Erro ao listar vendas");
@@ -801,6 +1002,12 @@ export const vendaService = {
     async obter(id: string): Promise<{ message: string; venda: Venda } | null> {
         try {
             const { data } = await api.get(`/api/vendas/${id}`);
+            
+            // ✅ Normalizar venda para garantir conformidade
+            if (data.venda) {
+                data.venda = this.normalizarVenda(data.venda);
+            }
+            
             return data;
         } catch (err) {
             handleAxiosError(err, "[VENDA SERVICE] Erro ao obter venda");
@@ -811,6 +1018,11 @@ export const vendaService = {
     async cancelar(id: string): Promise<{ message: string; venda: Venda } | null> {
         try {
             const { data } = await api.post(`/api/vendas/${id}/cancelar`);
+            
+            if (data.venda) {
+                data.venda = this.normalizarVenda(data.venda);
+            }
+            
             return data;
         } catch (err) {
             handleAxiosError(err, "[VENDA SERVICE] Erro ao cancelar venda");
@@ -826,6 +1038,11 @@ export const vendaService = {
     }): Promise<{ message: string; venda: Venda; recibo: DocumentoFiscal } | null> {
         try {
             const { data } = await api.post(`/api/vendas/${id}/recibo`, dadosPagamento);
+            
+            if (data.venda) {
+                data.venda = this.normalizarVenda(data.venda);
+            }
+            
             return data;
         } catch (err) {
             handleAxiosError(err, "[VENDA SERVICE] Erro ao gerar recibo");
@@ -841,11 +1058,79 @@ export const vendaService = {
     }): Promise<{ message: string; venda: Venda } | null> {
         try {
             const { data } = await api.post(`/api/vendas/${id}/converter`, dadosPagamento);
+            
+            if (data.venda) {
+                data.venda = this.normalizarVenda(data.venda);
+            }
+            
             return data;
         } catch (err) {
             handleAxiosError(err, "[VENDA SERVICE] Erro ao converter proforma");
             return null;
         }
+    },
+
+    // ✅ NOVO: Helper para normalizar venda e garantir conformidade com VendaController
+    normalizarVenda(venda: Venda): Venda {
+        // Garantir que itens estejam normalizados
+        if (venda.itens) {
+            venda.itens = venda.itens.map(item => this.normalizarItemVenda(item));
+        }
+
+        // Calcular estatísticas de serviços se não vierem do backend
+        if (venda.totais_por_tipo === undefined && venda.itens) {
+            const servicos = venda.itens.filter(item => item.eh_servico);
+            const produtos = venda.itens.filter(item => !item.eh_servico);
+
+            venda.totais_por_tipo = {
+                produtos: {
+                    quantidade: produtos.length,
+                    total: produtos.reduce((acc, item) => acc + item.subtotal, 0),
+                },
+                servicos: {
+                    quantidade: servicos.length,
+                    total: servicos.reduce((acc, item) => acc + item.subtotal, 0),
+                    retencao: servicos.reduce((acc, item) => acc + item.valor_retencao, 0),
+                },
+            };
+        }
+
+        // Garantir campos de retenção
+        if (venda.total_retencao_servicos === undefined && venda.itens) {
+            venda.total_retencao_servicos = venda.itens
+                .filter(item => item.eh_servico)
+                .reduce((acc, item) => acc + item.valor_retencao, 0);
+        }
+
+        if (venda.tem_servicos === undefined && venda.itens) {
+            venda.tem_servicos = venda.itens.some(item => item.eh_servico);
+        }
+
+        if (venda.quantidade_servicos === undefined && venda.itens) {
+            venda.quantidade_servicos = venda.itens.filter(item => item.eh_servico).length;
+        }
+
+        // Garantir flags derivadas
+        if (venda.paga === undefined) {
+            venda.paga = venda.estado_pagamento === 'paga';
+        }
+
+        return venda;
+    },
+
+    // ✅ NOVO: Helper para normalizar item de venda
+    normalizarItemVenda(item: ItemVenda): ItemVenda {
+        // Garantir que eh_servico esteja calculado
+        if (item.eh_servico === undefined && item.produto) {
+            item.eh_servico = item.produto.tipo === 'servico';
+        }
+
+        // Garantir subtotal_liquido calculado
+        if (item.subtotal_liquido === undefined) {
+            item.subtotal_liquido = item.subtotal - (item.valor_retencao ?? 0);
+        }
+
+        return item;
     },
 };
 
@@ -864,6 +1149,8 @@ export const documentoFiscalService = {
         apenas_vendas?: boolean; // Filtrar apenas FT, FR, RC
         apenas_nao_vendas?: boolean; // Filtrar FP, FA, NC, ND, FRt
         per_page?: number;
+        // ✅ NOVOS FILTROS
+        com_retencao?: boolean;
     }): Promise<{ message: string; data: { documentos: DocumentoFiscal[] } } | null> {
         try {
             const queryParams = new URLSearchParams();
@@ -879,6 +1166,7 @@ export const documentoFiscalService = {
             if (params?.apenas_vendas) queryParams.append('apenas_vendas', 'true');
             if (params?.apenas_nao_vendas) queryParams.append('apenas_nao_vendas', 'true');
             if (params?.per_page) queryParams.append('per_page', params.per_page.toString());
+            if (params?.com_retencao) queryParams.append('com_retencao', 'true');
 
             const queryString = queryParams.toString();
             const url = `/api/documentos-fiscais${queryString ? `?${queryString}` : ''}`;
@@ -891,32 +1179,28 @@ export const documentoFiscalService = {
         }
     },
 
-    async emitir(payload: {
-        tipo_documento: TipoDocumentoFiscal;
-        venda_id?: string;
-        cliente_id?: string;
-        cliente_nome?: string; // Para cliente avulso
-        cliente_nif?: string;  // Para cliente avulso
-        fatura_id?: string;
-        itens: Array<{
-            produto_id?: string;
-            descricao: string;
-            quantidade: number;
-            preco_unitario: number;
-            desconto?: number;
-            taxa_iva?: number;
-            taxa_retencao?: number;
-        }>;
-        dados_pagamento?: DadosPagamento;
-        motivo?: string;
-        data_vencimento?: string;
-        referencia_externa?: string;
-    }): Promise<{ message: string; documento: DocumentoFiscal } | null> {
+    /**
+     * Emitir um documento fiscal (FT, FR, FP, FA, NC, ND, RC, FRt)
+     * Para FP (Fatura Proforma): não mexe em stock, não é venda
+     */
+    async emitir(payload: CriarDocumentoFiscalPayload): Promise<{
+        data: unknown; message: string; documento: DocumentoFiscal
+    } | null> {
         try {
-            const { data } = await api.post("/api/documentos-fiscais/emitir", payload);
+            const cleanPayload = criarPayloadDocumentoFiscal(payload);
+
+            // Log para debug
+            console.log('[DOCUMENTO FISCAL SERVICE] Emitindo documento:', {
+                tipo: payload.tipo_documento,
+                cliente: payload.cliente_id ? 'cadastrado' : (payload.cliente_nome ? 'avulso' : 'não informado'),
+                itens: payload.itens.length,
+                tem_retencao: payload.itens.some(i => i.taxa_retencao && i.taxa_retencao > 0)
+            });
+
+            const { data } = await api.post("/api/documentos-fiscais/emitir", cleanPayload);
             return data;
         } catch (err) {
-            handleAxiosError(err, "[DOCUMENTO FISCAL SERVICE] Erro ao emitir");
+            handleAxiosError(err, "[DOCUMENTO FISCAL SERVICE] Erro ao emitir documento");
             return null;
         }
     },
@@ -962,6 +1246,7 @@ export const documentoFiscalService = {
             quantidade: number;
             preco_unitario: number;
             taxa_iva?: number;
+            taxa_retencao?: number; // ✅ NOVO
         }>;
         motivo: string;
     }): Promise<{ message: string; documento: DocumentoFiscal } | null> {
@@ -981,6 +1266,7 @@ export const documentoFiscalService = {
             quantidade: number;
             preco_unitario: number;
             taxa_iva?: number;
+            taxa_retencao?: number; // ✅ NOVO
         }>;
         motivo?: string;
     }): Promise<{ message: string; documento: DocumentoFiscal; data?: { documento: DocumentoFiscal } } | null> {
@@ -1066,11 +1352,15 @@ export const documentoFiscalService = {
         }
     },
 
-    async alertas(): Promise<{ message: string; data: {
-        adiantamentos_vencidos: { total: number; items: DocumentoFiscal[] };
-        faturas_com_adiantamentos_pendentes: { total: number; items: DocumentoFiscal[] };
-        proformas_pendentes: { total: number; items: DocumentoFiscal[] };
-    } } | null> {
+    async alertas(): Promise<{
+        message: string; data: {
+            adiantamentos_vencidos: { total: number; items: DocumentoFiscal[] };
+            faturas_com_adiantamentos_pendentes: { total: number; items: DocumentoFiscal[] };
+            proformas_pendentes: { total: number; items: DocumentoFiscal[] };
+            // ✅ NOVO
+            servicos_com_retencao_proximos?: { total: number; items: DocumentoFiscal[] };
+        }
+    } | null> {
         try {
             const { data } = await api.get('/api/documentos-fiscais/alertas');
             return data;
@@ -1090,16 +1380,21 @@ export const documentoFiscalService = {
         }
     },
 
-    async dashboard(): Promise<{ message: string; data: {
-        faturas_emitidas_mes: number;
-        faturas_pendentes: number;
-        total_pendente_cobranca: number;
-        adiantamentos_pendentes: number;
-        proformas_pendentes: number;
-        documentos_cancelados_mes: number;
-        total_vendas_mes: number;
-        total_nao_vendas_mes: number;
-    } } | null> {
+    async dashboard(): Promise<{
+        message: string; data: {
+            faturas_emitidas_mes: number;
+            faturas_pendentes: number;
+            total_pendente_cobranca: number;
+            adiantamentos_pendentes: number;
+            proformas_pendentes: number;
+            documentos_cancelados_mes: number;
+            total_vendas_mes: number;
+            total_nao_vendas_mes: number;
+            // ✅ NOVO
+            total_retencao_mes?: number;
+            documentos_com_retencao?: number;
+        }
+    } | null> {
         try {
             const { data } = await api.get('/api/documentos-fiscais/dashboard');
             return data;
@@ -1122,11 +1417,21 @@ const noCacheConfig = {
 };
 
 export const clienteService = {
-    async listar(): Promise<Cliente[]> {
+    async listar(params?: { status?: 'ativo' | 'inativo' | 'todos' }): Promise<Cliente[]> {
         console.log('[CLIENTE SERVICE] Listar clientes - Iniciando...');
         const timestamp = new Date().getTime();
-        const response = await api.get(`${API_PREFIX}/clientes?t=${timestamp}`, noCacheConfig);
+
+        let url = `${API_PREFIX}/clientes?t=${timestamp}`;
+        if (params?.status && params.status !== 'todos') {
+            url += `&status=${params.status}`;
+        }
+
+        const response = await api.get(url, noCacheConfig);
         return response.data.clientes || [];
+    },
+
+    async listarAtivos(): Promise<Cliente[]> {
+        return this.listar({ status: 'ativo' });
     },
 
     async listarTodos(): Promise<Cliente[]> {
@@ -1166,6 +1471,26 @@ export const clienteService = {
             return response.data.cliente;
         } catch (err) {
             handleAxiosError(err, "[CLIENTE] Erro ao atualizar cliente");
+            return null;
+        }
+    },
+
+    async ativar(id: string): Promise<Cliente | null> {
+        try {
+            const response = await api.post(`${API_PREFIX}/clientes/${id}/ativar`);
+            return response.data.cliente;
+        } catch (err) {
+            handleAxiosError(err, "[CLIENTE] Erro ao ativar cliente");
+            return null;
+        }
+    },
+
+    async inativar(id: string): Promise<Cliente | null> {
+        try {
+            const response = await api.post(`${API_PREFIX}/clientes/${id}/inativar`);
+            return response.data.cliente;
+        } catch (err) {
+            handleAxiosError(err, "[CLIENTE] Erro ao inativar cliente");
             return null;
         }
     },
@@ -1220,6 +1545,15 @@ export function getTipoClienteLabel(tipo: TipoCliente): string {
 
 export function getTipoClienteColor(tipo: TipoCliente): string {
     return tipo === "empresa" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-700";
+}
+
+// ✅ NOVO: funções para status do cliente
+export function getStatusClienteLabel(status: string): string {
+    return status === 'ativo' ? 'Ativo' : 'Inativo';
+}
+
+export function getStatusClienteColor(status: string): string {
+    return status === 'ativo' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700';
 }
 
 /* -------- Fornecedores -------- */
@@ -1291,6 +1625,9 @@ export const produtoService = {
             if (params.direcao) queryParams.append("direcao", params.direcao);
             if (params.paginar) queryParams.append("paginar", "true");
             if (params.per_page) queryParams.append("per_page", params.per_page.toString());
+            if (params.apenas_servicos) queryParams.append("apenas_servicos", "true");
+            if (params.apenas_produtos) queryParams.append("apenas_produtos", "true");
+            if (params.com_retencao) queryParams.append("com_retencao", "true");
 
             const queryString = queryParams.toString();
             const url = `${API_PREFIX}/produtos${queryString ? `?${queryString}` : ""}`;
@@ -1362,6 +1699,7 @@ export const produtoService = {
 
     async criar(dados: CriarProdutoInput): Promise<Produto | null> {
         try {
+            console.log('[PRODUTO SERVICE] Criando item:', { tipo: dados.tipo, nome: dados.nome, retencao: dados.retencao });
             const response = await api.post(`${API_PREFIX}/produtos`, dados);
             return response.data.produto;
         } catch (err) {
@@ -1420,14 +1758,26 @@ export const produtoService = {
         }
     },
 
-    async listarCategorias(): Promise<Categoria[]> {
+    async listarCategorias(params?: { tipo?: 'produto' | 'servico' }): Promise<Categoria[]> {
         try {
-            const response = await api.get(`${API_PREFIX}/categorias`);
+            let url = `${API_PREFIX}/categorias`;
+            if (params?.tipo) {
+                url += `?tipo=${params.tipo}`;
+            }
+            const response = await api.get(url);
             return response.data.categorias || [];
         } catch (err) {
             handleAxiosError(err, "[PRODUTO] Erro ao listar categorias");
             return [];
         }
+    },
+
+    async listarServicos(params: Omit<ListarProdutosParams, 'tipo'> = {}): Promise<{ message: string; produtos: Produto[] }> {
+        return this.listar({ ...params, tipo: 'servico' }) as Promise<{ message: string; produtos: Produto[] }>;
+    },
+
+    async listarApenasProdutos(params: Omit<ListarProdutosParams, 'tipo'> = {}): Promise<{ message: string; produtos: Produto[] }> {
+        return this.listar({ ...params, tipo: 'produto' }) as Promise<{ message: string; produtos: Produto[] }>;
     },
 
     async verificarStatus(id: string): Promise<{ existe: boolean; deletado: boolean; produto?: Produto }> {
@@ -1516,6 +1866,23 @@ export function isServico(produto: Produto): boolean {
     return produto.tipo === "servico";
 }
 
+export function isProduto(produto: Produto): boolean {
+    return produto.tipo === "produto";
+}
+
+// ✅ NOVO: calcular retenção
+export function calcularRetencao(produto: Produto, quantidade = 1): number {
+    if (!isServico(produto) || !produto.retencao) return 0;
+    return (produto.preco_venda * quantidade * produto.retencao) / 100;
+}
+
+// ✅ NOVO: calcular preço líquido após retenção
+export function calcularPrecoLiquido(produto: Produto, quantidade = 1): number {
+    const total = produto.preco_venda * quantidade;
+    if (!isServico(produto) || !produto.retencao) return total;
+    return total - (total * produto.retencao) / 100;
+}
+
 export function getStatusBadge(produto: Produto): { texto: string; cor: string } {
     if (produto.deleted_at) {
         return { texto: "Na Lixeira", cor: "bg-red-100 text-red-800" };
@@ -1533,6 +1900,14 @@ export function getTipoBadge(tipo: TipoProduto): { texto: string; cor: string } 
     return { texto: "Produto", cor: "bg-purple-100 text-purple-800" };
 }
 
+export function getRetencaoBadge(retencao?: number): { texto: string; cor: string } | null {
+    if (!retencao) return null;
+    return {
+        texto: `Retenção ${retencao}%`,
+        cor: "bg-orange-100 text-orange-800"
+    };
+}
+
 export function formatarUnidadeMedida(unidade: UnidadeMedida | undefined): string {
     if (!unidade) return "-";
     const map: Record<UnidadeMedida, string> = {
@@ -1546,9 +1921,13 @@ export function formatarUnidadeMedida(unidade: UnidadeMedida | undefined): strin
 
 /* -------- Categorias -------- */
 export const categoriaService = {
-    listar: async (): Promise<Categoria[]> => {
+    listar: async (params?: { tipo?: 'produto' | 'servico' }): Promise<Categoria[]> => {
         try {
-            const { data } = await api.get<Categoria[]>("/api/categorias");
+            let url = "/api/categorias";
+            if (params?.tipo) {
+                url += `?tipo=${params.tipo}`;
+            }
+            const { data } = await api.get<Categoria[]>(url);
             return data;
         } catch (err) {
             handleAxiosError(err, "[CATEGORIA] Erro ao listar categorias");
@@ -1779,6 +2158,36 @@ export const stockService = {
         }
     },
 
+    async verificarDisponibilidade(produto_id: string, quantidade: number): Promise<{
+        disponivel: boolean;
+        estoque_atual: number;
+        mensagem?: string;
+    }> {
+        try {
+            const produto = await produtoService.buscar(produto_id);
+            if (!produto) throw new Error("Produto não encontrado");
+
+            if (isServico(produto)) {
+                return {
+                    disponivel: true,
+                    estoque_atual: 0,
+                    mensagem: "Serviço não possui controle de estoque"
+                };
+            }
+
+            const disponivel = (produto.estoque_atual || 0) >= quantidade;
+
+            return {
+                disponivel,
+                estoque_atual: produto.estoque_atual || 0,
+                mensagem: disponivel ? undefined : `Estoque insuficiente. Disponível: ${produto.estoque_atual || 0}`
+            };
+        } catch (err) {
+            handleAxiosError(err, "[STOCK] Erro ao verificar disponibilidade");
+            throw err;
+        }
+    },
+
     atualizar: async (id: string, payload: Partial<CriarMovimentoPayload>): Promise<MovimentoStock | null> => {
         try {
             const { data } = await api.put<MovimentoStock>(`/api/movimentos-stock/${id}`, payload);
@@ -1907,6 +2316,7 @@ export const relatorioService = {
         tipo?: TipoDocumentoFiscal;
         cliente_id?: string;
         cliente_nome?: string;
+        com_retencao?: boolean;
     }): Promise<{ message: string; data: { documentos: DocumentoFiscal[] } } | null> {
         try {
             const queryParams = new URLSearchParams();
@@ -1915,6 +2325,7 @@ export const relatorioService = {
             if (params?.tipo) queryParams.append('tipo', params.tipo);
             if (params?.cliente_id) queryParams.append('cliente_id', params.cliente_id);
             if (params?.cliente_nome) queryParams.append('cliente_nome', params.cliente_nome);
+            if (params?.com_retencao) queryParams.append('com_retencao', 'true');
 
             const queryString = queryParams.toString();
             const url = `/api/relatorios/documentos-fiscais${queryString ? `?${queryString}` : ''}`;
@@ -1941,17 +2352,29 @@ export const relatorioService = {
         data_inicio?: string;
         data_fim?: string;
         apenas_vendas?: boolean; // FT, FR, RC
+        tipo_item?: 'produto' | 'servico';
+        com_retencao?: boolean;
     }): Promise<{ message: string; data: { vendas: Venda[] } } | null> {
         try {
             const queryParams = new URLSearchParams();
             if (params?.data_inicio) queryParams.append('data_inicio', params.data_inicio);
             if (params?.data_fim) queryParams.append('data_fim', params.data_fim);
             if (params?.apenas_vendas) queryParams.append('apenas_vendas', 'true');
+            if (params?.tipo_item) queryParams.append('tipo_item', params.tipo_item);
+            if (params?.com_retencao) queryParams.append('com_retencao', 'true');
 
             const queryString = queryParams.toString();
             const url = `/api/relatorios/vendas${queryString ? `?${queryString}` : ''}`;
 
             const { data } = await api.get(url);
+            
+            // ✅ Normalizar vendas
+            if (data.data?.vendas) {
+                data.data.vendas = data.data.vendas.map((venda: Venda) => 
+                    vendaService.normalizarVenda(venda)
+                );
+            }
+            
             return data;
         } catch (err) {
             handleAxiosError(err, "[RELATÓRIO] Erro ao obter relatório de vendas");
@@ -2012,6 +2435,51 @@ export const relatorioService = {
             return null;
         }
     },
+
+    // ✅ NOVOS RELATÓRIOS
+    async servicos(params?: {
+        data_inicio?: string;
+        data_fim?: string;
+        apenas_ativos?: boolean;
+    }): Promise<{ message: string; data: any } | null> {
+        try {
+            const queryParams = new URLSearchParams();
+            if (params?.data_inicio) queryParams.append('data_inicio', params.data_inicio);
+            if (params?.data_fim) queryParams.append('data_fim', params.data_fim);
+            if (params?.apenas_ativos) queryParams.append('apenas_ativos', 'true');
+
+            const queryString = queryParams.toString();
+            const url = `/api/relatorios/servicos${queryString ? `?${queryString}` : ''}`;
+
+            const { data } = await api.get(url);
+            return data;
+        } catch (err) {
+            handleAxiosError(err, "[RELATÓRIO] Erro ao obter relatório de serviços");
+            return null;
+        }
+    },
+
+    async retencoes(params?: {
+        data_inicio?: string;
+        data_fim?: string;
+        cliente_id?: string;
+    }): Promise<{ message: string; data: any } | null> {
+        try {
+            const queryParams = new URLSearchParams();
+            if (params?.data_inicio) queryParams.append('data_inicio', params.data_inicio);
+            if (params?.data_fim) queryParams.append('data_fim', params.data_fim);
+            if (params?.cliente_id) queryParams.append('cliente_id', params.cliente_id);
+
+            const queryString = queryParams.toString();
+            const url = `/api/relatorios/retencoes${queryString ? `?${queryString}` : ''}`;
+
+            const { data } = await api.get(url);
+            return data;
+        } catch (err) {
+            handleAxiosError(err, "[RELATÓRIO] Erro ao obter relatório de retenções");
+            return null;
+        }
+    },
 };
 
 /* -------- Exportações legadas (para compatibilidade) -------- */
@@ -2024,6 +2492,11 @@ export async function obterDadosNovaVenda(): Promise<{
 
 export async function criarVenda(payload: CriarVendaPayload) {
     return vendaService.criar(payload);
+}
+
+// NOVA FUNÇÃO: Criar documento fiscal (FP, FT, FR, etc)
+export async function emitirDocumentoFiscal(payload: CriarDocumentoFiscalPayload) {
+    return documentoFiscalService.emitir(payload);
 }
 
 // Funções utilitárias para documentos fiscais
@@ -2130,6 +2603,7 @@ export async function obterEvolucaoMensal(ano?: number): Promise<EvolucaoMensal 
     return dashboardService.evolucaoMensal(ano);
 }
 
+// eslint-disable-next-line import/no-anonymous-default-export
 export default {
     vendaService,
     documentoFiscalService,

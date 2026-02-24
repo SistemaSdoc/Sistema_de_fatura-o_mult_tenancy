@@ -1,669 +1,502 @@
 'use client';
 
-import { useEffect, useState, useMemo } from "react";
-import { motion, AnimatePresence, Variants } from "framer-motion";
+import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip,
-  PieChart, Pie, Cell,
-  ResponsiveContainer, Legend, CartesianGrid, Area, AreaChart
+  BarChart, Bar, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, AreaChart, Area, CartesianGrid,
+  PieChart, Pie, Cell
 } from "recharts";
 import {
-  TrendingUp, Users, ShoppingCart,
-  CreditCard, DollarSign, Package, AlertCircle,
-  ArrowUpRight, ArrowDownRight, Receipt
+  TrendingUp, Users,
+  CreditCard, DollarSign, Package, Receipt,
+  FileText
 } from "lucide-react";
+import Link from "next/link";
 
 import MainEmpresa from "@/app/components/MainEmpresa";
 import { dashboardService } from "@/services/Dashboard";
-import type { DashboardData, AlertasPendentes } from "@/services/Dashboard";
 
-/* ================= CORES DO SISTEMA (APENAS 2) ================= */
 const COLORS = {
-  primary: "#123859",      // Azul escuro
-  secondary: "#F9941F",    // Laranja âmbra
+  primary: "#123859",
+  secondary: "#F9941F",
 };
 
-// Cores para gráficos usando apenas as duas cores do sistema + variações
-const CHART_COLORS = [
-  COLORS.primary,
-  COLORS.secondary,
-  "#0f2b4c",      // Azul mais escuro
-  "#ffb347",      // Laranja mais claro
-  "#1a4a73",      // Azul médio
-];
-
-const PIE_COLORS = [COLORS.primary, COLORS.secondary, "#0f2b4c"];
-
-/* ================= TIPOS AUXILIARES ================= */
-interface KPIData {
-  title: string;
-  value: string | number;
-  change?: number;
-  icon: React.ElementType;
-}
-
-interface ChartCardProps {
-  title: string;
-  children: React.ReactNode;
-  className?: string;
-  icon?: React.ElementType;
-}
-
-/* ================= ANIMAÇÕES ================= */
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1,
-      delayChildren: 0.2,
-    },
-  },
+const formatKz = (v: number | string): string => {
+  const num = Number(v) || 0;
+  return new Intl.NumberFormat("pt-AO", {
+    style: "currency",
+    currency: "AOA",
+    minimumFractionDigits: 0,
+  }).format(num).replace("AOA", "Kz");
 };
 
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: {
-      type: "spring",
-      stiffness: 100,
-      damping: 15,
-    },
-  },
-};
-
-/* ================= COMPONENTES ================= */
-
-const SkeletonCard: React.FC = () => (
+// Componente Skeleton
+const SkeletonCard = () => (
   <motion.div
-    className="bg-white rounded-2xl p-4 md:p-6 shadow-sm border border-[#E5E5E5]"
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
+    className="bg-white p-4 rounded-xl shadow border animate-pulse"
   >
-    <div className="animate-pulse space-y-3 md:space-y-4">
-      <div className="h-3 md:h-4 bg-[#123859]/10 rounded w-1/3"></div>
-      <div className="h-6 md:h-8 bg-[#123859]/10 rounded w-2/3"></div>
-      <div className="h-16 md:h-20 bg-[#123859]/10 rounded"></div>
-    </div>
+    <div className="w-10 h-10 bg-gray-200 rounded-lg mb-3"></div>
+    <div className="h-4 bg-gray-200 rounded w-20 mb-2"></div>
+    <div className="h-6 bg-gray-200 rounded w-24"></div>
   </motion.div>
 );
 
-const AlertBanner: React.FC<{ alertas: AlertasPendentes | null }> = ({ alertas }) => {
-  if (!alertas || alertas.total_alertas === 0) return null;
-
-  return (
-    <motion.div
-      variants={itemVariants}
-      className="bg-[#F9941F]/10 border border-[#F9941F] rounded-2xl p-4 mb-6"
-    >
-      <div className="flex items-center gap-3 mb-3">
-        <AlertCircle size={20} className="text-[#F9941F]" />
-        <h3 className="font-semibold text-[#123859]">Alertas do Sistema</h3>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {alertas.vencidos?.quantidade > 0 && (
-          <div className="bg-white rounded-xl p-3 shadow-sm">
-            <p className="text-xs text-[#123859]/60 mb-1">Vencidos</p>
-            <p className="text-lg font-bold text-red-600">{alertas.vencidos.quantidade}</p>
-            <p className="text-xs text-[#123859]/60">{dashboardService._formatarMoeda(alertas.vencidos.valor_total || 0)}</p>
-          </div>
-        )}
-
-        {alertas.proximos_vencimento?.quantidade > 0 && (
-          <div className="bg-white rounded-xl p-3 shadow-sm">
-            <p className="text-xs text-[#123859]/60 mb-1">Próximos (3 dias)</p>
-            <p className="text-lg font-bold text-yellow-600">{alertas.proximos_vencimento.quantidade}</p>
-            <p className="text-xs text-[#123859]/60">{dashboardService._formatarMoeda(alertas.proximos_vencimento.valor_total || 0)}</p>
-          </div>
-        )}
-
-        {alertas.proformas_pendentes?.quantidade > 0 && (
-          <div className="bg-white rounded-xl p-3 shadow-sm">
-            <p className="text-xs text-[#123859]/60 mb-1">Proformas Antigas</p>
-            <p className="text-lg font-bold text-orange-600">{alertas.proformas_pendentes.quantidade}</p>
-            <p className="text-xs text-[#123859]/60">{dashboardService._formatarMoeda(alertas.proformas_pendentes.valor_total || 0)}</p>
-          </div>
-        )}
-      </div>
-    </motion.div>
-  );
-};
-
-const KPICard: React.FC<KPIData> = ({ title, value, change, icon: Icon }) => {
-  const isPositive = change !== undefined && change > 0;
-  const isNegative = change !== undefined && change < 0;
-
-  return (
-    <motion.div
-      variants={itemVariants}
-      whileHover={{ scale: 1.02, y: -5 }}
-      whileTap={{ scale: 0.98 }}
-      className="bg-white rounded-2xl p-4 md:p-6 shadow-sm border border-[#E5E5E5] relative overflow-hidden group cursor-pointer"
-    >
-      <div className="absolute inset-0 opacity-0 group-hover:opacity-5 bg-[#123859] transition-opacity duration-300" />
-
-      <div className="flex items-start justify-between mb-2 md:mb-4">
-        <div className="p-2 md:p-3 rounded-xl bg-[#123859]/10">
-          <Icon size={20} className="text-[#123859] md:w-6 md:h-6" />
-        </div>
-
-        {change !== undefined && (
-          <motion.div
-            className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${isPositive ? "bg-[#123859] text-white" :
-                isNegative ? "bg-[#F9941F] text-white" : "bg-[#E5E5E5] text-[#123859]"
-              }`}
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.5, type: "spring" }}
-          >
-            {isPositive ? <ArrowUpRight size={12} /> :
-              isNegative ? <ArrowDownRight size={12} /> : null}
-            {Math.abs(change || 0)}%
-          </motion.div>
-        )}
-      </div>
-
-      <h3 className="text-[#123859]/60 text-xs md:text-sm font-medium mb-1">{title}</h3>
-      <motion.p
-        className="text-lg md:text-2xl font-bold text-[#123859] truncate"
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ delay: 0.3 }}
-      >
-        {value}
-      </motion.p>
-    </motion.div>
-  );
-};
-
-const ChartCard: React.FC<ChartCardProps> = ({ title, children, className = "", icon: Icon }) => (
-  <motion.div
-    variants={itemVariants}
-    className={`bg-white rounded-2xl p-4 md:p-6 shadow-sm border border-[#E5E5E5] ${className}`}
-    whileHover={{ boxShadow: "0 20px 25px -5px rgba(18, 56, 89, 0.1)" }}
-    transition={{ duration: 0.3 }}
-  >
-    <div className="flex items-center gap-2 mb-4 md:mb-6">
-      {Icon && <Icon size={18} className="text-[#F9941F] md:w-5 md:h-5" />}
-      <h3 className="font-semibold text-[#123859] text-base md:text-lg">{title}</h3>
-    </div>
-    {children}
-  </motion.div>
+const SkeletonChart = () => (
+  <div className="bg-white p-4 rounded-xl shadow border">
+    <div className="h-6 bg-gray-200 rounded w-40 mb-4"></div>
+    <div className="h-[360px] bg-gray-100 rounded flex items-center justify-center"></div>
+  </div>
 );
 
-const DataTable: React.FC<{
-  title: string;
-  columns: string[];
-  data: (string | number)[][];
-  maxRows?: number;
-}> = ({ title, columns, data, maxRows = 5 }) => {
-  const safeData = Array.isArray(data) ? data : [];
-  const displayData = safeData.slice(0, maxRows);
+const SkeletonTable = () => (
+  <div className="bg-white p-4 rounded-xl shadow border">
+    <div className="h-6 bg-gray-200 rounded w-32 mb-4"></div>
+    <div className="space-y-3">
+      <div className="h-8 bg-gray-100 rounded"></div>
+      <div className="h-8 bg-gray-100 rounded"></div>
+      <div className="h-8 bg-gray-100 rounded"></div>
+      <div className="h-8 bg-gray-100 rounded"></div>
+      <div className="h-8 bg-gray-100 rounded"></div>
+    </div>
+  </div>
+);
 
-  return (
-    <motion.div
-      variants={itemVariants}
-      className="bg-white rounded-2xl p-4 md:p-6 shadow-sm border border-[#E5E5E5] overflow-hidden"
-      whileHover={{ y: -2 }}
-    >
-      <h3 className="font-semibold text-[#123859] mb-4 flex items-center gap-2 text-sm md:text-base">
-        <Receipt size={16} className="text-[#F9941F] md:w-[18px] md:h-[18px]" />
-        {title}
-      </h3>
-
-      <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
-        <table className="w-full text-xs md:text-sm min-w-[350px]">
-          <thead>
-            <tr className="border-b border-[#123859]/10">
-              {columns.map((col, idx) => (
-                <th
-                  key={idx}
-                  className="text-left p-2 md:p-3 font-medium text-[#123859]/60 uppercase text-[10px] md:text-xs tracking-wider"
-                >
-                  {col}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            <AnimatePresence>
-              {displayData.length > 0 ? (
-                displayData.map((row, rowIdx) => (
-                  <motion.tr
-                    key={rowIdx}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: rowIdx * 0.05 }}
-                    className="border-b border-[#123859]/5 hover:bg-[#123859]/5 transition-colors"
-                  >
-                    {row.map((cell, cellIdx) => (
-                      <td key={cellIdx} className="p-2 md:p-3 text-[#123859]">
-                        {cellIdx === 2 && typeof cell === 'string' ? (
-                          <span className={`px-2 py-1 rounded-full text-[10px] md:text-xs font-medium ${cell.toLowerCase().includes('paga') ||
-                              cell.toLowerCase().includes('faturada') ||
-                              (cell.toLowerCase().includes('emitida') && cell.toLowerCase().includes('paga'))
-                              ? 'bg-green-100 text-green-700' :
-                              cell.toLowerCase().includes('pendente') ||
-                                cell.toLowerCase().includes('emitida') ||
-                                cell.toLowerCase().includes('aberta')
-                                ? 'bg-[#F9941F] text-white' :
-                                cell.toLowerCase().includes('cancelada') ||
-                                  cell.toLowerCase().includes('anulado')
-                                  ? 'bg-[#E5E5E5] text-[#123859]'
-                                  : 'bg-[#E5E5E5] text-[#123859]'
-                            }`}>
-                            {cell}
-                          </span>
-                        ) : (
-                          <span className="truncate block max-w-[100px] md:max-w-none">{cell}</span>
-                        )}
-                      </td>
-                    ))}
-                  </motion.tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={columns.length} className="p-6 md:p-8 text-center text-[#123859]/40">
-                    Nenhum dado disponível
-                  </td>
-                </tr>
-              )}
-            </AnimatePresence>
-          </tbody>
-        </table>
-
-        {safeData.length > maxRows && (
-          <motion.div
-            className="text-center mt-4 text-xs md:text-sm text-[#F9941F] cursor-pointer hover:underline font-medium"
-            whileHover={{ scale: 1.05 }}
-          >
-            Ver mais {safeData.length - maxRows} registros
-          </motion.div>
-        )}
-      </div>
-    </motion.div>
-  );
-};
-
-/* ================= PÁGINA PRINCIPAL ================= */
-export default function DashboardPage(): React.ReactElement {
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [alertas, setAlertas] = useState<AlertasPendentes | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+export default function DashboardPage() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchData = async (): Promise<void> => {
+    const fetchData = async () => {
       try {
         setLoading(true);
-        setError(null);
-
-        // Buscar dados principais do dashboard
-        const dashboardResponse = await dashboardService.fetch();
-
-        if (dashboardResponse) {
-          setData(dashboardResponse);
-        } else {
-          setError("Não foi possível carregar os dados do dashboard");
-        }
-
-        // Buscar alertas separadamente - não bloqueante
-        try {
-          const alertasResponse = await dashboardService.alertasPendentes();
-          if (alertasResponse) {
-            setAlertas(alertasResponse);
-          }
-        } catch (alertError) {
-          console.warn("[DASHBOARD] Não foi possível carregar alertas:", alertError);
-          // Não definir erro principal, apenas ignorar alertas
-        }
-      } catch (err) {
-        setError("Erro ao conectar com o servidor");
-        console.error("[DASHBOARD] Erro:", err);
+        const response = await dashboardService.fetch();
+        console.log('Dados recebidos:', response);
+        setData(response);
+      } catch (err: any) {
+        setError(err.message);
       } finally {
         setLoading(false);
       }
     };
-
     fetchData();
   }, []);
-
-  const processedData = useMemo(() => {
-    if (!data) return null;
-
-    const metricas = dashboardService.calcularMetricas(data);
-    const graficos = dashboardService.prepararDadosGraficos(data);
-    const kpisCards = dashboardService.getKPIsCards(data);
-
-    return {
-      metricas,
-      graficos,
-      kpisCards,
-    };
-  }, [data]);
-
-  const formatKz = (v: number | string): string => {
-    const num = Number(v) || 0;
-    return new Intl.NumberFormat("pt-AO", {
-      style: "currency",
-      currency: "AOA",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(num).replace("AOA", "Kz");
-  };
-
-  const formatDate = (d: string): string => {
-    if (!d) return "-";
-    try {
-      return new Date(d).toLocaleDateString("pt-AO", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      });
-    } catch {
-      return d;
-    }
-  };
-
-  const formatNumber = (n: number): string =>
-    new Intl.NumberFormat("pt-AO").format(n || 0);
-
-  // Formatter seguro para o Recharts
-  const formatTooltipValue = (value: number): string => formatKz(value);
-
-  const formatYAxisTick = (value: number): string => `Kz ${(Number(value) / 1000).toFixed(0)}k`;
 
   if (loading) {
     return (
       <MainEmpresa>
-        <div className="p-4 md:p-6 space-y-4 md:space-y-6">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
-            {[...Array(5)].map((_, i) => (
-              <SkeletonCard key={i} />
-            ))}
+        <div className="p-6 space-y-6">
+          <motion.h1
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-2xl font-bold text-[#F9941F]"
+          >
+            Dashboard
+          </motion.h1>
+
+          {/* Skeleton Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-            <SkeletonCard />
-            <SkeletonCard />
+
+          {/* Skeleton Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <SkeletonChart />
+            <SkeletonChart />
+          </div>
+
+          {/* Skeleton Second Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <SkeletonChart />
+            <SkeletonChart />
+          </div>
+
+          {/* Skeleton Tables */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <SkeletonTable />
+            <SkeletonTable />
           </div>
         </div>
       </MainEmpresa>
     );
   }
 
-  if (error || !processedData || !data) {
+  if (error || !data) {
     return (
       <MainEmpresa>
-        <motion.div
-          className="flex flex-col items-center justify-center min-h-[60vh] p-4 md:p-6"
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-        >
-          <div className="bg-white p-6 rounded-2xl text-center max-w-md shadow-sm border border-[#E5E5E5]">
-            <AlertCircle size={48} className="text-[#F9941F] mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-[#123859] mb-2">Erro ao carregar dashboard</h3>
-            <p className="text-[#123859]/60 mb-4">{error || "Dados indisponíveis"}</p>
-            <motion.button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-[#123859] text-white rounded-lg font-medium hover:bg-[#0f2b4c] transition-colors"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              Tentar novamente
-            </motion.button>
-          </div>
-        </motion.div>
+        <div className="p-6 text-red-500">Erro: {error || 'Sem dados'}</div>
       </MainEmpresa>
     );
   }
 
-  const { kpisCards } = processedData;
+  // Preparar dados usando os métodos do service
+  const metricas = dashboardService.calcularMetricas(data);
+  const graficos = dashboardService.prepararDadosGraficos(data);
+
+  // Dados para o gráfico de produtos mais vendidos
+  const produtosData = data.indicadores?.produtosMaisVendidos?.slice(0, 5).map((p: any) => ({
+    nome: p.produto?.substring(0, 15) || 'Produto',
+    quantidade: p.quantidade || 0,
+    valor: p.valor_total || 0
+  })) || [];
+
+  // Dados para o gráfico de evolução mensal
+  const evolucaoData = graficos.evolucaoMensal.map((item: any) => ({
+    mes: item.mes,
+    total: item.Total || 0
+  })) || [];
+
+  // Dados para documentos por tipo
+  const documentosPorTipo = graficos.documentosPorTipo.map(item => ({
+    nome: item.nome,
+    quantidade: item.quantidade,
+    valor: item.valor
+  }));
+
+  // Dados para documentos por estado
+  const documentosPorEstado = graficos.documentosPorEstado.reduce((acc: any, item) => {
+    const estado = item.estado;
+    if (!acc[estado]) {
+      acc[estado] = {
+        estado: estado === 'paga' ? 'Pago' :
+          estado === 'emitido' ? 'Emitido' :
+            estado === 'cancelado' ? 'Cancelado' :
+              estado === 'parcialmente_paga' ? 'Parcial' :
+                estado,
+        quantidade: 0
+      };
+    }
+    acc[estado].quantidade += item.quantidade;
+    return acc;
+  }, {});
+
+  const documentosEstadoData = Object.values(documentosPorEstado);
+
+  // Dados mockados para fallback (usando o service)
+  const mockProdutos = [
+    { nome: 'Produto A', quantidade: 50 },
+    { nome: 'Produto B', quantidade: 30 },
+    { nome: 'Produto C', quantidade: 20 },
+  ];
+
+  const mockEvolucao = [
+    { mes: 'Jan', total: 100000 },
+    { mes: 'Fev', total: 150000 },
+    { mes: 'Mar', total: 120000 },
+  ];
+
+  const mockDocumentosTipo = [
+    { nome: 'Faturas', quantidade: 45, valor: 450000 },
+    { nome: 'Faturas-Recibo', quantidade: 30, valor: 300000 },
+    { nome: 'Notas de Crédito', quantidade: 5, valor: 50000 },
+  ];
+
+  const mockDocumentosEstado = [
+    { estado: 'Pago', quantidade: 40 },
+    { estado: 'Emitido', quantidade: 25 },
+    { estado: 'Parcial', quantidade: 15 },
+  ];
+
+  const displayProdutos = produtosData.length ? produtosData : mockProdutos;
+  const displayEvolucao = evolucaoData.length ? evolucaoData : mockEvolucao;
+  const displayDocumentosTipo = documentosPorTipo.length ? documentosPorTipo : mockDocumentosTipo;
+  const displayDocumentosEstado = documentosEstadoData.length ? documentosEstadoData : mockDocumentosEstado;
 
   return (
     <MainEmpresa>
-      <motion.div
-        className="p-4 md:p-6 lg:p-8 space-y-4 md:space-y-6 max-w-[1600px] mx-auto"
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-      >
-        {/* Header */}
-        <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
-          <div>
-            <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-[#F9941F]">Dashboard</h1>
-            <p className="text-[#123859]/60 mt-1 text-sm md:text-base">Visão geral do sistema em tempo real</p>
-          </div>
+      <div className="p-6 space-y-6">
+        <motion.h1
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-2xl font-bold text-[#F9941F]"
+        >
+          Dashboard
+        </motion.h1>
+
+        {/* Cards KPI com hover animation */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ staggerChildren: 0.1 }}
+          className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        >
           <motion.div
-            className="flex items-center gap-2 px-3 py-2 bg-white rounded-full shadow-sm border border-[#E5E5E5] text-xs md:text-sm text-[#123859] w-fit"
-            whileHover={{ scale: 1.05 }}
+            whileHover={{ scale: 1.05, y: -5 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 300 }}
           >
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            Sistema Online
+            <Link href="/dashboard/Vendas/relatorios" className="bg-white p-4 rounded-xl shadow border block hover:shadow-lg transition-shadow">
+              <DollarSign className="text-[#123859] mb-2" size={24} />
+              <div className="text-sm text-gray-500">Total Faturado</div>
+              <div className="text-xl font-bold">{formatKz(metricas.totalFaturado)}</div>
+            </Link>
+          </motion.div>
+
+          <motion.div
+            whileHover={{ scale: 1.05, y: -5 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 300 }}
+          >
+            <Link href="/dashboard/Clientes/Novo_cliente" className="bg-white p-4 rounded-xl shadow border block hover:shadow-lg transition-shadow">
+              <Users className="text-[#123859] mb-2" size={24} />
+              <div className="text-sm text-gray-500">Clientes Ativos</div>
+              <div className="text-xl font-bold">{metricas.totalClientes}</div>
+            </Link>
+          </motion.div>
+
+          <motion.div
+            whileHover={{ scale: 1.05, y: -5 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 300 }}
+          >
+            <Link href="/dashboard/Faturas/relatorios" className="bg-white p-4 rounded-xl shadow border block hover:shadow-lg transition-shadow">
+              <CreditCard className="text-[#123859] mb-2" size={24} />
+              <div className="text-sm text-gray-500">Pendente</div>
+              <div className="text-xl font-bold">{formatKz(metricas.totalPendente)}</div>
+            </Link>
+          </motion.div>
+
+          <motion.div
+            whileHover={{ scale: 1.05, y: -5 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 300 }}
+          >
+            <Link href="/dashboard/Produtos_servicos/Stock" className="bg-white p-4 rounded-xl shadow border block hover:shadow-lg transition-shadow">
+              <Package className="text-[#123859] mb-2" size={24} />
+              <div className="text-sm text-gray-500">Stock Baixo</div>
+              <div className="text-xl font-bold">{metricas.produtosEmStockBaixo}</div>
+            </Link>
           </motion.div>
         </motion.div>
 
-        {/* Alertas */}
-        <AlertBanner alertas={alertas} />
+        {/* Primeira linha - Gráficos */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Produtos Mais Vendidos */}
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="bg-white p-4 rounded-xl shadow border"
+          >
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <Package className="text-[#F9941F]" /> Top Produtos Mais Vendidos
+            </h2>
+            <div style={{ width: '100%', height: '360px' }}>
+              <ResponsiveContainer>
+                <BarChart data={displayProdutos} layout="vertical" margin={{ left: 40 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                  <XAxis type="number" />
+                  <YAxis dataKey="nome" type="category" width={100} tick={{ fontSize: 12 }} />
+                  <Tooltip
+                    formatter={(value: any, name: string) => {
+                      if (name === 'quantidade') return [`${value} unidades`, 'Quantidade'];
+                      return [formatKz(value), 'Valor'];
+                    }}
+                  />
+                  <Bar dataKey="quantidade" fill={COLORS.secondary} radius={[0, 4, 4, 0]} barSize={20}>
+                    {displayProdutos.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={index === 0 ? COLORS.secondary : `${COLORS.secondary}${Math.max(40, 90 - index * 15)}`} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.div>
 
-        {/* KPIs Grid - Responsivo */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
-          {kpisCards.map((kpi, index) => (
-            <KPICard
-              key={index}
-              title={kpi.titulo}
-              value={kpi.valor}
-              change={kpi.variacao !== null ? kpi.variacao : undefined}
-              icon={kpi.titulo === 'Total Faturado' ? DollarSign :
-                kpi.titulo === 'Pendente' ? CreditCard :
-                  kpi.titulo === 'Clientes Ativos' ? Users :
-                    kpi.titulo === 'Ticket Médio' ? ShoppingCart :
-                      Receipt}
-            />
-          ))}
+          {/* Evolução Mensal */}
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="bg-white p-4 rounded-xl shadow border"
+          >
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <TrendingUp className="text-[#F9941F]" /> Evolução Mensal
+            </h2>
+            <div style={{ width: '100%', height: '360px' }}>
+              <ResponsiveContainer>
+                <AreaChart data={displayEvolucao}>
+                  <defs>
+                    <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.3} />
+                      <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#12385920" vertical={false} />
+                  <XAxis dataKey="mes" tick={{ fontSize: 12 }} />
+                  <YAxis tickFormatter={(v) => `${(v / 1000)}k`} width={60} />
+                  <Tooltip formatter={(v) => formatKz(Number(v))} />
+                  <Area type="monotone" dataKey="total" stroke={COLORS.primary} fill="url(#colorTotal)" strokeWidth={2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.div>
         </div>
 
-        {/* Gráfico Principal - Evolução Mensal */}
-        <ChartCard
-          title="Evolução Mensal"
-          className="w-full"
-          icon={TrendingUp}
-        >
-          <div className="h-[250px] md:h-[300px] lg:h-[400px] w-full min-w-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart
-                data={processedData.graficos.evolucaoMensal}
-                margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-              >
-                <defs>
-                  <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.3} />
-                    <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#12385920" vertical={false} />
-                <XAxis
-                  dataKey="mes"
-                  stroke="#12385960"
-                  fontSize={11}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis
-                  stroke="#12385960"
-                  fontSize={11}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={formatYAxisTick}
-                  width={60}
-                />
-                <RechartsTooltip
-                  formatter={(value: number | undefined) => [formatTooltipValue(value || 0), "Total"]}
-                  contentStyle={{
-                    backgroundColor: "white",
-                    borderRadius: "12px",
-                    border: "1px solid #E5E5E5",
-                    boxShadow: "0 10px 15px -3px rgba(18, 56, 89, 0.1)",
-                  }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="Total"
-                  stroke={COLORS.primary}
-                  fillOpacity={1}
-                  fill="url(#colorTotal)"
-                  strokeWidth={2}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </ChartCard>
-
-        {/* Grid Secundário */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-          {/* Pagamentos - Pie Chart */}
-          <ChartCard title="Métodos de Pagamento" icon={CreditCard}>
-            <div className="h-[250px] md:h-[300px] w-full min-w-[300px]">
-              {processedData.graficos.pagamentosPorMetodo.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={processedData.graficos.pagamentosPorMetodo}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={50}
-                      outerRadius={80}
-                      paddingAngle={5}
-                      dataKey="valor"
-                      nameKey="metodo"
-                    >
-                      {processedData.graficos.pagamentosPorMetodo.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <RechartsTooltip
-                      formatter={(value: number | undefined) => formatTooltipValue(value || 0)}
-                      contentStyle={{
-                        backgroundColor: "white",
-                        borderRadius: "12px",
-                        border: "1px solid #E5E5E5",
-                        boxShadow: "0 10px 15px -3px rgba(18, 56, 89, 0.1)",
-                      }}
-                    />
-                    <Legend
-                      verticalAlign="bottom"
-                      height={36}
-                      iconType="circle"
-                      formatter={(value: string) => (
-                        <span className="text-[#123859] text-xs md:text-sm">{value}</span>
-                      )}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex items-center justify-center h-full text-[#123859]/40">
-                  Sem dados de pagamento
-                </div>
-              )}
+        {/* Segunda linha - Documentos por Tipo e Estado */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Documentos por Tipo */}
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-white p-4 rounded-xl shadow border"
+          >
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <Receipt className="text-[#F9941F]" /> Documentos por Tipo
+            </h2>
+            <div style={{ width: '100%', height: '300px' }}>
+              <ResponsiveContainer>
+                <BarChart data={displayDocumentosTipo} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="nome" tick={{ fontSize: 11 }} />
+                  <YAxis yAxisId="left" orientation="left" stroke={COLORS.primary} />
+                  <YAxis yAxisId="right" orientation="right" stroke={COLORS.secondary} />
+                  <Tooltip
+                    formatter={(value: any, name: string) => {
+                      if (name === 'quantidade') return [value, 'Quantidade'];
+                      return [formatKz(value), 'Valor'];
+                    }}
+                  />
+                  <Bar yAxisId="left" dataKey="quantidade" fill={COLORS.primary} name="Quantidade" radius={[4, 4, 0, 0]} />
+                  <Bar yAxisId="right" dataKey="valor" fill={COLORS.secondary} name="Valor" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
+          </motion.div>
 
-            {/* Resumo numérico abaixo do gráfico */}
-            {processedData.graficos.pagamentosPorMetodo.length > 0 && (
-              <div className="grid grid-cols-3 gap-2 md:gap-4 mt-4 pt-4 border-t border-[#123859]/10">
-                {processedData.graficos.pagamentosPorMetodo.map((item, idx) => (
-                  <div key={idx} className="text-center">
-                    <p className="text-[10px] md:text-xs text-[#123859]/60 mb-1">{item.metodo}</p>
-                    <p className="font-semibold text-[#123859] text-xs md:text-base">{formatKz(item.valor)}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </ChartCard>
-
-          {/* Produtos Mais Vendidos - Bar Chart */}
-          <ChartCard title="Top Produtos Mais Vendidos" icon={Package}>
-            <div className="h-[250px] md:h-[300px] w-full min-w-[300px]">
-              {data.indicadores.produtosMaisVendidos.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={data.indicadores.produtosMaisVendidos.slice(0, 5)}
-                    layout="vertical"
-                    margin={{ left: 10, right: 20, top: 10, bottom: 10 }}
+          {/* Documentos por Estado */}
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-white p-4 rounded-xl shadow border"
+          >
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <FileText className="text-[#F9941F]" /> Documentos por Estado
+            </h2>
+            <div style={{ width: '100%', height: '300px' }}>
+              <ResponsiveContainer>
+                <PieChart>
+                  <Pie
+                    data={displayDocumentosEstado}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={5}
+                    dataKey="quantidade"
+                    nameKey="estado"
+                    label={(entry) => `${entry.estado}: ${entry.quantidade}`}
+                    labelLine={false}
                   >
-                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#12385920" />
-                    <XAxis type="number" hide />
-                    <YAxis
-                      dataKey="produto"
-                      type="category"
-                      width={80}
-                      tick={{ fontSize: 10, fill: COLORS.primary }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <RechartsTooltip
-                      cursor={{ fill: "transparent" }}
-                      contentStyle={{
-                        backgroundColor: "white",
-                        borderRadius: "12px",
-                        border: "1px solid #E5E5E5",
-                        boxShadow: "0 10px 15px -3px rgba(18, 56, 89, 0.1)",
-                      }}
-                      formatter={(value: number | undefined, name?: string) => {
-                        if (name === 'quantidade') return [value, 'Quantidade'];
-                        return [formatKz(value || 0), 'Valor'];
-                      }}
-                    />
-                    <Bar
-                      dataKey="quantidade"
-                      fill={COLORS.secondary}
-                      radius={[0, 6, 6, 0]}
-                      barSize={24}
-                    >
-                      {data.indicadores.produtosMaisVendidos.slice(0, 5).map((_, index) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={index === 0 ? COLORS.secondary : `${COLORS.secondary}${Math.max(40, 90 - index * 15)}`}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex items-center justify-center h-full text-[#123859]/40">
-                  Sem dados de produtos
-                </div>
-              )}
+                    {displayDocumentosEstado.map((_, i) => (
+                      <Cell key={i} fill={i === 0 ? COLORS.primary : i === 1 ? COLORS.secondary : '#95a5a6'} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => [`${value} documentos`, 'Quantidade']} />
+                </PieChart>
+              </ResponsiveContainer>
             </div>
-          </ChartCard>
+
+            {/* Legenda adicional */}
+            <div className="flex justify-center gap-4 mt-4 pt-4 border-t border-gray-100">
+              {displayDocumentosEstado.map((item: any, i: number) => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full" style={{
+                    backgroundColor: i === 0 ? COLORS.primary : i === 1 ? COLORS.secondary : '#95a5a6'
+                  }} />
+                  <span className="text-xs text-gray-600">{item.estado}: {item.quantidade}</span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
         </div>
 
         {/* Tabelas */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-          <DataTable
-            title="Últimas Vendas"
-            columns={["Cliente", "Total", "Status", "Data"]}
-            data={data.vendas.ultimas.map(v => [
-              v?.cliente || "-",
-              formatKz(v?.total || 0),
-              v?.status || "-",
-              v?.data || "-",
-            ])}
-          />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-white p-4 rounded-xl shadow border"
+          >
+            <h2 className="text-lg font-semibold mb-4">Últimas Vendas</h2>
+            <table className="w-full">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left p-2">Cliente</th>
+                  <th className="text-left p-2">Total</th>
+                  <th className="text-left p-2">Status</th>
+                  <th className="text-left p-2">Data</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.vendas?.ultimas?.slice(0, 5).map((v: any, i: number) => (
+                  <tr key={i} className="border-b hover:bg-gray-50">
+                    <td className="p-2">{v.cliente || '-'}</td>
+                    <td className="p-2">{formatKz(v.total || 0)}</td>
+                    <td className="p-2">
+                      <span className={`px-2 py-1 rounded text-xs ${v.status === 'faturada' ? 'bg-green-100 text-green-700' :
+                        v.status === 'pendente' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-gray-100'
+                        }`}>
+                        {v.status || '-'}
+                      </span>
+                    </td>
+                    <td className="p-2">{v.data || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <Link href="/dashboard/Vendas/relatorios" className="block text-center mt-4 text-[#F9941F] hover:underline">
+              Ver mais →
+            </Link>
+          </motion.div>
 
-          <DataTable
-            title="Últimos Documentos"
-            columns={["Tipo", "Nº Documento", "Total", "Estado"]}
-            data={data.documentos_fiscais.ultimos.map(d => [
-              d?.tipo_nome || "-",
-              d?.numero || "-",
-              formatKz(d?.total || 0),
-              d?.estado || "-",
-            ])}
-          />
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="bg-white p-4 rounded-xl shadow border"
+          >
+            <h2 className="text-lg font-semibold mb-4">Últimos Documentos</h2>
+            <table className="w-full">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left p-2">Tipo</th>
+                  <th className="text-left p-2">Nº</th>
+                  <th className="text-left p-2">Total</th>
+                  <th className="text-left p-2">Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.documentos_fiscais?.ultimos?.slice(0, 5).map((d: any, i: number) => (
+                  <tr key={i} className="border-b hover:bg-gray-50">
+                    <td className="p-2">{d.tipo_nome || '-'}</td>
+                    <td className="p-2">{d.numero || '-'}</td>
+                    <td className="p-2">{formatKz(d.total || 0)}</td>
+                    <td className="p-2">
+                      <span className={`px-2 py-1 rounded text-xs ${d.estado === 'paga' ? 'bg-green-100 text-green-700' :
+                        d.estado === 'emitido' ? 'bg-blue-100 text-blue-700' :
+                          d.estado === 'cancelado' ? 'bg-red-100 text-red-700' :
+                            d.estado === 'parcialmente_paga' ? 'bg-orange-100 text-orange-700' :
+                              'bg-gray-100'
+                        }`}>
+                        {d.estado === 'parcialmente_paga' ? 'Parcial' : d.estado || '-'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <Link href="/dashboard/Faturas/Faturas" className="block text-center mt-4 text-[#F9941F] hover:underline">
+              Ver mais →
+            </Link>
+          </motion.div>
         </div>
-      </motion.div>
+      </div>
     </MainEmpresa>
   );
 }

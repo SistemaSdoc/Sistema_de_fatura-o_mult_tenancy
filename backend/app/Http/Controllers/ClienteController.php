@@ -9,20 +9,74 @@ use Illuminate\Support\Facades\Log;
 
 class ClienteController extends Controller
 {
-    public function index()
+    /**
+     * Listar clientes (apenas ativos por padrão)
+     */
+    public function index(Request $request)
     {
-        $clientes = Cliente::whereNull('deleted_at')->get();
+        $query = Cliente::query();
+
+        // Filtrar por status se solicitado
+        if ($request->has('status')) {
+            if ($request->status === 'todos') {
+                // Mostrar todos (ativos e inativos)
+                // Não aplica filtro
+            } elseif ($request->status === 'ativos') {
+                $query->where('status', 'ativo');
+            } elseif ($request->status === 'inativos') {
+                $query->where('status', 'inativo');
+            }
+        } else {
+            // Por padrão, mostrar apenas ativos
+            $query->where('status', 'ativo');
+        }
+
+        // Filtrar por tipo
+        if ($request->has('tipo')) {
+            $query->where('tipo', $request->tipo);
+        }
+
+        // Busca por nome ou NIF
+        if ($request->has('busca')) {
+            $busca = $request->busca;
+            $query->where(function($q) use ($busca) {
+                $q->where('nome', 'like', "%{$busca}%")
+                  ->orWhere('nif', 'like', "%{$busca}%")
+                  ->orWhere('email', 'like', "%{$busca}%");
+            });
+        }
+
+        // Ordenação
+        $ordenarPor = $request->get('ordenar_por', 'nome');
+        $direcao = $request->get('direcao', 'asc');
+        $query->orderBy($ordenarPor, $direcao);
+
+        // Paginação ou lista completa
+        if ($request->has('paginar') && $request->paginar) {
+            $perPage = $request->get('per_page', 15);
+            $clientes = $query->paginate($perPage);
+        } else {
+            $clientes = $query->get();
+        }
 
         return response()->json([
             'message' => 'Lista de clientes carregada com sucesso',
             'clientes' => $clientes,
-            'total' => $clientes->count(),
+            'filtros' => [
+                'status' => $request->get('status', 'ativos'),
+                'total' => $clientes->count(),
+                'ativos' => Cliente::where('status', 'ativo')->count(),
+                'inativos' => Cliente::where('status', 'inativo')->count(),
+            ],
         ]);
     }
 
+    /**
+     * Mostrar cliente específico
+     */
     public function show($id)
     {
-        $cliente = Cliente::findOrFail($id);
+        $cliente = Cliente::withTrashed()->findOrFail($id);
 
         return response()->json([
             'message' => 'Cliente carregado com sucesso',
@@ -30,12 +84,16 @@ class ClienteController extends Controller
         ]);
     }
 
+    /**
+     * Criar novo cliente
+     */
     public function store(Request $request)
     {
         $dados = $request->validate([
             'nome' => 'required|string|max:255',
             'nif' => 'nullable|string|max:50|unique:clientes,nif',
             'tipo' => 'nullable|in:consumidor_final,empresa',
+            'status' => 'nullable|in:ativo,inativo', // NOVO
             'telefone' => 'nullable|string|max:20',
             'email' => 'nullable|email|max:255|unique:clientes,email',
             'endereco' => 'nullable|string',
@@ -43,6 +101,7 @@ class ClienteController extends Controller
         ]);
 
         $dados['data_registro'] = $dados['data_registro'] ?? now();
+        $dados['status'] = $dados['status'] ?? 'ativo'; // Valor padrão
 
         $cliente = Cliente::create($dados);
 
@@ -52,6 +111,9 @@ class ClienteController extends Controller
         ], 201);
     }
 
+    /**
+     * Atualizar cliente
+     */
     public function update(Request $request, $id)
     {
         $cliente = Cliente::findOrFail($id);
@@ -60,6 +122,7 @@ class ClienteController extends Controller
             'nome' => 'sometimes|required|string|max:255',
             'nif' => 'sometimes|nullable|string|max:50|unique:clientes,nif,' . $cliente->id,
             'tipo' => 'nullable|in:consumidor_final,empresa',
+            'status' => 'nullable|in:ativo,inativo', // NOVO
             'telefone' => 'nullable|string|max:20',
             'email' => 'nullable|email|max:255|unique:clientes,email,' . $cliente->id,
             'endereco' => 'nullable|string',
@@ -76,14 +139,43 @@ class ClienteController extends Controller
     }
 
     /**
-     * Deletar cliente (SOFT DELETE) - CORRIGIDO
+     * NOVO: Ativar cliente
+     */
+    public function ativar($id)
+    {
+        $cliente = Cliente::findOrFail($id);
+
+        $cliente->ativar();
+
+        return response()->json([
+            'message' => 'Cliente ativado com sucesso',
+            'cliente' => $cliente,
+        ]);
+    }
+
+    /**
+     * NOVO: Inativar cliente
+     */
+    public function inativar($id)
+    {
+        $cliente = Cliente::findOrFail($id);
+
+        $cliente->inativar();
+
+        return response()->json([
+            'message' => 'Cliente inativado com sucesso',
+            'cliente' => $cliente,
+        ]);
+    }
+
+    /**
+     * Deletar cliente (SOFT DELETE)
      */
     public function destroy($id)
     {
         try {
             DB::beginTransaction();
 
-            // Busca o cliente pelo ID (incluindo soft deleted se necessário)
             $cliente = Cliente::find($id);
 
             if (!$cliente) {
@@ -92,7 +184,6 @@ class ClienteController extends Controller
                 ], 404);
             }
 
-            // Verifica se já está deletado
             if ($cliente->trashed()) {
                 return response()->json([
                     'message' => 'Cliente já está deletado',
@@ -107,11 +198,7 @@ class ClienteController extends Controller
                 ], 409);
             }
 
-            // FORÇA o soft delete
             $cliente->delete();
-
-            // Verifica se foi deletado
-            $cliente->refresh();
 
             Log::info('[CLIENTE DELETE]', [
                 'id' => $cliente->id,
@@ -143,6 +230,9 @@ class ClienteController extends Controller
         }
     }
 
+    /**
+     * Listar todos (incluindo inativos e deletados)
+     */
     public function indexWithTrashed()
     {
         $clientes = Cliente::withTrashed()->get();
@@ -151,11 +241,15 @@ class ClienteController extends Controller
             'message' => 'Lista completa de clientes',
             'clientes' => $clientes,
             'total' => $clientes->count(),
-            'ativos' => $clientes->whereNull('deleted_at')->count(),
+            'ativos' => $clientes->where('status', 'ativo')->whereNull('deleted_at')->count(),
+            'inativos' => $clientes->where('status', 'inativo')->whereNull('deleted_at')->count(),
             'deletados' => $clientes->whereNotNull('deleted_at')->count(),
         ]);
     }
 
+    /**
+     * Restaurar cliente deletado
+     */
     public function restore($id)
     {
         $cliente = Cliente::withTrashed()->findOrFail($id);
@@ -174,6 +268,9 @@ class ClienteController extends Controller
         ]);
     }
 
+    /**
+     * Remover permanentemente
+     */
     public function forceDelete($id)
     {
         $cliente = Cliente::withTrashed()->findOrFail($id);

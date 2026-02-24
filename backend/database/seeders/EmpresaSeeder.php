@@ -56,7 +56,7 @@ class EmpresaSeeder extends Seeder
         /* ================= CATEGORIAS ================= */
         $cosmeticosId = Str::uuid();
         $alimentacaoId = Str::uuid();
-        $servicosId = Str::uuid();
+        $servicosId = Str::uuid(); // ✅ NOVA CATEGORIA PARA SERVIÇOS
 
         DB::table('categorias')->insert([
             [
@@ -81,7 +81,7 @@ class EmpresaSeeder extends Seeder
             ],
             [
                 'id' => $servicosId,
-                'nome' => 'Serviços',
+                'nome' => 'Serviços Profissionais',
                 'descricao' => 'Serviços diversos',
                 'status' => 'ativo',
                 'tipo' => 'servico',
@@ -91,12 +91,17 @@ class EmpresaSeeder extends Seeder
             ],
         ]);
 
-        /* ================= PRODUTOS ================= */
+        /* ================= PRODUTOS E SERVIÇOS ================= */
         $cremeId = Str::uuid();
         $arrozId = Str::uuid();
-        $servicoId = Str::uuid();
 
-        $produtos = [
+        // ✅ SERVIÇOS
+        $consultoriaId = Str::uuid();
+        $manutencaoId = Str::uuid();
+        $instalacaoId = Str::uuid();
+
+        $itens = [
+            // Produtos existentes
             [
                 'id' => $cremeId,
                 'categoria_id' => $cosmeticosId,
@@ -111,6 +116,9 @@ class EmpresaSeeder extends Seeder
                 'status' => 'ativo',
                 'tipo' => 'produto',
                 'user_id' => $adminUserId,
+                'retencao' => null,
+                'duracao_estimada' => null,
+                'unidade_medida' => null,
             ],
             [
                 'id' => $arrozId,
@@ -126,29 +134,69 @@ class EmpresaSeeder extends Seeder
                 'status' => 'ativo',
                 'tipo' => 'produto',
                 'user_id' => $adminUserId,
+                'retencao' => null,
+                'duracao_estimada' => null,
+                'unidade_medida' => null,
             ],
+            // ✅ SERVIÇOS
             [
-                'id' => $servicoId,
+                'id' => $consultoriaId,
                 'categoria_id' => $servicosId,
-                'nome' => 'Consultoria',
-                'descricao' => 'Serviço de consultoria empresarial',
+                'nome' => 'Consultoria Fiscal',
+                'descricao' => 'Consultoria em legislação fiscal angolana',
                 'preco_compra' => 0,
-                'preco_venda' => 50000,
+                'preco_venda' => 75000,
                 'taxa_iva' => 14,
                 'estoque_atual' => 0,
                 'estoque_minimo' => 0,
                 'custo_medio' => 0,
                 'status' => 'ativo',
                 'tipo' => 'servico',
-                'retencao' => 6.5,
-                'duracao_estimada' => '01:00',
-                'unidade_medida' => 'hora',
                 'user_id' => $adminUserId,
+                'retencao' => 6.5,
+                'duracao_estimada' => '4 horas',
+                'unidade_medida' => 'hora',
+            ],
+            [
+                'id' => $manutencaoId,
+                'categoria_id' => $servicosId,
+                'nome' => 'Manutenção de Software',
+                'descricao' => 'Manutenção mensal do sistema',
+                'preco_compra' => 0,
+                'preco_venda' => 35000,
+                'taxa_iva' => 14,
+                'estoque_atual' => 0,
+                'estoque_minimo' => 0,
+                'custo_medio' => 0,
+                'status' => 'ativo',
+                'tipo' => 'servico',
+                'user_id' => $adminUserId,
+                'retencao' => 6.5,
+                'duracao_estimada' => '1 mês',
+                'unidade_medida' => 'mes',
+            ],
+            [
+                'id' => $instalacaoId,
+                'categoria_id' => $servicosId,
+                'nome' => 'Instalação de Equipamento',
+                'descricao' => 'Instalação técnica no local',
+                'preco_compra' => 0,
+                'preco_venda' => 25000,
+                'taxa_iva' => 14,
+                'estoque_atual' => 0,
+                'estoque_minimo' => 0,
+                'custo_medio' => 0,
+                'status' => 'ativo',
+                'tipo' => 'servico',
+                'user_id' => $adminUserId,
+                'retencao' => 6.5,
+                'duracao_estimada' => '2 horas',
+                'unidade_medida' => 'hora',
             ],
         ];
 
-        foreach ($produtos as $p) {
-            DB::table('produtos')->insert(array_merge($p, [
+        foreach ($itens as $item) {
+            DB::table('produtos')->insert(array_merge($item, [
                 'created_at' => $now,
                 'updated_at' => $now
             ]));
@@ -180,6 +228,7 @@ class EmpresaSeeder extends Seeder
                 'nome' => 'Cliente Final',
                 'nif' => null,
                 'tipo' => 'consumidor_final',
+                'status' => 'ativo',
                 'telefone' => '911234567',
                 'email' => 'cliente@teste.com',
                 'endereco' => 'Bairro Central, Luanda',
@@ -192,6 +241,7 @@ class EmpresaSeeder extends Seeder
                 'nome' => 'Empresa Teste Lda',
                 'nif' => '5009876543',
                 'tipo' => 'empresa',
+                'status' => 'ativo',
                 'telefone' => '922345678',
                 'email' => 'empresa@teste.com',
                 'endereco' => 'Av. Empresarial, Luanda',
@@ -262,7 +312,7 @@ class EmpresaSeeder extends Seeder
             ]);
         }
 
-        /* ================= VENDA 1 - Fatura Normal (FT) ================= */
+        /* ================= VENDA 1 - Fatura Normal (FT) com serviços ================= */
         $venda1Id = Str::uuid();
         $quantidade1 = 2;
         $precoUnitario1 = 8000;
@@ -383,10 +433,10 @@ class EmpresaSeeder extends Seeder
             ->where('ano', date('Y'))
             ->update(['ultimo_numero' => $numeroFt]);
 
-        /* ================= VENDA 2 - Fatura-Recibo (FR) ================= */
+        /* ================= VENDA 2 - Fatura-Recibo (FR) com serviços ================= */
         $venda2Id = Str::uuid();
         $quantidade2 = 1;
-        $precoUnitario2 = 50000;
+        $precoUnitario2 = 75000;
         $totalBruto2 = $precoUnitario2 * $quantidade2;
         $desconto2 = 0;
         $baseTributavel2 = $totalBruto2 - $desconto2;
@@ -420,8 +470,8 @@ class EmpresaSeeder extends Seeder
         DB::table('itens_venda')->insert([
             'id' => Str::uuid(),
             'venda_id' => $venda2Id,
-            'produto_id' => $servicoId,
-            'descricao' => 'Consultoria Empresarial',
+            'produto_id' => $consultoriaId,
+            'descricao' => 'Consultoria Fiscal',
             'quantidade' => $quantidade2,
             'preco_venda' => $precoUnitario2,
             'desconto' => $desconto2,
@@ -468,31 +518,6 @@ class EmpresaSeeder extends Seeder
             'updated_at' => $now,
         ]);
 
-        // Item do Documento Fiscal FR
-        DB::table('itens_documento_fiscal')->insert([
-            'id' => Str::uuid(),
-            'documento_fiscal_id' => $documentoFrId,
-            'produto_id' => $servicoId,
-            'item_origem_id' => null,
-            'descricao' => 'Consultoria Empresarial',
-            'referencia' => 'SERV001',
-            'quantidade' => $quantidade2,
-            'unidade' => 'HORA',
-            'preco_unitario' => $precoUnitario2,
-            'desconto' => $desconto2,
-            'base_tributavel' => $baseTributavel2,
-            'taxa_iva' => $taxaIva2,
-            'valor_iva' => $valorIva2,
-            'taxa_retencao' => $taxaRetencao2,
-            'valor_retencao' => $valorRetencao2,
-            'total_linha' => $totalLiquido2,
-            'ordem' => 1,
-            'motivo_alteracao' => null,
-            'observacoes' => null,
-            'created_at' => $now,
-            'updated_at' => $now,
-        ]);
-
         // Atualizar venda com documento_fiscal_id
         DB::table('vendas')->where('id', $venda2Id)->update([
             'documento_fiscal_id' => $documentoFrId,
@@ -504,6 +529,8 @@ class EmpresaSeeder extends Seeder
             ->where('serie', 'B')
             ->where('ano', date('Y'))
             ->update(['ultimo_numero' => $numeroFr]);
+
+        // ... (restante do código permanece igual: recibo, venda 3, etc.)
 
         /* ================= RECIBO DO PAGAMENTO DA FT ================= */
         $reciboId = Str::uuid();
@@ -571,7 +598,7 @@ class EmpresaSeeder extends Seeder
             'total' => $valorAdiantamento,
             'status' => 'faturada',
             'estado_pagamento' => 'paga',
-            'tipo_documento' => 'venda', // ← CORRIGIDO: era 'adiantamento', agora é 'venda'
+            'tipo_documento' => 'venda',
             'serie' => 'F',
             'numero' => '00001',
             'base_tributavel' => $valorAdiantamento,
@@ -682,10 +709,9 @@ class EmpresaSeeder extends Seeder
         /* ================= LOGS FISCAIS ================= */
         $logsFiscais = [
             ['entidade' => 'documento_fiscal', 'entidade_id' => $documentoFtId, 'acao' => 'emitir', 'detalhe' => 'Fatura FT emitida'],
-            ['entidade' => 'documento_fiscal', 'entidade_id' => $documentoFrId, 'acao' => 'emitir', 'detalhe' => 'Fatura-Recibo FR emitida'],
+            ['entidade' => 'documento_fiscal', 'entidade_id' => $documentoFrId, 'acao' => 'emitir', 'detalhe' => 'Fatura-Recibo FR emitida com serviço'],
             ['entidade' => 'documento_fiscal', 'entidade_id' => $reciboId, 'acao' => 'emitir', 'detalhe' => 'Recibo RC emitido para pagamento da FT'],
             ['entidade' => 'documento_fiscal', 'entidade_id' => $documentoFaId, 'acao' => 'emitir', 'detalhe' => 'Fatura de Adiantamento FA emitida'],
-            // CORRIGIDO: 'vincular' → 'emitir' (ou outra ação válida do seu enum)
             ['entidade' => 'adiantamento_fatura', 'entidade_id' => $documentoFaId, 'acao' => 'emitir', 'detalhe' => 'FA vinculada parcialmente à FT'],
         ];
 

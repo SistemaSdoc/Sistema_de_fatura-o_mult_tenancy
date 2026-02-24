@@ -27,12 +27,18 @@ class VendaController extends Controller
      */
     public function create()
     {
-        $clientes = Cliente::all();
-        $produtos = Produto::all();
+        $clientes = Cliente::where('status', 'ativo')->get();
+
+        // ✅ Separar produtos e serviços para melhor exibição
+        $produtos = Produto::where('status', 'ativo')->get();
 
         return response()->json([
             'clientes' => $clientes,
-            'produtos' => $produtos
+            'produtos' => $produtos,
+            'estatisticas' => [
+                'total_produtos' => $produtos->where('tipo', 'produto')->count(),
+                'total_servicos' => $produtos->where('tipo', 'servico')->count(),
+            ]
         ]);
     }
 
@@ -48,7 +54,7 @@ class VendaController extends Controller
             'cliente',
             'user',
             'itens.produto',
-            'documentoFiscal' => function($q) {
+            'documentoFiscal' => function ($q) {
                 $q->with(['recibos', 'notasCredito', 'notasDebito']);
             }
         ]);
@@ -70,8 +76,15 @@ class VendaController extends Controller
 
         // Filtro por tipo de documento fiscal
         if ($request->has('tipo_documento')) {
-            $query->whereHas('documentoFiscal', function($q) use ($request) {
+            $query->whereHas('documentoFiscal', function ($q) use ($request) {
                 $q->where('tipo_documento', $request->input('tipo_documento'));
+            });
+        }
+
+        // ✅ Filtro por tipo de item (produto/serviço)
+        if ($request->has('tipo_item')) {
+            $query->whereHas('itens.produto', function ($q) use ($request) {
+                $q->where('tipo', $request->input('tipo_item'));
             });
         }
 
@@ -82,6 +95,13 @@ class VendaController extends Controller
             'vendas' => $vendas->map(function ($venda) {
                 // Determinar se é venda válida (FT, FR ou RC)
                 $ehVenda = $this->ehVendaValida($venda->documentoFiscal);
+
+                // ✅ Estatísticas de serviços na venda
+                $servicos = $venda->itens->filter(function ($item) {
+                    return $item->produto && $item->produto->tipo === 'servico';
+                });
+
+                $totalRetencaoServicos = $servicos->sum('valor_retencao');
 
                 return [
                     'id' => $venda->id,
@@ -102,6 +122,7 @@ class VendaController extends Controller
                         'telefone' => $venda->cliente->telefone,
                         'email' => $venda->cliente->email,
                         'endereco' => $venda->cliente->endereco,
+                        'status' => $venda->cliente->status,
                     ] : null,
 
                     // Usuário
@@ -121,6 +142,11 @@ class VendaController extends Controller
                     'base_tributavel' => $venda->base_tributavel,
                     'total_iva' => $venda->total_iva,
                     'total_retencao' => $venda->total_retencao,
+
+                    // ✅ Retenção de serviços
+                    'total_retencao_servicos' => $totalRetencaoServicos,
+                    'tem_servicos' => $servicos->count() > 0,
+                    'quantidade_servicos' => $servicos->count(),
 
                     // Status da venda
                     'status' => $venda->status,
@@ -149,8 +175,11 @@ class VendaController extends Controller
                         'estado_pagamento' => $this->determinarEstadoPagamentoDocumento($venda->documentoFiscal),
                         'valor_pendente' => $this->calcularValorPendente($venda->documentoFiscal),
 
+                        // ✅ Retenção total do documento
+                        'retencao_total' => $venda->documentoFiscal->total_retencao ?? 0,
+
                         // Recibos associados
-                        'recibos' => $venda->documentoFiscal->recibos->map(function($recibo) {
+                        'recibos' => $venda->documentoFiscal->recibos->map(function ($recibo) {
                             return [
                                 'id' => $recibo->id,
                                 'numero' => $recibo->numero_documento,
@@ -162,7 +191,7 @@ class VendaController extends Controller
                         }),
 
                         // Notas de crédito/débito associadas
-                        'notas_credito' => $venda->documentoFiscal->notasCredito->map(function($nc) {
+                        'notas_credito' => $venda->documentoFiscal->notasCredito->map(function ($nc) {
                             return [
                                 'id' => $nc->id,
                                 'numero' => $nc->numero_documento,
@@ -171,7 +200,7 @@ class VendaController extends Controller
                             ];
                         }),
 
-                        'notas_debito' => $venda->documentoFiscal->notasDebito->map(function($nd) {
+                        'notas_debito' => $venda->documentoFiscal->notasDebito->map(function ($nd) {
                             return [
                                 'id' => $nd->id,
                                 'numero' => $nd->numero_documento,
@@ -183,6 +212,8 @@ class VendaController extends Controller
 
                     // Itens
                     'itens' => $venda->itens->map(function ($item) {
+                        $ehServico = $item->produto && $item->produto->tipo === 'servico';
+
                         return [
                             'id' => $item->id,
                             'produto_id' => $item->produto_id,
@@ -190,6 +221,7 @@ class VendaController extends Controller
                                 'id' => $item->produto->id,
                                 'nome' => $item->produto->nome,
                                 'codigo' => $item->produto->codigo,
+                                'tipo' => $item->produto->tipo,
                             ] : null,
                             'descricao' => $item->descricao,
                             'quantidade' => $item->quantidade,
@@ -198,11 +230,27 @@ class VendaController extends Controller
                             'base_tributavel' => $item->base_tributavel,
                             'valor_iva' => $item->valor_iva,
                             'valor_retencao' => $item->valor_retencao,
+                            'taxa_retencao' => $item->taxa_retencao,
                             'subtotal' => $item->subtotal,
+                            'eh_servico' => $ehServico,
+                            'subtotal_liquido' => $item->subtotal - ($item->valor_retencao ?? 0),
                         ];
                     }),
+
+                    // ✅ Totais por tipo
+                    'totais_por_tipo' => [
+                        'produtos' => [
+                            'quantidade' => $venda->itens->filter(fn($i) => $i->produto && $i->produto->tipo === 'produto')->count(),
+                            'total' => $venda->itens->filter(fn($i) => $i->produto && $i->produto->tipo === 'produto')->sum('subtotal'),
+                        ],
+                        'servicos' => [
+                            'quantidade' => $venda->itens->filter(fn($i) => $i->produto && $i->produto->tipo === 'servico')->count(),
+                            'total' => $venda->itens->filter(fn($i) => $i->produto && $i->produto->tipo === 'servico')->sum('subtotal'),
+                            'retencao' => $totalRetencaoServicos,
+                        ],
+                    ],
                 ];
-            })->filter(function($venda) {
+            })->filter(function ($venda) {
                 // Se solicitado, filtra apenas vendas válidas (FT/FR/RC)
                 if (request()->has('apenas_vendas') && request()->input('apenas_vendas') === 'true') {
                     return $venda['eh_venda'];
@@ -224,6 +272,13 @@ class VendaController extends Controller
         // Determinar estado de pagamento
         $estadoPagamento = $this->determinarEstadoPagamentoVenda($venda);
 
+        // ✅ Estatísticas de serviços
+        $servicos = $venda->itens->filter(function ($item) {
+            return $item->produto && $item->produto->tipo === 'servico';
+        });
+
+        $totalRetencaoServicos = $servicos->sum('valor_retencao');
+
         return response()->json([
             'message' => 'Venda carregada',
             'venda' => [
@@ -244,6 +299,7 @@ class VendaController extends Controller
                     'telefone' => $venda->cliente->telefone,
                     'email' => $venda->cliente->email,
                     'endereco' => $venda->cliente->endereco,
+                    'status' => $venda->cliente->status,
                 ] : null,
 
                 // Usuário
@@ -262,6 +318,11 @@ class VendaController extends Controller
                 'base_tributavel' => $venda->base_tributavel,
                 'total_iva' => $venda->total_iva,
                 'total_retencao' => $venda->total_retencao,
+
+                // ✅ Retenção de serviços
+                'total_retencao_servicos' => $totalRetencaoServicos,
+                'tem_servicos' => $servicos->count() > 0,
+                'quantidade_servicos' => $servicos->count(),
 
                 // Status
                 'status' => $venda->status,
@@ -292,8 +353,11 @@ class VendaController extends Controller
                     'valor_pago' => $this->calcularValorPago($venda->documentoFiscal),
                     'valor_pendente' => $this->calcularValorPendente($venda->documentoFiscal),
 
+                    // ✅ Retenção
+                    'retencao_total' => $venda->documentoFiscal->total_retencao ?? 0,
+
                     // Recibos
-                    'recibos' => $venda->documentoFiscal->recibos->map(function($recibo) {
+                    'recibos' => $venda->documentoFiscal->recibos->map(function ($recibo) {
                         return [
                             'id' => $recibo->id,
                             'numero_documento' => $recibo->numero_documento,
@@ -309,6 +373,8 @@ class VendaController extends Controller
 
                 // Itens
                 'itens' => $venda->itens->map(function ($item) {
+                    $ehServico = $item->produto && $item->produto->tipo === 'servico';
+
                     return [
                         'produto' => $item->produto,
                         'quantidade' => $item->quantidade,
@@ -318,8 +384,24 @@ class VendaController extends Controller
                         'base_tributavel' => $item->base_tributavel,
                         'valor_iva' => $item->valor_iva,
                         'valor_retencao' => $item->valor_retencao,
+                        'taxa_retencao' => $item->taxa_retencao,
+                        'eh_servico' => $ehServico,
+                        'subtotal_liquido' => $item->subtotal - ($item->valor_retencao ?? 0),
                     ];
                 }),
+
+                // ✅ Totais por tipo
+                'totais_por_tipo' => [
+                    'produtos' => [
+                        'quantidade' => $venda->itens->filter(fn($i) => $i->produto && $i->produto->tipo === 'produto')->count(),
+                        'total' => $venda->itens->filter(fn($i) => $i->produto && $i->produto->tipo === 'produto')->sum('subtotal'),
+                    ],
+                    'servicos' => [
+                        'quantidade' => $venda->itens->filter(fn($i) => $i->produto && $i->produto->tipo === 'servico')->count(),
+                        'total' => $venda->itens->filter(fn($i) => $i->produto && $i->produto->tipo === 'servico')->sum('subtotal'),
+                        'retencao' => $totalRetencaoServicos,
+                    ],
+                ],
             ],
         ]);
     }
@@ -337,7 +419,7 @@ class VendaController extends Controller
             'faturar' => $request->input('faturar')
         ]);
 
-        // ATUALIZADO: Adicionado FP (Fatura Proforma) - mas FP não é venda, é documento prévio
+        // ✅ Validação incluindo campos de serviço
         $dados = $request->validate([
             'cliente_id' => 'nullable|uuid|exists:clientes,id',
             'cliente_nome' => 'nullable|string|max:255',
@@ -346,8 +428,8 @@ class VendaController extends Controller
             'itens.*.quantidade' => 'required|integer|min:1',
             'itens.*.preco_venda' => 'required|numeric|min:0',
             'itens.*.desconto' => 'nullable|numeric|min:0',
+            'itens.*.taxa_retencao' => 'nullable|numeric|min:0|max:100', // ✅ Para serviços
             'faturar' => 'nullable|boolean',
-            // Tipos permitidos: FT, FR, FP (FP é proforma, não é venda fiscal)
             'tipo_documento' => 'nullable|in:FT,FR,FP',
             'dados_pagamento' => 'nullable|array',
             'dados_pagamento.metodo' => 'required_with:dados_pagamento|in:transferencia,multibanco,dinheiro,cheque,cartao',
@@ -362,7 +444,6 @@ class VendaController extends Controller
         ]);
 
         // VALIDAÇÃO PARA CLIENTE AVULSO
-        // Verificar se tem pelo menos uma forma de identificar o cliente
         if (empty($dados['cliente_id']) && empty($dados['cliente_nome'])) {
             return response()->json([
                 'message' => 'É necessário informar um cliente (selecionado ou avulso).'
@@ -377,7 +458,6 @@ class VendaController extends Controller
                 ], 422);
             }
 
-            // Validar valor do pagamento
             if ($dados['dados_pagamento']['valor'] <= 0) {
                 return response()->json([
                     'message' => 'Valor do pagamento deve ser maior que zero.'
@@ -390,7 +470,6 @@ class VendaController extends Controller
             $dados['faturar'] = false;
         }
 
-        // Para FT normal, faturar pode ser true ou false conforme necessidade
         // Se não especificado, assume true para FT e FR, false para FP
         if (!isset($dados['faturar'])) {
             $dados['faturar'] = ($dados['tipo_documento'] ?? 'FT') !== 'FP';
@@ -405,11 +484,18 @@ class VendaController extends Controller
         // Determinar estado de pagamento após criação
         $estadoPagamento = $this->determinarEstadoPagamentoVenda($venda);
 
+        // ✅ Estatísticas de serviços
+        $servicos = $venda->itens->filter(function ($item) {
+            return $item->produto && $item->produto->tipo === 'servico';
+        });
+
         Log::info('VendaController::store - Venda criada', [
             'venda_id' => $venda->id,
             'tipo_documento_gerado' => $venda->documentoFiscal?->tipo_documento ?? 'N/A',
             'estado_pagamento' => $estadoPagamento,
-            'cliente_tipo' => $venda->cliente_id ? 'cadastrado' : 'avulso'
+            'cliente_tipo' => $venda->cliente_id ? 'cadastrado' : 'avulso',
+            'quantidade_servicos' => $servicos->count(),
+            'retencao_total' => $servicos->sum('valor_retencao')
         ]);
 
         return response()->json([
@@ -440,9 +526,13 @@ class VendaController extends Controller
                     'tipo_documento_nome' => $venda->documentoFiscal->tipo_documento_nome,
                     'estado' => $venda->documentoFiscal->estado,
                     'estado_pagamento' => $this->determinarEstadoPagamentoDocumento($venda->documentoFiscal),
+                    'retencao_total' => $venda->documentoFiscal->total_retencao ?? 0,
                 ] : null,
 
+                // Itens
                 'itens' => $venda->itens->map(function ($item) {
+                    $ehServico = $item->produto && $item->produto->tipo === 'servico';
+
                     return [
                         'produto' => $item->produto,
                         'quantidade' => $item->quantidade,
@@ -452,8 +542,15 @@ class VendaController extends Controller
                         'base_tributavel' => $item->base_tributavel,
                         'valor_iva' => $item->valor_iva,
                         'valor_retencao' => $item->valor_retencao,
+                        'taxa_retencao' => $item->taxa_retencao,
+                        'eh_servico' => $ehServico,
                     ];
                 }),
+
+                // ✅ Estatísticas de serviços
+                'tem_servicos' => $servicos->count() > 0,
+                'quantidade_servicos' => $servicos->count(),
+                'retencao_servicos' => $servicos->sum('valor_retencao'),
             ],
         ]);
     }
@@ -465,14 +562,12 @@ class VendaController extends Controller
     {
         $this->authorize('cancel', $venda);
 
-        // Verificar se pode ser cancelada
         if ($venda->estado_pagamento === 'paga') {
             return response()->json([
                 'message' => 'Não é possível cancelar uma venda já paga. Cancele o documento fiscal primeiro.'
             ], 422);
         }
 
-        // Se tem documento fiscal, verificar se pode cancelar
         if ($venda->documentoFiscal) {
             if (!in_array($venda->documentoFiscal->estado, ['emitido', 'parcialmente_paga'])) {
                 return response()->json([
@@ -540,8 +635,6 @@ class VendaController extends Controller
 
     /**
      * Verificar se é venda válida (FT, FR ou RC)
-     * NC, ND, FA, FP, FRt NÃO são vendas
-     * FA (Fatura de Adiantamento) só se torna venda quando gerado recibo
      */
     private function ehVendaValida(?DocumentoFiscal $documento): bool
     {
@@ -550,8 +643,7 @@ class VendaController extends Controller
     }
 
     /**
-     * Determinar estado de pagamento da venda baseado no documento fiscal
-     * Estados = pendente, paga, cancelada, parcial
+     * Determinar estado de pagamento da venda
      */
     private function determinarEstadoPagamentoVenda(Venda $venda): string
     {
@@ -559,61 +651,45 @@ class VendaController extends Controller
             return 'pendente';
         }
 
-        // Se documento cancelado, venda é cancelada
         if ($venda->documentoFiscal->estado === 'cancelado') {
             return 'cancelada';
         }
 
-        // FP (Fatura Proforma) não é venda fiscal, sempre pendente
         if ($venda->documentoFiscal->tipo_documento === 'FP') {
             return 'pendente';
         }
 
-        // FA (Fatura de Adiantamento) não é venda até gerar recibo
         if ($venda->documentoFiscal->tipo_documento === 'FA') {
-            // Verificar se já tem recibos (se tiver, virou venda)
             if ($venda->documentoFiscal->recibos()->where('estado', '!=', 'cancelado')->exists()) {
                 return 'paga';
             }
             return 'pendente';
         }
 
-        // FR é sempre paga
-        if ($venda->documentoFiscal->tipo_documento === 'FR') {
+        if (in_array($venda->documentoFiscal->tipo_documento, ['FR', 'RC'])) {
             return 'paga';
         }
 
-        // RC é sempre pago (é o próprio pagamento)
-        if ($venda->documentoFiscal->tipo_documento === 'RC') {
-            return 'paga';
-        }
-
-        // FT depende de recibos
         if ($venda->documentoFiscal->tipo_documento === 'FT') {
             return $this->determinarEstadoPagamentoDocumento($venda->documentoFiscal);
         }
 
-        // Outros tipos não são vendas
         return 'pendente';
     }
 
     /**
      * Determinar estado de pagamento de um documento fiscal
-     * Estados = pendente, paga, parcial
      */
     private function determinarEstadoPagamentoDocumento(DocumentoFiscal $documento): string
     {
-        // FR sempre paga
         if ($documento->tipo_documento === 'FR') {
             return 'paga';
         }
 
-        // FP sempre pendente (proforma)
         if ($documento->tipo_documento === 'FP') {
             return 'pendente';
         }
 
-        // FA depende de recibos
         if ($documento->tipo_documento === 'FA') {
             if ($documento->recibos()->where('estado', '!=', 'cancelado')->exists()) {
                 return 'paga';
@@ -621,12 +697,10 @@ class VendaController extends Controller
             return 'pendente';
         }
 
-        // RC sempre pago
         if ($documento->tipo_documento === 'RC') {
             return 'paga';
         }
 
-        // Verificar por recibos para FT
         if ($documento->tipo_documento === 'FT') {
             $valorPendente = $this->calcularValorPendente($documento);
 
@@ -640,8 +714,7 @@ class VendaController extends Controller
             }
         }
 
-        // Verificar estado do documento
-        return match($documento->estado) {
+        return match ($documento->estado) {
             'paga' => 'paga',
             'parcialmente_paga' => 'parcial',
             'cancelado' => 'cancelada',
@@ -658,13 +731,7 @@ class VendaController extends Controller
             return $documento->total_liquido;
         }
 
-        if ($documento->tipo_documento === 'FA') {
-            return $documento->recibos()
-                ->where('estado', '!=', 'cancelado')
-                ->sum('total_liquido') ?? 0;
-        }
-
-        if ($documento->tipo_documento === 'FT') {
+        if (in_array($documento->tipo_documento, ['FA', 'FT'])) {
             return $documento->recibos()
                 ->where('estado', '!=', 'cancelado')
                 ->sum('total_liquido') ?? 0;
@@ -674,35 +741,28 @@ class VendaController extends Controller
     }
 
     /**
-     * Calcular valor pendente (considerando recibos e adiantamentos)
+     * Calcular valor pendente
      */
     private function calcularValorPendente(DocumentoFiscal $documento): float
     {
-        // FP sempre tem valor pendente total
         if ($documento->tipo_documento === 'FP') {
             return $documento->total_liquido;
         }
 
-        // FA só tem pendente se não tiver recibos
         if ($documento->tipo_documento === 'FA') {
             $totalPago = $this->calcularValorPago($documento);
             return max(0, $documento->total_liquido - $totalPago);
         }
 
-        // FR e RC não tem valor pendente
         if (in_array($documento->tipo_documento, ['FR', 'RC'])) {
             return 0;
         }
 
-        // FT tem pendente baseado em recibos
         if ($documento->tipo_documento === 'FT') {
             $totalPago = $this->calcularValorPago($documento);
-
-            // Considerar adiantamentos vinculados
             $totalAdiantamentos = DB::table('adiantamento_fatura')
                 ->where('fatura_id', $documento->id)
                 ->sum('valor_utilizado');
-
             return max(0, $documento->total_liquido - $totalPago - $totalAdiantamentos);
         }
 
@@ -711,8 +771,6 @@ class VendaController extends Controller
 
     /**
      * Verificar se a venda pode receber pagamento
-     * Apenas FT pendente ou parcial pode receber recibo
-     * FA pode receber recibo (se transforma em venda)
      */
     private function podeReceberPagamento(Venda $venda): bool
     {
@@ -720,18 +778,15 @@ class VendaController extends Controller
             return false;
         }
 
-        // FT e FA podem receber pagamento via recibo
         if (!in_array($venda->documentoFiscal->tipo_documento, ['FT', 'FA'])) {
             return false;
         }
 
-        // Não pode receber pagamento se cancelada
         if ($venda->documentoFiscal->estado === 'cancelado') {
             return false;
         }
 
         $estadoPagamento = $this->determinarEstadoPagamentoVenda($venda);
-
         return in_array($estadoPagamento, ['pendente', 'parcial']);
     }
 }

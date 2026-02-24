@@ -23,9 +23,14 @@ export interface ItemDocumento {
     desconto?: number;
     taxa_iva: number;
     valor_iva?: number;
+    // ✅ NOVO: campos de retenção para serviços
+    taxa_retencao?: number;
+    valor_retencao?: number;
     total_linha?: number;
     codigo_produto?: string;
     unidade?: string;
+    // ✅ NOVO: identificar se é serviço
+    eh_servico?: boolean;
 }
 
 export interface DocumentoFiscal {
@@ -46,7 +51,7 @@ export interface DocumentoFiscal {
     data_cancelamento?: string | null;
     base_tributavel: number;
     total_iva: number;
-    total_retencao: number;
+    total_retencao: number; // ✅ Soma das retenções de serviços
     total_liquido: number;
     estado: EstadoDocumento;
     motivo?: string | null;
@@ -71,6 +76,12 @@ export interface DocumentoFiscal {
     notasDebito?: DocumentoFiscal[];
     faturasAdiantamento?: DocumentoFiscal[];
     faturasVinculadas?: DocumentoFiscal[];
+
+    // ✅ Campos calculados
+    tem_servicos?: boolean;
+    quantidade_servicos?: number;
+    total_retencao_servicos?: number;
+    percentual_retencao?: number;
 }
 
 export interface Cliente {
@@ -78,6 +89,7 @@ export interface Cliente {
     nome: string;
     nif?: string | null;
     tipo: 'consumidor_final' | 'empresa';
+    status?: 'ativo' | 'inativo';
     telefone?: string;
     email?: string;
     endereco?: string;
@@ -105,6 +117,9 @@ export interface FiltrosDocumento {
     per_page?: number;
     page?: number;
     search?: string;
+    // ✅ NOVOS FILTROS
+    com_retencao?: boolean;
+    tipo_item?: 'produto' | 'servico';
 }
 
 export interface DadosPagamento {
@@ -175,6 +190,9 @@ export interface DashboardDocumentos {
     documentos_cancelados_mes: number;
     total_vendas_mes: number;
     total_nao_vendas_mes: number;
+    // ✅ NOVO
+    total_retencao_mes?: number;
+    documentos_com_retencao?: number;
 }
 
 export interface AlertasDocumentos {
@@ -194,6 +212,11 @@ export interface AlertasDocumentos {
         total: number;
         items: DocumentoFiscal[];
     };
+    // ✅ NOVO
+    servicos_com_retencao_proximos?: {
+        total: number;
+        items: DocumentoFiscal[];
+    };
 }
 
 export interface EvolucaoDados {
@@ -202,6 +225,8 @@ export interface EvolucaoDados {
     total_vendas: number;
     total_nao_vendas: number;
     total_pendente: number;
+    // ✅ NOVO
+    total_retencao?: number;
 }
 
 export interface ResumoDashboard {
@@ -215,6 +240,12 @@ export interface ResumoDashboard {
     alertas?: AlertasDocumentos;
     ano?: number;
     evolucao?: EvolucaoDados[];
+    // ✅ NOVO
+    servicos?: {
+        total: number;
+        com_retencao: number;
+        valor_retencao_total: number;
+    };
 }
 
 // ==================== SERVICE ====================
@@ -245,7 +276,11 @@ class DocumentoFiscalService {
             throw new Error(response.data.message);
         }
 
-        return response.data.data;
+        // ✅ Adicionar campos calculados aos documentos
+        const documentos = response.data.data;
+        documentos.data = documentos.data.map(this._enriquecerDocumento.bind(this));
+
+        return documentos;
     }
 
     /**
@@ -258,7 +293,8 @@ class DocumentoFiscalService {
             throw new Error(response.data.message);
         }
 
-        return response.data.data.documento;
+        // ✅ Enriquecer documento com campos calculados
+        return this._enriquecerDocumento(response.data.data.documento);
     }
 
     // ==================== EMISSÃO ====================
@@ -273,6 +309,13 @@ class DocumentoFiscalService {
             throw new Error('Fatura-Recibo (FR) requer um cliente (cadastrado ou avulso)');
         }
 
+        // ✅ Log para debug
+        console.log('[DocumentoFiscalService] Emitindo documento:', {
+            tipo: dados.tipo_documento,
+            itens: dados.itens?.length || 0,
+            tem_retencao: dados.itens?.some(i => i.taxa_retencao && i.taxa_retencao > 0)
+        });
+
         const response = await api.post<ApiResponse<DocumentoFiscal>>(
             `${this.baseUrl}/emitir`,
             dados
@@ -282,7 +325,7 @@ class DocumentoFiscalService {
             throw new Error(response.data.message);
         }
 
-        return response.data.data;
+        return this._enriquecerDocumento(response.data.data);
     }
 
     /**
@@ -362,7 +405,7 @@ class DocumentoFiscalService {
             throw new Error(response.data.message);
         }
 
-        return response.data.data;
+        return this._enriquecerDocumento(response.data.data);
     }
 
     /**
@@ -381,7 +424,7 @@ class DocumentoFiscalService {
             throw new Error(response.data.message);
         }
 
-        return response.data.data;
+        return this._enriquecerDocumento(response.data.data);
     }
 
     // ==================== RECIBOS ====================
@@ -399,7 +442,7 @@ class DocumentoFiscalService {
             throw new Error(response.data.message);
         }
 
-        return response.data.data;
+        return this._enriquecerDocumento(response.data.data);
     }
 
     /**
@@ -414,7 +457,7 @@ class DocumentoFiscalService {
             throw new Error(response.data.message);
         }
 
-        return response.data.data;
+        return response.data.data.map(this._enriquecerDocumento.bind(this));
     }
 
     // ==================== ADIANTAMENTOS ====================
@@ -435,7 +478,10 @@ class DocumentoFiscalService {
             throw new Error(response.data.message);
         }
 
-        return response.data.data;
+        return {
+            adiantamento: this._enriquecerDocumento(response.data.data.adiantamento),
+            fatura: this._enriquecerDocumento(response.data.data.fatura)
+        };
     }
 
     // ==================== CANCELAMENTO ====================
@@ -453,7 +499,7 @@ class DocumentoFiscalService {
             throw new Error(response.data.message);
         }
 
-        return response.data.data;
+        return this._enriquecerDocumento(response.data.data);
     }
 
     // ==================== DASHBOARD E ESTATÍSTICAS ====================
@@ -512,7 +558,6 @@ class DocumentoFiscalService {
 
     /**
      * Obter evolução mensal (GET /api/dashboard/evolucao-mensal)
-     * CORRIGIDO: Usa 'meses' em vez de 'evolucao' conforme retorno do backend
      */
     async getEvolucaoMensal(ano?: number): Promise<EvolucaoDados[]> {
         const params = ano ? `?ano=${ano}` : '';
@@ -525,7 +570,6 @@ class DocumentoFiscalService {
             return [];
         }
 
-        // CORREÇÃO: Usa 'meses' em vez de 'evolucao'
         const meses = response.data.data?.meses;
 
         if (!Array.isArray(meses)) {
@@ -534,6 +578,27 @@ class DocumentoFiscalService {
         }
 
         return meses;
+    }
+
+    // ==================== MÉTODOS PRIVADOS ====================
+
+    /**
+     * ✅ Enriquecer documento com campos calculados
+     */
+    private _enriquecerDocumento(doc: DocumentoFiscal): DocumentoFiscal {
+        const servicos = doc.itens?.filter(item => 
+            item.produto_id && (item as any).eh_servico
+        ) || [];
+
+        return {
+            ...doc,
+            tem_servicos: servicos.length > 0,
+            quantidade_servicos: servicos.length,
+            total_retencao_servicos: servicos.reduce((acc, item) => acc + (item.valor_retencao || 0), 0),
+            percentual_retencao: doc.base_tributavel > 0 
+                ? Math.round((doc.total_retencao / doc.base_tributavel) * 100 * 100) / 100
+                : 0
+        };
     }
 
     // ==================== UTILITÁRIOS ====================
@@ -574,6 +639,22 @@ class DocumentoFiscalService {
         return documento.recibos?.reduce((sum, r) =>
             r.estado !== 'cancelado' ? sum + r.total_liquido : sum, 0
         ) || 0;
+    }
+
+    /**
+     * ✅ Calcular total de retenção do documento
+     */
+    calcularRetencaoTotal(documento: DocumentoFiscal): number {
+        return documento.itens?.reduce((sum, item) => sum + (item.valor_retencao || 0), 0) || 0;
+    }
+
+    /**
+     * ✅ Verificar se documento tem serviços com retenção
+     */
+    temServicosComRetencao(documento: DocumentoFiscal): boolean {
+        return documento.itens?.some(item => 
+            item.valor_retencao && item.valor_retencao > 0
+        ) || false;
     }
 
     /**
@@ -699,6 +780,16 @@ class DocumentoFiscalService {
     }
 
     /**
+     * ✅ Obter cor para retenção
+     */
+    getRetencaoCor(percentual?: number): string {
+        if (!percentual) return 'gray';
+        if (percentual > 10) return 'red';
+        if (percentual > 5) return 'orange';
+        return 'yellow';
+    }
+
+    /**
      * Obter cor do estado para UI
      */
     getEstadoCor(estado: EstadoDocumento): string {
@@ -737,7 +828,18 @@ class DocumentoFiscalService {
      * Verificar se documento afeta stock
      */
     afetaStock(documento: DocumentoFiscal): boolean {
-        return ['FT', 'FR', 'FP', 'NC'].includes(documento.tipo_documento);
+        return ['FT', 'FR', 'NC'].includes(documento.tipo_documento);
+    }
+
+    /**
+     * ✅ Formatar valor de retenção
+     */
+    formatarRetencao(valor: number): string {
+        return valor.toLocaleString('pt-PT', {
+            style: 'currency',
+            currency: 'AOA',
+            minimumFractionDigits: 2
+        }).replace('AOA', 'Kz');
     }
 }
 

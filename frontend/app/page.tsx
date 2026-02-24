@@ -119,7 +119,7 @@ const CheckIcon = ({ color = COLOR_PRIMARY }) => (
 
 // Ícone de Fatura (Usado no Logotipo e Hero)
 const InvoiceIcon = ({ sizeClass = 'w-12 h-12' }) => (
-  <img src="/images/3.png" alt="Invoice Icon" className={sizeClass} />
+  <img src="/images/3.PNG" alt="Invoice Icon" className={sizeClass} />
 );
 
 

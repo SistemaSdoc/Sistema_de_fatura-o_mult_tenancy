@@ -44,6 +44,14 @@ class RelatoriosController extends Controller
 
             $totalLiquido = $totalFaturado - $totalNotasCredito;
 
+            // ✅ Totais de retenção de serviços
+            $totalRetencaoServicos = DocumentoFiscal::whereNotIn('estado', ['cancelado'])
+                ->sum('total_retencao');
+
+            $totalRetencaoMes = DocumentoFiscal::whereBetween('data_emissao', [$inicioMes, $hoje])
+                ->whereNotIn('estado', ['cancelado'])
+                ->sum('total_retencao');
+
             // Vendas do mês
             $vendasMes = Venda::whereBetween('data_venda', [$inicioMes, $hoje])
                 ->where('status', 'faturada')
@@ -57,10 +65,18 @@ class RelatoriosController extends Controller
             $totalClientes = Cliente::count();
             $clientesNovosMes = Cliente::whereBetween('created_at', [$inicioMes, $hoje])->count();
 
-            // Produtos
-            $totalProdutos = Produto::count();
-            $produtosEstoqueBaixo = Produto::whereColumn('estoque_atual', '<=', 'estoque_minimo')->count();
-            $produtosSemEstoque = Produto::where('estoque_atual', '<=', 0)->count();
+            // Produtos e Serviços
+            $totalProdutos = Produto::where('tipo', 'produto')->count();
+            $totalServicos = Produto::where('tipo', 'servico')->count();
+            $servicosAtivos = Produto::where('tipo', 'servico')->where('status', 'ativo')->count();
+
+            $produtosEstoqueBaixo = Produto::where('tipo', 'produto')
+                ->whereColumn('estoque_atual', '<=', 'estoque_minimo')
+                ->count();
+
+            $produtosSemEstoque = Produto::where('tipo', 'produto')
+                ->where('estoque_atual', '<=', 0)
+                ->count();
 
             // Alertas
             $documentosVencidos = DocumentoFiscal::whereIn('tipo_documento', ['FT', 'FA'])
@@ -74,12 +90,20 @@ class RelatoriosController extends Controller
                 ->where('data_emissao', '<', $hoje->copy()->subDays(7))
                 ->count();
 
+            // ✅ Alertas de serviços com retenção não paga
+            $servicosComRetencaoPendente = DocumentoFiscal::where('total_retencao', '>', 0)
+                ->whereIn('estado', ['emitido', 'parcialmente_paga'])
+                ->where('data_vencimento', '<', $hoje->copy()->addDays(5))
+                ->count();
+
             $dashboard = [
                 'documentos_fiscais' => [
                     'total' => $totalDocumentos,
                     'total_faturado' => $totalFaturado,
                     'total_notas_credito' => $totalNotasCredito,
                     'total_liquido' => $totalLiquido,
+                    'total_retencao' => $totalRetencaoServicos,
+                    'total_retencao_mes' => $totalRetencaoMes,
                 ],
                 'vendas' => [
                     'total_mes' => $vendasMes,
@@ -94,9 +118,15 @@ class RelatoriosController extends Controller
                     'estoque_baixo' => $produtosEstoqueBaixo,
                     'sem_estoque' => $produtosSemEstoque,
                 ],
+                'servicos' => [
+                    'total' => $totalServicos,
+                    'ativos' => $servicosAtivos,
+                    'inativos' => $totalServicos - $servicosAtivos,
+                ],
                 'alertas' => [
                     'documentos_vencidos' => $documentosVencidos,
                     'proformas_antigas' => $proformasAntigas,
+                    'servicos_com_retencao_pendente' => $servicosComRetencaoPendente,
                 ],
                 'periodo' => [
                     'inicio_mes' => $inicioMes->toDateString(),
@@ -134,6 +164,7 @@ class RelatoriosController extends Controller
                 'tipo_documento' => 'nullable|in:FT,FR,FP,FA,NC,ND,RC,FRt',
                 'estado_pagamento' => 'nullable|in:paga,pendente,parcial,cancelada',
                 'agrupar_por' => 'nullable|in:dia,mes,ano',
+                'incluir_servicos' => 'nullable|boolean', // ✅ NOVO
             ]);
 
             $dataInicio = $dados['data_inicio'] ?? now()->startOfMonth()->toDateString();
@@ -165,6 +196,26 @@ class RelatoriosController extends Controller
 
             $vendas = $query->orderBy('data_venda', 'desc')->get();
 
+            // ✅ Estatísticas de serviços
+            $totalServicos = 0;
+            $totalRetencaoServicos = 0;
+            $servicosPorVenda = [];
+
+            foreach ($vendas as $venda) {
+                $itensServicos = $venda->itens->filter(function ($item) {
+                    return $item->produto && $item->produto->tipo === 'servico';
+                });
+
+                if ($itensServicos->count() > 0) {
+                    $totalServicos += $itensServicos->count();
+                    $totalRetencaoServicos += $itensServicos->sum('valor_retencao');
+                    $servicosPorVenda[$venda->id] = [
+                        'quantidade' => $itensServicos->count(),
+                        'retencao' => $itensServicos->sum('valor_retencao'),
+                    ];
+                }
+            }
+
             // Totais
             $totais = [
                 'total_vendas' => $vendas->count(),
@@ -172,6 +223,12 @@ class RelatoriosController extends Controller
                 'total_base_tributavel' => $vendas->sum('base_tributavel'),
                 'total_iva' => $vendas->sum('total_iva'),
                 'total_retencao' => $vendas->sum('total_retencao'),
+                // ✅ Novos totais
+                'total_servicos' => $totalServicos,
+                'total_retencao_servicos' => $totalRetencaoServicos,
+                'percentual_retencao_media' => $vendas->sum('base_tributavel') > 0
+                    ? round(($vendas->sum('total_retencao') / $vendas->sum('base_tributavel')) * 100, 2)
+                    : 0,
             ];
 
             // Agrupamento opcional
@@ -190,7 +247,12 @@ class RelatoriosController extends Controller
                     ],
                     'filtros' => $dados,
                     'totais' => $totais,
-                    'vendas' => $vendas->map(fn($v) => $v->resumo),
+                    'vendas' => $vendas->map(function ($v) use ($servicosPorVenda) {
+                        $resumo = $v->resumo;
+                        $resumo['tem_servicos'] = isset($servicosPorVenda[$v->id]);
+                        $resumo['dados_servicos'] = $servicosPorVenda[$v->id] ?? null;
+                        return $resumo;
+                    }),
                     'agrupado' => $agrupado,
                 ]
             ]);
@@ -250,6 +312,7 @@ class RelatoriosController extends Controller
                 'data_fim' => 'nullable|date|after_or_equal:data_inicio',
                 'tipo' => 'nullable|in:FT,FR,FP,FA,NC,ND,RC,FRt',
                 'cliente_id' => 'nullable|uuid|exists:clientes,id',
+                'incluir_retencoes' => 'nullable|boolean', // ✅ NOVO
             ]);
 
             $dataInicio = $dados['data_inicio'] ?? now()->startOfMonth()->toDateString();
@@ -257,6 +320,32 @@ class RelatoriosController extends Controller
 
             // Usar o serviço
             $relatorio = $this->relatoriosService->relatorioFaturacao($dataInicio, $dataFim, $dados);
+
+            // ✅ Adicionar informações de retenção se solicitado
+            if (!empty($dados['incluir_retencoes'])) {
+                $retencoes = DocumentoFiscal::whereBetween('data_emissao', [$dataInicio, $dataFim])
+                    ->where('total_retencao', '>', 0)
+                    ->whereNotIn('estado', ['cancelado'])
+                    ->with(['cliente'])
+                    ->get();
+
+                $relatorio['retencoes'] = [
+                    'total' => $retencoes->sum('total_retencao'),
+                    'quantidade_documentos' => $retencoes->count(),
+                    'detalhes' => $retencoes->map(function ($doc) {
+                        return [
+                            'numero' => $doc->numero_documento,
+                            'data' => $doc->data_emissao,
+                            'cliente' => $doc->nome_cliente,
+                            'total' => $doc->total_liquido,
+                            'retencao' => $doc->total_retencao,
+                            'percentual' => $doc->base_tributavel > 0
+                                ? round(($doc->total_retencao / $doc->base_tributavel) * 100, 2)
+                                : 0,
+                        ];
+                    }),
+                ];
+            }
 
             return response()->json([
                 'success' => true,
@@ -288,7 +377,7 @@ class RelatoriosController extends Controller
             ]);
 
             $query = Produto::with(['categoria', 'fornecedor'])
-                ->where('tipo', 'produto');
+                ->where('tipo', 'produto'); // ✅ Apenas produtos
 
             // Filtros
             if (!empty($dados['apenas_ativos'])) {
@@ -371,6 +460,180 @@ class RelatoriosController extends Controller
     }
 
     /**
+     * ✅ NOVO: Relatório específico de serviços
+     * GET /api/relatorios/servicos
+     */
+    public function servicos(Request $request)
+    {
+        try {
+            $dados = $request->validate([
+                'data_inicio' => 'nullable|date',
+                'data_fim' => 'nullable|date|after_or_equal:data_inicio',
+                'apenas_ativos' => 'nullable|boolean',
+                'agrupar_por' => 'nullable|in:servico,categoria',
+            ]);
+
+            $dataInicio = $dados['data_inicio'] ?? now()->startOfMonth()->toDateString();
+            $dataFim = $dados['data_fim'] ?? now()->toDateString();
+
+            // Serviços vendidos no período
+            $servicosVendidos = DB::table('itens_venda')
+                ->join('produtos', 'itens_venda.produto_id', '=', 'produtos.id')
+                ->join('vendas', 'itens_venda.venda_id', '=', 'vendas.id')
+                ->where('produtos.tipo', 'servico')
+                ->whereBetween('vendas.data_venda', [$dataInicio, $dataFim])
+                ->where('vendas.status', '!=', 'cancelada')
+                ->select(
+                    'produtos.id',
+                    'produtos.nome',
+                    'produtos.retencao',
+                    'produtos.unidade_medida',
+                    DB::raw('SUM(itens_venda.quantidade) as total_quantidade'),
+                    DB::raw('SUM(itens_venda.subtotal) as total_receita'),
+                    DB::raw('SUM(itens_venda.valor_retencao) as total_retencao'),
+                    DB::raw('COUNT(DISTINCT vendas.id) as total_vendas')
+                )
+                ->groupBy('produtos.id', 'produtos.nome', 'produtos.retencao', 'produtos.unidade_medida')
+                ->orderByDesc('total_receita')
+                ->get();
+
+            // Totais gerais
+            $totais = [
+                'total_servicos_vendidos' => $servicosVendidos->count(),
+                'total_receita' => $servicosVendidos->sum('total_receita'),
+                'total_retencao' => $servicosVendidos->sum('total_retencao'),
+                'total_quantidade' => $servicosVendidos->sum('total_quantidade'),
+                'percentual_retencao_media' => $servicosVendidos->sum('total_receita') > 0
+                    ? round(($servicosVendidos->sum('total_retencao') / $servicosVendidos->sum('total_receita')) * 100, 2)
+                    : 0,
+            ];
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Relatório de serviços carregado com sucesso',
+                'data' => [
+                    'periodo' => [
+                        'data_inicio' => $dataInicio,
+                        'data_fim' => $dataFim,
+                    ],
+                    'totais' => $totais,
+                    'servicos' => $servicosVendidos->map(function ($item) {
+                        return [
+                            'id' => $item->id,
+                            'nome' => $item->nome,
+                            'unidade_medida' => $item->unidade_medida,
+                            'taxa_retencao' => $item->retencao,
+                            'quantidade' => (int) $item->total_quantidade,
+                            'vendas' => (int) $item->total_vendas,
+                            'receita' => round($item->total_receita, 2),
+                            'receita_formatada' => number_format($item->total_receita, 2, ',', '.') . ' Kz',
+                            'retencao' => round($item->total_retencao, 2),
+                            'retencao_formatada' => number_format($item->total_retencao, 2, ',', '.') . ' Kz',
+                            'percentual_retencao_real' => $item->total_receita > 0
+                                ? round(($item->total_retencao / $item->total_receita) * 100, 2)
+                                : 0,
+                        ];
+                    }),
+                ]
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Erro ao gerar relatório de serviços:', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao gerar relatório de serviços: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * ✅ NOVO: Relatório de retenções
+     * GET /api/relatorios/retencoes
+     */
+    public function retencoes(Request $request)
+    {
+        try {
+            $dados = $request->validate([
+                'data_inicio' => 'nullable|date',
+                'data_fim' => 'nullable|date|after_or_equal:data_inicio',
+                'cliente_id' => 'nullable|uuid|exists:clientes,id',
+            ]);
+
+            $dataInicio = $dados['data_inicio'] ?? now()->startOfMonth()->toDateString();
+            $dataFim = $dados['data_fim'] ?? now()->toDateString();
+
+            $query = DocumentoFiscal::where('total_retencao', '>', 0)
+                ->whereNotIn('estado', ['cancelado'])
+                ->whereBetween('data_emissao', [$dataInicio, $dataFim])
+                ->with(['cliente', 'itens.produto']);
+
+            if (!empty($dados['cliente_id'])) {
+                $query->where('cliente_id', $dados['cliente_id']);
+            }
+
+            $documentos = $query->orderBy('data_emissao', 'desc')->get();
+
+            // Agrupar por cliente
+            $porCliente = [];
+            foreach ($documentos as $doc) {
+                $clienteNome = $doc->nome_cliente ?? 'Consumidor Final';
+                if (!isset($porCliente[$clienteNome])) {
+                    $porCliente[$clienteNome] = [
+                        'cliente' => $clienteNome,
+                        'total_documentos' => 0,
+                        'total_base' => 0,
+                        'total_retencao' => 0,
+                    ];
+                }
+                $porCliente[$clienteNome]['total_documentos']++;
+                $porCliente[$clienteNome]['total_base'] += $doc->base_tributavel;
+                $porCliente[$clienteNome]['total_retencao'] += $doc->total_retencao;
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Relatório de retenções carregado com sucesso',
+                'data' => [
+                    'periodo' => [
+                        'data_inicio' => $dataInicio,
+                        'data_fim' => $dataFim,
+                    ],
+                    'resumo' => [
+                        'total_documentos' => $documentos->count(),
+                        'total_base' => $documentos->sum('base_tributavel'),
+                        'total_retencao' => $documentos->sum('total_retencao'),
+                        'percentual_medio' => $documentos->sum('base_tributavel') > 0
+                            ? round(($documentos->sum('total_retencao') / $documentos->sum('base_tributavel')) * 100, 2)
+                            : 0,
+                    ],
+                    'por_cliente' => array_values($porCliente),
+                    'documentos' => $documentos->map(function ($doc) {
+                        return [
+                            'id' => $doc->id,
+                            'numero' => $doc->numero_documento,
+                            'data' => $doc->data_emissao,
+                            'cliente' => $doc->nome_cliente,
+                            'base' => $doc->base_tributavel,
+                            'retencao' => $doc->total_retencao,
+                            'percentual' => $doc->base_tributavel > 0
+                                ? round(($doc->total_retencao / $doc->base_tributavel) * 100, 2)
+                                : 0,
+                            'servicos' => $doc->itens->filter(fn($i) => $i->produto && $i->produto->isServico())->count(),
+                        ];
+                    }),
+                ]
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Erro ao gerar relatório de retenções:', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao gerar relatório de retenções: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Relatório de documentos fiscais (detalhado)
      * GET /api/relatorios/documentos-fiscais
      */
@@ -386,6 +649,7 @@ class RelatoriosController extends Controller
                 'estado' => 'nullable|in:emitido,paga,parcialmente_paga,cancelado,expirado',
                 'apenas_vendas' => 'nullable|boolean',
                 'apenas_nao_vendas' => 'nullable|boolean',
+                'com_retencao' => 'nullable|boolean', // ✅ NOVO
             ]);
 
             $dataInicio = $dados['data_inicio'] ?? now()->startOfMonth()->toDateString();
@@ -417,6 +681,10 @@ class RelatoriosController extends Controller
                 $query->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FRt']);
             }
 
+            if (!empty($dados['com_retencao'])) {
+                $query->where('total_retencao', '>', 0);
+            }
+
             $documentos = $query->orderBy('data_emissao', 'desc')->get();
 
             // Estatísticas
@@ -425,10 +693,12 @@ class RelatoriosController extends Controller
                 'total_valor' => $documentos->sum('total_liquido'),
                 'total_base' => $documentos->sum('base_tributavel'),
                 'total_iva' => $documentos->sum('total_iva'),
+                'total_retencao' => $documentos->sum('total_retencao'), // ✅ NOVO
                 'por_tipo' => $documentos->groupBy('tipo_documento')
                     ->map(fn($docs) => [
                         'quantidade' => $docs->count(),
                         'valor' => $docs->sum('total_liquido'),
+                        'retencao' => $docs->sum('total_retencao'),
                     ]),
                 'por_estado' => $documentos->groupBy('estado')
                     ->map(fn($docs) => $docs->count()),
@@ -444,7 +714,9 @@ class RelatoriosController extends Controller
                     ],
                     'filtros' => $dados,
                     'estatisticas' => $estatisticas,
-                    'documentos' => $documentos,
+                    'documentos' => $documentos->map(fn($d) => array_merge($d->toArray(), [
+                        'resumo' => $d->resumo,
+                    ])),
                 ]
             ]);
         } catch (\Exception $e) {
@@ -491,6 +763,7 @@ class RelatoriosController extends Controller
                         'data_vencimento' => $fatura->data_vencimento,
                         'valor_total' => $fatura->total_liquido,
                         'valor_pendente' => max(0, $valorPendente),
+                        'retencao' => $fatura->total_retencao, // ✅ NOVO
                         'dias_atraso' => $fatura->data_vencimento && $fatura->data_vencimento < $hoje
                             ? $hoje->diffInDays($fatura->data_vencimento)
                             : 0,
@@ -535,6 +808,9 @@ class RelatoriosController extends Controller
             $totalAtrasado = $faturasPendentes->where('dias_atraso', '>', 0)->sum('valor_pendente') +
                             $adiantamentosPendentes->where('dias_atraso', '>', 0)->sum('valor_pendente');
 
+            // ✅ Total de retenção pendente
+            $retencaoPendente = $faturasPendentes->sum('retencao');
+
             return response()->json([
                 'success' => true,
                 'message' => 'Relatório de pagamentos pendentes carregado com sucesso',
@@ -544,6 +820,7 @@ class RelatoriosController extends Controller
                         'total_atrasado' => $totalAtrasado,
                         'quantidade_faturas' => $faturasPendentes->count(),
                         'quantidade_adiantamentos' => $adiantamentosPendentes->count(),
+                        'retencao_pendente' => $retencaoPendente, // ✅ NOVO
                     ],
                     'faturas_pendentes' => $faturasPendentes,
                     'adiantamentos_pendentes' => $adiantamentosPendentes,
@@ -635,6 +912,7 @@ class RelatoriosController extends Controller
                     'total' => 0,
                     'base_tributavel' => 0,
                     'total_iva' => 0,
+                    'total_retencao' => 0, // ✅ NOVO
                 ];
             }
 
@@ -642,6 +920,7 @@ class RelatoriosController extends Controller
             $agrupado[$chave]['total'] += $venda->total;
             $agrupado[$chave]['base_tributavel'] += $venda->base_tributavel;
             $agrupado[$chave]['total_iva'] += $venda->total_iva;
+            $agrupado[$chave]['total_retencao'] += $venda->total_retencao; // ✅ NOVO
         }
 
         return array_values($agrupado);

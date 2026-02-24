@@ -44,7 +44,7 @@ class VendaService
             ]);
 
             // Validar tipo de documento permitido
-            $tiposPermitidos = ['FT', 'FR', 'FP', 'FA']; // FA é adiantamento, não é venda ainda
+            $tiposPermitidos = ['FT', 'FR', 'FP', 'FA'];
             if (!in_array($tipoDocumento, $tiposPermitidos)) {
                 throw new \Exception("Tipo de documento {$tipoDocumento} não é válido. Use FT, FR, FP ou FA.");
             }
@@ -89,8 +89,8 @@ class VendaService
             $venda = Venda::create([
                 'id' => Str::uuid(),
                 'cliente_id' => $clienteId,
-                'cliente_nome' => $clienteNome, // Para cliente avulso
-                'cliente_nif' => $clienteNif,   // Para cliente avulso
+                'cliente_nome' => $clienteNome,
+                'cliente_nif' => $clienteNif,
                 'user_id' => Auth::id(),
                 'documento_fiscal_id' => null,
                 'tipo_documento' => 'venda',
@@ -130,12 +130,38 @@ class VendaService
                 $preco = (float) $item['preco_venda'];
                 $desconto = (float) ($item['desconto'] ?? 0);
 
+                // CORREÇÃO: Usar taxa de retenção do item se fornecida, senão do produto
+                $taxaRetencaoItem = isset($item['taxa_retencao']) ? (float) $item['taxa_retencao'] : ($produto->retencao ?? 0);
+
                 $subtotal = ($preco * $quantidade) - $desconto;
-                $taxaIva = ($aplicaIva && $regime === 'geral') ? ($produto->taxa_iva ?? 14) : 0;
+
+                // CORREÇÃO: Usar taxa de IVA do produto, não assumir 14%
+                $taxaIva = ($aplicaIva && $regime === 'geral') ? ($produto->taxa_iva ?? 0) : 0;
                 $valorIva = round(($subtotal * $taxaIva) / 100, 2);
-                $valorRetencao = ($produto->tipo === 'servico') ? round($subtotal * 0.10, 2) : 0;
+
+                // CORREÇÃO: Usar taxa de retenção correta do item/produto (não 10% hardcoded)
+                $valorRetencao = ($produto->tipo === 'servico' && $taxaRetencaoItem > 0)
+                    ? round(($subtotal * $taxaRetencaoItem) / 100, 2)
+                    : 0;
+
                 $baseTributavel = round($subtotal, 2);
                 $subtotalFinal = $baseTributavel + $valorIva - $valorRetencao;
+
+                // Log para debug do cálculo
+                Log::info('Cálculo do item', [
+                    'produto_id' => $produto->id,
+                    'nome' => $produto->nome,
+                    'tipo' => $produto->tipo,
+                    'preco' => $preco,
+                    'quantidade' => $quantidade,
+                    'subtotal' => $subtotal,
+                    'taxa_iva' => $taxaIva,
+                    'valor_iva' => $valorIva,
+                    'taxa_retencao' => $taxaRetencaoItem,
+                    'valor_retencao' => $valorRetencao,
+                    'base_tributavel' => $baseTributavel,
+                    'subtotal_final' => $subtotalFinal
+                ]);
 
                 ItemVenda::create([
                     'id' => Str::uuid(),
@@ -149,7 +175,7 @@ class VendaService
                     'valor_iva' => $valorIva,
                     'taxa_iva' => $taxaIva,
                     'valor_retencao' => $valorRetencao,
-                    'taxa_retencao' => $produto->tipo === 'servico' ? 6.5 : 0,
+                    'taxa_retencao' => $taxaRetencaoItem,
                     'subtotal' => $subtotalFinal,
                     'codigo_produto' => $produto->codigo,
                     'unidade' => $produto->tipo === 'servico' ? ($produto->unidade_medida ?? 'hora') : 'UN',
@@ -165,7 +191,11 @@ class VendaService
                 $totalRetencao += $valorRetencao;
             }
 
-            $totalPagar = $totalBase + $totalIva - $totalRetencao;
+            // CORREÇÃO: Arredondar totais finais para evitar diferenças de precisão
+            $totalBase = round($totalBase, 2);
+            $totalIva = round($totalIva, 2);
+            $totalRetencao = round($totalRetencao, 2);
+            $totalPagar = round($totalBase + $totalIva - $totalRetencao, 2);
 
             $venda->update([
                 'base_tributavel' => $totalBase,
@@ -196,9 +226,27 @@ class VendaService
                         throw new \Exception('Campo dados_pagamento é obrigatório para Fatura-Recibo (FR).');
                     }
 
-                    // Validar valor do pagamento
-                    if ($dados['dados_pagamento']['valor'] != $totalPagar) {
-                        throw new \Exception('Valor do pagamento deve ser exatamente igual ao total da venda para FR.');
+                    // CORREÇÃO: Validar valor do pagamento com tolerância
+                    $valorPagamento = (float) $dados['dados_pagamento']['valor'];
+                    $valorPagamentoArredondado = round($valorPagamento, 2);
+
+                    // Usar tolerância de 0.01 para evitar problemas de precisão float
+                    $diferenca = abs($valorPagamentoArredondado - $totalPagar);
+
+                    Log::info('Validação de pagamento FR', [
+                        'valor_pagamento' => $valorPagamento,
+                        'valor_pagamento_arredondado' => $valorPagamentoArredondado,
+                        'total_pagar' => $totalPagar,
+                        'diferenca' => $diferenca,
+                        'tolerancia' => 0.01
+                    ]);
+
+                    if ($diferenca > 0.01) {
+                        throw new \Exception(
+                            'Valor do pagamento (' . number_format($valorPagamentoArredondado, 2, ',', '.') .
+                            ') deve ser exatamente igual ao total da venda (' .
+                            number_format($totalPagar, 2, ',', '.') . ') para FR.'
+                        );
                     }
                 }
 
@@ -231,18 +279,17 @@ class VendaService
                             'quantidade' => $item->quantidade,
                             'preco_unitario' => $item->preco_venda,
                             'desconto' => $item->desconto,
-                            'taxa_iva' => $produto?->taxa_iva ?? 14,
+                            'taxa_iva' => $item->taxa_iva,
+                            'taxa_retencao' => $item->taxa_retencao,
                         ];
                     })->toArray(),
                 ];
 
                 // CORREÇÃO: Usar dados originais do request em vez da instância da venda
-                // Isso garante que cliente_nome seja enviado corretamente
                 if (!empty($dados['cliente_id'])) {
                     $payloadDocumento['cliente_id'] = $dados['cliente_id'];
                     Log::info('Adicionando cliente cadastrado ao payload (dos dados originais)', ['cliente_id' => $dados['cliente_id']]);
                 } elseif (!empty($dados['cliente_nome'])) {
-                    // Cliente avulso - usar dados do request
                     $payloadDocumento['cliente_nome'] = $dados['cliente_nome'];
                     Log::info('Adicionando cliente avulso ao payload (dos dados originais)', ['cliente_nome' => $dados['cliente_nome']]);
 
@@ -252,7 +299,7 @@ class VendaService
                     }
                 }
 
-                // Fallback: se não achou nos dados originais, tentar na venda (não deveria acontecer)
+                // Fallback: se não achou nos dados originais, tentar na venda
                 if (empty($payloadDocumento['cliente_id']) && empty($payloadDocumento['cliente_nome'])) {
                     if ($venda->cliente_id) {
                         $payloadDocumento['cliente_id'] = $venda->cliente_id;
@@ -297,11 +344,11 @@ class VendaService
 
                 // Atualizar venda com referência ao documento fiscal
                 $novoEstadoPagamento = match ($tipoDocumento) {
-                    'FR' => 'paga',           // FR já está paga
-                    'RC' => 'paga',            // RC é pagamento
-                    'FT' => 'pendente',        // FT aguarda pagamento
-                    'FA' => 'pendente',        // FA aguarda recibo para virar venda
-                    'FP' => 'pendente',        // FP sempre pendente (proforma)
+                    'FR' => 'paga',
+                    'RC' => 'paga',
+                    'FT' => 'pendente',
+                    'FA' => 'pendente',
+                    'FP' => 'pendente',
                     default => 'pendente',
                 };
 
@@ -322,7 +369,6 @@ class VendaService
                     'eh_venda' => in_array($tipoDocumento, ['FT', 'FR', 'RC']) ? 'sim' : 'não'
                 ]);
             } else {
-                // Se não faturar, a venda permanece aberta
                 $venda->update([
                     'status' => 'aberta',
                 ]);
@@ -356,19 +402,15 @@ class VendaService
                 throw new \Exception("Venda já cancelada.");
             }
 
-            // Verificar se pode cancelar pelo estado do documento fiscal
             if ($venda->documentoFiscal) {
-                // Se documento já está pago, não pode cancelar diretamente
                 if ($venda->documentoFiscal->estado === 'paga') {
                     throw new \Exception("Não é possível cancelar venda com documento fiscal pago. Cancele o documento fiscal primeiro.");
                 }
 
-                // Se tem recibos, não pode cancelar
                 if ($venda->documentoFiscal->recibos()->where('estado', '!=', 'cancelado')->exists()) {
                     throw new \Exception("Venda possui recibos de pagamento. Cancele-os primeiro.");
                 }
 
-                // Cancelar documento fiscal se estiver emitido ou parcialmente pago
                 if (in_array($venda->documentoFiscal->estado, ['emitido', 'parcialmente_paga'])) {
                     $this->documentoFiscalService->cancelarDocumento(
                         $venda->documentoFiscal,
@@ -377,7 +419,6 @@ class VendaService
                 }
             }
 
-            // Reverter stock (apenas para produtos, não serviços)
             foreach ($venda->itens as $item) {
                 if ($item->produto && $item->produto->tipo !== 'servico') {
                     $this->stockService->movimentar(
@@ -406,7 +447,6 @@ class VendaService
 
     /**
      * Processar pagamento de uma venda (gerar recibo)
-     * FT e FA podem receber pagamento (FA vira venda com recibo)
      */
     public function processarPagamento(string $vendaId, array $dadosPagamento)
     {
@@ -418,7 +458,6 @@ class VendaService
                 throw new \Exception("Venda não possui documento fiscal. Gere uma fatura primeiro.");
             }
 
-            // FT e FA podem receber pagamento via recibo
             if (!in_array($venda->documentoFiscal->tipo_documento, ['FT', 'FA'])) {
                 if ($venda->documentoFiscal->tipo_documento === 'FR') {
                     throw new \Exception("Fatura-Recibo (FR) já está paga no momento da emissão.");
@@ -436,19 +475,16 @@ class VendaService
                 throw new \Exception("Venda já está totalmente paga.");
             }
 
-            // Validar valor do pagamento
             $valorPendente = $this->documentoFiscalService->calcularValorPendente($venda->documentoFiscal);
             if ($dadosPagamento['valor'] > $valorPendente) {
                 throw new \Exception("Valor do pagamento ({$dadosPagamento['valor']}) excede o valor pendente ({$valorPendente}).");
             }
 
-            // Gerar recibo via DocumentoFiscalService
             $recibo = $this->documentoFiscalService->gerarRecibo(
                 $venda->documentoFiscal,
                 $dadosPagamento
             );
 
-            // Atualizar estado de pagamento da venda
             $novoValorPendente = $this->documentoFiscalService->calcularValorPendente($venda->documentoFiscal);
 
             $novoEstado = match (true) {
@@ -457,7 +493,6 @@ class VendaService
                 default => 'pendente',
             };
 
-            // Se for FA e ficou paga, agora é considerada venda
             if ($venda->documentoFiscal->tipo_documento === 'FA' && $novoEstado === 'paga') {
                 Log::info('Fatura de Adiantamento (FA) convertida em venda', [
                     'venda_id' => $vendaId,
@@ -485,13 +520,11 @@ class VendaService
 
     /**
      * Relatório de vendas
-     * Filtra apenas documentos de venda (FT, FR, RC)
      */
     public function relatorioVendas(array $filtros = [])
     {
         $query = Venda::with('cliente', 'itens.produto', 'documentoFiscal')
             ->whereHas('documentoFiscal', function ($q) {
-                // Apenas FT, FR e RC são vendas
                 $q->whereIn('tipo_documento', ['FT', 'FR', 'RC']);
             });
 
@@ -529,13 +562,12 @@ class VendaService
     }
 
     /**
-     * Relatório de documentos não-venda (FP, FA, NC, ND, FRt)
+     * Relatório de documentos não-venda
      */
     public function relatorioDocumentosNaoVenda(array $filtros = [])
     {
         $query = Venda::with('cliente', 'itens.produto', 'documentoFiscal')
             ->whereHas('documentoFiscal', function ($q) {
-                // Documentos que não são vendas
                 $q->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FRt']);
             });
 
@@ -586,13 +618,11 @@ class VendaService
                 'cliente' => $venda->cliente_id ? 'cadastrado' : ($venda->cliente_nome ? 'avulso' : 'não informado')
             ]);
 
-            // Cancelar a FP atual
             $this->documentoFiscalService->cancelarDocumento(
                 $venda->documentoFiscal,
                 'Convertida para Fatura (FT)'
             );
 
-            // Criar nova FT com os mesmos itens
             $dadosNovaVenda = [
                 'cliente_id' => $venda->cliente_id,
                 'cliente_nome' => $venda->cliente_nome,
@@ -611,7 +641,6 @@ class VendaService
                 $dadosNovaVenda['dados_pagamento'] = $dadosPagamento;
             }
 
-            // Criar nova venda como FT
             $novaVenda = $this->criarVenda($dadosNovaVenda, true, 'FT');
 
             Log::info('Proforma convertida para Fatura', [
@@ -628,14 +657,13 @@ class VendaService
      */
     private function obterSerieFiscal(string $tipoDocumento): ?SerieFiscal
     {
-        // Mapear tipo de documento para a série apropriada
         $tipoSerie = match ($tipoDocumento) {
-            'FT', 'FR', 'RC' => 'FT', // Vendas usam série de fatura
-            'FP' => 'FP',              // Proforma tem série própria
-            'FA' => 'FA',              // Adiantamento tem série própria
-            'NC' => 'NC',              // Nota de Crédito
-            'ND' => 'ND',              // Nota de Débito
-            'FRt' => 'FRt',            // Fatura de Retificação
+            'FT', 'FR', 'RC' => 'FT',
+            'FP' => 'FP',
+            'FA' => 'FA',
+            'NC' => 'NC',
+            'ND' => 'ND',
+            'FRt' => 'FRt',
             default => $tipoDocumento,
         };
 
@@ -644,17 +672,15 @@ class VendaService
             'tipo_serie' => $tipoSerie
         ]);
 
-        // Buscar série específica para o tipo
         $serie = SerieFiscal::where('tipo_documento', $tipoSerie)
             ->where('ativa', true)
             ->where(function ($q) {
                 $q->whereNull('ano')->orWhere('ano', now()->year);
             })
-            ->orderBy('padrao', 'desc') // Priorizar série padrão
+            ->orderBy('padrao', 'desc')
             ->lockForUpdate()
             ->first();
 
-        // Se não encontrar, buscar qualquer série ativa do mesmo tipo
         if (!$serie) {
             Log::warning('Série fiscal não encontrada com filtros de ano, buscando sem ano', [
                 'tipo_serie' => $tipoSerie
@@ -679,11 +705,8 @@ class VendaService
         return $serie;
     }
 
-    /* ================= MÉTODOS AUXILIARES PRIVADOS ================= */
-
     /**
      * Determinar estado de pagamento inicial
-     * Estados = pendente, paga, parcial, cancelada
      */
     private function determinarEstadoPagamentoInicial(string $tipoDocumento, bool $faturar): string
     {
@@ -692,8 +715,8 @@ class VendaService
         }
 
         return match ($tipoDocumento) {
-            'FR', 'RC' => 'paga',      // FR e RC já estão pagos
-            'FT', 'FA', 'FP' => 'pendente', // FT, FA, FP aguardam pagamento
+            'FR', 'RC' => 'paga',
+            'FT', 'FA', 'FP' => 'pendente',
             default => 'pendente',
         };
     }

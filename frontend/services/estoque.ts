@@ -1,12 +1,12 @@
 // src/services/estoque.ts
 
 import api from "./axios";
-import { Produto } from "./produtos";
+import { Produto, isServico } from "./produtos";
 
 // ===== TIPOS =====
 
-export type TipoMovimento = "entrada" | "saida" | "ajuste";
-export type TipoMovimentoContexto = "compra" | "venda" | "ajuste" | "nota_credito" | "devolucao" | "transferencia";
+export type TipoMovimento = "entrada" | "saida";
+export type TipoMovimentoContexto = "compra" | "venda" | "ajuste" | "nota_credito" | "devolucao";
 
 // ===== INTERFACES =====
 
@@ -84,19 +84,6 @@ export interface EstatisticasMovimento {
     por_mes: Array<{ mes: string; entradas: number; saidas: number }>;
 }
 
-export interface FiltrosEstoque {
-    busca?: string;
-    categoria_id?: string;
-    status?: "ativo" | "inativo";
-    tipo?: "produto" | "servico";
-    estoque_baixo?: boolean;
-    sem_estoque?: boolean;
-    ordenar?: string;
-    direcao?: "asc" | "desc";
-    paginar?: boolean;
-    per_page?: number;
-}
-
 export interface FiltrosMovimento {
     produto_id?: string;
     tipo?: TipoMovimento;
@@ -112,129 +99,10 @@ export interface FiltrosMovimento {
 const API_PREFIX = "/api";
 
 export const estoqueService = {
-    // ============ PRODUTOS ============
-
-    /**
-     * Listar produtos com filtros (ativos apenas)
-     */
-    async listarProdutos(filtros?: FiltrosEstoque): Promise<Produto[]> {
-        const params = new URLSearchParams();
-
-        if (filtros?.busca) params.append("busca", filtros.busca);
-        if (filtros?.categoria_id) params.append("categoria_id", filtros.categoria_id);
-        if (filtros?.status) params.append("status", filtros.status);
-        if (filtros?.tipo) params.append("tipo", filtros.tipo);
-        if (filtros?.estoque_baixo) params.append("estoque_baixo", "true");
-        if (filtros?.sem_estoque) params.append("sem_estoque", "true");
-        if (filtros?.ordenar) params.append("ordenar", filtros.ordenar);
-        if (filtros?.direcao) params.append("direcao", filtros.direcao);
-        if (filtros?.paginar) params.append("paginar", "true");
-        if (filtros?.per_page) params.append("per_page", filtros.per_page.toString());
-
-        const response = await api.get(`${API_PREFIX}/produtos?${params.toString()}`);
-        return response.data.produtos || [];
-    },
-
-    /**
-     * Listar todos os produtos incluindo deletados (admin)
-     */
-    async listarTodosProdutos(filtros?: Omit<FiltrosEstoque, 'status'>): Promise<{
-        produtos: Produto[];
-        total: number;
-        ativos: number;
-        deletados: number;
-        produtos_fisicos: number;
-        servicos: number;
-    }> {
-        const params = new URLSearchParams();
-        if (filtros?.busca) params.append("busca", filtros.busca);
-        if (filtros?.tipo) params.append("tipo", filtros.tipo);
-
-        const response = await api.get(`${API_PREFIX}/produtos/with-trashed?${params.toString()}`);
-        return response.data;
-    },
-
-    /**
-     * Listar apenas produtos deletados (lixeira)
-     */
-    async listarProdutosDeletados(filtros?: { busca?: string; paginar?: boolean; per_page?: number }): Promise<{
-        produtos: Produto[];
-        total_deletados: number;
-    }> {
-        const params = new URLSearchParams();
-        if (filtros?.busca) params.append("busca", filtros.busca);
-        if (filtros?.paginar) params.append("paginar", "true");
-        if (filtros?.per_page) params.append("per_page", filtros.per_page.toString());
-
-        const response = await api.get(`${API_PREFIX}/produtos/trashed?${params.toString()}`);
-        return response.data;
-    },
-
-    /**
-     * Buscar produto específico por ID (inclui deletados)
-     */
-    async buscarProduto(id: string): Promise<Produto> {
-        const response = await api.get(`${API_PREFIX}/produtos/${id}`);
-        return response.data.produto;
-    },
-
-    /**
-     * Criar novo produto ou serviço
-     */
-    async criarProduto(dados: Partial<Produto> & { tipo: "produto" | "servico" }): Promise<Produto> {
-        const response = await api.post(`${API_PREFIX}/produtos`, dados);
-        return response.data.produto;
-    },
-
-    /**
-     * Atualizar produto
-     */
-    async atualizarProduto(id: string, dados: Partial<Produto>): Promise<Produto> {
-        const response = await api.put(`${API_PREFIX}/produtos/${id}`, dados);
-        return response.data.produto;
-    },
-
-    /**
-     * Alterar status do produto (ativo/inativo)
-     */
-    async alterarStatusProduto(id: string, status: "ativo" | "inativo"): Promise<Produto> {
-        const response = await api.patch(`${API_PREFIX}/produtos/${id}/status`, { status });
-        return response.data.produto;
-    },
-
-    /**
-     * Deletar produto (soft delete)
-     */
-    async deletarProduto(id: string): Promise<{
-        message: string;
-        soft_deleted: boolean;
-        id: string;
-        deleted_at: string;
-    }> {
-        const response = await api.delete(`${API_PREFIX}/produtos/${id}`);
-        return response.data;
-    },
-
-    /**
-     * Restaurar produto da lixeira
-     */
-    async restaurarProduto(id: string): Promise<Produto> {
-        const response = await api.post(`${API_PREFIX}/produtos/${id}/restore`);
-        return response.data.produto;
-    },
-
-    /**
-     * Deletar produto permanentemente (force delete) - apenas admin
-     */
-    async deletarPermanentemente(id: string): Promise<{ message: string; id: string }> {
-        const response = await api.delete(`${API_PREFIX}/produtos/${id}/force`);
-        return response.data;
-    },
-
     // ============ MOVIMENTAÇÕES ============
 
     /**
-     * Listar movimentações de stock
+     * Listar movimentações de stock (apenas produtos, serviços são ignorados)
      */
     async listarMovimentacoes(filtros?: FiltrosMovimento): Promise<MovimentoStock[]> {
         const params = new URLSearchParams();
@@ -259,7 +127,7 @@ export const estoqueService = {
     },
 
     /**
-     * Registrar movimento de entrada
+     * ✅ Registrar movimento de entrada (apenas para produtos)
      */
     async registrarEntrada(dados: EntradaStockInput): Promise<{
         message: string;
@@ -270,6 +138,19 @@ export const estoqueService = {
             diferenca: number;
         };
     }> {
+        // Buscar produto para verificar se é serviço
+        try {
+            const produtoResponse = await api.get(`${API_PREFIX}/produtos/${dados.produto_id}`);
+            const produto = produtoResponse.data.produto;
+
+            // ✅ Impedir movimentação em serviços
+            if (isServico(produto)) {
+                throw new Error("Serviços não possuem controle de stock");
+            }
+        } catch (error) {
+            console.error("[EstoqueService] Erro ao verificar produto:", error);
+        }
+
         const response = await api.post(`${API_PREFIX}/movimentos-stock`, {
             produto_id: dados.produto_id,
             tipo: "entrada",
@@ -283,7 +164,7 @@ export const estoqueService = {
     },
 
     /**
-     * Registrar movimento de saída
+     * ✅ Registrar movimento de saída (apenas para produtos)
      */
     async registrarSaida(dados: SaidaStockInput): Promise<{
         message: string;
@@ -294,6 +175,19 @@ export const estoqueService = {
             diferenca: number;
         };
     }> {
+        // Buscar produto para verificar se é serviço
+        try {
+            const produtoResponse = await api.get(`${API_PREFIX}/produtos/${dados.produto_id}`);
+            const produto = produtoResponse.data.produto;
+
+            // ✅ Impedir movimentação em serviços
+            if (isServico(produto)) {
+                throw new Error("Serviços não possuem controle de stock");
+            }
+        } catch (error) {
+            console.error("[EstoqueService] Erro ao verificar produto:", error);
+        }
+
         const response = await api.post(`${API_PREFIX}/movimentos-stock`, {
             produto_id: dados.produto_id,
             tipo: "saida",
@@ -306,7 +200,7 @@ export const estoqueService = {
     },
 
     /**
-     * Ajustar stock (correção para quantidade específica)
+     * ✅ Ajustar stock (apenas para produtos)
      */
     async ajustarStock(dados: AjusteStockInput): Promise<{
         message: string;
@@ -317,9 +211,22 @@ export const estoqueService = {
             diferenca: number;
         };
     }> {
+        // Buscar produto para verificar se é serviço
+        try {
+            const produtoResponse = await api.get(`${API_PREFIX}/produtos/${dados.produto_id}`);
+            const produto = produtoResponse.data.produto;
+
+            // ✅ Impedir ajuste em serviços
+            if (isServico(produto)) {
+                throw new Error("Serviços não possuem controle de stock");
+            }
+        } catch (error) {
+            console.error("[EstoqueService] Erro ao verificar produto:", error);
+        }
+
         const response = await api.post(`${API_PREFIX}/movimentos-stock/ajuste`, {
             produto_id: dados.produto_id,
-            quantidade: dados.quantidade, // Quantidade final
+            quantidade: dados.quantidade,
             motivo: dados.motivo,
             custo_medio: dados.custo_medio,
         });
@@ -327,7 +234,7 @@ export const estoqueService = {
     },
 
     /**
-     * Transferência entre produtos
+     * ✅ Transferência entre produtos (apenas produtos)
      */
     async transferirStock(dados: TransferenciaInput): Promise<{
         message: string;
@@ -337,26 +244,44 @@ export const estoqueService = {
             quantidade: number;
         };
     }> {
+        // Verificar produtos de origem e destino
+        try {
+            const [origemRes, destinoRes] = await Promise.all([
+                api.get(`${API_PREFIX}/produtos/${dados.produto_origem_id}`),
+                api.get(`${API_PREFIX}/produtos/${dados.produto_destino_id}`)
+            ]);
+
+            const origem = origemRes.data.produto;
+            const destino = destinoRes.data.produto;
+
+            // ✅ Impedir transferência se algum for serviço
+            if (isServico(origem) || isServico(destino)) {
+                throw new Error("Transferência de stock não é permitida para serviços");
+            }
+        } catch (error) {
+            console.error("[EstoqueService] Erro ao verificar produtos:", error);
+        }
+
         const response = await api.post(`${API_PREFIX}/movimentos-stock/transferencia`, dados);
         return response.data;
     },
 
     /**
-     * Obter histórico de movimentos de um produto específico
+     * ✅ Obter histórico de movimentos de um produto específico
      */
     async historicoProduto(produtoId: string, page?: number): Promise<{
         produto: { id: string; nome: string; estoque_atual: number };
         movimentos: MovimentoStock[];
     }> {
         const params = page ? `?page=${page}` : "";
-        const response = await api.get(`${API_PREFIX}/movimentos-stock/produto/${produtoId}/historico${params}`);
+        const response = await api.get(`${API_PREFIX}/movimentos-stock/produto/${produtoId}${params}`);
         return response.data;
     },
 
     // ============ RESUMOS E ESTATÍSTICAS ============
 
     /**
-     * Obter resumo do estoque (dashboard)
+     * ✅ Obter resumo do estoque (dashboard) - apenas produtos
      */
     async obterResumo(): Promise<ResumoEstoque> {
         const response = await api.get(`${API_PREFIX}/movimentos-stock/resumo`);
@@ -364,7 +289,7 @@ export const estoqueService = {
     },
 
     /**
-     * Obter estatísticas de movimentos (relatório)
+     * ✅ Obter estatísticas de movimentos (relatório) - apenas produtos
      */
     async obterEstatisticas(filtros?: {
         data_inicio?: string;
@@ -380,21 +305,50 @@ export const estoqueService = {
         return response.data.estatisticas;
     },
 
-    // ============ MÉTODOS LEGACY (mantidos para compatibilidade) ============
+    // ============ UTILITÁRIOS ============
 
     /**
-     * @deprecated Use listarProdutos() ou listarTodosProdutos()
+     * ✅ Verificar disponibilidade de estoque (apenas produtos)
      */
-    async listarProdutosEstoque(filtros?: FiltrosEstoque): Promise<Produto[]> {
-        return this.listarProdutos(filtros);
+    async verificarDisponibilidade(produtoId: string, quantidade: number): Promise<{
+        disponivel: boolean;
+        estoque_atual: number;
+        mensagem?: string;
+    }> {
+        try {
+            const response = await api.get(`${API_PREFIX}/produtos/${produtoId}`);
+            const produto = response.data.produto;
+
+            // ✅ Serviços sempre disponíveis
+            if (isServico(produto)) {
+                return {
+                    disponivel: true,
+                    estoque_atual: 0,
+                    mensagem: "Serviço não possui controle de estoque"
+                };
+            }
+
+            const disponivel = produto.estoque_atual >= quantidade;
+
+            return {
+                disponivel,
+                estoque_atual: produto.estoque_atual,
+                mensagem: disponivel
+                    ? undefined
+                    : `Estoque insuficiente. Disponível: ${produto.estoque_atual}, Necessário: ${quantidade}`
+            };
+        } catch (error) {
+            console.error("[EstoqueService] Erro ao verificar disponibilidade:", error);
+            throw new Error("Erro ao verificar disponibilidade do produto");
+        }
     },
 
     /**
-     * @deprecated Use listarTodosProdutos()
+     * ✅ Calcular valor total do estoque
      */
-    async listarTodosProdutosLegacy(): Promise<Produto[]> {
-        const response = await api.get(`${API_PREFIX}/produtos/with-trashed`);
-        return response.data.produtos || [];
+    async calcularValorTotal(): Promise<number> {
+        const resumo = await this.obterResumo();
+        return resumo.valorTotalEstoque;
     },
 };
 

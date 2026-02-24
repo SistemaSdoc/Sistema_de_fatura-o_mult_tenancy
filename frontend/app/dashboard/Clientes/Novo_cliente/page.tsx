@@ -5,19 +5,21 @@ import MainEmpresa from "../../../components/MainEmpresa";
 import {
   clienteService,
   Cliente,
-
   CriarClienteInput,
   AtualizarClienteInput,
   formatarNIF,
   getTipoClienteLabel,
-  getTipoClienteColor
+  getTipoClienteColor,
+  getStatusClienteLabel,
+  getStatusClienteColor,
+  getStatusClienteBadge,
+  StatusCliente
 } from "@/services/clientes";
 import {
   Users,
   Plus,
   Search,
   Edit2,
-  Trash2,
   Eye,
   Building2,
   User,
@@ -28,8 +30,9 @@ import {
   X,
   AlertCircle,
   Loader2,
-  RefreshCw,
-  Trash
+  CheckCircle,
+  XCircle,
+  Power
 } from "lucide-react";
 
 // ===== COMPONENTES AUXILIARES =====
@@ -71,17 +74,48 @@ interface ConfirmModalProps {
   title: string;
   message: string;
   loading?: boolean;
+  confirmText?: string;
+  cancelText?: string;
+  type?: 'warning' | 'danger' | 'info';
 }
 
-function ConfirmModal({ isOpen, onClose, onConfirm, title, message, loading }: ConfirmModalProps) {
+function ConfirmModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  title,
+  message,
+  loading,
+  confirmText = "Confirmar",
+  cancelText = "Cancelar",
+  type = 'warning'
+}: ConfirmModalProps) {
   if (!isOpen) return null;
+
+  const colors = {
+    warning: {
+      bg: "bg-yellow-100",
+      text: "text-yellow-600",
+      button: "bg-yellow-600 hover:bg-yellow-700"
+    },
+    danger: {
+      bg: "bg-red-100",
+      text: "text-red-600",
+      button: "bg-red-600 hover:bg-red-700"
+    },
+    info: {
+      bg: "bg-orange-50",
+      text: "text-[#F9941F]",
+      button: "bg-[#123859] hover:bg-[#1a4d7a]"
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="p-3 bg-red-100 rounded-full">
-            <AlertCircle className="w-6 h-6 text-red-600" />
+          <div className={`p-3 ${colors[type].bg} rounded-full`}>
+            <AlertCircle className={`w-6 h-6 ${colors[type].text}`} />
           </div>
           <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
         </div>
@@ -92,18 +126,103 @@ function ConfirmModal({ isOpen, onClose, onConfirm, title, message, loading }: C
             disabled={loading}
             className="flex-1 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            Cancelar
+            {cancelText}
           </button>
           <button
             onClick={onConfirm}
             disabled={loading}
-            className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
+            className={`flex-1 px-4 py-2 ${colors[type].button} text-white rounded-lg transition-colors flex items-center justify-center gap-2`}
           >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-            {loading ? "Excluindo..." : "Excluir"}
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            {loading ? "Processando..." : confirmText}
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ===== SKELETON LOADING COMPONENT =====
+
+function SkeletonCard() {
+  return (
+    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 animate-pulse">
+      <div className="flex items-center gap-3">
+        <div className="p-3 rounded-lg bg-gray-200 w-12 h-12"></div>
+        <div className="flex-1">
+          <div className="h-6 bg-gray-200 rounded w-16 mb-2"></div>
+          <div className="h-4 bg-gray-200 rounded w-12"></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SkeletonTableRow() {
+  return (
+    <tr className="animate-pulse">
+      <td className="py-4 px-6">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-gray-200"></div>
+          <div className="flex-1">
+            <div className="h-4 bg-gray-200 rounded w-32 mb-2"></div>
+            <div className="h-3 bg-gray-200 rounded w-24"></div>
+          </div>
+        </div>
+      </td>
+      <td className="py-4 px-6">
+        <div className="h-6 bg-gray-200 rounded w-20"></div>
+      </td>
+      <td className="py-4 px-6">
+        <div className="h-6 bg-gray-200 rounded w-16"></div>
+      </td>
+      <td className="py-4 px-6">
+        <div className="h-4 bg-gray-200 rounded w-24"></div>
+      </td>
+      <td className="py-4 px-6">
+        <div className="h-4 bg-gray-200 rounded w-20"></div>
+      </td>
+      <td className="py-4 px-6">
+        <div className="flex items-center justify-center gap-2">
+          <div className="w-8 h-8 bg-gray-200 rounded-lg"></div>
+          <div className="w-8 h-8 bg-gray-200 rounded-lg"></div>
+          <div className="w-8 h-8 bg-gray-200 rounded-lg"></div>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function SkeletonStats() {
+  return (
+    <div className="grid grid-cols-4 sm:grid-cols-4 gap-4">
+      {[1, 2, 3, 4].map((i) => (
+        <SkeletonCard key={i} />
+      ))}
+    </div>
+  );
+}
+
+function SkeletonTable() {
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="bg-[#123859] border-b border-gray-200">
+          <tr>
+            <th className="py-4 px-6 text-left font-semibold text-white uppercase text-xs">Cliente</th>
+            <th className="py-4 px-6 text-left font-semibold text-white uppercase text-xs">Tipo</th>
+            <th className="py-4 px-6 text-left font-semibold text-white uppercase text-xs">Status</th>
+            <th className="py-4 px-6 text-left font-semibold text-white uppercase text-xs">Contacto</th>
+            <th className="py-4 px-6 text-left font-semibold text-white uppercase text-xs">NIF</th>
+            <th className="py-4 px-6 text-center font-semibold text-white uppercase text-xs">Ações</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <SkeletonTableRow key={i} />
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -122,6 +241,7 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
     nome: "",
     nif: "",
     tipo: "consumidor_final",
+    status: "ativo",
     telefone: "",
     email: "",
     endereco: "",
@@ -135,6 +255,7 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
         nome: cliente.nome,
         nif: cliente.nif || "",
         tipo: cliente.tipo,
+        status: cliente.status,
         telefone: cliente.telefone || "",
         email: cliente.email || "",
         endereco: cliente.endereco || "",
@@ -144,6 +265,7 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
         nome: "",
         nif: "",
         tipo: "consumidor_final",
+        status: "ativo",
         telefone: "",
         email: "",
         endereco: "",
@@ -192,8 +314,8 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
         <div className="grid grid-cols-2 gap-4">
           <label
             className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${formData.tipo === "consumidor_final"
-              ? "border-[#123859] bg-[#123859]/5"
-              : "border-gray-200 hover:border-gray-300"
+                ? "border-[#123859] bg-[#123859]/5"
+                : "border-gray-200 hover:border-gray-300"
               }`}
           >
             <input
@@ -215,8 +337,8 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
 
           <label
             className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${formData.tipo === "empresa"
-              ? "border-[#F9941F] bg-[#F9941F]/5"
-              : "border-gray-200 hover:border-gray-300"
+                ? "border-[#F9941F] bg-[#F9941F]/5"
+                : "border-gray-200 hover:border-gray-300"
               }`}
           >
             <input
@@ -253,6 +375,60 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
             } focus:ring-2 focus:ring-[#123859] outline-none transition-all`}
         />
         {errors.nome && <p className="mt-1 text-sm text-red-500">{errors.nome}</p>}
+      </div>
+
+      {/* Status - NOVO */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-3">
+          Status do Cliente
+        </label>
+        <div className="grid grid-cols-2 gap-4">
+          <label
+            className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${formData.status === "ativo"
+                ? "border-green-600 bg-green-50"
+                : "border-gray-200 hover:border-gray-300"
+              }`}
+          >
+            <input
+              type="radio"
+              name="status"
+              value="ativo"
+              checked={formData.status === "ativo"}
+              onChange={handleChange}
+              className="hidden"
+            />
+            <CheckCircle className={`w-5 h-5 ${formData.status === "ativo" ? "text-green-600" : "text-gray-400"}`} />
+            <div>
+              <div className={`font-medium ${formData.status === "ativo" ? "text-green-600" : "text-gray-700"}`}>
+                Ativo
+              </div>
+              <div className="text-xs text-gray-500">Cliente pode realizar compras</div>
+            </div>
+          </label>
+
+          <label
+            className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${formData.status === "inativo"
+                ? "border-gray-600 bg-gray-50"
+                : "border-gray-200 hover:border-gray-300"
+              }`}
+          >
+            <input
+              type="radio"
+              name="status"
+              value="inativo"
+              checked={formData.status === "inativo"}
+              onChange={handleChange}
+              className="hidden"
+            />
+            <XCircle className={`w-5 h-5 ${formData.status === "inativo" ? "text-gray-600" : "text-gray-400"}`} />
+            <div>
+              <div className={`font-medium ${formData.status === "inativo" ? "text-gray-600" : "text-gray-700"}`}>
+                Inativo
+              </div>
+              <div className="text-xs text-gray-500">Cliente não pode realizar compras</div>
+            </div>
+          </label>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -359,12 +535,12 @@ export default function ClientesPage() {
   const [clientesFiltrados, setClientesFiltrados] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
-  const [mostrarDeletados, setMostrarDeletados] = useState(false);
+  const [filtroStatus, setFiltroStatus] = useState<"todos" | "ativos" | "inativos">("ativos");
 
   // Modais
   const [modalFormAberto, setModalFormAberto] = useState(false);
   const [modalDetalhesAberto, setModalDetalhesAberto] = useState(false);
-  const [modalConfirmAberto, setModalConfirmAberto] = useState(false);
+  const [modalStatusAberto, setModalStatusAberto] = useState(false);
 
   // Cliente selecionado
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
@@ -374,7 +550,7 @@ export default function ClientesPage() {
 
   useEffect(() => {
     carregarClientes();
-  }, [mostrarDeletados]);
+  }, [filtroStatus]);
 
   useEffect(() => {
     const termo = busca.toLowerCase();
@@ -393,11 +569,15 @@ export default function ClientesPage() {
     try {
       console.log('[PAGE] Carregando clientes...');
       let data;
-      if (mostrarDeletados) {
-        data = await clienteService.listarTodosClientes();
+
+      if (filtroStatus === "todos") {
+        data = await clienteService.listarClientes(true); // incluir inativos
+      } else if (filtroStatus === "ativos") {
+        data = await clienteService.listarClientesAtivos();
       } else {
-        data = await clienteService.listarClientes();
+        data = await clienteService.listarClientesInativos();
       }
+
       console.log('[PAGE] Clientes recebidos:', data.length);
       setClientes(data);
       setClientesFiltrados(data);
@@ -423,9 +603,9 @@ export default function ClientesPage() {
     setModalDetalhesAberto(true);
   }
 
-  function abrirExcluir(cliente: Cliente) {
+  function abrirAlterarStatus(cliente: Cliente) {
     setClienteSelecionado(cliente);
-    setModalConfirmAberto(true);
+    setModalStatusAberto(true);
   }
 
   async function handleSubmit(dados: CriarClienteInput | AtualizarClienteInput) {
@@ -449,39 +629,41 @@ export default function ClientesPage() {
     }
   }
 
-  async function handleExcluir() {
+  async function handleAtivar() {
     if (!clienteSelecionado) return;
 
     setLoadingAcao(true);
     try {
-      console.log('[PAGE] Iniciando exclusão do cliente:', clienteSelecionado.id);
+      console.log('[PAGE] Ativando cliente:', clienteSelecionado.id);
+      await clienteService.ativarCliente(clienteSelecionado.id);
 
-      // Chama o backend para deletar
-      await clienteService.deletarCliente(clienteSelecionado.id);
-
-      console.log('[PAGE] Cliente deletado com sucesso no backend');
-
-      // Fecha modal e limpa seleção
-      setModalConfirmAberto(false);
+      setModalStatusAberto(false);
       setClienteSelecionado(null);
-
-      // Recarrega a lista do servidor para confirmar
       await carregarClientes();
-
     } catch (error: any) {
-      console.error('[PAGE] Erro ao excluir:', error);
-      alert(error.response?.data?.message || "Erro ao excluir cliente");
+      console.error('[PAGE] Erro ao ativar:', error);
+      alert(error.response?.data?.message || "Erro ao ativar cliente");
     } finally {
       setLoadingAcao(false);
     }
   }
 
-  async function handleRestaurar(id: string) {
+  async function handleInativar() {
+    if (!clienteSelecionado) return;
+
+    setLoadingAcao(true);
     try {
-      await clienteService.restaurarCliente(id);
+      console.log('[PAGE] Inativando cliente:', clienteSelecionado.id);
+      await clienteService.inativarCliente(clienteSelecionado.id);
+
+      setModalStatusAberto(false);
+      setClienteSelecionado(null);
       await carregarClientes();
     } catch (error: any) {
-      alert(error.response?.data?.message || "Erro ao restaurar cliente");
+      console.error('[PAGE] Erro ao inativar:', error);
+      alert(error.response?.data?.message || "Erro ao inativar cliente");
+    } finally {
+      setLoadingAcao(false);
     }
   }
 
@@ -493,226 +675,245 @@ export default function ClientesPage() {
           <div>
             <h1 className="text-3xl font-bold text-[#123859]">Clientes</h1>
             <p className="text-gray-500 mt-1">
-              {mostrarDeletados
-                ? "Mostrando todos os clientes (incluindo deletados)"
-                : "Gerencie seus clientes e empresas"}
+              Gerencie seus clientes e empresas
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {/* Busca */}
-            <div className=" p-1 rounded-xl border border-gray-100 w-50mx-auto">
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  value={busca}
-                  onChange={(e) => setBusca(e.target.value)}
-                  placeholder="Buscar por nome, NIF, email ou telefone..."
-                  className="w-full pl-12 pr-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#123859] outline-none transition-all"
-                />
-              </div>
+            <div className="relative flex-1 min-w-[250px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar por nome, NIF, email ou telefone..."
+                className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#123859] outline-none transition-all"
+              />
             </div>
-            <button
-              onClick={() => setMostrarDeletados(!mostrarDeletados)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors font-medium ${mostrarDeletados
-                ? "bg-red-100 text-red-700 hover:bg-red-200"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              title={mostrarDeletados ? "Ver apenas ativos" : "Ver todos incluindo deletados"}
+
+            {/* Filtro de Status */}
+            <select
+              value={filtroStatus}
+              onChange={(e) => setFiltroStatus(e.target.value as any)}
+              className="px-4 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-700 focus:ring-2 focus:ring-[#123859] outline-none transition-all"
             >
-              <Trash className="w-5 h-5" />
-              {mostrarDeletados ? "Ver Ativos" : "Ver Todos"}
-            </button>
+              <option value="ativos">Apenas Ativos</option>
+              <option value="inativos">Apenas Inativos</option>
+              <option value="todos">Todos</option>
+            </select>
+
             <button
               onClick={carregarClientes}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+              className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
               title="Recarregar lista"
             >
-              <RefreshCw className="w-5 h-5" />
+              <Plus className="w-5 h-5 rotate-45" />
             </button>
-            {!mostrarDeletados && (
-              <button
-                onClick={abrirCriar}
-                className="flex items-center gap-2 px-2 py-1 bg-[#F9941F] text-white rounded-lg hover:bg-[#e08516] transition-colors font-medium"
-              >
-                <Plus className="w-5 h-5" />
-                Novo Cliente
-              </button>
-            )}
+
+            <button
+              onClick={abrirCriar}
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#F9941F] text-white rounded-lg hover:bg-[#e08516] transition-colors font-medium"
+            >
+              <Plus className="w-5 h-5" />
+              Novo Cliente
+            </button>
           </div>
         </div>
 
         {/* Estatísticas rápidas */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-[#123859]/10 rounded-lg">
-                <Users className="w-6 h-6 text-[#123859]" />
+        {loading ? (
+          <SkeletonStats />
+        ) : (
+          <div className="grid grid-cols-4 sm:grid-cols-4 gap-4">
+            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-lg bg-[#dbeafe]">
+                  <Users className="w-6 h-6 text-[#123859]" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-900">{clientes.length}</p>
+                  <p className="text-sm text-gray-500">Total</p>
+                </div>
               </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{clientes.length}</p>
-                <p className="text-sm text-gray-500">
-                  {mostrarDeletados ? "Total (com deletados)" : "Clientes Ativos"}
-                </p>
+            </div>
+
+            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-lg bg-green-50">
+                  <CheckCircle className="w-6 h-6 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {clientes.filter((c) => c.status === "ativo").length}
+                  </p>
+                  <p className="text-sm text-gray-500">Ativos</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-lg bg-gray-50">
+                  <XCircle className="w-6 h-6 text-gray-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {clientes.filter((c) => c.status === "inativo").length}
+                  </p>
+                  <p className="text-sm text-gray-500">Inativos</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-lg bg-orange-50">
+                  <Building2 className="w-6 h-6 text-[#F9941F]" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {clientes.filter((c) => c.tipo === "empresa").length}
+                  </p>
+                  <p className="text-sm text-gray-500">Empresas</p>
+                </div>
               </div>
             </div>
           </div>
-          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <Building2 className="w-6 h-6 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">
-                  {clientes.filter((c) => c.tipo === "empresa").length}
-                </p>
-                <p className="text-sm text-gray-500">Empresas</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-gray-100 rounded-lg">
-                <User className="w-6 h-6 text-gray-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">
-                  {clientes.filter((c) => c.tipo === "consumidor_final").length}
-                </p>
-                <p className="text-sm text-gray-500">Consumidores Finais</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        )}
 
         {/* Lista de Clientes */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="w-8 h-8 animate-spin text-[#123859]" />
-            </div>
-          ) : clientes.length === 0 ? (
-            <div className="text-center py-16">
-              <Users className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-              <p className="text-gray-500 mb-4">
-                {mostrarDeletados
-                  ? "Nenhum cliente encontrado"
-                  : "Nenhum cliente ativo. Verifique se há clientes deletados."}
-              </p>
-              {!mostrarDeletados && (
-                <button
-                  onClick={() => setMostrarDeletados(true)}
-                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors mr-2"
-                >
-                  Ver clientes deletados
-                </button>
-              )}
-              <button
-                onClick={abrirCriar}
-                className="px-4 py-2 bg-[#123859] text-white rounded-lg hover:bg-[#1a4d7a] transition-colors"
-              >
-                Cadastrar primeiro cliente
-              </button>
-            </div>
-          ) : (
+        {loading ? (
+          <SkeletonTable />
+        ) : clientes.length === 0 ? (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 text-center py-16">
+            <Users className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+            <p className="text-gray-500 mb-4">
+              {filtroStatus === "ativos" && "Nenhum cliente ativo encontrado."}
+              {filtroStatus === "inativos" && "Nenhum cliente inativo encontrado."}
+              {filtroStatus === "todos" && "Nenhum cliente encontrado."}
+            </p>
+            <button
+              onClick={abrirCriar}
+              className="px-4 py-2 bg-[#123859] text-white rounded-lg hover:bg-[#1a4d7a] transition-colors"
+            >
+              Cadastrar primeiro cliente
+            </button>
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
+                <thead className="bg-[#123859] border-b border-gray-200">
                   <tr>
-                    <th className="py-4 px-6 text-left font-semibold text-gray-700 uppercase text-xs">Cliente</th>
-                    <th className="py-4 px-6 text-left font-semibold text-gray-700 uppercase text-xs">Tipo</th>
-                    <th className="py-4 px-6 text-left font-semibold text-gray-700 uppercase text-xs">Contacto</th>
-                    <th className="py-4 px-6 text-left font-semibold text-gray-700 uppercase text-xs">NIF</th>
-                    <th className="py-4 px-6 text-center font-semibold text-gray-700 uppercase text-xs">Ações</th>
+                    <th className="py-4 px-6 text-left font-semibold text-white uppercase text-xs">
+                      Cliente
+                    </th>
+                    <th className="py-4 px-6 text-left font-semibold text-white uppercase text-xs">
+                      Tipo
+                    </th>
+                    <th className="py-4 px-6 text-left font-semibold text-white uppercase text-xs">
+                      Status
+                    </th>
+                    <th className="py-4 px-6 text-left font-semibold text-white uppercase text-xs">
+                      Contacto
+                    </th>
+                    <th className="py-4 px-6 text-left font-semibold text-white uppercase text-xs">
+                      NIF
+                    </th>
+                    <th className="py-4 px-6 text-center font-semibold text-white uppercase text-xs">
+                      Ações
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {clientesFiltrados.map((cliente) => (
-                    <tr
-                      key={cliente.id}
-                      className={`hover:bg-gray-50 transition-colors ${cliente.deleted_at ? 'bg-[#F9941F] opacity-60' : ''
-                        }`}
-                    >
-                      <td className="py-4 px-6">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${cliente.tipo === "empresa" ? "bg-blue-100" : "bg-gray-100"
-                            }`}>
-                            {cliente.tipo === "empresa" ? (
-                              <Building2 className="w-5 h-5 text-blue-600" />
-                            ) : (
-                              <User className="w-5 h-5 text-gray-600" />
-                            )}
-                          </div>
-                          <div>
-                            <div className="font-medium text-gray-900">
-                              {cliente.nome}
-                              {cliente.deleted_at && (
-                                <span className="ml-2 text-xs text-red-600 font-normal">(Deletado)</span>
+                  {clientesFiltrados.map((cliente) => {
+                    const statusBadge = getStatusClienteBadge(cliente.status);
+
+                    return (
+                      <tr
+                        key={cliente.id}
+                        className={`hover:bg-gray-50 transition-colors ${cliente.status === "inativo" ? "bg-gray-50 opacity-75" : ""
+                          }`}
+                      >
+                        <td className="py-4 px-6">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${cliente.tipo === "empresa" ? "bg-orange-50" : "bg-gray-100"
+                              }`}>
+                              {cliente.tipo === "empresa" ? (
+                                <Building2 className="w-5 h-5 text-[#F9941F]" />
+                              ) : (
+                                <User className="w-5 h-5 text-gray-600" />
                               )}
                             </div>
-                            {cliente.email && (
-                              <div className="text-xs text-gray-500">{cliente.email}</div>
+                            <div>
+                              <div className="font-medium text-gray-900">
+                                {cliente.nome}
+                              </div>
+                              {cliente.email && (
+                                <div className="text-xs text-gray-500">{cliente.email}</div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-4 px-6">
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getTipoClienteColor(cliente.tipo)}`}>
+                            {getTipoClienteLabel(cliente.tipo)}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6">
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusBadge.cor}`}>
+                            {cliente.status === "ativo" ? (
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                            ) : (
+                              <XCircle className="w-3 h-3 mr-1" />
                             )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-4 px-6">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getTipoClienteColor(cliente.tipo)}`}>
-                          {getTipoClienteLabel(cliente.tipo)}
-                        </span>
-                      </td>
-                      <td className="py-4 px-6">
-                        {cliente.telefone ? (
-                          <div className="flex items-center gap-1.5 text-gray-600">
-                            <Phone className="w-3.5 h-3.5" />
-                            {cliente.telefone}
-                          </div>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="py-4 px-6 font-mono text-gray-600">
-                        {formatarNIF(cliente.nif)}
-                      </td>
-                      <td className="py-4 px-6">
-                        <div className="flex items-center justify-center gap-2">
-                          {cliente.deleted_at ? (
-                            <button
-                              onClick={() => handleRestaurar(cliente.id)}
-                              className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                              title="Restaurar cliente"
-                            >
-                              <RefreshCw className="w-4 h-4" />
-                            </button>
+                            {statusBadge.texto}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6">
+                          {cliente.telefone ? (
+                            <div className="flex items-center gap-1.5 text-gray-600">
+                              <Phone className="w-3.5 h-3.5" />
+                              {cliente.telefone}
+                            </div>
                           ) : (
-                            <>
-                              <button
-                                onClick={() => abrirDetalhes(cliente)}
-                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                title="Ver detalhes"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => abrirEditar(cliente)}
-                                className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                                title="Editar"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => abrirExcluir(cliente)}
-                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                title="Excluir"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </>
+                            <span className="text-gray-400">-</span>
                           )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="py-4 px-6 font-mono text-gray-600">
+                          {formatarNIF(cliente.nif)}
+                        </td>
+                        <td className="py-4 px-6">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => abrirDetalhes(cliente)}
+                              className="p-2 text-[#123859] hover:bg-[#123859]/10 rounded-lg transition-colors"
+                              title="Ver detalhes"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => abrirEditar(cliente)}
+                              className="p-2 text-[#F9941F] hover:bg-[#F9941F]/10 rounded-lg transition-colors"
+                              title="Editar"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => abrirAlterarStatus(cliente)}
+                              className={`p-2 rounded-lg transition-colors ${cliente.status === "ativo"
+                                  ? "text-yellow-600 hover:bg-yellow-50"
+                                  : "text-green-600 hover:bg-green-50"
+                                }`}
+                              title={cliente.status === "ativo" ? "Inativar cliente" : "Ativar cliente"}
+                            >
+                              <Power className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
 
@@ -729,10 +930,9 @@ export default function ClientesPage() {
                 </div>
               )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
-
 
       {/* Modal de Formulário (Criar/Editar) */}
       <Modal
@@ -766,19 +966,32 @@ export default function ClientesPage() {
         {clienteSelecionado && (
           <div className="space-y-6">
             <div className="flex items-center gap-4 pb-6 border-b border-gray-200">
-              <div className={`w-16 h-16 rounded-full flex items-center justify-center ${clienteSelecionado.tipo === "empresa" ? "bg-blue-100" : "bg-gray-100"
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center ${clienteSelecionado.tipo === "empresa" ? "bg-orange-50" : "bg-orange-50"
                 }`}>
                 {clienteSelecionado.tipo === "empresa" ? (
-                  <Building2 className="w-8 h-8 text-blue-600" />
+                  <Building2 className="w-8 h-8 text-[#F9941F]" />
                 ) : (
                   <User className="w-8 h-8 text-gray-600" />
                 )}
               </div>
               <div>
                 <h4 className="text-xl font-semibold text-gray-900">{clienteSelecionado.nome}</h4>
-                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium mt-1 ${getTipoClienteColor(clienteSelecionado.tipo)}`}>
-                  {getTipoClienteLabel(clienteSelecionado.tipo)}
-                </span>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getTipoClienteColor(clienteSelecionado.tipo)}`}>
+                    {getTipoClienteLabel(clienteSelecionado.tipo)}
+                  </span>
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${clienteSelecionado.status === "ativo"
+                      ? "bg-green-100 text-green-700"
+                      : "bg-gray-100 text-gray-700"
+                    }`}>
+                    {clienteSelecionado.status === "ativo" ? (
+                      <CheckCircle className="w-3 h-3 mr-1" />
+                    ) : (
+                      <XCircle className="w-3 h-3 mr-1" />
+                    )}
+                    {getStatusClienteLabel(clienteSelecionado.status)}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -845,18 +1058,23 @@ export default function ClientesPage() {
         )}
       </Modal>
 
-      {/* Modal de Confirmação de Exclusão */}
+      {/* Modal de Alterar Status */}
       <ConfirmModal
-        isOpen={modalConfirmAberto}
+        isOpen={modalStatusAberto}
         onClose={() => {
-          setModalConfirmAberto(false);
+          setModalStatusAberto(false);
           setClienteSelecionado(null);
         }}
-        onConfirm={handleExcluir}
-        title="Excluir Cliente"
-        message={`Tem certeza que deseja excluir o cliente "${clienteSelecionado?.nome}"? Esta ação não pode ser desfeita.`}
+        onConfirm={clienteSelecionado?.status === "ativo" ? handleInativar : handleAtivar}
+        title={clienteSelecionado?.status === "ativo" ? "Inativar Cliente" : "Ativar Cliente"}
+        message={clienteSelecionado?.status === "ativo"
+          ? `Tem certeza que deseja inativar o cliente "${clienteSelecionado?.nome}"? Clientes inativos não podem realizar novas compras.`
+          : `Tem certeza que deseja ativar o cliente "${clienteSelecionado?.nome}"? Clientes ativos podem realizar compras normalmente.`
+        }
+        confirmText={clienteSelecionado?.status === "ativo" ? "Inativar" : "Ativar"}
+        type={clienteSelecionado?.status === "ativo" ? "warning" : "info"}
         loading={loadingAcao}
       />
-    </MainEmpresa >
+    </MainEmpresa>
   );
 }

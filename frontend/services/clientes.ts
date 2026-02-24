@@ -2,12 +2,14 @@
 import api from "./axios";
 
 export type TipoCliente = "consumidor_final" | "empresa";
+export type StatusCliente = "ativo" | "inativo";
 
 export interface Cliente {
     id: string;
     nome: string;
     nif: string | null;
     tipo: TipoCliente;
+    status: StatusCliente; // NOVO: campo status
     telefone: string | null;
     email: string | null;
     endereco: string | null;
@@ -21,6 +23,7 @@ export interface CriarClienteInput {
     nome: string;
     nif?: string;
     tipo?: TipoCliente;
+    status?: StatusCliente; // NOVO: campo status opcional
     telefone?: string;
     email?: string;
     endereco?: string;
@@ -41,18 +44,52 @@ const noCacheConfig = {
 };
 
 export const clienteService = {
-    async listarClientes(): Promise<Cliente[]> {
+    /**
+     * Listar clientes ativos (padrão)
+     * @param incluirInativos Se true, inclui também clientes inativos
+     */
+    async listarClientes(incluirInativos: boolean = false): Promise<Cliente[]> {
         console.log('[CLIENTE SERVICE] Listar clientes - Iniciando...');
         const timestamp = new Date().getTime();
-        const response = await api.get(`${API_PREFIX}/clientes?t=${timestamp}`, noCacheConfig);
+        
+        let url = `${API_PREFIX}/clientes?t=${timestamp}`;
+        if (incluirInativos) {
+            url += '&status=todos';
+        }
+        
+        const response = await api.get(url, noCacheConfig);
         console.log('[CLIENTE SERVICE] Listar clientes - Sucesso:', response.data);
         return response.data.clientes || [];
     },
 
+    /**
+     * Listar apenas clientes ativos
+     */
+    async listarClientesAtivos(): Promise<Cliente[]> {
+        console.log('[CLIENTE SERVICE] Listar clientes ativos - Iniciando...');
+        const timestamp = new Date().getTime();
+        const response = await api.get(`${API_PREFIX}/clientes?t=${timestamp}&status=ativos`, noCacheConfig);
+        console.log('[CLIENTE SERVICE] Listar clientes ativos - Sucesso:', response.data);
+        return response.data.clientes || [];
+    },
+
+    /**
+     * Listar apenas clientes inativos
+     */
+    async listarClientesInativos(): Promise<Cliente[]> {
+        console.log('[CLIENTE SERVICE] Listar clientes inativos - Iniciando...');
+        const timestamp = new Date().getTime();
+        const response = await api.get(`${API_PREFIX}/clientes?t=${timestamp}&status=inativos`, noCacheConfig);
+        console.log('[CLIENTE SERVICE] Listar clientes inativos - Sucesso:', response.data);
+        return response.data.clientes || [];
+    },
+
+    /**
+     * Listar todos os clientes (ativos, inativos e deletados)
+     */
     async listarTodosClientes(): Promise<Cliente[]> {
         console.log('[CLIENTE SERVICE] Listar todos clientes (com deletados) - Iniciando...');
         const timestamp = new Date().getTime();
-        // MUDEI: de 'with-trashed' para 'todos'
         const response = await api.get(`${API_PREFIX}/clientes/todos?t=${timestamp}`, noCacheConfig);
         console.log('[CLIENTE SERVICE] Listar todos clientes - Sucesso:', response.data);
         return response.data.clientes || [];
@@ -68,7 +105,10 @@ export const clienteService = {
 
     async criarCliente(dados: CriarClienteInput): Promise<Cliente> {
         console.log('[CLIENTE SERVICE] Criar cliente - Dados:', dados);
+        
+        // Se não especificar status, o backend vai definir 'ativo' como padrão
         const response = await api.post(`${API_PREFIX}/clientes`, dados);
+        
         console.log('[CLIENTE SERVICE] Criar cliente - Sucesso:', response.data);
         return response.data.cliente;
     },
@@ -91,6 +131,26 @@ export const clienteService = {
             console.error('[CLIENTE SERVICE] ERRO na requisição PUT:', error.response?.data?.message || error.message);
             throw error;
         }
+    },
+
+    /**
+     * NOVO: Ativar cliente
+     */
+    async ativarCliente(id: string): Promise<Cliente> {
+        console.log('[CLIENTE SERVICE] Ativar cliente - ID:', id);
+        const response = await api.post(`${API_PREFIX}/clientes/${id}/ativar`);
+        console.log('[CLIENTE SERVICE] Cliente ativado - Sucesso:', response.data);
+        return response.data.cliente;
+    },
+
+    /**
+     * NOVO: Inativar cliente
+     */
+    async inativarCliente(id: string): Promise<Cliente> {
+        console.log('[CLIENTE SERVICE] Inativar cliente - ID:', id);
+        const response = await api.post(`${API_PREFIX}/clientes/${id}/inativar`);
+        console.log('[CLIENTE SERVICE] Cliente inativado - Sucesso:', response.data);
+        return response.data.cliente;
     },
 
     async deletarCliente(id: string): Promise<void> {
@@ -140,6 +200,30 @@ export function getTipoClienteLabel(tipo: TipoCliente): string {
 
 export function getTipoClienteColor(tipo: TipoCliente): string {
     return tipo === "empresa" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-700";
+}
+
+// NOVAS FUNÇÕES PARA STATUS
+export function getStatusClienteLabel(status: StatusCliente): string {
+    const labels: Record<StatusCliente, string> = {
+        ativo: "Ativo",
+        inativo: "Inativo",
+    };
+    return labels[status] || status;
+}
+
+export function getStatusClienteColor(status: StatusCliente): string {
+    const colors: Record<StatusCliente, string> = {
+        ativo: "bg-green-100 text-green-700",
+        inativo: "bg-gray-100 text-gray-700",
+    };
+    return colors[status] || "bg-gray-100 text-gray-700";
+}
+
+export function getStatusClienteBadge(status: StatusCliente): { texto: string; cor: string } {
+    return {
+        texto: getStatusClienteLabel(status),
+        cor: getStatusClienteColor(status),
+    };
 }
 
 export default clienteService;

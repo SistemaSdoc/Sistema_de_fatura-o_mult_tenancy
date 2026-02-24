@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
+
 class DocumentoFiscal extends Model
 {
     protected $table = 'documentos_fiscais';
@@ -34,7 +35,7 @@ class DocumentoFiscal extends Model
 
         'base_tributavel',
         'total_iva',
-        'total_retencao',
+        'total_retencao', // Soma das retenções de serviços
         'total_liquido',
 
         'estado', // emitido, paga, parcialmente_paga, cancelado, expirado
@@ -57,6 +58,10 @@ class DocumentoFiscal extends Model
         'data_cancelamento' => 'date',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+        'base_tributavel' => 'decimal:2',
+        'total_iva' => 'decimal:2',
+        'total_retencao' => 'decimal:2',
+        'total_liquido' => 'decimal:2',
     ];
 
     protected static function boot(): void
@@ -66,6 +71,16 @@ class DocumentoFiscal extends Model
         static::creating(function ($model) {
             if (! $model->id) {
                 $model->id = (string) Str::uuid();
+            }
+        });
+
+        // ✅ NOVO: Atualizar total_retencao quando itens são salvos
+        static::saved(function ($model) {
+            if ($model->itens()->exists()) {
+                $retencaoTotal = $model->itens->sum('valor_retencao');
+                if ($retencaoTotal != $model->total_retencao) {
+                    $model->updateQuietly(['total_retencao' => $retencaoTotal]);
+                }
             }
         });
     }
@@ -264,6 +279,22 @@ class DocumentoFiscal extends Model
     }
 
     /**
+     * ✅ NOVO: Documentos com retenção de serviços
+     */
+    public function scopeComRetencao($query)
+    {
+        return $query->where('total_retencao', '>', 0);
+    }
+
+    /**
+     * ✅ NOVO: Documentos sem retenção
+     */
+    public function scopeSemRetencao($query)
+    {
+        return $query->where('total_retencao', 0);
+    }
+
+    /**
      * Faturas de adiantamento pendentes de utilização
      */
     public function scopeAdiantamentosPendentes($query)
@@ -318,6 +349,88 @@ class DocumentoFiscal extends Model
     public function getTemClienteCadastradoAttribute(): bool
     {
         return !is_null($this->cliente_id);
+    }
+
+    /**
+     * ✅ Calcular retenção total (soma das retenções dos serviços)
+     */
+    public function getTotalRetencaoCalculadoAttribute(): float
+    {
+        return $this->itens->sum(function ($item) {
+            if ($item->produto && $item->produto->isServico()) {
+                return $item->valor_retencao ?? 0;
+            }
+            return 0;
+        });
+    }
+
+    /**
+     * ✅ Verificar se documento tem serviços com retenção
+     */
+    public function getTemServicosComRetencaoAttribute(): bool
+    {
+        return $this->itens->contains(function ($item) {
+            return $item->produto &&
+                   $item->produto->isServico() &&
+                   ($item->valor_retencao ?? 0) > 0;
+        });
+    }
+
+    /**
+     * ✅ Listar serviços com retenção
+     */
+    public function getServicosComRetencaoAttribute()
+    {
+        return $this->itens->filter(function ($item) {
+            return $item->produto &&
+                   $item->produto->isServico() &&
+                   ($item->valor_retencao ?? 0) > 0;
+        })->values();
+    }
+
+    /**
+     * ✅ Total líquido após retenções (já é o total_liquido)
+     */
+    public function getTotalLiquidoAposRetencoesAttribute(): float
+    {
+        return $this->total_liquido;
+    }
+
+    /**
+     * ✅ Valor base antes do IVA e retenções
+     */
+    public function getBaseTributavelLiquidaAttribute(): float
+    {
+        return $this->base_tributavel;
+    }
+
+    /**
+     * ✅ Percentual médio de retenção do documento
+     */
+    public function getPercentualRetencaoAttribute(): float
+    {
+        if ($this->base_tributavel <= 0) return 0;
+        return round(($this->total_retencao / $this->base_tributavel) * 100, 2);
+    }
+
+    /**
+     * ✅ Resumo para relatórios
+     */
+    public function getResumoAttribute(): array
+    {
+        return [
+            'id' => $this->id,
+            'numero' => $this->numero_documento,
+            'tipo' => $this->tipo_documento,
+            'tipo_nome' => $this->tipo_documento_nome,
+            'cliente' => $this->nome_cliente,
+            'data' => $this->data_emissao,
+            'total' => $this->total_liquido,
+            'retencao' => $this->total_retencao,
+            'percentual_retencao' => $this->percentual_retencao,
+            'tem_servicos' => $this->tem_servicos_com_retencao,
+            'estado' => $this->estado,
+        ];
     }
 
     public function getValorPendenteAttribute()
@@ -513,15 +626,31 @@ class DocumentoFiscal extends Model
 
     /**
      * Verificar se afeta stock
+     * ATUALIZADO: FP não afeta stock (proforma)
      */
     public function afetaStock()
     {
         return in_array($this->tipo_documento, [
             self::TIPO_FATURA,
             self::TIPO_FATURA_RECIBO,
-            self::TIPO_FATURA_PROFORMA,
             self::TIPO_NOTA_CREDITO
         ]);
+    }
+
+    /**
+     * Verificar se tem retenção de serviços
+     */
+    public function temRetencaoServicos(): bool
+    {
+        return $this->total_retencao > 0;
+    }
+
+    /**
+     * Calcular base tributável excluindo retenções
+     */
+    public function calcularBaseTributavelLiquida(): float
+    {
+        return $this->base_tributavel;
     }
 
     /**
@@ -603,6 +732,34 @@ class DocumentoFiscal extends Model
         }
 
         return $this->data_vencimento && $this->data_vencimento->isPast();
+    }
+
+    /**
+     * ✅ NOVO: Obter total de retenção por período
+     */
+    public static function totalRetencaoNoPeriodo($inicio, $fim): float
+    {
+        return self::whereBetween('data_emissao', [$inicio, $fim])
+            ->where('estado', '!=', self::ESTADO_CANCELADO)
+            ->sum('total_retencao');
+    }
+
+    /**
+     * ✅ NOVO: Agrupar retenções por mês
+     */
+    public static function retencaoPorMes($ano = null)
+    {
+        $ano = $ano ?? now()->year;
+
+        return self::select(
+                DB::raw('MONTH(data_emissao) as mes'),
+                DB::raw('SUM(total_retencao) as total')
+            )
+            ->whereYear('data_emissao', $ano)
+            ->where('estado', '!=', self::ESTADO_CANCELADO)
+            ->groupBy(DB::raw('MONTH(data_emissao)'))
+            ->orderBy('mes')
+            ->get();
     }
 
     /**

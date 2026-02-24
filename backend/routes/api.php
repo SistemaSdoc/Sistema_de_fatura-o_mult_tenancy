@@ -45,11 +45,15 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
         Route::get('/users/create', [UserController::class, 'create']);
         Route::apiResource('/users', UserController::class)->except(['store']);
 
-        // ===== CLIENTES - ADMIN (com soft delete) =====
+        // ===== CLIENTES - ADMIN (com soft delete e ativação) =====
         Route::prefix('clientes')->group(function () use ($uuidPattern) {
             Route::get('/todos', [ClienteController::class, 'indexWithTrashed'])->name('clientes.todos');
             Route::post('/{id}/restore', [ClienteController::class, 'restore'])->where('id', $uuidPattern)->name('clientes.restore');
             Route::delete('/{id}/force', [ClienteController::class, 'forceDelete'])->where('id', $uuidPattern)->name('clientes.force-delete');
+
+            // NOVAS ROTAS PARA ATIVAR/INATIVAR
+            Route::post('/{id}/ativar', [ClienteController::class, 'ativar'])->where('id', $uuidPattern)->name('clientes.ativar');
+            Route::post('/{id}/inativar', [ClienteController::class, 'inativar'])->where('id', $uuidPattern)->name('clientes.inativar');
         });
         Route::apiResource('/clientes', ClienteController::class);
     });
@@ -91,9 +95,13 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
         });
         Route::apiResource('/fornecedores', FornecedorController::class);
 
-        // ===== CLIENTES (Operador: apenas operações básicas) =====
+        // ===== CLIENTES (Operador: apenas operações básicas, sem deletar permanentemente) =====
         Route::apiResource('/clientes', ClienteController::class)->except(['destroy']);
         Route::delete('/clientes/{id}', [ClienteController::class, 'destroy'])->where('id', $uuidPattern)->name('clientes.destroy');
+
+        // Operador também pode ativar/inativar clientes
+        Route::post('/clientes/{id}/ativar', [ClienteController::class, 'ativar'])->where('id', $uuidPattern)->name('clientes.ativar');
+        Route::post('/clientes/{id}/inativar', [ClienteController::class, 'inativar'])->where('id', $uuidPattern)->name('clientes.inativar');
 
         // ===== COMPRAS =====
         Route::prefix('compras')->group(function () use ($uuidPattern) {

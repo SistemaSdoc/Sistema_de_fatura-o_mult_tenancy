@@ -13,27 +13,26 @@ import MainEmpresa from "../../../components/MainEmpresa";
 import { useAuth } from "@/context/authprovider";
 
 import {
-    criarVenda,
+    emitirDocumentoFiscal,
     Produto,
     Cliente,
     clienteService,
     produtoService,
-    CriarVendaPayload,
+    CriarDocumentoFiscalPayload,
     formatarNIF,
     isServico,
     formatarPreco,
     getNomeTipoDocumento,
-    validarPayloadVenda,
 } from "@/services/vendas";
 
 const ESTOQUE_MINIMO = 5;
 
-interface ItemVendaUI {
+interface ItemDocumentoUI {
     id: string;
     produto_id: string;
     descricao: string;
     quantidade: number;
-    preco_venda: number;
+    preco_unitario: number;
     desconto: number;
     base_tributavel: number;
     valor_iva: number;
@@ -60,7 +59,7 @@ export default function NovaFaturaProformaPage() {
     const [produtosDisponiveis, setProdutosDisponiveis] = useState<Produto[]>([]);
     const [produtosEstoqueBaixo, setProdutosEstoqueBaixo] = useState<Produto[]>([]);
     const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
-    const [itens, setItens] = useState<ItemVendaUI[]>([]);
+    const [itens, setItens] = useState<ItemDocumentoUI[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [sucesso, setSucesso] = useState<string | null>(null);
@@ -75,7 +74,7 @@ export default function NovaFaturaProformaPage() {
         desconto: 0,
     });
 
-    const [previewItem, setPreviewItem] = useState<ItemVendaUI | null>(null);
+    const [previewItem, setPreviewItem] = useState<ItemDocumentoUI | null>(null);
     const [observacoes, setObservacoes] = useState('');
 
     useEffect(() => {
@@ -128,12 +127,12 @@ export default function NovaFaturaProformaPage() {
             return;
         }
 
-        const preco_venda = produto.preco_venda;
+        const preco_unitario = produto.preco_venda;
         const maxQuantidade = isServico(produto) ? Infinity : produto.estoque_atual;
         const quantidade = Math.min(formItem.quantidade, maxQuantidade);
         const desconto = formItem.desconto;
 
-        const base = preco_venda * quantidade - desconto;
+        const base = preco_unitario * quantidade - desconto;
         const taxaIva = produto.taxa_iva ?? 14;
         const valorIva = (base * taxaIva) / 100;
         const valorRetencao = produto.tipo === "servico" ? base * 0.065 : 0;
@@ -143,7 +142,7 @@ export default function NovaFaturaProformaPage() {
             produto_id: produto.id,
             descricao: produto.nome,
             quantidade,
-            preco_venda,
+            preco_unitario,
             desconto,
             base_tributavel: base,
             valor_iva: valorIva,
@@ -189,7 +188,7 @@ export default function NovaFaturaProformaPage() {
             return;
         }
 
-        const novoItem: ItemVendaUI = {
+        const novoItem: ItemDocumentoUI = {
             ...previewItem,
             id: uuidv4(),
         };
@@ -229,7 +228,7 @@ export default function NovaFaturaProformaPage() {
         return true;
     };
 
-    const finalizarVenda = async () => {
+    const finalizarProforma = async () => {
         if (modoCliente === 'cadastrado' && !clienteSelecionado) {
             setError("Selecione um cliente cadastrado");
             return;
@@ -241,7 +240,7 @@ export default function NovaFaturaProformaPage() {
         }
 
         if (itens.length === 0) {
-            setError("Adicione itens à venda");
+            setError("Adicione itens à proforma");
             return;
         }
 
@@ -250,15 +249,16 @@ export default function NovaFaturaProformaPage() {
         setSucesso(null);
 
         try {
-            const payload: CriarVendaPayload = {
+            const payload: CriarDocumentoFiscalPayload = {
+                tipo_documento: 'FP', // Fatura Proforma
                 itens: itens.map(item => ({
                     produto_id: item.produto_id,
-                    quantidade: Number(item.quantidade),
-                    preco_venda: Number(item.preco_venda),
-                    desconto: Number(item.desconto),
+                    descricao: item.descricao,
+                    quantidade: item.quantidade,
+                    preco_unitario: item.preco_unitario,
+                    desconto: item.desconto,
+                    taxa_iva: item.taxa_iva,
                 })),
-                tipo_documento: 'FP',
-                faturar: false,
             };
 
             if (modoCliente === 'cadastrado' && clienteSelecionado) {
@@ -271,23 +271,27 @@ export default function NovaFaturaProformaPage() {
             }
 
             if (observacoes.trim()) {
-                payload.observacoes = observacoes.trim();
+                payload.motivo = observacoes.trim(); // Observações vão no motivo
             }
 
-            const erroValidacao = validarPayloadVenda(payload);
-            if (erroValidacao) {
-                setError(erroValidacao);
-                setLoading(false);
-                return;
+            console.log('[PROFORMA] Criando Fatura Proforma - NÃO vai mexer em stock');
+            console.log('[PROFORMA] Payload:', payload);
+
+            const resultado = await emitirDocumentoFiscal(payload);
+
+            if (!resultado) {
+                throw new Error("Erro ao criar proforma - resposta vazia");
             }
 
-            const vendaCriada = await criarVenda(payload);
+            // Verificar estrutura da resposta
+            console.log('[PROFORMA] Resposta:', resultado);
 
-            if (!vendaCriada) {
-                throw new Error("Erro ao criar venda - resposta vazia");
-            }
+            // Acessar documento de forma segura
+            const numeroDocumento = resultado.documento?.numero_documento ||
+                resultado.data?.documento?.numero_documento ||
+                'N/A';
 
-            setSucesso("Fatura Proforma criada com sucesso!");
+            setSucesso(`Fatura Proforma criada com sucesso! Nº: ${numeroDocumento}`);
 
             setTimeout(() => {
                 router.push("/dashboard/Faturas/Faturas");
@@ -296,10 +300,10 @@ export default function NovaFaturaProformaPage() {
         } catch (err: unknown) {
             if (err instanceof AxiosError) {
                 console.error("Erro Axios:", err.response?.data || err.message);
-                setError(err.response?.data?.message || "Erro ao salvar venda");
+                setError(err.response?.data?.message || "Erro ao salvar proforma");
             } else {
                 console.error("Erro:", err);
-                setError("Erro ao salvar venda");
+                setError("Erro ao salvar proforma");
             }
         } finally {
             setLoading(false);
@@ -344,7 +348,7 @@ export default function NovaFaturaProformaPage() {
                     </div>
                 )}
 
-                {/* Alerta de estoque baixo */}
+                {/* Alerta de estoque baixo (apenas informativo, não bloqueia) */}
                 {produtosEstoqueBaixo.length > 0 && (
                     <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
                         <div className="flex items-start gap-2">
@@ -603,8 +607,9 @@ export default function NovaFaturaProformaPage() {
                                     <tr>
                                         <th className="p-2 text-left text-[#123859] font-semibold">Produto</th>
                                         <th className="p-2 text-center text-[#123859] font-semibold">Qtd</th>
-                                        <th className="p-2 text-right text-[#123859] font-semibold">Preço</th>
+                                        <th className="p-2 text-right text-[#123859] font-semibold">Preço Unit.</th>
                                         <th className="p-2 text-right text-[#123859] font-semibold">Desc.</th>
+                                        <th className="p-2 text-right text-[#123859] font-semibold">Base</th>
                                         <th className="p-2 text-right text-[#123859] font-semibold">IVA</th>
                                         <th className="p-2 text-right text-[#123859] font-semibold">Ret.</th>
                                         <th className="p-2 text-right text-[#123859] font-semibold">Subtotal</th>
@@ -616,8 +621,9 @@ export default function NovaFaturaProformaPage() {
                                         <tr key={item.id} className="border-t border-gray-200 hover:bg-gray-50">
                                             <td className="p-2 font-medium text-[#123859]">{item.descricao}</td>
                                             <td className="p-2 text-center">{item.quantidade}</td>
-                                            <td className="p-2 text-right">{formatarPreco(item.preco_venda)}</td>
+                                            <td className="p-2 text-right">{formatarPreco(item.preco_unitario)}</td>
                                             <td className="p-2 text-right text-red-600">{item.desconto > 0 ? formatarPreco(item.desconto) : '-'}</td>
+                                            <td className="p-2 text-right">{formatarPreco(item.base_tributavel)}</td>
                                             <td className="p-2 text-right">{formatarPreco(item.valor_iva)}</td>
                                             <td className="p-2 text-right text-orange-600">{item.valor_retencao > 0 ? formatarPreco(item.valor_retencao) : '-'}</td>
                                             <td className="p-2 text-right font-bold text-[#F9941F]">{formatarPreco(item.subtotal)}</td>
@@ -644,7 +650,7 @@ export default function NovaFaturaProformaPage() {
                     <div className="bg-white rounded-lg shadow border-2 border-[#123859]/20 overflow-hidden">
                         <div className="bg-[#123859] text-white px-4 py-2 flex items-center gap-2">
                             <Calculator size={18} />
-                            <h2 className="font-bold text-sm">RESUMO - FATURA-PROFORMA</h2>
+                            <h2 className="font-bold text-sm">RESUMO - FATURA PROFORMA</h2>
                         </div>
 
                         <table className="w-full border-collapse text-center">
@@ -653,7 +659,7 @@ export default function NovaFaturaProformaPage() {
                                 <tr className="bg-gray-50 text-gray-600 font-medium border-b">
                                     <td className="p-2">Base Tributável</td>
                                     <td className="p-2">
-                                        IVA ({((totalIva / totalBase) * 100).toFixed(1)}%)
+                                        IVA ({totalBase > 0 ? ((totalIva / totalBase) * 100).toFixed(1) : 0}%)
                                     </td>
                                     {totalRetencao > 0 && (
                                         <td className="p-2">Retenção (6.5%)</td>
@@ -677,7 +683,7 @@ export default function NovaFaturaProformaPage() {
                                         colSpan={totalRetencao > 0 ? 2 : 1}
                                         className="p-3 font-bold text-left"
                                     >
-                                        TOTAL DA FATURA
+                                        TOTAL DA FATURA PROFORMA
                                     </td>
                                     <td
                                         colSpan={totalRetencao > 0 ? 1 : 2}
@@ -694,7 +700,7 @@ export default function NovaFaturaProformaPage() {
                 {/* BOTÃO FINALIZAR */}
                 <button
                     type="button"
-                    onClick={finalizarVenda}
+                    onClick={finalizarProforma}
                     disabled={loading || !podeFinalizar()}
                     className="w-full bg-[#F9941F] hover:bg-[#d9831a] disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-3 rounded-lg font-bold text-base shadow-lg transition-colors flex items-center justify-center gap-2"
                 >
@@ -706,7 +712,7 @@ export default function NovaFaturaProformaPage() {
                     ) : (
                         <>
                             <FileText size={20} />
-                            Finalizar
+                            Finalizar Proforma
                         </>
                     )}
                 </button>

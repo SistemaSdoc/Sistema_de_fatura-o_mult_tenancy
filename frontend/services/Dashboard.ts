@@ -51,6 +51,7 @@ export interface Cliente {
     nome: string;
     nif: string | null;
     tipo: 'consumidor_final' | 'empresa';
+    status?: 'ativo' | 'inativo'; // ✅ NOVO
     telefone: string | null;
     email: string | null;
     endereco: string | null;
@@ -65,6 +66,9 @@ export interface Produto {
     preco_venda: number;
     estoque_atual: number;
     estoque_minimo: number;
+    // ✅ NOVO: campos de serviço
+    tipo?: 'produto' | 'servico';
+    retencao?: number;
 }
 
 /* -------- Documento Fiscal (básico para listagens) -------- */
@@ -75,6 +79,7 @@ export interface DocumentoFiscal {
     numero_documento: string;
     data_emissao: string;
     total_liquido: number;
+    total_retencao?: number; // ✅ NOVO
     estado: EstadoDocumentoFiscal;
     cliente?: Cliente;
     cliente_nome?: string;
@@ -93,6 +98,9 @@ export interface DashboardData {
         totalFaturado: number;
         totalNotasCredito: number;
         totalLiquido: number;
+        // ✅ NOVOS
+        totalRetencao?: number;
+        totalRetencaoMes?: number;
     };
 
     produtos: {
@@ -100,6 +108,17 @@ export interface DashboardData {
         ativos: number;
         inativos: number;
         stock_baixo: number;
+    };
+
+    // ✅ NOVO: estatísticas de serviços
+    servicos?: {
+        total: number;
+        ativos: number;
+        inativos: number;
+        precoMedio: number;
+        comRetencao: number;
+        retencaoMedia: number;
+        valorRetencaoTotal: number;
     };
 
     vendas: {
@@ -117,8 +136,12 @@ export interface DashboardData {
                 tipo: TipoDocumentoFiscal;
                 numero: string;
                 estado: EstadoDocumentoFiscal;
+                total_retencao?: number; // ✅ NOVO
             };
             data: string;
+            // ✅ NOVOS
+            tem_servicos?: boolean;
+            total_retencao?: number;
         }>;
     };
 
@@ -128,12 +151,14 @@ export interface DashboardData {
             nome: string;
             quantidade: number;
             valor: number;
+            retencao?: number; // ✅ NOVO
         }>;
         por_estado: Array<{
             tipo: string;
-            por_estado: Record<string, { quantidade: number; valor: number }>;
+            por_estado: Record<string, { quantidade: number; valor: number; retencao?: number }>;
             total_quantidade: number;
             total_valor: number;
+            total_retencao?: number; // ✅ NOVO
         }>;
         ultimos: Array<{
             id: string;
@@ -145,6 +170,7 @@ export interface DashboardData {
             estado: EstadoDocumentoFiscal;
             estado_pagamento: EstadoPagamentoVenda;
             data: string;
+            total_retencao?: number; // ✅ NOVO
         }>;
         por_mes: Array<{
             mes: string;
@@ -153,10 +179,12 @@ export interface DashboardData {
             NC: number;
             ND: number;
             total: number;
+            retencao?: number; // ✅ NOVO
         }>;
         por_dia: Array<{
             dia: string;
             total: number;
+            retencao?: number; // ✅ NOVO
         }>;
     };
 
@@ -170,11 +198,15 @@ export interface DashboardData {
             quantidade: number;
             valor_total: number;
         }>;
+        // ✅ NOVO
+        recebidos_com_retencao?: number;
     };
 
     clientes: {
         ativos: number;
         novos_mes: number;
+        // ✅ NOVO
+        inativos?: number;
     };
 
     indicadores: {
@@ -184,12 +216,23 @@ export interface DashboardData {
             quantidade: number;
             valor_total: number;
         }>;
+        // ✅ NOVO: serviços mais vendidos
+        servicosMaisVendidos?: Array<{
+            produto: string;
+            codigo?: string;
+            quantidade: number;
+            valor_total: number;
+            retencao_total: number;
+        }>;
     };
 
     alertas: {
         documentos_vencidos: number;
         documentos_proximo_vencimento: number;
         proformas_antigas: number;
+        // ✅ NOVOS
+        servicos_com_retencao_pendente?: number;
+        valor_retencao_pendente?: number;
     };
 
     periodo: {
@@ -207,6 +250,7 @@ export interface ResumoDocumentosFiscais {
         quantidade: number;
         valor_total: number;
         mes_atual: number;
+        retencao_total?: number; // ✅ NOVO
     }>;
     por_estado: Record<EstadoDocumentoFiscal, number>;
     periodo: {
@@ -233,6 +277,9 @@ export interface EstatisticasPagamentos {
     };
     prazo_medio_pagamento: number;
     metodos_pagamento: Record<string, number>;
+    // ✅ NOVO
+    recebidos_com_retencao?: number;
+    valor_retencao_recebido?: number;
 }
 
 export interface AlertasPendentes {
@@ -248,6 +295,7 @@ export interface AlertasPendentes {
             valor_pendente: number;
             data_vencimento: string;
             dias_atraso: number;
+            retencao?: number; // ✅ NOVO
         }>;
     };
     proximos_vencimento: {
@@ -262,6 +310,7 @@ export interface AlertasPendentes {
             valor_pendente: number;
             data_vencimento: string;
             dias_ate_vencimento: number;
+            retencao?: number; // ✅ NOVO
         }>;
     };
     proformas_pendentes: {
@@ -275,6 +324,20 @@ export interface AlertasPendentes {
             valor: number;
             data_emissao: string;
             dias_pendentes: number;
+        }>;
+    };
+    // ✅ NOVOS
+    servicos_com_retencao_proximos?: {
+        quantidade: number;
+        valor_total: number;
+        valor_retencao: number;
+        documentos: Array<{
+            id: string;
+            numero: string;
+            cliente?: string;
+            valor: number;
+            retencao: number;
+            data_vencimento: string;
         }>;
     };
     total_alertas: number;
@@ -291,6 +354,10 @@ export interface EvolucaoMensal {
         valor_pendente: number;
         notas_credito: number;
         valor_notas_credito: number;
+        // ✅ NOVOS
+        proformas?: number;
+        valor_proformas?: number;
+        retencao?: number;
     }>;
 }
 
@@ -410,6 +477,10 @@ export const dashboardService = {
         crescimento: number;
         produtosEmStockBaixo: number;
         documentosVencidos: number;
+        // ✅ NOVOS
+        totalServicos: number;
+        totalRetencao: number;
+        servicosComRetencao: number;
     } {
         if (!dashboardData) {
             return {
@@ -420,8 +491,16 @@ export const dashboardService = {
                 crescimento: 0,
                 produtosEmStockBaixo: 0,
                 documentosVencidos: 0,
+                totalServicos: 0,
+                totalRetencao: 0,
+                servicosComRetencao: 0,
             };
         }
+
+        const totalServicos = dashboardData.servicos?.total || 0;
+        const totalRetencao = dashboardData.kpis?.totalRetencao ||
+            dashboardData.documentos_fiscais?.por_mes?.reduce((acc, mes) => acc + (mes.retencao || 0), 0) ||
+            0;
 
         return {
             totalFaturado: dashboardData.kpis?.totalFaturado || 0,
@@ -431,6 +510,51 @@ export const dashboardService = {
             crescimento: dashboardData.kpis?.crescimentoPercentual || 0,
             produtosEmStockBaixo: dashboardData.produtos?.stock_baixo || 0,
             documentosVencidos: dashboardData.alertas?.documentos_vencidos || 0,
+            totalServicos,
+            totalRetencao,
+            servicosComRetencao: dashboardData.servicos?.comRetencao || 0,
+        };
+    },
+
+    /**
+     * ✅ NOVO: Calcular estatísticas de serviços
+     */
+    calcularEstatisticasServicos(dashboardData: DashboardData | null): {
+        totalServicos: number;
+        servicosAtivos: number;
+        receitaServicos: number;
+        retencaoTotal: number;
+        percentualRetencao: number;
+        topServicos: Array<{ nome: string; quantidade: number; valor: number; retencao: number }>;
+    } {
+        if (!dashboardData) {
+            return {
+                totalServicos: 0,
+                servicosAtivos: 0,
+                receitaServicos: 0,
+                retencaoTotal: 0,
+                percentualRetencao: 0,
+                topServicos: [],
+            };
+        }
+
+        const servicos = dashboardData.indicadores?.servicosMaisVendidos || [];
+        const totalServicos = dashboardData.servicos?.total || 0;
+        const retencaoTotal = dashboardData.kpis?.totalRetencao || 0;
+        const receitaServicos = servicos.reduce((acc, s) => acc + s.valor_total, 0);
+
+        return {
+            totalServicos,
+            servicosAtivos: dashboardData.servicos?.ativos || 0,
+            receitaServicos,
+            retencaoTotal,
+            percentualRetencao: receitaServicos > 0 ? (retencaoTotal / receitaServicos) * 100 : 0,
+            topServicos: servicos.slice(0, 5).map(s => ({
+                nome: s.produto,
+                quantidade: s.quantidade,
+                valor: s.valor_total,
+                retencao: s.retencao_total || 0,
+            })),
         };
     },
 
@@ -444,12 +568,14 @@ export const dashboardService = {
             'Faturas-Recibo': number;
             'Notas de Crédito': number;
             Total: number;
+            Retencao: number; // ✅ NOVO
         }>;
         documentosPorTipo: Array<{
             tipo: string;
             nome: string;
             quantidade: number;
             valor: number;
+            retencao?: number; // ✅ NOVO
         }>;
         pagamentosPorMetodo: Array<{
             metodo: string;
@@ -461,6 +587,14 @@ export const dashboardService = {
             estado: string;
             quantidade: number;
             valor: number;
+            retencao?: number; // ✅ NOVO
+        }>;
+        // ✅ NOVO: gráfico de serviços
+        servicosVendidos: Array<{
+            nome: string;
+            quantidade: number;
+            valor: number;
+            retencao: number;
         }>;
     } {
         if (!dashboardData) {
@@ -469,24 +603,27 @@ export const dashboardService = {
                 documentosPorTipo: [],
                 pagamentosPorMetodo: [],
                 documentosPorEstado: [],
+                servicosVendidos: [],
             };
         }
 
-        // Gráfico de evolução mensal
+        // Gráfico de evolução mensal com retenção
         const evolucaoMensal = (dashboardData.documentos_fiscais?.por_mes || []).map(item => ({
             mes: item.mes,
             Faturas: item.FT || 0,
             'Faturas-Recibo': item.FR || 0,
             'Notas de Crédito': item.NC || 0,
             Total: item.total || 0,
+            Retencao: item.retencao || 0,
         }));
 
-        // Gráfico de documentos por tipo
+        // Gráfico de documentos por tipo com retenção
         const documentosPorTipo = Object.entries(dashboardData.documentos_fiscais?.por_tipo || {}).map(([tipo, info]) => ({
             tipo,
             nome: info.nome,
             quantidade: info.quantidade,
             valor: info.valor,
+            retencao: (info as any).retencao || 0,
         }));
 
         // Gráfico de pagamentos por método
@@ -496,8 +633,8 @@ export const dashboardService = {
             valor: metodo.valor_total,
         }));
 
-        // Gráfico de documentos por estado
-        const documentosPorEstado: Array<{ tipo: string; estado: string; quantidade: number; valor: number }> = [];
+        // Gráfico de documentos por estado com retenção
+        const documentosPorEstado: Array<{ tipo: string; estado: string; quantidade: number; valor: number; retencao?: number }> = [];
         if (dashboardData.documentos_fiscais?.por_estado) {
             Object.entries(dashboardData.documentos_fiscais.por_estado).forEach(([tipo, info]) => {
                 if (info && info.por_estado) {
@@ -507,17 +644,27 @@ export const dashboardService = {
                             estado,
                             quantidade: dados.quantidade,
                             valor: dados.valor,
+                            retencao: (dados as any).retencao || 0,
                         });
                     });
                 }
             });
         }
 
+        // ✅ Gráfico de serviços mais vendidos
+        const servicosVendidos = (dashboardData.indicadores?.servicosMaisVendidos || []).map(s => ({
+            nome: s.produto,
+            quantidade: s.quantidade,
+            valor: s.valor_total,
+            retencao: s.retencao_total || 0,
+        }));
+
         return {
             evolucaoMensal,
             documentosPorTipo,
             pagamentosPorMetodo,
             documentosPorEstado,
+            servicosVendidos,
         };
     },
 
@@ -578,6 +725,18 @@ export const dashboardService = {
             });
         }
 
+        // ✅ Adicionar card de retenção se houver
+        if (metricas.totalRetencao > 0) {
+            cards.push({
+                titulo: 'Retenções',
+                valor: this._formatarMoeda(metricas.totalRetencao),
+                icone: '🔖',
+                cor: 'bg-amber-500',
+                variacao: null,
+                variacaoTexto: `${metricas.servicosComRetencao} serviços`,
+            });
+        }
+
         return cards;
     },
 
@@ -632,6 +791,17 @@ export const dashboardService = {
             });
         }
 
+        // ✅ Alerta de serviços com retenção pendente
+        if (alertas.servicos_com_retencao_pendente && alertas.servicos_com_retencao_pendente > 0) {
+            listaAlertas.push({
+                tipo: 'warning',
+                titulo: 'Retenções Pendentes',
+                mensagem: `${alertas.servicos_com_retencao_pendente} serviço(s) com retenção a vencer`,
+                icone: '🔖',
+                acao: '/documentos?com_retencao=true&estado=pendente',
+            });
+        }
+
         const produtosStockBaixo = dashboardData.produtos?.stock_baixo || 0;
         if (produtosStockBaixo > 0) {
             listaAlertas.push({
@@ -677,6 +847,13 @@ export const dashboardService = {
     },
 
     /**
+     * ✅ NOVO: Formatar percentual de retenção
+     */
+    _formatarPercentual(valor: number): string {
+        return `${valor.toFixed(1)}%`;
+    },
+
+    /**
      * Obter cor do badge para tipo de documento
      */
     getTipoDocumentoColor(tipo: TipoDocumentoFiscal): string {
@@ -708,6 +885,16 @@ export const dashboardService = {
     },
 
     /**
+     * ✅ NOVO: Obter cor do badge para retenção
+     */
+    getRetencaoColor(percentual: number): string {
+        if (percentual > 10) return 'bg-red-100 text-red-800';
+        if (percentual > 5) return 'bg-orange-100 text-orange-800';
+        if (percentual > 0) return 'bg-yellow-100 text-yellow-800';
+        return 'bg-gray-100 text-gray-800';
+    },
+
+    /**
      * Obter nome do tipo de documento
      */
     getNomeTipoDocumento(tipo: TipoDocumentoFiscal): string {
@@ -729,13 +916,43 @@ export const dashboardService = {
      */
     hasData(dashboardData: DashboardData | null): boolean {
         if (!dashboardData) return false;
-        
+
         return (
             (dashboardData.kpis?.totalFaturado > 0) ||
             (dashboardData.vendas?.total > 0) ||
             (dashboardData.documentos_fiscais?.total > 0) ||
-            (dashboardData.clientes?.ativos > 0)
+            (dashboardData.clientes?.ativos > 0) ||
+            (dashboardData.servicos?.total ? dashboardData.servicos.total > 0 : false)
         );
+    },
+
+    /**
+     * ✅ NOVO: Calcular resumo rápido para o dashboard
+     */
+    getResumoRapido(dashboardData: DashboardData | null): {
+        totalVendas: number;
+        totalServicos: number;
+        totalClientes: number;
+        totalRetencao: number;
+        ticketMedio: number;
+    } {
+        if (!dashboardData) {
+            return {
+                totalVendas: 0,
+                totalServicos: 0,
+                totalClientes: 0,
+                totalRetencao: 0,
+                ticketMedio: 0,
+            };
+        }
+
+        return {
+            totalVendas: dashboardData.vendas?.total || 0,
+            totalServicos: dashboardData.servicos?.total || 0,
+            totalClientes: dashboardData.clientes?.ativos || 0,
+            totalRetencao: dashboardData.kpis?.totalRetencao || 0,
+            ticketMedio: dashboardData.kpis?.ticketMedio || 0,
+        };
     }
 };
 

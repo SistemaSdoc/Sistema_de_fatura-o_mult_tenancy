@@ -6,25 +6,34 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    /**
+     * Run the migrations.
+     */
     public function up(): void
     {
-Schema::create('clientes', function (Blueprint $table) {
-    $table->uuid('id')->primary();
+        Schema::create('clientes', function (Blueprint $table) {
+            $table->uuid('id')->primary();
 
-    $table->string('nome');
-    $table->string('nif')->nullable();
-    $table->enum('tipo', ['consumidor_final', 'empresa'])->default('consumidor_final');
+            $table->string('nome');
+            $table->string('nif')->nullable()->unique();
+            $table->enum('tipo', ['consumidor_final', 'empresa'])->default('consumidor_final');
 
-    $table->date('data_registro');
-    $table->string('telefone')->nullable();
-    $table->string('email')->nullable();
-    $table->text('endereco')->nullable();
+            // Campo status para ativar/inativar sem deletar
+            $table->enum('status', ['ativo', 'inativo'])->default('ativo');
 
-    $table->timestamps();
-});
+            $table->date('data_registro');
+            $table->string('telefone')->nullable();
+            $table->string('email')->nullable()->unique();
+            $table->text('endereco')->nullable();
 
+            $table->timestamps(); // created_at e updated_at
+            $table->softDeletes(); // deleted_at para soft delete
+        });
     }
 
+    /**
+     * Reverse the migrations.
+     */
     public function down(): void
     {
         Schema::dropIfExists('clientes');

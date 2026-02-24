@@ -25,7 +25,8 @@ import { LucideIcon } from "lucide-react";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-import { estoqueService, Produto } from "@/services/estoque";
+import { estoqueService } from "@/services/estoque";
+import { Produto } from "@/services/produtos";
 
 /* ===================== TIPOS ===================== */
 interface DropdownLink {
@@ -95,21 +96,15 @@ export default function MainEmpresa({
         setIsLoaded(true);
     }, []);
 
-    // Buscar produtos com estoque baixo
+    // Buscar produtos com estoque baixo usando o estoqueService
     const buscarProdutosEstoqueBaixo = useCallback(async () => {
         setLoadingNotificacoes(true);
         try {
-            const produtos = await estoqueService.listarProdutos({
-                estoque_baixo: true,
-                status: 'ativo'
-            });
-
-            const apenasEstoqueBaixo = produtos.filter(p => {
-                const estoqueMinimo = p.estoque_minimo || 5;
-                return p.estoque_atual <= estoqueMinimo;
-            });
-
-            setProdutosEstoqueBaixo(apenasEstoqueBaixo);
+            // ✅ Usar o método correto do estoqueService para obter o resumo
+            const resumo = await estoqueService.obterResumo();
+            
+            // ✅ Os produtos críticos já vêm no resumo
+            setProdutosEstoqueBaixo(resumo.produtos_criticos || []);
             setUltimaAtualizacao(new Date());
         } catch (error) {
             console.error("Erro ao buscar produtos com estoque baixo:", error);
@@ -177,7 +172,7 @@ export default function MainEmpresa({
             setLogoutLoading(true);
             setLogoutError(null);
 
-            // Usar o método de logout do hook useAuth (que agora usa simpleLogout)
+            // Usar o método de logout do hook useAuth
             const result = await authLogout();
 
             if (result.success) {
@@ -231,7 +226,6 @@ export default function MainEmpresa({
                 { label: "Nova fatura", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
                 { label: "Nova Fatura Proforma", path: "/dashboard/Faturas/Faturas_Proforma", icon: FileText },
                 { label: "Faturas", path: "/dashboard/Faturas/Faturas", icon: FileText },
-                { label: "Relatório das faturas", path: "/dashboard/Faturas/relatorios", icon: BarChart2 },
             ],
             isGroup: true,
         },
@@ -269,7 +263,7 @@ export default function MainEmpresa({
             icon: BarChart2,
             path: "/dashboard/relatorios",
             links: [
-                { label: "Diário", path: "/dashboard/relatorios/diario", icon: BarChart2 },
+                { label: "Relatorio", path: "/dashboard/relatorios/diario", icon: BarChart2 },
             ],
             isGroup: true,
         },
