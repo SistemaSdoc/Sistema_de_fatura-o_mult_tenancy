@@ -463,6 +463,34 @@ class VendaController extends Controller
                     'message' => 'Valor do pagamento deve ser maior que zero.'
                 ], 422);
             }
+
+            // ✅ VALIDAÇÃO ADICIONAL: O valor pago deve ser igual ao total da venda
+            // Calculamos o total aproximado baseado nos itens
+            $totalEstimado = 0;
+            foreach ($dados['itens'] as $item) {
+                $produto = Produto::find($item['produto_id']);
+                if ($produto) {
+                    $valorBruto = $produto->preco_venda * $item['quantidade'];
+                    $desconto = $item['desconto'] ?? 0;
+                    $baseTributavel = $valorBruto - $desconto;
+                    $taxaIva = $produto->taxa_iva ?? 14;
+                    $valorIva = ($baseTributavel * $taxaIva) / 100;
+
+                    // Retenção apenas para serviços
+                    $taxaRetencao = ($produto->tipo === 'servico') ? ($item['taxa_retencao'] ?? 6.5) : 0;
+                    $valorRetencao = ($produto->tipo === 'servico') ? ($baseTributavel * $taxaRetencao) / 100 : 0;
+
+                    $totalEstimado += round($baseTributavel + $valorIva - $valorRetencao, 2);
+                }
+            }
+
+            // 🔍 Comparação com tolerância de 0.01 (1 centavo)
+            $diferenca = abs($dados['dados_pagamento']['valor'] - $totalEstimado);
+            if ($diferenca > 0.01) {
+                return response()->json([
+                    'message' => "Para Fatura-Recibo (FR), o valor pago ({$dados['dados_pagamento']['valor']}) deve ser igual ao total da venda ({$totalEstimado}). Diferença: {$diferenca}"
+                ], 422);
+            }
         }
 
         // Para FP, faturar deve ser false (é proforma)

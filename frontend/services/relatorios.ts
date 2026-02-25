@@ -14,11 +14,64 @@ export interface ClienteInfo {
     nif?: string;
 }
 
-export interface DocumentoInfo {
-    id: string;
-    numero_documento: string;
-    tipo_documento: string;
-    estado: string;
+/* ==================== TIPOS PARA DASHBOARD ==================== */
+
+export interface DashboardDocumentosFiscais {
+    total: number;
+    total_faturado: number;
+    total_notas_credito: number;
+    total_liquido: number;
+    total_retencao: number;
+    total_retencao_mes: number;
+}
+
+export interface DashboardVendas {
+    total_mes: number;
+    valor_mes: number;
+}
+
+export interface DashboardClientes {
+    total: number;
+    novos_mes: number;
+}
+
+export interface DashboardProdutos {
+    total: number;
+    estoque_baixo: number;
+    sem_estoque: number;
+}
+
+export interface DashboardServicos {
+    total: number;
+    ativos: number;
+    inativos: number;
+}
+
+export interface DashboardAlertas {
+    documentos_vencidos: number;
+    proformas_antigas: number;
+    servicos_com_retencao_pendente: number;
+}
+
+export interface DashboardPeriodo {
+    inicio_mes: string;
+    hoje: string;
+}
+
+export interface DashboardGeral {
+    documentos_fiscais: DashboardDocumentosFiscais;
+    vendas: DashboardVendas;
+    clientes: DashboardClientes;
+    produtos: DashboardProdutos;
+    servicos: DashboardServicos;
+    alertas: DashboardAlertas;
+    periodo: DashboardPeriodo;
+}
+
+export interface DashboardResponse {
+    success: boolean;
+    message: string;
+    dashboard: DashboardGeral;
 }
 
 /* ==================== TIPOS PARA RELATÓRIO DE VENDAS ==================== */
@@ -34,30 +87,48 @@ export interface VendaRelatorioItem {
     total_iva: number;
     estado_pagamento: string;
     tipo_documento?: string;
+    tem_servicos?: boolean;
+    dados_servicos?: {
+        quantidade: number;
+        retencao: number;
+    } | null;
 }
 
-export interface VendasPorStatus {
-    pagas: number;
-    pendentes: number;
-    canceladas: number;
+export interface VendasAgrupado {
+    periodo: string;
+    quantidade: number;
+    total: number;
+    base_tributavel: number;
+    total_iva: number;
+    total_retencao: number;
 }
 
-export interface KPIsVendas {
+export interface VendasTotais {
     total_vendas: number;
-    quantidade_vendas: number;
-    ticket_medio: number;
-    clientes_periodo: number;
-    produtos_vendidos: number;
-    vendas_por_status: VendasPorStatus;
+    total_valor: number;
+    total_base_tributavel: number;
+    total_iva: number;
+    total_retencao: number;
+    total_servicos: number;
+    total_retencao_servicos: number;
+    percentual_retencao_media: number;
 }
 
 export interface RelatorioVendas {
-    vendas: VendaRelatorioItem[];
-    kpis: KPIsVendas;
     periodo: {
-        data_inicio: string | null;
-        data_fim: string | null;
+        data_inicio: string;
+        data_fim: string;
     };
+    filtros: Record<string, any>;
+    totais: VendasTotais;
+    vendas: VendaRelatorioItem[];
+    agrupado: VendasAgrupado[];
+}
+
+export interface VendasResponse {
+    success: boolean;
+    message: string;
+    data: RelatorioVendas;
 }
 
 /* ==================== TIPOS PARA RELATÓRIO DE COMPRAS ==================== */
@@ -86,7 +157,28 @@ export interface RelatorioCompras {
     };
 }
 
+export interface ComprasResponse {
+    success: boolean;
+    message: string;
+    relatorio: RelatorioCompras;
+}
+
 /* ==================== TIPOS PARA RELATÓRIO DE FATURAÇÃO ==================== */
+
+export interface RetencaoDetalhe {
+    numero: string;
+    data: string;
+    cliente: string;
+    total: number;
+    retencao: number;
+    percentual: number;
+}
+
+export interface FaturacaoRetencoes {
+    total: number;
+    quantidade_documentos: number;
+    detalhes: RetencaoDetalhe[];
+}
 
 export interface FaturacaoPorTipo {
     [tipo: string]: {
@@ -110,73 +202,187 @@ export interface RelatorioFaturacao {
     faturacao_por_mes: FaturacaoPorMes[];
     por_tipo: FaturacaoPorTipo;
     por_estado: Record<string, number>;
+    retencoes?: FaturacaoRetencoes;
     periodo: {
         data_inicio: string | null;
         data_fim: string | null;
     };
 }
 
-/* ==================== TIPOS PARA RELATÓRIO DE STOCK ==================== */
-
-export interface ProdutoItem {
-    id: string;
-    nome: string;
-    codigo?: string;
-    categoria_id?: string;
-    categoria_nome: string;
-    estoque_atual: number;
-    estoque_minimo: number;
-    preco_compra: number;
-    preco_venda: number;
-    custo_medio: number;
-    status: string;
-    margem_lucro: number;
-    valor_total_stock: number;
-    em_risco: boolean;
+export interface FaturacaoResponse {
+    success: boolean;
+    message: string;
+    relatorio: RelatorioFaturacao;
 }
 
-export interface ProdutoPorCategoria {
-    categoria: string;
+/* ==================== TIPOS PARA RELATÓRIO DE STOCK ==================== */
+
+export interface ProdutoStockItem {
+    id: string;
+    nome: string;
+    codigo: string | null;
+    categoria: string | null;
+    estoque_atual: number;
+    estoque_minimo: number;
+    preco_venda: number;
+    custo_medio: number | null;
+    valor_estoque: number;
+    status: string;
+    em_estoque_baixo: boolean;
+}
+
+export interface StockPorCategoria {
     quantidade: number;
     valor: number;
     produtos: number;
 }
 
-export interface MovimentoRecente {
-    id: string;
-    produto: string;
-    tipo: 'entrada' | 'saida' | 'ajuste';
-    quantidade: number;
-    motivo?: string;
-    data: string;
-    user: string;
+export interface StockResumo {
+    total_produtos: number;
+    total_quantidade_estoque: number;
+    total_valor_estoque: number;
+    produtos_estoque_baixo: number;
+    produtos_sem_estoque: number;
 }
 
 export interface RelatorioStock {
-    total_produtos: number;
-    valor_stock_total: number;
-    produtos_baixo_stock: number;
-    produtos_sem_stock: number;
-    produtos_por_categoria: ProdutoPorCategoria[];
-    movimentos_recentes: MovimentoRecente[];
-    produtos?: ProdutoItem[]; // Lista completa opcional
+    resumo: StockResumo;
+    por_categoria: Record<string, StockPorCategoria>;
+    produtos: ProdutoStockItem[];
 }
 
-/* ==================== TIPOS PARA DASHBOARD GERAL ==================== */
+export interface StockResponse {
+    success: boolean;
+    message: string;
+    data: RelatorioStock;
+}
 
-export interface DashboardGeral {
-    vendas_hoje: number;
-    vendas_mes: number;
-    vendas_ano: number;
-    documentos_mes: number;
-    faturas_pendentes: number;
-    total_pendente_cobranca: number;
-    adiantamentos_pendentes: number;
-    proformas_pendentes: number;
-    total_clientes: number;
-    total_produtos: number;
-    total_fornecedores: number;
-    alertas_stock: number;
+/* ==================== TIPOS PARA RELATÓRIO DE SERVIÇOS ==================== */
+
+export interface ServicoItem {
+    id: string;
+    nome: string;
+    unidade_medida: string;
+    taxa_retencao: number | null;
+    quantidade: number;
+    vendas: number;
+    receita: number;
+    receita_formatada: string;
+    retencao: number;
+    retencao_formatada: string;
+    percentual_retencao_real: number;
+}
+
+export interface ServicosTotais {
+    total_servicos_vendidos: number;
+    total_receita: number;
+    total_retencao: number;
+    total_quantidade: number;
+    percentual_retencao_media: number;
+}
+
+export interface RelatorioServicos {
+    periodo: {
+        data_inicio: string;
+        data_fim: string;
+    };
+    totais: ServicosTotais;
+    servicos: ServicoItem[];
+}
+
+export interface ServicosResponse {
+    success: boolean;
+    message: string;
+    data: RelatorioServicos;
+}
+
+/* ==================== TIPOS PARA RELATÓRIO DE RETENÇÕES ==================== */
+
+export interface RetencaoPorCliente {
+    cliente: string;
+    total_documentos: number;
+    total_base: number;
+    total_retencao: number;
+}
+
+export interface RetencaoDocumento {
+    id: string;
+    numero: string;
+    data: string;
+    cliente: string;
+    base: number;
+    retencao: number;
+    percentual: number;
+    servicos: number;
+}
+
+export interface RetencoesResumo {
+    total_documentos: number;
+    total_base: number;
+    total_retencao: number;
+    percentual_medio: number;
+}
+
+export interface RelatorioRetencoes {
+    periodo: {
+        data_inicio: string;
+        data_fim: string;
+    };
+    resumo: RetencoesResumo;
+    por_cliente: RetencaoPorCliente[];
+    documentos: RetencaoDocumento[];
+}
+
+export interface RetencoesResponse {
+    success: boolean;
+    message: string;
+    data: RelatorioRetencoes;
+}
+
+/* ==================== TIPOS PARA DOCUMENTOS FISCAIS ==================== */
+
+export interface DocumentoFiscalEstatisticas {
+    total_documentos: number;
+    total_valor: number;
+    total_base: number;
+    total_iva: number;
+    total_retencao: number;
+    por_tipo: Record<string, {
+        quantidade: number;
+        valor: number;
+        retencao: number;
+    }>;
+    por_estado: Record<string, number>;
+}
+
+export interface DocumentoFiscalItem {
+    id: string;
+    numero_documento: string;
+    tipo_documento: string;
+    cliente: string;
+    data_emissao: string;
+    base_tributavel: number;
+    total_iva: number;
+    total_liquido: number;
+    total_retencao?: number;
+    estado: string;
+    resumo?: any;
+}
+
+export interface RelatorioDocumentosFiscais {
+    periodo: {
+        data_inicio: string;
+        data_fim: string;
+    };
+    filtros: Record<string, any>;
+    estatisticas: DocumentoFiscalEstatisticas;
+    documentos: DocumentoFiscalItem[];
+}
+
+export interface DocumentosFiscaisResponse {
+    success: boolean;
+    message: string;
+    data: RelatorioDocumentosFiscais;
 }
 
 /* ==================== TIPOS PARA PAGAMENTOS PENDENTES ==================== */
@@ -186,9 +392,10 @@ export interface PagamentoPendente {
     numero_documento: string;
     cliente: string;
     data_emissao: string;
-    data_vencimento?: string;
+    data_vencimento: string | null;
     valor_total: number;
     valor_pendente: number;
+    retencao?: number;
     dias_atraso: number;
     estado: string;
 }
@@ -198,12 +405,19 @@ export interface ResumoPagamentosPendentes {
     total_atrasado: number;
     quantidade_faturas: number;
     quantidade_adiantamentos: number;
+    retencao_pendente?: number;
 }
 
 export interface RelatorioPagamentosPendentes {
     resumo: ResumoPagamentosPendentes;
     faturas_pendentes: PagamentoPendente[];
     adiantamentos_pendentes: PagamentoPendente[];
+}
+
+export interface PagamentosPendentesResponse {
+    success: boolean;
+    message: string;
+    data: RelatorioPagamentosPendentes;
 }
 
 /* ==================== TIPOS PARA PROFORMAS ==================== */
@@ -218,40 +432,19 @@ export interface ProformaItem {
 }
 
 export interface RelatorioProformas {
+    periodo: {
+        data_inicio: string;
+        data_fim: string;
+    };
     total: number;
     valor_total: number;
     proformas: ProformaItem[];
 }
 
-/* ==================== TIPOS PARA DOCUMENTOS FISCAIS ==================== */
-
-export interface DocumentoFiscalRelatorio {
-    id: string;
-    numero_documento: string;
-    tipo_documento: string;
-    cliente: string;
-    data_emissao: string;
-    base_tributavel: number;
-    total_iva: number;
-    total_liquido: number;
-    estado: string;
-}
-
-export interface RelatorioDocumentosFiscais {
-    periodo: {
-        data_inicio: string | null;
-        data_fim: string | null;
-    };
-    filtros: Record<string, any>;
-    estatisticas: {
-        total_documentos: number;
-        total_valor: number;
-        total_base: number;
-        total_iva: number;
-        por_tipo: Record<string, { quantidade: number; valor: number }>;
-        por_estado: Record<string, number>;
-    };
-    documentos: DocumentoFiscalRelatorio[];
+export interface ProformasResponse {
+    success: boolean;
+    message: string;
+    data: RelatorioProformas;
 }
 
 /* ==================== CONSTANTES ==================== */
@@ -266,132 +459,114 @@ export const relatoriosService = {
      * GET /api/relatorios/dashboard
      */
     async getDashboard(): Promise<DashboardGeral> {
-        console.log('[RELATÓRIOS] Buscando dashboard');
-        try {
-            const response = await api.get(`${API_PREFIX}/dashboard`);
-            console.log('[RELATÓRIOS] Resposta dashboard:', response.data);
-            
-            // A API pode retornar em diferentes formatos
-            return response.data.dashboard || response.data.data || response.data;
-        } catch (error) {
-            console.error('[RELATÓRIOS] Erro ao buscar dashboard:', error);
-            throw error;
-        }
+        const response = await api.get<DashboardResponse>(`${API_PREFIX}/dashboard`);
+        return response.data.dashboard;
     },
 
     /**
      * Relatório detalhado de vendas
      * GET /api/relatorios/vendas
      */
-    async getRelatorioVendas(filtro?: PeriodoFiltro & {
-        cliente_id?: string;
+    async getRelatorioVendas(params?: {
+        data_inicio?: string;
+        data_fim?: string;
         apenas_vendas?: boolean;
-        estado_pagamento?: 'paga' | 'pendente' | 'parcial' | 'cancelada';
+        cliente_id?: string;
+        tipo_documento?: "FT" | "FR" | "FP" | "FA" | "NC" | "ND" | "RC" | "FRt";
+        estado_pagamento?: "paga" | "pendente" | "parcial" | "cancelada";
+        agrupar_por?: "dia" | "mes" | "ano";
+        incluir_servicos?: boolean;
     }): Promise<RelatorioVendas> {
-        console.log('[RELATÓRIOS] Buscando vendas:', filtro);
-        try {
-            const response = await api.get(`${API_PREFIX}/vendas`, { params: filtro });
-            
-            // A API pode retornar em diferentes formatos
-            return response.data.data || response.data.relatorio || response.data;
-        } catch (error) {
-            console.error('[RELATÓRIOS] Erro ao buscar vendas:', error);
-            throw error;
-        }
+        const response = await api.get<VendasResponse>(`${API_PREFIX}/vendas`, { params });
+        return response.data.data;
     },
 
     /**
      * Relatório detalhado de compras
      * GET /api/relatorios/compras
      */
-    async getRelatorioCompras(filtro?: PeriodoFiltro & {
+    async getRelatorioCompras(params?: {
+        data_inicio?: string;
+        data_fim?: string;
         fornecedor_id?: string;
     }): Promise<RelatorioCompras> {
-        console.log('[RELATÓRIOS] Buscando compras:', filtro);
-        try {
-            const response = await api.get(`${API_PREFIX}/compras`, { params: filtro });
-            
-            return response.data.relatorio || response.data.data || response.data;
-        } catch (error) {
-            console.error('[RELATÓRIOS] Erro ao buscar compras:', error);
-            throw error;
-        }
+        const response = await api.get<ComprasResponse>(`${API_PREFIX}/compras`, { params });
+        return response.data.relatorio;
     },
 
     /**
      * Relatório de faturação/documentos fiscais
      * GET /api/relatorios/faturacao
      */
-    async getRelatorioFaturacao(filtro?: PeriodoFiltro & {
-        tipo?: string;
+    async getRelatorioFaturacao(params?: {
+        data_inicio?: string;
+        data_fim?: string;
+        tipo?: "FT" | "FR" | "FP" | "FA" | "NC" | "ND" | "RC" | "FRt";
         cliente_id?: string;
-        estado?: string;
+        incluir_retencoes?: boolean;
     }): Promise<RelatorioFaturacao> {
-        console.log('[RELATÓRIOS] Buscando faturação:', filtro);
-        try {
-            const response = await api.get(`${API_PREFIX}/faturacao`, { params: filtro });
-            
-            return response.data.relatorio || response.data.data || response.data;
-        } catch (error) {
-            console.error('[RELATÓRIOS] Erro ao buscar faturação:', error);
-            throw error;
-        }
+        const response = await api.get<FaturacaoResponse>(`${API_PREFIX}/faturacao`, { params });
+        return response.data.relatorio;
     },
 
     /**
      * Relatório de stock
      * GET /api/relatorios/stock
      */
-    async getRelatorioStock(filtro?: {
-        categoria_id?: string;
-        apenas_ativos?: boolean;
+    async getRelatorioStock(params?: {
         estoque_baixo?: boolean;
         sem_estoque?: boolean;
+        categoria_id?: string;
+        apenas_ativos?: boolean;
     }): Promise<RelatorioStock> {
-        console.log('[RELATÓRIOS] Buscando stock');
-        try {
-            const response = await api.get(`${API_PREFIX}/stock`, { params: filtro });
-            
-            // A API pode retornar em diferentes formatos
-            const data = response.data.data || response.data.relatorio || response.data;
-            
-            // Garantir que os dados tenham a estrutura esperada
-            return {
-                total_produtos: data.total_produtos || 0,
-                valor_stock_total: data.valor_stock_total || 0,
-                produtos_baixo_stock: data.produtos_baixo_stock || 0,
-                produtos_sem_stock: data.produtos_sem_stock || 0,
-                produtos_por_categoria: data.produtos_por_categoria || [],
-                movimentos_recentes: data.movimentos_recentes || [],
-                produtos: data.produtos || []
-            };
-        } catch (error) {
-            console.error('[RELATÓRIOS] Erro ao buscar stock:', error);
-            throw error;
-        }
+        const response = await api.get<StockResponse>(`${API_PREFIX}/stock`, { params });
+        return response.data.data;
+    },
+
+    /**
+     * Relatório específico de serviços
+     * GET /api/relatorios/servicos
+     */
+    async getRelatorioServicos(params?: {
+        data_inicio?: string;
+        data_fim?: string;
+        apenas_ativos?: boolean;
+        agrupar_por?: "servico" | "categoria";
+    }): Promise<RelatorioServicos> {
+        const response = await api.get<ServicosResponse>(`${API_PREFIX}/servicos`, { params });
+        return response.data.data;
+    },
+
+    /**
+     * Relatório de retenções
+     * GET /api/relatorios/retencoes
+     */
+    async getRelatorioRetencoes(params?: {
+        data_inicio?: string;
+        data_fim?: string;
+        cliente_id?: string;
+    }): Promise<RelatorioRetencoes> {
+        const response = await api.get<RetencoesResponse>(`${API_PREFIX}/retencoes`, { params });
+        return response.data.data;
     },
 
     /**
      * Relatório de documentos fiscais (detalhado)
      * GET /api/relatorios/documentos-fiscais
      */
-    async getRelatorioDocumentosFiscais(filtro?: PeriodoFiltro & {
-        tipo?: string;
+    async getRelatorioDocumentosFiscais(params?: {
+        data_inicio?: string;
+        data_fim?: string;
+        tipo?: "FT" | "FR" | "FP" | "FA" | "NC" | "ND" | "RC" | "FRt";
         cliente_id?: string;
         cliente_nome?: string;
-        estado?: string;
+        estado?: "emitido" | "paga" | "parcialmente_paga" | "cancelado" | "expirado";
         apenas_vendas?: boolean;
         apenas_nao_vendas?: boolean;
+        com_retencao?: boolean;
     }): Promise<RelatorioDocumentosFiscais> {
-        console.log('[RELATÓRIOS] Buscando documentos fiscais:', filtro);
-        try {
-            const response = await api.get(`${API_PREFIX}/documentos-fiscais`, { params: filtro });
-            
-            return response.data.data || response.data;
-        } catch (error) {
-            console.error('[RELATÓRIOS] Erro ao buscar documentos fiscais:', error);
-            throw error;
-        }
+        const response = await api.get<DocumentosFiscaisResponse>(`${API_PREFIX}/documentos-fiscais`, { params });
+        return response.data.data;
     },
 
     /**
@@ -399,74 +574,23 @@ export const relatoriosService = {
      * GET /api/relatorios/pagamentos-pendentes
      */
     async getRelatorioPagamentosPendentes(): Promise<RelatorioPagamentosPendentes> {
-        console.log('[RELATÓRIOS] Buscando pagamentos pendentes');
-        try {
-            const response = await api.get(`${API_PREFIX}/pagamentos-pendentes`);
-            
-            const data = response.data.data || response.data;
-            
-            // Garantir estrutura
-            return {
-                resumo: data.resumo || {
-                    total_pendente: 0,
-                    total_atrasado: 0,
-                    quantidade_faturas: 0,
-                    quantidade_adiantamentos: 0
-                },
-                faturas_pendentes: data.faturas_pendentes || [],
-                adiantamentos_pendentes: data.adiantamentos_pendentes || []
-            };
-        } catch (error) {
-            console.error('[RELATÓRIOS] Erro ao buscar pagamentos pendentes:', error);
-            throw error;
-        }
+        const response = await api.get<PagamentosPendentesResponse>(`${API_PREFIX}/pagamentos-pendentes`);
+        return response.data.data;
     },
 
     /**
      * Relatório de proformas
      * GET /api/relatorios/proformas
      */
-    async getRelatorioProformas(filtro?: PeriodoFiltro & {
+    async getRelatorioProformas(params?: {
+        data_inicio?: string;
+        data_fim?: string;
         cliente_id?: string;
         pendentes?: boolean;
     }): Promise<RelatorioProformas> {
-        console.log('[RELATÓRIOS] Buscando proformas:', filtro);
-        try {
-            const response = await api.get(`${API_PREFIX}/proformas`, { params: filtro });
-            
-            const data = response.data.data || response.data;
-            
-            return {
-                total: data.total || 0,
-                valor_total: data.valor_total || 0,
-                proformas: data.proformas || []
-            };
-        } catch (error) {
-            console.error('[RELATÓRIOS] Erro ao buscar proformas:', error);
-            throw error;
-        }
+        const response = await api.get<ProformasResponse>(`${API_PREFIX}/proformas`, { params });
+        return response.data.data;
     },
-
-    /**
-     * Exportar relatório para Excel
-     * GET /api/relatorios/exportar/{tipo}
-     */
-    async exportarRelatorioExcel(
-        tipo: 'vendas' | 'compras' | 'faturacao' | 'documentos' | 'stock' | 'proformas',
-        filtro?: PeriodoFiltro
-    ): Promise<Blob> {
-        console.log('[RELATÓRIOS] Exportando Excel:', tipo, filtro);
-        try {
-            const response = await api.get(`${API_PREFIX}/exportar/${tipo}`, {
-                params: filtro,
-                responseType: 'blob'
-            });
-            return response.data;
-        } catch (error) {
-            console.error('[RELATÓRIOS] Erro ao exportar Excel:', error);
-            throw error;
-        }
-    }
 };
 
 /* ==================== FUNÇÕES AUXILIARES PARA DATAS ==================== */
@@ -475,7 +599,7 @@ export const relatoriosService = {
  * Obter data de hoje no formato YYYY-MM-DD
  */
 export function getHoje(): string {
-    return new Date().toISOString().split('T')[0];
+    return new Date().toISOString().split("T")[0];
 }
 
 /**
@@ -483,7 +607,7 @@ export function getHoje(): string {
  */
 export function getInicioMes(): string {
     const date = new Date();
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
 /**
@@ -494,86 +618,91 @@ export function getInicioAno(): string {
 }
 
 /**
- * Obter label para período selecionado
- */
-export function getPeriodoLabel(tipo: 'hoje' | 'ontem' | 'este_mes' | 'mes_passado' | 'este_ano' | 'personalizado'): string {
-    const labels: Record<string, string> = {
-        hoje: 'Hoje',
-        ontem: 'Ontem',
-        este_mes: 'Este Mês',
-        mes_passado: 'Mês Passado',
-        este_ano: 'Este Ano',
-        personalizado: 'Período Personalizado'
-    };
-    return labels[tipo] || tipo;
-}
-
-/**
  * Obter período pré-definido
  */
 export function getPeriodoPredefinido(
-    tipo: 'hoje' | 'ontem' | 'este_mes' | 'mes_passado' | 'este_ano'
+    tipo: "hoje" | "ontem" | "este_mes" | "mes_passado" | "este_ano"
 ): { data_inicio: string; data_fim: string; tipo: string } {
     const hoje = new Date();
 
     switch (tipo) {
-        case 'hoje':
+        case "hoje":
             return {
-                tipo: 'hoje',
+                tipo: "hoje",
                 data_inicio: getHoje(),
-                data_fim: getHoje()
+                data_fim: getHoje(),
             };
 
-        case 'ontem':
+        case "ontem": {
             const ontem = new Date(hoje);
             ontem.setDate(ontem.getDate() - 1);
+            const dataOntem = ontem.toISOString().split("T")[0];
             return {
-                tipo: 'ontem',
-                data_inicio: ontem.toISOString().split('T')[0],
-                data_fim: ontem.toISOString().split('T')[0]
+                tipo: "ontem",
+                data_inicio: dataOntem,
+                data_fim: dataOntem,
             };
+        }
 
-        case 'este_mes':
+        case "este_mes":
             return {
-                tipo: 'este_mes',
+                tipo: "este_mes",
                 data_inicio: getInicioMes(),
-                data_fim: getHoje()
+                data_fim: getHoje(),
             };
 
-        case 'mes_passado':
+        case "mes_passado": {
             const mesPassado = new Date(hoje);
             mesPassado.setMonth(mesPassado.getMonth() - 1);
             const inicioMesPassado = new Date(mesPassado.getFullYear(), mesPassado.getMonth(), 1);
             const fimMesPassado = new Date(mesPassado.getFullYear(), mesPassado.getMonth() + 1, 0);
             return {
-                tipo: 'mes_passado',
-                data_inicio: inicioMesPassado.toISOString().split('T')[0],
-                data_fim: fimMesPassado.toISOString().split('T')[0]
+                tipo: "mes_passado",
+                data_inicio: inicioMesPassado.toISOString().split("T")[0],
+                data_fim: fimMesPassado.toISOString().split("T")[0],
             };
+        }
 
-        case 'este_ano':
+        case "este_ano":
             return {
-                tipo: 'este_ano',
+                tipo: "este_ano",
                 data_inicio: getInicioAno(),
-                data_fim: getHoje()
+                data_fim: getHoje(),
             };
 
         default:
             return {
-                tipo: 'este_mes',
+                tipo: "este_mes",
                 data_inicio: getInicioMes(),
-                data_fim: getHoje()
+                data_fim: getHoje(),
             };
     }
 }
 
 /**
+ * Obter label para período selecionado
+ */
+export function getPeriodoLabel(
+    tipo: "hoje" | "ontem" | "este_mes" | "mes_passado" | "este_ano" | "personalizado"
+): string {
+    const labels: Record<string, string> = {
+        hoje: "Hoje",
+        ontem: "Ontem",
+        este_mes: "Este Mês",
+        mes_passado: "Mês Passado",
+        este_ano: "Este Ano",
+        personalizado: "Período Personalizado",
+    };
+    return labels[tipo] || tipo;
+}
+
+/**
  * Formatar data para exibição
  */
-export function formatarData(data: string): string {
-    if (!data) return '-';
+export function formatarData(data: string | null): string {
+    if (!data) return "-";
     try {
-        return new Date(data).toLocaleDateString('pt-PT');
+        return new Date(data).toLocaleDateString("pt-PT");
     } catch {
         return data;
     }
@@ -583,30 +712,33 @@ export function formatarData(data: string): string {
  * Formatar valor em Kwanzas
  */
 export function formatarKwanza(valor: number): string {
-    return new Intl.NumberFormat('pt-AO', {
-        style: 'currency',
-        currency: 'AOA',
+    return new Intl.NumberFormat("pt-AO", {
+        style: "currency",
+        currency: "AOA",
         minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    }).format(valor || 0);
+        maximumFractionDigits: 2,
+    })
+        .format(valor || 0)
+        .replace("AOA", "Kz");
 }
 
-/* ==================== HOOKS PARA REACT ==================== */
+/* ==================== HOOK PARA REACT ==================== */
 
 /**
  * Hook personalizado para usar relatórios em componentes React
  */
 export const useRelatorios = () => {
     return {
+        dashboard: relatoriosService.getDashboard,
         vendas: relatoriosService.getRelatorioVendas,
         compras: relatoriosService.getRelatorioCompras,
         faturacao: relatoriosService.getRelatorioFaturacao,
         stock: relatoriosService.getRelatorioStock,
-        documentos: relatoriosService.getRelatorioDocumentosFiscais,
+        servicos: relatoriosService.getRelatorioServicos,
+        retencoes: relatoriosService.getRelatorioRetencoes,
+        documentosFiscais: relatoriosService.getRelatorioDocumentosFiscais,
         pagamentosPendentes: relatoriosService.getRelatorioPagamentosPendentes,
         proformas: relatoriosService.getRelatorioProformas,
-        dashboard: relatoriosService.getDashboard,
-        exportar: relatoriosService.exportarRelatorioExcel,
     };
 };
 

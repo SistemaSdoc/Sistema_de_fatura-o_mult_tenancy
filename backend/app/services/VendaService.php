@@ -226,7 +226,7 @@ class VendaService
                         throw new \Exception('Campo dados_pagamento é obrigatório para Fatura-Recibo (FR).');
                     }
 
-                    // CORREÇÃO: Validar valor do pagamento com tolerância
+                    // ✅ VALIDAÇÃO DE PAGAMENTO PARA FR (NÃO HÁ TROCO)
                     $valorPagamento = (float) $dados['dados_pagamento']['valor'];
                     $valorPagamentoArredondado = round($valorPagamento, 2);
 
@@ -248,6 +248,9 @@ class VendaService
                             number_format($totalPagar, 2, ',', '.') . ') para FR.'
                         );
                     }
+
+                    // ✅ NOTA: O BACKEND NÃO ARMAZENA TROCO
+                    // O troco é calculado e devolvido no frontend antes de enviar ao backend
                 }
 
                 // Para FP, não precisa de dados_pagamento

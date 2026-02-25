@@ -55,7 +55,7 @@ return new class extends Migration
             // Status da venda
             $table->enum('status', ['aberta', 'faturada', 'cancelada'])->default('aberta');
 
-            // Estado de pagamento
+            // Estado de pagamento - ✅ INDICA SE ESTÁ PAGA, MAS NÃO ARMAZENA TROCO
             $table->enum('estado_pagamento', ['pendente', 'paga', 'parcial', 'cancelada'])
                   ->default('pendente');
 

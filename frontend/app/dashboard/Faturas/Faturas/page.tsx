@@ -108,6 +108,7 @@ export default function FaturasPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<TipoFiltro>("todas");
+  const [termoPesquisa, setTermoPesquisa] = useState<string>("");
   const [modalAberto, setModalAberto] = useState(false);
   const [documentoSelecionado, setDocumentoSelecionado] = useState<DocumentoFiscal | null>(null);
   const [modalTalaoAberto, setModalTalaoAberto] = useState(false);
@@ -203,11 +204,47 @@ export default function FaturasPage() {
     }
   };
 
-  /* ================== FILTRO ================== */
+  /* ================== ORDENAÇÃO E FILTROS ================== */
+  
+  // Ordenar documentos por data (mais recentes primeiro)
+  const documentosOrdenados = useMemo(() => {
+    return [...documentos].sort((a, b) => {
+      // Combinar data e hora para comparação
+      const dataA = new Date(`${a.data_emissao}T${a.hora_emissao || '00:00:00'}`);
+      const dataB = new Date(`${b.data_emissao}T${b.hora_emissao || '00:00:00'}`);
+      
+      // Ordem decrescente (mais recente primeiro)
+      return dataB.getTime() - dataA.getTime();
+    });
+  }, [documentos]);
+
+  // Filtrar por tipo
+  const documentosPorTipo = useMemo(() => {
+    if (filtro === "todas") return documentosOrdenados;
+    return documentosOrdenados.filter((d) => d.tipo_documento === filtro);
+  }, [documentosOrdenados, filtro]);
+
+  // Filtrar por termo de pesquisa
   const documentosFiltrados = useMemo(() => {
-    if (filtro === "todas") return documentos;
-    return documentos.filter((d) => d.tipo_documento === filtro);
-  }, [documentos, filtro]);
+    if (!termoPesquisa.trim()) return documentosPorTipo;
+    
+    const termo = termoPesquisa.toLowerCase().trim();
+    
+    return documentosPorTipo.filter((doc) => {
+      // Pesquisar em vários campos
+      const numeroDocumento = (doc.numero_documento || '').toLowerCase();
+      const serie = (doc.serie || '').toLowerCase();
+      const nomeCliente = (doc.cliente?.nome || doc.cliente_nome || '').toLowerCase();
+      const nifCliente = (doc.cliente?.nif || doc.cliente_nif || '').toLowerCase();
+      
+      return (
+        numeroDocumento.includes(termo) ||
+        serie.includes(termo) ||
+        nomeCliente.includes(termo) ||
+        nifCliente.includes(termo)
+      );
+    });
+  }, [documentosPorTipo, termoPesquisa]);
 
   /* ================== ESTATÍSTICAS ================== */
   const estatisticas = useMemo(() => ({
@@ -308,39 +345,83 @@ export default function FaturasPage() {
           </div>
         )}
 
-        {/* Filtros - Scroll Horizontal em Mobile */}
+        {/* Barra de Pesquisa e Filtros */}
         {!loading && !error && (
-          <div className="bg-white p-3 sm:p-4 rounded-xl shadow border border-gray-100">
-            <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0 sm:flex-wrap scrollbar-hide">
-              {[
-                { key: "todas" as TipoFiltro, label: "Todas", count: estatisticas.total },
-                { key: "FT" as TipoFiltro, label: "Faturas", count: estatisticas.FT },
-                { key: "FR" as TipoFiltro, label: "Faturas-Recibo", count: estatisticas.FR },
-                { key: "FP" as TipoFiltro, label: "Proformas", count: estatisticas.FP },
-                { key: "FA" as TipoFiltro, label: "Adiantamentos", count: estatisticas.FA },
-                { key: "RC" as TipoFiltro, label: "Recibos", count: estatisticas.RC },
-                { key: "NC" as TipoFiltro, label: "Notas Crédito", count: estatisticas.NC },
-                { key: "ND" as TipoFiltro, label: "Notas Débito", count: estatisticas.ND },
-                { key: "FRt" as TipoFiltro, label: "Retificações", count: estatisticas.FRt },
-              ].map(({ key, label, count }) => (
+          <div className="space-y-3">
+            {/* Campo de Pesquisa */}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Pesquisar por nº documento, série, cliente ou NIF..."
+                value={termoPesquisa}
+                onChange={(e) => setTermoPesquisa(e.target.value)}
+                className="w-full px-4 py-3 pl-10 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#123859] focus:border-transparent text-sm transition-all"
+              />
+              <svg
+                className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+              {termoPesquisa && (
                 <button
-                  key={key}
-                  onClick={() => setFiltro(key)}
-                  className={`flex-shrink-0 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all min-h-[44px] touch-manipulation ${
-                    filtro === key
-                      ? "bg-[#123859] text-white shadow-md"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
+                  onClick={() => setTermoPesquisa("")}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
-                  <span className="whitespace-nowrap">{label}</span>
-                  <span className={`ml-1.5 px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${
-                    filtro === key ? "bg-white/20" : "bg-white"
-                  }`}>
-                    {count}
-                  </span>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
-              ))}
+              )}
             </div>
+
+            {/* Filtros por Tipo - Scroll Horizontal em Mobile */}
+            <div className="bg-white p-3 sm:p-4 rounded-xl shadow border border-gray-100">
+              <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0 sm:flex-wrap scrollbar-hide">
+                {[
+                  { key: "todas" as TipoFiltro, label: "Todas", count: estatisticas.total },
+                  { key: "FT" as TipoFiltro, label: "Faturas", count: estatisticas.FT },
+                  { key: "FR" as TipoFiltro, label: "Faturas-Recibo", count: estatisticas.FR },
+                  { key: "FP" as TipoFiltro, label: "Proformas", count: estatisticas.FP },
+                  { key: "FA" as TipoFiltro, label: "Adiantamentos", count: estatisticas.FA },
+                  { key: "RC" as TipoFiltro, label: "Recibos", count: estatisticas.RC },
+                  { key: "NC" as TipoFiltro, label: "Notas Crédito", count: estatisticas.NC },
+                  { key: "ND" as TipoFiltro, label: "Notas Débito", count: estatisticas.ND },
+                  { key: "FRt" as TipoFiltro, label: "Retificações", count: estatisticas.FRt },
+                ].map(({ key, label, count }) => (
+                  <button
+                    key={key}
+                    onClick={() => setFiltro(key)}
+                    className={`flex-shrink-0 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all min-h-[44px] touch-manipulation ${
+                      filtro === key
+                        ? "bg-[#123859] text-white shadow-md"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    <span className="whitespace-nowrap">{label}</span>
+                    <span className={`ml-1.5 px-1.5 sm:px-2 py-0.5 rounded-full text-xs ${
+                      filtro === key ? "bg-white/20" : "bg-white"
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Resultado da pesquisa */}
+            {termoPesquisa && (
+              <div className="text-sm text-gray-500">
+                Encontrados {documentosFiltrados.length} documentos para "{termoPesquisa}"
+              </div>
+            )}
           </div>
         )}
 
@@ -604,7 +685,11 @@ export default function FaturasPage() {
                     </svg>
                   </div>
                   <p className="text-base sm:text-lg font-medium">Nenhum documento encontrado</p>
-                  <p className="text-sm text-gray-400 mt-1">Tente ajustar os filtros</p>
+                  <p className="text-sm text-gray-400 mt-1">
+                    {termoPesquisa 
+                      ? `Nenhum resultado para "${termoPesquisa}"` 
+                      : "Tente ajustar os filtros"}
+                  </p>
                 </div>
               )}
             </>

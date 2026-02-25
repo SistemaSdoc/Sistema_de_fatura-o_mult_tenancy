@@ -20,15 +20,9 @@ import {
   Save,
   ArrowLeft,
   Calculator,
-  Tag,
-  Box,
-  DollarSign,
-  Percent,
   AlertCircle,
   CheckCircle2,
   Loader2,
-  FileText,
-  Clock,
 } from "lucide-react";
 
 interface FormData {
@@ -36,15 +30,12 @@ interface FormData {
   categoria_id: string;
   codigo: string;
   nome: string;
-  descricao: string;
   preco_compra: string;
   preco_venda: string;
   taxa_iva: string;
   sujeito_iva: boolean;
   estoque_atual: string;
   estoque_minimo: string;
-  status: StatusProduto;
-  // Campos específicos para serviço
   retencao: string;
   duracao_estimada: string;
   unidade_medida: UnidadeMedida;
@@ -67,34 +58,24 @@ export default function NovoProdutoPage() {
     categoria_id: "",
     codigo: "",
     nome: "",
-    descricao: "",
     preco_compra: "",
     preco_venda: "",
     taxa_iva: "14",
     sujeito_iva: true,
     estoque_atual: "0",
     estoque_minimo: "5",
-    status: "ativo",
-    // Serviço
     retencao: "0",
-    duracao_estimada: "",
+    duracao_estimada: "1",
     unidade_medida: "hora",
   });
 
-  // Carregar categorias ao montar
   useEffect(() => {
     async function carregarCategorias() {
       try {
         const data = await produtoService.listarCategorias();
-        // Filtrar apenas categorias ativas (não deletadas)
-        const categoriasAtivas = data.filter((c) => !c.deleted_at);
-        setCategorias(categoriasAtivas);
+        setCategorias(data.filter((c) => !c.deleted_at));
       } catch (error) {
         console.error("Erro ao carregar categorias:", error);
-        setErrors((prev) => ({
-          ...prev,
-          categorias: "Erro ao carregar categorias. Tente recarregar a página.",
-        }));
       } finally {
         setLoadingCategorias(false);
       }
@@ -102,16 +83,17 @@ export default function NovoProdutoPage() {
     carregarCategorias();
   }, []);
 
-  // Calcular margem de lucro (apenas produtos)
+  const isServico = formData.tipo === "servico";
+
+  // Cálculos
   const margemLucro = React.useMemo(() => {
-    if (formData.tipo === "servico") return 0;
+    if (isServico) return 0;
     const compra = parseFloat(formData.preco_compra) || 0;
     const venda = parseFloat(formData.preco_venda) || 0;
     if (!compra || compra <= 0) return 0;
     return calcularMargemLucro(compra, venda);
-  }, [formData.preco_compra, formData.preco_venda, formData.tipo]);
+  }, [formData.preco_compra, formData.preco_venda, isServico]);
 
-  // Calcular preço com IVA
   const precoComIva = React.useMemo(() => {
     const venda = parseFloat(formData.preco_venda) || 0;
     const iva = parseFloat(formData.taxa_iva) || 0;
@@ -119,93 +101,56 @@ export default function NovoProdutoPage() {
     return venda * (1 + iva / 100);
   }, [formData.preco_venda, formData.taxa_iva, formData.sujeito_iva]);
 
-  // Calcular retenção na fonte (apenas serviços)
   const valorRetencao = React.useMemo(() => {
-    if (formData.tipo === "produto") return 0;
+    if (!isServico) return 0;
     const venda = parseFloat(formData.preco_venda) || 0;
     const retencao = parseFloat(formData.retencao) || 0;
     return venda * (retencao / 100);
-  }, [formData.preco_venda, formData.retencao, formData.tipo]);
+  }, [formData.preco_venda, formData.retencao, isServico]);
 
-  // Valor líquido do serviço
-  const valorLiquidoServico = React.useMemo(() => {
-    if (formData.tipo === "produto") return 0;
+  const valorLiquido = React.useMemo(() => {
     const venda = parseFloat(formData.preco_venda) || 0;
-    return venda - valorRetencao;
-  }, [formData.preco_venda, valorRetencao, formData.tipo]);
+    return isServico ? venda - valorRetencao : venda;
+  }, [formData.preco_venda, valorRetencao, isServico]);
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
     const { name, value, type } = e.target;
+    const checked = (e.target as HTMLInputElement).checked;
 
-    if (type === "checkbox") {
-      const checked = (e.target as HTMLInputElement).checked;
-      setFormData((prev) => ({ ...prev, [name]: checked }));
-    } else {
-      setFormData((prev) => ({ ...prev, [name]: value }));
-    }
+    setFormData((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
 
-    // Limpar erro do campo
-    if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: "" }));
-    }
+    if (errors[name]) setErrors((prev) => ({ ...prev, [name]: "" }));
   };
 
   const handleTipoChange = (tipo: TipoProduto) => {
     setFormData((prev) => ({
       ...prev,
       tipo,
-      // Resetar campos específicos ao trocar de tipo
+      categoria_id: tipo === "servico" ? "" : prev.categoria_id,
+      preco_compra: tipo === "servico" ? "0" : prev.preco_compra,
       estoque_atual: tipo === "servico" ? "0" : prev.estoque_atual,
       estoque_minimo: tipo === "servico" ? "0" : prev.estoque_minimo,
-      preco_compra: tipo === "servico" ? "0" : prev.preco_compra,
-      codigo: tipo === "servico" ? "" : prev.codigo,
-      categoria_id: tipo === "servico" ? "" : prev.categoria_id,
-      // Resetar campos de serviço se voltar para produto
       retencao: tipo === "produto" ? "0" : prev.retencao,
-      duracao_estimada: tipo === "produto" ? "" : prev.duracao_estimada,
-      unidade_medida: tipo === "produto" ? "hora" : prev.unidade_medida,
     }));
-
-    // Limpar erros ao trocar tipo
     setErrors({});
   };
 
   const validate = (): boolean => {
     const newErrors: FormErrors = {};
 
-    if (formData.tipo === "produto") {
-      if (!formData.categoria_id) {
-        newErrors.categoria_id = "Selecione uma categoria";
-      }
-      if (!formData.preco_compra || parseFloat(formData.preco_compra) < 0) {
-        newErrors.preco_compra = "Preço de compra é obrigatório para produtos";
-      }
-    }
-
-    if (formData.tipo === "servico") {
-      if (!formData.duracao_estimada || parseInt(formData.duracao_estimada) <= 0) {
-        newErrors.duracao_estimada = "Duração estimada é obrigatória para serviços";
-      }
-    }
-
-    if (!formData.nome.trim()) {
-      newErrors.nome = "Nome é obrigatório";
-    } else if (formData.nome.trim().length < 3) {
-      newErrors.nome = "Nome deve ter pelo menos 3 caracteres";
-    }
-
+    if (!formData.nome.trim()) newErrors.nome = "Nome obrigatório";
     if (!formData.preco_venda || parseFloat(formData.preco_venda) <= 0) {
-      newErrors.preco_venda = "Preço de venda deve ser maior que zero";
+      newErrors.preco_venda = "Preço de venda obrigatório";
     }
-
-    // Validação de estoque mínimo não maior que atual
-    if (formData.tipo === "produto") {
-      const atual = parseInt(formData.estoque_atual) || 0;
-      const minimo = parseInt(formData.estoque_minimo) || 0;
-      if (minimo > atual && atual > 0) {
-        newErrors.estoque_minimo = "Estoque mínimo não pode ser maior que o estoque atual";
+    if (!isServico) {
+      if (!formData.categoria_id) newErrors.categoria_id = "Categoria obrigatória";
+      if (!formData.preco_compra || parseFloat(formData.preco_compra) < 0) {
+        newErrors.preco_compra = "Preço de compra obrigatório";
       }
     }
 
@@ -215,91 +160,60 @@ export default function NovoProdutoPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!validate()) {
-      // Scroll para o primeiro erro
-      const firstError = document.querySelector(".border-red-500");
-      firstError?.scrollIntoView({ behavior: "smooth", block: "center" });
-      return;
-    }
+    if (!validate()) return;
 
     setLoading(true);
-    setSuccess(false);
-    setErrors({});
-
     try {
-      // Preparar dados para envio conforme interface CriarProdutoInput
-      const dadosParaEnvio: CriarProdutoInput = {
+      const dados: CriarProdutoInput = {
         tipo: formData.tipo,
         nome: formData.nome.trim(),
-        descricao: formData.descricao.trim() || undefined,
         preco_venda: parseFloat(formData.preco_venda),
         taxa_iva: parseFloat(formData.taxa_iva) || 0,
         sujeito_iva: formData.sujeito_iva,
-        status: formData.status,
+        status: "ativo",
       };
 
-      if (formData.tipo === "produto") {
-        dadosParaEnvio.categoria_id = formData.categoria_id || null;
-        dadosParaEnvio.codigo = formData.codigo.trim() || null;
-        dadosParaEnvio.preco_compra = parseFloat(formData.preco_compra) || 0;
-        dadosParaEnvio.estoque_atual = parseInt(formData.estoque_atual) || 0;
-        dadosParaEnvio.estoque_minimo = parseInt(formData.estoque_minimo) || 0;
+      if (isServico) {
+        dados.retencao = parseFloat(formData.retencao) || 0;
+        dados.duracao_estimada = `${formData.duracao_estimada} ${formData.unidade_medida}`;
+        dados.unidade_medida = formData.unidade_medida;
+        dados.categoria_id = null;
+        dados.codigo = null;
+        dados.preco_compra = 0;
+        dados.estoque_atual = 0;
+        dados.estoque_minimo = 0;
       } else {
-        // Serviço
-        dadosParaEnvio.retencao = parseFloat(formData.retencao) || 0;
-        dadosParaEnvio.duracao_estimada = formData.duracao_estimada;
-        dadosParaEnvio.unidade_medida = formData.unidade_medida;
-        // Campos não aplicáveis a serviços
-        dadosParaEnvio.categoria_id = null;
-        dadosParaEnvio.codigo = null;
-        dadosParaEnvio.preco_compra = 0;
-        dadosParaEnvio.estoque_atual = 0;
-        dadosParaEnvio.estoque_minimo = 0;
+        dados.categoria_id = formData.categoria_id || null;
+        dados.codigo = formData.codigo.trim() || null;
+        dados.preco_compra = parseFloat(formData.preco_compra) || 0;
+        dados.estoque_atual = parseInt(formData.estoque_atual) || 0;
+        dados.estoque_minimo = parseInt(formData.estoque_minimo) || 0;
       }
 
-      const resposta = await produtoService.criarProduto(dadosParaEnvio);
+      const resposta = await produtoService.criarProduto(dados);
       setSuccess(true);
-
-      // Redirecionar após sucesso
-      setTimeout(() => {
-        router.push(`/produtos/${resposta.produto.id}`);
-      }, 1500);
+      setTimeout(() => router.push(`/produtos/${resposta.produto.id}`), 1000);
     } catch (error: any) {
-      console.error("Erro ao criar produto:", error);
-
-      const errorMessage =
-        error?.response?.data?.message ||
-        error?.message ||
-        "Erro ao criar produto. Tente novamente.";
-
-      // Verificar se é erro de validação do Laravel
+      const msg = error?.response?.data?.message || "Erro ao criar. Tente novamente.";
       if (error?.response?.data?.errors) {
-        const laravelErrors = error.response.data.errors;
-        const formattedErrors: FormErrors = {};
-
-        Object.keys(laravelErrors).forEach((key) => {
-          formattedErrors[key] = Array.isArray(laravelErrors[key])
-            ? laravelErrors[key][0]
-            : laravelErrors[key];
+        const errs: FormErrors = {};
+        Object.entries(error.response.data.errors).forEach(([k, v]) => {
+          errs[k] = Array.isArray(v) ? v[0] : (v as string);
         });
-
-        setErrors(formattedErrors);
+        setErrors(errs);
       } else {
-        setErrors({ submit: errorMessage });
+        setErrors({ submit: msg });
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const isServico = formData.tipo === "servico";
-
   return (
     <MainEmpresa>
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-2xl mx-auto">
         {/* Header */}
-        <div className="flex items-center gap-4 mb-8">
+        <div className="flex items-center gap-3 mb-6">
           <button
             onClick={() => router.back()}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -308,131 +222,62 @@ export default function NovoProdutoPage() {
             <ArrowLeft className="w-5 h-5 text-gray-600" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-[#123859]">
+            <h1 className="text-xl font-bold text-[#123859]">
               Novo {isServico ? "Serviço" : "Produto"}
             </h1>
-            <p className="text-gray-500 text-sm">
-              Cadastre um novo {isServico ? "serviço" : "produto"} no sistema
-            </p>
           </div>
         </div>
 
         {/* Alertas */}
         {success && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3 text-green-700 animate-fade-in">
-            <CheckCircle2 className="w-5 h-5" />
-            <span>
-              {isServico ? "Serviço" : "Produto"} criado com sucesso! Redirecionando...
-            </span>
+          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700 text-sm">
+            <CheckCircle2 className="w-4 h-4" />
+            <span>Criado com sucesso! Redirecionando...</span>
           </div>
         )}
 
         {errors.submit && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 text-red-700">
-            <AlertCircle className="w-5 h-5" />
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700 text-sm">
+            <AlertCircle className="w-4 h-4" />
             <span>{errors.submit}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Tipo: Produto ou Serviço */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <label className="block text-sm font-semibold text-gray-700 mb-4">
-              Tipo de Item
-            </label>
-            <div className="grid grid-cols-2 gap-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Tipo */}
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={() => handleTipoChange("produto")}
-                className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${formData.tipo === "produto"
+                className={`flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-all ${!isServico
                     ? "border-[#123859] bg-[#123859]/5 text-[#123859]"
                     : "border-gray-200 hover:border-gray-300 text-gray-600"
                   }`}
               >
-                <Package className="w-6 h-6" />
-                <div className="text-left">
-                  <div className="font-semibold">Produto</div>
-                  <div className="text-xs opacity-75">Com controle de estoque</div>
-                </div>
+                <Package className="w-5 h-5" />
+                <span className="font-medium">Produto</span>
               </button>
-
               <button
                 type="button"
                 onClick={() => handleTipoChange("servico")}
-                className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${formData.tipo === "servico"
+                className={`flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-all ${isServico
                     ? "border-[#F9941F] bg-[#F9941F]/5 text-[#F9941F]"
                     : "border-gray-200 hover:border-gray-300 text-gray-600"
                   }`}
               >
-                <Wrench className="w-6 h-6" />
-                <div className="text-left">
-                  <div className="font-semibold">Serviço</div>
-                  <div className="text-xs opacity-75">Sem controle de estoque</div>
-                </div>
+                <Wrench className="w-5 h-5" />
+                <span className="font-medium">Serviço</span>
               </button>
             </div>
           </div>
 
-          {/* Informações Básicas */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <h2 className="text-lg font-semibold text-[#123859] mb-4 flex items-center gap-2">
-              <Tag className="w-5 h-5" />
-              Informações Básicas
-            </h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Categoria - APENAS PRODUTOS */}
-              {!isServico && (
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Categoria <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    name="categoria_id"
-                    value={formData.categoria_id}
-                    onChange={handleChange}
-                    className={`w-full px-4 py-2.5 rounded-lg border ${errors.categoria_id ? "border-red-500" : "border-gray-300"
-                      } focus:ring-2 focus:ring-[#123859] focus:border-transparent outline-none transition-all`}
-                    disabled={loadingCategorias}
-                  >
-                    <option value="">
-                      {loadingCategorias ? "Carregando categorias..." : "Selecione uma categoria"}
-                    </option>
-                    {categorias.map((cat) => (
-                      <option key={cat.id} value={cat.id}>
-                        {cat.nome}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.categoria_id && (
-                    <p className="mt-1 text-sm text-red-500">{errors.categoria_id}</p>
-                  )}
-                </div>
-              )}
-
-              {/* Código/SKU - APENAS PRODUTOS */}
-              {!isServico && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Código/SKU
-                  </label>
-                  <input
-                    type="text"
-                    name="codigo"
-                    value={formData.codigo}
-                    onChange={handleChange}
-                    placeholder="Ex: PROD-001"
-                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#123859] focus:border-transparent outline-none transition-all"
-                  />
-                  <p className="mt-1 text-xs text-gray-500">
-                    Código único para identificação do produto
-                  </p>
-                </div>
-              )}
-
-              {/* Nome */}
-              <div className={isServico ? "md:col-span-2" : ""}>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+          {/* Informações Principais */}
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 space-y-4">
+            {/* Nome + Categoria/Código em grid */}
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Nome <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -440,50 +285,69 @@ export default function NovoProdutoPage() {
                   name="nome"
                   value={formData.nome}
                   onChange={handleChange}
-                  placeholder={isServico ? "Ex: Instalação de Rede" : "Ex: Computador Dell"}
-                  className={`w-full px-4 py-2.5 rounded-lg border ${errors.nome ? "border-red-500" : "border-gray-300"
-                    } focus:ring-2 focus:ring-[#123859] focus:border-transparent outline-none transition-all`}
+                  placeholder={isServico ? "Ex: Consultoria TI" : "Ex: Notebook Dell"}
+                  className={`w-full px-3 py-2 rounded-lg border ${errors.nome ? "border-red-500" : "border-gray-300"
+                    } focus:ring-2 focus:ring-[#123859] focus:border-transparent outline-none`}
                 />
-                {errors.nome && (
-                  <p className="mt-1 text-sm text-red-500">{errors.nome}</p>
-                )}
+                {errors.nome && <p className="mt-1 text-xs text-red-500">{errors.nome}</p>}
               </div>
 
-              {/* Descrição */}
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Descrição
-                </label>
-                <textarea
-                  name="descricao"
-                  value={formData.descricao}
-                  onChange={handleChange}
-                  rows={3}
-                  placeholder="Descreva o item..."
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#123859] focus:border-transparent outline-none transition-all resize-none"
-                />
-              </div>
+              {!isServico && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Categoria <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      name="categoria_id"
+                      value={formData.categoria_id}
+                      onChange={handleChange}
+                      disabled={loadingCategorias}
+                      className={`w-full px-3 py-2 rounded-lg border ${errors.categoria_id ? "border-red-500" : "border-gray-300"
+                        } focus:ring-2 focus:ring-[#123859] outline-none bg-white`}
+                    >
+                      <option value="">
+                        {loadingCategorias ? "Carregando..." : "Selecione"}
+                      </option>
+                      {categorias.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.nome}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.categoria_id && (
+                      <p className="mt-1 text-xs text-red-500">{errors.categoria_id}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Código/SKU
+                    </label>
+                    <input
+                      type="text"
+                      name="codigo"
+                      value={formData.codigo}
+                      onChange={handleChange}
+                      placeholder="PROD-001"
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#123859] outline-none"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Preços */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <h2 className="text-lg font-semibold text-[#123859] mb-4 flex items-center gap-2">
-              <DollarSign className="w-5 h-5" />
-              Preços e Tributação
-            </h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Preço de Compra - APENAS PRODUTOS */}
+          {/* Preços - Compacto */}
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Preço Compra (apenas produtos) */}
               {!isServico && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Preço de Compra <span className="text-red-500">*</span>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Preço Compra <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
-                      AOA
-                    </span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">Kz</span>
                     <input
                       type="number"
                       name="preco_compra"
@@ -491,26 +355,20 @@ export default function NovoProdutoPage() {
                       onChange={handleChange}
                       min="0"
                       step="0.01"
-                      placeholder="0,00"
-                      className={`w-full pl-12 pr-4 py-2.5 rounded-lg border ${errors.preco_compra ? "border-red-500" : "border-gray-300"
-                        } focus:ring-2 focus:ring-[#123859] focus:border-transparent outline-none transition-all`}
+                      className={`w-full pl-10 pr-3 py-2 rounded-lg border ${errors.preco_compra ? "border-red-500" : "border-gray-300"
+                        } focus:ring-2 focus:ring-[#123859] outline-none`}
                     />
                   </div>
-                  {errors.preco_compra && (
-                    <p className="mt-1 text-sm text-red-500">{errors.preco_compra}</p>
-                  )}
                 </div>
               )}
 
-              {/* Preço de Venda */}
+              {/* Preço Venda */}
               <div className={isServico ? "md:col-span-2" : ""}>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Preço de Venda <span className="text-red-500">*</span>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Preço Venda <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
-                    AOA
-                  </span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">Kz</span>
                   <input
                     type="number"
                     name="preco_venda"
@@ -518,23 +376,28 @@ export default function NovoProdutoPage() {
                     onChange={handleChange}
                     min="0.01"
                     step="0.01"
-                    placeholder="0,00"
-                    className={`w-full pl-12 pr-4 py-2.5 rounded-lg border ${errors.preco_venda ? "border-red-500" : "border-gray-300"
-                      } focus:ring-2 focus:ring-[#123859] focus:border-transparent outline-none transition-all`}
+                    className={`w-full pl-10 pr-3 py-2 rounded-lg border ${errors.preco_venda ? "border-red-500" : "border-gray-300"
+                      } focus:ring-2 focus:ring-[#123859] outline-none`}
                   />
                 </div>
-                {errors.preco_venda && (
-                  <p className="mt-1 text-sm text-red-500">{errors.preco_venda}</p>
-                )}
               </div>
+            </div>
 
-              {/* IVA */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                  <Percent className="w-4 h-4" />
-                  Taxa de IVA
-                </label>
-                <div className="flex items-center gap-4">
+            {/* IVA e Retenção em linha */}
+            <div className="mt-4 flex flex-wrap items-center gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="sujeito_iva"
+                  checked={formData.sujeito_iva}
+                  onChange={handleChange}
+                  className="w-4 h-4 text-[#123859] rounded"
+                />
+                <span className="text-sm text-gray-700">IVA</span>
+              </label>
+
+              {formData.sujeito_iva && (
+                <div className="flex items-center gap-2">
                   <input
                     type="number"
                     name="taxa_iva"
@@ -542,31 +405,16 @@ export default function NovoProdutoPage() {
                     onChange={handleChange}
                     min="0"
                     max="100"
-                    step="0.01"
-                    disabled={!formData.sujeito_iva}
-                    className={`w-32 px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#123859] focus:border-transparent outline-none transition-all ${!formData.sujeito_iva ? "bg-gray-100 text-gray-500" : ""
-                      }`}
+                    className="w-20 px-2 py-1 rounded border border-gray-300 text-sm"
                   />
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="sujeito_iva"
-                      checked={formData.sujeito_iva}
-                      onChange={handleChange}
-                      className="w-4 h-4 text-[#123859] rounded focus:ring-[#123859]"
-                    />
-                    <span className="text-sm text-gray-700">Sujeito a IVA</span>
-                  </label>
+                  <span className="text-sm text-gray-500">%</span>
                 </div>
-              </div>
+              )}
 
-              {/* Retenção na Fonte - APENAS SERVIÇOS */}
               {isServico && (
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                    <FileText className="w-4 h-4" />
-                    Retenção na Fonte (IRT)
-                  </label>
+                <>
+                  <div className="w-px h-4 bg-gray-300" />
+                  <span className="text-sm text-gray-500">Retenção:</span>
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
@@ -575,81 +423,41 @@ export default function NovoProdutoPage() {
                       onChange={handleChange}
                       min="0"
                       max="100"
-                      step="0.01"
-                      className="w-32 px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#123859] focus:border-transparent outline-none transition-all"
+                      className="w-20 px-2 py-1 rounded border border-gray-300 text-sm"
                     />
-                    <span className="text-gray-500">%</span>
+                    <span className="text-sm text-gray-500">%</span>
                   </div>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Percentual de retenção de imposto de retenção na fonte
-                  </p>
-                </div>
+                </>
               )}
+            </div>
 
-              {/* Preview de Preços */}
-              <div
-                className={`bg-gray-50 p-4 rounded-lg ${isServico ? "md:col-span-2" : "md:col-span-2"
-                  }`}
-              >
-                <div className="flex items-center gap-2 mb-3 text-sm font-medium text-gray-700">
-                  <Calculator className="w-4 h-4" />
-                  Resumo de Preços
-                </div>
-                <div
-                  className={`grid gap-4 text-sm ${isServico ? "grid-cols-1 md:grid-cols-3" : "grid-cols-1 md:grid-cols-3"
-                    }`}
-                >
-                  <div>
-                    <span className="text-gray-500 block">Preço Base</span>
-                    <span className="font-semibold text-[#123859]">
-                      {formatarPreco(parseFloat(formData.preco_venda) || 0)}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500 block">Preço Final (c/ IVA)</span>
-                    <span className="font-semibold text-[#123859]">
-                      {formatarPreco(precoComIva)}
-                    </span>
-                  </div>
-                  {!isServico ? (
-                    <div>
-                      <span className="text-gray-500 block">Margem de Lucro</span>
-                      <span
-                        className={`font-semibold ${margemLucro >= 0 ? "text-green-600" : "text-red-600"
-                          }`}
-                      >
-                        {margemLucro.toFixed(2)}%
-                      </span>
-                    </div>
-                  ) : (
-                    <div>
-                      <span className="text-gray-500 block">Valor Líquido</span>
-                      <span className="font-semibold text-green-600">
-                        {formatarPreco(valorLiquidoServico)}
-                      </span>
-                      {valorRetencao > 0 && (
-                        <span className="block text-xs text-red-500">
-                          - Retenção: {formatarPreco(valorRetencao)}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
+            {/* Preview Compacto */}
+            <div className="mt-4 p-3 bg-gray-50 rounded-lg flex items-center justify-between text-sm">
+              <div className="flex items-center gap-2 text-gray-600">
+                <Calculator className="w-4 h-4" />
+                <span>Total c/ IVA:</span>
+                <span className="font-semibold text-[#123859]">{formatarPreco(precoComIva)}</span>
               </div>
+
+              {!isServico ? (
+                <span className={`font-medium ${margemLucro >= 0 ? "text-green-600" : "text-red-600"}`}>
+                  Margem: {margemLucro.toFixed(1)}%
+                </span>
+              ) : valorRetencao > 0 ? (
+                <span className="text-orange-600 font-medium">
+                  Líquido: {formatarPreco(valorLiquido)}
+                </span>
+              ) : null}
             </div>
           </div>
 
-          {/* Estoque - APENAS PRODUTOS */}
-          {!isServico && (
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h2 className="text-lg font-semibold text-[#123859] mb-4 flex items-center gap-2">
-                <Box className="w-5 h-5" />
-                Controle de Estoque
-              </h2>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Campos Específicos */}
+          {!isServico ? (
+            // Estoque (Produtos)
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Estoque Atual
                   </label>
                   <input
@@ -658,12 +466,11 @@ export default function NovoProdutoPage() {
                     value={formData.estoque_atual}
                     onChange={handleChange}
                     min="0"
-                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#123859] focus:border-transparent outline-none transition-all"
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#123859] outline-none"
                   />
                 </div>
-
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Estoque Mínimo
                   </label>
                   <input
@@ -672,118 +479,64 @@ export default function NovoProdutoPage() {
                     value={formData.estoque_minimo}
                     onChange={handleChange}
                     min="0"
-                    className={`w-full px-4 py-2.5 rounded-lg border ${errors.estoque_minimo ? "border-red-500" : "border-gray-300"
-                      } focus:ring-2 focus:ring-[#123859] focus:border-transparent outline-none transition-all`}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#123859] outline-none"
                   />
-                  {errors.estoque_minimo && (
-                    <p className="mt-1 text-sm text-red-500">{errors.estoque_minimo}</p>
-                  )}
-                  <p className="mt-1 text-xs text-gray-500">
-                    Alerta quando estoque atingir este valor
-                  </p>
                 </div>
               </div>
             </div>
-          )}
-
-          {/* Duração Estimada - APENAS SERVIÇOS */}
-          {isServico && (
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h2 className="text-lg font-semibold text-[#F9941F] mb-4 flex items-center gap-2">
-                <Clock className="w-5 h-5" />
-                Informações do Serviço
-              </h2>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Duração Estimada <span className="text-red-500">*</span>
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      name="duracao_estimada"
-                      value={formData.duracao_estimada}
-                      onChange={handleChange}
-                      min="1"
-                      placeholder="Ex: 2"
-                      className={`flex-1 px-4 py-2.5 rounded-lg border ${errors.duracao_estimada ? "border-red-500" : "border-gray-300"
-                        } focus:ring-2 focus:ring-[#123859] focus:border-transparent outline-none transition-all`}
-                    />
-                    <select
-                      name="unidade_medida"
-                      value={formData.unidade_medida}
-                      onChange={handleChange}
-                      className="px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#123859] outline-none bg-white"
-                    >
-                      <option value="hora">Hora(s)</option>
-                      <option value="dia">Dia(s)</option>
-                      <option value="semana">Semana(s)</option>
-                      <option value="mes">Mês(es)</option>
-                    </select>
-                  </div>
-                  {errors.duracao_estimada && (
-                    <p className="mt-1 text-sm text-red-500">{errors.duracao_estimada}</p>
-                  )}
-                </div>
+          ) : (
+            // Duração (Serviços)
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Duração Estimada
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  name="duracao_estimada"
+                  value={formData.duracao_estimada}
+                  onChange={handleChange}
+                  min="1"
+                  className="flex-1 px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#123859] outline-none"
+                />
+                <select
+                  name="unidade_medida"
+                  value={formData.unidade_medida}
+                  onChange={handleChange}
+                  className="px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#123859] outline-none bg-white"
+                >
+                  <option value="hora">Hora(s)</option>
+                  <option value="dia">Dia(s)</option>
+                  <option value="semana">Semana(s)</option>
+                  <option value="mes">Mês(es)</option>
+                </select>
               </div>
             </div>
           )}
-
-          {/* Status */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Status
-            </label>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="status"
-                  value="ativo"
-                  checked={formData.status === "ativo"}
-                  onChange={handleChange}
-                  className="w-4 h-4 text-[#123859] focus:ring-[#123859]"
-                />
-                <span className="text-sm text-gray-700">Ativo</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="status"
-                  value="inativo"
-                  checked={formData.status === "inativo"}
-                  onChange={handleChange}
-                  className="w-4 h-4 text-gray-400 focus:ring-gray-400"
-                />
-                <span className="text-sm text-gray-700">Inativo</span>
-              </label>
-            </div>
-          </div>
 
           {/* Botões */}
-          <div className="flex items-center justify-end gap-4">
+          <div className="flex items-center justify-end gap-3 pt-2">
             <button
               type="button"
               onClick={() => router.back()}
-              className="px-6 py-2.5 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors font-medium"
+              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors text-sm font-medium"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex items-center gap-2 px-6 py-2.5 bg-[#123859] hover:bg-[#1a4d7a] text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-6 py-2 bg-[#123859] hover:bg-[#1a4d7a] text-white rounded-lg transition-colors font-medium disabled:opacity-50"
             >
               {loading ? (
                 <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin" />
                   Salvando...
                 </>
               ) : (
                 <>
-                  <Save className="w-5 h-5" />
-                  Salvar {isServico ? "Serviço" : "Produto"}
+                  <Save className="w-4 h-4" />
+                  Salvar
                 </>
               )}
             </button>

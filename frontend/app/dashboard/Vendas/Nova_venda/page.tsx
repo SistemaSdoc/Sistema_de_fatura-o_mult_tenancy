@@ -21,7 +21,6 @@ import {
   formatarNIF,
   isServico,
   formatarPreco,
-  getNomeTipoDocumento,
   DadosPagamento,
   validarPayloadVenda,
   TipoDocumentoFiscal,
@@ -29,7 +28,7 @@ import {
 
 const ESTOQUE_MINIMO = 5;
 
-// ✅ NOVA INTERFACE: Item com campos completos de retenção
+// Interface do item com campos completos de retenção
 interface ItemVendaUI {
   id: string;
   produto_id: string;
@@ -55,7 +54,7 @@ interface FormItemState {
 
 type ModoCliente = 'cadastrado' | 'avulso';
 
-// ✅ FUNÇÃO AUXILIAR: Arredondar para 2 casas decimais
+// Função auxiliar para arredondar para 2 casas decimais
 const arredondar = (valor: number): number => {
   return Math.round(valor * 100) / 100;
 };
@@ -73,7 +72,7 @@ export default function NovaFaturaReciboPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
-  const [debugInfo, setDebugInfo] = useState<string | null>(null); // ✅ NOVO: info de debug
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
 
   const [modoCliente, setModoCliente] = useState<ModoCliente>('cadastrado');
   const [clienteAvulso, setClienteAvulso] = useState('');
@@ -134,7 +133,7 @@ export default function NovaFaturaReciboPage() {
     carregarDados();
   }, [user]);
 
-  // ✅ CORRIGIDO: Cálculo do preview com arredondamento em cada etapa
+  // Cálculo do preview com arredondamento em cada etapa
   useEffect(() => {
     if (!formItem.produto_id) {
       setPreviewItem(null);
@@ -153,17 +152,14 @@ export default function NovaFaturaReciboPage() {
     const quantidade = Math.min(formItem.quantidade, maxQuantidade);
     const desconto = formItem.desconto;
 
-    // ✅ Cálculo com arredondamento em cada etapa (igual ao backend deve fazer)
     const valorBruto = arredondar(preco_venda * quantidade);
     const baseTributavel = arredondar(valorBruto - desconto);
     const taxaIva = produto.taxa_iva ?? 14;
     const valorIva = arredondar((baseTributavel * taxaIva) / 100);
     
-    // ✅ Retenção: 6.5% sobre a base tributável (conforme prática angolana)
     const taxaRetencao = ehServico ? 6.5 : 0;
     const valorRetencao = ehServico ? arredondar((baseTributavel * taxaRetencao) / 100) : 0;
     
-    // Subtotal líquido = base + iva - retencao
     const subtotal = arredondar(baseTributavel + valorIva - valorRetencao);
 
     setPreviewItem({
@@ -203,7 +199,15 @@ export default function NovaFaturaReciboPage() {
     }
   };
 
-  // ✅ CORRIGIDO: Função auxiliar para calcular item completo com arredondamento
+  // Função para preencher automaticamente o valor do pagamento
+  const preencherValorPagamento = () => {
+    setFormPagamento(prev => ({
+      ...prev,
+      valor_pago: totalLiquido.toString()
+    }));
+  };
+
+  // Função auxiliar para calcular item completo com arredondamento
   const calcularItemCompleto = (
     produto: Produto, 
     quantidade: number, 
@@ -212,7 +216,6 @@ export default function NovaFaturaReciboPage() {
   ): ItemVendaUI => {
     const ehServico = isServico(produto);
     
-    // ✅ Cálculo com arredondamento em cada etapa
     const valorBruto = arredondar(produto.preco_venda * quantidade);
     const baseTributavel = arredondar(valorBruto - desconto);
     const taxaIva = produto.taxa_iva ?? 14;
@@ -255,21 +258,17 @@ export default function NovaFaturaReciboPage() {
       return;
     }
 
-    // Verificar se o produto já existe no carrinho
     const itemExistenteIndex = itens.findIndex(item => item.produto_id === formItem.produto_id);
 
     if (itemExistenteIndex >= 0) {
-      // Atualizar quantidade do item existente
       const itemExistente = itens[itemExistenteIndex];
       const novaQuantidade = itemExistente.quantidade + formItem.quantidade;
 
-      // Verificar estoque para a nova quantidade total
       if (!isServico(produto) && novaQuantidade > produto.estoque_atual) {
         setError(`Estoque insuficiente para ${novaQuantidade} unidades. Disponível: ${produto.estoque_atual}`);
         return;
       }
 
-      // Recalcular item completo
       const itemAtualizado = calcularItemCompleto(
         produto, 
         novaQuantidade, 
@@ -281,7 +280,6 @@ export default function NovaFaturaReciboPage() {
         index === itemExistenteIndex ? itemAtualizado : item
       ));
     } else {
-      // Adicionar novo item
       const novoItem = calcularItemCompleto(produto, formItem.quantidade, formItem.desconto);
       setItens(prev => [...prev, novoItem]);
     }
@@ -313,7 +311,6 @@ export default function NovaFaturaReciboPage() {
       return;
     }
 
-    // Recalcular item completo mantendo o mesmo desconto
     const itemAtualizado = calcularItemCompleto(
       produto,
       novaQuantidade,
@@ -333,24 +330,24 @@ export default function NovaFaturaReciboPage() {
   const limparCarrinho = () => {
     if (itens.length > 0 && confirm("Tem certeza que deseja limpar todos os itens?")) {
       setItens([]);
+      setFormPagamento(prev => ({ ...prev, valor_pago: "" }));
     }
   };
 
-  // ✅ CORRIGIDO: Totais calculados com arredondamento
+  // Totais calculados com arredondamento
   const totalBase = arredondar(itens.reduce((acc, i) => acc + i.base_tributavel, 0));
   const totalIva = arredondar(itens.reduce((acc, i) => acc + i.valor_iva, 0));
   const totalRetencao = arredondar(itens.reduce((acc, i) => acc + i.valor_retencao, 0));
-  
-  // ✅ IMPORTANTE: Total líquido é a soma dos subtotais dos itens (já arredondados)
   const totalLiquido = arredondar(itens.reduce((acc, i) => acc + i.subtotal, 0));
 
   const valorPagamento = parseFloat(formPagamento.valor_pago) || 0;
-  const troco = valorPagamento > totalLiquido ? arredondar(valorPagamento - totalLiquido) : 0;
-  const pagamentoSuficiente = valorPagamento >= totalLiquido && totalLiquido > 0;
   
-  // ✅ CORRIGIDO: Validar com tolerância menor (0.005 para centavos)
-  const diferencaPagamento = Math.abs(arredondar(valorPagamento) - totalLiquido);
-  const pagamentoValido = pagamentoSuficiente && diferencaPagamento < 0.005;
+  // ✅ CÁLCULO DO TROCO - Só existe quando valor pago > total
+  const troco = valorPagamento > totalLiquido ? arredondar(valorPagamento - totalLiquido) : 0;
+  
+  // ✅ VALIDAÇÃO: Pagamento deve ser MAIOR OU IGUAL ao total (para interface)
+  // Mas para o backend FR, enviaremos o valor exato do total
+  const pagamentoSuficiente = valorPagamento >= totalLiquido && totalLiquido > 0;
 
   const percentualIva = totalBase > 0 ? ((totalIva / totalBase) * 100).toFixed(1) : "0.0";
 
@@ -364,7 +361,6 @@ export default function NovaFaturaReciboPage() {
     return true;
   };
 
-  // ✅ CORRIGIDO: Finalizar venda com debug completo
   const finalizarVenda = async () => {
     if (modoCliente === 'cadastrado' && !clienteSelecionado) {
       setError("Selecione um cliente cadastrado");
@@ -381,15 +377,20 @@ export default function NovaFaturaReciboPage() {
       return;
     }
 
-    // ✅ CORRIGIDO: Garantir que usamos valores arredondados
     const totalVenda = totalLiquido;
     const valorPagoNumerico = arredondar(parseFloat(formPagamento.valor_pago) || 0);
     
-    // ✅ DEBUG: Mostrar cálculos detalhados
+    // ✅ IMPORTANTE: Para Fatura-Recibo (FR), o backend exige valor exato do total
+    // O troco é apenas informativo na interface até o backend ser ajustado
+    const valorParaBackend = valorPagoNumerico > totalVenda ? totalVenda : valorPagoNumerico;
+    
     const debugData = {
       totalCalculado: totalVenda,
-      valorPago: valorPagoNumerico,
-      diferenca: diferencaPagamento,
+      valorPagoInput: valorPagoNumerico,
+      valorEnviadoBackend: valorParaBackend,
+      trocoCalculado: troco,
+      // ✅ Só inclui troco no debug se existir
+      ...(troco > 0 && { troco }),
       itens: itens.map(i => ({
         nome: i.descricao,
         qtd: i.quantidade,
@@ -405,9 +406,8 @@ export default function NovaFaturaReciboPage() {
     console.log('[DEBUG] Cálculos da venda:', debugData);
     setDebugInfo(JSON.stringify(debugData, null, 2));
 
-    // ✅ VALIDAÇÃO RIGOROSA: Para FR, o valor pago deve ser EXATAMENTE igual ao total
-    if (diferencaPagamento >= 0.005) {
-      setError(`Para Fatura-Recibo, o valor pago (${formatarPreco(valorPagoNumerico)}) deve ser exatamente igual ao total (${formatarPreco(totalVenda)}). Diferença: ${formatarPreco(diferencaPagamento)}`);
+    if (!pagamentoSuficiente) {
+      setError(`Valor insuficiente! Total: ${formatarPreco(totalVenda)}, Pago: ${formatarPreco(valorPagoNumerico)}`);
       return;
     }
 
@@ -416,14 +416,12 @@ export default function NovaFaturaReciboPage() {
     setSucesso(null);
 
     try {
-      // ✅ CORRIGIDO: Construir payload com valores numéricos precisos
       const payload: CriarVendaPayload = {
         itens: itens.map(item => ({
           produto_id: item.produto_id,
           quantidade: Number(item.quantidade),
           preco_venda: arredondar(Number(item.preco_venda)),
           desconto: arredondar(Number(item.desconto)),
-          // ✅ IMPORTANTE: Enviar taxa_retencao apenas para serviços
           taxa_retencao: item.eh_servico ? item.taxa_retencao : undefined,
         })),
         tipo_documento: 'FR' as TipoDocumentoFiscal,
@@ -439,10 +437,9 @@ export default function NovaFaturaReciboPage() {
         }
       }
 
-      // ✅ CORRIGIDO: Usar totalVenda (já arredondado) - EXATAMENTE igual ao total dos itens
       payload.dados_pagamento = {
         metodo: formPagamento.metodo,
-        valor: totalVenda, // ✅ Mesmo valor que a soma dos subtotais dos itens
+        valor: valorParaBackend, // ✅ Envia o valor exato do total (ou menor, nunca maior)
         referencia: formPagamento.referencia || undefined,
         data: formPagamento.data_pagamento,
       };
@@ -458,16 +455,8 @@ export default function NovaFaturaReciboPage() {
         return;
       }
 
-      // ✅ DEBUG COMPLETO antes de enviar
       console.log('========== ENVIANDO PARA BACKEND ==========');
       console.log('Payload completo:', JSON.stringify(payload, null, 2));
-      console.log('Total itens (soma subtotais):', itens.reduce((acc, i) => acc + i.subtotal, 0));
-      console.log('Total enviado (dados_pagamento.valor):', payload.dados_pagamento.valor);
-      console.log('Itens com retenção:', itens.filter(i => i.eh_servico).map(i => ({
-        nome: i.descricao,
-        taxa_retencao: i.taxa_retencao,
-        valor_retencao: i.valor_retencao
-      })));
 
       const vendaCriada = await vendaService.criar(payload);
 
@@ -475,8 +464,9 @@ export default function NovaFaturaReciboPage() {
         throw new Error("Erro ao criar venda - resposta vazia");
       }
 
-      const trocoCalculado = valorPagamento > totalVenda ? arredondar(valorPagamento - totalVenda) : 0;
-      setSucesso(`Fatura-Recibo criada com sucesso! ${trocoCalculado > 0 ? `Troco: ${formatarPreco(trocoCalculado)}` : ''}`);
+      // ✅ Mensagem de sucesso com troco (se existir)
+      const mensagemTroco = troco > 0 ? ` Troco: ${formatarPreco(troco)}` : '';
+      setSucesso(`Fatura-Recibo criada com sucesso!${mensagemTroco}`);
 
       setTimeout(() => {
         router.push("/dashboard/Faturas/Faturas");
@@ -510,11 +500,7 @@ export default function NovaFaturaReciboPage() {
             >
               <ArrowLeft className="w-5 h-5 md:w-6 md:h-6 text-[#123859]" />
             </button>
-            <h1 className="text-2xl md:text-3xl font-bold text-[#F9941F]">Nova Fatura-Recibo</h1>
-          </div>
-
-          <div className="px-3 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-800">
-            {getNomeTipoDocumento('FR')}
+            <h1 className="text-2xl md:text-3xl font-bold text-[#F9941F]">Fatura-Recibo</h1>
           </div>
         </div>
 
@@ -533,7 +519,7 @@ export default function NovaFaturaReciboPage() {
           </div>
         )}
 
-        {/* ✅ DEBUG INFO (remover em produção) */}
+        {/* DEBUG INFO */}
         {debugInfo && (
           <div className="bg-gray-900 text-green-400 p-3 rounded text-xs font-mono overflow-auto max-h-40">
             <div className="flex items-center gap-2 mb-2 text-yellow-400">
@@ -758,9 +744,6 @@ export default function NovaFaturaReciboPage() {
                           {formatarPreco(previewItem.subtotal)}
                         </span>
                       </div>
-                      {previewItem.eh_servico && (
-                        <div className="text-blue-600 font-medium">(Serviço)</div>
-                      )}
                     </div>
                   )}
                 </td>
@@ -794,7 +777,7 @@ export default function NovaFaturaReciboPage() {
             <div className="bg-[#123859] text-white px-4 py-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ShoppingCart size={18} />
-                <h2 className="font-bold text-sm">ITENS DA FATURA-RECIBO ({itens.length})</h2>
+                <h2 className="font-bold text-sm">ITENS DA FATURA</h2>
               </div>
               <button
                 onClick={limparCarrinho}
@@ -809,7 +792,6 @@ export default function NovaFaturaReciboPage() {
                 <thead className="bg-gray-100">
                   <tr>
                     <th className="p-2 text-left text-[#123859] font-semibold">Produto</th>
-                    <th className="p-2 text-center text-[#123859] font-semibold">Tipo</th>
                     <th className="p-2 text-center text-[#123859] font-semibold">Qtd</th>
                     <th className="p-2 text-right text-[#123859] font-semibold">Preço</th>
                     <th className="p-2 text-right text-[#123859] font-semibold">Desc.</th>
@@ -828,13 +810,6 @@ export default function NovaFaturaReciboPage() {
                     return (
                       <tr key={item.id} className="border-t border-gray-200 hover:bg-gray-50">
                         <td className="p-2 font-medium text-[#123859]">{item.descricao}</td>
-                        <td className="p-2 text-center">
-                          {item.eh_servico ? (
-                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">Serviço</span>
-                          ) : (
-                            <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">Produto</span>
-                          )}
-                        </td>
                         <td className="p-2 text-center">
                           <div className="flex items-center justify-center gap-1">
                             <button
@@ -858,7 +833,7 @@ export default function NovaFaturaReciboPage() {
                         <td className="p-2 text-right text-red-600">{item.desconto > 0 ? formatarPreco(item.desconto) : '-'}</td>
                         <td className="p-2 text-right">{formatarPreco(item.base_tributavel)}</td>
                         <td className="p-2 text-right">{formatarPreco(item.valor_iva)}</td>
-                        <td className="p-2 text-right text-orange-600">
+                        <td className="p-2 text-right text-orange">
                           {item.valor_retencao > 0 ? `-${formatarPreco(item.valor_retencao)}` : '-'}
                         </td>
                         <td className="p-2 text-right font-bold text-[#F9941F]">{formatarPreco(item.subtotal)}</td>
@@ -866,7 +841,7 @@ export default function NovaFaturaReciboPage() {
                           <button
                             type="button"
                             onClick={() => removerItem(item.id)}
-                            className="text-orange-600 hover:text-red-800 p-1 hover:bg-red-50 rounded transition-colors"
+                            className="text-orange-600 hover:text-orange p-1 hover:bg-orange rounded transition-colors"
                             title="Remover item"
                           >
                             <Trash2 size={16} />
@@ -884,9 +859,18 @@ export default function NovaFaturaReciboPage() {
         {/* Linha de Pagamento */}
         {mostrarPagamento && (
           <div className="bg-white rounded-lg shadow border-2 border-[#123859]/20 overflow-hidden">
-            <div className="bg-[#123859] text-white px-4 py-2 flex items-center gap-2">
-              <CreditCard size={18} />
-              <h2 className="font-bold text-sm">PAGAMENTO</h2>
+            <div className="bg-[#123859] text-white px-4 py-2 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CreditCard size={18} />
+                <h2 className="font-bold text-sm">PAGAMENTO</h2>
+              </div>
+              <button
+                onClick={preencherValorPagamento}
+                className="text-xs bg-[#F9941F] text-white px-2 py-1 rounded hover:bg-[#d9831a] transition-colors"
+                title="Preencher com o valor total"
+              >
+                Preencher Total
+              </button>
             </div>
 
             <div className="p-4">
@@ -909,9 +893,6 @@ export default function NovaFaturaReciboPage() {
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">
                     Valor Pago <span className="text-red-500">*</span>
-                    <span className="block text-[10px] text-gray-400 font-normal">
-                      Exatamente: {formatarPreco(totalLiquido)}
-                    </span>
                   </label>
                   <input
                     type="number"
@@ -921,9 +902,9 @@ export default function NovaFaturaReciboPage() {
                     value={formPagamento.valor_pago}
                     onChange={e => setFormPagamento(prev => ({ ...prev, valor_pago: e.target.value }))}
                     className={`w-full border p-2 rounded text-sm ${
-                      valorPagamento > 0 && diferencaPagamento >= 0.005
+                      valorPagamento > 0 && valorPagamento < totalLiquido
                         ? 'border-red-400 bg-red-50'
-                        : diferencaPagamento < 0.005 && totalLiquido > 0
+                        : valorPagamento >= totalLiquido && totalLiquido > 0
                           ? 'border-green-400 bg-green-50'
                           : 'border-gray-300'
                     }`}
@@ -944,7 +925,7 @@ export default function NovaFaturaReciboPage() {
                   <label className="block text-xs text-gray-600 mb-1">Referência</label>
                   <input
                     type="text"
-                    placeholder="Referência"
+                    placeholder="Referência (opcional)"
                     value={formPagamento.referencia}
                     onChange={e => setFormPagamento(prev => ({ ...prev, referencia: e.target.value }))}
                     className="w-full border border-gray-300 p-2 rounded text-sm"
@@ -952,25 +933,32 @@ export default function NovaFaturaReciboPage() {
                 </div>
               </div>
 
-              {valorPagamento > 0 && diferencaPagamento >= 0.005 && (
+              {valorPagamento > 0 && valorPagamento < totalLiquido && (
                 <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
                   <AlertTriangle size={12} />
-                  Valor incorreto! Deve ser exatamente {formatarPreco(totalLiquido)}. 
-                  Diferença: {formatarPreco(diferencaPagamento)}
+                  Valor insuficiente! Faltam {formatarPreco(totalLiquido - valorPagamento)}
                 </p>
               )}
 
-              {diferencaPagamento < 0.005 && totalLiquido > 0 && (
+              {/* ✅ EXIBIÇÃO DO TROCO - Só aparece quando existe */}
+              {troco > 0 && (
+                <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded">
+                  <p className="text-sm font-bold text-green-700 flex items-center gap-1">
+                    <CheckCircle2 size={16} />
+                    Troco a devolver: {formatarPreco(troco)}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Nota: O backend atualmente não aceita troco. Enviando valor exato do total.
+                  </p>
+                </div>
+              )}
+
+              {valorPagamento >= totalLiquido && totalLiquido > 0 && troco === 0 && (
                 <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded">
                   <p className="text-xs text-green-700 flex items-center gap-1">
                     <CheckCircle2 size={12} />
-                    Valor correto para Fatura-Recibo
+                    Pagamento exato - OK
                   </p>
-                  {troco > 0 && (
-                    <p className="text-sm font-bold text-green-700 mt-1">
-                      Troco a devolver: {formatarPreco(troco)}
-                    </p>
-                  )}
                 </div>
               )}
             </div>
@@ -989,18 +977,18 @@ export default function NovaFaturaReciboPage() {
               <tbody>
                 {/* Linha 1 – Componentes */}
                 <tr className="bg-gray-50 text-gray-600 font-medium">
-                  <td className="p-3">Base Tributável</td>
-                  <td className="p-3">IVA ({percentualIva}%)</td>
-                  <td className="p-3 text-orange-600">Retenção</td>
-                  <td className="p-3">Total Líquido</td>
+                  <td className="p-2">Base Tributável</td>
+                  <td className="p-2">IVA ({percentualIva}%)</td>
+                  <td className="p-2">Retenção</td>
+                  <td className="p-2">Total Líquido</td>
                 </tr>
 
                 {/* Linha 2 – Valores */}
                 <tr className="border-b font-semibold">
-                  <td className="p-3">{formatarPreco(totalBase)}</td>
-                  <td className="p-3">{formatarPreco(totalIva)}</td>
-                  <td className="p-3 text-orange-600">-{formatarPreco(totalRetencao)}</td>
-                  <td className="p-3 text-[#F9941f] font-bold text-lg">{formatarPreco(totalLiquido)}</td>
+                  <td className="p-2">{formatarPreco(totalBase)}</td>
+                  <td className="p-2">{formatarPreco(totalIva)}</td>
+                  <td className="p-2">-{formatarPreco(totalRetencao)}</td>
+                  <td className="p-2 text-[#F9941F] font-bold">{formatarPreco(totalLiquido)}</td>
                 </tr>
 
                 {/* Linha 3 – Info */}
@@ -1009,7 +997,13 @@ export default function NovaFaturaReciboPage() {
                     {itens.some(i => i.eh_servico) && (
                       <span>Inclui serviços com retenção de 6.5% | </span>
                     )}
-                    <strong>Valor exato para pagamento: {formatarPreco(totalLiquido)}</strong>
+                    <strong>Total a pagar: {formatarPreco(totalLiquido)}</strong>
+                    {/* ✅ TROCO NO RESUMO - Só aparece quando existe */}
+                    {troco > 0 && (
+                      <span className="ml-2 text-green-600">
+                        | Troco: {formatarPreco(troco)}
+                      </span>
+                    )}
                   </td>
                 </tr>
               </tbody>
@@ -1032,9 +1026,12 @@ export default function NovaFaturaReciboPage() {
           ) : itens.length === 0 ? (
             "Adicione itens para finalizar"
           ) : !pagamentoSuficiente ? (
-            `Valor necessário: ${formatarPreco(totalLiquido)}`
-          ) : diferencaPagamento >= 0.005 ? (
-            `Ajuste: ${formatarPreco(totalLiquido)} (dif: ${formatarPreco(diferencaPagamento)})`
+            `Valor insuficiente: ${formatarPreco(valorPagamento)} de ${formatarPreco(totalLiquido)}`
+          ) : troco > 0 ? (
+            <>
+              <CheckCircle2 size={20} />
+              Finalizar com troco de {formatarPreco(troco)}
+            </>
           ) : (
             <>
               <CheckCircle2 size={20} />
@@ -1043,12 +1040,6 @@ export default function NovaFaturaReciboPage() {
           )}
         </button>
 
-        <div className="text-xs text-gray-500 text-center space-y-1">
-          <p>✓ Fatura-Recibo: Pagamento registrado automaticamente</p>
-          {itens.some(i => i.eh_servico) && (
-            <p className="text-orange-600">⚠️ Serviços incluem retenção na fonte de 6.5%</p>
-          )}
-        </div>
       </div>
     </MainEmpresa>
   );

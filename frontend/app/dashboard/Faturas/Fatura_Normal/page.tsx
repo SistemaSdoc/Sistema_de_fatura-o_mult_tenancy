@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import {
     Plus, Trash2, ShoppingCart, FileText,
     CheckCircle2, Calculator, ArrowLeft,
-    AlertTriangle, User, Package
+    AlertTriangle, User, Package, Minus
 } from "lucide-react";
 import { AxiosError } from "axios";
 import MainEmpresa from "../../../components/MainEmpresa";
@@ -27,6 +27,11 @@ import {
 } from "@/services/vendas";
 
 const ESTOQUE_MINIMO = 5;
+
+// Função auxiliar para arredondar para 2 casas decimais
+const arredondar = (valor: number): number => {
+    return Math.round(valor * 100) / 100;
+};
 
 interface ItemVendaUI {
     id: string;
@@ -128,15 +133,17 @@ export default function NovaFaturaNormalPage() {
             return;
         }
 
+        const ehServico = isServico(produto);
         const preco_venda = produto.preco_venda;
-        const maxQuantidade = isServico(produto) ? Infinity : produto.estoque_atual;
+        const maxQuantidade = ehServico ? Infinity : produto.estoque_atual;
         const quantidade = Math.min(formItem.quantidade, maxQuantidade);
         const desconto = formItem.desconto;
 
-        const base = preco_venda * quantidade - desconto;
+        const valorBruto = arredondar(preco_venda * quantidade);
+        const baseTributavel = arredondar(valorBruto - desconto);
         const taxaIva = produto.taxa_iva ?? 14;
-        const valorIva = (base * taxaIva) / 100;
-        const valorRetencao = produto.tipo === "servico" ? base * 0.065 : 0;
+        const valorIva = arredondar((baseTributavel * taxaIva) / 100);
+        const valorRetencao = ehServico ? arredondar(baseTributavel * 0.065) : 0;
 
         setPreviewItem({
             id: "preview",
@@ -145,10 +152,10 @@ export default function NovaFaturaNormalPage() {
             quantidade,
             preco_venda,
             desconto,
-            base_tributavel: base,
+            base_tributavel: baseTributavel,
             valor_iva: valorIva,
             valor_retencao: valorRetencao,
-            subtotal: base + valorIva - valorRetencao,
+            subtotal: arredondar(baseTributavel + valorIva - valorRetencao),
             taxa_iva: taxaIva,
             codigo_produto: produto.codigo || undefined,
         });
@@ -173,6 +180,37 @@ export default function NovaFaturaNormalPage() {
         }
     };
 
+    // Função auxiliar para calcular item completo com arredondamento
+    const calcularItemCompleto = (
+        produto: Produto,
+        quantidade: number,
+        desconto: number,
+        id: string = uuidv4()
+    ): ItemVendaUI => {
+        const ehServico = isServico(produto);
+
+        const valorBruto = arredondar(produto.preco_venda * quantidade);
+        const baseTributavel = arredondar(valorBruto - desconto);
+        const taxaIva = produto.taxa_iva ?? 14;
+        const valorIva = arredondar((baseTributavel * taxaIva) / 100);
+        const valorRetencao = ehServico ? arredondar(baseTributavel * 0.065) : 0;
+
+        return {
+            id,
+            produto_id: produto.id,
+            descricao: produto.nome,
+            quantidade,
+            preco_venda: produto.preco_venda,
+            desconto,
+            base_tributavel: baseTributavel,
+            valor_iva: valorIva,
+            valor_retencao: valorRetencao,
+            subtotal: arredondar(baseTributavel + valorIva - valorRetencao),
+            taxa_iva: taxaIva,
+            codigo_produto: produto.codigo || undefined,
+        };
+    };
+
     const adicionarAoCarrinho = () => {
         if (!formItem.produto_id) {
             setError("Selecione um produto");
@@ -189,12 +227,31 @@ export default function NovaFaturaNormalPage() {
             return;
         }
 
-        const novoItem: ItemVendaUI = {
-            ...previewItem,
-            id: uuidv4(),
-        };
+        const itemExistenteIndex = itens.findIndex(item => item.produto_id === formItem.produto_id);
 
-        setItens(prev => [...prev, novoItem]);
+        if (itemExistenteIndex >= 0) {
+            const itemExistente = itens[itemExistenteIndex];
+            const novaQuantidade = itemExistente.quantidade + formItem.quantidade;
+
+            if (!isServico(produto) && novaQuantidade > produto.estoque_atual) {
+                setError(`Estoque insuficiente para ${novaQuantidade} unidades. Disponível: ${produto.estoque_atual}`);
+                return;
+            }
+
+            const itemAtualizado = calcularItemCompleto(
+                produto,
+                novaQuantidade,
+                itemExistente.desconto + formItem.desconto,
+                itemExistente.id
+            );
+
+            setItens(prev => prev.map((item, index) =>
+                index === itemExistenteIndex ? itemAtualizado : item
+            ));
+        } else {
+            const novoItem = calcularItemCompleto(produto, formItem.quantidade, formItem.desconto);
+            setItens(prev => [...prev, novoItem]);
+        }
 
         setFormItem({
             produto_id: "",
@@ -202,6 +259,38 @@ export default function NovaFaturaNormalPage() {
             desconto: 0,
         });
         setPreviewItem(null);
+        setError(null);
+    };
+
+    // ✅ NOVO: Função para atualizar quantidade do item no carrinho
+    const atualizarQuantidadeItem = (itemId: string, novaQuantidade: number) => {
+        const itemIndex = itens.findIndex(i => i.id === itemId);
+        if (itemIndex < 0) return;
+
+        const item = itens[itemIndex];
+        const produto = produtos.find(p => p.id === item.produto_id);
+        if (!produto) return;
+
+        if (!isServico(produto) && novaQuantidade > produto.estoque_atual) {
+            setError(`Estoque insuficiente. Máximo: ${produto.estoque_atual}`);
+            return;
+        }
+
+        if (novaQuantidade < 1) {
+            removerItem(itemId);
+            return;
+        }
+
+        const itemAtualizado = calcularItemCompleto(
+            produto,
+            novaQuantidade,
+            item.desconto,
+            item.id
+        );
+
+        setItens(prev => prev.map((i, index) =>
+            index === itemIndex ? itemAtualizado : i
+        ));
         setError(null);
     };
 
@@ -215,10 +304,11 @@ export default function NovaFaturaNormalPage() {
         }
     };
 
-    const totalBase = itens.reduce((acc, i) => acc + i.base_tributavel, 0);
-    const totalIva = itens.reduce((acc, i) => acc + i.valor_iva, 0);
-    const totalRetencao = itens.reduce((acc, i) => acc + i.valor_retencao, 0);
-    const totalLiquido = totalBase + totalIva - totalRetencao;
+    // Totais calculados com arredondamento
+    const totalBase = arredondar(itens.reduce((acc, i) => acc + i.base_tributavel, 0));
+    const totalIva = arredondar(itens.reduce((acc, i) => acc + i.valor_iva, 0));
+    const totalRetencao = arredondar(itens.reduce((acc, i) => acc + i.valor_retencao, 0));
+    const totalLiquido = arredondar(totalBase + totalIva - totalRetencao);
 
     const podeFinalizar = (): boolean => {
         if (itens.length === 0) return false;
@@ -254,8 +344,8 @@ export default function NovaFaturaNormalPage() {
                 itens: itens.map(item => ({
                     produto_id: item.produto_id,
                     quantidade: Number(item.quantidade),
-                    preco_venda: Number(item.preco_venda),
-                    desconto: Number(item.desconto),
+                    preco_venda: arredondar(Number(item.preco_venda)),
+                    desconto: arredondar(Number(item.desconto)),
                 })),
                 tipo_documento: 'FT',
                 faturar: true,
@@ -510,7 +600,7 @@ export default function NovaFaturaNormalPage() {
                                                 disabled={!formItem.produto_id}
                                             />
                                             {produtoSelecionado && !isServico(produtoSelecionado) && (
-                                                <div className=" absolute -bottom-4 left-0 text-[10px] text-gray-500">
+                                                <div className="absolute -bottom-4 left-0 text-[10px] text-gray-500">
                                                     Disp: {produtoSelecionado.estoque_atual}
                                                 </div>
                                             )}
@@ -614,27 +704,53 @@ export default function NovaFaturaNormalPage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {itens.map((item) => (
-                                        <tr key={item.id} className="border-t border-gray-200 hover:bg-gray-50">
-                                            <td className="p-2 font-medium text-[#123859]">{item.descricao}</td>
-                                            <td className="p-2 text-center">{item.quantidade}</td>
-                                            <td className="p-2 text-right">{formatarPreco(item.preco_venda)}</td>
-                                            <td className="p-2 text-right text-red-600">{item.desconto > 0 ? formatarPreco(item.desconto) : '-'}</td>
-                                            <td className="p-2 text-right">{formatarPreco(item.valor_iva)}</td>
-                                            <td className="p-2 text-right text-orange-600">{item.valor_retencao > 0 ? formatarPreco(item.valor_retencao) : '-'}</td>
-                                            <td className="p-2 text-right font-bold text-[#F9941F]">{formatarPreco(item.subtotal)}</td>
-                                            <td className="p-2 text-center">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removerItem(item.id)}
-                                                    className="text-orange-600 hover:text-red-800 p-1 hover:bg-red-50 rounded transition-colors"
-                                                    title="Remover item"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {itens.map((item) => {
+                                        const produto = produtos.find(p => p.id === item.produto_id);
+                                        const maxEstoque = produto && !isServico(produto) ? produto.estoque_atual : Infinity;
+
+                                        return (
+                                            <tr key={item.id} className="border-t border-gray-200 hover:bg-gray-50">
+                                                <td className="p-2 font-medium text-[#123859]">{item.descricao}</td>
+                                                <td className="p-2 text-center">
+                                                    {/* ✅ BOTÕES + E - PARA ALTERAR QUANTIDADE */}
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        <button
+                                                            onClick={() => atualizarQuantidadeItem(item.id, item.quantidade - 1)}
+                                                            className="p-1 hover:bg-gray-200 rounded disabled:opacity-50"
+                                                            disabled={item.quantidade <= 1}
+                                                            title="Diminuir quantidade"
+                                                        >
+                                                            <Minus size={14} />
+                                                        </button>
+                                                        <span className="w-8 text-center font-medium">{item.quantidade}</span>
+                                                        <button
+                                                            onClick={() => atualizarQuantidadeItem(item.id, item.quantidade + 1)}
+                                                            className="p-1 hover:bg-gray-200 rounded disabled:opacity-50"
+                                                            disabled={item.quantidade >= maxEstoque}
+                                                            title="Aumentar quantidade"
+                                                        >
+                                                            <Plus size={14} />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                                <td className="p-2 text-right">{formatarPreco(item.preco_venda)}</td>
+                                                <td className="p-2 text-right text-red-600">{item.desconto > 0 ? formatarPreco(item.desconto) : '-'}</td>
+                                                <td className="p-2 text-right">{formatarPreco(item.valor_iva)}</td>
+                                                <td className="p-2 text-right text-orange-600">{item.valor_retencao > 0 ? formatarPreco(item.valor_retencao) : '-'}</td>
+                                                <td className="p-2 text-right font-bold text-[#F9941F]">{formatarPreco(item.subtotal)}</td>
+                                                <td className="p-2 text-center">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removerItem(item.id)}
+                                                        className="text-orange-600 hover:text-red-800 p-1 hover:bg-red-50 rounded transition-colors"
+                                                        title="Remover item"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
@@ -655,7 +771,7 @@ export default function NovaFaturaNormalPage() {
                                 <tr className="bg-gray-50 text-gray-600 font-medium border-b">
                                     <td className="p-2">Base Tributável</td>
                                     <td className="p-2">
-                                        IVA ({((totalIva / totalBase) * 100).toFixed(1)}%)
+                                        IVA ({totalBase > 0 ? ((totalIva / totalBase) * 100).toFixed(1) : "0.0"}%)
                                     </td>
                                     {totalRetencao > 0 && (
                                         <td className="p-2">Retenção (6.5%)</td>

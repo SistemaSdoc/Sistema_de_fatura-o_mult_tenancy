@@ -5,21 +5,22 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import MainEmpresa from "../../../components/MainEmpresa";
 import {
-  produtoService, // ✅ CORRIGIDO: Usar produtoService, não estoqueService
+  produtoService,
   Produto,
   Categoria,
   formatarPreco,
   estaEstoqueBaixo,
   estaSemEstoque,
   formatarData,
-  movimentoStockService, // ✅ ADICIONADO: Serviço correto de movimentos
+  movimentoStockService,
   MovimentoStock,
+  isServico,
+  isProduto,
+  getTipoBadge,
 } from "@/services/produtos";
 import {
   Package,
   AlertTriangle,
-  TrendingDown,
-  DollarSign,
   Search,
   Plus,
   History,
@@ -34,6 +35,8 @@ import {
   ArrowUpCircle,
   ArrowDownCircle,
   RefreshCcw,
+  Wrench,
+  Layers,
 } from "lucide-react";
 
 // ===== COMPONENTES AUXILIARES =====
@@ -42,38 +45,26 @@ interface StatCardProps {
   icon: React.ReactNode;
   label: string;
   value: string | number;
-  trend?: "up" | "down" | "neutral";
-  color: "blue" | "orange" | "red" | "green";
+  color: "blue" | "orange" | "red" | "green" | "purple";
 }
 
-function StatCard({ icon, label, value, trend, color }: StatCardProps) {
+function StatCard({ icon, label, value, color }: StatCardProps) {
   const colors = {
     blue: "bg-blue-50 text-blue-700 border-blue-200",
     orange: "bg-orange-50 text-orange-700 border-orange-200",
     red: "bg-red-50 text-red-700 border-red-200",
     green: "bg-green-50 text-green-700 border-green-200",
+    purple: "bg-purple-50 text-purple-700 border-purple-200",
   };
 
   return (
-    <div className={`p-5 rounded-xl border ${colors[color]} bg-opacity-50`}>
-      <div className="flex items-start justify-between">
-        <div className="p-2 bg-white rounded-lg shadow-sm">{icon}</div>
-        {trend && (
-          <span
-            className={`text-xs font-medium ${trend === "up"
-                ? "text-green-600"
-                : trend === "down"
-                  ? "text-red-600"
-                  : "text-gray-500"
-              }`}
-          >
-            {trend === "up" ? "↑" : trend === "down" ? "↓" : "→"}
-          </span>
-        )}
-      </div>
-      <div className="mt-3">
-        <p className="text-2xl font-bold">{value}</p>
-        <p className="text-sm opacity-75">{label}</p>
+    <div className={`p-3 rounded-xl border ${colors[color]} bg-opacity-50`}>
+      <div className="flex items-center gap-3">
+        <div className="p-1.5 bg-white rounded-lg shadow-sm">{icon}</div>
+        <div>
+          <p className="text-xl font-bold">{value}</p>
+          <p className="text-xs opacity-75">{label}</p>
+        </div>
       </div>
     </div>
   );
@@ -261,12 +252,13 @@ function ConfirmacaoModal({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
         <h3
-          className={`text-lg font-semibold mb-2 ${tipo === "danger"
+          className={`text-lg font-semibold mb-2 ${
+            tipo === "danger"
               ? "text-red-600"
               : tipo === "warning"
                 ? "text-orange-600"
                 : "text-blue-600"
-            }`}
+          }`}
         >
           {titulo}
         </h3>
@@ -299,24 +291,21 @@ function ConfirmacaoModal({
 export default function EstoquePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [resumo, setResumo] = useState<any>(null); // ✅ Simplificado tipo
-  const [produtos, setProdutos] = useState<Produto[]>([]);
-  const [produtosDeletados, setProdutosDeletados] = useState<Produto[]>([]);
+  const [resumo, setResumo] = useState<any>(null);
+  const [itens, setItens] = useState<Produto[]>([]);
+  const [itensDeletados, setItensDeletados] = useState<Produto[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [movimentacoes, setMovimentacoes] = useState<MovimentoStock[]>([]);
 
   // Filtros
   const [busca, setBusca] = useState("");
   const [categoriaFiltro, setCategoriaFiltro] = useState("");
-  const [filtroEstoque, setFiltroEstoque] = useState<
-    "todos" | "baixo" | "zerado"
-  >("todos");
+  const [tipoFiltro, setTipoFiltro] = useState<"todos" | "produto" | "servico">("todos");
+  const [filtroEstoque, setFiltroEstoque] = useState<"todos" | "baixo" | "zerado">("todos");
 
   // Modal Entrada
   const [modalEntradaAberto, setModalEntradaAberto] = useState(false);
-  const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(
-    null
-  );
+  const [itemSelecionado, setItemSelecionado] = useState<Produto | null>(null);
 
   // Modal Confirmação
   const [modalConfirmacao, setModalConfirmacao] = useState<{
@@ -330,26 +319,23 @@ export default function EstoquePage() {
   });
 
   // Tabs
-  const [abaAtiva, setAbaAtiva] = useState<
-    "produtos" | "movimentacoes" | "deletados"
-  >("produtos");
+  const [abaAtiva, setAbaAtiva] = useState<"itens" | "movimentacoes" | "deletados">("itens");
 
-  // ✅ CORRIGIDO: Usar produtoService e movimentoStockService
   const carregarDados = useCallback(async () => {
     setLoading(true);
     try {
-      const [resumoData, produtosData, cats, movs] = await Promise.all([
-        movimentoStockService.resumo(), // ✅ CORRIGIDO
-        produtoService.listarProdutos({ tipo: "produto" }), // ✅ CORRIGIDO
-        produtoService.listarCategorias(), // ✅ CORRIGIDO
-        movimentoStockService.listarMovimentos({ paginar: false }), // ✅ CORRIGIDO
+      const [resumoData, itensData, cats, movs] = await Promise.all([
+        movimentoStockService.resumo(),
+        produtoService.listarProdutos({}), // ✅ Sem filtro de tipo para trazer tudo
+        produtoService.listarCategorias(),
+        movimentoStockService.listarMovimentos({ paginar: false }),
       ]);
 
       setResumo(resumoData);
-      const listaProdutos = Array.isArray(produtosData.produtos)
-        ? produtosData.produtos
-        : (produtosData.produtos as any)?.data || [];
-      setProdutos(listaProdutos);
+      const listaItens = Array.isArray(itensData.produtos)
+        ? itensData.produtos
+        : (itensData.produtos as any)?.data || [];
+      setItens(listaItens);
       setCategorias(cats);
       const listaMovs = Array.isArray(movs.movimentos)
         ? movs.movimentos
@@ -362,7 +348,6 @@ export default function EstoquePage() {
     }
   }, []);
 
-  // ✅ CORRIGIDO: Usar produtoService.listarDeletados
   const carregarDeletados = useCallback(async () => {
     try {
       const response = await produtoService.listarDeletados({
@@ -371,10 +356,10 @@ export default function EstoquePage() {
       const listaDeletados = Array.isArray(response.produtos)
         ? response.produtos
         : (response.produtos as any)?.data || [];
-      setProdutosDeletados(listaDeletados);
+      setItensDeletados(listaDeletados);
     } catch (error) {
-      console.error("Erro ao carregar produtos deletados:", error);
-      setProdutosDeletados([]);
+      console.error("Erro ao carregar itens deletados:", error);
+      setItensDeletados([]);
     }
   }, []);
 
@@ -388,24 +373,27 @@ export default function EstoquePage() {
     }
   }, [abaAtiva, carregarDeletados]);
 
-  // ✅ CORRIGIDO: Usar produtoService.listarProdutos
   async function aplicarFiltros() {
     setLoading(true);
     try {
-      const filtros: Parameters<typeof produtoService.listarProdutos>[0] = {
-        tipo: "produto",
-      };
+      const filtros: Parameters<typeof produtoService.listarProdutos>[0] = {};
 
       if (busca) filtros.busca = busca;
       if (categoriaFiltro) filtros.categoria_id = categoriaFiltro;
+      
+      // Aplicar filtro por tipo
+      if (tipoFiltro === "produto") filtros.tipo = "produto";
+      if (tipoFiltro === "servico") filtros.tipo = "servico";
+      
+      // Filtros de estoque (só se aplicam a produtos)
       if (filtroEstoque === "baixo") filtros.estoque_baixo = true;
       if (filtroEstoque === "zerado") filtros.sem_estoque = true;
 
       const data = await produtoService.listarProdutos(filtros);
-      const listaProdutos = Array.isArray(data.produtos)
+      const listaItens = Array.isArray(data.produtos)
         ? data.produtos
         : (data.produtos as any)?.data || [];
-      setProdutos(listaProdutos);
+      setItens(listaItens);
     } catch (error) {
       console.error("Erro ao filtrar:", error);
     } finally {
@@ -413,21 +401,24 @@ export default function EstoquePage() {
     }
   }
 
-  function abrirModalEntrada(produto: Produto) {
-    setProdutoSelecionado(produto);
+  function abrirModalEntrada(item: Produto) {
+    if (isServico(item)) {
+      alert("Serviços não têm controle de estoque");
+      return;
+    }
+    setItemSelecionado(item);
     setModalEntradaAberto(true);
   }
 
-  // ✅ CORRIGIDO: Usar movimentoStockService.criarMovimento
   async function handleEntrada(quantidade: number, motivo: string) {
-    if (!produtoSelecionado) return;
+    if (!itemSelecionado) return;
 
     try {
       await movimentoStockService.criarMovimento({
-        produto_id: produtoSelecionado.id,
+        produto_id: itemSelecionado.id,
         quantidade,
         motivo,
-        tipo: "entrada", // ✅ CORRIGIDO: tipo é obrigatório
+        tipo: "entrada",
         tipo_movimento: "ajuste",
       });
 
@@ -443,32 +434,31 @@ export default function EstoquePage() {
     }
   }
 
-  function abrirModalDeletar(produto: Produto) {
+  function abrirModalDeletar(item: Produto) {
     setModalConfirmacao({
       isOpen: true,
       tipo: "delete",
-      produto,
+      produto: item,
     });
   }
 
-  function abrirModalRestaurar(produto: Produto) {
+  function abrirModalRestaurar(item: Produto) {
     setModalConfirmacao({
       isOpen: true,
       tipo: "restore",
-      produto,
+      produto: item,
     });
   }
 
-  function abrirModalForceDelete(produto: Produto) {
+  function abrirModalForceDelete(item: Produto) {
     setModalConfirmacao({
       isOpen: true,
       tipo: "forceDelete",
-      produto,
+      produto: item,
     });
   }
 
-  // ✅ CORRIGIDO: Usar produtoService.moverParaLixeira
-  async function handleDeletarProduto() {
+  async function handleDeletarItem() {
     if (!modalConfirmacao.produto) return;
 
     try {
@@ -476,18 +466,17 @@ export default function EstoquePage() {
       await carregarDados();
       setModalConfirmacao({ isOpen: false, tipo: "delete", produto: null });
     } catch (error: any) {
-      console.error("Erro ao deletar produto:", error);
+      console.error("Erro ao deletar item:", error);
       const mensagem =
         error?.response?.data?.message ||
         error?.message ||
-        "Erro ao deletar produto. Tente novamente.";
+        "Erro ao deletar item. Tente novamente.";
       alert(mensagem);
       throw error;
     }
   }
 
-  // ✅ CORRIGIDO: Usar produtoService.restaurarProduto
-  async function handleRestaurarProduto() {
+  async function handleRestaurarItem() {
     if (!modalConfirmacao.produto) return;
 
     try {
@@ -496,17 +485,16 @@ export default function EstoquePage() {
       await carregarDados();
       setModalConfirmacao({ isOpen: false, tipo: "restore", produto: null });
     } catch (error: any) {
-      console.error("Erro ao restaurar produto:", error);
+      console.error("Erro ao restaurar item:", error);
       const mensagem =
         error?.response?.data?.message ||
         error?.message ||
-        "Erro ao restaurar produto. Tente novamente.";
+        "Erro ao restaurar item. Tente novamente.";
       alert(mensagem);
       throw error;
     }
   }
 
-  // ✅ CORRIGIDO: Usar produtoService.deletarPermanentemente
   async function handleForceDelete() {
     if (!modalConfirmacao.produto) return;
 
@@ -525,19 +513,26 @@ export default function EstoquePage() {
     }
   }
 
-  function getStatusEstoque(produto: Produto): {
+  function getStatusEstoque(item: Produto): {
     label: string;
     cor: string;
     icone: React.ReactNode;
   } {
-    if (estaSemEstoque(produto)) {
+    if (isServico(item)) {
+      return {
+        label: "Serviço",
+        cor: "bg-purple-100 text-purple-700 border-purple-200",
+        icone: <Wrench className="w-3 h-3" />,
+      };
+    }
+    if (estaSemEstoque(item)) {
       return {
         label: "Sem Estoque",
         cor: "bg-red-100 text-red-700 border-red-200",
         icone: <XCircle className="w-3 h-3" />,
       };
     }
-    if (estaEstoqueBaixo(produto)) {
+    if (estaEstoqueBaixo(item)) {
       return {
         label: "Estoque Baixo",
         cor: "bg-orange-100 text-orange-700 border-orange-200",
@@ -557,10 +552,8 @@ export default function EstoquePage() {
         return <ArrowUpCircle className="w-3 h-3" />;
       case "saida":
         return <ArrowDownCircle className="w-3 h-3" />;
-      case "ajuste":
-        return <RefreshCcw className="w-3 h-3" />;
       default:
-        return <RotateCcw className="w-3 h-3" />;
+        return <RefreshCcw className="w-3 h-3" />;
     }
   }
 
@@ -570,12 +563,14 @@ export default function EstoquePage() {
         return "bg-green-100 text-green-700";
       case "saida":
         return "bg-red-100 text-red-700";
-      case "ajuste":
-        return "bg-blue-100 text-blue-700";
       default:
-        return "bg-gray-100 text-gray-700";
+        return "bg-blue-100 text-blue-700";
     }
   }
+
+  // Calcular estatísticas separadas
+  const produtos = itens.filter(isProduto);
+  const servicos = itens.filter(isServico);
 
   if (loading && !resumo) {
     return (
@@ -589,52 +584,45 @@ export default function EstoquePage() {
 
   return (
     <MainEmpresa>
-      <div className="space-y-6 max-w-7xl mx-auto">
+      <div className="space-y-4 max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-[#123859]">
-              Gestão de Estoque
-            </h1>
-            <p className="text-gray-500 mt-1">Controle e movimentação de stock</p>
-          </div>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-[#123859]">Produtos e Serviços</h1>
           <button
             onClick={() => router.push("/produtos/novo")}
-            className="flex items-center gap-2 px-4 py-2 bg-[#F9941F] text-white rounded-lg hover:bg-[#e08516] transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 bg-[#F9941F] text-white rounded-lg hover:bg-[#e08516] transition-colors text-sm"
           >
-            <Plus className="w-5 h-5" />
-            Novo Produto
+            <Plus className="w-4 h-4" />
+            Novo Item
           </button>
         </div>
 
         {/* Cards de Resumo */}
         {resumo && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-4 gap-3">
             <StatCard
-              icon={<Package className="w-5 h-5 text-blue-600" />}
-              label="Produtos Ativos"
-              value={resumo.produtosAtivos || 0}
+              icon={<Package className="w-4 h-4 text-blue-600" />}
+              label="Produtos"
+              value={produtos.length}
               color="blue"
             />
             <StatCard
-              icon={<AlertTriangle className="w-5 h-5 text-orange-600" />}
+              icon={<Wrench className="w-4 h-4 text-purple-600" />}
+              label="Serviços"
+              value={servicos.length}
+              color="purple"
+            />
+            <StatCard
+              icon={<AlertTriangle className="w-4 h-4 text-orange-600" />}
               label="Estoque Baixo"
               value={resumo.produtosEstoqueBaixo || 0}
-              trend="down"
               color="orange"
             />
             <StatCard
-              icon={<TrendingDown className="w-5 h-5 text-red-600" />}
+              icon={<XCircle className="w-4 h-4 text-red-600" />}
               label="Sem Estoque"
               value={resumo.produtosSemEstoque || 0}
-              trend="down"
               color="red"
-            />
-            <StatCard
-              icon={<DollarSign className="w-5 h-5 text-green-600" />}
-              label="Valor Total em Stock"
-              value={formatarPreco(resumo.valorTotalEstoque || 0)}
-              color="green"
             />
           </div>
         )}
@@ -643,64 +631,80 @@ export default function EstoquePage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="flex border-b border-gray-200">
             <button
-              onClick={() => setAbaAtiva("produtos")}
-              className={`flex items-center gap-2 px-6 py-4 font-medium text-sm transition-colors ${abaAtiva === "produtos"
+              onClick={() => setAbaAtiva("itens")}
+              className={`flex items-center gap-2 px-4 py-2 font-medium text-sm transition-colors ${
+                abaAtiva === "itens"
                   ? "text-[#123859] border-b-2 border-[#123859]"
                   : "text-gray-500 hover:text-gray-700"
-                }`}
+              }`}
             >
-              <Box className="w-4 h-4" />
-              Produtos
+              <Layers className="w-4 h-4" />
+              Todos os Itens
+              <span className="ml-1 px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs">
+                {itens.length}
+              </span>
             </button>
             <button
               onClick={() => setAbaAtiva("movimentacoes")}
-              className={`flex items-center gap-2 px-6 py-4 font-medium text-sm transition-colors ${abaAtiva === "movimentacoes"
+              className={`flex items-center gap-2 px-4 py-2 font-medium text-sm transition-colors ${
+                abaAtiva === "movimentacoes"
                   ? "text-[#123859] border-b-2 border-[#123859]"
                   : "text-gray-500 hover:text-gray-700"
-                }`}
+              }`}
             >
               <History className="w-4 h-4" />
               Movimentações
             </button>
             <button
               onClick={() => setAbaAtiva("deletados")}
-              className={`flex items-center gap-2 px-6 py-4 font-medium text-sm transition-colors ${abaAtiva === "deletados"
+              className={`flex items-center gap-2 px-4 py-2 font-medium text-sm transition-colors ${
+                abaAtiva === "deletados"
                   ? "text-[#123859] border-b-2 border-[#123859]"
                   : "text-gray-500 hover:text-gray-700"
-                }`}
+              }`}
             >
               <Archive className="w-4 h-4" />
-              Deletados
-              {produtosDeletados.length > 0 && (
-                <span className="ml-1 px-2 py-0.5 bg-red-100 text-red-600 rounded-full text-xs">
-                  {produtosDeletados.length}
+              Lixeira
+              {itensDeletados.length > 0 && (
+                <span className="px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full text-xs">
+                  {itensDeletados.length}
                 </span>
               )}
             </button>
           </div>
 
-          <div className="p-6">
-            {abaAtiva === "produtos" ? (
+          <div className="p-4">
+            {abaAtiva === "itens" ? (
               <>
                 {/* Filtros */}
-                <div className="flex flex-col lg:flex-row gap-4 mb-6">
+                <div className="flex gap-2 mb-4">
                   <div className="flex-1 relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
                       type="text"
                       value={busca}
                       onChange={(e) => setBusca(e.target.value)}
-                      placeholder="Buscar produto..."
-                      className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#123859] outline-none"
+                      placeholder="Buscar..."
+                      className="w-full pl-8 pr-3 py-1.5 text-sm rounded-lg border border-gray-300 focus:ring-1 focus:ring-[#123859] outline-none"
                     />
                   </div>
 
                   <select
+                    value={tipoFiltro}
+                    onChange={(e) => setTipoFiltro(e.target.value as any)}
+                    className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 focus:ring-1 focus:ring-[#123859] outline-none bg-white"
+                  >
+                    <option value="todos">Todos</option>
+                    <option value="produto">Produtos</option>
+                    <option value="servico">Serviços</option>
+                  </select>
+
+                  <select
                     value={categoriaFiltro}
                     onChange={(e) => setCategoriaFiltro(e.target.value)}
-                    className="px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#123859] outline-none bg-white"
+                    className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 focus:ring-1 focus:ring-[#123859] outline-none bg-white"
                   >
-                    <option value="">Todas as categorias</option>
+                    <option value="">Categorias</option>
                     {categorias.map((cat) => (
                       <option key={cat.id} value={cat.id}>
                         {cat.nome}
@@ -708,115 +712,97 @@ export default function EstoquePage() {
                     ))}
                   </select>
 
-                  <select
-                    value={filtroEstoque}
-                    onChange={(e) =>
-                      setFiltroEstoque(e.target.value as any)
-                    }
-                    className="px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#123859] outline-none bg-white"
-                  >
-                    <option value="todos">Todos os níveis</option>
-                    <option value="baixo">Estoque baixo</option>
-                    <option value="zerado">Sem estoque</option>
-                  </select>
+                  {tipoFiltro !== "servico" && (
+                    <select
+                      value={filtroEstoque}
+                      onChange={(e) => setFiltroEstoque(e.target.value as any)}
+                      className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 focus:ring-1 focus:ring-[#123859] outline-none bg-white"
+                    >
+                      <option value="todos">Todos níveis</option>
+                      <option value="baixo">Estoque baixo</option>
+                      <option value="zerado">Sem estoque</option>
+                    </select>
+                  )}
 
                   <button
                     onClick={aplicarFiltros}
                     disabled={loading}
-                    className="flex items-center gap-2 px-4 py-2 bg-[#123859] text-white rounded-lg hover:bg-[#1a4d7a] transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1 px-3 py-1.5 bg-[#123859] text-white rounded-lg hover:bg-[#1a4d7a] transition-colors disabled:opacity-50 text-sm"
                   >
                     <Filter className="w-4 h-4" />
                     Filtrar
                   </button>
                 </div>
 
-                {/* Tabela de Produtos */}
+                {/* Tabela de Itens */}
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead className="bg-gray-50 border-b border-gray-200">
-                      <tr>
-                        <th className="py-3 px-4 text-left font-semibold text-gray-700 uppercase text-xs">
-                          Produto
-                        </th>
-                        <th className="py-3 px-4 text-left font-semibold text-gray-700 uppercase text-xs">
-                          Categoria
-                        </th>
-                        <th className="py-3 px-4 text-center font-semibold text-gray-700 uppercase text-xs">
-                          Estoque
-                        </th>
-                        <th className="py-3 px-4 text-center font-semibold text-gray-700 uppercase text-xs">
-                          Mínimo
-                        </th>
-                        <th className="py-3 px-4 text-right font-semibold text-gray-700 uppercase text-xs">
-                          Preço
-                        </th>
-                        <th className="py-3 px-4 text-center font-semibold text-gray-700 uppercase text-xs">
-                          Status
-                        </th>
-                        <th className="py-3 px-4 text-center font-semibold text-gray-700 uppercase text-xs">
-                          Ações
-                        </th>
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="py-2 px-3 text-left font-medium text-gray-600">Item</th>
+                        <th className="py-2 px-3 text-left font-medium text-gray-600">Tipo</th>
+                        <th className="py-2 px-3 text-left font-medium text-gray-600">Categoria</th>
+                        <th className="py-2 px-3 text-center font-medium text-gray-600">Stock</th>
+                        <th className="py-2 px-3 text-right font-medium text-gray-600">Preço</th>
+                        <th className="py-2 px-3 text-center font-medium text-gray-600">Status</th>
+                        <th className="py-2 px-3 text-center font-medium text-gray-600">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {produtos.map((produto) => {
-                        const statusEstoque = getStatusEstoque(produto);
+                      {itens.map((item) => {
+                        const statusEstoque = getStatusEstoque(item);
+                        const tipoBadge = getTipoBadge(item.tipo);
+                        const isServicoItem = isServico(item);
 
                         return (
-                          <tr
-                            key={produto.id}
-                            className="hover:bg-gray-50 transition-colors"
-                          >
-                            <td className="py-4 px-4">
-                              <div className="font-medium text-gray-900">
-                                {produto.nome}
-                              </div>
-                              {produto.codigo && (
-                                <div className="text-xs text-gray-500">
-                                  Cód: {produto.codigo}
-                                </div>
+                          <tr key={item.id} className="hover:bg-gray-50">
+                            <td className="py-2 px-3">
+                              <div className="font-medium">{item.nome}</div>
+                              {item.codigo && (
+                                <div className="text-xs text-gray-400">{item.codigo}</div>
                               )}
                             </td>
-                            <td className="py-4 px-4 text-gray-600">
-                              {produto.categoria?.nome || "-"}
-                            </td>
-                            <td className="py-4 px-4 text-center">
-                              <span
-                                className={`font-semibold ${estaEstoqueBaixo(produto) ||
-                                    estaSemEstoque(produto)
-                                    ? "text-orange-600"
-                                    : "text-gray-900"
-                                  }`}
-                              >
-                                {produto.estoque_atual}
+                            <td className="py-2 px-3">
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${tipoBadge.cor}`}>
+                                {isServicoItem ? <Wrench className="w-3 h-3" /> : <Package className="w-3 h-3" />}
+                                {tipoBadge.texto}
                               </span>
                             </td>
-                            <td className="py-4 px-4 text-center text-gray-500">
-                              {produto.estoque_minimo}
+                            <td className="py-2 px-3 text-gray-600">
+                              {item.categoria?.nome || "-"}
                             </td>
-                            <td className="py-4 px-4 text-right font-medium">
-                              {formatarPreco(produto.preco_venda)}
+                            <td className="py-2 px-3 text-center font-medium">
+                              {isServicoItem ? (
+                                <span className="text-gray-400">—</span>
+                              ) : (
+                                item.estoque_atual
+                              )}
                             </td>
-                            <td className="py-4 px-4 text-center">
+                            <td className="py-2 px-3 text-right font-medium">
+                              {formatarPreco(item.preco_venda)}
+                            </td>
+                            <td className="py-2 px-3 text-center">
                               <span
-                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${statusEstoque.cor}`}
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${statusEstoque.cor}`}
                               >
                                 {statusEstoque.icone}
                                 {statusEstoque.label}
                               </span>
                             </td>
-                            <td className="py-4 px-4">
+                            <td className="py-2 px-3">
                               <div className="flex items-center justify-center gap-1">
+                                {!isServicoItem && (
+                                  <button
+                                    onClick={() => abrirModalEntrada(item)}
+                                    className="p-1 text-green-600 hover:bg-green-50 rounded"
+                                    title="Registrar Entrada"
+                                  >
+                                    <ArrowUpCircle className="w-4 h-4" />
+                                  </button>
+                                )}
                                 <button
-                                  onClick={() => abrirModalEntrada(produto)}
-                                  className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                                  title="Registrar Entrada"
-                                >
-                                  <ArrowUpCircle className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => abrirModalDeletar(produto)}
-                                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  onClick={() => abrirModalDeletar(item)}
+                                  className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
                                   title="Mover para Lixeira"
                                 >
                                   <Trash2 className="w-4 h-4" />
@@ -829,23 +815,10 @@ export default function EstoquePage() {
                     </tbody>
                   </table>
 
-                  {produtos.length === 0 && (
-                    <div className="text-center py-12 text-gray-500">
-                      <Package className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                      <p>Nenhum produto encontrado</p>
-                      {(busca || categoriaFiltro || filtroEstoque !== "todos") && (
-                        <button
-                          onClick={() => {
-                            setBusca("");
-                            setCategoriaFiltro("");
-                            setFiltroEstoque("todos");
-                            carregarDados();
-                          }}
-                          className="mt-2 text-[#123859] hover:underline text-sm"
-                        >
-                          Limpar filtros
-                        </button>
-                      )}
+                  {itens.length === 0 && (
+                    <div className="text-center py-8 text-gray-500 text-sm">
+                      <Layers className="w-8 h-8 mx-auto text-gray-300 mb-2" />
+                      <p>Nenhum item encontrado</p>
                     </div>
                   )}
                 </div>
@@ -854,79 +827,41 @@ export default function EstoquePage() {
               /* Aba de Movimentações */
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="py-3 px-4 text-left font-semibold text-gray-700 uppercase text-xs">
-                        Data
-                      </th>
-                      <th className="py-3 px-4 text-left font-semibold text-gray-700 uppercase text-xs">
-                        Produto
-                      </th>
-                      <th className="py-3 px-4 text-center font-semibold text-gray-700 uppercase text-xs">
-                        Tipo
-                      </th>
-                      <th className="py-3 px-4 text-center font-semibold text-gray-700 uppercase text-xs">
-                        Qtd
-                      </th>
-                      <th className="py-3 px-4 text-left font-semibold text-gray-700 uppercase text-xs">
-                        Motivo/Observação
-                      </th>
-                      <th className="py-3 px-4 text-center font-semibold text-gray-700 uppercase text-xs">
-                        Stock Anterior → Novo
-                      </th>
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="py-2 px-3 text-left font-medium text-gray-600">Data</th>
+                      <th className="py-2 px-3 text-left font-medium text-gray-600">Produto</th>
+                      <th className="py-2 px-3 text-center font-medium text-gray-600">Tipo</th>
+                      <th className="py-2 px-3 text-center font-medium text-gray-600">Qtd</th>
+                      <th className="py-2 px-3 text-left font-medium text-gray-600">Motivo</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {movimentacoes.map((mov) => (
-                      <tr
-                        key={mov.id}
-                        className="hover:bg-gray-50 transition-colors"
-                      >
-                        <td className="py-4 px-4 text-gray-600 whitespace-nowrap">
+                    {movimentacoes.slice(0, 10).map((mov) => (
+                      <tr key={mov.id} className="hover:bg-gray-50">
+                        <td className="py-2 px-3 text-gray-600 whitespace-nowrap text-xs">
                           {formatarData(mov.created_at)}
                         </td>
-                        <td className="py-4 px-4 font-medium text-gray-900">
+                        <td className="py-2 px-3 font-medium">
                           {mov.produto?.nome || "-"}
                         </td>
-                        <td className="py-4 px-4 text-center">
+                        <td className="py-2 px-3 text-center">
                           <span
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${getCorMovimento(
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${getCorMovimento(
                               mov.tipo
                             )}`}
                           >
                             {getIconeMovimento(mov.tipo)}
-                            {mov.tipo.charAt(0).toUpperCase() + mov.tipo.slice(1)}
+                            {mov.tipo}
                           </span>
                         </td>
-                        <td className="py-4 px-4 text-center font-medium">
-                          <span
-                            className={
-                              mov.quantidade > 0 ? "text-green-600" : "text-red-600"
-                            }
-                          >
-                            {mov.quantidade > 0
-                              ? `+${mov.quantidade}`
-                              : mov.quantidade}
+                        <td className="py-2 px-3 text-center font-medium">
+                          <span className={mov.quantidade > 0 ? "text-green-600" : "text-red-600"}>
+                            {mov.quantidade > 0 ? `+${mov.quantidade}` : mov.quantidade}
                           </span>
                         </td>
-                        <td className="py-4 px-4 text-gray-600 max-w-xs">
-                          <div className="truncate" title={mov.observacao || ""}>
-                            {mov.observacao || "-"}
-                          </div>
-                          {mov.tipo_movimento && (
-                            <div className="text-xs text-gray-400 mt-0.5">
-                              {mov.tipo_movimento}
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-4 px-4 text-center text-sm text-gray-500">
-                          {mov.estoque_anterior !== undefined && mov.estoque_novo !== undefined ? (
-                            <span>
-                              {mov.estoque_anterior} → {mov.estoque_novo}
-                            </span>
-                          ) : (
-                            "-"
-                          )}
+                        <td className="py-2 px-3 text-gray-600 text-xs">
+                          {mov.observacao || "-"}
                         </td>
                       </tr>
                     ))}
@@ -934,89 +869,70 @@ export default function EstoquePage() {
                 </table>
 
                 {movimentacoes.length === 0 && (
-                  <div className="text-center py-12 text-gray-500">
-                    <History className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                    Nenhuma movimentação registrada
+                  <div className="text-center py-8 text-gray-500 text-sm">
+                    <History className="w-8 h-8 mx-auto text-gray-300 mb-2" />
+                    Nenhuma movimentação
                   </div>
                 )}
               </div>
             ) : (
-              /* Aba de Deletados */
+              /* Aba de Lixeira */
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="py-3 px-4 text-left font-semibold text-gray-700 uppercase text-xs">
-                        Produto
-                      </th>
-                      <th className="py-3 px-4 text-left font-semibold text-gray-700 uppercase text-xs">
-                        Categoria
-                      </th>
-                      <th className="py-3 px-4 text-center font-semibold text-gray-700 uppercase text-xs">
-                        Deletado em
-                      </th>
-                      <th className="py-3 px-4 text-right font-semibold text-gray-700 uppercase text-xs">
-                        Preço
-                      </th>
-                      <th className="py-3 px-4 text-center font-semibold text-gray-700 uppercase text-xs">
-                        Ações
-                      </th>
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="py-2 px-3 text-left font-medium text-gray-600">Item</th>
+                      <th className="py-2 px-3 text-left font-medium text-gray-600">Tipo</th>
+                      <th className="py-2 px-3 text-left font-medium text-gray-600">Categoria</th>
+                      <th className="py-2 px-3 text-center font-medium text-gray-600">Ações</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {produtosDeletados.map((produto) => (
-                      <tr
-                        key={produto.id}
-                        className="hover:bg-gray-50 transition-colors bg-red-50/30"
-                      >
-                        <td className="py-4 px-4">
-                          <div className="font-medium text-gray-900 line-through opacity-75">
-                            {produto.nome}
-                          </div>
-                          {produto.codigo && (
-                            <div className="text-xs text-gray-500">
-                              Cód: {produto.codigo}
+                    {itensDeletados.map((item) => {
+                      const tipoBadge = getTipoBadge(item.tipo);
+                      
+                      return (
+                        <tr key={item.id} className="hover:bg-gray-50 bg-red-50/30">
+                          <td className="py-2 px-3">
+                            <span className="line-through opacity-75">{item.nome}</span>
+                          </td>
+                          <td className="py-2 px-3">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${tipoBadge.cor} opacity-75`}>
+                              {item.tipo === "servico" ? <Wrench className="w-3 h-3" /> : <Package className="w-3 h-3" />}
+                              {tipoBadge.texto}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 text-gray-600">
+                            {item.categoria?.nome || "-"}
+                          </td>
+                          <td className="py-2 px-3">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => abrirModalRestaurar(item)}
+                                className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                                title="Restaurar"
+                              >
+                                <RotateCcw className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => abrirModalForceDelete(item)}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded"
+                                title="Deletar permanentemente"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
-                          )}
-                        </td>
-                        <td className="py-4 px-4 text-gray-600">
-                          {produto.categoria?.nome || "-"}
-                        </td>
-                        <td className="py-4 px-4 text-center text-gray-500">
-                          {produto.deleted_at
-                            ? formatarData(produto.deleted_at)
-                            : "-"}
-                        </td>
-                        <td className="py-4 px-4 text-right font-medium opacity-75">
-                          {formatarPreco(produto.preco_venda)}
-                        </td>
-                        <td className="py-4 px-4">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => abrirModalRestaurar(produto)}
-                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Restaurar Produto"
-                            >
-                              <RotateCcw className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => abrirModalForceDelete(produto)}
-                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Deletar Permanentemente"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
 
-                {produtosDeletados.length === 0 && (
-                  <div className="text-center py-12 text-gray-500">
-                    <Archive className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                    Nenhum produto deletado
+                {itensDeletados.length === 0 && (
+                  <div className="text-center py-8 text-gray-500 text-sm">
+                    <Archive className="w-8 h-8 mx-auto text-gray-300 mb-2" />
+                    Lixeira vazia
                   </div>
                 )}
               </div>
@@ -1025,64 +941,47 @@ export default function EstoquePage() {
         </div>
       </div>
 
-      {/* Modal de Entrada */}
+      {/* Modais */}
       <ModalEntrada
         isOpen={modalEntradaAberto}
         onClose={() => setModalEntradaAberto(false)}
-        produto={produtoSelecionado}
+        produto={itemSelecionado}
         onConfirm={handleEntrada}
       />
 
-      {/* Modal de Confirmação - Deletar */}
       {modalConfirmacao.tipo === "delete" && (
         <ConfirmacaoModal
           isOpen={modalConfirmacao.isOpen}
-          onClose={() =>
-            setModalConfirmacao({ isOpen: false, tipo: "delete", produto: null })
-          }
-          onConfirm={handleDeletarProduto}
+          onClose={() => setModalConfirmacao({ isOpen: false, tipo: "delete", produto: null })}
+          onConfirm={handleDeletarItem}
           titulo="Mover para Lixeira"
-          mensagem={`Tem certeza que deseja mover "${modalConfirmacao.produto?.nome}" para a lixeira? O produto não aparecerá mais nas listagens, mas poderá ser restaurado posteriormente.`}
+          mensagem={`Mover "${modalConfirmacao.produto?.nome}" para a lixeira?`}
           tipo="warning"
-          confirmarTexto="Mover para Lixeira"
+          confirmarTexto="Mover"
         />
       )}
 
-      {/* Modal de Confirmação - Restaurar */}
       {modalConfirmacao.tipo === "restore" && (
         <ConfirmacaoModal
           isOpen={modalConfirmacao.isOpen}
-          onClose={() =>
-            setModalConfirmacao({
-              isOpen: false,
-              tipo: "restore",
-              produto: null,
-            })
-          }
-          onConfirm={handleRestaurarProduto}
-          titulo="Restaurar Produto"
-          mensagem={`Tem certeza que deseja restaurar "${modalConfirmacao.produto?.nome}"? O produto voltará a estar disponível no estoque.`}
+          onClose={() => setModalConfirmacao({ isOpen: false, tipo: "restore", produto: null })}
+          onConfirm={handleRestaurarItem}
+          titulo="Restaurar Item"
+          mensagem={`Restaurar "${modalConfirmacao.produto?.nome}"?`}
           tipo="info"
           confirmarTexto="Restaurar"
         />
       )}
 
-      {/* Modal de Confirmação - Force Delete */}
       {modalConfirmacao.tipo === "forceDelete" && (
         <ConfirmacaoModal
           isOpen={modalConfirmacao.isOpen}
-          onClose={() =>
-            setModalConfirmacao({
-              isOpen: false,
-              tipo: "forceDelete",
-              produto: null,
-            })
-          }
+          onClose={() => setModalConfirmacao({ isOpen: false, tipo: "forceDelete", produto: null })}
           onConfirm={handleForceDelete}
           titulo="Deletar Permanentemente"
-          mensagem={`ATENÇÃO: Tem certeza que deseja deletar "${modalConfirmacao.produto?.nome}" PERMANENTEMENTE? Esta ação não pode ser desfeita e todos os dados serão perdidos!`}
+          mensagem={`Deletar "${modalConfirmacao.produto?.nome}" permanentemente?`}
           tipo="danger"
-          confirmarTexto="Deletar Permanentemente"
+          confirmarTexto="Deletar"
         />
       )}
     </MainEmpresa>

@@ -122,6 +122,8 @@ class DocumentoFiscalController extends Controller
 
     /**
      * Emitir qualquer tipo de documento fiscal
+     * ✅ NOTA: O troco não é tratado aqui - é responsabilidade do frontend
+     * A validação de pagamento para FR está no VendaController, não neste controller
      */
     public function emitir(Request $request)
     {

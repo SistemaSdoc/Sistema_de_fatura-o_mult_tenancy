@@ -6,14 +6,10 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
-  PieChart,
-  Pie,
-  Cell,
   XAxis,
   YAxis,
   Tooltip,
   CartesianGrid,
-  Legend,
   AreaChart,
   Area,
 } from "recharts";
@@ -31,16 +27,12 @@ import {
   Package,
   ArrowUpRight,
   ArrowDownRight,
-  CreditCard,
   Receipt,
   Wallet,
-  BarChart3,
-  PieChartIcon,
-  Activity,
 } from "lucide-react";
 
-import { dashboardService, vendaService } from "@/services/vendas";
-import type { DashboardResponse, Venda } from "@/services/vendas";
+import { dashboardService, vendaService, NOMES_TIPO_DOCUMENTO } from "@/services/vendas";
+import type { DashboardResponse, Venda, TipoDocumentoFiscal } from "@/services/vendas";
 
 /* 🎨 Paleta FacturaJá */
 const COLORS = {
@@ -109,7 +101,6 @@ const StatCard = ({
   trend?: { value: number; label: string };
   color?: string;
 }) => {
-  const numericValue = typeof value === 'string' ? parseFloat(value) || 0 : value;
   const isPositive = trend?.value ? trend.value > 0 : false;
 
   return (
@@ -140,26 +131,21 @@ const ChartCard = ({
   icon,
   children,
   subtitle,
-  action
 }: {
   title: string;
   icon: React.ReactNode;
   children: React.ReactNode;
   subtitle?: string;
-  action?: React.ReactNode;
 }) => (
-  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-    <div className="flex items-center justify-between mb-6">
-      <div className="flex items-center gap-3">
-        <div className="p-2 rounded-lg bg-gray-50">
-          {icon}
-        </div>
-        <div>
-          <h3 className="font-semibold text-gray-900">{title}</h3>
-          {subtitle && <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>}
-        </div>
+  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 h-full">
+    <div className="flex items-center gap-3 mb-6">
+      <div className="p-2 rounded-lg bg-gray-50">
+        {icon}
       </div>
-      {action && action}
+      <div>
+        <h3 className="font-semibold text-gray-900">{title}</h3>
+        {subtitle && <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>}
+      </div>
     </div>
     {children}
   </div>
@@ -172,7 +158,7 @@ const StatusBadge = ({ status }: { status: string }) => {
     cancelada: { color: "bg-red-100 text-red-700", icon: XCircle, label: "Cancelada" },
     paga: { color: "bg-blue-100 text-blue-700", icon: CheckCircle, label: "Paga" },
     pendente: { color: "bg-orange-100 text-orange-700", icon: Clock, label: "Pendente" },
-    parcial: { color: "bg-purple-100 text-purple-700", icon: Activity, label: "Parcial" },
+    parcial: { color: "bg-purple-100 text-purple-700", icon: AlertCircle, label: "Parcial" },
   };
 
   const statusKey = status?.toLowerCase() || "aberta";
@@ -187,7 +173,7 @@ const StatusBadge = ({ status }: { status: string }) => {
 };
 
 const EmptyState = ({ icon: Icon, title, description }: { icon: any, title: string, description: string }) => (
-  <div className="h-[300px] flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-200 rounded-lg bg-gray-50/50">
+  <div className="h-[250px] flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-200 rounded-lg bg-gray-50/50">
     <Icon className="w-12 h-12 mb-3 text-gray-300" />
     <p className="font-medium text-gray-500">{title}</p>
     <p className="text-sm text-gray-400 mt-1">{description}</p>
@@ -212,11 +198,55 @@ const formatNumber = (value: number | string | undefined | null): string => {
 
 const formatDate = (dateString: string) => {
   if (!dateString) return "-";
-  return new Date(dateString).toLocaleDateString("pt-PT", {
+  const date = new Date(dateString);
+  return date.toLocaleDateString("pt-PT", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
   });
+};
+
+const formatTimeOnly = (timeString: string) => {
+  if (!timeString) return "-";
+  
+  let timeStr = timeString;
+  if (timeString.includes('T')) {
+    timeStr = timeString.split('T')[1];
+  }
+  
+  const dummyDate = new Date(`2000-01-01T${timeStr}`);
+  return dummyDate.toLocaleTimeString("pt-PT", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+// Função para obter nome amigável do tipo de documento
+const getNomeTipoDocumento = (tipo: string): string => {
+  if (!tipo) return "Desconhecido";
+  
+  // Tentar no NOMES_TIPO_DOCUMENTO do service
+  if (NOMES_TIPO_DOCUMENTO && NOMES_TIPO_DOCUMENTO[tipo as TipoDocumentoFiscal]) {
+    return NOMES_TIPO_DOCUMENTO[tipo as TipoDocumentoFiscal];
+  }
+
+  // Mapeamento adicional para tipos que podem vir em formato diferente
+  const mapeamento: Record<string, string> = {
+    'VENDA': 'Venda',
+    'venda': 'Venda',
+    'fatura': 'Fatura',
+    'recibo': 'Recibo',
+    'proforma': 'Fatura Proforma',
+    'nota_credito': 'Nota de Crédito',
+    'nota_debito': 'Nota de Débito',
+  };
+
+  if (mapeamento[tipo]) {
+    return mapeamento[tipo];
+  }
+
+  // Se não encontrar, retornar o próprio tipo formatado
+  return tipo.replace(/_/g, ' ').replace(/-/g, ' ').toUpperCase();
 };
 
 /* ===== PÁGINA PRINCIPAL ===== */
@@ -258,24 +288,20 @@ export default function RelatorioVendas() {
     return (
       <MainEmpresa>
         <div className="p-6 space-y-6 max-w-7xl mx-auto">
-          {/* Header Skeleton */}
           <div className="border-b border-gray-200 pb-6">
             <div className="h-8 bg-gray-200 rounded w-64 mb-2 animate-pulse"></div>
             <div className="h-5 bg-gray-200 rounded w-96 animate-pulse"></div>
           </div>
 
-          {/* Cards Skeleton */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
           </div>
 
-          {/* Charts Skeleton */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <SkeletonChart />
             <SkeletonChart />
           </div>
 
-          {/* Table Skeleton */}
           <SkeletonTable />
         </div>
       </MainEmpresa>
@@ -304,39 +330,41 @@ export default function RelatorioVendas() {
     );
   }
 
-  /* ===== PROCESSAMENTO DE DADOS ===== */
   const safeNumber = (value: any, defaultValue = 0): number => {
     if (value === undefined || value === null) return defaultValue;
     const num = Number(value);
     return isNaN(num) ? defaultValue : num;
   };
 
-  // Dados para os cards
+  // Dados para os cards - usando apenas campos que existem no DashboardData
   const statsData = [
     {
       icon: <DollarSign className="w-5 h-5" />,
       label: "Total Faturado",
       value: formatCurrency(dashboard.kpis?.totalFaturado),
-      trend: dashboard.kpis?.crescimentoPercentual ? { value: dashboard.kpis.crescimentoPercentual, label: "vs mês anterior" } : undefined,
+      trend: dashboard.kpis?.crescimentoPercentual ? { 
+        value: dashboard.kpis.crescimentoPercentual, 
+        label: "vs mês anterior" 
+      } : undefined,
       color: COLORS.primary,
     },
     {
       icon: <ShoppingCart className="w-5 h-5" />,
       label: "Total de Vendas",
       value: formatNumber(dashboard.vendas?.total),
-      color: COLORS.accent,
+      color: COLORS.primary,
     },
     {
       icon: <Users className="w-5 h-5" />,
       label: "Clientes Ativos",
       value: formatNumber(dashboard.clientes?.ativos),
-      color: COLORS.success,
+      color: COLORS.primary,
     },
     {
       icon: <Receipt className="w-5 h-5" />,
       label: "Ticket Médio",
       value: formatCurrency(dashboard.kpis?.ticketMedio),
-      color: COLORS.info,
+      color: COLORS.primary,
     },
   ];
 
@@ -350,6 +378,7 @@ export default function RelatorioVendas() {
       quantidade: safeNumber(item.FT) + safeNumber(item.FR),
     }));
   } else if (vendas.length > 0) {
+    // Fallback: calcular a partir das vendas
     const vendasPorMes = vendas.reduce((acc, venda) => {
       const date = new Date(venda.data_venda);
       const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -369,46 +398,14 @@ export default function RelatorioVendas() {
       }));
   }
 
-  // ===== GRÁFICO 2: Distribuição por Status (PieChart) =====
-  // Forçar sempre ter dados para o gráfico de pizza aparecer
-  let statusData = [
-    { name: "Faturadas", value: safeNumber(dashboard.vendas?.faturadas), color: COLORS.success },
-    { name: "Abertas", value: safeNumber(dashboard.vendas?.abertas), color: COLORS.warning },
-  ];
+  // ===== GRÁFICO 2: Documentos por Tipo =====
+  let documentosPorTipo: Array<{ tipo: string; tipoCode: string; quantidade: number; valor: number }> = [];
 
-  // Se todos os valores forem 0, calcular das vendas
-  const totalStatus = statusData.reduce((sum, item) => sum + item.value, 0);
-
-  if (totalStatus === 0 && vendas.length > 0) {
-    const counts = vendas.reduce((acc, v) => {
-      const status = (v.status || 'aberta').toLowerCase();
-      if (status === 'faturada' || status === 'paga' || status === 'faturado') acc.faturadas++;
-      else if (status === 'cancelada' || status === 'cancelado') acc.canceladas++;
-      else acc.abertas++; // tudo que não é faturada ou cancelada é aberta
-      return acc;
-    }, { faturadas: 0, abertas: 0, canceladas: 0 });
-
-    statusData = [
-      { name: "Faturadas", value: counts.faturadas, color: COLORS.success },
-      { name: "Abertas", value: counts.abertas, color: COLORS.warning },
-    ];
-  }
-
-  // Se ainda for tudo zero, criar dados de exemplo para mostrar o gráfico
-  const finalStatusData = statusData.every(s => s.value === 0)
-    ? [
-      { name: "Faturadas", value: 1, color: COLORS.success },
-      { name: "Abertas", value: 0, color: COLORS.warning },
-    ]
-    : statusData;
-
-  // ===== GRÁFICO 3: Documentos por Tipo =====
-  let documentosPorTipo: Array<{ tipo: string; quantidade: number; valor: number }> = [];
-
-  if (dashboard.documentos_fiscais?.por_tipo) {
+  if (dashboard.documentos_fiscais?.por_tipo && Object.keys(dashboard.documentos_fiscais.por_tipo).length > 0) {
     documentosPorTipo = Object.entries(dashboard.documentos_fiscais.por_tipo)
       .map(([tipo, data]) => ({
-        tipo: data.nome || tipo,
+        tipo: getNomeTipoDocumento(data.nome || tipo),
+        tipoCode: tipo,
         quantidade: safeNumber(data.quantidade),
         valor: safeNumber(data.valor),
       }))
@@ -416,27 +413,28 @@ export default function RelatorioVendas() {
       .slice(0, 5);
   }
 
-  if (documentosPorTipo.length === 0 && vendas.length > 0) {
-    const docs = vendas.reduce((acc, v) => {
-      const tipoKey = v.tipo_documento_fiscal || v.tipo_documento || "VENDA";
-      if (!acc[tipoKey]) acc[tipoKey] = { nome: tipoKey, quantidade: 0, valor: 0 };
-      acc[tipoKey].quantidade++;
-      acc[tipoKey].valor += safeNumber(v.total);
-      return acc;
-    }, {} as Record<string, { nome: string; quantidade: number; valor: number }>);
+  // ===== GRÁFICO 3: Produtos Mais Vendidos =====
+  const produtosMaisVendidos = dashboard.indicadores?.produtosMaisVendidos?.slice(0, 5) || [];
 
-    documentosPorTipo = Object.values(docs)
-      .map(d => ({
-        tipo: d.nome,
-        quantidade: d.quantidade,
-        valor: d.valor
-      }))
-      .sort((a, b) => b.quantidade - a.quantidade)
-      .slice(0, 5);
+  // Garantir que sempre tenhamos 5 posições para manter a numeração 1-5
+  const produtosCompletos = [...produtosMaisVendidos];
+  while (produtosCompletos.length < 5) {
+    produtosCompletos.push({
+      produto: "Sem dados",
+      codigo: "-",
+      quantidade: 0,
+      valor_total: 0,
+    });
   }
 
-  // ===== GRÁFICO 4: Produtos Mais Vendidos =====
-  const produtosMaisVendidos = dashboard.indicadores?.produtosMaisVendidos?.slice(0, 5) || [];
+  // Cores para os rankings
+  const rankingColors = [
+    { bg: 'bg-yellow-500', text: 'text-yellow-600' },      // 1º
+    { bg: 'bg-gray-400', text: 'text-gray-600' },          // 2º
+    { bg: 'bg-orange-400', text: 'text-orange-600' },      // 3º
+    { bg: 'bg-blue-400', text: 'text-blue-600' },          // 4º
+    { bg: 'bg-purple-400', text: 'text-purple-600' },      // 5º
+  ];
 
   return (
     <MainEmpresa>
@@ -456,10 +454,6 @@ export default function RelatorioVendas() {
                 })}
               </p>
             </div>
-            <div className="flex items-center gap-2 text-sm bg-blue-50 text-blue-700 px-4 py-2 rounded-lg">
-              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-              Dados atualizados em tempo real
-            </div>
           </div>
         </div>
 
@@ -470,139 +464,87 @@ export default function RelatorioVendas() {
           ))}
         </div>
 
-        {/* ===== GRÁFICOS PRINCIPAIS - LINHA 1 ===== */}
+        {/* ===== GRÁFICO DE EVOLUÇÃO MENSAL ===== */}
+        <ChartCard
+          title="Evolução das Vendas"
+          icon={<TrendingUp className="w-5 h-5 text-[#F9941F]" />}
+          subtitle="Últimos 6 meses"
+        >
+          {evolucaoMensalData.length > 0 && evolucaoMensalData.some(d => d.valor > 0) ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <AreaChart data={evolucaoMensalData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorValor" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={COLORS.accent} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={COLORS.accent} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={COLORS.lightGray} vertical={false} />
+                <XAxis
+                  dataKey="mes"
+                  tick={{ fill: COLORS.gray, fontSize: 12 }}
+                  axisLine={{ stroke: COLORS.lightGray }}
+                />
+                <YAxis
+                  tick={{ fill: COLORS.gray, fontSize: 12 }}
+                  axisLine={{ stroke: COLORS.lightGray }}
+                  tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                />
+                <Tooltip
+                  formatter={(value: number) => [formatCurrency(value), "Valor"]}
+                  labelFormatter={(label) => `Mês: ${label}`}
+                  contentStyle={{
+                    backgroundColor: 'white',
+                    border: `1px solid ${COLORS.lightGray}`,
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="valor"
+                  stroke={COLORS.accent}
+                  strokeWidth={3}
+                  fillOpacity={1}
+                  fill="url(#colorValor)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <EmptyState
+              icon={TrendingUp}
+              title="Sem dados de evolução"
+              description="Nenhuma venda registrada nos últimos meses"
+            />
+          )}
+        </ChartCard>
+
+        {/* ===== GRÁFICOS LADO A LADO: Documentos por Tipo e Top Produtos ===== */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Gráfico de Evolução Mensal */}
-          <ChartCard
-            title="Evolução das Vendas"
-            icon={<TrendingUp className="w-5 h-5 text-[#123859]" />}
-            subtitle="Últimos 6 meses"
-          >
-            {evolucaoMensalData.length > 0 && evolucaoMensalData.some(d => d.valor > 0) ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={evolucaoMensalData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorValor" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={COLORS.accent} stopOpacity={0.3} />
-                      <stop offset="95%" stopColor={COLORS.accent} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke={COLORS.lightGray} vertical={false} />
-                  <XAxis
-                    dataKey="mes"
-                    tick={{ fill: COLORS.gray, fontSize: 12 }}
-                    axisLine={{ stroke: COLORS.lightGray }}
-                  />
-                  <YAxis
-                    tick={{ fill: COLORS.gray, fontSize: 12 }}
-                    axisLine={{ stroke: COLORS.lightGray }}
-                    tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
-                  />
-                  <Tooltip
-                    formatter={(value: number) => [formatCurrency(value), "Valor"]}
-                    labelFormatter={(label) => `Mês: ${label}`}
-                    contentStyle={{
-                      backgroundColor: 'white',
-                      border: `1px solid ${COLORS.lightGray}`,
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="valor"
-                    stroke={COLORS.accent}
-                    strokeWidth={3}
-                    fillOpacity={1}
-                    fill="url(#colorValor)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <EmptyState
-                icon={TrendingUp}
-                title="Sem dados de evolução"
-                description="Nenhuma venda registrada nos últimos meses"
-              />
-            )}
-          </ChartCard>
-
-          {/* Gráfico de Status das Vendas - PIZZA */}
-          <ChartCard
-            title="Distribuição por Status"
-            icon={<PieChartIcon className="w-5 h-5 text-[#123859]" />}
-            subtitle="Quantidade de vendas por status"
-          >
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={finalStatusData}
-                    cx="50%"
-                    cy="45%"
-                    innerRadius={70}
-                    outerRadius={100}
-                    paddingAngle={2}
-                    dataKey="value"
-                    nameKey="name"
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                    labelLine={true}
-                  >
-                    {finalStatusData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} stroke={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(value: number, name: string) => [formatNumber(value), name]}
-                    contentStyle={{
-                      backgroundColor: 'white',
-                      border: `1px solid ${COLORS.lightGray}`,
-                      borderRadius: '8px',
-                    }}
-                  />
-                  <Legend verticalAlign="bottom" align="center" height={36} />
-                </PieChart>
-              </ResponsiveContainer>
-
-              {/* Resumo numérico abaixo do gráfico */}
-              <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-gray-100">
-                {finalStatusData.map((item) => (
-                  <div key={item.name} className="text-center">
-                    <div className="text-xl font-bold" style={{ color: item.color }}>
-                      {formatNumber(item.value)}
-                    </div>
-                    <div className="text-xs text-gray-500">{item.name}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </ChartCard>
-        </div>
-
-        {/* ===== GRÁFICOS SECUNDÁRIOS - LINHA 2 ===== */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Gráfico de Documentos por Tipo */}
+          {/* GRÁFICO DE DOCUMENTOS POR TIPO - ESQUERDA */}
           <ChartCard
             title="Documentos por Tipo"
-            icon={<FileText className="w-5 h-5 text-[#123859]" />}
+            icon={<FileText className="w-5 h-5 text-[#F9941F]" />}
             subtitle="Top 5 tipos mais utilizados"
           >
             {documentosPorTipo.length > 0 ? (
               <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={documentosPorTipo} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
+                <BarChart data={documentosPorTipo} layout="vertical" margin={{ top: 5, right: 30, left: 100, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={COLORS.lightGray} horizontal={true} vertical={false} />
                   <XAxis type="number" hide />
                   <YAxis
                     dataKey="tipo"
                     type="category"
                     tick={{ fontSize: 11 }}
-                    width={80}
+                    width={95}
+                    interval={0}
                   />
                   <Tooltip
                     formatter={(value: number, name: string) => {
-                      if (name === "quantidade") return [value, "Quantidade"];
+                      if (name === "quantidade") return [formatNumber(value), "Quantidade"];
                       return [formatCurrency(value), "Valor"];
                     }}
+                    labelFormatter={(label) => `${label}`}
                     contentStyle={{
                       backgroundColor: 'white',
                       border: `1px solid ${COLORS.lightGray}`,
@@ -622,58 +564,66 @@ export default function RelatorioVendas() {
             )}
           </ChartCard>
 
-          {/* Gráfico de Produtos Mais Vendidos */}
+          {/* GRÁFICO DE PRODUTOS MAIS VENDIDOS - DIREITA */}
           <ChartCard
             title="Top Produtos"
-            icon={<Package className="w-5 h-5 text-[#123859]" />}
+            icon={<Package className="w-5 h-5 text-[#F9941F]" />}
             subtitle="Produtos mais vendidos"
           >
-            {produtosMaisVendidos.length > 0 ? (
-              <div className="space-y-3">
-                {produtosMaisVendidos.map((produto, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div className="space-y-3">
+              {produtosCompletos.map((produto, index) => {
+                const colors = rankingColors[index];
+                const hasData = produto.valor_total > 0;
+                
+                return (
+                  <div 
+                    key={index} 
+                    className={`flex items-center justify-between p-3 rounded-lg ${
+                      hasData ? 'bg-gray-50 hover:bg-gray-100' : 'bg-gray-50/50'
+                    } transition-colors`}
+                  >
                     <div className="flex items-center gap-3">
                       <div className={`
                         w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold
-                        ${index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-gray-400' : index === 2 ? 'bg-orange-400' : 'bg-gray-300'}
+                        ${hasData ? colors.bg : 'bg-gray-300'}
                       `}>
                         {index + 1}
                       </div>
                       <div>
-                        <p className="font-medium text-gray-900 text-sm">{produto.produto}</p>
-                        <p className="text-xs text-gray-500">{produto.codigo || 'Sem código'}</p>
+                        <p className={`font-medium text-sm ${hasData ? 'text-gray-900' : 'text-gray-400'}`}>
+                          {produto.produto}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {produto.codigo || 'Sem código'}
+                        </p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-semibold text-[#123859] text-sm">
-                        {formatCurrency(produto.valor_total)}
+                      <p className={`font-semibold text-sm ${hasData ? 'text-[#123859]' : 'text-gray-400'}`}>
+                        {hasData ? formatCurrency(produto.valor_total) : '-'}
                       </p>
-                      <p className="text-xs text-gray-500">{produto.quantidade} unid.</p>
+                      <p className="text-xs text-gray-500">
+                        {hasData ? `${produto.quantidade} unid.` : '-'}
+                      </p>
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                icon={Package}
-                title="Sem dados de produtos"
-                description="Nenhum produto vendido no período"
-              />
-            )}
+                );
+              })}
+            </div>
           </ChartCard>
         </div>
 
         {/* ===== TABELA DE VENDAS RECENTES ===== */}
         <ChartCard
           title="Vendas Recentes"
-          icon={<ShoppingCart className="w-5 h-5 text-[#123859]" />}
+          icon={<ShoppingCart className="w-5 h-5 text-[#F9941F]" />}
           subtitle={`Últimas ${Math.min(vendas.length, 10)} vendas`}
         >
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="py-4 px-4 text-left font-semibold text-gray-700">Data</th>
+                  <th className="py-4 px-4 text-left font-semibold text-gray-700">Data/Hora</th>
                   <th className="py-4 px-4 text-left font-semibold text-gray-700">Cliente</th>
                   <th className="py-4 px-4 text-left font-semibold text-gray-700">Documento</th>
                   <th className="py-4 px-4 text-right font-semibold text-gray-700">Total</th>
@@ -684,7 +634,14 @@ export default function RelatorioVendas() {
                 {vendas.slice(0, 10).map((venda) => (
                   <tr key={venda.id} className="hover:bg-gray-50 transition-colors">
                     <td className="py-4 px-4 text-gray-600 whitespace-nowrap">
-                      {formatDate(venda.data_venda)}
+                      <div className="flex flex-col">
+                        <span>{formatDate(venda.data_venda)}</span>
+                        {venda.hora_venda && (
+                          <span className="text-xs text-gray-400">
+                            {formatTimeOnly(venda.hora_venda)}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-4 px-4">
                       <div className="font-medium text-gray-900">
@@ -696,7 +653,7 @@ export default function RelatorioVendas() {
                     </td>
                     <td className="py-4 px-4">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 uppercase">
-                        {venda.tipo_documento_fiscal || venda.tipo_documento || "VENDA"}
+                        {getNomeTipoDocumento(venda.tipo_documento_fiscal || venda.tipo_documento || "VENDA")}
                       </span>
                     </td>
                     <td className="py-4 px-4 text-right font-semibold text-[#123859]">
@@ -720,7 +677,7 @@ export default function RelatorioVendas() {
         </ChartCard>
 
         {/* ===== ALERTAS E INDICADORES ===== */}
-        {(dashboard.alertas && Object.values(dashboard.alertas).some(v => safeNumber(v) > 0)) && (
+        {dashboard.alertas && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {dashboard.alertas.documentos_vencidos > 0 && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
