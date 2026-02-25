@@ -1,9 +1,6 @@
 <?php
-
 namespace App\Providers;
-
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
-
 // Models
 use App\Models\Produto;
 use App\Models\Venda;
@@ -13,8 +10,6 @@ use App\Models\Fatura;
 use App\Models\Categoria;
 use App\Models\User;
 use App\Models\Cliente;
-
-
 // Policies
 use App\Policies\ProdutoPolicy;
 use App\Policies\VendaPolicy;

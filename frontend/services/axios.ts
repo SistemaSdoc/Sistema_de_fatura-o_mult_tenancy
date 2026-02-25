@@ -9,7 +9,7 @@ export interface ApiErrorResponse {
 }
 
 const api = axios.create({
-  baseURL: "http://192.168.1.199:8000", // URL do backend Laravel
+  baseURL: "http://192.168.1.198:8000", // URL do backend Laravel
   withCredentials: true, // ESSENCIAL: envia cookies de sessão do Sanctum
   headers: {
     Accept: "application/json",
