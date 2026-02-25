@@ -589,7 +589,7 @@ export default function EstoquePage() {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-[#123859]">Produtos e Serviços</h1>
           <button
-            onClick={() => router.push("/produtos/novo")}
+            onClick={() => router.push("/dashboard/Produtos_servicos/Novo_produto_servico")}
             className="flex items-center gap-2 px-3 py-1.5 bg-[#F9941F] text-white rounded-lg hover:bg-[#e08516] transition-colors text-sm"
           >
             <Plus className="w-4 h-4" />

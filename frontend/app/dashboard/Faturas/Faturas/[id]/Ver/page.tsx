@@ -20,7 +20,10 @@ import {
     Link2,
     Copy,
     Loader2,
-    Printer
+    Printer,
+    Package,
+    Receipt,
+    ScrollText
 } from "lucide-react";
 import MainEmpresa from "@/app/components/MainEmpresa";
 import {
@@ -35,9 +38,9 @@ import {
 
 /* ==================== CONSTANTES ==================== */
 const COLORS = {
-    primary: '#123859',      // Azul escuro (ações, botões, texto principal)
-    secondary: '#F9941F',    // Laranja âmbra (destaques, títulos, indicadores)
-    background: '#F2F2F2',   // Cinza muito claro (fundo geral)
+    primary: '#123859',      // Azul escuro
+    secondary: '#F9941F',    // Laranja âmbra
+    background: '#F2F2F2',
     white: '#FFFFFF',
     text: '#333333',
     textLight: '#666666',
@@ -46,8 +49,6 @@ const COLORS = {
     danger: '#dc3545',
     info: '#17a2b8',
 };
-
-type TabType = 'detalhes' | 'itens' | 'recibos' | 'documentos-relacionados';
 
 /* ==================== COMPONENTE PRINCIPAL ==================== */
 export default function VisualizarDocumentoPage() {
@@ -59,7 +60,6 @@ export default function VisualizarDocumentoPage() {
     const [documento, setDocumento] = useState<DocumentoFiscal | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<TabType>('detalhes');
     const [acaoLoading, setAcaoLoading] = useState<string | null>(null);
 
     /* ==================== CARREGAR DOCUMENTO ==================== */
@@ -152,289 +152,6 @@ export default function VisualizarDocumentoPage() {
     const podeConverterProforma = useMemo(() => documento && documento.tipo_documento === 'FP' && documento.estado !== 'cancelado', [documento]);
     const podeCancelar = useMemo(() => documento && !['cancelado', 'expirado'].includes(documento.estado), [documento]);
 
-    /* ==================== COMPONENTE DE IMPRESSÃO PROFISSIONAL ==================== */
-    const PrintDocument = () => {
-        if (!documento) return null;
-
-        const nomeCliente = documento.cliente?.nome || documento.cliente_nome || 'Consumidor Final';
-        const nifCliente = documento.cliente?.nif || documento.cliente_nif;
-        const enderecoCliente = documento.cliente?.endereco || '';
-        const telefoneCliente = documento.cliente?.telefone || '';
-        const emailCliente = documento.cliente?.email || '';
-
-        return (
-            <div className="print-only" style={{
-                fontFamily: 'Arial, sans-serif',
-                backgroundColor: COLORS.white,
-                padding: '20px',
-                maxWidth: '210mm',
-                margin: '0 auto',
-                color: COLORS.text
-            }}>
-                {/* Cabeçalho com gradiente sutil */}
-                <div style={{
-                    background: `linear-gradient(135deg, ${COLORS.primary} 0%, #1a4a7a 100%)`,
-                    color: COLORS.white,
-                    padding: '20px',
-                    borderRadius: '8px 8px 0 0',
-                    marginBottom: '20px'
-                }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <tbody>
-                            <tr>
-                                <td style={{ width: '60%', verticalAlign: 'middle' }}>
-                                    <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 'bold' }}>MINHA EMPRESA</h1>
-                                    <p style={{ margin: '5px 0 0 0', fontSize: '12px', opacity: 0.9 }}>NIF: 123456789 • Luanda, Angola</p>
-                                </td>
-                                <td style={{ width: '40%', textAlign: 'right', verticalAlign: 'middle' }}>
-                                    <div style={{
-                                        backgroundColor: 'rgba(255,255,255,0.15)',
-                                        padding: '10px 15px',
-                                        borderRadius: '6px',
-                                        display: 'inline-block'
-                                    }}>
-                                        <p style={{ margin: 0, fontSize: '12px', opacity: 0.9 }}>Documento Fiscal</p>
-                                        <p style={{ margin: '5px 0 0 0', fontSize: '18px', fontWeight: 'bold' }}>
-                                            {getNomeTipoDocumento(documento.tipo_documento)}
-                                        </p>
-                                        <p style={{ margin: '5px 0 0 0', fontSize: '14px' }}>Nº {documento.numero_documento}</p>
-                                    </div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                {/* Informações do Documento em Tabela Compacta */}
-                <table style={{
-                    width: '100%',
-                    borderCollapse: 'collapse',
-                    marginBottom: '20px',
-                    border: `1px solid ${COLORS.background}`,
-                    borderRadius: '6px',
-                    overflow: 'hidden'
-                }}>
-                    <thead>
-                        <tr>
-                            <th colSpan={2} style={{
-                                backgroundColor: COLORS.secondary,
-                                color: COLORS.white,
-                                padding: '10px',
-                                textAlign: 'left',
-                                fontSize: '14px',
-                                fontWeight: 'bold'
-                            }}>
-                                INFORMAÇÕES DO DOCUMENTO
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td style={{ width: '50%', padding: '10px', border: `1px solid ${COLORS.background}`, verticalAlign: 'top' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                    <tbody>
-                                        <tr><td style={{ fontWeight: 'bold', color: COLORS.primary, width: '100px' }}>Cliente:</td><td>{nomeCliente}</td></tr>
-                                        {nifCliente && <tr><td style={{ fontWeight: 'bold', color: COLORS.primary }}>NIF:</td><td>{nifCliente}</td></tr>}
-                                        {enderecoCliente && <tr><td style={{ fontWeight: 'bold', color: COLORS.primary }}>Endereço:</td><td>{enderecoCliente}</td></tr>}
-                                        {(telefoneCliente || emailCliente) && (
-                                            <tr><td style={{ fontWeight: 'bold', color: COLORS.primary }}>Contato:</td><td>{telefoneCliente} {emailCliente && `• ${emailCliente}`}</td></tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </td>
-                            <td style={{ width: '50%', padding: '10px', border: `1px solid ${COLORS.background}`, verticalAlign: 'top' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                    <tbody>
-                                        <tr><td style={{ fontWeight: 'bold', color: COLORS.primary, width: '100px' }}>Emissão:</td><td>{formatarDataHora(documento.data_emissao)}</td></tr>
-                                        {documento.data_vencimento && <tr><td style={{ fontWeight: 'bold', color: COLORS.primary }}>Vencimento:</td><td>{formatarData(documento.data_vencimento)}</td></tr>}
-                                        <tr><td style={{ fontWeight: 'bold', color: COLORS.primary }}>Série:</td><td>{documento.serie}</td></tr>
-                                        <tr><td style={{ fontWeight: 'bold', color: COLORS.primary }}>Estado:</td><td style={{ color: COLORS.secondary, fontWeight: 'bold' }}>{documento.estado.toUpperCase()}</td></tr>
-                                    </tbody>
-                                </table>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-
-                {/* Informações de Pagamento para FR */}
-                {documento.tipo_documento === 'FR' && documento.metodo_pagamento && (
-                    <table style={{
-                        width: '100%',
-                        borderCollapse: 'collapse',
-                        marginBottom: '20px',
-                        border: `1px solid ${COLORS.background}`,
-                        borderRadius: '6px',
-                        overflow: 'hidden'
-                    }}>
-                        <thead>
-                            <tr>
-                                <th colSpan={2} style={{
-                                    backgroundColor: COLORS.secondary,
-                                    color: COLORS.white,
-                                    padding: '10px',
-                                    textAlign: 'left',
-                                    fontSize: '14px',
-                                    fontWeight: 'bold'
-                                }}>
-                                    INFORMAÇÕES DE PAGAMENTO
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td style={{ padding: '10px', border: `1px solid ${COLORS.background}` }}>
-                                    <span style={{ fontWeight: 'bold', color: COLORS.primary }}>Método:</span> {getMetodoPagamentoNome(documento.metodo_pagamento)}
-                                </td>
-                                <td style={{ padding: '10px', border: `1px solid ${COLORS.background}` }}>
-                                    <span style={{ fontWeight: 'bold', color: COLORS.primary }}>Valor Pago:</span>{' '}
-                                    <span style={{ color: COLORS.success, fontWeight: 'bold' }}>{formatarPreco(documento.total_liquido)}</span>
-                                </td>
-                            </tr>
-                            {documento.referencia_pagamento && (
-                                <tr>
-                                    <td colSpan={2} style={{ padding: '10px', border: `1px solid ${COLORS.background}` }}>
-                                        <span style={{ fontWeight: 'bold', color: COLORS.primary }}>Referência:</span> {documento.referencia_pagamento}
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                )}
-
-                {/* Tabela de Itens - Layout Profissional */}
-                <table style={{
-                    width: '100%',
-                    borderCollapse: 'collapse',
-                    marginBottom: '20px',
-                    border: `1px solid ${COLORS.background}`,
-                    borderRadius: '6px',
-                    overflow: 'hidden'
-                }}>
-                    <thead>
-                        <tr>
-                            <th colSpan={6} style={{
-                                backgroundColor: COLORS.primary,
-                                color: COLORS.white,
-                                padding: '10px',
-                                textAlign: 'left',
-                                fontSize: '14px',
-                                fontWeight: 'bold'
-                            }}>
-                                ITENS DO DOCUMENTO
-                            </th>
-                        </tr>
-                        <tr style={{ backgroundColor: COLORS.secondary, color: COLORS.white }}>
-                            <th style={{ padding: '10px', textAlign: 'left', fontSize: '12px' }}>Descrição</th>
-                            <th style={{ padding: '10px', textAlign: 'center', fontSize: '12px' }}>Qtd</th>
-                            <th style={{ padding: '10px', textAlign: 'right', fontSize: '12px' }}>Preço Unit.</th>
-                            <th style={{ padding: '10px', textAlign: 'right', fontSize: '12px' }}>Desconto</th>
-                            <th style={{ padding: '10px', textAlign: 'right', fontSize: '12px' }}>IVA</th>
-                            <th style={{ padding: '10px', textAlign: 'right', fontSize: '12px' }}>Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {documento.itens?.map((item, index) => (
-                            <tr key={index} style={{ borderBottom: `1px solid ${COLORS.background}` }}>
-                                <td style={{ padding: '8px', fontSize: '12px' }}>
-                                    <div style={{ fontWeight: 'bold' }}>{item.descricao}</div>
-                                    {item.referencia && <div style={{ fontSize: '10px', color: COLORS.textLight }}>Ref: {item.referencia}</div>}
-                                </td>
-                                <td style={{ padding: '8px', textAlign: 'center', fontSize: '12px' }}>{item.quantidade}</td>
-                                <td style={{ padding: '8px', textAlign: 'right', fontSize: '12px' }}>{formatarPreco(item.preco_unitario)}</td>
-                                <td style={{ padding: '8px', textAlign: 'right', fontSize: '12px', color: COLORS.danger }}>
-                                    {item.desconto ? formatarPreco(item.desconto) : '-'}
-                                </td>
-                                <td style={{ padding: '8px', textAlign: 'right', fontSize: '12px' }}>{formatarPreco(item.valor_iva || 0)}</td>
-                                <td style={{ padding: '8px', textAlign: 'right', fontSize: '12px', fontWeight: 'bold', color: COLORS.primary }}>
-                                    {formatarPreco(item.total_linha || 0)}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-
-                {/* Totais em Tabela Compacta */}
-                <table style={{
-                    width: '300px',
-                    marginLeft: 'auto',
-                    borderCollapse: 'collapse',
-                    marginBottom: '20px'
-                }}>
-                    <tbody>
-                        <tr>
-                            <td style={{ padding: '5px', textAlign: 'right', color: COLORS.textLight }}>Base Tributável:</td>
-                            <td style={{ padding: '5px', textAlign: 'right', fontWeight: 'bold' }}>{formatarPreco(documento.base_tributavel)}</td>
-                        </tr>
-                        <tr>
-                            <td style={{ padding: '5px', textAlign: 'right', color: COLORS.textLight }}>IVA:</td>
-                            <td style={{ padding: '5px', textAlign: 'right', fontWeight: 'bold' }}>{formatarPreco(documento.total_iva)}</td>
-                        </tr>
-                        {documento.total_retencao > 0 && (
-                            <tr>
-                                <td style={{ padding: '5px', textAlign: 'right', color: COLORS.textLight }}>Retenção:</td>
-                                <td style={{ padding: '5px', textAlign: 'right', fontWeight: 'bold', color: COLORS.danger }}>
-                                    -{formatarPreco(documento.total_retencao)}
-                                </td>
-                            </tr>
-                        )}
-                        <tr>
-                            <td colSpan={2} style={{ padding: '5px 0', borderTop: `2px solid ${COLORS.primary}` }}></td>
-                        </tr>
-                        <tr>
-                            <td style={{ padding: '8px 5px', textAlign: 'right', fontSize: '16px', fontWeight: 'bold', color: COLORS.primary }}>TOTAL:</td>
-                            <td style={{ padding: '8px 5px', textAlign: 'right', fontSize: '18px', fontWeight: 'bold', color: COLORS.primary }}>
-                                {formatarPreco(documento.total_liquido)}
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-
-                {/* Motivo para Nota de Crédito */}
-                {documento.tipo_documento === 'NC' && documento.motivo && (
-                    <div style={{
-                        marginBottom: '20px',
-                        padding: '12px',
-                        backgroundColor: '#FFF9E6',
-                        borderLeft: `4px solid ${COLORS.secondary}`,
-                        borderRadius: '4px'
-                    }}>
-                        <p style={{ margin: 0, fontWeight: 'bold', color: COLORS.primary }}>Motivo da Nota de Crédito:</p>
-                        <p style={{ margin: '5px 0 0 0', fontSize: '12px' }}>{documento.motivo}</p>
-                    </div>
-                )}
-
-                {/* Hash Fiscal */}
-                {documento.hash_fiscal && (
-                    <div style={{
-                        marginTop: '20px',
-                        padding: '10px',
-                        backgroundColor: COLORS.background,
-                        borderRadius: '4px',
-                        fontSize: '10px',
-                        color: COLORS.textLight,
-                        wordBreak: 'break-all'
-                    }}>
-                        <span style={{ fontWeight: 'bold' }}>Hash Fiscal:</span> {documento.hash_fiscal}
-                    </div>
-                )}
-
-                {/* Rodapé Profissional */}
-                <div style={{
-                    marginTop: '30px',
-                    paddingTop: '15px',
-                    borderTop: `1px solid ${COLORS.background}`,
-                    textAlign: 'center',
-                    fontSize: '10px',
-                    color: COLORS.textLight
-                }}>
-                    <p style={{ margin: '2px 0' }}>Documento processado por software validado nos termos da legislação fiscal</p>
-                    <p style={{ margin: '2px 0' }}>IVA incluído à taxa legal em vigor • Documento com valor fiscal</p>
-                    <p style={{ margin: '8px 0 0 0', fontWeight: 'bold', color: COLORS.primary }}>Obrigado pela preferência!</p>
-                </div>
-            </div>
-        );
-    };
-
     if (loading) {
         return (
             <MainEmpresa>
@@ -474,7 +191,7 @@ export default function VisualizarDocumentoPage() {
 
     return (
         <MainEmpresa>
-            {/* Estilos de impressão otimizados */}
+            {/* Estilos de impressão */}
             <style jsx global>{`
                 @media print {
                     body * {
@@ -505,12 +222,7 @@ export default function VisualizarDocumentoPage() {
                 }
             `}</style>
 
-            {/* Documento para impressão */}
-            <div ref={printRef} className="print-only">
-                <PrintDocument />
-            </div>
-
-            {/* Interface Principal */}
+            {/* Interface Principal - TUDO EM UMA ÚNICA PÁGINA */}
             <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
                 {/* Header com ações */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -607,237 +319,267 @@ export default function VisualizarDocumentoPage() {
                     </div>
                 </div>
 
-                {/* Navegação por Tabs */}
-                <div className="border-b border-gray-200">
-                    <nav className="flex gap-4 overflow-x-auto pb-1">
-                        {['detalhes', 'itens', ...(documento.tipo_documento === 'FT' || documento.tipo_documento === 'FA' ? ['recibos'] : []), 'documentos-relacionados'].map((tab) => (
-                            <button
-                                key={tab}
-                                onClick={() => setActiveTab(tab as TabType)}
-                                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap capitalize ${activeTab === tab
-                                        ? 'border-[#F9941F] text-[#F9941F]'
-                                        : 'border-transparent text-gray-500 hover:text-gray-700'
-                                    }`}
-                            >
-                                {tab === 'recibos' ? `Recibos (${documento.recibos?.length || 0})` : tab}
-                            </button>
-                        ))}
-                    </nav>
-                </div>
-
-                {/* Conteúdo das Tabs em Tabelas Compactas */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                    {activeTab === 'detalhes' && (
-                        <div className="space-y-6">
-                            {/* Informações do Cliente em Tabela */}
-                            <table className="w-full border-collapse">
-                                <thead>
-                                    <tr>
-                                        <th colSpan={2} className="text-left pb-2" style={{ color: COLORS.primary, borderBottom: `2px solid ${COLORS.secondary}` }}>
-                                            <User className="inline w-5 h-5 mr-2" style={{ color: COLORS.secondary }} />
-                                            Cliente
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr><td className="py-1 font-medium" style={{ width: '100px', color: COLORS.primary }}>Nome:</td><td>{nomeCliente}</td></tr>
-                                    {nifCliente && <tr><td className="py-1 font-medium" style={{ color: COLORS.primary }}>NIF:</td><td>{nifCliente}</td></tr>}
-                                    {documento.cliente?.endereco && <tr><td className="py-1 font-medium" style={{ color: COLORS.primary }}>Endereço:</td><td>{documento.cliente.endereco}</td></tr>}
-                                    {documento.cliente?.telefone && <tr><td className="py-1 font-medium" style={{ color: COLORS.primary }}>Telefone:</td><td>{documento.cliente.telefone}</td></tr>}
-                                    {documento.cliente?.email && <tr><td className="py-1 font-medium" style={{ color: COLORS.primary }}>Email:</td><td>{documento.cliente.email}</td></tr>}
-                                </tbody>
-                            </table>
-
-                            {/* Informações do Documento em Tabela */}
-                            <table className="w-full border-collapse">
-                                <thead>
-                                    <tr>
-                                        <th colSpan={2} className="text-left pb-2" style={{ color: COLORS.primary, borderBottom: `2px solid ${COLORS.secondary}` }}>
-                                            <FileText className="inline w-5 h-5 mr-2" style={{ color: COLORS.secondary }} />
-                                            Informações do Documento
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr><td className="py-1 font-medium" style={{ width: '120px', color: COLORS.primary }}>Número:</td><td>{documento.numero_documento}</td></tr>
-                                    <tr><td className="py-1 font-medium" style={{ color: COLORS.primary }}>Série:</td><td>{documento.serie}</td></tr>
-                                    <tr><td className="py-1 font-medium" style={{ color: COLORS.primary }}>Emissão:</td><td>{formatarDataHora(documento.data_emissao)}</td></tr>
-                                    {documento.data_vencimento && <tr><td className="py-1 font-medium" style={{ color: COLORS.primary }}>Vencimento:</td><td>{formatarData(documento.data_vencimento)}</td></tr>}
-                                    {documento.motivo && <tr><td className="py-1 font-medium" style={{ color: COLORS.primary }}>Motivo:</td><td>{documento.motivo}</td></tr>}
-                                </tbody>
-                            </table>
-
-                            {/* Informações de Pagamento para FR */}
-                            {documento.tipo_documento === 'FR' && documento.metodo_pagamento && (
-                                <table className="w-full border-collapse">
-                                    <thead>
-                                        <tr>
-                                            <th colSpan={2} className="text-left pb-2" style={{ color: COLORS.primary, borderBottom: `2px solid ${COLORS.secondary}` }}>
-                                                <CreditCard className="inline w-5 h-5 mr-2" style={{ color: COLORS.secondary }} />
-                                                Pagamento
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr><td className="py-1 font-medium" style={{ width: '120px', color: COLORS.primary }}>Método:</td><td>{getMetodoPagamentoNome(documento.metodo_pagamento)}</td></tr>
-                                        {documento.referencia_pagamento && <tr><td className="py-1 font-medium" style={{ color: COLORS.primary }}>Referência:</td><td>{documento.referencia_pagamento}</td></tr>}
-                                    </tbody>
-                                </table>
+                {/* CONTEÚDO ÚNICO - TUDO NUMA SÓ PÁGINA */}
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 space-y-8">
+                    
+                    {/* SEÇÃO 1: Informações do Cliente */}
+                    <section>
+                        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: COLORS.primary, borderBottom: `2px solid ${COLORS.secondary}`, paddingBottom: '8px' }}>
+                            <User className="w-5 h-5" style={{ color: COLORS.secondary }} />
+                            Cliente
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <p className="text-sm text-gray-600">Nome</p>
+                                <p className="font-medium">{nomeCliente}</p>
+                            </div>
+                            {nifCliente && (
+                                <div>
+                                    <p className="text-sm text-gray-600">NIF</p>
+                                    <p className="font-medium">{nifCliente}</p>
+                                </div>
                             )}
-
-                            {/* Totais em Tabela */}
-                            <table className="w-full border-collapse">
-                                <thead>
-                                    <tr>
-                                        <th colSpan={2} className="text-left pb-2" style={{ color: COLORS.primary, borderBottom: `2px solid ${COLORS.secondary}` }}>
-                                            Totais
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr><td className="py-1 font-medium" style={{ width: '120px', color: COLORS.primary }}>Base Tributável:</td><td>{formatarPreco(documento.base_tributavel)}</td></tr>
-                                    <tr><td className="py-1 font-medium" style={{ color: COLORS.primary }}>IVA:</td><td>{formatarPreco(documento.total_iva)}</td></tr>
-                                    {documento.total_retencao > 0 && (
-                                        <tr><td className="py-1 font-medium" style={{ color: COLORS.primary }}>Retenção:</td><td className="text-red-600">-{formatarPreco(documento.total_retencao)}</td></tr>
-                                    )}
-                                    <tr><td colSpan={2} className="py-2"><hr style={{ borderColor: COLORS.primary }} /></td></tr>
-                                    <tr><td className="py-1 font-bold text-lg" style={{ color: COLORS.primary }}>TOTAL:</td><td className="font-bold text-lg" style={{ color: COLORS.primary }}>{formatarPreco(documento.total_liquido)}</td></tr>
-                                </tbody>
-                            </table>
-
-                            {documento.hash_fiscal && (
-                                <div className="text-xs text-gray-400 break-all">
-                                    <span className="font-medium">Hash Fiscal:</span> {documento.hash_fiscal}
+                            {documento.cliente?.endereco && (
+                                <div>
+                                    <p className="text-sm text-gray-600">Endereço</p>
+                                    <p className="font-medium">{documento.cliente.endereco}</p>
+                                </div>
+                            )}
+                            {documento.cliente?.telefone && (
+                                <div>
+                                    <p className="text-sm text-gray-600">Telefone</p>
+                                    <p className="font-medium">{documento.cliente.telefone}</p>
+                                </div>
+                            )}
+                            {documento.cliente?.email && (
+                                <div>
+                                    <p className="text-sm text-gray-600">Email</p>
+                                    <p className="font-medium">{documento.cliente.email}</p>
                                 </div>
                             )}
                         </div>
+                    </section>
+
+                    {/* SEÇÃO 2: Informações do Documento */}
+                    <section>
+                        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: COLORS.primary, borderBottom: `2px solid ${COLORS.secondary}`, paddingBottom: '8px' }}>
+                            <FileText className="w-5 h-5" style={{ color: COLORS.secondary }} />
+                            Informações do Documento
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <p className="text-sm text-gray-600">Número</p>
+                                <p className="font-medium">{documento.numero_documento}</p>
+                            </div>
+                            <div>
+                                <p className="text-sm text-gray-600">Série</p>
+                                <p className="font-medium">{documento.serie}</p>
+                            </div>
+                            <div>
+                                <p className="text-sm text-gray-600">Emissão</p>
+                                <p className="font-medium">{formatarDataHora(documento.data_emissao)}</p>
+                            </div>
+                            {documento.data_vencimento && (
+                                <div>
+                                    <p className="text-sm text-gray-600">Vencimento</p>
+                                    <p className="font-medium">{formatarData(documento.data_vencimento)}</p>
+                                </div>
+                            )}
+                            {documento.motivo && (
+                                <div className="md:col-span-2">
+                                    <p className="text-sm text-gray-600">Motivo</p>
+                                    <p className="font-medium">{documento.motivo}</p>
+                                </div>
+                            )}
+                        </div>
+                    </section>
+
+                    {/* SEÇÃO 3: Pagamento (apenas para FR) */}
+                    {documento.tipo_documento === 'FR' && documento.metodo_pagamento && (
+                        <section>
+                            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: COLORS.primary, borderBottom: `2px solid ${COLORS.secondary}`, paddingBottom: '8px' }}>
+                                <CreditCard className="w-5 h-5" style={{ color: COLORS.secondary }} />
+                                Pagamento
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <p className="text-sm text-gray-600">Método</p>
+                                    <p className="font-medium">{getMetodoPagamentoNome(documento.metodo_pagamento)}</p>
+                                </div>
+                                {documento.referencia_pagamento && (
+                                    <div>
+                                        <p className="text-sm text-gray-600">Referência</p>
+                                        <p className="font-medium">{documento.referencia_pagamento}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </section>
                     )}
 
-                    {activeTab === 'itens' && (
-                        <div>
-                            <h3 className="text-lg font-semibold mb-4" style={{ color: COLORS.primary }}>Itens do Documento</h3>
-                            <div className="overflow-x-auto">
-                                <table className="w-full border-collapse">
-                                    <thead>
-                                        <tr style={{ backgroundColor: COLORS.primary, color: 'white' }}>
-                                            <th className="px-4 py-2 text-left text-sm">Descrição</th>
-                                            <th className="px-4 py-2 text-center text-sm">Qtd</th>
-                                            <th className="px-4 py-2 text-right text-sm">Preço Unit.</th>
-                                            <th className="px-4 py-2 text-right text-sm">Desconto</th>
-                                            <th className="px-4 py-2 text-right text-sm">IVA</th>
-                                            <th className="px-4 py-2 text-right text-sm">Total</th>
+                    {/* SEÇÃO 4: Itens do Documento */}
+                    <section>
+                        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: COLORS.primary, borderBottom: `2px solid ${COLORS.secondary}`, paddingBottom: '8px' }}>
+                            <Package className="w-5 h-5" style={{ color: COLORS.secondary }} />
+                            Itens do Documento
+                        </h3>
+                        <div className="overflow-x-auto">
+                            <table className="w-full border-collapse">
+                                <thead>
+                                    <tr style={{ backgroundColor: COLORS.primary, color: 'white' }}>
+                                        <th className="px-4 py-2 text-left text-sm">Descrição</th>
+                                        <th className="px-4 py-2 text-center text-sm">Qtd</th>
+                                        <th className="px-4 py-2 text-right text-sm">Preço Unit.</th>
+                                        <th className="px-4 py-2 text-right text-sm">Desconto</th>
+                                        <th className="px-4 py-2 text-right text-sm">IVA</th>
+                                        <th className="px-4 py-2 text-right text-sm">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {documento.itens?.map((item, index) => (
+                                        <tr key={index} className="hover:bg-gray-50">
+                                            <td className="px-4 py-2 text-sm">
+                                                <div className="font-medium">{item.descricao}</div>
+                                                {item.referencia && <div className="text-xs text-gray-500">Ref: {item.referencia}</div>}
+                                            </td>
+                                            <td className="px-4 py-2 text-center text-sm">{item.quantidade}</td>
+                                            <td className="px-4 py-2 text-right text-sm">{formatarPreco(item.preco_unitario)}</td>
+                                            <td className="px-4 py-2 text-right text-sm text-red-600">
+                                                {item.desconto ? formatarPreco(item.desconto) : '-'}
+                                            </td>
+                                            <td className="px-4 py-2 text-right text-sm">{formatarPreco(item.valor_iva || 0)}</td>
+                                            <td className="px-4 py-2 text-right text-sm font-bold" style={{ color: COLORS.primary }}>
+                                                {formatarPreco(item.total_linha || 0)}
+                                            </td>
                                         </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100">
-                                        {documento.itens?.map((item, index) => (
-                                            <tr key={index} className="hover:bg-gray-50">
-                                                <td className="px-4 py-2 text-sm">
-                                                    <div className="font-medium">{item.descricao}</div>
-                                                    {item.referencia && <div className="text-xs text-gray-500">Ref: {item.referencia}</div>}
-                                                </td>
-                                                <td className="px-4 py-2 text-center text-sm">{item.quantidade}</td>
-                                                <td className="px-4 py-2 text-right text-sm">{formatarPreco(item.preco_unitario)}</td>
-                                                <td className="px-4 py-2 text-right text-sm text-red-600">
-                                                    {item.desconto ? formatarPreco(item.desconto) : '-'}
-                                                </td>
-                                                <td className="px-4 py-2 text-right text-sm">{formatarPreco(item.valor_iva || 0)}</td>
-                                                <td className="px-4 py-2 text-right text-sm font-bold" style={{ color: COLORS.primary }}>
-                                                    {formatarPreco(item.total_linha || 0)}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Totais - abaixo da tabela de itens */}
+                        <div className="mt-4 flex justify-end">
+                            <div className="w-full md:w-64 space-y-2">
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">Base Tributável:</span>
+                                    <span className="font-medium">{formatarPreco(documento.base_tributavel)}</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">IVA:</span>
+                                    <span className="font-medium">{formatarPreco(documento.total_iva)}</span>
+                                </div>
+                                {documento.total_retencao > 0 && (
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-gray-600">Retenção:</span>
+                                        <span className="font-medium text-red-600">-{formatarPreco(documento.total_retencao)}</span>
+                                    </div>
+                                )}
+                                <div className="border-t pt-2 mt-2">
+                                    <div className="flex justify-between font-bold text-lg" style={{ color: COLORS.primary }}>
+                                        <span>TOTAL:</span>
+                                        <span>{formatarPreco(documento.total_liquido)}</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    )}
+                    </section>
 
-                    {activeTab === 'recibos' && (
-                        <div>
-                            <h3 className="text-lg font-semibold mb-4" style={{ color: COLORS.primary }}>Recibos</h3>
-                            {documento.recibos && documento.recibos.length > 0 ? (
-                                <div className="space-y-2">
-                                    {documento.recibos.map((recibo) => (
-                                        <div
-                                            key={recibo.id}
-                                            className="bg-gray-50 rounded-lg p-3 flex justify-between items-center hover:bg-gray-100 transition-colors cursor-pointer"
-                                            onClick={() => router.push(`/dashboard/Faturas/Faturas/${recibo.id}`)}
-                                        >
-                                            <div>
-                                                <p className="font-medium" style={{ color: COLORS.primary }}>{recibo.numero_documento}</p>
-                                                <p className="text-xs text-gray-600">
-                                                    {formatarData(recibo.data_emissao)} • {formatarPreco(recibo.total_liquido)}
-                                                </p>
-                                                {recibo.metodo_pagamento && (
-                                                    <p className="text-xs text-gray-500">Método: {getMetodoPagamentoNome(recibo.metodo_pagamento)}</p>
-                                                )}
-                                            </div>
-                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${recibo.estado === 'paga' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                                                }`}>
-                                                {recibo.estado}
-                                            </span>
+                    {/* SEÇÃO 5: Recibos (se houver) */}
+                    {documento.recibos && documento.recibos.length > 0 && (
+                        <section>
+                            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: COLORS.primary, borderBottom: `2px solid ${COLORS.secondary}`, paddingBottom: '8px' }}>
+                                <Receipt className="w-5 h-5" style={{ color: COLORS.secondary }} />
+                                Recibos ({documento.recibos.length})
+                            </h3>
+                            <div className="space-y-2">
+                                {documento.recibos.map((recibo) => (
+                                    <div
+                                        key={recibo.id}
+                                        className="bg-gray-50 rounded-lg p-3 flex justify-between items-center hover:bg-gray-100 transition-colors cursor-pointer"
+                                        onClick={() => router.push(`/dashboard/Faturas/Faturas/${recibo.id}`)}
+                                    >
+                                        <div>
+                                            <p className="font-medium" style={{ color: COLORS.primary }}>{recibo.numero_documento}</p>
+                                            <p className="text-xs text-gray-600">
+                                                {formatarData(recibo.data_emissao)} • {formatarPreco(recibo.total_liquido)}
+                                            </p>
+                                            {recibo.metodo_pagamento && (
+                                                <p className="text-xs text-gray-500">Método: {getMetodoPagamentoNome(recibo.metodo_pagamento)}</p>
+                                            )}
                                         </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <p className="text-center text-gray-500 py-8">Nenhum recibo encontrado</p>
-                            )}
-                        </div>
+                                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${recibo.estado === 'paga' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                                            }`}>
+                                            {recibo.estado}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
                     )}
 
-                    {activeTab === 'documentos-relacionados' && (
-                        <div className="space-y-4">
-                            {documento.documento_origem && (
-                                <DocumentoRelacionado
-                                    titulo="Documento de Origem"
-                                    documento={documento.documento_origem}
-                                    getTipoIcone={getTipoIcone}
-                                    router={router}
-                                />
-                            )}
-                            {documento.notas_credito && documento.notas_credito.length > 0 && (
-                                <DocumentoRelacionado
-                                    titulo="Notas de Crédito"
-                                    documentos={documento.notas_credito}
-                                    getTipoIcone={getTipoIcone}
-                                    router={router}
-                                    cor={COLORS.danger}
-                                />
-                            )}
-                            {documento.notas_debito && documento.notas_debito.length > 0 && (
-                                <DocumentoRelacionado
-                                    titulo="Notas de Débito"
-                                    documentos={documento.notas_debito}
-                                    getTipoIcone={getTipoIcone}
-                                    router={router}
-                                    cor="#fd7e14"
-                                />
-                            )}
-                            {documento.adiantamentos_vinculados && documento.adiantamentos_vinculados.length > 0 && (
-                                <DocumentoRelacionado
-                                    titulo="Adiantamentos Vinculados"
-                                    documentos={documento.adiantamentos_vinculados}
-                                    getTipoIcone={getTipoIcone}
-                                    router={router}
-                                    cor="#6f42c1"
-                                />
-                            )}
-                            {documento.faturas_vinculadas && documento.faturas_vinculadas.length > 0 && (
-                                <DocumentoRelacionado
-                                    titulo="Faturas Vinculadas"
-                                    documentos={documento.faturas_vinculadas}
-                                    getTipoIcone={getTipoIcone}
-                                    router={router}
-                                    cor={COLORS.primary}
-                                />
-                            )}
-                            {!documento.documento_origem &&
-                                (!documento.notas_credito?.length) &&
-                                (!documento.notas_debito?.length) &&
-                                (!documento.adiantamentos_vinculados?.length) &&
-                                (!documento.faturas_vinculadas?.length) && (
-                                    <p className="text-center text-gray-500 py-8">Nenhum documento relacionado</p>
+                    {/* SEÇÃO 6: Documentos Relacionados */}
+                    {(documento.documento_origem || 
+                      (documento.notas_credito && documento.notas_credito.length > 0) ||
+                      (documento.notas_debito && documento.notas_debito.length > 0) ||
+                      (documento.adiantamentos_vinculados && documento.adiantamentos_vinculados.length > 0) ||
+                      (documento.faturas_vinculadas && documento.faturas_vinculadas.length > 0)) && (
+                        <section>
+                            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: COLORS.primary, borderBottom: `2px solid ${COLORS.secondary}`, paddingBottom: '8px' }}>
+                                <ScrollText className="w-5 h-5" style={{ color: COLORS.secondary }} />
+                                Documentos Relacionados
+                            </h3>
+                            <div className="space-y-4">
+                                {documento.documento_origem && (
+                                    <DocumentoRelacionado
+                                        titulo="Documento de Origem"
+                                        documentos={[documento.documento_origem]}
+                                        getTipoIcone={getTipoIcone}
+                                        router={router}
+                                    />
                                 )}
+                                {documento.notas_credito && documento.notas_credito.length > 0 && (
+                                    <DocumentoRelacionado
+                                        titulo="Notas de Crédito"
+                                        documentos={documento.notas_credito}
+                                        getTipoIcone={getTipoIcone}
+                                        router={router}
+                                        cor={COLORS.danger}
+                                    />
+                                )}
+                                {documento.notas_debito && documento.notas_debito.length > 0 && (
+                                    <DocumentoRelacionado
+                                        titulo="Notas de Débito"
+                                        documentos={documento.notas_debito}
+                                        getTipoIcone={getTipoIcone}
+                                        router={router}
+                                        cor="#fd7e14"
+                                    />
+                                )}
+                                {documento.adiantamentos_vinculados && documento.adiantamentos_vinculados.length > 0 && (
+                                    <DocumentoRelacionado
+                                        titulo="Adiantamentos Vinculados"
+                                        documentos={documento.adiantamentos_vinculados}
+                                        getTipoIcone={getTipoIcone}
+                                        router={router}
+                                        cor="#6f42c1"
+                                    />
+                                )}
+                                {documento.faturas_vinculadas && documento.faturas_vinculadas.length > 0 && (
+                                    <DocumentoRelacionado
+                                        titulo="Faturas Vinculadas"
+                                        documentos={documento.faturas_vinculadas}
+                                        getTipoIcone={getTipoIcone}
+                                        router={router}
+                                        cor={COLORS.primary}
+                                    />
+                                )}
+                            </div>
+                        </section>
+                    )}
+
+                    {/* Hash Fiscal */}
+                    {documento.hash_fiscal && (
+                        <div className="text-xs text-gray-400 break-all pt-4 border-t">
+                            <span className="font-medium">Hash Fiscal:</span> {documento.hash_fiscal}
                         </div>
                     )}
                 </div>
@@ -849,21 +591,20 @@ export default function VisualizarDocumentoPage() {
 /* ==================== COMPONENTE AUXILIAR ==================== */
 interface DocumentoRelacionadoProps {
     titulo: string;
-    documentos?: DocumentoFiscal[];
-    documento?: DocumentoFiscal;
+    documentos: DocumentoFiscal[];
     getTipoIcone: (tipo: string) => JSX.Element;
     router: ReturnType<typeof useRouter>;
     cor?: string;
 }
 
-const DocumentoRelacionado = ({ titulo, documentos, documento, getTipoIcone, router, cor }: DocumentoRelacionadoProps) => {
-    const docs = documentos || (documento ? [documento] : []);
+const DocumentoRelacionado = ({ titulo, documentos, getTipoIcone, router, cor }: DocumentoRelacionadoProps) => {
+    if (!documentos || documentos.length === 0) return null;
 
     return (
         <div>
             <h4 className="text-sm font-medium text-gray-600 mb-2">{titulo}</h4>
             <div className="space-y-2">
-                {docs.map((doc: DocumentoFiscal) => (
+                {documentos.map((doc: DocumentoFiscal) => (
                     <div
                         key={doc.id}
                         className="bg-gray-50 rounded-lg p-3 hover:bg-gray-100 transition-colors cursor-pointer"

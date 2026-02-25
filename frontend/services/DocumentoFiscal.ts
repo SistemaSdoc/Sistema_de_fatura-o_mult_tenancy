@@ -23,13 +23,11 @@ export interface ItemDocumento {
     desconto?: number;
     taxa_iva: number;
     valor_iva?: number;
-    // ✅ NOVO: campos de retenção para serviços
     taxa_retencao?: number;
     valor_retencao?: number;
     total_linha?: number;
     codigo_produto?: string;
     unidade?: string;
-    // ✅ NOVO: identificar se é serviço
     eh_servico?: boolean;
 }
 

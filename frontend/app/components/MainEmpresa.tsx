@@ -219,7 +219,7 @@ export default function MainEmpresa({
             isGroup: true,
         },
         {
-            label: "Faturas",
+            label: "Documentos Fiscais",
             icon: FileText,
             path: "/dashboard/Faturas",
             links: [

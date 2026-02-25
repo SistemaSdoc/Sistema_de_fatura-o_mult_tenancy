@@ -192,7 +192,7 @@ export default function NovoProdutoPage() {
 
       const resposta = await produtoService.criarProduto(dados);
       setSuccess(true);
-      setTimeout(() => router.push(`/produtos/${resposta.produto.id}`), 1000);
+      setTimeout(() => router.push(`/dashboard/Produtos_servicos/Stock`), 1000);
     } catch (error: any) {
       const msg = error?.response?.data?.message || "Erro ao criar. Tente novamente.";
       if (error?.response?.data?.errors) {
