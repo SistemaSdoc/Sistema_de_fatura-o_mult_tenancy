@@ -35,39 +35,35 @@ export default function PrintReceipt({
   documentoFiscalService,
 }: PrintReceiptProps) {
   const colors = useThemeColors();
-  const [itensParaMostrar, setItensParaMostrar] = useState<ItemDocumento[]>([]);
   const [documentoOrigem, setDocumentoOrigem] = useState<DocumentoFiscal | null>(null);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !documento) {
-      setItensParaMostrar([]);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDocumentoOrigem(null);
       return;
     }
 
     // Se for RC (Recibo), buscar a fatura de origem para mostrar os itens
     if (documento.tipo_documento === 'RC' && documento.fatura_id) {
-      setLoading(true);
       api.get(`/api/documentos-fiscais/${documento.fatura_id}`)
         .then(response => {
           if (response.data.success) {
             const faturaOrigem = response.data.data.documento;
             setDocumentoOrigem(faturaOrigem);
-            setItensParaMostrar(faturaOrigem.itens || []);
           }
         })
         .catch(error => {
           console.error('Erro ao buscar fatura de origem:', error);
-          // Fallback: tenta usar itens do próprio recibo se existirem
-          setItensParaMostrar(documento.itens || []);
-        })
-        .finally(() => setLoading(false));
+          setDocumentoOrigem(null);
+        });
     } else {
-      // Para FR e outros, usa os próprios itens
-      setItensParaMostrar(documento.itens || []);
+      setDocumentoOrigem(null);
     }
   }, [isOpen, documento]);
+
+  // Determina quais itens mostrar baseado no documentoOrigem
+  const itensParaMostrar = documentoOrigem?.itens || documento?.itens || [];
 
   if (!isOpen || !documento) return null;
 
@@ -118,7 +114,7 @@ export default function PrintReceipt({
 
     // Determina qual documento mostrar no cabeçalho
     const docInfo = documentoOrigem || documento;
-    const itensPrint = itensParaMostrar;
+    const itensPrint = documentoOrigem?.itens || documento.itens || [];
 
     const htmlContent = `
     <!DOCTYPE html>
@@ -440,12 +436,7 @@ export default function PrintReceipt({
         {/* Receipt Content */}
         <div id="area-talao" className="flex-1 overflow-y-auto p-0" style={{ backgroundColor: colors.hover }}>
           <div className="mx-auto" style={{ width: '80mm', minHeight: '100%', backgroundColor: 'white' }}>
-            {loading ? (
-              <div className="flex items-center justify-center h-64">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: colors.primary }}></div>
-              </div>
-            ) : (
-              <div className="p-4 font-mono text-xs leading-tight">
+            <div className="p-4 font-mono text-xs leading-tight">
                 {/* Header */}
                 <div className="text-center border-b-2 border-dashed pb-3 mb-3" style={{ borderColor: colors.border }}>
                   <div className="flex justify-center mb-2">
@@ -563,7 +554,6 @@ export default function PrintReceipt({
                   </p>
                 </div>
               </div>
-            )}
           </div>
         </div>
       </div>

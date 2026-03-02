@@ -259,7 +259,8 @@ export default function MainEmpresa({
                 ? [
                     { label: "Nova fatura", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
                     { label: "Nova Fatura Proforma", path: "/dashboard/Faturas/Faturas_Proforma", icon: FileText },
-                    { label: "Faturas", path: "/dashboard/Faturas/Faturas", icon: FileText }
+                    { label: "Faturas", path: "/dashboard/Faturas/Faturas", icon: FileText },
+                    { label: "Documentos fiscais", path: "/dashboard/Faturas/DC", icon: FileText }
                 ]
                 : [],
             isGroup: true,
@@ -299,22 +300,7 @@ export default function MainEmpresa({
             label: "Configurações",
             icon: Settings,
             path: "/dashboard/configuracoes",
-            links: userRole === 'admin'
-                ? [
-                    { label: "Perfil", path: "/dashboard/configuracoes/perfil", icon: Users },
-                    { label: "Empresa", path: "/dashboard/configuracoes/empresa", icon: Settings },
-                    { label: "Usuários", path: "/dashboard/configuracoes/usuarios", icon: Users },
-                    { label: "Permissões", path: "/dashboard/configuracoes/permissoes", icon: Settings }
-                ]
-                : userRole === 'contabilista'
-                    ? [
-                        { label: "Perfil", path: "/dashboard/configuracoes/perfil", icon: Users },
-                        { label: "Empresa", path: "/dashboard/configuracoes/empresa", icon: Settings }
-                    ]
-                    : [
-                        { label: "Perfil", path: "/dashboard/configuracoes/perfil", icon: Users }
-                    ],
-            isGroup: true,
+            links: [],
             roles: ['admin', 'contabilista', 'operador']
         }
     ];

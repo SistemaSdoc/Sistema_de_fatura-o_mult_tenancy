@@ -27,27 +27,27 @@ const formatKz = (v: number | string): string => {
   }).format(num).replace("AOA", "Kz");
 };
 
-// Componente Skeleton com tema
+// Componente Skeleton com tema e responsivo
 const SkeletonCard = ({ colors }: { colors: any }) => (
   <motion.div
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
-    className="p-4 rounded-xl shadow border animate-pulse"
+    className="p-3 sm:p-4 rounded-xl shadow border animate-pulse"
     style={{ 
       backgroundColor: colors.card, 
       borderColor: colors.border 
     }}
   >
     <div 
-      className="w-10 h-10 rounded-lg mb-3"
+      className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg mb-2 sm:mb-3"
       style={{ backgroundColor: colors.border }}
     ></div>
     <div 
-      className="h-4 rounded w-20 mb-2"
+      className="h-3 sm:h-4 rounded w-16 sm:w-20 mb-1 sm:mb-2"
       style={{ backgroundColor: colors.border }}
     ></div>
     <div 
-      className="h-6 rounded w-24"
+      className="h-4 sm:h-6 rounded w-20 sm:w-24"
       style={{ backgroundColor: colors.border }}
     ></div>
   </motion.div>
@@ -55,18 +55,18 @@ const SkeletonCard = ({ colors }: { colors: any }) => (
 
 const SkeletonChart = ({ colors }: { colors: any }) => (
   <div 
-    className="p-4 rounded-xl shadow border"
+    className="p-3 sm:p-4 rounded-xl shadow border"
     style={{ 
       backgroundColor: colors.card, 
       borderColor: colors.border 
     }}
   >
     <div 
-      className="h-6 rounded w-40 mb-4"
+      className="h-5 sm:h-6 rounded w-32 sm:w-40 mb-3 sm:mb-4"
       style={{ backgroundColor: colors.border }}
     ></div>
     <div 
-      className="h-[360px] rounded flex items-center justify-center"
+      className="h-[250px] sm:h-[300px] md:h-[360px] rounded flex items-center justify-center"
       style={{ backgroundColor: colors.hover }}
     ></div>
   </div>
@@ -74,21 +74,21 @@ const SkeletonChart = ({ colors }: { colors: any }) => (
 
 const SkeletonTable = ({ colors }: { colors: any }) => (
   <div 
-    className="p-4 rounded-xl shadow border"
+    className="p-3 sm:p-4 rounded-xl shadow border"
     style={{ 
       backgroundColor: colors.card, 
       borderColor: colors.border 
     }}
   >
     <div 
-      className="h-6 rounded w-32 mb-4"
+      className="h-5 sm:h-6 rounded w-24 sm:w-32 mb-3 sm:mb-4"
       style={{ backgroundColor: colors.border }}
     ></div>
-    <div className="space-y-3">
+    <div className="space-y-2 sm:space-y-3">
       {[...Array(5)].map((_, i) => (
         <div 
           key={i} 
-          className="h-8 rounded"
+          className="h-6 sm:h-8 rounded"
           style={{ backgroundColor: colors.hover }}
         ></div>
       ))}
@@ -97,13 +97,26 @@ const SkeletonTable = ({ colors }: { colors: any }) => (
 );
 
 export default function DashboardPage() {
+  // Todos os Hooks declarados no top level, na mesma ordem
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
   
   const colors = useThemeColors();
   const { theme } = useTheme();
 
+  // Hook para detectar mobile
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Hook para buscar dados
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -123,31 +136,31 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <MainEmpresa>
-        <div className="p-6 space-y-6" style={{ backgroundColor: colors.background }}>
+        <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6" style={{ backgroundColor: colors.background }}>
           <motion.h1
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             style={{ color: colors.secondary }}
-            className="text-2xl font-bold"
+            className="text-xl sm:text-2xl font-bold"
           >
             Dashboard
           </motion.h1>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             {[...Array(4)].map((_, i) => <SkeletonCard key={i} colors={colors} />)}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             <SkeletonChart colors={colors} />
             <SkeletonChart colors={colors} />
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             <SkeletonChart colors={colors} />
             <SkeletonChart colors={colors} />
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             <SkeletonTable colors={colors} />
             <SkeletonTable colors={colors} />
           </div>
@@ -159,8 +172,17 @@ export default function DashboardPage() {
   if (error || !data) {
     return (
       <MainEmpresa>
-        <div className="p-6" style={{ backgroundColor: colors.background, color: '#EF4444' }}>
-          Erro: {error || 'Sem dados'}
+        <div className="p-3 sm:p-4 md:p-6" style={{ backgroundColor: colors.background, color: '#EF4444' }}>
+          <div className="text-center">
+            <p className="text-sm sm:text-base">Erro: {error || 'Sem dados'}</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="mt-3 sm:mt-4 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm rounded-lg"
+              style={{ backgroundColor: colors.primary, color: 'white' }}
+            >
+              Tentar novamente
+            </button>
+          </div>
         </div>
       </MainEmpresa>
     );
@@ -241,123 +263,150 @@ export default function DashboardPage() {
 
   return (
     <MainEmpresa>
-      <div className="p-6 space-y-6 transition-colors duration-300" style={{ backgroundColor: colors.background }}>
+      <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 transition-colors duration-300" style={{ backgroundColor: colors.background }}>
         <motion.h1
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           style={{ color: colors.secondary }}
-          className="text-2xl font-bold"
+          className="text-xl sm:text-2xl font-bold"
         >
           Dashboard
         </motion.h1>
 
-        {/* Cards KPI com hover animation */}
+        {/* Cards KPI com hover animation - Responsivo */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ staggerChildren: 0.1 }}
-          className="grid grid-cols-2 md:grid-cols-4 gap-4"
+          className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
         >
           <motion.div
-            whileHover={{ scale: 1.05, y: -5 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
             transition={{ type: "spring", stiffness: 300 }}
+            className="w-full"
           >
             <Link 
               href="/dashboard/Vendas/relatorios" 
-              className="p-4 rounded-xl shadow border block hover:shadow-lg transition-all"
+              className="p-3 sm:p-4 rounded-xl shadow border block hover:shadow-lg transition-all"
               style={{ backgroundColor: colors.card, borderColor: colors.border }}
             >
-              <DollarSign style={{ color: colors.primary }} className="mb-2" size={24} />
-              <div style={{ color: colors.textSecondary }} className="text-sm">Total Faturado</div>
-              <div style={{ color: colors.text }} className="text-xl font-bold">{formatKz(metricas.totalFaturado)}</div>
+              <div className="flex items-center gap-3 sm:block">
+                <DollarSign style={{ color: colors.primary }} className="mb-0 sm:mb-2" size={isMobile ? 20 : 24} />
+                <div>
+                  <div style={{ color: colors.textSecondary }} className="text-xs sm:text-sm">Total Faturado</div>
+                  <div style={{ color: colors.text }} className="text-sm sm:text-xl font-bold truncate">{formatKz(metricas.totalFaturado)}</div>
+                </div>
+              </div>
             </Link>
           </motion.div>
 
           <motion.div
-            whileHover={{ scale: 1.05, y: -5 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
             transition={{ type: "spring", stiffness: 300 }}
+            className="w-full"
           >
             <Link 
               href="/dashboard/Clientes/Novo_cliente" 
-              className="p-4 rounded-xl shadow border block hover:shadow-lg transition-all"
+              className="p-3 sm:p-4 rounded-xl shadow border block hover:shadow-lg transition-all"
               style={{ backgroundColor: colors.card, borderColor: colors.border }}
             >
-              <Users style={{ color: colors.primary }} className="mb-2" size={24} />
-              <div style={{ color: colors.textSecondary }} className="text-sm">Clientes Ativos</div>
-              <div style={{ color: colors.text }} className="text-xl font-bold">{metricas.totalClientes}</div>
+              <div className="flex items-center gap-3 sm:block">
+                <Users style={{ color: colors.primary }} className="mb-0 sm:mb-2" size={isMobile ? 20 : 24} />
+                <div>
+                  <div style={{ color: colors.textSecondary }} className="text-xs sm:text-sm">Clientes Ativos</div>
+                  <div style={{ color: colors.text }} className="text-sm sm:text-xl font-bold">{metricas.totalClientes}</div>
+                </div>
+              </div>
             </Link>
           </motion.div>
 
           <motion.div
-            whileHover={{ scale: 1.05, y: -5 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
             transition={{ type: "spring", stiffness: 300 }}
+            className="w-full"
           >
             <Link 
               href="/dashboard/Faturas/relatorios" 
-              className="p-4 rounded-xl shadow border block hover:shadow-lg transition-all"
+              className="p-3 sm:p-4 rounded-xl shadow border block hover:shadow-lg transition-all"
               style={{ backgroundColor: colors.card, borderColor: colors.border }}
             >
-              <CreditCard style={{ color: colors.primary }} className="mb-2" size={24} />
-              <div style={{ color: colors.textSecondary }} className="text-sm">Pendente</div>
-              <div style={{ color: colors.text }} className="text-xl font-bold">{formatKz(metricas.totalPendente)}</div>
+              <div className="flex items-center gap-3 sm:block">
+                <CreditCard style={{ color: colors.primary }} className="mb-0 sm:mb-2" size={isMobile ? 20 : 24} />
+                <div>
+                  <div style={{ color: colors.textSecondary }} className="text-xs sm:text-sm">Pendente</div>
+                  <div style={{ color: colors.text }} className="text-sm sm:text-xl font-bold truncate">{formatKz(metricas.totalPendente)}</div>
+                </div>
+              </div>
             </Link>
           </motion.div>
 
           <motion.div
-            whileHover={{ scale: 1.05, y: -5 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
             transition={{ type: "spring", stiffness: 300 }}
+            className="w-full"
           >
             <Link 
               href="/dashboard/Produtos_servicos/Stock" 
-              className="p-4 rounded-xl shadow border block hover:shadow-lg transition-all"
+              className="p-3 sm:p-4 rounded-xl shadow border block hover:shadow-lg transition-all"
               style={{ backgroundColor: colors.card, borderColor: colors.border }}
             >
-              <Package style={{ color: colors.primary }} className="mb-2" size={24} />
-              <div style={{ color: colors.textSecondary }} className="text-sm">Stock Baixo</div>
-              <div style={{ color: colors.text }} className="text-xl font-bold">{metricas.produtosEmStockBaixo}</div>
+              <div className="flex items-center gap-3 sm:block">
+                <Package style={{ color: colors.primary }} className="mb-0 sm:mb-2" size={isMobile ? 20 : 24} />
+                <div>
+                  <div style={{ color: colors.textSecondary }} className="text-xs sm:text-sm">Stock Baixo</div>
+                  <div style={{ color: colors.text }} className="text-sm sm:text-xl font-bold">{metricas.produtosEmStockBaixo}</div>
+                </div>
+              </div>
             </Link>
           </motion.div>
         </motion.div>
 
         {/* Primeira linha - Gráficos */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           {/* Produtos Mais Vendidos */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="p-4 rounded-xl shadow border"
+            className="p-3 sm:p-4 rounded-xl shadow border"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
           >
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: colors.text }}>
-              <Package style={{ color: colors.secondary }} /> Top Produtos Mais Vendidos
+            <h2 className="text-base sm:text-lg font-semibold mb-2 sm:mb-4 flex items-center gap-2" style={{ color: colors.text }}>
+              <Package style={{ color: colors.secondary }} size={isMobile ? 18 : 20} /> 
+              <span className="truncate">Top Produtos</span>
             </h2>
-            <div style={{ width: '100%', height: '360px' }}>
+            <div style={{ width: '100%', height: isMobile ? '250px' : '360px' }}>
               <ResponsiveContainer>
-                <BarChart data={displayProdutos} layout="vertical" margin={{ left: 40 }}>
+                <BarChart data={displayProdutos} layout={isMobile ? "horizontal" : "vertical"} margin={{ left: isMobile ? 20 : 40 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} 
                     stroke={theme === 'dark' ? '#404040' : '#E5E7EB'} />
-                  <XAxis type="number" 
-                    tick={{ fill: colors.textSecondary, fontSize: 12 }}
+                  <XAxis 
+                    type={isMobile ? "category" : "number"} 
+                    dataKey={isMobile ? "nome" : undefined}
+                    tick={{ fill: colors.textSecondary, fontSize: isMobile ? 10 : 12 }}
                     stroke={colors.border} />
-                  <YAxis dataKey="nome" type="category" width={100} 
-                    tick={{ fill: colors.textSecondary, fontSize: 12 }}
+                  <YAxis 
+                    type={isMobile ? "number" : "category"} 
+                    dataKey={isMobile ? undefined : "nome"} 
+                    width={isMobile ? 60 : 100}
+                    tick={{ fill: colors.textSecondary, fontSize: isMobile ? 10 : 12 }}
                     stroke={colors.border} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: colors.card,
                       borderColor: colors.border,
-                      color: colors.text
+                      color: colors.text,
+                      fontSize: isMobile ? '10px' : '12px'
                     }}
                     formatter={(value: any, name: string) => {
-                      if (name === 'quantidade') return [`${value} unidades`, 'Quantidade'];
+                      if (name === 'quantidade') return [`${value} unidades`, 'Qtd'];
                       return [formatKz(value), 'Valor'];
                     }}
                   />
-                  <Bar dataKey="quantidade" fill={colors.secondary} radius={[0, 4, 4, 0]} barSize={20}>
+                  <Bar dataKey="quantidade" fill={colors.secondary} radius={[0, 4, 4, 0]} barSize={isMobile ? 15 : 20}>
                     {displayProdutos.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={index === 0 ? colors.secondary : `${colors.secondary}${Math.max(40, 90 - index * 15)}`} />
                     ))}
@@ -371,13 +420,13 @@ export default function DashboardPage() {
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="p-4 rounded-xl shadow border"
+            className="p-3 sm:p-4 rounded-xl shadow border"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
           >
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: colors.text }}>
-              <TrendingUp style={{ color: colors.secondary }} /> Evolução Mensal
+            <h2 className="text-base sm:text-lg font-semibold mb-2 sm:mb-4 flex items-center gap-2" style={{ color: colors.text }}>
+              <TrendingUp style={{ color: colors.secondary }} size={isMobile ? 18 : 20} /> Evolução
             </h2>
-            <div style={{ width: '100%', height: '360px' }}>
+            <div style={{ width: '100%', height: isMobile ? '250px' : '360px' }}>
               <ResponsiveContainer>
                 <AreaChart data={displayEvolucao}>
                   <defs>
@@ -390,16 +439,17 @@ export default function DashboardPage() {
                     stroke={theme === 'dark' ? '#404040' : '#12385920'} 
                     vertical={false} />
                   <XAxis dataKey="mes" 
-                    tick={{ fill: colors.textSecondary, fontSize: 12 }}
+                    tick={{ fill: colors.textSecondary, fontSize: isMobile ? 10 : 12 }}
                     stroke={colors.border} />
-                  <YAxis tickFormatter={(v) => `${(v / 1000)}k`} width={60}
-                    tick={{ fill: colors.textSecondary, fontSize: 12 }}
+                  <YAxis tickFormatter={(v) => `${(v / 1000)}k`} width={isMobile ? 40 : 60}
+                    tick={{ fill: colors.textSecondary, fontSize: isMobile ? 10 : 12 }}
                     stroke={colors.border} />
                   <Tooltip 
                     contentStyle={{
                       backgroundColor: colors.card,
                       borderColor: colors.border,
-                      color: colors.text
+                      color: colors.text,
+                      fontSize: isMobile ? '10px' : '12px'
                     }}
                     formatter={(v) => formatKz(Number(v))} />
                   <Area type="monotone" dataKey="total" stroke={colors.primary} fill="url(#colorTotal)" strokeWidth={2} />
@@ -410,44 +460,50 @@ export default function DashboardPage() {
         </div>
 
         {/* Segunda linha - Documentos por Tipo e Estado */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           {/* Documentos por Tipo */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2 }}
-            className="p-4 rounded-xl shadow border"
+            className="p-3 sm:p-4 rounded-xl shadow border"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
           >
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: colors.text }}>
-              <Receipt style={{ color: colors.secondary }} /> Documentos por Tipo
+            <h2 className="text-base sm:text-lg font-semibold mb-2 sm:mb-4 flex items-center gap-2" style={{ color: colors.text }}>
+              <Receipt style={{ color: colors.secondary }} size={isMobile ? 18 : 20} /> Docs por Tipo
             </h2>
-            <div style={{ width: '100%', height: '300px' }}>
+            <div style={{ width: '100%', height: isMobile ? '250px' : '300px' }}>
               <ResponsiveContainer>
-                <BarChart data={displayDocumentosTipo} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                <BarChart data={displayDocumentosTipo} margin={{ top: 10, right: 10, left: 5, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#404040' : '#E5E7EB'} />
                   <XAxis dataKey="nome" 
-                    tick={{ fill: colors.textSecondary, fontSize: 11 }}
-                    stroke={colors.border} />
+                    tick={{ fill: colors.textSecondary, fontSize: isMobile ? 9 : 11 }}
+                    stroke={colors.border}
+                    angle={isMobile ? -45 : 0}
+                    textAnchor={isMobile ? "end" : "middle"}
+                    height={isMobile ? 60 : 30} />
                   <YAxis yAxisId="left" orientation="left" 
                     stroke={colors.primary}
-                    tick={{ fill: colors.textSecondary }} />
+                    tick={{ fill: colors.textSecondary, fontSize: isMobile ? 9 : 11 }}
+                    width={isMobile ? 35 : 40} />
                   <YAxis yAxisId="right" orientation="right" 
                     stroke={colors.secondary}
-                    tick={{ fill: colors.textSecondary }} />
+                    tick={{ fill: colors.textSecondary, fontSize: isMobile ? 9 : 11 }}
+                    width={isMobile ? 35 : 40} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: colors.card,
                       borderColor: colors.border,
-                      color: colors.text
+                      color: colors.text,
+                      fontSize: isMobile ? '10px' : '12px'
                     }}
                     formatter={(value: any, name: string) => {
-                      if (name === 'quantidade') return [value, 'Quantidade'];
+                      if (name === 'quantidade') return [value, 'Qtd'];
                       return [formatKz(value), 'Valor'];
                     }}
                   />
-                  <Bar yAxisId="left" dataKey="quantidade" fill={colors.primary} name="Quantidade" radius={[4, 4, 0, 0]} />
-                  <Bar yAxisId="right" dataKey="valor" fill={colors.secondary} name="Valor" radius={[4, 4, 0, 0]} />
+                  <Bar yAxisId="left" dataKey="quantidade" fill={colors.primary} name="Qtd" radius={[4, 4, 0, 0]} barSize={isMobile ? 10 : 15} />
+                  <Bar yAxisId="right" dataKey="valor" fill={colors.secondary} name="Valor" radius={[4, 4, 0, 0]} barSize={isMobile ? 10 : 15} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -458,25 +514,25 @@ export default function DashboardPage() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2 }}
-            className="p-4 rounded-xl shadow border"
+            className="p-3 sm:p-4 rounded-xl shadow border"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
           >
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: colors.text }}>
-              <FileText style={{ color: colors.secondary }} /> Documentos por Estado
+            <h2 className="text-base sm:text-lg font-semibold mb-2 sm:mb-4 flex items-center gap-2" style={{ color: colors.text }}>
+              <FileText style={{ color: colors.secondary }} size={isMobile ? 18 : 20} /> Docs por Estado
             </h2>
-            <div style={{ width: '100%', height: '300px' }}>
+            <div style={{ width: '100%', height: isMobile ? '250px' : '300px' }}>
               <ResponsiveContainer>
                 <PieChart>
                   <Pie
                     data={displayDocumentosEstado}
                     cx="50%"
                     cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
+                    innerRadius={isMobile ? 40 : 60}
+                    outerRadius={isMobile ? 70 : 100}
                     paddingAngle={5}
                     dataKey="quantidade"
                     nameKey="estado"
-                    label={(entry) => `${entry.estado}: ${entry.quantidade}`}
+                    label={isMobile ? false : (entry) => `${entry.estado}: ${entry.quantidade}`}
                     labelLine={false}
                   >
                     {displayDocumentosEstado.map((_, i) => (
@@ -487,136 +543,149 @@ export default function DashboardPage() {
                     contentStyle={{
                       backgroundColor: colors.card,
                       borderColor: colors.border,
-                      color: colors.text
+                      color: colors.text,
+                      fontSize: isMobile ? '10px' : '12px'
                     }}
-                    formatter={(value) => [`${value} documentos`, 'Quantidade']} />
+                    formatter={(value) => [`${value} docs`, 'Quantidade']} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
 
-            {/* Legenda adicional */}
-            <div className="flex justify-center gap-4 mt-4 pt-4 border-t" 
+            {/* Legenda responsiva */}
+            <div className={`flex ${isMobile ? 'flex-col items-start gap-1' : 'justify-center gap-4'} mt-3 sm:mt-4 pt-3 sm:pt-4 border-t`} 
               style={{ borderColor: colors.border }}>
               {displayDocumentosEstado.map((item: any, i: number) => (
                 <div key={i} className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{
+                  <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full" style={{
                     backgroundColor: i === 0 ? colors.primary : i === 1 ? colors.secondary : '#95a5a6'
                   }} />
-                  <span style={{ color: colors.textSecondary }} className="text-xs">{item.estado}: {item.quantidade}</span>
+                  <span style={{ color: colors.textSecondary }} className="text-xs">
+                    {item.estado}: {item.quantidade}
+                  </span>
                 </div>
               ))}
             </div>
           </motion.div>
         </div>
 
-        {/* Tabelas */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Tabelas - Versão responsiva */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          {/* Últimas Vendas */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="p-4 rounded-xl shadow border"
+            className="p-3 sm:p-4 rounded-xl shadow border overflow-x-auto"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
           >
-            <h2 className="text-lg font-semibold mb-4" style={{ color: colors.text }}>Últimas Vendas</h2>
-            <table className="w-full">
-              <thead>
-                <tr className="border-b" style={{ borderColor: colors.border }}>
-                  <th className="text-left p-2" style={{ color: colors.textSecondary }}>Cliente</th>
-                  <th className="text-left p-2" style={{ color: colors.textSecondary }}>Total</th>
-                  <th className="text-left p-2" style={{ color: colors.textSecondary }}>Status</th>
-                  <th className="text-left p-2" style={{ color: colors.textSecondary }}>Data</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.vendas?.ultimas?.slice(0, 5).map((v: any, i: number) => (
-                  <tr key={i} className="border-b transition-colors" 
-                    style={{ borderColor: colors.border }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = theme === 'dark' ? '#333333' : '#F9FAFB';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                    }}>
-                    <td className="p-2" style={{ color: colors.text }}>{v.cliente || '-'}</td>
-                    <td className="p-2" style={{ color: colors.text }}>{formatKz(v.total || 0)}</td>
-                    <td className="p-2">
-                      <span className={`px-2 py-1 rounded text-xs ${
-                        v.status === 'faturada' 
-                          ? theme === 'dark' ? 'bg-green-900 text-green-300' : 'bg-green-100 text-green-700'
-                          : v.status === 'pendente' 
-                            ? theme === 'dark' ? 'bg-yellow-900 text-yellow-300' : 'bg-yellow-100 text-yellow-700'
-                            : theme === 'dark' ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-700'
-                      }`}>
-                        {v.status || '-'}
-                      </span>
-                    </td>
-                    <td className="p-2" style={{ color: colors.textSecondary }}>{v.data || '-'}</td>
+            <h2 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4" style={{ color: colors.text }}>Últimas Vendas</h2>
+            <div className="min-w-[300px] sm:min-w-full">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b" style={{ borderColor: colors.border }}>
+                    <th className="text-left p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.textSecondary }}>Cliente</th>
+                    <th className="text-left p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.textSecondary }}>Total</th>
+                    <th className="text-left p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.textSecondary }}>Status</th>
+                    <th className="text-left p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.textSecondary }}>Data</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data.vendas?.ultimas?.slice(0, 5).map((v: any, i: number) => (
+                    <tr key={i} className="border-b transition-colors" 
+                      style={{ borderColor: colors.border }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = theme === 'dark' ? '#333333' : '#F9FAFB';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}>
+                      <td className="p-1 sm:p-2 text-xs sm:text-sm truncate max-w-[80px] sm:max-w-none" style={{ color: colors.text }} title={v.cliente || '-'}>
+                        {v.cliente?.substring(0, 15) || '-'}
+                      </td>
+                      <td className="p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.text }}>{formatKz(v.total || 0)}</td>
+                      <td className="p-1 sm:p-2">
+                        <span className={`px-1 sm:px-2 py-0.5 sm:py-1 rounded text-xs ${
+                          v.status === 'faturada' 
+                            ? theme === 'dark' ? 'bg-green-900 text-green-300' : 'bg-green-100 text-green-700'
+                            : v.status === 'pendente' 
+                              ? theme === 'dark' ? 'bg-yellow-900 text-yellow-300' : 'bg-yellow-100 text-yellow-700'
+                              : theme === 'dark' ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-700'
+                        }`}>
+                          {v.status === 'faturada' ? 'Faturada' : v.status === 'pendente' ? 'Pendente' : '-'}
+                        </span>
+                      </td>
+                      <td className="p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.textSecondary }}>{v.data || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <Link 
               href="/dashboard/Vendas/relatorios" 
-              className="block text-center mt-4 hover:underline transition-colors"
+              className="block text-center mt-3 sm:mt-4 text-xs sm:text-sm hover:underline transition-colors"
               style={{ color: colors.secondary }}
             >
               Ver mais →
             </Link>
           </motion.div>
 
+          {/* Últimos Documentos */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
-            className="p-4 rounded-xl shadow border"
+            className="p-3 sm:p-4 rounded-xl shadow border overflow-x-auto"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
           >
-            <h2 className="text-lg font-semibold mb-4" style={{ color: colors.text }}>Últimos Documentos</h2>
-            <table className="w-full">
-              <thead>
-                <tr className="border-b" style={{ borderColor: colors.border }}>
-                  <th className="text-left p-2" style={{ color: colors.textSecondary }}>Tipo</th>
-                  <th className="text-left p-2" style={{ color: colors.textSecondary }}>Nº</th>
-                  <th className="text-left p-2" style={{ color: colors.textSecondary }}>Total</th>
-                  <th className="text-left p-2" style={{ color: colors.textSecondary }}>Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.documentos_fiscais?.ultimos?.slice(0, 5).map((d: any, i: number) => (
-                  <tr key={i} className="border-b transition-colors"
-                    style={{ borderColor: colors.border }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = theme === 'dark' ? '#333333' : '#F9FAFB';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                    }}>
-                    <td className="p-2" style={{ color: colors.text }}>{d.tipo_nome || '-'}</td>
-                    <td className="p-2" style={{ color: colors.text }}>{d.numero || '-'}</td>
-                    <td className="p-2" style={{ color: colors.text }}>{formatKz(d.total || 0)}</td>
-                    <td className="p-2">
-                      <span className={`px-2 py-1 rounded text-xs ${
-                        d.estado === 'paga' 
-                          ? theme === 'dark' ? 'bg-green-900 text-green-300' : 'bg-green-100 text-green-700'
-                          : d.estado === 'emitido' 
-                            ? theme === 'dark' ? 'bg-blue-900 text-blue-300' : 'bg-blue-100 text-blue-700'
-                            : d.estado === 'cancelado' 
-                              ? theme === 'dark' ? 'bg-red-900 text-red-300' : 'bg-red-100 text-red-700'
-                              : d.estado === 'parcialmente_paga' 
-                                ? theme === 'dark' ? 'bg-orange-900 text-orange-300' : 'bg-orange-100 text-orange-700'
-                                : theme === 'dark' ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-700'
-                      }`}>
-                        {d.estado === 'parcialmente_paga' ? 'Parcial' : d.estado || '-'}
-                      </span>
-                    </td>
+            <h2 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4" style={{ color: colors.text }}>Últimos Documentos</h2>
+            <div className="min-w-[300px] sm:min-w-full">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b" style={{ borderColor: colors.border }}>
+                    <th className="text-left p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.textSecondary }}>Tipo</th>
+                    <th className="text-left p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.textSecondary }}>Nº</th>
+                    <th className="text-left p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.textSecondary }}>Total</th>
+                    <th className="text-left p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.textSecondary }}>Estado</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data.documentos_fiscais?.ultimos?.slice(0, 5).map((d: any, i: number) => (
+                    <tr key={i} className="border-b transition-colors"
+                      style={{ borderColor: colors.border }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = theme === 'dark' ? '#333333' : '#F9FAFB';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}>
+                      <td className="p-1 sm:p-2 text-xs sm:text-sm truncate max-w-[60px] sm:max-w-none" style={{ color: colors.text }} title={d.tipo_nome || '-'}>
+                        {d.tipo_nome?.substring(0, 10) || '-'}
+                      </td>
+                      <td className="p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.text }}>{d.numero || '-'}</td>
+                      <td className="p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.text }}>{formatKz(d.total || 0)}</td>
+                      <td className="p-1 sm:p-2">
+                        <span className={`px-1 sm:px-2 py-0.5 sm:py-1 rounded text-xs ${
+                          d.estado === 'paga' 
+                            ? theme === 'dark' ? 'bg-green-900 text-green-300' : 'bg-green-100 text-green-700'
+                            : d.estado === 'emitido' 
+                              ? theme === 'dark' ? 'bg-blue-900 text-blue-300' : 'bg-blue-100 text-blue-700'
+                              : d.estado === 'cancelado' 
+                                ? theme === 'dark' ? 'bg-red-900 text-red-300' : 'bg-red-100 text-red-700'
+                                : d.estado === 'parcialmente_paga' 
+                                  ? theme === 'dark' ? 'bg-orange-900 text-orange-300' : 'bg-orange-100 text-orange-700'
+                                  : theme === 'dark' ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-700'
+                        }`}>
+                          {d.estado === 'parcialmente_paga' ? 'Parcial' : d.estado || '-'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <Link 
               href="/dashboard/Faturas/Faturas" 
-              className="block text-center mt-4 hover:underline transition-colors"
+              className="block text-center mt-3 sm:mt-4 text-xs sm:text-sm hover:underline transition-colors"
               style={{ color: colors.secondary }}
             >
               Ver mais →

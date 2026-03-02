@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
     DocumentoFiscal,
     TipoDocumento,
@@ -97,6 +98,9 @@ export default function InvoiceTable({
     documentoFiscalService,
     colors,
 }: InvoiceTableProps) {
+    const [paginaAtual, setPaginaAtual] = useState(1);
+    const ITENS_POR_PAGINA = 7;
+
     const podeImprimir = (tipo: TipoDocumento): boolean => {
         return TIPOS_IMPRESSAO.includes(tipo);
     };
@@ -111,7 +115,7 @@ export default function InvoiceTable({
         try {
             // Chama o handler original que retorna o recibo gerado
             const resultado = await onGerarRecibo(documento);
-            
+
             // Se o resultado for o recibo gerado e tivermos a callback onReciboGerado
             if (resultado && onReciboGerado) {
                 // Pequeno delay para garantir que o estado foi atualizado
@@ -121,6 +125,21 @@ export default function InvoiceTable({
             }
         } catch (error) {
             console.error('Erro ao gerar recibo:', error);
+        }
+    };
+
+    // Cálculos da paginação
+    const totalPaginas = Math.ceil(documentos.length / ITENS_POR_PAGINA);
+    const paginaValida = paginaAtual > totalPaginas ? 1 : paginaAtual;
+    const indiceInicial = (paginaValida - 1) * ITENS_POR_PAGINA;
+    const indiceFinal = indiceInicial + ITENS_POR_PAGINA;
+    const documentosPaginados = documentos.slice(indiceInicial, indiceFinal);
+
+    const irParaPagina = (pagina: number) => {
+        if (pagina >= 1 && pagina <= totalPaginas) {
+            setPaginaAtual(pagina);
+        } else if (pagina > totalPaginas) {
+            setPaginaAtual(1);
         }
     };
 
@@ -164,7 +183,7 @@ export default function InvoiceTable({
                     </tr>
                 </thead>
                 <tbody className="divide-y" style={{ borderColor: colors.border }}>
-                    {documentos.map((documento) => {
+                    {documentosPaginados.map((documento) => {
                         const tipo = documento.tipo_documento;
                         const podeImprimirDoc = podeImprimir(tipo);
                         const podeGerarReciboDoc = podeGerarRecibo(documento);
@@ -262,6 +281,59 @@ export default function InvoiceTable({
                     })}
                 </tbody>
             </table>
+
+            {/* Paginação */}
+            {totalPaginas > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t" style={{ borderColor: colors.border }}>
+                        <div className="text-sm" style={{ color: colors.textSecondary }}>
+                            Mostrando {indiceInicial + 1} a {Math.min(indiceFinal, documentos.length)} de {documentos.length} documentos
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => irParaPagina(paginaValida - 1)}
+                                disabled={paginaValida === 1}
+                            className="px-3 py-1 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            style={{
+                                backgroundColor: paginaAtual === 1 ? colors.hover : colors.primary,
+                                color: paginaAtual === 1 ? colors.textSecondary : 'white'
+                            }}
+                        >
+                            Anterior
+                        </button>
+
+                        {[...Array(totalPaginas)].map((_, index) => {
+                            const pagina = index + 1;
+                            const isAtiva = pagina === paginaValida;
+
+                            return (
+                                <button
+                                    key={pagina}
+                                    onClick={() => irParaPagina(pagina)}
+                                    className="w-8 h-8 rounded-md text-sm font-medium transition-colors"
+                                    style={{
+                                        backgroundColor: isAtiva ? colors.primary : colors.hover,
+                                        color: isAtiva ? 'white' : colors.text
+                                    }}
+                                >
+                                    {pagina}
+                                </button>
+                            );
+                        })}
+
+                        <button
+                            onClick={() => irParaPagina(paginaValida + 1)}
+                            disabled={paginaValida === totalPaginas}
+                            className="px-3 py-1 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            style={{
+                                backgroundColor: paginaAtual === totalPaginas ? colors.hover : colors.primary,
+                                color: paginaAtual === totalPaginas ? colors.textSecondary : 'white'
+                            }}
+                        >
+                            Próxima
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
