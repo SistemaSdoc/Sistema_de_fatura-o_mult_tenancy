@@ -889,6 +889,9 @@ class DocumentoFiscalService
         return $dataEmissao->copy()->addDays($prazoDias)->toDateString();
     }
 
+    /**
+     * CORREÇÃO PRINCIPAL: Lógica de cálculo de impostos corrigida
+     */
     private function processarItens(array $itens, bool $aplicaIva, string $regime)
     {
         $totalBase = 0;
@@ -905,45 +908,93 @@ class DocumentoFiscalService
             $quantidade = (float) ($item['quantidade'] ?? 1);
             $precoUnitario = (float) ($item['preco_venda'] ?? $item['preco_unitario'] ?? 0);
             $desconto = (float) ($item['desconto'] ?? 0);
+            $taxaDesconto = (float) ($item['taxa_desconto'] ?? 0);
 
-            $baseTributavel = ($quantidade * $precoUnitario) - $desconto;
+            // 1. Calcular VALOR BRUTO da linha (sem descontos)
+            $valorBruto = $quantidade * $precoUnitario;
+
+            // 2. Aplicar desconto percentual se existir
+            if ($taxaDesconto > 0) {
+                $desconto += ($valorBruto * $taxaDesconto / 100);
+            }
+
+            // 3. Desconto não pode ser maior que valor bruto
+            $desconto = min($desconto, $valorBruto);
+
+            // 4. Calcular BASE TRIBUTÁVEL (valor bruto - desconto)
+            $baseTributavel = $valorBruto - $desconto;
             $baseTributavel = max($baseTributavel, 0);
 
-            $taxaIva = ($aplicaIva && $regime === 'geral')
-                ? (float) ($item['taxa_iva'] ?? $produto?->taxa_iva ?? 14)
-                : 0;
+            // 5. Determinar taxa de IVA
+            $taxaIva = 0;
+            if ($aplicaIva && $regime === 'geral') {
+                // Usar taxa específica do item, do produto, ou padrão 14%
+                $taxaIva = (float) ($item['taxa_iva'] ?? $produto?->taxa_iva ?? 14);
+            }
 
+            // 6. Calcular IVA sobre a BASE TRIBUTÁVEL (já descontada)
+            // FÓRMULA CORRETA: IVA incide sobre o valor líquido da linha após descontos
             $valorIva = round(($baseTributavel * $taxaIva) / 100, 2);
 
-            $valorRetencao = ($produto && $produto->tipo === 'servico')
-                ? round($baseTributavel * 0.1, 2)
-                : 0;
+            // 7. Calcular retenção na fonte (se aplicável)
+            $valorRetencao = 0;
+            if ($produto && $produto->tipo === 'servico' && $aplicaIva) {
+                // Retenção de 6.5% sobre o valor líquido (base tributável)
+                // ou usar taxa configurada no produto/empresa
+                $taxaRetencao = (float) ($produto->taxa_retencao ?? $item['taxa_retencao'] ?? 6.5);
+                $valorRetencao = round(($baseTributavel * $taxaRetencao) / 100, 2);
+            }
 
+            // 8. Calcular TOTAL DA LINHA
+            // FÓRMULA: Base + IVA - Retenção
             $totalLinha = round($baseTributavel + $valorIva - $valorRetencao, 2);
 
+            // 9. Guardar valores detalhados para possível análise/relatórios
             $itensProcessados[] = [
                 'produto_id' => $item['produto_id'] ?? null,
                 'descricao' => $item['descricao'] ?? $produto?->nome ?? 'Item',
                 'quantidade' => $quantidade,
                 'preco_unitario' => $precoUnitario,
-                'base_tributavel' => $baseTributavel,
+                'valor_bruto' => round($valorBruto, 2),           // NOVO: valor antes desconto
+                'desconto' => round($desconto, 2),
+                'taxa_desconto' => $taxaDesconto,
+                'base_tributavel' => round($baseTributavel, 2),
                 'taxa_iva' => $taxaIva,
                 'valor_iva' => $valorIva,
+                'taxa_retencao' => $valorRetencao > 0 ? ($produto->taxa_retencao ?? 6.5) : 0, // NOVO
                 'valor_retencao' => $valorRetencao,
-                'desconto' => $desconto,
                 'total_linha' => $totalLinha,
             ];
 
+            // 10. Acumular totais (sem arredondamento intermediário para evitar diferenças de centavo)
             $totalBase += $baseTributavel;
             $totalIva += $valorIva;
             $totalRetencao += $valorRetencao;
         }
 
+        // Arredondar totais finais apenas no final
+        $totalBase = round($totalBase, 2);
+        $totalIva = round($totalIva, 2);
+        $totalRetencao = round($totalRetencao, 2);
+        $totalLiquido = round($totalBase + $totalIva - $totalRetencao, 2);
+
+        // Validação de segurança: verificar se soma das linhas bate com totais
+        $somaLinhas = array_sum(array_column($itensProcessados, 'total_linha'));
+        if (abs($somaLinhas - $totalLiquido) > 0.01) {
+            Log::warning('Diferença de arredondamento detectada', [
+                'soma_linhas' => $somaLinhas,
+                'total_calculado' => $totalLiquido,
+                'diferenca' => $somaLinhas - $totalLiquido
+            ]);
+            // Ajustar total líquido para bater com soma das linhas (mais preciso)
+            $totalLiquido = $somaLinhas;
+        }
+
         return [
-            'base' => round($totalBase, 2),
-            'iva' => round($totalIva, 2),
-            'retencao' => round($totalRetencao, 2),
-            'liquido' => round($totalBase + $totalIva - $totalRetencao, 2),
+            'base' => $totalBase,
+            'iva' => $totalIva,
+            'retencao' => $totalRetencao,
+            'liquido' => $totalLiquido,
             'itens_processados' => $itensProcessados,
         ];
     }

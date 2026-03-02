@@ -321,7 +321,7 @@ export default function VisualizarDocumentoPage() {
 
                 {/* CONTEÚDO ÚNICO - TUDO NUMA SÓ PÁGINA */}
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 space-y-8">
-                    
+
                     {/* SEÇÃO 1: Informações do Cliente */}
                     <section>
                         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: COLORS.primary, borderBottom: `2px solid ${COLORS.secondary}`, paddingBottom: '8px' }}>
@@ -517,64 +517,64 @@ export default function VisualizarDocumentoPage() {
                     )}
 
                     {/* SEÇÃO 6: Documentos Relacionados */}
-                    {(documento.documento_origem || 
-                      (documento.notas_credito && documento.notas_credito.length > 0) ||
-                      (documento.notas_debito && documento.notas_debito.length > 0) ||
-                      (documento.adiantamentos_vinculados && documento.adiantamentos_vinculados.length > 0) ||
-                      (documento.faturas_vinculadas && documento.faturas_vinculadas.length > 0)) && (
-                        <section>
-                            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: COLORS.primary, borderBottom: `2px solid ${COLORS.secondary}`, paddingBottom: '8px' }}>
-                                <ScrollText className="w-5 h-5" style={{ color: COLORS.secondary }} />
-                                Documentos Relacionados
-                            </h3>
-                            <div className="space-y-4">
-                                {documento.documento_origem && (
-                                    <DocumentoRelacionado
-                                        titulo="Documento de Origem"
-                                        documentos={[documento.documento_origem]}
-                                        getTipoIcone={getTipoIcone}
-                                        router={router}
-                                    />
-                                )}
-                                {documento.notas_credito && documento.notas_credito.length > 0 && (
-                                    <DocumentoRelacionado
-                                        titulo="Notas de Crédito"
-                                        documentos={documento.notas_credito}
-                                        getTipoIcone={getTipoIcone}
-                                        router={router}
-                                        cor={COLORS.danger}
-                                    />
-                                )}
-                                {documento.notas_debito && documento.notas_debito.length > 0 && (
-                                    <DocumentoRelacionado
-                                        titulo="Notas de Débito"
-                                        documentos={documento.notas_debito}
-                                        getTipoIcone={getTipoIcone}
-                                        router={router}
-                                        cor="#fd7e14"
-                                    />
-                                )}
-                                {documento.adiantamentos_vinculados && documento.adiantamentos_vinculados.length > 0 && (
-                                    <DocumentoRelacionado
-                                        titulo="Adiantamentos Vinculados"
-                                        documentos={documento.adiantamentos_vinculados}
-                                        getTipoIcone={getTipoIcone}
-                                        router={router}
-                                        cor="#6f42c1"
-                                    />
-                                )}
-                                {documento.faturas_vinculadas && documento.faturas_vinculadas.length > 0 && (
-                                    <DocumentoRelacionado
-                                        titulo="Faturas Vinculadas"
-                                        documentos={documento.faturas_vinculadas}
-                                        getTipoIcone={getTipoIcone}
-                                        router={router}
-                                        cor={COLORS.primary}
-                                    />
-                                )}
-                            </div>
-                        </section>
-                    )}
+                    {(documento.documento_origem ||
+                        (documento.notas_credito && documento.notas_credito.length > 0) ||
+                        (documento.notas_debito && documento.notas_debito.length > 0) ||
+                        (documento.adiantamentos_vinculados && documento.adiantamentos_vinculados.length > 0) ||
+                        (documento.faturas_vinculadas && documento.faturas_vinculadas.length > 0)) && (
+                            <section>
+                                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: COLORS.primary, borderBottom: `2px solid ${COLORS.secondary}`, paddingBottom: '8px' }}>
+                                    <ScrollText className="w-5 h-5" style={{ color: COLORS.secondary }} />
+                                    Documentos Relacionados
+                                </h3>
+                                <div className="space-y-4">
+                                    {documento.documento_origem && (
+                                        <DocumentoRelacionado
+                                            titulo="Documento de Origem"
+                                            documentos={[documento.documento_origem]}
+                                            getTipoIcone={getTipoIcone}
+                                            router={router}
+                                        />
+                                    )}
+                                    {documento.notas_credito && documento.notas_credito.length > 0 && (
+                                        <DocumentoRelacionado
+                                            titulo="Notas de Crédito"
+                                            documentos={documento.notas_credito}
+                                            getTipoIcone={getTipoIcone}
+                                            router={router}
+                                            cor={COLORS.danger}
+                                        />
+                                    )}
+                                    {documento.notas_debito && documento.notas_debito.length > 0 && (
+                                        <DocumentoRelacionado
+                                            titulo="Notas de Débito"
+                                            documentos={documento.notas_debito}
+                                            getTipoIcone={getTipoIcone}
+                                            router={router}
+                                            cor="#fd7e14"
+                                        />
+                                    )}
+                                    {documento.adiantamentos_vinculados && documento.adiantamentos_vinculados.length > 0 && (
+                                        <DocumentoRelacionado
+                                            titulo="Adiantamentos Vinculados"
+                                            documentos={documento.adiantamentos_vinculados}
+                                            getTipoIcone={getTipoIcone}
+                                            router={router}
+                                            cor="#6f42c1"
+                                        />
+                                    )}
+                                    {documento.faturas_vinculadas && documento.faturas_vinculadas.length > 0 && (
+                                        <DocumentoRelacionado
+                                            titulo="Faturas Vinculadas"
+                                            documentos={documento.faturas_vinculadas}
+                                            getTipoIcone={getTipoIcone}
+                                            router={router}
+                                            cor={COLORS.primary}
+                                        />
+                                    )}
+                                </div>
+                            </section>
+                        )}
 
                     {/* Hash Fiscal */}
                     {documento.hash_fiscal && (

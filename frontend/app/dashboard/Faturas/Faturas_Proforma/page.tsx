@@ -11,6 +11,7 @@ import {
 import { AxiosError } from "axios";
 import MainEmpresa from "../../../components/MainEmpresa";
 import { useAuth } from "@/context/authprovider";
+import { useThemeColors } from "@/context/ThemeContext";
 
 import {
     emitirDocumentoFiscal,
@@ -58,6 +59,7 @@ type ModoCliente = 'cadastrado' | 'avulso';
 export default function NovaFaturaProformaPage() {
     const router = useRouter();
     const { user, loading: authLoading } = useAuth();
+    const colors = useThemeColors();
 
     const [clientes, setClientes] = useState<Cliente[]>([]);
     const [produtos, setProdutos] = useState<Produto[]>([]);
@@ -400,35 +402,56 @@ export default function NovaFaturaProformaPage() {
 
     return (
         <MainEmpresa>
-            <div className="p-4 md:p-6 space-y-4 md:space-y-6 w-full max-w-full">
+            <div className="p-4 md:p-6 space-y-4 md:space-y-6 w-full max-w-full transition-colors duration-300" style={{ backgroundColor: colors.background }}>
                 {/* Header */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <button
                             onClick={() => router.back()}
-                            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                            className="p-2 rounded-full transition-colors"
+                            style={{ color: colors.primary }}
                             title="Voltar"
                         >
-                            <ArrowLeft className="w-5 h-5 md:w-6 md:h-6 text-[#123859]" />
+                            <ArrowLeft className="w-5 h-5 md:w-6 md:h-6" />
                         </button>
-                        <h1 className="text-2xl md:text-3xl font-bold text-[#F9941F]">Nova Fatura Proforma</h1>
+                        <h1 className="text-2xl md:text-3xl font-bold" style={{ color: colors.secondary }}>Nova Fatura Proforma</h1>
                     </div>
 
-                    <div className="px-3 py-1 rounded-full text-sm font-semibold bg-orange-100 text-orange-800">
+                    <div 
+                        className="px-3 py-1 rounded-full text-sm font-semibold"
+                        style={{ 
+                            backgroundColor: `${colors.warning}20`, 
+                            color: colors.warning 
+                        }}
+                    >
                         {getNomeTipoDocumento('FP')}
                     </div>
                 </div>
 
                 {/* Alertas */}
                 {error && (
-                    <div role="alert" className="bg-red-100 border border-red-400 text-red-700 p-3 rounded text-sm flex items-center gap-2">
+                    <div 
+                        className="border p-3 rounded text-sm flex items-center gap-2"
+                        style={{ 
+                            backgroundColor: `${colors.danger}20`, 
+                            borderColor: colors.danger,
+                            color: colors.danger 
+                        }}
+                    >
                         <AlertTriangle size={18} />
                         <span>{error}</span>
                     </div>
                 )}
 
                 {sucesso && (
-                    <div role="alert" className="bg-green-100 border border-green-400 text-green-700 p-3 rounded text-sm flex items-center gap-2">
+                    <div 
+                        className="border p-3 rounded text-sm flex items-center gap-2"
+                        style={{ 
+                            backgroundColor: `${colors.success}20`, 
+                            borderColor: colors.success,
+                            color: colors.success 
+                        }}
+                    >
                         <CheckCircle2 size={18} />
                         <span>{sucesso}</span>
                     </div>
@@ -436,18 +459,28 @@ export default function NovaFaturaProformaPage() {
 
                 {/* Alerta de estoque baixo (apenas informativo, não bloqueia) */}
                 {produtosEstoqueBaixo.length > 0 && (
-                    <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                    <div 
+                        className="p-3 rounded-lg border"
+                        style={{ 
+                            backgroundColor: `${colors.warning}20`, 
+                            borderColor: colors.warning 
+                        }}
+                    >
                         <div className="flex items-start gap-2">
-                            <AlertTriangle className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
+                            <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: colors.warning }} />
                             <div className="text-xs">
-                                <h3 className="font-semibold text-orange-800 mb-1">
+                                <h3 className="font-semibold mb-1" style={{ color: colors.warning }}>
                                     Produtos com Estoque Baixo ({produtosEstoqueBaixo.length})
                                 </h3>
                                 <div className="flex flex-wrap gap-1">
                                     {produtosEstoqueBaixo.map(p => (
                                         <span
                                             key={p.id}
-                                            className="inline-flex items-center px-2 py-0.5 rounded bg-orange-100 text-orange-800"
+                                            className="inline-flex items-center px-2 py-0.5 rounded"
+                                            style={{ 
+                                                backgroundColor: `${colors.warning}20`, 
+                                                color: colors.warning 
+                                            }}
                                         >
                                             {p.nome} ({p.estoque_atual})
                                         </span>
@@ -459,8 +492,20 @@ export default function NovaFaturaProformaPage() {
                 )}
 
                 {/* TABELA PRINCIPAL */}
-                <div className="bg-white rounded-lg shadow border-2 border-[#123859]/20 overflow-hidden">
-                    <div className="bg-[#123859] text-white px-4 py-2 flex items-center gap-2">
+                <div 
+                    className="rounded-lg shadow border overflow-hidden"
+                    style={{ 
+                        backgroundColor: colors.card, 
+                        borderColor: colors.border 
+                    }}
+                >
+                    <div 
+                        className="px-4 py-2 flex items-center gap-2"
+                        style={{ 
+                            backgroundColor: colors.primary, 
+                            color: 'white' 
+                        }}
+                    >
                         <FileText size={18} />
                         <h2 className="font-bold text-sm">DADOS DA FATURA PROFORMA</h2>
                     </div>
@@ -468,8 +513,16 @@ export default function NovaFaturaProformaPage() {
                     <table className="w-full border-collapse">
                         <tbody>
                             {/* Linha 1: Cliente */}
-                            <tr className="border-b border-gray-200">
-                                <td className="p-3 bg-gray-50 font-semibold text-[#123859] text-sm border-r border-gray-200 w-40">
+                            <tr className="border-b" style={{ borderColor: colors.border }}>
+                                <td 
+                                    className="p-3 font-semibold text-sm border-r" 
+                                    style={{ 
+                                        backgroundColor: colors.hover, 
+                                        color: colors.primary,
+                                        borderColor: colors.border,
+                                        width: '160px'
+                                    }}
+                                >
                                     <div className="flex items-center gap-2">
                                         <User size={16} />
                                         <span>Cliente</span>
@@ -489,10 +542,12 @@ export default function NovaFaturaProformaPage() {
                                                     setClienteAvulsoNif('');
                                                     setClienteSelecionado(null);
                                                 }}
-                                                className={`px-2 py-1 text-xs rounded ${modoCliente === 'cadastrado'
-                                                    ? 'bg-[#123859] text-white'
-                                                    : 'bg-white border border-gray-300 text-gray-700'
-                                                    }`}
+                                                style={{
+                                                    backgroundColor: modoCliente === 'cadastrado' ? colors.primary : 'transparent',
+                                                    color: modoCliente === 'cadastrado' ? 'white' : colors.textSecondary,
+                                                    borderColor: colors.border
+                                                }}
+                                                className={`px-2 py-1 text-xs rounded border transition-colors`}
                                             >
                                                 Cadastrado
                                             </button>
@@ -503,10 +558,12 @@ export default function NovaFaturaProformaPage() {
                                                     setModoCliente('avulso');
                                                     setClienteSelecionado(null);
                                                 }}
-                                                className={`px-2 py-1 text-xs rounded ${modoCliente === 'avulso'
-                                                    ? 'bg-[#123859] text-white'
-                                                    : 'bg-white border border-gray-300 text-gray-700'
-                                                    }`}
+                                                style={{
+                                                    backgroundColor: modoCliente === 'avulso' ? colors.primary : 'transparent',
+                                                    color: modoCliente === 'avulso' ? 'white' : colors.textSecondary,
+                                                    borderColor: colors.border
+                                                }}
+                                                className={`px-2 py-1 text-xs rounded border transition-colors`}
                                             >
                                                 Não cadastrado
                                             </button>
@@ -515,7 +572,13 @@ export default function NovaFaturaProformaPage() {
                                         {/* Cliente cadastrado */}
                                         {modoCliente === 'cadastrado' && (
                                             <select
-                                                className="w-72 border border-gray-300 p-2 rounded text-sm"
+                                                className="w-72 p-2 rounded text-sm"
+                                                style={{ 
+                                                    backgroundColor: colors.card, 
+                                                    borderColor: colors.border,
+                                                    color: colors.text,
+                                                    borderWidth: 1
+                                                }}
                                                 value={clienteSelecionado?.id ?? ""}
                                                 onChange={e =>
                                                     setClienteSelecionado(
@@ -538,7 +601,13 @@ export default function NovaFaturaProformaPage() {
                                                 <input
                                                     type="text"
                                                     placeholder="Nome do cliente"
-                                                    className="w-60 border border-gray-300 p-2 rounded text-sm"
+                                                    className="w-60 p-2 rounded text-sm"
+                                                    style={{ 
+                                                        backgroundColor: colors.card, 
+                                                        borderColor: colors.border,
+                                                        color: colors.text,
+                                                        borderWidth: 1
+                                                    }}
                                                     value={clienteAvulso}
                                                     onChange={e => setClienteAvulso(e.target.value)}
                                                     required
@@ -547,7 +616,13 @@ export default function NovaFaturaProformaPage() {
                                                 <input
                                                     type="text"
                                                     placeholder="NIF"
-                                                    className="w-40 border border-gray-300 p-2 rounded text-sm"
+                                                    className="w-40 p-2 rounded text-sm"
+                                                    style={{ 
+                                                        backgroundColor: colors.card, 
+                                                        borderColor: colors.border,
+                                                        color: colors.text,
+                                                        borderWidth: 1
+                                                    }}
                                                     value={clienteAvulsoNif}
                                                     onChange={e => setClienteAvulsoNif(e.target.value)}
                                                 />
@@ -559,8 +634,15 @@ export default function NovaFaturaProformaPage() {
                             </tr>
 
                             {/* Linha 2: Produto */}
-                            <tr className="border-b border-gray-200">
-                                <td className="p-3 bg-gray-50 font-semibold text-[#123859] text-sm border-r border-gray-200">
+                            <tr className="border-b" style={{ borderColor: colors.border }}>
+                                <td 
+                                    className="p-3 font-semibold text-sm border-r" 
+                                    style={{ 
+                                        backgroundColor: colors.hover, 
+                                        color: colors.primary,
+                                        borderColor: colors.border 
+                                    }}
+                                >
                                     <div className="flex items-center gap-2">
                                         <Package size={16} />
                                         <span>Produto</span>
@@ -569,7 +651,13 @@ export default function NovaFaturaProformaPage() {
                                 <td className="p-3">
                                     <div className="flex items-center gap-3 flex-wrap">
                                         <select
-                                            className="w-64 border border-gray-300 p-2 rounded text-sm"
+                                            className="w-64 p-2 rounded text-sm"
+                                            style={{ 
+                                                backgroundColor: colors.card, 
+                                                borderColor: colors.border,
+                                                color: colors.text,
+                                                borderWidth: 1
+                                            }}
                                             value={formItem.produto_id}
                                             onChange={e => handleProdutoChange(e.target.value)}
                                         >
@@ -592,13 +680,19 @@ export default function NovaFaturaProformaPage() {
                                                 type="number"
                                                 min={1}
                                                 placeholder="Qtd"
-                                                className="w-full border border-gray-300 p-2 rounded text-sm"
+                                                className="w-full p-2 rounded text-sm"
+                                                style={{ 
+                                                    backgroundColor: colors.card, 
+                                                    borderColor: colors.border,
+                                                    color: colors.text,
+                                                    borderWidth: 1
+                                                }}
                                                 value={formItem.quantidade}
                                                 onChange={e => handleQuantidadeChange(Number(e.target.value))}
                                                 disabled={!formItem.produto_id}
                                             />
                                             {produtoSelecionado && !isServico(produtoSelecionado) && (
-                                                <div className="absolute -bottom-4 left-0 text-[10px] text-gray-500">
+                                                <div className="absolute -bottom-4 left-0 text-[10px]" style={{ color: colors.textSecondary }}>
                                                     Disp: {produtoSelecionado.estoque_atual}
                                                 </div>
                                             )}
@@ -609,7 +703,13 @@ export default function NovaFaturaProformaPage() {
                                             type="number"
                                             min={0}
                                             placeholder="Desc. (Kz)"
-                                            className="w-28 border border-gray-300 p-2 rounded text-sm"
+                                            className="w-28 p-2 rounded text-sm"
+                                            style={{ 
+                                                backgroundColor: colors.card, 
+                                                borderColor: colors.border,
+                                                color: colors.text,
+                                                borderWidth: 1
+                                            }}
                                             value={formItem.desconto}
                                             onChange={e =>
                                                 setFormItem(prev => ({ ...prev, desconto: Number(e.target.value) }))
@@ -622,8 +722,11 @@ export default function NovaFaturaProformaPage() {
                                             type="button"
                                             onClick={adicionarAoCarrinho}
                                             disabled={!formItem.produto_id}
-                                            className="bg-[#123859] hover:bg-[#0d2840] disabled:bg-gray-300 disabled:cursor-not-allowed 
-                   text-white px-4 py-2 rounded font-semibold flex items-center gap-1 text-sm"
+                                            className="text-white px-4 py-2 rounded font-semibold flex items-center gap-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                            style={{ 
+                                                backgroundColor: colors.primary,
+                                                opacity: !formItem.produto_id ? 0.5 : 1
+                                            }}
                                         >
                                             <Plus size={16} />
                                             Adicionar
@@ -632,15 +735,21 @@ export default function NovaFaturaProformaPage() {
 
                                     {/* Preview do item */}
                                     {previewItem && (
-                                        <div className="mt-4 p-2 bg-gray-50 rounded text-xs flex gap-6 border border-gray-200">
-                                            <div><span className="text-gray-500">Base:</span> {formatarPreco(previewItem.base_tributavel)}</div>
-                                            <div><span className="text-gray-500">IVA:</span> {formatarPreco(previewItem.valor_iva)}</div>
+                                        <div 
+                                            className="mt-4 p-2 rounded text-xs flex gap-6 border flex-wrap"
+                                            style={{ 
+                                                backgroundColor: colors.hover, 
+                                                borderColor: colors.border 
+                                            }}
+                                        >
+                                            <div><span style={{ color: colors.textSecondary }}>Base:</span> {formatarPreco(previewItem.base_tributavel)}</div>
+                                            <div><span style={{ color: colors.textSecondary }}>IVA:</span> {formatarPreco(previewItem.valor_iva)}</div>
                                             {previewItem.valor_retencao > 0 && (
-                                                <div><span className="text-gray-500">Ret.:</span> -{formatarPreco(previewItem.valor_retencao)}</div>
+                                                <div><span style={{ color: colors.textSecondary }}>Ret.:</span> -{formatarPreco(previewItem.valor_retencao)}</div>
                                             )}
                                             <div>
-                                                <span className="text-gray-500">Subtotal:</span>{" "}
-                                                <span className="font-bold text-[#F9941F]">
+                                                <span style={{ color: colors.textSecondary }}>Subtotal:</span>{" "}
+                                                <span className="font-bold" style={{ color: colors.secondary }}>
                                                     {formatarPreco(previewItem.subtotal)}
                                                 </span>
                                             </div>
@@ -650,8 +759,15 @@ export default function NovaFaturaProformaPage() {
                             </tr>
 
                             {/* Linha 3: Observações */}
-                            <tr className="border-b border-gray-200">
-                                <td className="p-3 bg-gray-50 font-semibold text-[#123859] text-sm border-r border-gray-200">
+                            <tr className="border-b" style={{ borderColor: colors.border }}>
+                                <td 
+                                    className="p-3 font-semibold text-sm border-r" 
+                                    style={{ 
+                                        backgroundColor: colors.hover, 
+                                        color: colors.primary,
+                                        borderColor: colors.border 
+                                    }}
+                                >
                                     <div className="flex items-center gap-2">
                                         <FileText size={16} />
                                         <span>Observações</span>
@@ -661,7 +777,13 @@ export default function NovaFaturaProformaPage() {
                                     <textarea
                                         rows={2}
                                         placeholder="Observações adicionais (opcional)"
-                                        className="w-full border border-gray-300 p-2 rounded text-sm"
+                                        className="w-full p-2 rounded text-sm"
+                                        style={{ 
+                                            backgroundColor: colors.card, 
+                                            borderColor: colors.border,
+                                            color: colors.text,
+                                            borderWidth: 1
+                                        }}
                                         value={observacoes}
                                         onChange={e => setObservacoes(e.target.value)}
                                     />
@@ -673,15 +795,28 @@ export default function NovaFaturaProformaPage() {
 
                 {/* TABELA DE ITENS */}
                 {itens.length > 0 && (
-                    <div className="bg-white rounded-lg shadow border-2 border-[#123859]/20 overflow-hidden">
-                        <div className="bg-[#123859] text-white px-4 py-2 flex items-center justify-between">
+                    <div 
+                        className="rounded-lg shadow border overflow-hidden"
+                        style={{ 
+                            backgroundColor: colors.card, 
+                            borderColor: colors.border 
+                        }}
+                    >
+                        <div 
+                            className="px-4 py-2 flex items-center justify-between"
+                            style={{ 
+                                backgroundColor: colors.primary, 
+                                color: 'white' 
+                            }}
+                        >
                             <div className="flex items-center gap-2">
                                 <ShoppingCart size={18} />
                                 <h2 className="font-bold text-sm">ITENS DA FATURA PROFORMA ({itens.length})</h2>
                             </div>
                             <button
                                 onClick={limparCarrinho}
-                                className="text-xs bg-[#F9941F] text-white px-2 py-1 rounded transition-colors"
+                                className="text-xs text-white px-2 py-1 rounded transition-colors"
+                                style={{ backgroundColor: colors.secondary }}
                             >
                                 Limpar Itens
                             </button>
@@ -689,17 +824,17 @@ export default function NovaFaturaProformaPage() {
 
                         <div className="overflow-x-auto">
                             <table className="w-full border-collapse text-sm">
-                                <thead className="bg-gray-100">
-                                    <tr>
-                                        <th className="p-2 text-left text-[#123859] font-semibold">Produto</th>
-                                        <th className="p-2 text-center text-[#123859] font-semibold">Qtd</th>
-                                        <th className="p-2 text-right text-[#123859] font-semibold">Preço Unit.</th>
-                                        <th className="p-2 text-right text-[#123859] font-semibold">Desc.</th>
-                                        <th className="p-2 text-right text-[#123859] font-semibold">Base</th>
-                                        <th className="p-2 text-right text-[#123859] font-semibold">IVA</th>
-                                        <th className="p-2 text-right text-[#123859] font-semibold">Ret.</th>
-                                        <th className="p-2 text-right text-[#123859] font-semibold">Subtotal</th>
-                                        <th className="p-2 text-center text-[#123859] font-semibold"></th>
+                                <thead>
+                                    <tr style={{ backgroundColor: colors.hover }}>
+                                        <th className="p-2 text-left font-semibold" style={{ color: colors.primary }}>Produto</th>
+                                        <th className="p-2 text-center font-semibold" style={{ color: colors.primary }}>Qtd</th>
+                                        <th className="p-2 text-right font-semibold" style={{ color: colors.primary }}>Preço Unit.</th>
+                                        <th className="p-2 text-right font-semibold" style={{ color: colors.primary }}>Desc.</th>
+                                        <th className="p-2 text-right font-semibold" style={{ color: colors.primary }}>Base</th>
+                                        <th className="p-2 text-right font-semibold" style={{ color: colors.primary }}>IVA</th>
+                                        <th className="p-2 text-right font-semibold" style={{ color: colors.primary }}>Ret.</th>
+                                        <th className="p-2 text-right font-semibold" style={{ color: colors.primary }}>Subtotal</th>
+                                        <th className="p-2 text-center font-semibold" style={{ color: colors.primary }}></th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -708,23 +843,25 @@ export default function NovaFaturaProformaPage() {
                                         const maxEstoque = produto && !isServico(produto) ? produto.estoque_atual : Infinity;
 
                                         return (
-                                            <tr key={item.id} className="border-t border-gray-200 hover:bg-gray-50">
-                                                <td className="p-2 font-medium text-[#123859]">{item.descricao}</td>
+                                            <tr key={item.id} className="border-t" style={{ borderColor: colors.border }}>
+                                                <td className="p-2 font-medium" style={{ color: colors.primary }}>{item.descricao}</td>
                                                 <td className="p-2 text-center">
                                                     {/* ✅ BOTÕES + E - PARA ALTERAR QUANTIDADE */}
                                                     <div className="flex items-center justify-center gap-1">
                                                         <button
                                                             onClick={() => atualizarQuantidadeItem(item.id, item.quantidade - 1)}
-                                                            className="p-1 hover:bg-gray-200 rounded disabled:opacity-50"
+                                                            className="p-1 rounded disabled:opacity-50"
+                                                            style={{ color: colors.primary }}
                                                             disabled={item.quantidade <= 1}
                                                             title="Diminuir quantidade"
                                                         >
                                                             <Minus size={14} />
                                                         </button>
-                                                        <span className="w-8 text-center font-medium">{item.quantidade}</span>
+                                                        <span className="w-8 text-center font-medium" style={{ color: colors.text }}>{item.quantidade}</span>
                                                         <button
                                                             onClick={() => atualizarQuantidadeItem(item.id, item.quantidade + 1)}
-                                                            className="p-1 hover:bg-gray-200 rounded disabled:opacity-50"
+                                                            className="p-1 rounded disabled:opacity-50"
+                                                            style={{ color: colors.primary }}
                                                             disabled={item.quantidade >= maxEstoque}
                                                             title="Aumentar quantidade"
                                                         >
@@ -732,17 +869,18 @@ export default function NovaFaturaProformaPage() {
                                                         </button>
                                                     </div>
                                                 </td>
-                                                <td className="p-2 text-right">{formatarPreco(item.preco_unitario)}</td>
-                                                <td className="p-2 text-right text-red-600">{item.desconto > 0 ? formatarPreco(item.desconto) : '-'}</td>
-                                                <td className="p-2 text-right">{formatarPreco(item.base_tributavel)}</td>
-                                                <td className="p-2 text-right">{formatarPreco(item.valor_iva)}</td>
-                                                <td className="p-2 text-right text-orange-600">{item.valor_retencao > 0 ? formatarPreco(item.valor_retencao) : '-'}</td>
-                                                <td className="p-2 text-right font-bold text-[#F9941F]">{formatarPreco(item.subtotal)}</td>
+                                                <td className="p-2 text-right" style={{ color: colors.text }}>{formatarPreco(item.preco_unitario)}</td>
+                                                <td className="p-2 text-right" style={{ color: colors.danger }}>{item.desconto > 0 ? formatarPreco(item.desconto) : '-'}</td>
+                                                <td className="p-2 text-right" style={{ color: colors.text }}>{formatarPreco(item.base_tributavel)}</td>
+                                                <td className="p-2 text-right" style={{ color: colors.text }}>{formatarPreco(item.valor_iva)}</td>
+                                                <td className="p-2 text-right" style={{ color: colors.secondary }}>{item.valor_retencao > 0 ? formatarPreco(item.valor_retencao) : '-'}</td>
+                                                <td className="p-2 text-right font-bold" style={{ color: colors.secondary }}>{formatarPreco(item.subtotal)}</td>
                                                 <td className="p-2 text-center">
                                                     <button
                                                         type="button"
                                                         onClick={() => removerItem(item.id)}
-                                                        className="text-orange-600 hover:text-red-800 p-1 hover:bg-red-50 rounded transition-colors"
+                                                        className="p-1 rounded transition-colors"
+                                                        style={{ color: colors.secondary }}
                                                         title="Remover item"
                                                     >
                                                         <Trash2 size={16} />
@@ -759,8 +897,20 @@ export default function NovaFaturaProformaPage() {
 
                 {/* RESUMO */}
                 {itens.length > 0 && (
-                    <div className="bg-white rounded-lg shadow border-2 border-[#123859]/20 overflow-hidden">
-                        <div className="bg-[#123859] text-white px-4 py-2 flex items-center gap-2">
+                    <div 
+                        className="rounded-lg shadow border overflow-hidden"
+                        style={{ 
+                            backgroundColor: colors.card, 
+                            borderColor: colors.border 
+                        }}
+                    >
+                        <div 
+                            className="px-4 py-2 flex items-center gap-2"
+                            style={{ 
+                                backgroundColor: colors.primary, 
+                                color: 'white' 
+                            }}
+                        >
                             <Calculator size={18} />
                             <h2 className="font-bold text-sm">RESUMO - FATURA PROFORMA</h2>
                         </div>
@@ -768,38 +918,39 @@ export default function NovaFaturaProformaPage() {
                         <table className="w-full border-collapse text-center">
                             <tbody>
                                 {/* Linha 1 – Componentes */}
-                                <tr className="bg-gray-50 text-gray-600 font-medium border-b">
-                                    <td className="p-2">Base Tributável</td>
-                                    <td className="p-2">
+                                <tr className="font-medium border-b" style={{ backgroundColor: colors.hover, borderColor: colors.border }}>
+                                    <td className="p-2" style={{ color: colors.textSecondary }}>Base Tributável</td>
+                                    <td className="p-2" style={{ color: colors.textSecondary }}>
                                         IVA ({totalBase > 0 ? ((totalIva / totalBase) * 100).toFixed(1) : "0.0"}%)
                                     </td>
                                     {totalRetencao > 0 && (
-                                        <td className="p-2">Retenção (6.5%)</td>
+                                        <td className="p-2" style={{ color: colors.textSecondary }}>Retenção (6.5%)</td>
                                     )}
                                 </tr>
 
                                 {/* Linha 2 – Valores */}
-                                <tr className="border-b font-semibold">
-                                    <td className="p-3">{formatarPreco(totalBase)}</td>
-                                    <td className="p-3">{formatarPreco(totalIva)}</td>
+                                <tr className="border-b font-semibold" style={{ borderColor: colors.border }}>
+                                    <td className="p-3" style={{ color: colors.text }}>{formatarPreco(totalBase)}</td>
+                                    <td className="p-3" style={{ color: colors.text }}>{formatarPreco(totalIva)}</td>
                                     {totalRetencao > 0 && (
-                                        <td className="p-3 text-red-600">
+                                        <td className="p-3" style={{ color: colors.danger }}>
                                             -{formatarPreco(totalRetencao)}
                                         </td>
                                     )}
                                 </tr>
 
                                 {/* Linha 3 – Total */}
-                                <tr className="bg-[#123859] text-white">
+                                <tr style={{ backgroundColor: colors.primary }}>
                                     <td
                                         colSpan={totalRetencao > 0 ? 2 : 1}
-                                        className="p-3 font-bold text-left"
+                                        className="p-3 font-bold text-left text-white"
                                     >
                                         TOTAL DA FATURA PROFORMA
                                     </td>
                                     <td
                                         colSpan={totalRetencao > 0 ? 1 : 2}
-                                        className="p-3 font-bold text-[#F9941F] text-lg text-right"
+                                        className="p-3 font-bold text-lg text-right"
+                                        style={{ color: colors.secondary }}
                                     >
                                         {formatarPreco(totalLiquido)}
                                     </td>
@@ -814,7 +965,11 @@ export default function NovaFaturaProformaPage() {
                     type="button"
                     onClick={finalizarProforma}
                     disabled={loading || !podeFinalizar()}
-                    className="w-full bg-[#F9941F] hover:bg-[#d9831a] disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-3 rounded-lg font-bold text-base shadow-lg transition-colors flex items-center justify-center gap-2"
+                    className="w-full py-3 rounded-lg font-bold text-base shadow-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ 
+                        backgroundColor: colors.secondary,
+                        color: 'white'
+                    }}
                 >
                     {loading ? (
                         <>

@@ -9,11 +9,8 @@ import {
   AtualizarClienteInput,
   formatarNIF,
   getTipoClienteLabel,
-  getTipoClienteColor,
   getStatusClienteLabel,
-  getStatusClienteColor,
   getStatusClienteBadge,
-  StatusCliente
 } from "@/services/clientes";
 import {
   Users,
@@ -32,8 +29,10 @@ import {
   Loader2,
   CheckCircle,
   XCircle,
-  Power
+  Power,
+  Globe
 } from "lucide-react";
+import { useThemeColors } from "@/context/ThemeContext";
 
 // ===== COMPONENTES AUXILIARES =====
 
@@ -45,18 +44,21 @@ interface ModalProps {
 }
 
 function Modal({ isOpen, onClose, title, children }: ModalProps) {
+  const colors = useThemeColors();
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-[#123859]">{title}</h3>
+      <div className="rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden" style={{ backgroundColor: colors.card }}>
+        <div className="flex items-center justify-between p-6 border-b" style={{ borderColor: colors.border }}>
+          <h3 className="text-lg font-semibold" style={{ color: colors.primary }}>{title}</h3>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 rounded-lg transition-colors"
+            style={{ color: colors.textSecondary }}
           >
-            <X className="w-5 h-5 text-gray-500" />
+            <X className="w-5 h-5" />
           </button>
         </div>
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
@@ -90,50 +92,67 @@ function ConfirmModal({
   cancelText = "Cancelar",
   type = 'warning'
 }: ConfirmModalProps) {
+  const colors = useThemeColors();
+
   if (!isOpen) return null;
 
-  const colors = {
-    warning: {
-      bg: "bg-yellow-100",
-      text: "text-yellow-600",
-      button: "bg-yellow-600 hover:bg-yellow-700"
-    },
-    danger: {
-      bg: "bg-red-100",
-      text: "text-red-600",
-      button: "bg-red-600 hover:bg-red-700"
-    },
-    info: {
-      bg: "bg-orange-50",
-      text: "text-[#F9941F]",
-      button: "bg-[#123859] hover:bg-[#1a4d7a]"
+  const getColors = () => {
+    switch (type) {
+      case 'warning':
+        return {
+          bg: `${colors.warning}20`,
+          text: colors.warning,
+          button: colors.warning
+        };
+      case 'danger':
+        return {
+          bg: `${colors.danger}20`,
+          text: colors.danger,
+          button: colors.danger
+        };
+      case 'info':
+        return {
+          bg: `${colors.secondary}20`,
+          text: colors.secondary,
+          button: colors.primary
+        };
+      default:
+        return {
+          bg: `${colors.warning}20`,
+          text: colors.warning,
+          button: colors.warning
+        };
     }
   };
 
+  const modalColors = getColors();
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+      <div className="rounded-xl shadow-xl max-w-md w-full p-6" style={{ backgroundColor: colors.card }}>
         <div className="flex items-center gap-3 mb-4">
-          <div className={`p-3 ${colors[type].bg} rounded-full`}>
-            <AlertCircle className={`w-6 h-6 ${colors[type].text}`} />
+          <div className="p-3 rounded-full" style={{ backgroundColor: modalColors.bg }}>
+            <AlertCircle className="w-6 h-6" style={{ color: modalColors.text }} />
           </div>
-          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+          <h3 className="text-lg font-semibold" style={{ color: colors.text }}>{title}</h3>
         </div>
-        <p className="text-gray-600 mb-6">{message}</p>
+        <p className="mb-6" style={{ color: colors.textSecondary }}>{message}</p>
         <div className="flex gap-3">
           <button
             onClick={onClose}
             disabled={loading}
-            className="flex-1 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            className="flex-1 px-4 py-2 rounded-lg transition-colors"
+            style={{ color: colors.textSecondary }}
           >
             {cancelText}
           </button>
           <button
             onClick={onConfirm}
             disabled={loading}
-            className={`flex-1 px-4 py-2 ${colors[type].button} text-white rounded-lg transition-colors flex items-center justify-center gap-2`}
+            className="flex-1 px-4 py-2 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
+            style={{ backgroundColor: modalColors.button }}
           >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            {loading && <Loader2 className="w-4 h-4 animate-spin" />}
             {loading ? "Processando..." : confirmText}
           </button>
         </div>
@@ -144,71 +163,71 @@ function ConfirmModal({
 
 // ===== SKELETON LOADING COMPONENT =====
 
-function SkeletonCard() {
+function SkeletonCard({ colors }: { colors: any }) {
   return (
-    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 animate-pulse">
+    <div className="p-5 rounded-xl shadow-sm border animate-pulse" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
       <div className="flex items-center gap-3">
-        <div className="p-3 rounded-lg bg-gray-200 w-12 h-12"></div>
+        <div className="p-3 rounded-lg" style={{ backgroundColor: colors.border, width: '48px', height: '48px' }}></div>
         <div className="flex-1">
-          <div className="h-6 bg-gray-200 rounded w-16 mb-2"></div>
-          <div className="h-4 bg-gray-200 rounded w-12"></div>
+          <div className="h-6 rounded w-16 mb-2" style={{ backgroundColor: colors.border }}></div>
+          <div className="h-4 rounded w-12" style={{ backgroundColor: colors.border }}></div>
         </div>
       </div>
     </div>
   );
 }
 
-function SkeletonTableRow() {
+function SkeletonTableRow({ colors }: { colors: any }) {
   return (
     <tr className="animate-pulse">
       <td className="py-4 px-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gray-200"></div>
+          <div className="w-10 h-10 rounded-full" style={{ backgroundColor: colors.border }}></div>
           <div className="flex-1">
-            <div className="h-4 bg-gray-200 rounded w-32 mb-2"></div>
-            <div className="h-3 bg-gray-200 rounded w-24"></div>
+            <div className="h-4 rounded w-32 mb-2" style={{ backgroundColor: colors.border }}></div>
+            <div className="h-3 rounded w-24" style={{ backgroundColor: colors.border }}></div>
           </div>
         </div>
       </td>
       <td className="py-4 px-6">
-        <div className="h-6 bg-gray-200 rounded w-20"></div>
+        <div className="h-6 rounded w-20" style={{ backgroundColor: colors.border }}></div>
       </td>
       <td className="py-4 px-6">
-        <div className="h-6 bg-gray-200 rounded w-16"></div>
+        <div className="h-6 rounded w-16" style={{ backgroundColor: colors.border }}></div>
       </td>
       <td className="py-4 px-6">
-        <div className="h-4 bg-gray-200 rounded w-24"></div>
+        <div className="h-4 rounded w-24" style={{ backgroundColor: colors.border }}></div>
       </td>
       <td className="py-4 px-6">
-        <div className="h-4 bg-gray-200 rounded w-20"></div>
+        <div className="h-4 rounded w-20" style={{ backgroundColor: colors.border }}></div>
       </td>
       <td className="py-4 px-6">
         <div className="flex items-center justify-center gap-2">
-          <div className="w-8 h-8 bg-gray-200 rounded-lg"></div>
-          <div className="w-8 h-8 bg-gray-200 rounded-lg"></div>
-          <div className="w-8 h-8 bg-gray-200 rounded-lg"></div>
+          <div className="w-8 h-8 rounded-lg" style={{ backgroundColor: colors.border }}></div>
+          <div className="w-8 h-8 rounded-lg" style={{ backgroundColor: colors.border }}></div>
+          <div className="w-8 h-8 rounded-lg" style={{ backgroundColor: colors.border }}></div>
         </div>
       </td>
     </tr>
   );
 }
 
-function SkeletonStats() {
+function SkeletonStats({ colors }: { colors: unknown }) {
   return (
     <div className="grid grid-cols-4 sm:grid-cols-4 gap-4">
       {[1, 2, 3, 4].map((i) => (
-        <SkeletonCard key={i} />
+        <SkeletonCard key={i} colors={colors} />
       ))}
     </div>
   );
 }
 
-function SkeletonTable() {
+function SkeletonTable({ colors }: { colors: any }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    <div className="rounded-xl shadow-sm border overflow-hidden" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
       <table className="w-full text-sm">
-        <thead className="bg-[#123859] border-b border-gray-200">
-          <tr>
+        <thead>
+          <tr style={{ backgroundColor: colors.primary }}>
             <th className="py-4 px-6 text-left font-semibold text-white uppercase text-xs">Cliente</th>
             <th className="py-4 px-6 text-left font-semibold text-white uppercase text-xs">Tipo</th>
             <th className="py-4 px-6 text-left font-semibold text-white uppercase text-xs">Status</th>
@@ -217,9 +236,9 @@ function SkeletonTable() {
             <th className="py-4 px-6 text-center font-semibold text-white uppercase text-xs">Ações</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y" style={{ borderColor: colors.border }}>
           {[1, 2, 3, 4, 5].map((i) => (
-            <SkeletonTableRow key={i} />
+            <SkeletonTableRow key={i} colors={colors} />
           ))}
         </tbody>
       </table>
@@ -236,7 +255,25 @@ interface FormClienteProps {
   loading?: boolean;
 }
 
+// Lista de códigos de país comuns
+const CODIGOS_PAIS = [
+  { codigo: '+244', pais: 'Angola', bandeira: '🇦🇴' },
+  { codigo: '+351', pais: 'Portugal', bandeira: '🇵🇹' },
+  { codigo: '+55', pais: 'Brasil', bandeira: '🇧🇷' },
+  { codigo: '+258', pais: 'Moçambique', bandeira: '🇲🇿' },
+  { codigo: '+238', pais: 'Cabo Verde', bandeira: '🇨🇻' },
+  { codigo: '+245', pais: 'Guiné-Bissau', bandeira: '🇬🇼' },
+  { codigo: '+239', pais: 'São Tomé e Príncipe', bandeira: '🇸🇹' },
+  { codigo: '+1', pais: 'EUA/Canadá', bandeira: '🇺🇸' },
+  { codigo: '+44', pais: 'Reino Unido', bandeira: '🇬🇧' },
+  { codigo: '+33', pais: 'França', bandeira: '🇫🇷' },
+  { codigo: '+49', pais: 'Alemanha', bandeira: '🇩🇪' },
+  { codigo: '+34', pais: 'Espanha', bandeira: '🇪🇸' },
+];
+
 function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps) {
+  const colors = useThemeColors();
+
   const [formData, setFormData] = useState<CriarClienteInput>({
     nome: "",
     nif: "",
@@ -248,10 +285,12 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [codigoPais, setCodigoPais] = useState('+244');
+  const [numeroTelefone, setNumeroTelefone] = useState('');
 
   useEffect(() => {
     if (cliente) {
-      setFormData({
+      const novaFormData = {
         nome: cliente.nome,
         nif: cliente.nif || "",
         tipo: cliente.tipo,
@@ -259,39 +298,140 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
         telefone: cliente.telefone || "",
         email: cliente.email || "",
         endereco: cliente.endereco || "",
-      });
+      };
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setFormData(novaFormData);
+
+      // Extrair código do país e número do telefone se existir
+      if (cliente.telefone) {
+        const codigoEncontrado = CODIGOS_PAIS.find(c => cliente.telefone?.startsWith(c.codigo));
+        if (codigoEncontrado) {
+          setCodigoPais(codigoEncontrado.codigo);
+          setNumeroTelefone(cliente.telefone.replace(codigoEncontrado.codigo, '').trim());
+        } else {
+          setNumeroTelefone(cliente.telefone);
+        }
+      }
     } else {
-      setFormData({
+      const formaPadrao = {
         nome: "",
         nif: "",
-        tipo: "consumidor_final",
-        status: "ativo",
+        tipo: "consumidor_final" as const,
+        status: "ativo" as const,
         telefone: "",
         email: "",
         endereco: "",
-      });
+      };
+      setFormData(formaPadrao);
+      setCodigoPais('+244');
+      setNumeroTelefone('');
     }
   }, [cliente]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+
+    // Validação especial para NIF
+    if (name === 'nif') {
+      if (formData.tipo === 'empresa') {
+        // Empresa: apenas números, máximo 10 dígitos
+        const apenasNumeros = value.replace(/\D/g, '').slice(0, 10);
+        setFormData((prev) => ({ ...prev, [name]: apenasNumeros }));
+      } else {
+        // Consumidor final: letras e números, máximo 14 caracteres (padrão Angola)
+        const valorLimpo = value.slice(0, 14);
+        setFormData((prev) => ({ ...prev, [name]: valorLimpo }));
+      }
+    } else {
+      setFormData((prev) => ({ ...prev, [name]: value }));
+    }
+
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: "" }));
     }
   };
 
+  const handleTipoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const novoTipo = e.target.value as 'consumidor_final' | 'empresa';
+    setFormData((prev) => ({
+      ...prev,
+      tipo: novoTipo,
+      // Limpa NIF ao mudar de tipo para evitar conflitos de validação
+      nif: ""
+    }));
+    if (errors.nif) {
+      setErrors((prev) => ({ ...prev, nif: "" }));
+    }
+  };
+
+  const handleNumeroTelefoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const valor = e.target.value.replace(/\D/g, '').slice(0, 9);
+    setNumeroTelefone(valor);
+
+    // Atualiza o telefone completo no formData
+    const telefoneCompleto = valor ? `${codigoPais} ${valor}` : '';
+    setFormData((prev) => ({ ...prev, telefone: telefoneCompleto }));
+
+    if (errors.telefone) {
+      setErrors((prev) => ({ ...prev, telefone: "" }));
+    }
+  };
+
+  const handleCodigoPaisChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const novoCodigo = e.target.value;
+    setCodigoPais(novoCodigo);
+
+    // Atualiza o telefone completo no formData
+    const telefoneCompleto = numeroTelefone ? `${novoCodigo} ${numeroTelefone}` : '';
+    setFormData((prev) => ({ ...prev, telefone: telefoneCompleto }));
+  };
+
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
+    const ehEmpresa = formData.tipo === 'empresa';
 
+    // Nome é obrigatório para todos
     if (!formData.nome?.trim()) {
       newErrors.nome = "Nome é obrigatório";
     }
-    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = "Email inválido";
-    }
-    if (formData.nif && formData.nif.length < 10) {
-      newErrors.nif = "NIF inválido";
+
+    // Validações específicas para empresa
+    if (ehEmpresa) {
+      // Todos os campos são obrigatórios para empresa
+      if (!formData.nif?.trim()) {
+        newErrors.nif = "NIF é obrigatório para empresas";
+      } else if (formData.nif.length !== 10) {
+        newErrors.nif = "NIF deve ter exatamente 10 dígitos";
+      }
+
+      if (!formData.telefone?.trim()) {
+        newErrors.telefone = "Telefone é obrigatório para empresas";
+      } else if (numeroTelefone.length !== 9) {
+        newErrors.telefone = "Telefone deve ter 9 dígitos após o código do país";
+      }
+
+      if (!formData.email?.trim()) {
+        newErrors.email = "Email é obrigatório para empresas";
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+        newErrors.email = "Email inválido";
+      }
+
+      if (!formData.endereco?.trim()) {
+        newErrors.endereco = "Endereço é obrigatório para empresas";
+      }
+    } else {
+      // Consumidor final: validações opcionais mas com formato correto se preenchido
+      if (formData.nif && formData.nif.length > 14) {
+        newErrors.nif = "NIF não pode ter mais de 14 caracteres";
+      }
+
+      if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+        newErrors.email = "Email inválido";
+      }
+
+      if (formData.telefone && numeroTelefone.length > 0 && numeroTelefone.length !== 9) {
+        newErrors.telefone = "Telefone deve ter 9 dígitos após o código do país";
+      }
     }
 
     setErrors(newErrors);
@@ -304,57 +444,61 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
     onSubmit(formData);
   };
 
+  const ehEmpresa = formData.tipo === 'empresa';
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Tipo de Cliente */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-3">
+        <label className="block text-sm font-medium mb-3" style={{ color: colors.text }}>
           Tipo de Cliente
         </label>
         <div className="grid grid-cols-2 gap-4">
           <label
-            className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${formData.tipo === "consumidor_final"
-                ? "border-[#123859] bg-[#123859]/5"
-                : "border-gray-200 hover:border-gray-300"
-              }`}
+            className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all`}
+            style={{
+              borderColor: formData.tipo === "consumidor_final" ? colors.primary : colors.border,
+              backgroundColor: formData.tipo === "consumidor_final" ? `${colors.primary}10` : 'transparent'
+            }}
           >
             <input
               type="radio"
               name="tipo"
               value="consumidor_final"
               checked={formData.tipo === "consumidor_final"}
-              onChange={handleChange}
+              onChange={handleTipoChange}
               className="hidden"
             />
-            <User className={`w-5 h-5 ${formData.tipo === "consumidor_final" ? "text-[#123859]" : "text-gray-400"}`} />
+            <User className="w-5 h-5" style={{ color: formData.tipo === "consumidor_final" ? colors.primary : colors.textSecondary }} />
             <div>
-              <div className={`font-medium ${formData.tipo === "consumidor_final" ? "text-[#123859]" : "text-gray-700"}`}>
+              <div className="font-medium" style={{ color: formData.tipo === "consumidor_final" ? colors.primary : colors.text }}>
                 Consumidor Final
               </div>
-              <div className="text-xs text-gray-500">Particular</div>
+              <div className="text-xs" style={{ color: colors.textSecondary }}>Particular</div>
             </div>
           </label>
 
           <label
-            className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${formData.tipo === "empresa"
-                ? "border-[#F9941F] bg-[#F9941F]/5"
-                : "border-gray-200 hover:border-gray-300"
-              }`}
+            className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all`}
+            style={{
+              borderColor: formData.tipo === "empresa" ? colors.secondary : colors.border,
+              backgroundColor: formData.tipo === "empresa" ? `${colors.secondary}10` : 'transparent'
+            }}
           >
             <input
               type="radio"
               name="tipo"
               value="empresa"
               checked={formData.tipo === "empresa"}
-              onChange={handleChange}
+              onChange={handleTipoChange}
               className="hidden"
             />
-            <Building2 className={`w-5 h-5 ${formData.tipo === "empresa" ? "text-[#F9941F]" : "text-gray-400"}`} />
+            <Building2 className="w-5 h-5" style={{ color: formData.tipo === "empresa" ? colors.secondary : colors.textSecondary }} />
             <div>
-              <div className={`font-medium ${formData.tipo === "empresa" ? "text-[#F9941F]" : "text-gray-700"}`}>
+              <div className="font-medium" style={{ color: formData.tipo === "empresa" ? colors.secondary : colors.text }}>
                 Empresa
               </div>
-              <div className="text-xs text-gray-500">Pessoa jurídica</div>
+              <div className="text-xs" style={{ color: colors.textSecondary }}>Pessoa jurídica</div>
             </div>
           </label>
         </div>
@@ -362,32 +506,37 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
 
       {/* Nome */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Nome {formData.tipo === "empresa" ? "da Empresa" : "Completo"} <span className="text-red-500">*</span>
+        <label className="block text-sm font-medium mb-2" style={{ color: colors.text }}>
+          Nome {ehEmpresa ? "da Empresa" : "Completo"}
         </label>
         <input
           type="text"
           name="nome"
           value={formData.nome}
           onChange={handleChange}
-          placeholder={formData.tipo === "empresa" ? "Ex: Empresa XYZ, Lda" : "Ex: João Silva"}
-          className={`w-full px-4 py-2.5 rounded-lg border ${errors.nome ? "border-red-500" : "border-gray-300"
-            } focus:ring-2 focus:ring-[#123859] outline-none transition-all`}
+          placeholder={ehEmpresa ? "Ex: Empresa XYZ, Lda" : "Ex: João Silva"}
+          className="w-full px-4 py-2.5 rounded-lg border outline-none transition-all"
+          style={{
+            backgroundColor: colors.card,
+            borderColor: errors.nome ? colors.danger : colors.border,
+            color: colors.text
+          }}
         />
-        {errors.nome && <p className="mt-1 text-sm text-red-500">{errors.nome}</p>}
+        {errors.nome && <p className="mt-1 text-sm" style={{ color: colors.danger }}>{errors.nome}</p>}
       </div>
 
-      {/* Status - NOVO */}
+      {/* Status */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-3">
+        <label className="block text-sm font-medium mb-3" style={{ color: colors.text }}>
           Status do Cliente
         </label>
         <div className="grid grid-cols-2 gap-4">
           <label
-            className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${formData.status === "ativo"
-                ? "border-green-600 bg-green-50"
-                : "border-gray-200 hover:border-gray-300"
-              }`}
+            className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all`}
+            style={{
+              borderColor: formData.status === "ativo" ? colors.success : colors.border,
+              backgroundColor: formData.status === "ativo" ? `${colors.success}10` : 'transparent'
+            }}
           >
             <input
               type="radio"
@@ -397,20 +546,21 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
               onChange={handleChange}
               className="hidden"
             />
-            <CheckCircle className={`w-5 h-5 ${formData.status === "ativo" ? "text-green-600" : "text-gray-400"}`} />
+            <CheckCircle className="w-5 h-5" style={{ color: formData.status === "ativo" ? colors.success : colors.textSecondary }} />
             <div>
-              <div className={`font-medium ${formData.status === "ativo" ? "text-green-600" : "text-gray-700"}`}>
+              <div className="font-medium" style={{ color: formData.status === "ativo" ? colors.success : colors.text }}>
                 Ativo
               </div>
-              <div className="text-xs text-gray-500">Cliente pode realizar compras</div>
+              <div className="text-xs" style={{ color: colors.textSecondary }}>Cliente pode realizar compras</div>
             </div>
           </label>
 
           <label
-            className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${formData.status === "inativo"
-                ? "border-gray-600 bg-gray-50"
-                : "border-gray-200 hover:border-gray-300"
-              }`}
+            className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all`}
+            style={{
+              borderColor: formData.status === "inativo" ? colors.textSecondary : colors.border,
+              backgroundColor: formData.status === "inativo" ? `${colors.textSecondary}10` : 'transparent'
+            }}
           >
             <input
               type="radio"
@@ -420,12 +570,12 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
               onChange={handleChange}
               className="hidden"
             />
-            <XCircle className={`w-5 h-5 ${formData.status === "inativo" ? "text-gray-600" : "text-gray-400"}`} />
+            <XCircle className="w-5 h-5" style={{ color: formData.status === "inativo" ? colors.textSecondary : colors.textSecondary }} />
             <div>
-              <div className={`font-medium ${formData.status === "inativo" ? "text-gray-600" : "text-gray-700"}`}>
+              <div className="font-medium" style={{ color: formData.status === "inativo" ? colors.textSecondary : colors.text }}>
                 Inativo
               </div>
-              <div className="text-xs text-gray-500">Cliente não pode realizar compras</div>
+              <div className="text-xs" style={{ color: colors.textSecondary }}>Cliente não pode realizar compras</div>
             </div>
           </label>
         </div>
@@ -434,91 +584,151 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* NIF */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            NIF {formData.tipo === "empresa" && <span className="text-red-500">*</span>}
+          <label className="block text-sm font-medium mb-2" style={{ color: colors.text }}>
+            NIF {ehEmpresa ? "da Empresa" : "do Cliente"}
+            <span className="text-xs ml-2 font-normal" style={{ color: colors.textSecondary }}>
+              {ehEmpresa ? "(apenas números, 10 dígitos)" : "(letras e números, máx. 14)"}
+            </span>
           </label>
           <input
             type="text"
             name="nif"
             value={formData.nif}
             onChange={handleChange}
-            placeholder="000000000LA000"
-            className={`w-full px-4 py-2.5 rounded-lg border ${errors.nif ? "border-red-500" : "border-gray-300"
-              } focus:ring-2 focus:ring-[#123859] outline-none transition-all`}
+            placeholder={ehEmpresa ? "0000000000" : "000000000LA000"}
+            maxLength={ehEmpresa ? 10 : 14}
+            className="w-full px-4 py-2.5 rounded-lg border outline-none transition-all font-mono"
+            style={{
+              backgroundColor: colors.card,
+              borderColor: errors.nif ? colors.danger : colors.border,
+              color: colors.text
+            }}
           />
-          {errors.nif && <p className="mt-1 text-sm text-red-500">{errors.nif}</p>}
+          {errors.nif && <p className="mt-1 text-sm" style={{ color: colors.danger }}>{errors.nif}</p>}
+          {ehEmpresa && formData.nif && (
+            <p className="mt-1 text-xs" style={{ color: colors.textSecondary }}>
+              {formData.nif.length}/10 dígitos
+            </p>
+          )}
         </div>
 
-        {/* Telefone */}
+        {/* Telefone com código do país */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Telefone
+          <label className="block text-sm font-medium mb-2" style={{ color: colors.text }}>
+            Telefone {ehEmpresa }
+            <span className="text-xs ml-2 font-normal" style={{ color: colors.textSecondary }}>
+              (9 dígitos)
+            </span>
           </label>
-          <div className="relative">
-            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="tel"
-              name="telefone"
-              value={formData.telefone}
-              onChange={handleChange}
-              placeholder="+244 900 000 000"
-              className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#123859] outline-none transition-all"
-            />
+          <div className="flex gap-2">
+            <div className="relative min-w-[140px]">
+              <Globe className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: colors.textSecondary }} />
+              <select
+                value={codigoPais}
+                onChange={handleCodigoPaisChange}
+                className="w-full pl-8 pr-2 py-2.5 rounded-lg border outline-none transition-all appearance-none"
+                style={{
+                  backgroundColor: colors.card,
+                  borderColor: errors.telefone ? colors.danger : colors.border,
+                  color: colors.text
+                }}
+              >
+                {CODIGOS_PAIS.map((pais) => (
+                  <option key={pais.codigo} value={pais.codigo}>
+                    {pais.bandeira} {pais.codigo}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="relative flex-1">
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" style={{ color: colors.textSecondary }} />
+              <input
+                type="tel"
+                value={numeroTelefone}
+                onChange={handleNumeroTelefoneChange}
+                placeholder="900 000 000"
+                maxLength={9}
+                className="w-full pl-10 pr-4 py-2.5 rounded-lg border outline-none transition-all"
+                style={{
+                  backgroundColor: colors.card,
+                  borderColor: errors.telefone ? colors.danger : colors.border,
+                  color: colors.text
+                }}
+              />
+            </div>
           </div>
+          {errors.telefone && <p className="mt-1 text-sm" style={{ color: colors.danger }}>{errors.telefone}</p>}
+          {numeroTelefone && (
+            <p className="mt-1 text-xs" style={{ color: colors.textSecondary }}>
+              {numeroTelefone.length}/9 dígitos
+            </p>
+          )}
         </div>
       </div>
 
       {/* Email */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Email
+        <label className="block text-sm font-medium mb-2" style={{ color: colors.text }}>
+          Email {ehEmpresa}
         </label>
         <div className="relative">
-          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" style={{ color: colors.textSecondary }} />
           <input
             type="email"
             name="email"
             value={formData.email}
             onChange={handleChange}
             placeholder="email@exemplo.com"
-            className={`w-full pl-10 pr-4 py-2.5 rounded-lg border ${errors.email ? "border-red-500" : "border-gray-300"
-              } focus:ring-2 focus:ring-[#123859] outline-none transition-all`}
+            className="w-full pl-10 pr-4 py-2.5 rounded-lg border outline-none transition-all"
+            style={{
+              backgroundColor: colors.card,
+              borderColor: errors.email ? colors.danger : colors.border,
+              color: colors.text
+            }}
           />
         </div>
-        {errors.email && <p className="mt-1 text-sm text-red-500">{errors.email}</p>}
+        {errors.email && <p className="mt-1 text-sm" style={{ color: colors.danger }}>{errors.email}</p>}
       </div>
 
       {/* Endereço */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Endereço
+        <label className="block text-sm font-medium mb-2" style={{ color: colors.text }}>
+          Endereço {ehEmpresa}
         </label>
         <div className="relative">
-          <MapPin className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+          <MapPin className="absolute left-3 top-3 w-5 h-5" style={{ color: colors.textSecondary }} />
           <textarea
             name="endereco"
             value={formData.endereco}
             onChange={handleChange}
             rows={3}
             placeholder="Rua, número, bairro, cidade..."
-            className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#123859] outline-none transition-all resize-none"
+            className="w-full pl-10 pr-4 py-2.5 rounded-lg border outline-none transition-all resize-none"
+            style={{
+              backgroundColor: colors.card,
+              borderColor: errors.endereco ? colors.danger : colors.border,
+              color: colors.text
+            }}
           />
         </div>
+        {errors.endereco && <p className="mt-1 text-sm" style={{ color: colors.danger }}>{errors.endereco}</p>}
       </div>
 
       {/* Botões */}
-      <div className="flex gap-3 pt-4 border-t border-gray-200">
+      <div className="flex gap-3 pt-4 border-t" style={{ borderColor: colors.border }}>
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 px-4 py-2.5 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors font-medium"
+          className="flex-1 px-4 py-2.5 rounded-lg transition-colors font-medium"
+          style={{ color: colors.textSecondary }}
         >
           Cancelar
         </button>
         <button
           type="submit"
           disabled={loading}
-          className="flex-1 px-4 py-2.5 bg-[#123859] hover:bg-[#1a4d7a] text-white rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
+          className="flex-1 px-4 py-2.5 text-white rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
+          style={{ backgroundColor: colors.primary }}
         >
           {loading && <Loader2 className="w-4 h-4 animate-spin" />}
           {cliente ? "Atualizar" : "Criar"} Cliente
@@ -531,6 +741,8 @@ function FormCliente({ cliente, onSubmit, onCancel, loading }: FormClienteProps)
 // ===== PÁGINA PRINCIPAL =====
 
 export default function ClientesPage() {
+  const colors = useThemeColors();
+
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clientesFiltrados, setClientesFiltrados] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
@@ -669,25 +881,30 @@ export default function ClientesPage() {
 
   return (
     <MainEmpresa>
-      <div className="space-y-6 max-w-7xl mx-auto">
+      <div className="space-y-6 max-w-7xl mx-auto transition-colors duration-300" style={{ backgroundColor: colors.background }}>
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-[#123859]">Clientes</h1>
-            <p className="text-gray-500 mt-1">
+            <h1 className="text-3xl font-bold" style={{ color: colors.primary }}>Clientes</h1>
+            <p className="mt-1" style={{ color: colors.textSecondary }}>
               Gerencie seus clientes e empresas
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             {/* Busca */}
             <div className="relative flex-1 min-w-[250px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" style={{ color: colors.textSecondary }} />
               <input
                 type="text"
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
                 placeholder="Buscar por nome, NIF, email ou telefone..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#123859] outline-none transition-all"
+                className="w-full pl-10 pr-4 py-2.5 rounded-lg border outline-none transition-all"
+                style={{
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  color: colors.text
+                }}
               />
             </div>
 
@@ -695,24 +912,21 @@ export default function ClientesPage() {
             <select
               value={filtroStatus}
               onChange={(e) => setFiltroStatus(e.target.value as any)}
-              className="px-4 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-700 focus:ring-2 focus:ring-[#123859] outline-none transition-all"
+              className="px-4 py-2.5 rounded-lg border outline-none transition-all"
+              style={{
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                color: colors.text
+              }}
             >
               <option value="ativos">Apenas Ativos</option>
               <option value="inativos">Apenas Inativos</option>
               <option value="todos">Todos</option>
             </select>
-
-            <button
-              onClick={carregarClientes}
-              className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
-              title="Recarregar lista"
-            >
-              <Plus className="w-5 h-5 rotate-45" />
-            </button>
-
             <button
               onClick={abrirCriar}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#F9941F] text-white rounded-lg hover:bg-[#e08516] transition-colors font-medium"
+              className="flex items-center gap-2 px-4 py-2.5 text-white rounded-lg transition-colors font-medium"
+              style={{ backgroundColor: colors.secondary }}
             >
               <Plus className="w-5 h-5" />
               Novo Cliente
@@ -722,59 +936,59 @@ export default function ClientesPage() {
 
         {/* Estatísticas rápidas */}
         {loading ? (
-          <SkeletonStats />
+          <SkeletonStats colors={colors} />
         ) : (
           <div className="grid grid-cols-4 sm:grid-cols-4 gap-4">
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+            <div className="p-5 rounded-xl shadow-sm border" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
               <div className="flex items-center gap-3">
-                <div className="p-3 rounded-lg bg-[#dbeafe]">
-                  <Users className="w-6 h-6 text-[#123859]" />
+                <div className="p-3 rounded-lg" style={{ backgroundColor: `${colors.primary}20` }}>
+                  <Users className="w-6 h-6" style={{ color: colors.primary }} />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-gray-900">{clientes.length}</p>
-                  <p className="text-sm text-gray-500">Total</p>
+                  <p className="text-2xl font-bold" style={{ color: colors.text }}>{clientes.length}</p>
+                  <p className="text-sm" style={{ color: colors.textSecondary }}>Total</p>
                 </div>
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+            <div className="p-5 rounded-xl shadow-sm border" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
               <div className="flex items-center gap-3">
-                <div className="p-3 rounded-lg bg-green-50">
-                  <CheckCircle className="w-6 h-6 text-green-600" />
+                <div className="p-3 rounded-lg" style={{ backgroundColor: `${colors.success}20` }}>
+                  <CheckCircle className="w-6 h-6" style={{ color: colors.success }} />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className="text-2xl font-bold" style={{ color: colors.text }}>
                     {clientes.filter((c) => c.status === "ativo").length}
                   </p>
-                  <p className="text-sm text-gray-500">Ativos</p>
+                  <p className="text-sm" style={{ color: colors.textSecondary }}>Ativos</p>
                 </div>
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+            <div className="p-5 rounded-xl shadow-sm border" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
               <div className="flex items-center gap-3">
-                <div className="p-3 rounded-lg bg-gray-50">
-                  <XCircle className="w-6 h-6 text-gray-600" />
+                <div className="p-3 rounded-lg" style={{ backgroundColor: `${colors.textSecondary}20` }}>
+                  <XCircle className="w-6 h-6" style={{ color: colors.textSecondary }} />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className="text-2xl font-bold" style={{ color: colors.text }}>
                     {clientes.filter((c) => c.status === "inativo").length}
                   </p>
-                  <p className="text-sm text-gray-500">Inativos</p>
+                  <p className="text-sm" style={{ color: colors.textSecondary }}>Inativos</p>
                 </div>
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+            <div className="p-5 rounded-xl shadow-sm border" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
               <div className="flex items-center gap-3">
-                <div className="p-3 rounded-lg bg-orange-50">
-                  <Building2 className="w-6 h-6 text-[#F9941F]" />
+                <div className="p-3 rounded-lg" style={{ backgroundColor: `${colors.secondary}20` }}>
+                  <Building2 className="w-6 h-6" style={{ color: colors.secondary }} />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className="text-2xl font-bold" style={{ color: colors.text }}>
                     {clientes.filter((c) => c.tipo === "empresa").length}
                   </p>
-                  <p className="text-sm text-gray-500">Empresas</p>
+                  <p className="text-sm" style={{ color: colors.textSecondary }}>Empresas</p>
                 </div>
               </div>
             </div>
@@ -783,28 +997,29 @@ export default function ClientesPage() {
 
         {/* Lista de Clientes */}
         {loading ? (
-          <SkeletonTable />
+          <SkeletonTable colors={colors} />
         ) : clientes.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 text-center py-16">
-            <Users className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-            <p className="text-gray-500 mb-4">
+          <div className="rounded-xl shadow-sm border text-center py-16" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+            <Users className="w-16 h-16 mx-auto mb-4" style={{ color: colors.border }} />
+            <p className="mb-4" style={{ color: colors.textSecondary }}>
               {filtroStatus === "ativos" && "Nenhum cliente ativo encontrado."}
               {filtroStatus === "inativos" && "Nenhum cliente inativo encontrado."}
               {filtroStatus === "todos" && "Nenhum cliente encontrado."}
             </p>
             <button
               onClick={abrirCriar}
-              className="px-4 py-2 bg-[#123859] text-white rounded-lg hover:bg-[#1a4d7a] transition-colors"
+              className="px-4 py-2 text-white rounded-lg transition-colors"
+              style={{ backgroundColor: colors.primary }}
             >
               Cadastrar primeiro cliente
             </button>
           </div>
         ) : (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="rounded-xl shadow-sm border overflow-hidden" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-[#123859] border-b border-gray-200">
-                  <tr>
+                <thead>
+                  <tr style={{ backgroundColor: colors.primary }}>
                     <th className="py-4 px-6 text-left font-semibold text-white uppercase text-xs">
                       Cliente
                     </th>
@@ -825,43 +1040,50 @@ export default function ClientesPage() {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y" style={{ borderColor: colors.border }}>
                   {clientesFiltrados.map((cliente) => {
                     const statusBadge = getStatusClienteBadge(cliente.status);
 
                     return (
                       <tr
                         key={cliente.id}
-                        className={`hover:bg-gray-50 transition-colors ${cliente.status === "inativo" ? "bg-gray-50 opacity-75" : ""
-                          }`}
+                        className="transition-colors hover:bg-opacity-50"
+                        style={{
+                          backgroundColor: cliente.status === "inativo" ? `${colors.hover}80` : 'transparent'
+                        }}
                       >
                         <td className="py-4 px-6">
                           <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${cliente.tipo === "empresa" ? "bg-orange-50" : "bg-gray-100"
-                              }`}>
+                            <div className="w-10 h-10 rounded-full flex items-center justify-center"
+                              style={{ backgroundColor: cliente.tipo === "empresa" ? `${colors.secondary}20` : colors.hover }}>
                               {cliente.tipo === "empresa" ? (
-                                <Building2 className="w-5 h-5 text-[#F9941F]" />
+                                <Building2 className="w-5 h-5" style={{ color: colors.secondary }} />
                               ) : (
-                                <User className="w-5 h-5 text-gray-600" />
+                                <User className="w-5 h-5" style={{ color: colors.textSecondary }} />
                               )}
                             </div>
                             <div>
-                              <div className="font-medium text-gray-900">
+                              <div className="font-medium" style={{ color: colors.text }}>
                                 {cliente.nome}
                               </div>
                               {cliente.email && (
-                                <div className="text-xs text-gray-500">{cliente.email}</div>
+                                <div className="text-xs" style={{ color: colors.textSecondary }}>{cliente.email}</div>
                               )}
                             </div>
                           </div>
                         </td>
                         <td className="py-4 px-6">
-                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getTipoClienteColor(cliente.tipo)}`}>
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium"
+                            style={{ backgroundColor: `${colors.primary}20`, color: colors.primary }}>
                             {getTipoClienteLabel(cliente.tipo)}
                           </span>
                         </td>
                         <td className="py-4 px-6">
-                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusBadge.cor}`}>
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium`}
+                            style={{
+                              backgroundColor: cliente.status === "ativo" ? `${colors.success}20` : `${colors.textSecondary}20`,
+                              color: cliente.status === "ativo" ? colors.success : colors.textSecondary
+                            }}>
                             {cliente.status === "ativo" ? (
                               <CheckCircle className="w-3 h-3 mr-1" />
                             ) : (
@@ -872,39 +1094,39 @@ export default function ClientesPage() {
                         </td>
                         <td className="py-4 px-6">
                           {cliente.telefone ? (
-                            <div className="flex items-center gap-1.5 text-gray-600">
+                            <div className="flex items-center gap-1.5" style={{ color: colors.textSecondary }}>
                               <Phone className="w-3.5 h-3.5" />
                               {cliente.telefone}
                             </div>
                           ) : (
-                            <span className="text-gray-400">-</span>
+                            <span style={{ color: colors.textSecondary }}>-</span>
                           )}
                         </td>
-                        <td className="py-4 px-6 font-mono text-gray-600">
+                        <td className="py-4 px-6 font-mono" style={{ color: colors.textSecondary }}>
                           {formatarNIF(cliente.nif)}
                         </td>
                         <td className="py-4 px-6">
                           <div className="flex items-center justify-center gap-2">
                             <button
                               onClick={() => abrirDetalhes(cliente)}
-                              className="p-2 text-[#123859] hover:bg-[#123859]/10 rounded-lg transition-colors"
+                              className="p-2 rounded-lg transition-colors"
+                              style={{ color: colors.primary }}
                               title="Ver detalhes"
                             >
                               <Eye className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => abrirEditar(cliente)}
-                              className="p-2 text-[#F9941F] hover:bg-[#F9941F]/10 rounded-lg transition-colors"
+                              className="p-2 rounded-lg transition-colors"
+                              style={{ color: colors.secondary }}
                               title="Editar"
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => abrirAlterarStatus(cliente)}
-                              className={`p-2 rounded-lg transition-colors ${cliente.status === "ativo"
-                                  ? "text-yellow-600 hover:bg-yellow-50"
-                                  : "text-green-600 hover:bg-green-50"
-                                }`}
+                              className="p-2 rounded-lg transition-colors"
+                              style={{ color: cliente.status === "ativo" ? colors.warning : colors.success }}
                               title={cliente.status === "ativo" ? "Inativar cliente" : "Ativar cliente"}
                             >
                               <Power className="w-4 h-4" />
@@ -919,11 +1141,12 @@ export default function ClientesPage() {
 
               {clientesFiltrados.length === 0 && busca && (
                 <div className="text-center py-16">
-                  <Search className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-                  <p className="text-gray-500">Nenhum cliente encontrado para "{busca}"</p>
+                  <Search className="w-16 h-16 mx-auto mb-4" style={{ color: colors.border }} />
+                  <p style={{ color: colors.textSecondary }}>Nenhum cliente encontrado para "{busca}"</p>
                   <button
                     onClick={() => setBusca("")}
-                    className="mt-2 text-[#123859] hover:underline"
+                    className="mt-2 underline"
+                    style={{ color: colors.primary }}
                   >
                     Limpar busca
                   </button>
@@ -965,25 +1188,27 @@ export default function ClientesPage() {
       >
         {clienteSelecionado && (
           <div className="space-y-6">
-            <div className="flex items-center gap-4 pb-6 border-b border-gray-200">
-              <div className={`w-16 h-16 rounded-full flex items-center justify-center ${clienteSelecionado.tipo === "empresa" ? "bg-orange-50" : "bg-orange-50"
-                }`}>
+            <div className="flex items-center gap-4 pb-6 border-b" style={{ borderColor: colors.border }}>
+              <div className="w-16 h-16 rounded-full flex items-center justify-center"
+                style={{ backgroundColor: `${colors.secondary}20` }}>
                 {clienteSelecionado.tipo === "empresa" ? (
-                  <Building2 className="w-8 h-8 text-[#F9941F]" />
+                  <Building2 className="w-8 h-8" style={{ color: colors.secondary }} />
                 ) : (
-                  <User className="w-8 h-8 text-gray-600" />
+                  <User className="w-8 h-8" style={{ color: colors.text }} />
                 )}
               </div>
               <div>
-                <h4 className="text-xl font-semibold text-gray-900">{clienteSelecionado.nome}</h4>
+                <h4 className="text-xl font-semibold" style={{ color: colors.text }}>{clienteSelecionado.nome}</h4>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getTipoClienteColor(clienteSelecionado.tipo)}`}>
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium"
+                    style={{ backgroundColor: `${colors.primary}20`, color: colors.primary }}>
                     {getTipoClienteLabel(clienteSelecionado.tipo)}
                   </span>
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${clienteSelecionado.status === "ativo"
-                      ? "bg-green-100 text-green-700"
-                      : "bg-gray-100 text-gray-700"
-                    }`}>
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium"
+                    style={{
+                      backgroundColor: clienteSelecionado.status === "ativo" ? `${colors.success}20` : `${colors.textSecondary}20`,
+                      color: clienteSelecionado.status === "ativo" ? colors.success : colors.textSecondary
+                    }}>
                     {clienteSelecionado.status === "ativo" ? (
                       <CheckCircle className="w-3 h-3 mr-1" />
                     ) : (
@@ -997,47 +1222,47 @@ export default function ClientesPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
-                <div className="flex items-center gap-3 text-gray-600">
-                  <Phone className="w-5 h-5 text-gray-400" />
+                <div className="flex items-center gap-3" style={{ color: colors.textSecondary }}>
+                  <Phone className="w-5 h-5" style={{ color: colors.textSecondary }} />
                   <div>
-                    <p className="text-xs text-gray-500">Telefone</p>
-                    <p className="font-medium">{clienteSelecionado.telefone || "-"}</p>
+                    <p className="text-xs" style={{ color: colors.textSecondary }}>Telefone</p>
+                    <p className="font-medium" style={{ color: colors.text }}>{clienteSelecionado.telefone || "-"}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 text-gray-600">
-                  <Mail className="w-5 h-5 text-gray-400" />
+                <div className="flex items-center gap-3" style={{ color: colors.textSecondary }}>
+                  <Mail className="w-5 h-5" style={{ color: colors.textSecondary }} />
                   <div>
-                    <p className="text-xs text-gray-500">Email</p>
-                    <p className="font-medium">{clienteSelecionado.email || "-"}</p>
+                    <p className="text-xs" style={{ color: colors.textSecondary }}>Email</p>
+                    <p className="font-medium" style={{ color: colors.text }}>{clienteSelecionado.email || "-"}</p>
                   </div>
                 </div>
               </div>
               <div className="space-y-4">
-                <div className="flex items-center gap-3 text-gray-600">
-                  <Calendar className="w-5 h-5 text-gray-400" />
+                <div className="flex items-center gap-3" style={{ color: colors.textSecondary }}>
+                  <Calendar className="w-5 h-5" style={{ color: colors.textSecondary }} />
                   <div>
-                    <p className="text-xs text-gray-500">Data de Registro</p>
-                    <p className="font-medium">
+                    <p className="text-xs" style={{ color: colors.textSecondary }}>Data de Registro</p>
+                    <p className="font-medium" style={{ color: colors.text }}>
                       {new Date(clienteSelecionado.data_registro).toLocaleDateString("pt-PT")}
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 text-gray-600">
-                  <Building2 className="w-5 h-5 text-gray-400" />
+                <div className="flex items-center gap-3" style={{ color: colors.textSecondary }}>
+                  <Building2 className="w-5 h-5" style={{ color: colors.textSecondary }} />
                   <div>
-                    <p className="text-xs text-gray-500">NIF</p>
-                    <p className="font-medium font-mono">{formatarNIF(clienteSelecionado.nif)}</p>
+                    <p className="text-xs" style={{ color: colors.textSecondary }}>NIF</p>
+                    <p className="font-medium font-mono" style={{ color: colors.text }}>{formatarNIF(clienteSelecionado.nif)}</p>
                   </div>
                 </div>
               </div>
             </div>
 
             {clienteSelecionado.endereco && (
-              <div className="flex items-start gap-3 text-gray-600 pt-4 border-t border-gray-200">
-                <MapPin className="w-5 h-5 text-gray-400 mt-0.5" />
+              <div className="flex items-start gap-3 pt-4 border-t" style={{ borderColor: colors.border }}>
+                <MapPin className="w-5 h-5 mt-0.5" style={{ color: colors.textSecondary }} />
                 <div>
-                  <p className="text-xs text-gray-500">Endereço</p>
-                  <p className="font-medium">{clienteSelecionado.endereco}</p>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>Endereço</p>
+                  <p className="font-medium" style={{ color: colors.text }}>{clienteSelecionado.endereco}</p>
                 </div>
               </div>
             )}
@@ -1048,7 +1273,8 @@ export default function ClientesPage() {
                   setModalDetalhesAberto(false);
                   abrirEditar(clienteSelecionado);
                 }}
-                className="flex-1 px-4 py-2.5 bg-[#123859] hover:bg-[#1a4d7a] text-white rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-2.5 text-white rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
+                style={{ backgroundColor: colors.primary }}
               >
                 <Edit2 className="w-4 h-4" />
                 Editar

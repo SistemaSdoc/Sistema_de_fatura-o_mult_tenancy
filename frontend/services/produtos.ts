@@ -32,6 +32,7 @@ export interface Fornecedor {
 }
 
 export interface MovimentoStock {
+    produto: any;
     id: string;
     produto_id: string;
     user_id: string;

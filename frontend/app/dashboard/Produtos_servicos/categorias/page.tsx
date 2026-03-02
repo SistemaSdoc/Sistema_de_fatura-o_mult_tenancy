@@ -20,8 +20,6 @@ import MainEmpresa from "../../../components/MainEmpresa";
 import {
     categoriaService,
     Categoria,
-    getStatusColor,
-    getTipoColor,
     getStatusLabel,
     getTipoLabel
 } from "@/services/categorias";
@@ -53,6 +51,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { useThemeColors } from "@/context/ThemeContext";
 
 // Interface para o formulário
 interface FormCategoriaData {
@@ -70,6 +69,8 @@ const INITIAL_FORM_DATA: FormCategoriaData = {
 };
 
 export default function CategoriasPage() {
+    const colors = useThemeColors();
+    
     // Estados
     const [categorias, setCategorias] = useState<Categoria[]>([]);
     const [categoriasFiltradas, setCategoriasFiltradas] = useState<Categoria[]>([]);
@@ -247,21 +248,21 @@ export default function CategoriasPage() {
 
     return (
         <MainEmpresa>
-            <div className="flex flex-col gap-6 p-6">
-
+            <div className="flex flex-col gap-6 p-6 transition-colors duration-300" style={{ backgroundColor: colors.background }}>
                 {/* Header */}
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
+                        <h1 className="text-2xl font-semibold" style={{ color: colors.primary }}>
                             Categorias
                         </h1>
-                        <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">
+                        <p className="mt-1 text-sm" style={{ color: colors.textSecondary }}>
                             Gerencie as categorias de produtos e serviços do sistema
                         </p>
                     </div>
                     <Button
                         onClick={handleNovo}
-                        className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                        className="gap-2 text-white"
+                        style={{ backgroundColor: colors.secondary }}
                     >
                         <Plus className="h-4 w-4" />
                         Nova Categoria
@@ -270,57 +271,57 @@ export default function CategoriasPage() {
 
                 {/* Cards de Estatísticas */}
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <Card className="border-slate-200 dark:border-slate-700">
+                    <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                         <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                            <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                            <CardTitle className="text-sm font-medium" style={{ color: colors.textSecondary }}>
                                 Total Categorias
                             </CardTitle>
-                            <LayoutGrid className="h-4 w-4 text-slate-500" />
+                            <LayoutGrid className="h-4 w-4" style={{ color: colors.textSecondary }} />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                            <div className="text-2xl font-bold" style={{ color: colors.text }}>
                                 {stats.total}
                             </div>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-slate-200 dark:border-slate-700">
+                    <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                         <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                            <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                            <CardTitle className="text-sm font-medium" style={{ color: colors.textSecondary }}>
                                 Ativas
                             </CardTitle>
-                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                            <CheckCircle2 className="h-4 w-4" style={{ color: colors.success }} />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-emerald-600">
+                            <div className="text-2xl font-bold" style={{ color: colors.success }}>
                                 {stats.ativos}
                             </div>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-slate-200 dark:border-slate-700">
+                    <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                         <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                            <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                            <CardTitle className="text-sm font-medium" style={{ color: colors.textSecondary }}>
                                 Produtos
                             </CardTitle>
-                            <Package className="h-4 w-4 text-blue-500" />
+                            <Package className="h-4 w-4" style={{ color: colors.primary }} />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-blue-600">
+                            <div className="text-2xl font-bold" style={{ color: colors.primary }}>
                                 {stats.produtos}
                             </div>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-slate-200 dark:border-slate-700">
+                    <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                         <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                            <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                            <CardTitle className="text-sm font-medium" style={{ color: colors.textSecondary }}>
                                 Serviços
                             </CardTitle>
-                            <Wrench className="h-4 w-4 text-violet-500" />
+                            <Wrench className="h-4 w-4" style={{ color: colors.secondary }} />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-violet-600">
+                            <div className="text-2xl font-bold" style={{ color: colors.secondary }}>
                                 {stats.servicos}
                             </div>
                         </CardContent>
@@ -328,40 +329,59 @@ export default function CategoriasPage() {
                 </div>
 
                 {/* Filtros */}
-                <Card className="border-slate-200 dark:border-slate-700">
+                <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                     <CardContent className="pt-6">
                         <div className="flex flex-col gap-4 md:flex-row">
                             <div className="relative flex-1">
-                                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: colors.textSecondary }} />
                                 <Input
                                     placeholder="Buscar por nome ou descrição..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="pl-10 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                                    className="pl-10"
+                                    style={{
+                                        backgroundColor: colors.card,
+                                        borderColor: colors.border,
+                                        color: colors.text
+                                    }}
                                 />
                             </div>
                             <div className="flex gap-2">
                                 <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-                                    <SelectTrigger className="w-[140px] bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                                        <Filter className="mr-2 h-4 w-4 text-slate-500" />
+                                    <SelectTrigger 
+                                        className="w-[140px]"
+                                        style={{
+                                            backgroundColor: colors.card,
+                                            borderColor: colors.border,
+                                            color: colors.text
+                                        }}
+                                    >
+                                        <Filter className="mr-2 h-4 w-4" style={{ color: colors.textSecondary }} />
                                         <SelectValue placeholder="Status" />
                                     </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="todos">Todos Status</SelectItem>
-                                        <SelectItem value="ativo">Ativo</SelectItem>
-                                        <SelectItem value="inativo">Inativo</SelectItem>
+                                    <SelectContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                                        <SelectItem value="todos" style={{ color: colors.text }}>Todos Status</SelectItem>
+                                        <SelectItem value="ativo" style={{ color: colors.success }}>Ativo</SelectItem>
+                                        <SelectItem value="inativo" style={{ color: colors.textSecondary }}>Inativo</SelectItem>
                                     </SelectContent>
                                 </Select>
 
                                 <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-                                    <SelectTrigger className="w-[140px] bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                                        <Filter className="mr-2 h-4 w-4 text-slate-500" />
+                                    <SelectTrigger 
+                                        className="w-[140px]"
+                                        style={{
+                                            backgroundColor: colors.card,
+                                            borderColor: colors.border,
+                                            color: colors.text
+                                        }}
+                                    >
+                                        <Filter className="mr-2 h-4 w-4" style={{ color: colors.textSecondary }} />
                                         <SelectValue placeholder="Tipo" />
                                     </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="todos">Todos Tipos</SelectItem>
-                                        <SelectItem value="produto">Produto</SelectItem>
-                                        <SelectItem value="servico">Serviço</SelectItem>
+                                    <SelectContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                                        <SelectItem value="todos" style={{ color: colors.text }}>Todos Tipos</SelectItem>
+                                        <SelectItem value="produto" style={{ color: colors.primary }}>Produto</SelectItem>
+                                        <SelectItem value="servico" style={{ color: colors.secondary }}>Serviço</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -370,11 +390,11 @@ export default function CategoriasPage() {
                 </Card>
 
                 {/* Lista de Categorias */}
-                <Card className="border-slate-200 dark:border-slate-700">
-                    <CardHeader className="border-b border-slate-100 dark:border-slate-800">
-                        <CardTitle className="text-lg text-slate-900 dark:text-slate-100">
+                <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                    <CardHeader className="border-b" style={{ borderColor: colors.border }}>
+                        <CardTitle className="text-lg" style={{ color: colors.text }}>
                             Lista de Categorias
-                            <span className="ml-2 text-sm font-normal text-slate-500">
+                            <span className="ml-2 text-sm font-normal" style={{ color: colors.textSecondary }}>
                                 ({categoriasFiltradas.length})
                             </span>
                         </CardTitle>
@@ -382,15 +402,18 @@ export default function CategoriasPage() {
                     <CardContent className="p-0">
                         {isLoading ? (
                             <div className="flex items-center justify-center py-12">
-                                <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" />
+                                <div 
+                                    className="h-8 w-8 animate-spin rounded-full border-b-2" 
+                                    style={{ borderColor: colors.primary }}
+                                />
                             </div>
                         ) : categoriasFiltradas.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-12 text-center">
-                                <LayoutGrid className="h-12 w-12 text-slate-300 dark:text-slate-600 mb-4" />
-                                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                                <LayoutGrid className="h-12 w-12 mb-4" style={{ color: colors.border }} />
+                                <h3 className="text-lg font-semibold" style={{ color: colors.text }}>
                                     Nenhuma categoria encontrada
                                 </h3>
-                                <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">
+                                <p className="mt-1 text-sm" style={{ color: colors.textSecondary }}>
                                     {searchTerm || filtroStatus !== "todos" || filtroTipo !== "todos"
                                         ? "Tente ajustar os filtros de busca"
                                         : "Clique em 'Nova Categoria' para começar"}
@@ -399,45 +422,50 @@ export default function CategoriasPage() {
                         ) : (
                             <div className="overflow-x-auto">
                                 <table className="w-full">
-                                    <thead className="bg-slate-50 dark:bg-slate-800/50">
-                                        <tr className="border-b border-slate-200 dark:border-slate-700">
-                                            <th className="text-left py-3 px-4 font-medium text-slate-700 dark:text-slate-300 text-sm">
+                                    <thead className="border-b" style={{ borderColor: colors.border, backgroundColor: colors.hover }}>
+                                        <tr>
+                                            <th className="text-left py-3 px-4 font-medium text-sm" style={{ color: colors.primary }}>
                                                 Nome
                                             </th>
-                                            <th className="text-left py-3 px-4 font-medium text-slate-700 dark:text-slate-300 text-sm">
+                                            <th className="text-left py-3 px-4 font-medium text-sm" style={{ color: colors.primary }}>
                                                 Tipo
                                             </th>
-                                            <th className="text-left py-3 px-4 font-medium text-slate-700 dark:text-slate-300 text-sm">
+                                            <th className="text-left py-3 px-4 font-medium text-sm" style={{ color: colors.primary }}>
                                                 Status
                                             </th>
-                                            <th className="text-left py-3 px-4 font-medium text-slate-700 dark:text-slate-300 text-sm hidden md:table-cell">
+                                            <th className="text-left py-3 px-4 font-medium text-sm hidden md:table-cell" style={{ color: colors.primary }}>
                                                 Descrição
                                             </th>
-                                            <th className="text-right py-3 px-4 font-medium text-slate-700 dark:text-slate-300 text-sm">
+                                            <th className="text-right py-3 px-4 font-medium text-sm" style={{ color: colors.primary }}>
                                                 Ações
                                             </th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                    <tbody className="divide-y" style={{ borderColor: colors.border }}>
                                         {categoriasFiltradas.map((categoria) => (
                                             <tr
                                                 key={categoria.id}
-                                                className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                                                className="transition-colors hover:bg-opacity-50"
+                                                style={{ backgroundColor: 'transparent' }}
                                             >
                                                 <td className="py-3 px-4">
-                                                    <div className="font-medium text-slate-900 dark:text-slate-100">
+                                                    <div className="font-medium" style={{ color: colors.text }}>
                                                         {categoria.nome}
                                                     </div>
                                                 </td>
                                                 <td className="py-3 px-4">
                                                     <Badge
                                                         variant="secondary"
-                                                        className={`${getTipoColor(categoria.tipo)} border-0 font-medium`}
+                                                        className="border-0 font-medium"
+                                                        style={{
+                                                            backgroundColor: `${colors.primary}20`,
+                                                            color: colors.primary
+                                                        }}
                                                     >
                                                         {categoria.tipo === "produto" ? (
                                                             <Package className="mr-1 h-3 w-3" />
                                                         ) : (
-                                                            <Wrench className="mr-1 h-3 w-3" />
+                                                            <Wrench className="mr-1 h-3 w-3" style={{ color: colors.secondary }} />
                                                         )}
                                                         {getTipoLabel(categoria.tipo)}
                                                     </Badge>
@@ -445,7 +473,11 @@ export default function CategoriasPage() {
                                                 <td className="py-3 px-4">
                                                     <Badge
                                                         variant="secondary"
-                                                        className={`${getStatusColor(categoria.status)} border-0 font-medium`}
+                                                        className="border-0 font-medium"
+                                                        style={{
+                                                            backgroundColor: categoria.status === "ativo" ? `${colors.success}20` : `${colors.textSecondary}20`,
+                                                            color: categoria.status === "ativo" ? colors.success : colors.textSecondary
+                                                        }}
                                                     >
                                                         {categoria.status === "ativo" ? (
                                                             <CheckCircle2 className="mr-1 h-3 w-3" />
@@ -455,13 +487,13 @@ export default function CategoriasPage() {
                                                         {getStatusLabel(categoria.status)}
                                                     </Badge>
                                                 </td>
-                                                <td className="py-3 px-4 text-slate-600 dark:text-slate-400 text-sm hidden md:table-cell max-w-xs">
+                                                <td className="py-3 px-4 text-sm hidden md:table-cell max-w-xs" style={{ color: colors.textSecondary }}>
                                                     {categoria.descricao ? (
                                                         <span className="line-clamp-1">
                                                             {categoria.descricao}
                                                         </span>
                                                     ) : (
-                                                        <span className="text-slate-400 dark:text-slate-600 italic">
+                                                        <span className="italic" style={{ color: colors.textSecondary }}>
                                                             Sem descrição
                                                         </span>
                                                     )}
@@ -472,22 +504,32 @@ export default function CategoriasPage() {
                                                             <Button
                                                                 variant="ghost"
                                                                 size="sm"
-                                                                className="h-8 w-8 p-0 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+                                                                className="h-8 w-8 p-0"
+                                                                style={{ color: colors.textSecondary }}
                                                             >
                                                                 <MoreVertical className="h-4 w-4" />
                                                             </Button>
                                                         </DropdownMenuTrigger>
-                                                        <DropdownMenuContent align="end" className="w-40">
+                                                        <DropdownMenuContent 
+                                                            align="end" 
+                                                            className="w-40"
+                                                            style={{ 
+                                                                backgroundColor: colors.card, 
+                                                                borderColor: colors.border 
+                                                            }}
+                                                        >
                                                             <DropdownMenuItem
                                                                 onClick={() => handleEditar(categoria)}
                                                                 className="gap-2 cursor-pointer"
+                                                                style={{ color: colors.text }}
                                                             >
-                                                                <Edit2 className="h-4 w-4 text-blue-500" />
+                                                                <Edit2 className="h-4 w-4" style={{ color: colors.primary }} />
                                                                 Editar
                                                             </DropdownMenuItem>
                                                             <DropdownMenuItem
                                                                 onClick={() => handleConfirmarDelete(categoria)}
-                                                                className="gap-2 cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
+                                                                className="gap-2 cursor-pointer"
+                                                                style={{ color: colors.danger }}
                                                             >
                                                                 <Trash2 className="h-4 w-4" />
                                                                 Excluir
@@ -507,12 +549,18 @@ export default function CategoriasPage() {
 
             {/* Modal de Formulário */}
             <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                <DialogContent className="sm:max-w-[500px] border-slate-200 dark:border-slate-700">
+                <DialogContent 
+                    className="sm:max-w-[500px]"
+                    style={{ 
+                        backgroundColor: colors.card, 
+                        borderColor: colors.border 
+                    }}
+                >
                     <DialogHeader>
-                        <DialogTitle className="text-slate-900 dark:text-slate-100">
+                        <DialogTitle style={{ color: colors.primary }}>
                             {categoriaSelecionada ? "Editar Categoria" : "Nova Categoria"}
                         </DialogTitle>
-                        <DialogDescription className="text-slate-500 dark:text-slate-400">
+                        <DialogDescription style={{ color: colors.textSecondary }}>
                             {categoriaSelecionada
                                 ? "Atualize as informações da categoria abaixo."
                                 : "Preencha as informações para criar uma nova categoria."
@@ -522,8 +570,8 @@ export default function CategoriasPage() {
 
                     <form onSubmit={handleSubmit} className="space-y-4 pt-4">
                         <div className="space-y-2">
-                            <Label htmlFor="nome" className="text-slate-700 dark:text-slate-300">
-                                Nome <span className="text-red-500">*</span>
+                            <Label htmlFor="nome" style={{ color: colors.text }}>
+                                Nome <span style={{ color: colors.danger }}>*</span>
                             </Label>
                             <Input
                                 id="nome"
@@ -531,35 +579,45 @@ export default function CategoriasPage() {
                                 value={formData.nome}
                                 onChange={handleInputChange}
                                 placeholder="Ex: Eletrônicos"
-                                className={`bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 ${errors.nome ? "border-red-500 focus-visible:ring-red-500" : ""
-                                    }`}
+                                style={{
+                                    backgroundColor: colors.card,
+                                    borderColor: errors.nome ? colors.danger : colors.border,
+                                    color: colors.text
+                                }}
+                                className={errors.nome ? "border-red-500" : ""}
                             />
                             {errors.nome && (
-                                <p className="text-sm text-red-500">{errors.nome}</p>
+                                <p className="text-sm" style={{ color: colors.danger }}>{errors.nome}</p>
                             )}
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label className="text-slate-700 dark:text-slate-300">Tipo</Label>
+                                <Label style={{ color: colors.text }}>Tipo</Label>
                                 <Select
                                     value={formData.tipo}
-                                    onValueChange={(value) => handleSelectChange("tipo", value)}
+                                    onValueChange={(value) => handleSelectChange("tipo", value as "produto" | "servico")}
                                 >
-                                    <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                                    <SelectTrigger 
+                                        style={{
+                                            backgroundColor: colors.card,
+                                            borderColor: colors.border,
+                                            color: colors.text
+                                        }}
+                                    >
                                         <SelectValue />
                                     </SelectTrigger>
-                                    <SelectContent>
+                                    <SelectContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                                         <SelectItem value="produto">
                                             <div className="flex items-center gap-2">
-                                                <Package className="h-4 w-4 text-blue-500" />
-                                                Produto
+                                                <Package className="h-4 w-4" style={{ color: colors.primary }} />
+                                                <span style={{ color: colors.text }}>Produto</span>
                                             </div>
                                         </SelectItem>
                                         <SelectItem value="servico">
                                             <div className="flex items-center gap-2">
-                                                <Wrench className="h-4 w-4 text-violet-500" />
-                                                Serviço
+                                                <Wrench className="h-4 w-4" style={{ color: colors.secondary }} />
+                                                <span style={{ color: colors.text }}>Serviço</span>
                                             </div>
                                         </SelectItem>
                                     </SelectContent>
@@ -567,25 +625,31 @@ export default function CategoriasPage() {
                             </div>
 
                             <div className="space-y-2">
-                                <Label className="text-slate-700 dark:text-slate-300">Status</Label>
+                                <Label style={{ color: colors.text }}>Status</Label>
                                 <Select
                                     value={formData.status}
-                                    onValueChange={(value) => handleSelectChange("status", value)}
+                                    onValueChange={(value) => handleSelectChange("status", value as "ativo" | "inativo")}
                                 >
-                                    <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                                    <SelectTrigger 
+                                        style={{
+                                            backgroundColor: colors.card,
+                                            borderColor: colors.border,
+                                            color: colors.text
+                                        }}
+                                    >
                                         <SelectValue />
                                     </SelectTrigger>
-                                    <SelectContent>
+                                    <SelectContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                                         <SelectItem value="ativo">
                                             <div className="flex items-center gap-2">
-                                                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                                                Ativo
+                                                <CheckCircle2 className="h-4 w-4" style={{ color: colors.success }} />
+                                                <span style={{ color: colors.text }}>Ativo</span>
                                             </div>
                                         </SelectItem>
                                         <SelectItem value="inativo">
                                             <div className="flex items-center gap-2">
-                                                <XCircle className="h-4 w-4 text-red-500" />
-                                                Inativo
+                                                <XCircle className="h-4 w-4" style={{ color: colors.textSecondary }} />
+                                                <span style={{ color: colors.text }}>Inativo</span>
                                             </div>
                                         </SelectItem>
                                     </SelectContent>
@@ -594,7 +658,7 @@ export default function CategoriasPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="descricao" className="text-slate-700 dark:text-slate-300">
+                            <Label htmlFor="descricao" style={{ color: colors.text }}>
                                 Descrição
                             </Label>
                             <Textarea
@@ -604,7 +668,12 @@ export default function CategoriasPage() {
                                 onChange={handleInputChange}
                                 placeholder="Descreva a categoria (opcional)..."
                                 rows={3}
-                                className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 resize-none"
+                                style={{
+                                    backgroundColor: colors.card,
+                                    borderColor: colors.border,
+                                    color: colors.text
+                                }}
+                                className="resize-none"
                             />
                         </div>
 
@@ -614,18 +683,25 @@ export default function CategoriasPage() {
                                 variant="outline"
                                 onClick={() => setIsModalOpen(false)}
                                 disabled={isSubmitting}
-                                className="border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                style={{
+                                    borderColor: colors.border,
+                                    color: colors.textSecondary
+                                }}
                             >
                                 Cancelar
                             </Button>
                             <Button
                                 type="submit"
                                 disabled={isSubmitting}
-                                className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
+                                className="gap-2 text-white"
+                                style={{ backgroundColor: colors.primary }}
                             >
                                 {isSubmitting ? (
                                     <>
-                                        <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-white" />
+                                        <div 
+                                            className="h-4 w-4 animate-spin rounded-full border-b-2" 
+                                            style={{ borderColor: 'white' }}
+                                        />
                                         Salvando...
                                     </>
                                 ) : (
@@ -642,15 +718,21 @@ export default function CategoriasPage() {
 
             {/* Modal de Confirmação de Delete */}
             <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
-                <DialogContent className="sm:max-w-[400px] border-slate-200 dark:border-slate-700">
+                <DialogContent 
+                    className="sm:max-w-[400px]"
+                    style={{ 
+                        backgroundColor: colors.card, 
+                        borderColor: colors.border 
+                    }}
+                >
                     <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-red-600">
+                        <DialogTitle className="flex items-center gap-2" style={{ color: colors.danger }}>
                             <AlertTriangle className="h-5 w-5" />
                             Confirmar Exclusão
                         </DialogTitle>
-                        <DialogDescription className="text-slate-600 dark:text-slate-400">
+                        <DialogDescription style={{ color: colors.textSecondary }}>
                             Tem certeza que deseja excluir a categoria{" "}
-                            <strong className="text-slate-900 dark:text-slate-100">"{categoriaSelecionada?.nome}"</strong>?
+                            <strong style={{ color: colors.text }}>"{categoriaSelecionada?.nome}"</strong>?
                             <br />
                             Esta ação não pode ser desfeita.
                         </DialogDescription>
@@ -659,14 +741,18 @@ export default function CategoriasPage() {
                         <Button
                             variant="outline"
                             onClick={() => setIsDeleteModalOpen(false)}
-                            className="border-slate-200 dark:border-slate-700"
+                            style={{
+                                borderColor: colors.border,
+                                color: colors.textSecondary
+                            }}
                         >
                             Cancelar
                         </Button>
                         <Button
                             variant="destructive"
                             onClick={handleDeletar}
-                            className="gap-2 bg-red-600 hover:bg-red-700"
+                            className="gap-2 text-white"
+                            style={{ backgroundColor: colors.danger }}
                         >
                             <Trash2 className="h-4 w-4" />
                             Excluir

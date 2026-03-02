@@ -585,7 +585,7 @@ class DocumentoFiscalService {
      */
     private _enriquecerDocumento(doc: DocumentoFiscal): DocumentoFiscal {
         const servicos = doc.itens?.filter(item => 
-            item.produto_id && (item as any).eh_servico
+            item.produto_id && item.eh_servico
         ) || [];
 
         return {

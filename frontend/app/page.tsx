@@ -1,7 +1,8 @@
 "use client";
 import Link from 'next/link';
 import React, { useState, useRef, useEffect } from 'react';
-import { Facebook, Instagram, Linkedin } from "lucide-react";
+import { Facebook, Instagram, Linkedin, Sun, Moon } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import EmpresasSection from "./components/EmpresasSection";
 import {
   HelpCircle,
@@ -9,44 +10,117 @@ import {
   FileText,
   ShieldCheck,
   BookOpenCheck
-} from "lucide-react"
+} from "lucide-react";
+import { useThemeColors, useTheme } from "@/context/ThemeContext";
 
+// Tipos para os componentes
+interface AnimatedSectionProps {
+  children: React.ReactNode;
+  animation?: 'fade-up' | 'fade-in' | 'slide-right' | 'slide-left';
+  delay?: number;
+  threshold?: number;
+}
 
+interface FeatureCardProps {
+  Icon?: React.FC<{ color: string }>;
+  title: string;
+  description: string;
+  delay?: number;
+  colors: any;
+}
 
+interface StepCardProps {
+  number: number;
+  title: string;
+  description: string;
+  delay?: number;
+  colors: any;
+}
 
-// --- Paleta de Cores PERSONALIZADA ---
-const COLOR_PRIMARY = "#123859";   // Azul-Escuro Forte (Ação principal, Botões)
-const COLOR_ACCENT = "#F9941F";    // Laranja/Âmbar Intenso (Destaque, Títulos)
-const COLOR_DARK_TEXT = "#123859"; // Azul Escuro (Texto Principal)
-const COLOR_LIGHT_BG = "#F2F2F2";  // Cinza Muito Claro (Fundo estático)
-const COLOR_SECONDARY_BG = "#E5E5E5"; // Um tom intermédio para secções
+interface FAQItemProps {
+  question: string;
+  answer: string;
+  index: number;
+  colors: any;
+}
 
-// CORES NOVAS PARA O GRADIENTE SUAVE DO FOOTER
-const FOOTER_GRADIENT_START = "#0F2D44"; // Azul escuro um pouco mais frio
-const FOOTER_GRADIENT_END = "#1A476F";   // Azul escuro primário
-const FOOTER_GRADIENT_MID = "#0A1F30";   // Tom quase preto para profundidade
+interface PricingCardProps {
+  plan: {
+    name: string;
+    price: string;
+    interval: string;
+    isPopular: boolean;
+    features: string[];
+  };
+  index: number;
+  colors: any;
+}
 
-// Cor de Texto do Rodapé (AGORA BRANCO FIXO)
-const FOOTER_TEXT_COLOR = 'white'; // Mantido para referência, mas usaremos 'text-white'
-const FOOTER_ACCENT_COLOR = COLOR_ACCENT;
+interface ContactFormState {
+  name: string;
+  type: string;
+  message: string;
+}
 
-// Classes Tailwind customizadas: APENAS UTILITIES SEM CORES DINÂMICAS
-const TAILWIND_CLASSES = {
-  // Botão principal (usado agora nos planos)
-  buttonPrimary: `px-8 py-3 rounded-full font-semibold  transition duration-300 ease-in-out transform hover:scale-[1.05] focus:ring-4 focus:ring-opacity-50`,
-  // Botão secundário 
-  buttonSecondary: `px-8 py-3 rounded-full font-semibold  transition duration-300 ease-in-out transform hover:scale-[1.03] focus:ring-4 focus:ring-opacity-50 border`,
-  // Input field focus (Usa a cor primária para o anel de foco)
-  inputFocus: `border-gray-300 focus:ring-2 focus:ring-[${COLOR_PRIMARY}] focus:ring-opacity-75 focus:shadow-lg focus:border-[${COLOR_PRIMARY}]`,
-  // Textos
-  textHighlight: ``,
-  textDefault: ``,
-  textMuted: "text-white-600",
+interface ContactMessageState {
+  type: 'success' | 'error' | '';
+  text: string;
+}
+
+// Botão de Toggle do Tema
+const ThemeToggleButton = () => {
+  const { theme, toggleTheme } = useTheme();
+
+  return (
+    <motion.button
+      whileHover={{ scale: 1.1 }}
+      whileTap={{ scale: 0.95 }}
+      onClick={toggleTheme}
+      className="p-2 rounded-full transition-colors relative group"
+      style={{ 
+        backgroundColor: 'transparent',
+        color: theme === 'dark' ? '#D9961A' : '#123859'
+      }}
+      aria-label="Alternar tema"
+    >
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={theme}
+          initial={{ y: -20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 20, opacity: 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          {theme === 'dark' ? (
+            <Sun size={20} />
+          ) : (
+            <Moon size={20} />
+          )}
+        </motion.div>
+      </AnimatePresence>
+
+      {/* Tooltip */}
+      <motion.div
+        initial={{ opacity: 0, x: 10, scale: 0.8 }}
+        whileHover={{ opacity: 1, x: 0, scale: 1 }}
+        className="absolute right-full mr-2 px-2 py-1 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none"
+        style={{ backgroundColor: theme === 'dark' ? '#D9961A' : '#123859' }}
+      >
+        {theme === 'dark' ? 'Modo Claro' : 'Modo Escuro'}
+      </motion.div>
+    </motion.button>
+  );
 };
+
 // 1. COMPONENTE DE ANIMAÇÃO (Animation Observer)
-const AnimatedSection = ({ children, animation = 'fade-up', delay = 0, threshold = 0.1 }) => {
+const AnimatedSection: React.FC<AnimatedSectionProps> = ({ 
+  children, 
+  animation = 'fade-up', 
+  delay = 0, 
+  threshold = 0.1 
+}) => {
   const [isVisible, setIsVisible] = useState(false);
-  const ref = useRef(null);
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -97,17 +171,16 @@ const AnimatedSection = ({ children, animation = 'fade-up', delay = 0, threshold
   );
 };
 
-
 // =========================================================================
 // 2. COMPONENTES E ÍCONES AUXILIARES
 // =========================================================================
 
 // Ícone de Visto (Usado nas Funcionalidades e Planos)
-const CheckIcon = ({ color = COLOR_PRIMARY }) => (
+const CheckIcon: React.FC<{ color: string }> = ({ color }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     className="w-5 h-5 mr-2 flex-shrink-0"
-    style={{ color: color }}
+    style={{ color }}
     fill="none"
     viewBox="0 0 24 24"
     stroke="currentColor"
@@ -118,100 +191,74 @@ const CheckIcon = ({ color = COLOR_PRIMARY }) => (
 );
 
 // Ícone de Fatura (Usado no Logotipo e Hero)
-const InvoiceIcon = ({ sizeClass = 'w-12 h-12' }) => (
+const InvoiceIcon: React.FC<{ sizeClass?: string }> = ({ sizeClass = 'w-12 h-12' }) => (
   <img src="/images/3.PNG" alt="Invoice Icon" className={sizeClass} />
 );
 
-
-
-// Ícone: Headset (Suporte Técnico)
-const HeadsetIcon = ({ size = 4, color }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" className={`w-${size} h-${size} mr-2 flex-shrink-0`} style={{ color: color }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l-5 5m5-5l-5-5" />
-  </svg>
-);
-
-// Ícone: Book (Livro de Reclamações)
-const BookIcon = ({ size = 4, color }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" className={`w-${size} h-${size} mr-2 flex-shrink-0`} style={{ color: color }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.206 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.832 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.832 5 16.5 5s3.332.477 4.5 1.253v13C19.832 18.477 18.168 18 16.5 18s-3.332.477-4.5 1.253" />
-  </svg>
-);
-
 // Ícone de Menu (Três Barras)
-const MenuIcon = () => (
+const MenuIcon: React.FC = () => (
   <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16m-7 6h7" />
   </svg>
 );
 
-// Ícones Sociais (Para o rodapé)
-const FacebookIcon = () => (<svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M14.999 3h2.998v3h-3a1 1 0 00-1 1v2h4l-.667 4h-3.333v9h-4v-9h-3v-4h3v-2.5c0-3.668 2.333-5.5 6-5.5z" /></svg>);
-const InstagramIcon = () => (<svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M7.8 2h8.4C19.4 2 22 4.6 22 7.8v8.4c0 3.2-2.6 5.8-5.8 5.8H7.8C4.6 22 2 19.4 2 16.2V7.8C2 4.6 4.6 2 7.8 2zm-.2 2A1.8 1.8 0 004 5.8v8.4c0 0 1.8 1.8 1.8 1.8h8.4c1 0 1.8-.8 1.8-1.8V5.8A1.8 1.8 0 0016.2 4H7.6zm9.2 2.4a1.2 1.2 0 110 2.4 1.2 1.2 0 010-2.4zm-4 3.6c-2.2 0-4 1.8-4 4s1.8 4 4 4 4-1.8 4-4-1.8-4-4-4zm0 6a2 2 0 110-4 2 2 0 010 4z" /></svg>);
-const LinkedinIcon = () => (<svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M19.7 2h-15C2.6 2 2 2.6 2 4.3v15.4C2 21.4 2.6 22 4.3 22h15.4c1.7 0 2.3-.6 2.3-2.3V4.3C22 2.6 21.4 2 19.7 2zM8 19H5V8h3v11zm2-11h-3V19h3V8zm7 0h-3v11h3V8zm0 0h3V19h-3V8zm-11-2.5A2.5 2.5 0 117.5 9 2.5 2.5 0 016 6.5z" /></svg>);
-
-const SocialIconLink = ({ icon, href, accentColor, textColor }) => (
-  <a
-    href={href}
-    target="_blank"
-    rel="noopener noreferrer"
-    className={`transition duration-200`}
-    style={{ color: textColor }}
-    onMouseOver={e => e.currentTarget.style.color = accentColor}
-    onMouseOut={e => e.currentTarget.style.color = textColor}
-  >
-    {icon}
-  </a>
-);
-
 // Componente Cartão de Funcionalidade
-const FeatureCard = ({ Icon = () => <CheckIcon color={COLOR_PRIMARY} />, title, description, delay }) => (
+const FeatureCard: React.FC<FeatureCardProps> = ({ 
+  Icon = () => <CheckIcon color="#F9941F" />, 
+  title, 
+  description, 
+  delay = 0, 
+  colors 
+}) => (
   <AnimatedSection animation="fade-up" delay={delay}>
-    <div className="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transition duration-300 transform hover:scale-[1.02] border border-gray-100 h-full">
+    <div className="p-6 rounded-xl shadow-lg hover:shadow-xl transition duration-300 transform hover:scale-[1.02] border h-full" style={{ 
+      backgroundColor: colors.card, 
+      borderColor: colors.border 
+    }}>
       <div className="flex items-center mb-3">
         <Icon />
-        <h3 className={`text-xl font-bold ${TAILWIND_CLASSES.textDefault}`} style={{ color: COLOR_DARK_TEXT }}>{title}</h3>
+        <h3 className="text-xl font-bold" style={{ color: colors.text }}>{title}</h3>
       </div>
-      <p className={`text-sm ${TAILWIND_CLASSES.textMuted}`}>{description}</p>
+      <p className="text-sm" style={{ color: colors.textSecondary }}>{description}</p>
     </div>
   </AnimatedSection>
 );
 
 // Componente Cartão de Passo do Processo
-const StepCard = ({ number, title, description, delay }) => (
+const StepCard: React.FC<StepCardProps> = ({ number, title, description, delay = 0, colors }) => (
   <AnimatedSection animation="fade-up" delay={delay}>
-    <div className="bg-white p-6 rounded-xl shadow-lg border-t-4" style={{ borderColor: COLOR_ACCENT }}>
-      <span className={`text-4xl font-extrabold mb-3 block ${TAILWIND_CLASSES.textHighlight}`} style={{ color: COLOR_ACCENT }}>{number}</span>
-      <h3 className={`text-xl font-bold mb-2 ${TAILWIND_CLASSES.textDefault}`} style={{ color: COLOR_DARK_TEXT }}>{title}</h3>
-      <p className={`text-sm ${TAILWIND_CLASSES.textMuted}`}>{description}</p>
+    <div className="p-6 rounded-xl shadow-lg border-t-4 h-full" style={{ 
+      backgroundColor: colors.card, 
+      borderColor: colors.secondary 
+    }}>
+      <span className="text-4xl font-extrabold mb-3 block" style={{ color: colors.secondary }}>{number}</span>
+      <h3 className="text-xl font-bold mb-2" style={{ color: colors.text }}>{title}</h3>
+      <p className="text-sm" style={{ color: colors.textSecondary }}>{description}</p>
     </div>
   </AnimatedSection>
 );
 
 // Componente Visual Grande para a Secção Hero
-const HeroVisual = () => (
+const HeroVisual: React.FC<{ colors: any }> = ({ colors }) => (
   <AnimatedSection animation="slide-left" delay={500} threshold={0.1}>
     <div
       className="hidden lg:flex justify-center items-center p-12 rounded-3xl h-full shadow-2xl"
-      style={{ backgroundColor: COLOR_SECONDARY_BG }}
+      style={{ backgroundColor: colors.hover }}
     >
-      {/* Ícone de fatura gigante */}
       <InvoiceIcon sizeClass="w-48 h-48" />
     </div>
   </AnimatedSection>
 );
 
-
 // Componente Simulação de Vídeo
-const VideoSection = () => (
-  // ESTILO FIXO: Fundo Primário (Azul Escuro)
-  <section className="py-16 md:py-24 text-white" style={{ backgroundColor: COLOR_PRIMARY }}>
+const VideoSection: React.FC<{ colors: any }> = ({ colors }) => (
+  <section className="py-16 md:py-24 text-white" style={{ backgroundColor: colors.primary }}>
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
       <AnimatedSection animation="fade-up" threshold={0.1}>
-        <h2 className={`text-3xl font-extrabold mb-4 text-white`}>
+        <h2 className="text-3xl font-extrabold mb-4 text-white">
           Veja o FaturaJá em Ação
         </h2>
-        <p className={`text-lg mb-10 max-w-2xl mx-auto location1`} style={{ color: '#f2f2f2' }}>
+        <p className="text-lg mb-10 max-w-2xl mx-auto" style={{ color: '#f2f2f2' }}>
           Uma breve apresentação do sistema e da nossa missão para simplificar a sua faturação.
         </p>
       </AnimatedSection>
@@ -219,7 +266,7 @@ const VideoSection = () => (
       <AnimatedSection animation="fade-in" delay={300} threshold={0.1}>
         <div
           className="relative w-full max-w-4xl mx-auto rounded-3xl overflow-hidden shadow-2xl aspect-video"
-          style={{ border: `4px solid ${COLOR_ACCENT}`, backgroundColor: '#000000' }}
+          style={{ border: `4px solid ${colors.secondary}`, backgroundColor: '#000000' }}
         >
           <video
             width="100%"
@@ -227,27 +274,24 @@ const VideoSection = () => (
             controls
             preload="metadata"
             className="w-full h-full object-cover rounded-xl shadow-lg"
-            src="/video/lv_0_20251103165718.mp4" type="video/mp4" controls
-          >
-          </video>
-
+            src="/video/lv_0_20251103165718.mp4"
+          />
         </div>
       </AnimatedSection>
     </div>
   </section>
 );
 
-
 // Componente Acordeão FAQ
-const FAQItem = ({ question, answer, index }) => {
+const FAQItem: React.FC<FAQItemProps> = ({ question, answer, index, colors }) => {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
     <AnimatedSection animation="fade-up" delay={index * 100}>
-      <div className="border-b border-gray-200">
+      <div className="border-b" style={{ borderColor: colors.border }}>
         <button
-          className={`flex justify-between items-center w-full py-4 text-left font-semibold transition-colors duration-200 ${TAILWIND_CLASSES.textDefault} hover:text-orange-500`}
-          style={{ color: COLOR_DARK_TEXT }}
+          className="flex justify-between items-center w-full py-4 text-left font-semibold transition-colors duration-200 hover:opacity-80"
+          style={{ color: colors.text }}
           onClick={() => setIsOpen(!isOpen)}
           aria-expanded={isOpen}
         >
@@ -257,7 +301,7 @@ const FAQItem = ({ question, answer, index }) => {
         <div
           className={`overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? 'max-h-96 opacity-100 py-3' : 'max-h-0 opacity-0'}`}
         >
-          <p className={TAILWIND_CLASSES.textMuted}>{answer}</p>
+          <p style={{ color: colors.textSecondary }}>{answer}</p>
         </div>
       </div>
     </AnimatedSection>
@@ -265,52 +309,48 @@ const FAQItem = ({ question, answer, index }) => {
 };
 
 // Componente Cartão do Plano de Preços
-const PricingCard = ({ plan, index }) => {
-
-  // Novo estilo de botão: Branco -> Azul no hover, com shadow e arredondado.
+const PricingCard: React.FC<PricingCardProps> = ({ plan, index, colors }) => {
   const buttonStyle = {
     backgroundColor: 'white',
-    color: COLOR_PRIMARY,
+    color: colors.primary,
     borderRadius: '30px',
-    border: `1px solid ${COLOR_PRIMARY}`,
+    border: `1px solid ${colors.primary}`,
     transition: 'all 0.3s ease',
   };
 
   const buttonHoverStyle = {
-    backgroundColor: COLOR_PRIMARY,
+    backgroundColor: colors.primary,
     color: 'white',
     transform: 'scale(1.05)'
   };
 
-  // Novo estilo de cartão: Elevação no hover
-  const cardBaseClasses = `flex flex-col p-6 mx-auto max-w-lg text-center bg-white rounded-xl  border-2 border-gray-100 h-full transition duration-300 ease-in-out`;
-  const cardHoverClasses = `hover:shadow-2xl hover:scale-[1.03]`;
-
   return (
     <AnimatedSection animation="fade-up" delay={index * 100} threshold={0.2}>
-      <div className={`${cardBaseClasses} ${cardHoverClasses}`}>
-        <h3 className={`mb-4 text-2xl font-semibold ${TAILWIND_CLASSES.textDefault}`} style={{ color: COLOR_DARK_TEXT }}>
+      <div className="flex flex-col p-6 mx-auto max-w-lg text-center rounded-xl border-2 h-full transition duration-300 ease-in-out hover:shadow-2xl hover:scale-[1.03]" style={{ 
+        backgroundColor: colors.card, 
+        borderColor: colors.border 
+      }}>
+        <h3 className="mb-4 text-2xl font-semibold" style={{ color: colors.text }}>
           {plan.name}
         </h3>
 
         <div className="flex justify-center items-baseline my-4">
-          <span className={`text-5xl font-extrabold ${TAILWIND_CLASSES.textDefault}`} style={{ color: COLOR_DARK_TEXT }}>{plan.price}</span>
-          <span className={`text-xl font-medium ${TAILWIND_CLASSES.textMuted}`}>{plan.interval}</span>
+          <span className="text-5xl font-extrabold" style={{ color: colors.text }}>{plan.price}</span>
+          <span className="text-xl font-medium" style={{ color: colors.textSecondary }}>{plan.interval}</span>
         </div>
 
         <ul className="space-y-3 text-left mb-8 flex-grow">
           {plan.features.map((feature, idx) => (
-            <li key={idx} className={`flex items-start ${TAILWIND_CLASSES.textMuted}`}>
-              <CheckIcon color={COLOR_PRIMARY} />
-              <span className="text-sm">{feature}</span>
+            <li key={idx} className="flex items-start">
+              <CheckIcon color={colors.secondary} />
+              <span className="text-sm" style={{ color: colors.textSecondary }}>{feature}</span>
             </li>
           ))}
         </ul>
 
-        {/* Botão Link moderno com login dinâmico */}
         <Link
-          href={getLoginLink(plan.name)}
-          className={TAILWIND_CLASSES.buttonPrimary + " mt-auto cursor-pointer inline-block text-center"}
+          href="/cadastro"
+          className="mt-auto cursor-pointer inline-block text-center px-8 py-3 rounded-full font-semibold transition duration-300 ease-in-out transform hover:scale-[1.05]"
           style={buttonStyle}
           onMouseOver={e => Object.assign(e.currentTarget.style, buttonHoverStyle)}
           onMouseOut={e => Object.assign(e.currentTarget.style, buttonStyle)}
@@ -319,33 +359,18 @@ const PricingCard = ({ plan, index }) => {
         </Link>
       </div>
     </AnimatedSection>
-
   );
-};
-const getLoginLink = (planName: string) => {
-  switch (planName) {
-    case "Grátis":
-      return "/cadastro";
-    case "Essencial":
-    case "Pro":
-      return "/cadastro";
-    case "Premium":
-    case "Empresa":
-      return "/cadastro";
-    default:
-      return "/cadastro"; // fallback seguro
-  }
 };
 
 // =========================================================================
 // 3. DADOS
 // =========================================================================
 const allFeaturesData = [
-  { title: "Emissão de Faturas", description: "Crie faturas, notas de crédito e recibos rapidamente, associe clientes, produtos e impostos, e envie por email.", icon: () => <CheckIcon color={COLOR_ACCENT} /> },
-  { title: "Gestão de Clientes", description: "Cadastre e administre os seus clientes, consulte o histórico de faturas e contactos de forma organizada e segura.", icon: () => <CheckIcon color={COLOR_ACCENT} /> },
-  { title: "Controle de Produtos", description: "Gerencie produtos e serviços, preços e stock em tempo real, directamente ligados às faturas.", icon: () => <CheckIcon color={COLOR_ACCENT} /> },
-  { title: "Relatórios Financeiros", description: "Visualize relatórios detalhados sobre vendas, faturamento e desempenho financeiro da sua empresa.", icon: () => <CheckIcon color={COLOR_ACCENT} /> },
-  { title: "Gestão de Utilizadores", description: "Adicione membros da equipa com permissões diferentes, garantindo controlo e colaboração eficiente.", icon: () => <CheckIcon color={COLOR_ACCENT} /> },
+  { title: "Emissão de Faturas", description: "Crie faturas, notas de crédito e recibos rapidamente, associe clientes, produtos e impostos, e envie por email." },
+  { title: "Gestão de Clientes", description: "Cadastre e administre os seus clientes, consulte o histórico de faturas e contactos de forma organizada e segura." },
+  { title: "Controle de Produtos", description: "Gerencie produtos e serviços, preços e stock em tempo real, directamente ligados às faturas." },
+  { title: "Relatórios Financeiros", description: "Visualize relatórios detalhados sobre vendas, faturamento e desempenho financeiro da sua empresa." },
+  { title: "Gestão de Utilizadores", description: "Adicione membros da equipa com permissões diferentes, garantindo controlo e colaboração eficiente." },
 ];
 
 const processSteps = [
@@ -360,12 +385,11 @@ const faqData = [
   { q: "Como é que a segurança dos meus dados é garantida?", a: "Utilizamos encriptação SSL de 256 bits para todas as comunicações, e os seus dados são armazenados em servidores seguros, cumprindo a legislação angolana de protecção de dados pessoais. A privacidade é a nossa prioridade." },
   { q: "O Fatura Já é compatível com telemóveis?", a: "Absolutamente! A plataforma é 100% responsiva, funcionando perfeitamente em dispositivos móveis, tablets e desktops." },
   { q: "Posso adicionar vários utilizadores à minha conta?", a: "Sim, dependendo do plano, pode adicionar vários utilizadores com diferentes permissões para gerir clientes, produtos e faturas de forma colaborativa." },
-  { q: "Quais métodos de pagamento estão disponíveis para os clientes finais??", a: "Pode aceitar pagamentos por transferência bancária, Multicaixa ou cartões de débito/crédito, e acompanhar o estado das faturas (pendente, pago, cancelado)." },
+  { q: "Quais métodos de pagamento estão disponíveis para os clientes finais?", a: "Pode aceitar pagamentos por transferência bancária, Multicaixa ou cartões de débito/crédito, e acompanhar o estado das faturas (pendente, pago, cancelado)." },
   { q: "Posso gerar relatórios das minhas vendas e faturamento?", a: "Sim, os planos Essencial, Pro, Premium e Empresa permitem gerar relatórios detalhados de faturamento e vendas, ajudando a monitorizar o desempenho financeiro da sua empresa." },
   { q: "As faturas cumprem a legislação fiscal angolana?", a: "Sim, todas as faturas emitidas pelo FacturaJá cumprem as normas da Autoridade Tributária Angolana, garantindo conformidade legal." },
 ];
 
-// Moeda atualizada para Kwanza (KZ)
 const pricingPlans = [
   {
     name: "Grátis",
@@ -439,7 +463,6 @@ const pricingPlans = [
   }
 ];
 
-
 // Mapeamento de links para a navegação
 const navLinks = [
   { name: 'Funcionalidades', id: 'funcionalidades' },
@@ -454,26 +477,35 @@ const navLinks = [
 // =========================================================================
 
 export default function App() {
+  const colors = useThemeColors();
+  const { theme } = useTheme();
 
   // Estado para controlar o menu mobile (hamburger)
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   // Simulação do Contact Form
-  const [contactForm, setContactForm] = useState({ name: '', type: 'Cliente', message: '' });
+  const [contactForm, setContactForm] = useState<ContactFormState>({ 
+    name: '', 
+    type: 'Cliente', 
+    message: '' 
+  });
   const [isContactLoading, setIsContactLoading] = useState(false);
-  const [contactMessage, setContactMessage] = useState({ type: '', text: '' });
+  const [contactMessage, setContactMessage] = useState<ContactMessageState>({ 
+    type: '', 
+    text: '' 
+  });
 
-  const handleContactChange = (e) => {
+  const handleContactChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setContactForm(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleContactSubmit = async (e) => {
+  const handleContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setContactMessage({ type: '', text: '' });
     setIsContactLoading(true);
 
-    await new Promise(resolve => setTimeout(resolve, 1500)); // Simula latência
+    await new Promise(resolve => setTimeout(resolve, 1500));
 
     if (contactForm.message.length > 10) {
       setContactMessage({ type: 'success', text: 'Mensagem enviada com sucesso! Responderemos brevemente.' });
@@ -485,97 +517,89 @@ export default function App() {
   };
 
   // Função para navegação (âncoras)
-  const scrollToSection = (id) => {
+  const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
     if (element) {
-      // Ajuste para a altura do header fixo (64px)
       window.scrollTo({ top: element.offsetTop - 64, behavior: 'smooth' });
     }
-    // Fechar o menu mobile após clicar no link
     setIsMenuOpen(false);
   };
 
-  return (
-    <div className="min-h-screen font-inter" style={{ backgroundColor: COLOR_LIGHT_BG }}>
+  // CORES DO FOOTER (mantidas fixas)
+  const FOOTER_GRADIENT_START = "#0F2D44";
+  const FOOTER_GRADIENT_END = "#1A476F";
+  const FOOTER_GRADIENT_MID = "#0A1F30";
 
-      {/* INJEÇÃO DE FONTE INTER (Componente simulado) */}
-      <Helmet />
+  return (
+    <div className="min-h-screen font-inter transition-colors duration-300" style={{ backgroundColor: colors.background }}>
 
       {/* ESTILOS CSS PARA O GRADIENTE ANIMADO (APENAS FOOTER) */}
       <style jsx global>{`
-                /* Font Inter global */
-                body {
-                    font-family: 'Inter', sans-serif;
-                    color:"white"
-                }
-                /* Classe de fundo com gradiente SUAVE e LENTO */
-                .animated-gradient-section {
-                    background: linear-gradient(
-                        -30deg,
-                        ${FOOTER_GRADIENT_START},
-                        ${FOOTER_GRADIENT_END},
-                        ${FOOTER_GRADIENT_MID},
-                        ${FOOTER_GRADIENT_START}
-                    );
-                    background-size: 400% 400%; /* Permite o movimento grande */
-                    animation: gradientShift 25s ease infinite; /* 30s para ser mais lento */
-                }
-
-                /* Keyframes para animação */
-                @keyframes gradientShift {
-                    0% {
-                        background-position: 0% 50%;
-                    }
-                    50% {
-                        background-position: 100% 50%; /* Move o gradiente horizontalmente */
-                    }
-                    100% {
-                        background-position: 0% 50%;
-                    }
-                }
-            `}</style>
+        body {
+          font-family: 'Inter', sans-serif;
+        }
+        .animated-gradient-section {
+          background: linear-gradient(
+            -30deg,
+            ${FOOTER_GRADIENT_START},
+            ${FOOTER_GRADIENT_END},
+            ${FOOTER_GRADIENT_MID},
+            ${FOOTER_GRADIENT_START}
+          );
+          background-size: 400% 400%;
+          animation: gradientShift 25s ease infinite;
+        }
+        @keyframes gradientShift {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+      `}</style>
 
       {/* Header */}
-      <header className="bg-white shadow-lg sticky top-0 z-50">
+      <header className="sticky top-0 z-50 shadow-lg" style={{ backgroundColor: colors.card }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
 
           {/* Logotipo */}
           <div className="flex items-center space-x-2 cursor-pointer" onClick={() => scrollToSection('topo')}>
             <InvoiceIcon />
-            <h1 className={`text-2xl font-extrabold ${TAILWIND_CLASSES.textDefault}`} style={{ color: COLOR_DARK_TEXT }}>
-              Fatura <span className={TAILWIND_CLASSES.textHighlight} style={{ color: COLOR_ACCENT }}>Já</span>
+            <h1 className="text-2xl font-extrabold" style={{ color: colors.text }}>
+              Fatura <span style={{ color: colors.secondary }}>Já</span>
             </h1>
           </div>
 
           {/* Links de Navegação (Desktop) */}
           <nav className="hidden lg:flex items-center space-x-4">
-            {/* Links para as secções */}
             {navLinks.map(link => (
               <a
                 key={link.id}
                 onClick={() => scrollToSection(link.id)}
-                className={`cursor-pointer text-sm font-medium ${TAILWIND_CLASSES.textMuted} hover:text-orange-500 transition duration-150`}
+                className="cursor-pointer text-sm font-medium transition duration-150 hover:opacity-80"
+                style={{ color: colors.textSecondary }}
               >
                 {link.name}
               </a>
             ))}
 
-            {/* Botão de Cadastro - Usa a cor Primária */}
+            {/* Botão de Tema */}
+            <ThemeToggleButton />
+
             <Link
               href="/login"
-              className={TAILWIND_CLASSES.buttonPrimary + " py-2 px-4 text-sm ml-4"}
-              style={{ backgroundColor: COLOR_PRIMARY, color: 'white' }}
+              className="px-4 py-2 rounded-full font-semibold text-sm transition duration-300 ease-in-out transform hover:scale-[1.05]"
+              style={{ backgroundColor: colors.primary, color: 'white' }}
             >
               Login
             </Link>
           </nav>
 
           {/* Menu Hamburger (Mobile e Tablet) */}
-          <div className="lg:hidden flex items-center">
+          <div className="lg:hidden flex items-center gap-2">
+            <ThemeToggleButton />
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
               className="p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-opacity-50"
-              style={{ color: COLOR_PRIMARY, borderColor: COLOR_PRIMARY, outlineColor: COLOR_PRIMARY }}
+              style={{ color: colors.primary }}
               aria-expanded={isMenuOpen}
               aria-controls="mobile-menu"
             >
@@ -585,25 +609,26 @@ export default function App() {
 
         </div>
 
-        {/* Dropdown do Menu Mobile (Aparece no clique) */}
+        {/* Dropdown do Menu Mobile */}
         <div id="mobile-menu"
           className={`lg:hidden transition-all duration-300 ease-in-out overflow-hidden ${isMenuOpen ? 'max-h-96 opacity-100 py-2' : 'max-h-0 opacity-0'}`}
+          style={{ backgroundColor: colors.card }}
         >
           <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
             {navLinks.map(link => (
               <a
                 key={link.id}
                 onClick={() => scrollToSection(link.id)}
-                className={`block px-3 py-2 rounded-md text-base font-medium cursor-pointer ${TAILWIND_CLASSES.textDefault} hover:bg-gray-100 hover:text-orange-600`}
-                style={{ color: COLOR_DARK_TEXT }}
+                className="block px-3 py-2 rounded-md text-base font-medium cursor-pointer transition hover:opacity-80"
+                style={{ color: colors.text }}
               >
                 {link.name}
               </a>
             ))}
             <a
               onClick={() => { window.location.href = '/login'; setIsMenuOpen(false); }}
-              className={TAILWIND_CLASSES.buttonPrimary + " w-full text-center py-2 px-4 text-sm cursor-pointer mt-2 block"}
-              style={{ backgroundColor: COLOR_PRIMARY, color: 'white' }}
+              className="w-full text-center py-2 px-4 text-sm cursor-pointer mt-2 block rounded-full font-semibold"
+              style={{ backgroundColor: colors.primary, color: 'white' }}
             >
               Começar Grátis
             </a>
@@ -613,22 +638,21 @@ export default function App() {
 
       {/* Conteúdo Principal */}
       <main>
-        {/* 1. Secção Principal (Hero) - ID para Navegação */}
-        <section id="topo" className="pt-20 pb-16 md:py-32" style={{ backgroundColor: COLOR_LIGHT_BG }}>
+        {/* 1. Secção Principal (Hero) */}
+        <section id="topo" className="pt-20 pb-16 md:py-32" style={{ backgroundColor: colors.background }}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
 
               {/* Lado Esquerdo: Texto e Botões */}
               <div className="text-center lg:text-left">
                 <AnimatedSection animation="fade-up" delay={0} threshold={0.1}>
-                  {/* Texto ajustado para cor Azul Escuro (COLOR_PRIMARY) no fundo claro */}
-                  <h2 className={`text-5xl md:text-6xl font-extrabold tracking-tight mb-4`} style={{ color: COLOR_PRIMARY }}>
+                  <h2 className="text-5xl md:text-6xl font-extrabold tracking-tight mb-4" style={{ color: colors.primary }}>
                     Faturação Simples, <br className="sm:hidden" />
-                    <span className={TAILWIND_CLASSES.textHighlight} style={{ color: COLOR_ACCENT }}>Poderosa</span> e Rápida.
+                    <span style={{ color: colors.secondary }}>Poderosa</span> e Rápida.
                   </h2>
                 </AnimatedSection>
                 <AnimatedSection animation="fade-up" delay={200} threshold={0.1}>
-                  <p className={`text-xl md:text-2xl mb-8 max-w-lg mx-auto lg:mx-0 ${TAILWIND_CLASSES.textMuted}`}>
+                  <p className="text-xl md:text-2xl mb-8 max-w-lg mx-auto lg:mx-0" style={{ color: colors.textSecondary }}>
                     Gere faturas profissionais em segundos, sem complicações.
                     A ferramenta ideal para pequenos negócios e freelancers.
                   </p>
@@ -636,16 +660,17 @@ export default function App() {
                 <AnimatedSection animation="fade-up" delay={400} threshold={0.1}>
                   <div className="flex flex-col sm:flex-row justify-center lg:justify-start gap-4">
                     <a
-                      href="/login"  // Link real para a página de login
-                      className={TAILWIND_CLASSES.buttonPrimary + " cursor-pointer"}
-                      style={{ backgroundColor: COLOR_PRIMARY, color: 'white' }}
+                      href="/login"
+                      className="px-8 py-3 rounded-full font-semibold transition duration-300 ease-in-out transform hover:scale-[1.05] cursor-pointer"
+                      style={{ backgroundColor: colors.primary, color: 'white' }}
                     >
                       Começar Agora (É Grátis)
                     </a>
 
                     <a
                       onClick={() => scrollToSection('planos')}
-                      className={TAILWIND_CLASSES.buttonSecondary + " cursor-pointer bg-transparent border-gray-400 text-gray-700 hover:bg-gray-100 hover:text-gray-900"}
+                      className="px-8 py-3 rounded-full font-semibold transition duration-300 ease-in-out transform hover:scale-[1.03] cursor-pointer border"
+                      style={{ color: colors.text, borderColor: colors.border }}
                     >
                       Ver Planos
                     </a>
@@ -654,47 +679,46 @@ export default function App() {
               </div>
 
               {/* Lado Direito: Visual de Ícone Grande */}
-              <HeroVisual />
+              <HeroVisual colors={colors} />
             </div>
           </div>
         </section>
 
         {/* 1.5 Secção de Vídeo */}
-        <VideoSection />
+        <VideoSection colors={colors} />
 
-        {/* 2. Secção de Funcionalidades (Ferramentas Essenciais) - ID para Navegação */}
-        <section id="funcionalidades" className="py-16 md:py-24 bg-white">
+        {/* 2. Secção de Funcionalidades */}
+        <section id="funcionalidades" className="py-16 md:py-24" style={{ backgroundColor: colors.card }}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <AnimatedSection animation="fade-up" threshold={0.1}>
-              <h1 className={`text-4xl font-extrabold text-center mb-12 ${TAILWIND_CLASSES.textDefault}`} style={{ color: COLOR_DARK_TEXT }}>
+              <h1 className="text-4xl font-extrabold text-center mb-12" style={{ color: colors.text }}>
                 Ferramentas Essenciais para o seu Negócio
               </h1>
-              {/* Subtítulo */}
-              <p className="text-center text-[#1f2937] mb-12 text-lg">
+              <p className="text-center mb-12 text-lg" style={{ color: colors.textSecondary }}>
                 Tudo o que precisa para começar a faturar de forma simples, segura e eficiente.
               </p>
             </AnimatedSection>
 
-            {/* Grid de 8 Funcionalidades */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
               {allFeaturesData.map((feature, index) => (
                 <FeatureCard
                   key={index}
-                  Icon={feature.icon}
+                  Icon={() => <CheckIcon color={colors.secondary} />}
                   title={feature.title}
                   description={feature.description}
                   delay={index * 100}
+                  colors={colors}
                 />
               ))}
             </div>
           </div>
         </section>
 
-        {/* 3. Secção Processo (Fácil de Usar) - ID para Navegação */}
-        <section id="processo" className="py-16 md:py-24" style={{ backgroundColor: COLOR_SECONDARY_BG }}>
+        {/* 3. Secção Processo */}
+        <section id="processo" className="py-16 md:py-24" style={{ backgroundColor: colors.hover }}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <AnimatedSection animation="fade-up" threshold={0.1}>
-              <h2 className={`text-3xl font-extrabold text-center mb-12 ${TAILWIND_CLASSES.textDefault}`} style={{ color: COLOR_DARK_TEXT }}>
+              <h2 className="text-3xl font-extrabold text-center mb-12" style={{ color: colors.text }}>
                 Fácil de Usar, Resultados Rápidos
               </h2>
             </AnimatedSection>
@@ -707,75 +731,80 @@ export default function App() {
                   title={step.title}
                   description={step.description}
                   delay={index * 200}
-                  className="h-full"
+                  colors={colors}
                 />
               ))}
             </div>
-
           </div>
         </section>
 
-        {/* 4. Secção de Planos de Pagamento - ID para Navegação */}
-        <section id="planos" className="py-16 md:py-24 bg-white">
+        {/* 4. Secção de Planos */}
+        <section id="planos" className="py-16 md:py-24" style={{ backgroundColor: colors.card }}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <AnimatedSection animation="fade-up" threshold={0.1}>
-              <h2 className={`text-3xl font-extrabold text-center mb-12 ${TAILWIND_CLASSES.textDefault}`} style={{ color: COLOR_DARK_TEXT }}>
+              <h2 className="text-3xl font-extrabold text-center mb-12" style={{ color: colors.text }}>
                 Escolha o Plano Certo para Si
               </h2>
             </AnimatedSection>
 
-            {/* Grid de Planos - Com hover effect de elevação */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-8">
               {pricingPlans.map((plan, index) => (
-                <PricingCard key={index} plan={plan} index={index} />
+                <PricingCard key={index} plan={plan} index={index} colors={colors} />
               ))}
             </div>
             <AnimatedSection animation="fade-in" delay={500}>
-              <p className={`text-center mt-12 text-sm ${TAILWIND_CLASSES.textMuted}`}>
+              <p className="text-center mt-12 text-sm" style={{ color: colors.textSecondary }}>
                 Preços apresentados sem IVA. Experimente o plano Grátis sem compromisso.
               </p>
             </AnimatedSection>
           </div>
         </section>
 
-        {/* 5. Secção FAQ - ID para Navegação */}
-        <section id="faq" className="py-16 md:py-24" style={{ backgroundColor: COLOR_LIGHT_BG }}>
+        {/* 5. Secção FAQ */}
+        <section id="faq" className="py-16 md:py-24" style={{ backgroundColor: colors.background }}>
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
             <AnimatedSection animation="fade-up" threshold={0.1}>
-              <h2 className={`text-3xl font-extrabold text-center mb-10 ${TAILWIND_CLASSES.textDefault}`} style={{ color: COLOR_DARK_TEXT }}>
+              <h2 className="text-3xl font-extrabold text-center mb-10" style={{ color: colors.text }}>
                 Perguntas Frequentes
               </h2>
             </AnimatedSection>
             <div className="space-y-4">
               {faqData.map((item, index) => (
-                <FAQItem key={index} question={item.q} answer={item.a} index={index} />
+                <FAQItem key={index} question={item.q} answer={item.a} index={index} colors={colors} />
               ))}
             </div>
           </div>
         </section>
+
         <EmpresasSection />
 
-        {/* 6. Secção Contacto (Deixe Sua Mensagem) - ID para Navegação */}
-        <section id="contacto" className="py-16 md:py-24 bg-white">
+        {/* 6. Secção Contacto */}
+        <section id="contacto" className="py-16 md:py-24" style={{ backgroundColor: colors.card }}>
           <div className="max-w-xl mx-auto px-4 sm:px-6 lg:px-8">
             <AnimatedSection animation="fade-up" threshold={0.1}>
-              <h2 className={`text-3xl font-extrabold text-center mb-10 ${TAILWIND_CLASSES.textDefault}`} style={{ color: COLOR_DARK_TEXT }}>
-                Deixe Seu <span className={TAILWIND_CLASSES.textHighlight} style={{ color: COLOR_ACCENT }}>Comentário</span>
+              <h2 className="text-3xl font-extrabold text-center mb-10" style={{ color: colors.text }}>
+                Deixe Seu <span style={{ color: colors.secondary }}>Comentário</span>
               </h2>
             </AnimatedSection>
 
             <AnimatedSection animation="fade-up" delay={200} threshold={0.1}>
-              <div className="bg-white p-8 rounded-2xl shadow-xl border border-gray-100">
+              <div className="p-8 rounded-2xl shadow-xl border" style={{ 
+                backgroundColor: colors.background, 
+                borderColor: colors.border 
+              }}>
                 {contactMessage.text && (
-                  <div className={`p-4 mb-4 rounded-lg text-sm font-medium ${contactMessage.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  <div className={`p-4 mb-4 rounded-lg text-sm font-medium ${
+                    contactMessage.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                  }`}>
                     {contactMessage.text}
                   </div>
                 )}
 
                 <form onSubmit={handleContactSubmit} className="space-y-4">
-                  {/* Nome */}
                   <div>
-                    <label htmlFor="contact-name" className={`block text-sm font-medium mb-1 ${TAILWIND_CLASSES.textDefault}`} style={{ color: COLOR_DARK_TEXT }}>Nome</label>
+                    <label htmlFor="contact-name" className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
+                      Nome
+                    </label>
                     <input
                       type="text"
                       id="contact-name"
@@ -783,30 +812,41 @@ export default function App() {
                       value={contactForm.name}
                       onChange={handleContactChange}
                       required
-                      className={`w-full border rounded-lg p-3 outline-none transition duration-150 ${TAILWIND_CLASSES.inputFocus}`}
+                      className="w-full border rounded-lg p-3 outline-none transition duration-150 focus:ring-2"
+                      style={{ 
+                        backgroundColor: colors.card, 
+                        borderColor: colors.border,
+                        color: colors.text
+                      }}
                       disabled={isContactLoading}
                     />
                   </div>
 
-                  {/* Mensagem */}
                   <div>
-                    <label htmlFor="contact-message" className={`block text-sm font-medium mb-1 ${TAILWIND_CLASSES.textDefault}`} style={{ color: COLOR_DARK_TEXT }}>Mensagem</label>
+                    <label htmlFor="contact-message" className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
+                      Mensagem
+                    </label>
                     <textarea
                       id="contact-message"
                       name="message"
-                      rows="4"
+                      rows={4}
                       value={contactForm.message}
                       onChange={handleContactChange}
                       required
-                      className={`w-full border rounded-lg p-3 outline-none transition duration-150 ${TAILWIND_CLASSES.inputFocus}`}
+                      className="w-full border rounded-lg p-3 outline-none transition duration-150 focus:ring-2"
+                      style={{ 
+                        backgroundColor: colors.card, 
+                        borderColor: colors.border,
+                        color: colors.text
+                      }}
                       disabled={isContactLoading}
-                    ></textarea>
+                    />
                   </div>
 
                   <button
                     type="submit"
-                    className={TAILWIND_CLASSES.buttonPrimary + " w-full rounded-lg"}
-                    style={{ backgroundColor: COLOR_PRIMARY, color: 'white' }}
+                    className="w-full px-8 py-3 rounded-full font-semibold transition duration-300 ease-in-out transform hover:scale-[1.05] disabled:opacity-50"
+                    style={{ backgroundColor: colors.primary, color: 'white' }}
                     disabled={isContactLoading}
                   >
                     {isContactLoading ? 'A Enviar...' : 'Enviar Mensagem'}
@@ -816,52 +856,42 @@ export default function App() {
             </AnimatedSection>
           </div>
         </section>
-
       </main>
 
-      {/* Rodapé (Footer) - AGORA COM text-white TAILWIND CLASS + CLASSES EXPLÍCITAS NAS LISTAS */}
-      {/* Rodapé (Footer) - AGORA COM TODOS OS <p> BRANCOS */}
+      {/* Rodapé (Footer) */}
       <AnimatedSection animation="fade-in" delay={200} threshold={0.5}>
-        <footer
-          className={`py-10 shadow-inner transition-colors duration-1000 animated-gradient-section text-white [&_p]:text-white`}
-        >
+        <footer className="py-10 shadow-inner transition-colors duration-1000 animated-gradient-section text-white [&_p]:text-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 border-b border-opacity-30 pb-8 mb-8" style={{ borderColor: FOOTER_ACCENT_COLOR }}>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 border-b border-opacity-30 pb-8 mb-8" style={{ borderColor: colors.secondary }}>
 
-              {/* Coluna 1: Info (Logo, Descrição, Contacto, Localização) */}
+              {/* Coluna 1: Info */}
               <div className="col-span-2 md:col-span-1">
-                <h4 className="text-2xl font-extrabold mb-4" style={{ color: FOOTER_TEXT_COLOR }}>
-                  Fatura<span style={{ color: FOOTER_ACCENT_COLOR }}>Já</span>
+                <h4 className="text-2xl font-extrabold mb-4 text-white">
+                  Fatura<span style={{ color: colors.secondary }}>Já</span>
                 </h4>
-                <p className="mb-4" style={{ color: '#f2f2f2' }} >
+                <p className="mb-4 text-white">
                   A sua solução definitiva para gestão e faturação simplificada. Rápido, seguro e compatível com as normas fiscais.
                 </p>
-                <p className="space-y-1 text-orange-500">
-                  <span className="block location" style={{ color: '#f9941f' }}>Luanda, Angola</span>
-                  <a
-                    href="mailto:geral@sdoca.it.ao"
-                    className="block font-semibold location hover:underline"
-                    style={{ color: '#f9941f' }}
-                  >
+                <p className="space-y-1">
+                  <span className="block text-white">Luanda, Angola</span>
+                  <a href="mailto:geral@sdoca.it.ao" className="block font-semibold hover:underline" style={{ color: colors.secondary }}>
                     geral@sdoca.it.ao
                   </a>
-                  <span className="block font-semibold location" style={{ color: '#f9941f' }}>
+                  <span className="block font-semibold" style={{ color: colors.secondary }}>
                     +244 923678529 <br /> +244 927800505
                   </span>
                 </p>
-
               </div>
 
               {/* Coluna 2: Navegação */}
               <div>
-                <h4 className={`text-lg font-semibold mb-4 text-white/70`} style={{ color: FOOTER_ACCENT_COLOR }}>Navegação</h4>
+                <h4 className="text-lg font-semibold mb-4" style={{ color: colors.secondary }}>Navegação</h4>
                 <ul className="space-y-2 text-sm">
                   {navLinks.map(link => (
                     <li key={link.id}>
                       <a
                         onClick={() => scrollToSection(link.id)}
-                        className={` hover:text-white cursor-pointer transition`}
-                        style={{ color: '#f2f2f2' }}
+                        className="cursor-pointer transition hover:text-white text-white"
                       >
                         {link.name}
                       </a>
@@ -872,99 +902,74 @@ export default function App() {
 
               {/* Coluna 3: Apoio e Legal */}
               <div>
-                <h4 className={`text-lg font-semibold mb-4 text-white/70`} style={{ color: FOOTER_ACCENT_COLOR }}>Apoio e Legal</h4>
+                <h4 className="text-lg font-semibold mb-4" style={{ color: colors.secondary }}>Apoio e Legal</h4>
                 <ul className="space-y-2 text-sm">
                   <li>
-                    <a
-                      onClick={() => scrollToSection("faq")}
-                      className="flex items-center gap-2 cursor-pointer transition hover:text-white"
-                      style={{ color: "#f2f2f2" }}
-                    >
+                    <a onClick={() => scrollToSection("faq")} className="flex items-center gap-2 cursor-pointer transition hover:text-white text-white">
                       <HelpCircle size={18} />
                       FAQ
                     </a>
                   </li>
-
                   <li>
-                    <a
-                      onClick={() => console.log("Link para Suporte Técnico")}
-                      className="flex items-center gap-2 cursor-pointer transition hover:text-white"
-                      style={{ color: "#f2f2f2" }}
-                    >
+                    <a onClick={() => console.log("Link para Suporte Técnico")} className="flex items-center gap-2 cursor-pointer transition hover:text-white text-white">
                       <Headset size={18} />
                       Suporte Técnico
                     </a>
                   </li>
-
                   <li>
-                    <a
-                      onClick={() => console.log("Link para Termos")}
-                      className="flex items-center gap-2 cursor-pointer transition hover:text-white"
-                      style={{ color: "#f2f2f2" }}
-                    >
+                    <a onClick={() => console.log("Link para Termos")} className="flex items-center gap-2 cursor-pointer transition hover:text-white text-white">
                       <FileText size={18} />
                       Termos de Serviço
                     </a>
                   </li>
-
                   <li>
-                    <a
-                      onClick={() => console.log("Link para Política")}
-                      className="flex items-center gap-2 cursor-pointer transition hover:text-white"
-                      style={{ color: "#f2f2f2" }}
-                    >
+                    <a onClick={() => console.log("Link para Política")} className="flex items-center gap-2 cursor-pointer transition hover:text-white text-white">
                       <ShieldCheck size={18} />
                       Política de Privacidade
                     </a>
                   </li>
-
                   <li>
-                    <a
-                      onClick={() => console.log("Link para Livro de Reclamações")}
-                      className="flex items-center gap-2 cursor-pointer transition hover:text-white"
-                      style={{ color: "#f2f2f2" }}
-                    >
+                    <a onClick={() => console.log("Link para Livro de Reclamações")} className="flex items-center gap-2 cursor-pointer transition hover:text-white text-white">
                       <BookOpenCheck size={18} />
                       Livro de Reclamações
                     </a>
                   </li>
-
                 </ul>
               </div>
 
-              {/* Coluna 4: Siga-nos (Social Media) */}
+              {/* Coluna 4: Siga-nos */}
               <div>
-                <h4 className={`text-lg font-semibold mb-4 text-white/70`} style={{ color: FOOTER_ACCENT_COLOR }}>Siga-nos</h4>
+                <h4 className="text-lg font-semibold mb-4" style={{ color: colors.secondary }}>Siga-nos</h4>
                 <div className="flex space-x-2">
                   <a
                     href="https://facebook.com"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-2 rounded-full transition-all duration-300 hover:bg-[#F9941F]/10"
+                    className="p-2 rounded-full transition-all duration-300 hover:bg-opacity-10"
+                    style={{ backgroundColor: colors.secondary + '20' }}
                   >
-                    <Facebook size={22} color="#f2f2f2" className="hover:scale-110 transition-transform" />
+                    <Facebook size={22} color="white" className="hover:scale-110 transition-transform" />
                   </a>
-
                   <a
                     href="https://instagram.com"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-2 rounded-full transition-all duration-300 hover:bg-[#F9941F]/10"
+                    className="p-2 rounded-full transition-all duration-300 hover:bg-opacity-10"
+                    style={{ backgroundColor: colors.secondary + '20' }}
                   >
-                    <Instagram size={22} color="#f2f2f2" className="hover:scale-110 transition-transform" />
+                    <Instagram size={22} color="white" className="hover:scale-110 transition-transform" />
                   </a>
-
                   <a
                     href="https://linkedin.com"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-2 rounded-full transition-all duration-300 hover:bg-[#F9941F]/10"
+                    className="p-2 rounded-full transition-all duration-300 hover:bg-opacity-10"
+                    style={{ backgroundColor: colors.secondary + '20' }}
                   >
-                    <Linkedin size={22} color="#f2f2f2" className="hover:scale-110 transition-transform" />
+                    <Linkedin size={22} color="white" className="hover:scale-110 transition-transform" />
                   </a>
                 </div>
               </div>
-
             </div>
 
             {/* Direitos de Autor */}
@@ -974,28 +979,6 @@ export default function App() {
           </div>
         </footer>
       </AnimatedSection>
-
     </div>
   );
-}
-
-// Componente simulado para injetar estilos no head
-function Helmet() {
-  useEffect(() => {
-    const link = document.createElement('link');
-    link.href = "https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap";
-    link.rel = "stylesheet";
-    document.head.appendChild(link);
-
-    const style = document.createElement('style');
-    style.textContent = `body { font-family: 'Inter', sans-serif; }`;
-    document.head.appendChild(style);
-
-    return () => {
-      // Limpar se o componente fosse destruído
-      document.head.removeChild(link);
-      document.head.removeChild(style);
-    }
-  }, []);
-  return null;
 }
