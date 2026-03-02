@@ -7,6 +7,8 @@ import {
   ItemDocumento
 } from "@/services/DocumentoFiscal";
 import { useThemeColors } from "@/context/ThemeContext";
+import { useState, useEffect } from 'react';
+import api from "@/services/axios";
 
 interface PrintReceiptProps {
   documento: DocumentoFiscal | null;
@@ -33,6 +35,39 @@ export default function PrintReceipt({
   documentoFiscalService,
 }: PrintReceiptProps) {
   const colors = useThemeColors();
+  const [itensParaMostrar, setItensParaMostrar] = useState<ItemDocumento[]>([]);
+  const [documentoOrigem, setDocumentoOrigem] = useState<DocumentoFiscal | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || !documento) {
+      setItensParaMostrar([]);
+      setDocumentoOrigem(null);
+      return;
+    }
+
+    // Se for RC (Recibo), buscar a fatura de origem para mostrar os itens
+    if (documento.tipo_documento === 'RC' && documento.fatura_id) {
+      setLoading(true);
+      api.get(`/api/documentos-fiscais/${documento.fatura_id}`)
+        .then(response => {
+          if (response.data.success) {
+            const faturaOrigem = response.data.data.documento;
+            setDocumentoOrigem(faturaOrigem);
+            setItensParaMostrar(faturaOrigem.itens || []);
+          }
+        })
+        .catch(error => {
+          console.error('Erro ao buscar fatura de origem:', error);
+          // Fallback: tenta usar itens do próprio recibo se existirem
+          setItensParaMostrar(documento.itens || []);
+        })
+        .finally(() => setLoading(false));
+    } else {
+      // Para FR e outros, usa os próprios itens
+      setItensParaMostrar(documento.itens || []);
+    }
+  }, [isOpen, documento]);
 
   if (!isOpen || !documento) return null;
 
@@ -63,9 +98,7 @@ export default function PrintReceipt({
   // Helper: calcular taxa de retenção do item baseado no valor_retencao e base_tributavel
   const calcularTaxaRetencaoItem = (item: ItemDocumento): number | undefined => {
     if (!item.valor_retencao || item.valor_retencao === 0) return undefined;
-    // Se tem valor_retencao > 0, tenta calcular a taxa ou usa a do item
     if (item.taxa_retencao && item.taxa_retencao > 0) return item.taxa_retencao;
-    // Fallback: assume 6.5% se não tiver taxa definida mas tiver valor
     return 6.5;
   };
 
@@ -82,6 +115,10 @@ export default function PrintReceipt({
 
     const doc = iframe.contentWindow?.document;
     if (!doc) return;
+
+    // Determina qual documento mostrar no cabeçalho
+    const docInfo = documentoOrigem || documento;
+    const itensPrint = itensParaMostrar;
 
     const htmlContent = `
     <!DOCTYPE html>
@@ -224,6 +261,15 @@ export default function PrintReceipt({
           .taxa-retencao {
             color: #dc2626 !important;
           }
+          
+          /* Info do documento de origem para recibos */
+          .origem-info {
+            background: #f3f4f6 !important;
+            padding: 4px 8px !important;
+            margin-bottom: 8px !important;
+            border-radius: 4px !important;
+            font-size: 9px !important;
+          }
         </style>
       </head>
       <body>
@@ -249,9 +295,15 @@ export default function PrintReceipt({
             </div>
           </div>
 
+          ${documento.tipo_documento === 'RC' && docInfo ? `
+            <div class="origem-info">
+              <p><strong>Referente a:</strong> ${documentoFiscalService.getTipoDocumentoNome(docInfo.tipo_documento)} Nº ${docInfo.numero_documento}</p>
+            </div>
+          ` : ''}
+
           <div class="border-b pb-2 mb-2">
-            <p class="font-bold">Cliente: ${documentoFiscalService.getNomeCliente(documento)}</p>
-            ${documentoFiscalService.getNifCliente(documento) ? `<p class="text-10">NIF: ${documentoFiscalService.getNifCliente(documento)}</p>` : ''}
+            <p class="font-bold">Cliente: ${documentoFiscalService.getNomeCliente(docInfo)}</p>
+            ${documentoFiscalService.getNifCliente(docInfo) ? `<p class="text-10">NIF: ${documentoFiscalService.getNifCliente(docInfo)}</p>` : ''}
           </div>
 
           <div class="border-b-2 pb-2 mb-2">
@@ -260,8 +312,8 @@ export default function PrintReceipt({
               <span class="w-1-6 text-center">Qtd</span>
               <span class="w-1-3" style="text-align: right;">Total</span>
             </div>
-            ${documento.itens && documento.itens.length > 0
-        ? documento.itens.map((item: ItemDocumento) => {
+            ${itensPrint && itensPrint.length > 0
+        ? itensPrint.map((item) => {
           const taxaRet = calcularTaxaRetencaoItem(item);
           return `
                 <div class="mb-1">
@@ -286,16 +338,16 @@ export default function PrintReceipt({
           <div class="border-b pb-2 mb-2">
             <div class="flex justify-between">
               <span>Base Tributável:</span>
-              <span>${formatKz(documento.base_tributavel)}</span>
+              <span>${formatKz(docInfo.base_tributavel)}</span>
             </div>
             <div class="flex justify-between">
               <span>Total IVA:</span>
-              <span>${formatKz(documento.total_iva)}</span>
+              <span>${formatKz(docInfo.total_iva)}</span>
             </div>
             <!-- Total Retenção: sempre visível, "-" se não houver -->
             <div class="flex justify-between">
               <span>Total Retenção:</span>
-              <span>${formatValorRetencao(documento.total_retencao)}</span>
+              <span>${formatValorRetencao(docInfo.total_retencao)}</span>
             </div>
             <div class="flex justify-between font-bold text-lg border-t-2 pt-1 mt-1">
               <span>TOTAL:</span>
@@ -388,111 +440,130 @@ export default function PrintReceipt({
         {/* Receipt Content */}
         <div id="area-talao" className="flex-1 overflow-y-auto p-0" style={{ backgroundColor: colors.hover }}>
           <div className="mx-auto" style={{ width: '80mm', minHeight: '100%', backgroundColor: 'white' }}>
-            <div className="p-4 font-mono text-xs leading-tight">
-              {/* Header */}
-              <div className="text-center border-b-2 border-dashed pb-3 mb-3" style={{ borderColor: colors.border }}>
-                <div className="flex justify-center mb-2">
-                  <Image src="/images/4.png" alt="Logo Faturajá" width={64} height={64} className="w-16 h-16 object-contain" />
-                </div>
-                <h1 className="text-lg font-bold uppercase mb-1 text-center" style={{ color: colors.primary }}>Faturajá</h1>
-                <p className="text-[10px] text-center" style={{ color: colors.textSecondary }}>NIF: ****************</p>
-                <p className="text-[10px] text-center" style={{ color: colors.textSecondary }}>Endereço:************** </p>
-                <p className="text-[10px] text-center" style={{ color: colors.textSecondary }}>Tel: +244 **************</p>
+            {loading ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: colors.primary }}></div>
               </div>
-
-              {/* Document Info */}
-              <div className="border-b border-dashed pb-2 mb-2" style={{ borderColor: colors.border }}>
-                <div className="flex justify-between font-bold" style={{ color: colors.text }}>
-                  <span>{documentoFiscalService.getTipoDocumentoNome(documento.tipo_documento)}</span>
-                  <span>Nº {documento.numero_documento}</span>
+            ) : (
+              <div className="p-4 font-mono text-xs leading-tight">
+                {/* Header */}
+                <div className="text-center border-b-2 border-dashed pb-3 mb-3" style={{ borderColor: colors.border }}>
+                  <div className="flex justify-center mb-2">
+                    <Image src="/images/4.png" alt="Logo Faturajá" width={64} height={64} className="w-16 h-16 object-contain" />
+                  </div>
+                  <h1 className="text-lg font-bold uppercase mb-1 text-center" style={{ color: colors.primary }}>Faturajá</h1>
+                  <p className="text-[10px] text-center" style={{ color: colors.textSecondary }}>NIF: ****************</p>
+                  <p className="text-[10px] text-center" style={{ color: colors.textSecondary }}>Endereço:************** </p>
+                  <p className="text-[10px] text-center" style={{ color: colors.textSecondary }}>Tel: +244 **************</p>
                 </div>
-                <div className="flex justify-between text-[10px]" style={{ color: colors.textSecondary }}>
-                  <span>Série: {documento.serie}</span>
-                  <span>{new Date(documento.data_emissao).toLocaleDateString("pt-AO")} {documento.hora_emissao}</span>
-                </div>
-              </div>
 
-              {/* Client */}
-              <div className="border-b border-dashed pb-2 mb-2" style={{ borderColor: colors.border }}>
-                <p className="font-bold" style={{ color: colors.text }}>Cliente:{documentoFiscalService.getNomeCliente(documento)}</p>
-                {documentoFiscalService.getNifCliente(documento) && (
-                  <p className="text-[10px]" style={{ color: colors.textSecondary }}>NIF: {documentoFiscalService.getNifCliente(documento)}</p>
+                {/* Document Info */}
+                <div className="border-b border-dashed pb-2 mb-2" style={{ borderColor: colors.border }}>
+                  <div className="flex justify-between font-bold" style={{ color: colors.text }}>
+                    <span>{documentoFiscalService.getTipoDocumentoNome(documento.tipo_documento)}</span>
+                    <span>Nº {documento.numero_documento}</span>
+                  </div>
+                  <div className="flex justify-between text-[10px]" style={{ color: colors.textSecondary }}>
+                    <span>Série: {documento.serie}</span>
+                    <span>{new Date(documento.data_emissao).toLocaleDateString("pt-AO")} {documento.hora_emissao}</span>
+                  </div>
+                </div>
+
+                {/* Info do documento de origem (para recibos) */}
+                {documento.tipo_documento === 'RC' && documentoOrigem && (
+                  <div className="bg-gray-100 p-2 rounded mb-2 text-[9px]" style={{ backgroundColor: colors.hover }}>
+                    <p className="font-semibold" style={{ color: colors.text }}>
+                      Referente a: {documentoFiscalService.getTipoDocumentoNome(documentoOrigem.tipo_documento)} Nº {documentoOrigem.numero_documento}
+                    </p>
+                  </div>
                 )}
-              </div>
 
-              {/* Items */}
-              <div className="border-b-2 border-dashed pb-2 mb-2" style={{ borderColor: colors.border }}>
-                <div className="flex justify-between font-bold border-b pb-1 mb-1" style={{ borderColor: colors.border }}>
-                  <span className="w-1/2" style={{ color: colors.primary }}>Descrição</span>
-                  <span className="w-1/6 text-center" style={{ color: colors.primary }}>Qtd</span>
-                  <span className="w-1/6 text-center" style={{ color: colors.primary }}>Iva</span>
-                  <span className="w-1/3 text-right" style={{ color: colors.primary }}>Total</span>
+                {/* Client */}
+                <div className="border-b border-dashed pb-2 mb-2" style={{ borderColor: colors.border }}>
+                  <p className="font-bold" style={{ color: colors.text }}>
+                    Cliente: {documentoFiscalService.getNomeCliente(documentoOrigem || documento)}
+                  </p>
+                  {(documentoOrigem ? documentoFiscalService.getNifCliente(documentoOrigem) : documentoFiscalService.getNifCliente(documento)) && (
+                    <p className="text-[10px]" style={{ color: colors.textSecondary }}>
+                      NIF: {documentoOrigem ? documentoFiscalService.getNifCliente(documentoOrigem) : documentoFiscalService.getNifCliente(documento)}
+                    </p>
+                  )}
                 </div>
-                {documento.itens && documento.itens.length > 0 ? (
-                  documento.itens.map((item: ItemDocumento, idx: number) => {
-                    return (
-                      <div key={idx} className="mb-1">
-                        <div className="truncate text-[10px]" style={{ color: colors.text }}>{item.descricao}</div>
-                        <div className="flex justify-between text-[10px]">
-                          <span className="w-1/2 truncate" style={{ color: colors.textSecondary }}>{formatKz(item.preco_unitario)}</span>
-                          <span className="w-1/6 text-center" style={{ color: colors.textSecondary }}>{formatQuantidade(item.quantidade)}</span>
-                          <span className="w-1/6 text-center" style={{ color: colors.textSecondary }}>{formatTaxaIva(item.taxa_iva)} </span>
-                          <span className="w-1/3 text-right font-semibold" style={{ color: colors.secondary }}>{formatKz(item.total_linha)}</span>
+
+                {/* Items */}
+                <div className="border-b-2 border-dashed pb-2 mb-2" style={{ borderColor: colors.border }}>
+                  <div className="flex justify-between font-bold border-b pb-1 mb-1" style={{ borderColor: colors.border }}>
+                    <span className="w-1/2" style={{ color: colors.primary }}>Descrição</span>
+                    <span className="w-1/6 text-center" style={{ color: colors.primary }}>Qtd</span>
+                    <span className="w-1/6 text-center" style={{ color: colors.primary }}>Iva</span>
+                    <span className="w-1/3 text-right" style={{ color: colors.primary }}>Total</span>
+                  </div>
+                  {itensParaMostrar && itensParaMostrar.length > 0 ? (
+                    itensParaMostrar.map((item: ItemDocumento, idx: number) => {
+                      return (
+                        <div key={idx} className="mb-1">
+                          <div className="truncate text-[10px]" style={{ color: colors.text }}>{item.descricao}</div>
+                          <div className="flex justify-between text-[10px]">
+                            <span className="w-1/2 truncate" style={{ color: colors.textSecondary }}>{formatKz(item.preco_unitario)}</span>
+                            <span className="w-1/6 text-center" style={{ color: colors.textSecondary }}>{formatQuantidade(item.quantidade)}</span>
+                            <span className="w-1/6 text-center" style={{ color: colors.textSecondary }}>{formatTaxaIva(item.taxa_iva)} </span>
+                            <span className="w-1/3 text-right font-semibold" style={{ color: colors.secondary }}>{formatKz(item.total_linha)}</span>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="text-center text-[10px] py-2" style={{ color: colors.textSecondary }}>Nenhum item</div>
+                      );
+                    })
+                  ) : (
+                    <div className="text-center text-[10px] py-2" style={{ color: colors.textSecondary }}>Nenhum item</div>
+                  )}
+                </div>
+
+                {/* Totals */}
+                <div className="border-b border-dashed pb-2 mb-2" style={{ borderColor: colors.border }}>
+                  <div className="flex justify-between" style={{ color: colors.textSecondary }}>
+                    <span>Base Tributável:</span>
+                    <span>{formatKz((documentoOrigem || documento).base_tributavel)}</span>
+                  </div>
+                  <div className="flex justify-between" style={{ color: colors.textSecondary }}>
+                    <span>Total IVA:</span>
+                    <span>{formatKz((documentoOrigem || documento).total_iva)}</span>
+                  </div>
+                  {/* Total Retenção: sempre visível, "-" se não houver */}
+                  <div className="flex justify-between" style={{ color: colors.textSecondary }}>
+                    <span>Total Retenção:</span>
+                    <span>{formatValorRetencao((documentoOrigem || documento).total_retencao)}</span>
+                  </div>
+
+                  <div className="flex justify-between font-bold text-base border-t-2 pt-1 mt-1"
+                    style={{ borderColor: colors.primary, color: colors.primary }}>
+                    <span>TOTAL:</span>
+                    <span>{formatKz(documento.total_liquido)}</span>
+                  </div>
+                </div>
+
+                {/* Hash */}
+                {documento.hash_fiscal && (
+                  <div className="text-center mb-2">
+                    <p className="text-[9px] font-bold text-center" style={{ color: colors.textSecondary }}>Hash:</p>
+                    <p className="text-[9px] break-all text-center leading-tight" style={{ color: colors.textSecondary }}>
+                      {documento.hash_fiscal}
+                    </p>
+                  </div>
                 )}
-              </div>
 
-              {/* Totals */}
-              <div className="border-b border-dashed pb-2 mb-2" style={{ borderColor: colors.border }}>
-                <div className="flex justify-between" style={{ color: colors.textSecondary }}>
-                  <span>Base Tributável:</span>
-                  <span>{formatKz(documento.base_tributavel)}</span>
-                </div>
-                <div className="flex justify-between" style={{ color: colors.textSecondary }}>
-                  <span>Total IVA:</span>
-                  <span>{formatKz(documento.total_iva)}</span>
-                </div>
-                {/* Total Retenção: sempre visível, "-" se não houver */}
-                <div className="flex justify-between" style={{ color: colors.textSecondary }}>
-                  <span>Total Retenção:</span>
-                  <span>{formatValorRetencao(documento.total_retencao)}</span>
-                </div>
-
-                <div className="flex justify-between font-bold text-base border-t-2 pt-1 mt-1"
-                  style={{ borderColor: colors.primary, color: colors.primary }}>
-                  <span>TOTAL:</span>
-                  <span>{formatKz(documento.total_liquido)}</span>
-                </div>
-              </div>
-
-              {/* Hash */}
-              {documento.hash_fiscal && (
-                <div className="text-center mb-2">
-                  <p className="text-[9px] font-bold text-center" style={{ color: colors.textSecondary }}>Hash:</p>
-                  <p className="text-[9px] break-all text-center leading-tight" style={{ color: colors.textSecondary }}>
-                    {documento.hash_fiscal}
+                {/* Bank Info */}
+                <div className="text-center pt-2 border-t border-dashed" style={{ borderColor: colors.border }}>
+                  <p className="text-[10px] font-bold text-center mb-1" style={{ color: colors.secondary }}>Coordenadas bancárias</p>
+                  <p className="text-[10px] text-center" style={{ color: colors.textSecondary }}>Bai:00000000000000000000000000000</p>
+                  <p className="text-[10px] text-center" style={{ color: colors.textSecondary }}>Bic:0000000000000000000000000000</p>
+                  <p className="mt-2 font-bold text-center text-[10px]" style={{ color: colors.secondary }}>
+                    Obrigado pela preferência!
+                  </p>
+                  <p className="mt-2 text-center text-[10px]" style={{ color: colors.textSecondary }}>
+                    *** Fim do Documento ***
                   </p>
                 </div>
-              )}
-
-              {/* Bank Info */}
-              <div className="text-center pt-2 border-t border-dashed" style={{ borderColor: colors.border }}>
-                <p className="text-[10px] font-bold text-center mb-1" style={{ color: colors.secondary }}>Coordenadas bancárias</p>
-                <p className="text-[10px] text-center" style={{ color: colors.textSecondary }}>Bai:00000000000000000000000000000</p>
-                <p className="text-[10px] text-center" style={{ color: colors.textSecondary }}>Bic:0000000000000000000000000000</p>
-                <p className="mt-2 font-bold text-center text-[10px]" style={{ color: colors.secondary }}>
-                  Obrigado pela preferência!
-                </p>
-                <p className="mt-2 text-center text-[10px]" style={{ color: colors.textSecondary }}>
-                  *** Fim do Documento ***
-                </p>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>

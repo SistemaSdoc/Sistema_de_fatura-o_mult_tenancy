@@ -123,7 +123,8 @@ export default function FaturasPage() {
     }
   };
 
-  const gerarRecibo = async (documento: DocumentoFiscal) => {
+  // Handler que gera o recibo e retorna o documento gerado para o InvoiceTable
+  const gerarRecibo = async (documento: DocumentoFiscal): Promise<DocumentoFiscal | void> => {
     if (!documento.id) return;
 
     try {
@@ -134,15 +135,27 @@ export default function FaturasPage() {
         data_pagamento: new Date().toISOString().split('T')[0],
       };
 
-      await documentoFiscalService.gerarRecibo(documento.id, dados);
+      // Chama a API e retorna o recibo gerado
+      const reciboGerado = await documentoFiscalService.gerarRecibo(documento.id, dados);
+      
+      // Recarrega a lista de documentos
       await carregarDocumentos();
-      alert("Recibo gerado com sucesso!");
+      
+      // Retorna o recibo gerado para que o InvoiceTable possa abrir o modal
+      return reciboGerado;
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Erro ao gerar recibo";
       alert(errorMessage);
+      throw err;
     } finally {
       setGerandoRecibo(null);
     }
+  };
+
+  // Handler chamado quando o recibo é gerado com sucesso - abre o modal automaticamente
+  const handleReciboGerado = (recibo: DocumentoFiscal) => {
+    setDocumentoSelecionado(recibo);
+    setModalTalaoAberto(true);
   };
 
   const abrirModalTalao = (documento: DocumentoFiscal) => {
@@ -304,6 +317,7 @@ export default function FaturasPage() {
             onVerDetalhes={verDetalhes}
             onGerarRecibo={gerarRecibo}
             onImprimirTalao={abrirModalTalao}
+            onReciboGerado={handleReciboGerado}
             formatKz={formatKz}
             formatQuantidade={formatQuantidade}
             documentoFiscalService={{

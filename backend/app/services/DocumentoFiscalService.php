@@ -266,109 +266,162 @@ class DocumentoFiscalService
         });
     }
 
-    /**
-     * Gerar recibo para fatura (FT) ou adiantamento (FA)
-     */
-    public function gerarRecibo(DocumentoFiscal $documentoOrigem, array $dados)
-    {
-        if (!in_array($documentoOrigem->tipo_documento, ['FT', 'FA'])) {
+/**
+ * Gerar recibo para fatura (FT) ou adiantamento (FA)
+ */
+public function gerarRecibo(DocumentoFiscal $documentoOrigem, array $dados)
+{
+    if (!in_array($documentoOrigem->tipo_documento, ['FT', 'FA'])) {
+        throw new \InvalidArgumentException(
+            "Apenas Faturas (FT) e Faturas de Adiantamento (FA) podem receber recibo. " .
+            "Tipo recebido: {$documentoOrigem->tipo_documento}"
+        );
+    }
+
+    if (in_array($documentoOrigem->estado, [self::ESTADO_PAGA, self::ESTADO_CANCELADO])) {
+        throw new \InvalidArgumentException(
+            "Documento já se encontra pago ou cancelado. " .
+            "Estado atual: {$documentoOrigem->estado}"
+        );
+    }
+
+    return DB::transaction(function () use ($documentoOrigem, $dados) {
+
+        $valorPago = $dados['valor'];
+        $valorPendente = $this->calcularValorPendente($documentoOrigem);
+
+        if ($valorPago > $valorPendente) {
             throw new \InvalidArgumentException(
-                "Apenas Faturas (FT) e Faturas de Adiantamento (FA) podem receber recibo. " .
-                "Tipo recebido: {$documentoOrigem->tipo_documento}"
+                "Valor do pagamento ({$valorPago}) excede o valor pendente ({$valorPendente})."
             );
         }
 
-        if (in_array($documentoOrigem->estado, [self::ESTADO_PAGA, self::ESTADO_CANCELADO])) {
+        // Verificar se já existe recibo para este documento
+        $reciboExistente = DocumentoFiscal::where('fatura_id', $documentoOrigem->id)
+            ->where('tipo_documento', 'RC')
+            ->where('estado', '!=', self::ESTADO_CANCELADO)
+            ->first();
+
+        if ($reciboExistente) {
             throw new \InvalidArgumentException(
-                "Documento já se encontra pago ou cancelado. " .
-                "Estado atual: {$documentoOrigem->estado}"
+                "Já existe um recibo ({$reciboExistente->numero_documento}) para este documento. " .
+                "Cancele-o primeiro se deseja gerar um novo."
             );
         }
 
-        return DB::transaction(function () use ($documentoOrigem, $dados) {
+        // ✅ CORREÇÃO DEFINITIVA: Buscar o último número real do banco
+        $serieFiscal = $this->obterSerieFiscal('RC');
 
-            $valorPago = $dados['valor'];
-            $valorPendente = $this->calcularValorPendente($documentoOrigem);
+        // Buscar o maior número existente no banco para esta série
+        $ultimoNumeroReal = DocumentoFiscal::where('serie', $serieFiscal->serie)
+            ->where('tipo_documento', 'RC')
+            ->max('numero');
 
-            if ($valorPago > $valorPendente) {
-                throw new \InvalidArgumentException(
-                    "Valor do pagamento ({$valorPago}) excede o valor pendente ({$valorPendente})."
+        // Usar o maior entre o último da série e o último do banco
+        $numeroBase = max($serieFiscal->ultimo_numero, $ultimoNumeroReal ?? 0);
+
+        Log::info('Sincronizando numeração de recibo', [
+            'serie' => $serieFiscal->serie,
+            'ultimo_numero_serie' => $serieFiscal->ultimo_numero,
+            'ultimo_numero_real' => $ultimoNumeroReal,
+            'numero_base' => $numeroBase
+        ]);
+
+        // Tentar gerar número único
+        $tentativas = 0;
+        $maxTentativas = 100; // Aumentado para 100
+
+        do {
+            $numero = $numeroBase + 1 + $tentativas;
+            $numeroDocumento = $serieFiscal->serie . '-' . str_pad($numero, $serieFiscal->digitos ?? 5, '0', STR_PAD_LEFT);
+
+            // Verificar se número já existe
+            $existe = DocumentoFiscal::where('numero_documento', $numeroDocumento)->lockForUpdate()->exists();
+
+            if (!$existe) {
+                // Número único encontrado
+                break;
+            }
+
+            $tentativas++;
+
+            if ($tentativas >= $maxTentativas) {
+                throw new \RuntimeException(
+                    "Não foi possível gerar número único para o recibo após {$maxTentativas} tentativas. " .
+                    "Verifique a série fiscal '{$serieFiscal->serie}' - pode haver uma inconsistência grave na numeração."
                 );
             }
 
-            $serieFiscal = $this->obterSerieFiscal('RC');
-            $numero = $serieFiscal->ultimo_numero + 1;
-            $numeroDocumento = $serieFiscal->serie . '-' . str_pad($numero, $serieFiscal->digitos ?? 5, '0', STR_PAD_LEFT);
-            $serieFiscal->update(['ultimo_numero' => $numero]);
+        } while (true);
 
-            $reciboData = [
-                'id' => Str::uuid(),
-                'user_id' => Auth::id(),
-                'fatura_id' => $documentoOrigem->id,
-                'serie' => $serieFiscal->serie,
-                'numero' => $numero,
-                'numero_documento' => $numeroDocumento,
-                'tipo_documento' => 'RC',
-                'data_emissao' => $dados['data_pagamento'] ?? now()->toDateString(),
-                'hora_emissao' => now()->toTimeString(),
-                'data_vencimento' => null,
-                'base_tributavel' => 0,
-                'total_iva' => 0,
-                'total_retencao' => 0,
-                'total_liquido' => $valorPago,
-                'estado' => self::ESTADO_PAGA,
-                'metodo_pagamento' => $dados['metodo_pagamento'],
-                'referencia_pagamento' => $dados['referencia'] ?? null,
-                'hash_fiscal' => null,
-            ];
+        // Atualizar série fiscal com o número definitivo
+        $serieFiscal->update(['ultimo_numero' => $numero]);
 
-            // Herdar dados do cliente do documento origem
-            if ($documentoOrigem->cliente_id) {
-                $reciboData['cliente_id'] = $documentoOrigem->cliente_id;
-            } elseif ($documentoOrigem->cliente_nome) {
-                $reciboData['cliente_nome'] = $documentoOrigem->cliente_nome;
-                $reciboData['cliente_nif'] = $documentoOrigem->cliente_nif;
-            }
+        $reciboData = [
+            'id' => Str::uuid(),
+            'user_id' => Auth::id(),
+            'fatura_id' => $documentoOrigem->id,
+            'serie' => $serieFiscal->serie,
+            'numero' => $numero,
+            'numero_documento' => $numeroDocumento,
+            'tipo_documento' => 'RC',
+            'data_emissao' => $dados['data_pagamento'] ?? now()->toDateString(),
+            'hora_emissao' => now()->toTimeString(),
+            'data_vencimento' => null,
+            'base_tributavel' => 0,
+            'total_iva' => 0,
+            'total_retencao' => 0,
+            'total_liquido' => $valorPago,
+            'estado' => self::ESTADO_PAGA,
+            'metodo_pagamento' => $dados['metodo_pagamento'],
+            'referencia_pagamento' => $dados['referencia'] ?? null,
+            'hash_fiscal' => null,
+        ];
 
-            $recibo = DocumentoFiscal::create($reciboData);
+        // Herdar dados do cliente do documento origem
+        if ($documentoOrigem->cliente_id) {
+            $reciboData['cliente_id'] = $documentoOrigem->cliente_id;
+        } elseif ($documentoOrigem->cliente_nome) {
+            $reciboData['cliente_nome'] = $documentoOrigem->cliente_nome;
+            $reciboData['cliente_nif'] = $documentoOrigem->cliente_nif;
+        }
 
-            // Atualizar estado do documento origem
-            $novoTotalPago = $this->calcularTotalPago($documentoOrigem) + $valorPago;
+        $recibo = DocumentoFiscal::create($reciboData);
 
-            // Se for FA, também considerar adiantamentos vinculados
-            if ($documentoOrigem->tipo_documento === 'FA') {
-                if ($novoTotalPago >= $documentoOrigem->total_liquido) {
-                    $documentoOrigem->update(['estado' => self::ESTADO_PAGA]);
-                } else {
-                    $documentoOrigem->update(['estado' => self::ESTADO_PARCIALMENTE_PAGA]);
-                }
+        // Atualizar estado do documento origem
+        $novoTotalPago = $this->calcularTotalPago($documentoOrigem) + $valorPago;
+
+        if ($documentoOrigem->tipo_documento === 'FA') {
+            if ($novoTotalPago >= $documentoOrigem->total_liquido) {
+                $documentoOrigem->update(['estado' => self::ESTADO_PAGA]);
             } else {
-                // Para FT, considerar adiantamentos vinculados
-                $totalAdiantamentos = DB::table('adiantamento_fatura')
-                    ->where('fatura_id', $documentoOrigem->id)
-                    ->sum('valor_utilizado');
-
-                if ($novoTotalPago + $totalAdiantamentos >= $documentoOrigem->total_liquido) {
-                    $documentoOrigem->update(['estado' => self::ESTADO_PAGA]);
-                } else {
-                    $documentoOrigem->update(['estado' => self::ESTADO_PARCIALMENTE_PAGA]);
-                }
+                $documentoOrigem->update(['estado' => self::ESTADO_PARCIALMENTE_PAGA]);
             }
+        } else {
+            $totalAdiantamentos = DB::table('adiantamento_fatura')
+                ->where('fatura_id', $documentoOrigem->id)
+                ->sum('valor_utilizado');
 
-            $recibo->update(['hash_fiscal' => $this->gerarHashFiscal($recibo)]);
+            if ($novoTotalPago + $totalAdiantamentos >= $documentoOrigem->total_liquido) {
+                $documentoOrigem->update(['estado' => self::ESTADO_PAGA]);
+            } else {
+                $documentoOrigem->update(['estado' => self::ESTADO_PARCIALMENTE_PAGA]);
+            }
+        }
 
-            Log::info('Recibo gerado com sucesso', [
-                'recibo_id' => $recibo->id,
-                'recibo_numero' => $recibo->numero_documento,
-                'documento_origem_id' => $documentoOrigem->id,
-                'documento_origem_tipo' => $documentoOrigem->tipo_documento,
-                'valor' => $valorPago
-            ]);
+        $recibo->update(['hash_fiscal' => $this->gerarHashFiscal($recibo)]);
 
-            return $recibo->load('documentoOrigem');
-        });
-    }
+        Log::info('Recibo gerado com sucesso', [
+            'recibo_id' => $recibo->id,
+            'recibo_numero' => $recibo->numero_documento,
+            'tentativas_necessarias' => $tentativas,
+            'documento_origem_id' => $documentoOrigem->id,
+            'valor' => $valorPago
+        ]);
 
+        return $recibo->load('documentoOrigem');
+    });
+}
     /**
      * Criar Nota de Crédito (NC) vinculada a FT ou FR
      */
@@ -382,14 +435,14 @@ class DocumentoFiscalService
         if (!in_array($documentoOrigem->tipo_documento, ['FT', 'FR'])) {
             throw new \InvalidArgumentException(
                 "Nota de Crédito só pode ser gerada a partir de Fatura (FT) ou Fatura-Recibo (FR). " .
-                "Tipo recebido: {$documentoOrigem->tipo_documento}"
+                    "Tipo recebido: {$documentoOrigem->tipo_documento}"
             );
         }
 
         if ($documentoOrigem->estado === self::ESTADO_CANCELADO) {
             throw new \InvalidArgumentException(
                 "Não é possível gerar NC de documento cancelado. " .
-                "Documento {$documentoOrigem->numero_documento} está cancelado."
+                    "Documento {$documentoOrigem->numero_documento} está cancelado."
             );
         }
 
@@ -423,14 +476,14 @@ class DocumentoFiscalService
         if (!in_array($documentoOrigem->tipo_documento, ['FT', 'FR'])) {
             throw new \InvalidArgumentException(
                 "Nota de Débito só pode ser gerada a partir de Fatura (FT) ou Fatura-Recibo (FR). " .
-                "Tipo recebido: {$documentoOrigem->tipo_documento}"
+                    "Tipo recebido: {$documentoOrigem->tipo_documento}"
             );
         }
 
         if ($documentoOrigem->estado === self::ESTADO_CANCELADO) {
             throw new \InvalidArgumentException(
                 "Não é possível gerar ND de documento cancelado. " .
-                "Documento {$documentoOrigem->numero_documento} está cancelado."
+                    "Documento {$documentoOrigem->numero_documento} está cancelado."
             );
         }
 
@@ -467,28 +520,28 @@ class DocumentoFiscalService
         if ($adiantamento->tipo_documento !== 'FA') {
             throw new \InvalidArgumentException(
                 "Apenas Faturas de Adiantamento (FA) podem ser vinculadas. " .
-                "Tipo recebido: {$adiantamento->tipo_documento}"
+                    "Tipo recebido: {$adiantamento->tipo_documento}"
             );
         }
 
         if ($adiantamento->estado !== self::ESTADO_EMITIDO) {
             throw new \InvalidArgumentException(
                 "Adiantamento deve estar emitido para ser vinculado. " .
-                "Estado atual: {$adiantamento->estado}"
+                    "Estado atual: {$adiantamento->estado}"
             );
         }
 
         if ($fatura->tipo_documento !== 'FT') {
             throw new \InvalidArgumentException(
                 "Apenas Faturas (FT) podem receber adiantamentos. " .
-                "Tipo recebido: {$fatura->tipo_documento}"
+                    "Tipo recebido: {$fatura->tipo_documento}"
             );
         }
 
         if (in_array($fatura->estado, [self::ESTADO_CANCELADO, self::ESTADO_PAGA])) {
             throw new \InvalidArgumentException(
                 "Fatura cancelada ou já paga não pode receber adiantamentos. " .
-                "Estado atual: {$fatura->estado}"
+                    "Estado atual: {$fatura->estado}"
             );
         }
 
@@ -570,7 +623,7 @@ class DocumentoFiscalService
         if ($derivadosNaoCancelados > 0) {
             throw new \InvalidArgumentException(
                 "Documento possui documentos derivados ativos. Cancele-os primeiro. " .
-                "Quantidade: {$derivadosNaoCancelados}"
+                    "Quantidade: {$derivadosNaoCancelados}"
             );
         }
 
@@ -590,7 +643,7 @@ class DocumentoFiscalService
                 if ($recibosAtivos > 0) {
                     throw new \InvalidArgumentException(
                         "Documento possui recibos ativos. Cancele-os primeiro. " .
-                        "Quantidade: {$recibosAtivos}"
+                            "Quantidade: {$recibosAtivos}"
                     );
                 }
             }
@@ -736,7 +789,6 @@ class DocumentoFiscalService
             ]);
 
             return $documento;
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             Log::error('Documento não encontrado no service:', ['id' => $documentoId]);
             throw $e;
@@ -833,14 +885,14 @@ class DocumentoFiscalService
             if (in_array($tipo, ['NC', 'ND']) && !in_array($origem->tipo_documento, ['FT', 'FR'])) {
                 throw new \InvalidArgumentException(
                     "NC/ND só podem ser geradas a partir de FT ou FR. " .
-                    "Tipo recebido: {$origem->tipo_documento}"
+                        "Tipo recebido: {$origem->tipo_documento}"
                 );
             }
 
             if ($tipo === 'RC' && !in_array($origem->tipo_documento, ['FT', 'FA'])) {
                 throw new \InvalidArgumentException(
                     "Recibo só pode ser gerado a partir de FT ou FA. " .
-                    "Tipo recebido: {$origem->tipo_documento}"
+                        "Tipo recebido: {$origem->tipo_documento}"
                 );
             }
         }

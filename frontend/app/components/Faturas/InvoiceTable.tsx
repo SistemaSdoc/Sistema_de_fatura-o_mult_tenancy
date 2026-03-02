@@ -24,8 +24,10 @@ interface InvoiceTableProps {
     loading: boolean;
     gerandoRecibo: string | null;
     onVerDetalhes: (documento: DocumentoFiscal) => void;
-    onGerarRecibo: (documento: DocumentoFiscal) => void;
+    onGerarRecibo: (documento: DocumentoFiscal) => Promise<DocumentoFiscal | void> | void;
     onImprimirTalao: (documento: DocumentoFiscal) => void;
+    // Nova prop para quando um recibo for gerado com sucesso (para abrir modal de impressão)
+    onReciboGerado?: (recibo: DocumentoFiscal) => void;
     formatKz: (valor: number | string | undefined) => string;
     formatQuantidade: (qtd: number | string | undefined) => string;
     documentoFiscalService: {
@@ -90,6 +92,7 @@ export default function InvoiceTable({
     onVerDetalhes,
     onGerarRecibo,
     onImprimirTalao,
+    onReciboGerado,
     formatKz,
     documentoFiscalService,
     colors,
@@ -101,6 +104,24 @@ export default function InvoiceTable({
     const podeGerarRecibo = (documento: DocumentoFiscal): boolean => {
         return documento.tipo_documento === "FT" &&
             !["cancelado", "paga"].includes(documento.estado);
+    };
+
+    // Handler para gerar recibo e depois imprimir automaticamente
+    const handleGerarRecibo = async (documento: DocumentoFiscal) => {
+        try {
+            // Chama o handler original que retorna o recibo gerado
+            const resultado = await onGerarRecibo(documento);
+            
+            // Se o resultado for o recibo gerado e tivermos a callback onReciboGerado
+            if (resultado && onReciboGerado) {
+                // Pequeno delay para garantir que o estado foi atualizado
+                setTimeout(() => {
+                    onReciboGerado(resultado);
+                }, 100);
+            }
+        } catch (error) {
+            console.error('Erro ao gerar recibo:', error);
+        }
     };
 
     if (loading) {
@@ -201,26 +222,27 @@ export default function InvoiceTable({
                                             </svg>
                                         </button>
 
-                                        {/* Gerar Recibo */}
+                                        {/* Gerar Recibo e Imprimir */}
                                         {podeGerarReciboDoc && (
                                             <button
-                                                onClick={() => onGerarRecibo(documento)}
+                                                onClick={() => handleGerarRecibo(documento)}
                                                 disabled={gerandoRecibo === documento.id}
                                                 className="p-1.5 sm:p-2 rounded-lg transition-colors touch-manipulation disabled:opacity-50"
                                                 style={{ color: colors.success }}
-                                                title="Gerar Recibo"
+                                                title="Gerar Recibo e Imprimir"
                                             >
                                                 {gerandoRecibo === documento.id ? (
                                                     <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-t-current rounded-full animate-spin" style={{ borderColor: `${colors.success}30`, borderTopColor: colors.success }} />
                                                 ) : (
                                                     <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                                                     </svg>
                                                 )}
                                             </button>
                                         )}
 
-                                        {/* Imprimir Talão */}
+                                        {/* Imprimir Talão (apenas FR e RC) */}
                                         {podeImprimirDoc && (
                                             <button
                                                 onClick={() => onImprimirTalao(documento)}
