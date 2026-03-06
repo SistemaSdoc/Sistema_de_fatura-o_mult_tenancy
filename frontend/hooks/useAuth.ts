@@ -1,58 +1,103 @@
 // src/hooks/useAuth.ts
-import { useState, useEffect } from 'react';
-import { authService, User } from '@/services/auth';
-import { toast } from 'sonner';
 
-export function useAuth() {
-    const [user, setUser] = useState<User | null>(null);
-    const [loading, setLoading] = useState(true);
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import api from "@/services/axios";
+import { toast } from "sonner";
 
-    useEffect(() => {
-        const fetchUser = async () => {
-            try {
-                const userData = await authService.getMe();
-                setUser(userData);
-            } catch (error) {
-                console.error('Erro ao carregar usuário:', error);
-                toast.error('Erro ao carregar dados do usuário');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchUser();
-    }, []);
-
-    // Função de logout que usa o authService
-    const logout = async () => {
-        try {
-            setLoading(true);
-            const result = await authService.simpleLogout();
-            
-            if (result.success) {
-                setUser(null);
-                toast.success('Logout realizado com sucesso');
-                // Redirecionamento será feito pelo componente
-            } else {
-                toast.error(result.message || 'Erro ao fazer logout');
-            }
-            
-            return result;
-        } catch (error) {
-            console.error('Erro no logout:', error);
-            toast.error('Erro ao fazer logout');
-            return { success: false, message: 'Erro ao fazer logout' };
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return {
-        user,
-        loading,
-        logout, // <-- ADICIONADO
-        isAdmin: user?.role === 'admin',
-        isOperador: user?.role === 'operador',
-        isContablista: user?.role === 'contablista'
-    };
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
 }
+
+export const useAuth = () => {
+
+  const router = useRouter();
+
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isOperador, setIsOperador] = useState(false);
+  const [isContablista, setIsContablista] = useState(false);
+
+  // buscar usuário logado
+  useEffect(() => {
+
+    const fetchUser = async () => {
+
+      try {
+
+        const { data } = await api.get("/me");
+
+        setUser(data.user || null);
+
+        setIsAdmin(data.user?.role === "admin");
+        setIsOperador(data.user?.role === "operador");
+        setIsContablista(data.user?.role === "contablista");
+
+      } catch {
+
+        setUser(null);
+
+      } finally {
+
+        setLoading(false);
+
+      }
+
+    };
+
+    fetchUser();
+
+  }, []);
+
+  // logout correto
+  const logout = async () => {
+
+    setLoading(true);
+
+    try {
+
+      await api.post("/logout");
+
+      setUser(null);
+
+      setIsAdmin(false);
+      setIsOperador(false);
+      setIsContablista(false);
+
+      toast.success("Logout realizado com sucesso");
+
+      router.replace("/login");
+
+      return { success: true };
+
+    } catch (err) {
+
+      const message = (err as Error).message;
+
+      toast.error(message);
+
+      return { success: false };
+
+    } finally {
+
+      setLoading(false);
+
+    }
+
+  };
+
+  return {
+    user,
+    loading,
+    logout,
+    isAdmin,
+    isOperador,
+    isContablista,
+  };
+
+};

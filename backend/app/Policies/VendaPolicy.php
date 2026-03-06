@@ -13,7 +13,7 @@ class VendaPolicy
 
     public function create(User $user)
     {
-        return in_array($user->role, ['admin', 'operador','contablista']);
+        return in_array($user->role, ['admin', 'operador']);
     }
 
     public function cancel(User $user)

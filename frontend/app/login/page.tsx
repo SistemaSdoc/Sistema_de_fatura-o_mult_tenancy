@@ -228,7 +228,7 @@ export default function LoginPage(): React.ReactElement {
 
     const redirectMap: Record<string, string> = {
       admin: "/dashboard",
-      caixa: "/dashboard/Vendas/Nova_venda",
+      contablista: "/dashboard/",
       operador: "/dashboard/Vendas/Nova_venda",
     };
 
