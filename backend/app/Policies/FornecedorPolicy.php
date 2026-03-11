@@ -28,7 +28,7 @@ class FornecedorPolicy
      */
     public function create(User $user): bool
     {
-        return in_array($user->role, ['admin', 'operador']);
+        return in_array($user->role, ['admin', 'contablista']);
     }
 
     /**

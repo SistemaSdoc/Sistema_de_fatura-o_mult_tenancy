@@ -22,12 +22,15 @@ $uuidPattern = '[0-9a-fA-F-]{36}';
 // Cadastro de usuários - qualquer um pode acessar
 Route::post('/users', [UserController::class, 'store']);
 
+
+Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+
+
 // ==================== ROTAS PROTEGIDAS (com auth:sanctum) ====================
 Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
 
     // ===== ROTAS DE AUTENTICAÇÃO =====
     Route::get('/me', [UserController::class, 'me']);
-    Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
     // ===== DASHBOARD =====
     Route::prefix('dashboard')->group(function () {

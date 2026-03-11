@@ -4,46 +4,60 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cookie;  
 
 class ApiAuthController extends Controller
 {
-    public function login(Request $request)
-    {
-        $request->validate([
-            'email'    => 'required|email',
-            'password' => 'required|string',
-        ]);
+public function login(Request $request)
+{
+    $request->validate([
+        'email'    => 'required|email',
+        'password' => 'required|string',
+    ]);
 
-        if (!Auth::attempt($request->only('email', 'password'))) {
-            return response()->json(['message' => 'Credenciais inválidas'], 401);
-        }
-
-        $request->session()->regenerate();
-
-        $user = $request->user();
-
-        return response()->json([
-            'user' => [
-                'id'    => $user->id,
-                'name'  => $user->name,
-                'email' => $user->email,
-                'role'  => $user->role,
-            ],
-        ]);
+    // Tenta autenticar
+    if (!Auth::attempt($request->only('email', 'password'))) {
+        return response()->json(['message' => 'Credenciais inválidas'], 401);
     }
 
-    public function logout(Request $request)
-    {
-        Auth::guard('web')->logout();
+    // Pega o usuário autenticado
+    $user = Auth::user(); // ou Auth::guard('web')->user()
 
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
+    // Loga explicitamente na sessão (ESSENCIAL para Sanctum stateful com cookie!)
+    Auth::guard('web')->login($user);
 
-        return response()->json(['message' => 'Logout realizado com sucesso']);
-    }
+    // Regenera a sessão para segurança
+    $request->session()->regenerate();
+
+    return response()->json([
+        'message' => 'Login realizado com sucesso',
+        'user' => [
+            'id'    => $user->id,
+            'name'  => $user->name,
+            'email' => $user->email,
+            'role'  => $user->role,
+        ],
+    ]);
+}    
+
+public function logout(Request $request)
+{
+    Auth::logout();
+
+    $request->session()->invalidate();
+    $request->session()->regenerateToken();
+
+    return response()->json([
+        'message' => 'Logout realizado'
+    ]);
+}
 
     public function me(Request $request)
     {
+        if (!$request->user()) {
+        return response()->json(['message' => 'Não autenticado'], 401);
+    }
+
         return response()->json([
             'user' => [
                 'id'    => $request->user()->id,

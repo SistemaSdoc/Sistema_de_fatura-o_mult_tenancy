@@ -2,6 +2,7 @@
 
 import React, { ReactNode, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { Easing } from "framer-motion";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Home,
@@ -56,6 +57,16 @@ interface MainEmpresaProps {
     companyName?: string;
 }
 
+/* ===================== CONSTANTES ===================== */
+const COLORS = {
+    primary: '#123859',
+    secondary: '#F9941F',
+    background: '#F2F2F2',
+    danger: '#dc3545',
+    success: '#28a745',
+    warning: '#ffc107',
+};
+
 /* ===================== COMPONENT ===================== */
 export default function MainEmpresa({
     children,
@@ -64,7 +75,7 @@ export default function MainEmpresa({
 }: MainEmpresaProps) {
     const pathname = usePathname();
     const router = useRouter();
-    const { user, loading: userLoading, logout: authLogout } = useAuth();
+    const { user, loading: userLoading, isAdmin, logout: authLogout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const colors = useThemeColors();
 
@@ -138,7 +149,7 @@ export default function MainEmpresa({
             setProdutosSemEstoque(produtosSemStock);
             setUltimaAtualizacao(new Date());
         } catch (error) {
-            console.error("Erro ao buscar notificações de estoque:", error);
+            console.error("Erro ao buscar produtos com estoque baixo:", error);
             setProdutosEstoqueBaixo([]);
             setProdutosSemEstoque([]);
         } finally {
@@ -279,6 +290,7 @@ export default function MainEmpresa({
             icon: Archive,
             path: "/dashboard/Produtos_servicos",
             links: [
+                { label: "Novo produto/serviço", path: "/dashboard/Produtos_servicos/Novo_produto_servico", icon: Package },
                 { label: "Stock", path: "/dashboard/Produtos_servicos/Stock", icon: Package },
                 { label: "Categorias", path: "/dashboard/Produtos_servicos/categorias", icon: Package },
                 { label: "Fornecedores", path: "/dashboard/Fornecedores/Novo_fornecedor", icon: Truck },
@@ -290,17 +302,17 @@ export default function MainEmpresa({
             label: "Relatórios",
             icon: BarChart2,
             path: "/dashboard/relatorios",
+            links: [{ label: "Relatorio", path: "/dashboard/relatorios/diario", icon: BarChart2 }],
             isGroup: true,
             roles: ["admin", "contabilista"],
-            links: [],
         },
-        {
+        ...(isAdmin ? [{
             label: "Configurações",
             icon: Settings,
             path: "/dashboard/configuracoes",
             links: [],
             roles: ["admin", "contabilista", "operador"],
-        },
+        }] : []),
     ];
 
     const menuItemsFiltrados = menuItems.filter(temPermissao);
