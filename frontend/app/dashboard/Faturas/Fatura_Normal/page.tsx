@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { useRouter } from "next/navigation";
 import {
     Plus, Trash2, ShoppingCart, FileText,
-    CheckCircle2, ArrowLeft,
+    CheckCircle2, ArrowLeft, Receipt,
     AlertTriangle, User, Package, Minus
 } from "lucide-react";
 import { AxiosError } from "axios";
@@ -56,6 +56,44 @@ interface FormItemState {
 
 type ModoCliente = 'cadastrado' | 'avulso';
 
+/* ─── Linha de detalhe fiscal ──────────────────────────────────── */
+interface ThemeColors {
+    background: string;
+    card: string;
+    border: string;
+    text: string;
+    textSecondary: string;
+    primary: string;
+    secondary: string;
+    danger: string;
+    success: string;
+    warning: string;
+    hover: string;
+}
+
+function LinhaFiscal({
+    label, valor, cor, negrito, separador, colors,
+}: {
+    label: string; valor: string; cor?: string;
+    negrito?: boolean; separador?: boolean; colors: ThemeColors;
+}) {
+    return (
+        <>
+            {separador && <div className="my-1 border-t" style={{ borderColor: colors.border }} />}
+            <div className="flex items-center justify-between gap-2 py-0.5">
+                <span className={`text-sm ${negrito ? "font-semibold" : ""}`}
+                    style={{ color: negrito ? colors.text : colors.textSecondary }}>
+                    {label}
+                </span>
+                <span className={`text-sm ${negrito ? "font-bold" : "font-medium"} tabular-nums`}
+                    style={{ color: cor || (negrito ? colors.text : colors.textSecondary) }}>
+                    {valor}
+                </span>
+            </div>
+        </>
+    );
+}
+
 export default function NovaFaturaNormalPage() {
     const router = useRouter();
     const { user, loading: authLoading } = useAuth();
@@ -66,6 +104,7 @@ export default function NovaFaturaNormalPage() {
         borderColor: colors.border,
         color: colors.text,
         borderWidth: 1,
+        fontSize: '14px',
     };
 
     const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -331,6 +370,7 @@ export default function NovaFaturaNormalPage() {
     const totalIva = arredondar(itens.reduce((acc, i) => acc + i.valor_iva, 0));
     const totalRetencao = arredondar(itens.reduce((acc, i) => acc + i.valor_retencao, 0));
     const totalLiquido = arredondar(totalBase + totalIva - totalRetencao);
+    const totalDesconto = arredondar(itens.reduce((acc, i) => acc + i.desconto, 0));
 
     const podeFinalizar = (): boolean => {
         if (itens.length === 0) return false;
@@ -434,96 +474,104 @@ export default function NovaFaturaNormalPage() {
 
     return (
         <MainEmpresa>
-            <div className="space-y-3 pb-8 px-2 sm:px-0 max-w-6xl mx-auto" style={{ backgroundColor: colors.background }}>
+            <div className="space-y-4 pb-8 px-3 sm:px-4 max-w-7xl mx-auto"
+                style={{ backgroundColor: colors.background }}>
 
                 {/* ── Header ── */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                     <button
                         onClick={() => router.back()}
-                        className="p-1.5 rounded-full transition-colors hover:bg-opacity-10"
+                        className="p-2 rounded-full transition-colors hover:opacity-70"
                         style={{ color: colors.primary }}
                         title="Voltar"
                     >
-                        <ArrowLeft size={18} />
+                        <ArrowLeft size={20} />
                     </button>
-                    <h1 className="text-lg sm:text-xl font-bold" style={{ color: colors.secondary }}>Nova Fatura</h1>
+                    <div>
+                        <h1 className="text-xl font-bold" style={{ color: colors.secondary }}>Nova Fatura</h1>
+                        <p className="text-xs mt-0.5" style={{ color: colors.textSecondary }}>
+                            Documento fiscal com validade legal
+                        </p>
+                    </div>
                 </div>
 
                 {/* ── Alertas ── */}
                 {error && (
                     <div
-                        className="p-2.5 rounded-lg border text-xs flex items-center gap-2"
+                        className="p-3 rounded-lg border text-sm flex items-center gap-2"
                         style={{
                             backgroundColor: `${colors.danger}15`,
                             borderColor: colors.danger,
                             color: colors.danger
                         }}
                     >
-                        <AlertTriangle size={13} className="flex-shrink-0" />
+                        <AlertTriangle size={15} className="flex-shrink-0" />
                         <span className="flex-1">{error}</span>
                     </div>
                 )}
 
                 {sucesso && (
                     <div
-                        className="p-2.5 rounded-lg border text-xs flex items-center gap-2"
+                        className="p-3 rounded-lg border text-sm flex items-center gap-2"
                         style={{
                             backgroundColor: `${colors.success}15`,
                             borderColor: colors.success,
                             color: colors.success
                         }}
                     >
-                        <CheckCircle2 size={13} className="flex-shrink-0" />
+                        <CheckCircle2 size={15} className="flex-shrink-0" />
                         <span className="flex-1">{sucesso}</span>
                     </div>
                 )}
 
                 {produtosEstoqueBaixo.length > 0 && (
                     <div
-                        className="p-2.5 rounded-lg border text-xs flex items-center gap-2 flex-wrap"
+                        className="p-3 rounded-lg border text-sm flex items-start gap-2"
                         style={{
-                            backgroundColor: `${colors.warning}15`,
-                            borderColor: colors.warning
+                            backgroundColor: `${colors.warning}12`,
+                            borderColor: `${colors.warning}50`
                         }}
                     >
-                        <AlertTriangle size={13} className="flex-shrink-0" style={{ color: colors.warning }} />
-                        <span style={{ color: colors.warning }} className="font-semibold">Estoque baixo:</span>
-                        <span style={{ color: colors.textSecondary }} className="flex-1">
-                            {produtosEstoqueBaixo.map(p => `${p.nome} (${p.estoque_atual})`).join(' · ')}
+                        <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" style={{ color: colors.warning }} />
+                        <span style={{ color: colors.warning }}>
+                            <strong>Estoque baixo: </strong>
+                            <span style={{ color: colors.textSecondary }}>
+                                {produtosEstoqueBaixo.map(p => `${p.nome} (${p.estoque_atual})`).join(' · ')}
+                            </span>
                         </span>
                     </div>
                 )}
 
-                {/* ══════════════════════════════════════
-                    CARD: Cliente + Produto + Observações
-                ══════════════════════════════════════ */}
+                {/* ══════════════════════════════════════════════════════
+                    CARD 1 — Dados da Fatura (Cliente + Produto + Obs)
+                ══════════════════════════════════════════════════════ */}
                 <div
                     className="rounded-xl border shadow-sm overflow-hidden"
                     style={{ backgroundColor: colors.card, borderColor: colors.border }}
                 >
                     <div
-                        className="px-4 py-2 flex items-center gap-2"
+                        className="px-4 py-2.5 flex items-center gap-2"
                         style={{ backgroundColor: colors.primary }}
                     >
-                        <ShoppingCart size={14} className="text-white" />
-                        <span className="text-white font-semibold text-xs uppercase tracking-wide">Dados da Fatura</span>
+                        <ShoppingCart size={16} className="text-white" />
+                        <span className="text-white font-semibold text-sm tracking-wide">Dados da Fatura</span>
                     </div>
 
-                    {/* Layout com tabela para manter alinhamento compacto */}
+                    {/* Layout com tabela para manter alinhamento */}
                     <table className="w-full border-collapse">
                         <tbody>
                             {/* ── Cliente ── */}
                             <tr className="border-b" style={{ borderColor: colors.border }}>
-                                <td className="py-2 pl-4 pr-2 align-middle w-[80px] sm:w-[100px]" style={{ backgroundColor: colors.hover }}>
+                                <td className="py-3 pl-4 pr-3 align-middle w-[110px]" style={{ backgroundColor: colors.hover }}>
                                     <div className="flex items-center gap-1.5">
-                                        <User size={13} style={{ color: colors.primary }} />
-                                        <span className="text-[11px] font-semibold" style={{ color: colors.primary }}>Cliente</span>
+                                        <User size={16} style={{ color: colors.primary }} />
+                                        <span className="text-sm font-semibold" style={{ color: colors.primary }}>Cliente</span>
                                     </div>
                                 </td>
-                                <td className="py-2 px-3 align-middle">
-                                    <div className="flex flex-wrap items-center gap-1.5">
-                                        {/* Botões de modo cliente - compactos */}
-                                        <div className="flex rounded-lg overflow-hidden border text-xs" style={{ borderColor: colors.border }}>
+                                <td className="py-3 px-3 align-middle">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {/* Botões de modo cliente */}
+                                        <div className="inline-flex rounded-lg border overflow-hidden flex-shrink-0" style={{ borderColor: colors.border }}>
                                             {(['cadastrado', 'avulso'] as ModoCliente[]).map(modo => (
                                                 <button
                                                     key={modo}
@@ -535,7 +583,7 @@ export default function NovaFaturaNormalPage() {
                                                         setClienteAvulsoNif('');
                                                         setNifError(null);
                                                     }}
-                                                    className="px-2 py-1 font-medium transition-colors whitespace-nowrap text-[11px]"
+                                                    className="px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap"
                                                     style={{
                                                         backgroundColor: modoCliente === modo ? colors.primary : 'transparent',
                                                         color: modoCliente === modo ? 'white' : colors.textSecondary
@@ -548,7 +596,7 @@ export default function NovaFaturaNormalPage() {
 
                                         {modoCliente === 'cadastrado' ? (
                                             <select
-                                                className="flex-1 min-w-[140px] max-w-[200px] p-1 rounded-lg text-xs"
+                                                className="flex-1 min-w-[160px] max-w-xs p-2 rounded-lg text-sm outline-none"
                                                 style={inputStyles}
                                                 value={clienteSelecionado?.id ?? ""}
                                                 onChange={e => setClienteSelecionado(
@@ -563,21 +611,21 @@ export default function NovaFaturaNormalPage() {
                                                 ))}
                                             </select>
                                         ) : (
-                                            <>
+                                            <div className="flex flex-wrap gap-2">
                                                 <input
                                                     type="text"
                                                     placeholder="Nome do cliente *"
-                                                    className="w-[140px] sm:w-[160px] p-1 rounded-lg text-xs"
+                                                    className="w-44 p-2 rounded-lg text-sm outline-none"
                                                     style={inputStyles}
                                                     value={clienteAvulso}
                                                     onChange={e => setClienteAvulso(e.target.value)}
                                                 />
-                                                <div className="relative inline-block">
+                                                <div className="flex flex-col gap-0.5">
                                                     <input
                                                         type="text"
                                                         inputMode="numeric"
-                                                        placeholder="NIF"
-                                                        className="w-[80px] p-1 rounded-lg text-xs"
+                                                        placeholder="NIF (9 dígitos)"
+                                                        className="w-32 p-2 rounded-lg text-sm outline-none"
                                                         style={{
                                                             ...inputStyles,
                                                             borderColor: nifError ? colors.danger : inputStyles.borderColor
@@ -587,12 +635,12 @@ export default function NovaFaturaNormalPage() {
                                                         maxLength={9}
                                                     />
                                                     {nifError && (
-                                                        <p className="absolute -bottom-4 left-0 text-[8px]" style={{ color: colors.danger }}>
+                                                        <span className="text-xs" style={{ color: colors.danger }}>
                                                             {nifError}
-                                                        </p>
+                                                        </span>
                                                     )}
                                                 </div>
-                                            </>
+                                            </div>
                                         )}
                                     </div>
                                 </td>
@@ -600,16 +648,16 @@ export default function NovaFaturaNormalPage() {
 
                             {/* ── Produto ── */}
                             <tr className="border-b" style={{ borderColor: colors.border }}>
-                                <td className="py-2 pl-4 pr-2 align-middle w-[80px] sm:w-[100px]" style={{ backgroundColor: colors.hover }}>
+                                <td className="py-3 pl-4 pr-3 align-middle" style={{ backgroundColor: colors.hover }}>
                                     <div className="flex items-center gap-1.5">
-                                        <Package size={13} style={{ color: colors.primary }} />
-                                        <span className="text-[11px] font-semibold" style={{ color: colors.primary }}>Produto</span>
+                                        <Package size={16} style={{ color: colors.primary }} />
+                                        <span className="text-sm font-semibold" style={{ color: colors.primary }}>Produto</span>
                                     </div>
                                 </td>
-                                <td className="py-2 px-3 align-middle">
-                                    <div className="flex flex-wrap items-center gap-1.5">
+                                <td className="py-3 px-3 align-middle">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <select
-                                            className="w-[140px] sm:w-[160px] p-1 rounded-lg text-xs"
+                                            className="w-48 sm:w-60 p-2 rounded-lg text-sm outline-none"
                                             style={inputStyles}
                                             value={formItem.produto_id}
                                             onChange={e => handleProdutoChange(e.target.value)}
@@ -617,7 +665,7 @@ export default function NovaFaturaNormalPage() {
                                             <option value="">
                                                 {produtosDisponiveis.length === 0
                                                     ? "Nenhum produto"
-                                                    : "Selecione"}
+                                                    : "Selecione um produto"}
                                             </option>
                                             {produtos.filter(p => p.status === 'ativo').map(p => (
                                                 <option key={p.id} value={p.id}>
@@ -627,11 +675,11 @@ export default function NovaFaturaNormalPage() {
                                             ))}
                                         </select>
 
-                                        {/* Stepper quantidade - compacto */}
-                                        <div className="flex items-center border rounded-lg overflow-hidden" style={{ borderColor: colors.border, height: 26 }}>
+                                        {/* Stepper quantidade */}
+                                        <div className="flex items-center border rounded-lg overflow-hidden" style={{ borderColor: colors.border, height: 38 }}>
                                             <button
                                                 type="button"
-                                                className="px-1.5 h-full text-xs transition-colors disabled:opacity-30"
+                                                className="px-2 h-full text-sm transition-colors disabled:opacity-30"
                                                 style={{ backgroundColor: colors.hover, color: colors.primary }}
                                                 disabled={!formItem.produto_id || formItem.quantidade <= 1}
                                                 onClick={() => {
@@ -641,12 +689,12 @@ export default function NovaFaturaNormalPage() {
                                                     }
                                                 }}
                                             >
-                                                <Minus size={10} />
+                                                <Minus size={14} />
                                             </button>
                                             <input
                                                 type="number"
                                                 min={1}
-                                                className="w-8 text-center text-[11px] border-0 outline-none h-full"
+                                                className="w-10 text-center text-sm border-0 outline-none h-full"
                                                 style={{ backgroundColor: colors.card, color: colors.text }}
                                                 value={formItem.quantidade}
                                                 disabled={!formItem.produto_id}
@@ -660,7 +708,7 @@ export default function NovaFaturaNormalPage() {
                                             />
                                             <button
                                                 type="button"
-                                                className="px-1.5 h-full text-xs transition-colors disabled:opacity-30"
+                                                className="px-2 h-full text-sm transition-colors disabled:opacity-30"
                                                 style={{ backgroundColor: colors.hover, color: colors.primary }}
                                                 disabled={!formItem.produto_id || (!!produtoSelecionado && !isServico(produtoSelecionado) && formItem.quantidade >= produtoSelecionado.estoque_atual)}
                                                 onClick={() => {
@@ -671,7 +719,7 @@ export default function NovaFaturaNormalPage() {
                                                     }
                                                 }}
                                             >
-                                                <Plus size={10} />
+                                                <Plus size={14} />
                                             </button>
                                         </div>
 
@@ -679,7 +727,7 @@ export default function NovaFaturaNormalPage() {
                                             type="number"
                                             min={0}
                                             placeholder="Desconto"
-                                            className="w-[70px] p-1 rounded-lg text-xs"
+                                            className="w-24 p-2 rounded-lg text-sm outline-none"
                                             style={inputStyles}
                                             value={formItem.desconto || ''}
                                             disabled={!formItem.produto_id}
@@ -690,14 +738,14 @@ export default function NovaFaturaNormalPage() {
                                             type="button"
                                             onClick={adicionarAoCarrinho}
                                             disabled={!formItem.produto_id}
-                                            className="px-2 py-1 rounded-lg text-xs font-semibold text-white flex items-center gap-0.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                                            className="px-4 py-2 rounded-lg text-sm font-semibold text-white flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
                                             style={{ backgroundColor: colors.primary }}
                                         >
-                                            <Plus size={11} /> Adicionar
+                                            <Plus size={14} /> Adicionar
                                         </button>
 
                                         {produtoSelecionado && !isServico(produtoSelecionado) && (
-                                            <span className="text-[9px]" style={{ color: colors.textSecondary }}>
+                                            <span className="text-xs" style={{ color: colors.textSecondary }}>
                                                 disp: {produtoSelecionado.estoque_atual}
                                             </span>
                                         )}
@@ -706,23 +754,21 @@ export default function NovaFaturaNormalPage() {
                                     {/* Preview cálculo */}
                                     {previewItem && (
                                         <div
-                                            className="mt-1.5 px-2 py-1 rounded-lg flex flex-wrap gap-2 text-[10px]"
+                                            className="mt-2 px-3 py-2 rounded-lg flex flex-wrap gap-x-4 gap-y-1 text-sm"
                                             style={{ backgroundColor: colors.hover }}
                                         >
-                                            <span style={{ color: colors.textSecondary }}>
-                                                Base: <span style={{ color: colors.text }}>{formatarPreco(previewItem.base_tributavel)}</span>
-                                            </span>
-                                            <span style={{ color: colors.textSecondary }}>
-                                                IVA: <span style={{ color: colors.text }}>{formatarPreco(previewItem.valor_iva)}</span>
-                                            </span>
-                                            {previewItem.valor_retencao > 0 && (
-                                                <span style={{ color: colors.textSecondary }}>
-                                                    Ret.: <span style={{ color: colors.danger }}>-{formatarPreco(previewItem.valor_retencao)}</span>
+                                            {[
+                                                { label: "Base", val: formatarPreco(previewItem.base_tributavel), clr: colors.text },
+                                                { label: "IVA", val: formatarPreco(previewItem.valor_iva), clr: colors.text },
+                                                ...(previewItem.valor_retencao > 0
+                                                    ? [{ label: "Ret.", val: `-${formatarPreco(previewItem.valor_retencao)}`, clr: colors.danger }]
+                                                    : []),
+                                                { label: "Total", val: formatarPreco(previewItem.subtotal), clr: colors.secondary },
+                                            ].map(({ label, val, clr }) => (
+                                                <span key={label} style={{ color: colors.textSecondary }}>
+                                                    {label}: <strong style={{ color: clr }}>{val}</strong>
                                                 </span>
-                                            )}
-                                            <span style={{ color: colors.textSecondary }}>
-                                                Total: <span style={{ color: colors.secondary }}>{formatarPreco(previewItem.subtotal)}</span>
-                                            </span>
+                                            ))}
                                         </div>
                                     )}
                                 </td>
@@ -730,17 +776,17 @@ export default function NovaFaturaNormalPage() {
 
                             {/* ── Observações ── */}
                             <tr>
-                                <td className="py-2 pl-4 pr-2 align-top w-[80px] sm:w-[100px]" style={{ backgroundColor: colors.hover }}>
+                                <td className="py-3 pl-4 pr-3 align-top" style={{ backgroundColor: colors.hover }}>
                                     <div className="flex items-center gap-1.5">
-                                        <FileText size={13} style={{ color: colors.primary }} />
-                                        <span className="text-[11px] font-semibold" style={{ color: colors.primary }}>Obs.</span>
+                                        <FileText size={16} style={{ color: colors.primary }} />
+                                        <span className="text-sm font-semibold" style={{ color: colors.primary }}>Obs.</span>
                                     </div>
                                 </td>
-                                <td className="py-2 px-3">
+                                <td className="py-3 px-3">
                                     <input
                                         type="text"
                                         placeholder="Observações adicionais (opcional)"
-                                        className="w-full p-1 rounded-lg text-xs"
+                                        className="w-full p-2 rounded-lg text-sm outline-none"
                                         style={inputStyles}
                                         value={observacoes}
                                         onChange={e => setObservacoes(e.target.value)}
@@ -751,103 +797,124 @@ export default function NovaFaturaNormalPage() {
                     </table>
                 </div>
 
-                {/* ══════════════════════════
-                    CARD: Itens + Totais
-                ══════════════════════════ */}
-                {itens.length > 0 && (
+                {/* ══════════════════════════════════════════════════════════════
+                    CARD ÚNICO — Itens + Resumo Fiscal
+                ══════════════════════════════════════════════════════════════ */}
+                {itens.length > 0 ? (
                     <div
                         className="rounded-xl border shadow-sm overflow-hidden"
                         style={{ backgroundColor: colors.card, borderColor: colors.border }}
                     >
-                        <div className="px-3 py-1.5 flex items-center justify-between" style={{ backgroundColor: colors.primary }}>
+                        {/* Header do card */}
+                        <div className="px-4 py-2.5 flex items-center justify-between" style={{ backgroundColor: colors.primary }}>
                             <div className="flex items-center gap-2">
-                                <ShoppingCart size={13} className="text-white" />
-                                <span className="text-white font-semibold text-[11px] uppercase tracking-wide">Itens ({itens.length})</span>
+                                <Receipt size={16} className="text-white" />
+                                <span className="text-white font-semibold text-sm tracking-wide">
+                                    Itens da Fatura
+                                    <span className="ml-1.5 text-white/60 font-normal text-xs">
+                                        ({itens.length} item{itens.length !== 1 ? 's' : ''})
+                                    </span>
+                                </span>
                             </div>
                             <button
                                 onClick={limparCarrinho}
-                                className="text-[10px] text-white/70 hover:text-white transition-colors"
+                                className="text-white/60 hover:text-white text-xs transition-colors"
                             >
-                                Limpar
+                                Limpar tudo
                             </button>
                         </div>
 
+                        {/* Tabela de Itens */}
                         <div className="overflow-x-auto">
-                            <table className="w-full text-[11px]">
-                                <thead>
-                                    <tr className="border-b" style={{ backgroundColor: colors.hover, borderColor: colors.border }}>
-                                        <th className="px-2 py-1.5 text-left font-semibold" style={{ color: colors.textSecondary }}>Produto</th>
-                                        <th className="px-2 py-1.5 text-center font-semibold" style={{ color: colors.textSecondary }}>Qtd</th>
-                                        <th className="px-2 py-1.5 text-right font-semibold hidden xs:table-cell" style={{ color: colors.textSecondary }}>Preço</th>
-                                        <th className="px-2 py-1.5 text-right font-semibold hidden sm:table-cell" style={{ color: colors.textSecondary }}>Base</th>
-                                        <th className="px-2 py-1.5 text-right font-semibold hidden sm:table-cell" style={{ color: colors.textSecondary }}>IVA</th>
-                                        <th className="px-2 py-1.5 text-right font-semibold hidden md:table-cell" style={{ color: colors.textSecondary }}>Ret.</th>
-                                        <th className="px-2 py-1.5 text-right font-semibold" style={{ color: colors.textSecondary }}>Subtotal</th>
-                                        <th className="px-2 py-1.5 w-6" />
+                            <table className="w-full text-sm">
+                                <thead style={{ backgroundColor: colors.hover }}>
+                                    <tr className="border-b" style={{ borderColor: colors.border }}>
+                                        <th className="py-2.5 px-3 text-left font-semibold text-xs" style={{ color: colors.textSecondary }}>Produto</th>
+                                        <th className="py-2.5 px-3 text-center font-semibold text-xs" style={{ color: colors.textSecondary }}>Qtd.</th>
+                                        <th className="py-2.5 px-3 text-right font-semibold text-xs hidden sm:table-cell" style={{ color: colors.textSecondary }}>Preço unit.</th>
+                                        <th className="py-2.5 px-3 text-right font-semibold text-xs hidden md:table-cell" style={{ color: colors.textSecondary }}>IVA</th>
+                                        <th className="py-2.5 px-3 text-right font-semibold text-xs hidden lg:table-cell" style={{ color: colors.textSecondary }}>Ret.</th>
+                                        <th className="py-2.5 px-3 text-right font-semibold text-xs" style={{ color: colors.textSecondary }}>Subtotal</th>
+                                        <th className="py-2.5 px-2 w-8" />
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {itens.map((item) => {
+                                    {itens.map((item, idx) => {
                                         const produto = produtos.find(p => p.id === item.produto_id);
                                         const maxEstoque = produto && !isServico(produto) ? produto.estoque_atual : Infinity;
 
                                         return (
-                                            <tr key={item.id} className="border-b last:border-0" style={{ borderColor: colors.border }}>
-                                                <td className="px-2 py-1.5 font-medium" style={{ color: colors.text }}>
-                                                    <div className="flex items-center gap-1">
-                                                        <span className="truncate max-w-[80px] xs:max-w-[100px] sm:max-w-[120px]">{item.descricao}</span>
+                                            <tr key={item.id}
+                                                className="border-b last:border-0 transition-colors"
+                                                style={{
+                                                    borderColor: colors.border,
+                                                    backgroundColor: idx % 2 !== 0 ? `${colors.hover}60` : 'transparent',
+                                                }}
+                                            >
+                                                <td className="px-3 py-2.5">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="font-medium truncate max-w-[100px] sm:max-w-[160px]"
+                                                            style={{ color: colors.text }}>{item.descricao}</span>
                                                         {produto && isServico(produto) && (
-                                                            <span className="text-[8px] px-1 py-0.5 rounded" style={{ backgroundColor: `${colors.primary}20`, color: colors.primary }}>
+                                                            <span
+                                                                className="text-[10px] px-1.5 py-0.5 rounded font-bold flex-shrink-0"
+                                                                style={{ backgroundColor: `${colors.primary}20`, color: colors.primary }}
+                                                            >
                                                                 S
                                                             </span>
                                                         )}
                                                     </div>
+                                                    {item.desconto > 0 && (
+                                                        <span className="text-[10px]" style={{ color: colors.danger }}>
+                                                            desc. −{formatarPreco(item.desconto)}
+                                                        </span>
+                                                    )}
                                                 </td>
-                                                <td className="px-2 py-1.5 text-center">
+                                                <td className="px-3 py-2.5">
                                                     <div className="flex items-center justify-center gap-0.5">
                                                         <button
                                                             onClick={() => atualizarQuantidadeItem(item.id, item.quantidade - 1)}
-                                                            className="w-4 h-4 rounded flex items-center justify-center disabled:opacity-30"
+                                                            className="w-6 h-6 rounded flex items-center justify-center disabled:opacity-30"
                                                             style={{ backgroundColor: colors.hover, color: colors.primary }}
                                                             disabled={item.quantidade <= 1}
                                                         >
-                                                            <Minus size={8} />
+                                                            <Minus size={12} />
                                                         </button>
-                                                        <span className="w-5 text-center" style={{ color: colors.text }}>{item.quantidade}</span>
+                                                        <span className="w-7 text-center text-sm font-medium"
+                                                            style={{ color: colors.text }}>{item.quantidade}</span>
                                                         <button
                                                             onClick={() => atualizarQuantidadeItem(item.id, item.quantidade + 1)}
-                                                            className="w-4 h-4 rounded flex items-center justify-center disabled:opacity-30"
+                                                            className="w-6 h-6 rounded flex items-center justify-center disabled:opacity-30"
                                                             style={{ backgroundColor: colors.hover, color: colors.primary }}
                                                             disabled={item.quantidade >= maxEstoque}
                                                         >
-                                                            <Plus size={8} />
+                                                            <Plus size={12} />
                                                         </button>
                                                     </div>
                                                 </td>
-                                                <td className="px-2 py-1.5 text-right hidden xs:table-cell" style={{ color: colors.textSecondary }}>
+                                                <td className="px-3 py-2.5 text-right hidden sm:table-cell"
+                                                    style={{ color: colors.textSecondary }}>
                                                     {formatarPreco(item.preco_venda)}
                                                 </td>
-                                                <td className="px-2 py-1.5 text-right hidden sm:table-cell" style={{ color: colors.text }}>
-                                                    {formatarPreco(item.base_tributavel)}
-                                                </td>
-                                                <td className="px-2 py-1.5 text-right hidden sm:table-cell" style={{ color: colors.text }}>
+                                                <td className="px-3 py-2.5 text-right hidden md:table-cell"
+                                                    style={{ color: colors.text }}>
                                                     {formatarPreco(item.valor_iva)}
                                                 </td>
-                                                <td className="px-2 py-1.5 text-right hidden md:table-cell"
-                                                    style={{ color: item.valor_retencao > 0 ? colors.danger : colors.textSecondary }}
-                                                >
-                                                    {item.valor_retencao > 0 ? `-${formatarPreco(item.valor_retencao)}` : '—'}
+                                                <td className="px-3 py-2.5 text-right hidden lg:table-cell"
+                                                    style={{ color: item.valor_retencao > 0 ? colors.danger : colors.textSecondary }}>
+                                                    {item.valor_retencao > 0 ? `−${formatarPreco(item.valor_retencao)}` : '—'}
                                                 </td>
-                                                <td className="px-2 py-1.5 text-right font-bold" style={{ color: colors.secondary }}>
+                                                <td className="px-3 py-2.5 text-right font-bold"
+                                                    style={{ color: colors.secondary }}>
                                                     {formatarPreco(item.subtotal)}
                                                 </td>
-                                                <td className="px-2 py-1.5 text-center">
+                                                <td className="px-2 py-2.5 text-center">
                                                     <button
                                                         onClick={() => removerItem(item.id)}
-                                                        className="p-0.5 hover:opacity-70 transition-opacity"
+                                                        className="p-1 rounded hover:opacity-70 transition-colors"
                                                         style={{ color: colors.danger }}
                                                     >
-                                                        <Trash2 size={11} />
+                                                        <Trash2 size={14} />
                                                     </button>
                                                 </td>
                                             </tr>
@@ -857,51 +924,65 @@ export default function NovaFaturaNormalPage() {
                             </table>
                         </div>
 
-                        {/* Totais no rodapé */}
-                        <div
-                            className="px-3 py-1.5 flex flex-wrap justify-end gap-x-3 gap-y-0.5 border-t text-[10px]"
-                            style={{ backgroundColor: colors.hover, borderColor: colors.border }}
-                        >
-                            <span style={{ color: colors.textSecondary }}>
-                                Base: <span style={{ color: colors.text }}>{formatarPreco(totalBase)}</span>
-                            </span>
-                            <span style={{ color: colors.textSecondary }}>
-                                IVA: <span style={{ color: colors.text }}>{formatarPreco(totalIva)}</span>
-                            </span>
-                            {totalRetencao > 0 && (
-                                <span style={{ color: colors.textSecondary }}>
-                                    Ret.: <span style={{ color: colors.danger }}>-{formatarPreco(totalRetencao)}</span>
-                                </span>
-                            )}
-                            <span style={{ color: colors.textSecondary }}>
-                                Total: <span className="text-xs" style={{ color: colors.secondary }}>{formatarPreco(totalLiquido)}</span>
-                            </span>
+                        {/* ── Secção: Resumo Fiscal (abaixo dos itens) ── */}
+                        <div className="border-t" style={{ borderColor: colors.border }}>
+                            <div className="p-4">
+                                <p className="text-xs font-bold uppercase tracking-wider mb-3"
+                                    style={{ color: colors.textSecondary }}>Resumo Fiscal</p>
+                                <div className="flex flex-col lg:flex-row lg:items-start gap-6">
+                                    <div className="flex-1 max-w-md">
+                                        <LinhaFiscal label="Subtotal bruto" valor={formatarPreco(totalBase + totalDesconto)} colors={colors} />
+                                        {totalDesconto > 0 && (
+                                            <LinhaFiscal label="Descontos" valor={`−${formatarPreco(totalDesconto)}`} cor={colors.danger} colors={colors} />
+                                        )}
+                                        <LinhaFiscal label="Base tributável" valor={formatarPreco(totalBase)} colors={colors} />
+                                        <LinhaFiscal label={`IVA (${itens[0]?.taxa_iva ?? 14}%)`} valor={formatarPreco(totalIva)} colors={colors} />
+                                        {totalRetencao > 0 && (
+                                            <LinhaFiscal label="Retenção (6.5%)" valor={`−${formatarPreco(totalRetencao)}`} cor={colors.danger} colors={colors} />
+                                        )}
+                                        <hr />
+                                        <LinhaFiscal label="Total a pagar" valor={formatarPreco(totalLiquido)}
+                                            cor={colors.secondary} negrito colors={colors} />
+                                    </div>
+                                </div>
+                            </div>
                         </div>
+                    </div>
+                ) : (
+                    /* Estado vazio */
+                    <div
+                        className="text-center py-8 rounded-xl border-2 border-dashed"
+                        style={{ borderColor: colors.border }}
+                    >
+                        <ShoppingCart size={32} className="mx-auto mb-3" style={{ color: colors.border }} />
+                        <p className="text-sm" style={{ color: colors.textSecondary }}>
+                            Adicione produtos para criar a fatura
+                        </p>
                     </div>
                 )}
 
                 {/* ── Botão Finalizar ── */}
-                <button
-                    type="button"
-                    onClick={finalizarVenda}
-                    disabled={loading || !podeFinalizar()}
-                    className="w-full py-2.5 rounded-xl font-bold text-sm text-white shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                    style={{ backgroundColor: colors.secondary }}
-                >
-                    {loading ? (
-                        <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-                            Processando...
-                        </>
-                    ) : itens.length === 0 ? (
-                        "Adicione itens para continuar"
-                    ) : (
-                        <>
-                            <CheckCircle2 size={16} />
-                            Finalizar Fatura
-                        </>
-                    )}
-                </button>
+                {itens.length > 0 && (
+                    <button
+                        type="button"
+                        onClick={finalizarVenda}
+                        disabled={loading || !podeFinalizar()}
+                        className="w-full py-3 rounded-xl font-bold text-base text-white shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ backgroundColor: colors.secondary }}
+                    >
+                        {loading ? (
+                            <>
+                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+                                Processando...
+                            </>
+                        ) : (
+                            <>
+                                <CheckCircle2 size={18} />
+                                Finalizar Fatura
+                            </>
+                        )}
+                    </button>
+                )}
 
             </div>
         </MainEmpresa>

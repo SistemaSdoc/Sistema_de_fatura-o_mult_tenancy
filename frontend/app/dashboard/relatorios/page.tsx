@@ -1,1311 +1,1111 @@
 // src/app/(dashboard)/relatorios/page.tsx
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import MainEmpresa from "../../components/MainEmpresa";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  CartesianGrid,
+  BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell,
+  Legend, ResponsiveContainer, AreaChart, Area, CartesianGrid,
 } from "recharts";
 import {
-  Calendar,
-  TrendingUp,
-  DollarSign,
-  Users,
-  AlertCircle,
-  Filter,
-  Loader2,
-  FileText,
-  CreditCard,
-  Wrench,
-  Percent,
+  TrendingUp, DollarSign, Users, AlertCircle, FileText,
+  Percent, Wrench, RefreshCw, Download, FileSpreadsheet,
+  AlertTriangle, Calendar, Filter, ChevronRight,
 } from "lucide-react";
 import {
   relatoriosService,
-  DashboardGeral,
-  RelatorioVendas,
-  RelatorioFaturacao,
-  RelatorioPagamentosPendentes,
-  RelatorioProformas,
-  RelatorioDocumentosFiscais,
-  getPeriodoLabel,
-  getPeriodoPredefinido,
-  formatarKwanza,
-  formatarData,
+  DashboardGeral, RelatorioVendas, RelatorioFaturacao,
+  RelatorioPagamentosPendentes, RelatorioProformas, RelatorioDocumentosFiscais,
+  getPeriodoLabel, getPeriodoPredefinido, formatarKwanza, formatarData,
 } from "@/services/relatorios";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useThemeColors } from "@/context/ThemeContext";
 import { toast } from "sonner";
 
-type TipoRelatorio =
-  | "dashboard"
-  | "vendas"
-  | "faturacao"
-  | "documentos"
-  | "pagamentos"
-  | "proformas";
-
+/* ═══════════════════════════════════════════════════════════
+   TIPOS
+═══════════════════════════════════════════════════════════ */
+type TipoRelatorio = "dashboard" | "vendas" | "faturacao" | "documentos" | "pagamentos" | "proformas";
 type PeriodoTipo = "hoje" | "ontem" | "este_mes" | "mes_passado" | "este_ano";
+interface PeriodoConfig { tipo: PeriodoTipo; data_inicio: string; data_fim: string; }
 
-interface PeriodoConfig {
-  tipo: PeriodoTipo;
-  data_inicio: string;
-  data_fim: string;
+/* ═══════════════════════════════════════════════════════════
+   EXPORT PDF
+═══════════════════════════════════════════════════════════ */
+async function exportarPDF(tab: TipoRelatorio, dados: any, periodo: string) {
+  const jsPDFModule = await import("jspdf");
+  const jsPDF = jsPDFModule.jsPDF || jsPDFModule.default;
+  // @ts-ignore
+  const autoTableModule = await import("jspdf-autotable");
+  const autoTableFn = autoTableModule.default;
+
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  if (typeof (doc as any).autoTable !== "function" && typeof autoTableFn === "function") {
+    (doc as any).autoTable = function(...args: any[]) { return autoTableFn(this, ...args); };
+  }
+
+  const pw = doc.internal.pageSize.getWidth();
+  const P  = [18,  56,  89]  as [number, number, number];
+  const A  = [249, 148, 31]  as [number, number, number];
+  const GR = [100, 100, 100] as [number, number, number];
+  const LG = [230, 230, 230] as [number, number, number];
+  const WH = [255, 255, 255] as [number, number, number];
+  const ST = [245, 247, 250] as [number, number, number];
+
+  const autoT = (opts: any) => { if (typeof (doc as any).autoTable === "function") (doc as any).autoTable(opts); };
+  const lastY = () => ((doc as any).lastAutoTable?.finalY ?? 0) + 8;
+
+  const titulos: Record<TipoRelatorio, string> = {
+    dashboard: "DASHBOARD GERAL", vendas: "RELATÓRIO DE VENDAS",
+    faturacao: "RELATÓRIO DE FATURAÇÃO", documentos: "DOCUMENTOS FISCAIS",
+    pagamentos: "PAGAMENTOS PENDENTES", proformas: "RELATÓRIO DE PROFORMAS",
+  };
+
+  // Cabeçalho
+  doc.setFillColor(...P); doc.rect(0, 0, pw, 22, "F");
+  doc.setFillColor(...A); doc.rect(0, 22, pw, 2, "F");
+  doc.setTextColor(...WH); doc.setFont("helvetica", "bold"); doc.setFontSize(14);
+  doc.text(titulos[tab], 14, 14);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
+  doc.text(`Gerado: ${new Date().toLocaleDateString("pt-PT")}  •  Período: ${periodo}`, pw - 14, 14, { align: "right" });
+
+  let y = 32;
+
+  // Conteúdo por tab
+  if (tab === "dashboard" && dados) {
+    const kpis = [
+      ["Vendas do Mês",     formatarKwanza(dados.vendas?.valor_mes ?? 0)],
+      ["Total Faturado",    formatarKwanza(dados.documentos_fiscais?.total_faturado ?? 0)],
+      ["Retenções Mês",     formatarKwanza(dados.documentos_fiscais?.total_retencao_mes ?? 0)],
+      ["Clientes",          String(dados.clientes?.total ?? 0)],
+      ["Serviços Ativos",   String(dados.servicos?.ativos ?? 0)],
+      ["Alertas Stock",     String((dados.produtos?.estoque_baixo ?? 0) + (dados.produtos?.sem_estoque ?? 0))],
+    ];
+    const cw = (pw - 28) / 3;
+    kpis.forEach(([lbl, val], i) => {
+      const col = i % 3; const row = Math.floor(i / 3);
+      const x = 14 + col * cw; const ky = y + row * 20;
+      doc.setFillColor(...LG); doc.roundedRect(x, ky, cw - 3, 16, 1.5, 1.5, "F");
+      doc.setFontSize(6.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...GR);
+      doc.text(lbl, x + (cw - 3) / 2, ky + 5, { align: "center" });
+      doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...P);
+      doc.text(val, x + (cw - 3) / 2, ky + 12, { align: "center" });
+    });
+    y += 46;
+
+    if (dados.alertas) {
+      const al = dados.alertas;
+      const rows = [
+        ["Documentos Vencidos", String(al.documentos_vencidos ?? 0)],
+        ["Proformas Antigas",   String(al.proformas_antigas ?? 0)],
+        ["Retenções Pendentes", String(al.servicos_com_retencao_pendente ?? 0)],
+      ];
+      autoT({ startY: y, head: [["Alerta", "Quantidade"]], body: rows,
+        theme: "grid", headStyles: { fillColor: P, fontSize: 7.5, fontStyle: "bold" },
+        bodyStyles: { fontSize: 7.5 }, alternateRowStyles: { fillColor: ST },
+        columnStyles: { 1: { halign: "center" } }, margin: { left: 14, right: 14 } });
+      y = lastY();
+    }
+  }
+
+  if (tab === "vendas" && dados) {
+    const totais = dados.totais ?? {};
+    const kpis = [
+      ["Total Vendas", formatarKwanza(totais.total_valor ?? 0)],
+      ["Base Tributável", formatarKwanza(totais.total_base_tributavel ?? 0)],
+      ["Total IVA", formatarKwanza(totais.total_iva ?? 0)],
+      ["Retenções", formatarKwanza(totais.total_retencao ?? 0)],
+    ];
+    const cw = (pw - 28) / 4;
+    kpis.forEach(([lbl, val], i) => {
+      const x = 14 + i * cw;
+      doc.setFillColor(...LG); doc.roundedRect(x, y, cw - 3, 16, 1.5, 1.5, "F");
+      doc.setFontSize(6.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...GR);
+      doc.text(lbl, x + (cw - 3) / 2, y + 5, { align: "center" });
+      doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...P);
+      doc.text(val, x + (cw - 3) / 2, y + 12, { align: "center" });
+    });
+    y += 24;
+    if (dados.vendas?.length > 0) {
+      autoT({ startY: y, head: [["Cliente", "Total", "Status"]],
+        body: dados.vendas.slice(0, 50).map((v: any) => [
+          typeof v.cliente === "string" ? v.cliente : v.cliente?.nome ?? "-",
+          formatarKwanza(Number(v.total) ?? 0),
+          v.estado_pagamento ?? "-",
+        ]),
+        theme: "grid", headStyles: { fillColor: P, fontSize: 7.5, fontStyle: "bold" },
+        bodyStyles: { fontSize: 7.5 }, alternateRowStyles: { fillColor: ST },
+        columnStyles: { 1: { halign: "right" }, 2: { halign: "center" } }, margin: { left: 14, right: 14 } });
+    }
+  }
+
+  if (tab === "faturacao" && dados) {
+    const kpis = [
+      ["Faturação Total", formatarKwanza(dados.faturacao_total ?? 0)],
+      ["Faturação Paga",  formatarKwanza(dados.faturacao_paga ?? 0)],
+      ["Pendente",        formatarKwanza(dados.faturacao_pendente ?? 0)],
+    ];
+    const cw = (pw - 28) / 3;
+    kpis.forEach(([lbl, val], i) => {
+      const x = 14 + i * cw;
+      doc.setFillColor(...LG); doc.roundedRect(x, y, cw - 3, 16, 1.5, 1.5, "F");
+      doc.setFontSize(6.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...GR);
+      doc.text(lbl, x + (cw - 3) / 2, y + 5, { align: "center" });
+      doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...P);
+      doc.text(val, x + (cw - 3) / 2, y + 12, { align: "center" });
+    });
+    y += 24;
+    if (dados.por_tipo) {
+      const rows = Object.entries(dados.por_tipo).map(([tipo, d]: any) => [
+        tipo, String(d?.quantidade ?? 0), formatarKwanza(d?.total_liquido ?? 0),
+      ]);
+      if (rows.length > 0) {
+        autoT({ startY: y, head: [["Tipo", "Quantidade", "Valor"]], body: rows,
+          theme: "grid", headStyles: { fillColor: P, fontSize: 7.5, fontStyle: "bold" },
+          bodyStyles: { fontSize: 7.5 }, alternateRowStyles: { fillColor: ST },
+          columnStyles: { 1: { halign: "center" }, 2: { halign: "right" } }, margin: { left: 14, right: 14 } });
+      }
+    }
+  }
+
+  if (tab === "pagamentos" && dados) {
+    const resumo = dados.resumo ?? {};
+    const kpis = [
+      ["Total Pendente", formatarKwanza(resumo.total_pendente ?? 0)],
+      ["Total Atrasado", formatarKwanza(resumo.total_atrasado ?? 0)],
+      ["Faturas Pend.",  String(resumo.quantidade_faturas ?? 0)],
+      ["Ret. Pendente",  formatarKwanza(resumo.retencao_pendente ?? 0)],
+    ];
+    const cw = (pw - 28) / 4;
+    kpis.forEach(([lbl, val], i) => {
+      const x = 14 + i * cw;
+      doc.setFillColor(...LG); doc.roundedRect(x, y, cw - 3, 16, 1.5, 1.5, "F");
+      doc.setFontSize(6.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...GR);
+      doc.text(lbl, x + (cw - 3) / 2, y + 5, { align: "center" });
+      doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...P);
+      doc.text(val, x + (cw - 3) / 2, y + 12, { align: "center" });
+    });
+    y += 24;
+    if (dados.faturas_pendentes?.length > 0) {
+      autoT({ startY: y, head: [["Documento", "Cliente", "Pendente", "Dias Atraso"]],
+        body: dados.faturas_pendentes.slice(0, 50).map((f: any) => [
+          f.numero_documento ?? "-",
+          typeof f.cliente === "string" ? f.cliente : f.cliente?.nome ?? "-",
+          formatarKwanza(Number(f.valor_pendente) ?? 0),
+          (f.dias_atraso ?? 0) > 0 ? `${f.dias_atraso} dias` : "Em dia",
+        ]),
+        theme: "grid", headStyles: { fillColor: P, fontSize: 7.5, fontStyle: "bold" },
+        bodyStyles: { fontSize: 7.5 }, alternateRowStyles: { fillColor: ST },
+        columnStyles: { 2: { halign: "right" }, 3: { halign: "center" } }, margin: { left: 14, right: 14 } });
+    }
+  }
+
+  if (tab === "proformas" && dados) {
+    doc.setFillColor(...LG); doc.roundedRect(14, y, 80, 16, 1.5, 1.5, "F");
+    doc.setFontSize(6.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...GR);
+    doc.text("Total Proformas", 54, y + 5, { align: "center" });
+    doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...P);
+    doc.text(String(dados.total ?? 0), 54, y + 12, { align: "center" });
+    doc.setFillColor(...LG); doc.roundedRect(100, y, 80, 16, 1.5, 1.5, "F");
+    doc.text("Valor Total", 140, y + 5, { align: "center" });
+    doc.setFontSize(9); doc.text(formatarKwanza(dados.valor_total ?? 0), 140, y + 12, { align: "center" });
+    y += 24;
+    if (dados.proformas?.length > 0) {
+      autoT({ startY: y, head: [["Nº Doc.", "Cliente", "Data", "Valor", "Estado"]],
+        body: dados.proformas.slice(0, 30).map((p: any) => [
+          p.numero_documento ?? "-",
+          typeof p.cliente === "string" ? p.cliente : p.cliente?.nome ?? "-",
+          formatarData(p.data_emissao),
+          formatarKwanza(Number(p.total_liquido) ?? 0),
+          p.estado ?? "-",
+        ]),
+        theme: "grid", headStyles: { fillColor: P, fontSize: 7.5, fontStyle: "bold" },
+        bodyStyles: { fontSize: 7.5 }, alternateRowStyles: { fillColor: ST },
+        columnStyles: { 3: { halign: "right" }, 4: { halign: "center" } }, margin: { left: 14, right: 14 } });
+    }
+  }
+
+  if (tab === "documentos" && dados) {
+    const est = dados.estatisticas ?? {};
+    const kpis = [
+      ["Total Docs", String(est.total_documentos ?? 0)],
+      ["Valor Total", formatarKwanza(est.total_valor ?? 0)],
+      ["Total IVA", formatarKwanza(est.total_iva ?? 0)],
+      ["Retenções", formatarKwanza(est.total_retencao ?? 0)],
+    ];
+    const cw = (pw - 28) / 4;
+    kpis.forEach(([lbl, val], i) => {
+      const x = 14 + i * cw;
+      doc.setFillColor(...LG); doc.roundedRect(x, y, cw - 3, 16, 1.5, 1.5, "F");
+      doc.setFontSize(6.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...GR);
+      doc.text(lbl, x + (cw - 3) / 2, y + 5, { align: "center" });
+      doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...P);
+      doc.text(val, x + (cw - 3) / 2, y + 12, { align: "center" });
+    });
+    y += 24;
+    if (est.por_tipo) {
+      const rows = Object.entries(est.por_tipo).map(([tipo, d]: any) => [
+        tipo, String(d?.quantidade ?? 0), formatarKwanza(d?.valor ?? 0), formatarKwanza(d?.retencao ?? 0),
+      ]);
+      if (rows.length > 0) {
+        autoT({ startY: y, head: [["Tipo", "Quantidade", "Valor", "Retenção"]], body: rows,
+          theme: "grid", headStyles: { fillColor: P, fontSize: 7.5, fontStyle: "bold" },
+          bodyStyles: { fontSize: 7.5 }, alternateRowStyles: { fillColor: ST },
+          columnStyles: { 1: { halign: "center" }, 2: { halign: "right" }, 3: { halign: "right" } },
+          margin: { left: 14, right: 14 } });
+      }
+    }
+  }
+
+  // Rodapé em todas as páginas
+  const total = (doc as any).internal.pages.length - 1;
+  for (let i = 1; i <= total; i++) {
+    doc.setPage(i);
+    doc.setFillColor(...P); doc.rect(0, doc.internal.pageSize.getHeight() - 8, pw, 8, "F");
+    doc.setTextColor(...WH); doc.setFontSize(6.5); doc.setFont("helvetica", "normal");
+    doc.text("FacturaJá — Sistema de Faturação", 14, doc.internal.pageSize.getHeight() - 3);
+    doc.text(`${i} / ${total}`, pw - 14, doc.internal.pageSize.getHeight() - 3, { align: "right" });
+  }
+
+  doc.save(`relatorio_${tab}_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
-const CORES_GRAFICO = [
-  "#123859",
-  "#F9941F",
-  "#22c55e",
-  "#ef4444",
-  "#8b5cf6",
-  "#06b6d4",
-];
+/* ═══════════════════════════════════════════════════════════
+   EXPORT EXCEL
+═══════════════════════════════════════════════════════════ */
+async function exportarExcel(tab: TipoRelatorio, dados: any, periodo: string) {
+  const XLSX = await import("xlsx");
 
+  const wb = XLSX.utils.book_new();
+
+  const addSheet = (nome: string, rows: any[][]) => {
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, nome.slice(0, 31));
+  };
+
+  const header = [`Período: ${periodo}`, `Gerado: ${new Date().toLocaleDateString("pt-PT")}`];
+
+  if (tab === "dashboard" && dados) {
+    addSheet("Dashboard", [
+      header, [],
+      ["Indicador", "Valor"],
+      ["Vendas do Mês", formatarKwanza(dados.vendas?.valor_mes ?? 0)],
+      ["Total Faturado", formatarKwanza(dados.documentos_fiscais?.total_faturado ?? 0)],
+      ["Retenções Mês", formatarKwanza(dados.documentos_fiscais?.total_retencao_mes ?? 0)],
+      ["Total Clientes", dados.clientes?.total ?? 0],
+      ["Serviços Ativos", dados.servicos?.ativos ?? 0],
+      [], ["Alertas", "Qtd."],
+      ["Documentos Vencidos", dados.alertas?.documentos_vencidos ?? 0],
+      ["Proformas Antigas", dados.alertas?.proformas_antigas ?? 0],
+      ["Retenções Pendentes", dados.alertas?.servicos_com_retencao_pendente ?? 0],
+    ]);
+  }
+
+  if (tab === "vendas" && dados) {
+    const totais = dados.totais ?? {};
+    addSheet("Resumo", [
+      header, [],
+      ["Métrica", "Valor"],
+      ["Total Vendas", formatarKwanza(totais.total_valor ?? 0)],
+      ["Base Tributável", formatarKwanza(totais.total_base_tributavel ?? 0)],
+      ["Total IVA", formatarKwanza(totais.total_iva ?? 0)],
+      ["Retenções", formatarKwanza(totais.total_retencao ?? 0)],
+      ["Nº Vendas", totais.total_vendas ?? 0],
+    ]);
+    if (dados.vendas?.length > 0) {
+      addSheet("Vendas", [
+        ["Cliente", "Total", "Status"],
+        ...dados.vendas.map((v: any) => [
+          typeof v.cliente === "string" ? v.cliente : v.cliente?.nome ?? "-",
+          Number(v.total) ?? 0,
+          v.estado_pagamento ?? "-",
+        ]),
+      ]);
+    }
+  }
+
+  if (tab === "faturacao" && dados) {
+    addSheet("Faturação", [
+      header, [],
+      ["Métrica", "Valor"],
+      ["Total", formatarKwanza(dados.faturacao_total ?? 0)],
+      ["Paga", formatarKwanza(dados.faturacao_paga ?? 0)],
+      ["Pendente", formatarKwanza(dados.faturacao_pendente ?? 0)],
+    ]);
+    if (dados.por_tipo) {
+      addSheet("Por Tipo", [
+        ["Tipo", "Quantidade", "Valor"],
+        ...Object.entries(dados.por_tipo).map(([tipo, d]: any) => [
+          tipo, d?.quantidade ?? 0, d?.total_liquido ?? 0,
+        ]),
+      ]);
+    }
+  }
+
+  if (tab === "pagamentos" && dados) {
+    const resumo = dados.resumo ?? {};
+    addSheet("Resumo", [
+      header, [],
+      ["Total Pendente", formatarKwanza(resumo.total_pendente ?? 0)],
+      ["Total Atrasado", formatarKwanza(resumo.total_atrasado ?? 0)],
+      ["Faturas Pendentes", resumo.quantidade_faturas ?? 0],
+      ["Retenção Pendente", formatarKwanza(resumo.retencao_pendente ?? 0)],
+    ]);
+    if (dados.faturas_pendentes?.length > 0) {
+      addSheet("Faturas Pendentes", [
+        ["Documento", "Cliente", "Pendente", "Dias Atraso"],
+        ...dados.faturas_pendentes.map((f: any) => [
+          f.numero_documento ?? "-",
+          typeof f.cliente === "string" ? f.cliente : f.cliente?.nome ?? "-",
+          Number(f.valor_pendente) ?? 0,
+          f.dias_atraso ?? 0,
+        ]),
+      ]);
+    }
+  }
+
+  if (tab === "proformas" && dados) {
+    addSheet("Proformas", [
+      header, [],
+      ["Total de Proformas", dados.total ?? 0],
+      ["Valor Total", formatarKwanza(dados.valor_total ?? 0)],
+      [],
+      ["Nº Doc.", "Cliente", "Data", "Valor", "Estado"],
+      ...(dados.proformas ?? []).map((p: any) => [
+        p.numero_documento ?? "-",
+        typeof p.cliente === "string" ? p.cliente : p.cliente?.nome ?? "-",
+        formatarData(p.data_emissao),
+        Number(p.total_liquido) ?? 0,
+        p.estado ?? "-",
+      ]),
+    ]);
+  }
+
+  if (tab === "documentos" && dados) {
+    const est = dados.estatisticas ?? {};
+    addSheet("Resumo", [
+      header, [],
+      ["Total Documentos", est.total_documentos ?? 0],
+      ["Valor Total", formatarKwanza(est.total_valor ?? 0)],
+      ["Total IVA", formatarKwanza(est.total_iva ?? 0)],
+      ["Retenções", formatarKwanza(est.total_retencao ?? 0)],
+    ]);
+    if (est.por_tipo) {
+      addSheet("Por Tipo", [
+        ["Tipo", "Quantidade", "Valor", "Retenção"],
+        ...Object.entries(est.por_tipo).map(([tipo, d]: any) => [
+          tipo, d?.quantidade ?? 0, d?.valor ?? 0, d?.retencao ?? 0,
+        ]),
+      ]);
+    }
+  }
+
+  XLSX.writeFile(wb, `relatorio_${tab}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PÁGINA PRINCIPAL
+═══════════════════════════════════════════════════════════ */
 export default function RelatoriosPage() {
-  // Estados de período
-  const [periodoVendas, setPeriodoVendas] = useState<PeriodoConfig>(
-    getPeriodoPredefinido("este_mes")
-  );
-  const [periodoFaturacao, setPeriodoFaturacao] = useState<PeriodoConfig>(
-    getPeriodoPredefinido("este_mes")
-  );
-  const [periodoDocumentos, setPeriodoDocumentos] = useState<PeriodoConfig>(
-    getPeriodoPredefinido("este_mes")
-  );
+  const colors = useThemeColors();
 
-  // Estados de dados
-  const [dashboard, setDashboard] = useState<DashboardGeral | null>(null);
-  const [relatorioVendas, setRelatorioVendas] =
-    useState<RelatorioVendas | null>(null);
-  const [relatorioFaturacao, setRelatorioFaturacao] =
-    useState<RelatorioFaturacao | null>(null);
-  const [relatorioPagamentos, setRelatorioPagamentos] =
-    useState<RelatorioPagamentosPendentes | null>(null);
-  const [relatorioProformas, setRelatorioProformas] =
-    useState<RelatorioProformas | null>(null);
-  const [relatorioDocumentos, setRelatorioDocumentos] =
-    useState<RelatorioDocumentosFiscais | null>(null);
+  const [periodoVendas,    setPeriodoVendas]    = useState<PeriodoConfig>(getPeriodoPredefinido("este_mes"));
+  const [periodoFaturacao, setPeriodoFaturacao] = useState<PeriodoConfig>(getPeriodoPredefinido("este_mes"));
+  const [periodoDocumentos, setPeriodoDocumentos] = useState<PeriodoConfig>(getPeriodoPredefinido("este_mes"));
+
+  const [dashboard,          setDashboard]          = useState<DashboardGeral | null>(null);
+  const [relatorioVendas,    setRelatorioVendas]    = useState<RelatorioVendas | null>(null);
+  const [relatorioFaturacao, setRelatorioFaturacao] = useState<RelatorioFaturacao | null>(null);
+  const [relatorioPagamentos, setRelatorioPagamentos] = useState<RelatorioPagamentosPendentes | null>(null);
+  const [relatorioProformas, setRelatorioProformas] = useState<RelatorioProformas | null>(null);
+  const [relatorioDocumentos, setRelatorioDocumentos] = useState<RelatorioDocumentosFiscais | null>(null);
 
   const [loading, setLoading] = useState<Record<TipoRelatorio, boolean>>({
-    dashboard: false,
-    vendas: false,
-    faturacao: false,
-    pagamentos: false,
-    proformas: false,
-    documentos: false,
+    dashboard: false, vendas: false, faturacao: false,
+    pagamentos: false, proformas: false, documentos: false,
   });
-
+  const [exportLoading, setExportLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<TipoRelatorio>("dashboard");
 
-  // Carregar dashboard inicial
-  useEffect(() => {
-    carregarDashboard();
-    carregarPagamentosPendentes();
+  /* ── Loaders ────────────────────────────────────────────── */
+  const carregarDashboard = useCallback(async () => {
+    setLoading(p => ({ ...p, dashboard: true }));
+    try { setDashboard(await relatoriosService.getDashboard()); }
+    catch { toast.error("Erro ao carregar dashboard"); }
+    finally { setLoading(p => ({ ...p, dashboard: false })); }
   }, []);
 
-  // Carregar dados quando mudar aba ou período
+  const carregarVendas = useCallback(async () => {
+    setLoading(p => ({ ...p, vendas: true }));
+    try { setRelatorioVendas(await relatoriosService.getRelatorioVendas({ data_inicio: periodoVendas.data_inicio, data_fim: periodoVendas.data_fim })); }
+    catch { toast.error("Erro ao carregar vendas"); }
+    finally { setLoading(p => ({ ...p, vendas: false })); }
+  }, [periodoVendas]);
+
+  const carregarFaturacao = useCallback(async () => {
+    setLoading(p => ({ ...p, faturacao: true }));
+    try { setRelatorioFaturacao(await relatoriosService.getRelatorioFaturacao({ data_inicio: periodoFaturacao.data_inicio, data_fim: periodoFaturacao.data_fim })); }
+    catch { toast.error("Erro ao carregar faturação"); }
+    finally { setLoading(p => ({ ...p, faturacao: false })); }
+  }, [periodoFaturacao]);
+
+  const carregarPagamentos = useCallback(async () => {
+    setLoading(p => ({ ...p, pagamentos: true }));
+    try { setRelatorioPagamentos(await relatoriosService.getRelatorioPagamentosPendentes()); }
+    catch { toast.error("Erro ao carregar pagamentos"); }
+    finally { setLoading(p => ({ ...p, pagamentos: false })); }
+  }, []);
+
+  const carregarProformas = useCallback(async () => {
+    setLoading(p => ({ ...p, proformas: true }));
+    try { setRelatorioProformas(await relatoriosService.getRelatorioProformas({ data_inicio: periodoFaturacao.data_inicio, data_fim: periodoFaturacao.data_fim })); }
+    catch { toast.error("Erro ao carregar proformas"); }
+    finally { setLoading(p => ({ ...p, proformas: false })); }
+  }, [periodoFaturacao]);
+
+  const carregarDocumentos = useCallback(async () => {
+    setLoading(p => ({ ...p, documentos: true }));
+    try { setRelatorioDocumentos(await relatoriosService.getRelatorioDocumentosFiscais({ data_inicio: periodoDocumentos.data_inicio, data_fim: periodoDocumentos.data_fim })); }
+    catch { toast.error("Erro ao carregar documentos"); }
+    finally { setLoading(p => ({ ...p, documentos: false })); }
+  }, [periodoDocumentos]);
+
+  useEffect(() => { carregarDashboard(); carregarPagamentos(); }, []);
+
   useEffect(() => {
     switch (activeTab) {
-      case "vendas":
-        carregarVendas();
-        break;
-      case "faturacao":
-        carregarFaturacao();
-        break;
-      case "documentos":
-        carregarDocumentos();
-        break;
-      case "proformas":
-        carregarProformas();
-        break;
+      case "vendas":     carregarVendas();     break;
+      case "faturacao":  carregarFaturacao();  break;
+      case "documentos": carregarDocumentos(); break;
+      case "proformas":  carregarProformas();  break;
     }
   }, [activeTab, periodoVendas, periodoFaturacao, periodoDocumentos]);
 
-  const carregarDashboard = async () => {
-    setLoading((prev) => ({ ...prev, dashboard: true }));
-    try {
-      const data = await relatoriosService.getDashboard();
-      setDashboard(data);
-    } catch (error) {
-      toast.error("Erro ao carregar dashboard");
-    } finally {
-      setLoading((prev) => ({ ...prev, dashboard: false }));
+  /* ── Período ────────────────────────────────────────────── */
+  const setPeriodo = (tipo: PeriodoTipo, rel: "vendas" | "faturacao" | "documentos") => {
+    const p = { ...getPeriodoPredefinido(tipo), tipo };
+    if (rel === "vendas") setPeriodoVendas(p);
+    else if (rel === "faturacao") setPeriodoFaturacao(p);
+    else setPeriodoDocumentos(p);
+  };
+
+  /* ── Exportar ───────────────────────────────────────────── */
+  const getDadosAtivos = () => {
+    switch (activeTab) {
+      case "dashboard":  return dashboard;
+      case "vendas":     return relatorioVendas;
+      case "faturacao":  return relatorioFaturacao;
+      case "pagamentos": return relatorioPagamentos;
+      case "proformas":  return relatorioProformas;
+      case "documentos": return relatorioDocumentos;
+    }
+  };
+  const getPeriodoAtivo = () => {
+    if (activeTab === "vendas")     return `${periodoVendas.data_inicio} a ${periodoVendas.data_fim}`;
+    if (activeTab === "faturacao")  return `${periodoFaturacao.data_inicio} a ${periodoFaturacao.data_fim}`;
+    if (activeTab === "documentos") return `${periodoDocumentos.data_inicio} a ${periodoDocumentos.data_fim}`;
+    return new Date().toLocaleDateString("pt-PT");
+  };
+
+  const handleExportPDF = async () => {
+    const dados = getDadosAtivos();
+    if (!dados) { toast.error("Sem dados para exportar"); return; }
+    setExportLoading(true);
+    try { await exportarPDF(activeTab, dados, getPeriodoAtivo()); toast.success("PDF exportado"); }
+    catch { toast.error("Erro ao exportar PDF"); }
+    finally { setExportLoading(false); }
+  };
+
+  const handleExportExcel = async () => {
+    const dados = getDadosAtivos();
+    if (!dados) { toast.error("Sem dados para exportar"); return; }
+    setExportLoading(true);
+    try { await exportarExcel(activeTab, dados, getPeriodoAtivo()); toast.success("Excel exportado"); }
+    catch { toast.error("Erro ao exportar Excel"); }
+    finally { setExportLoading(false); }
+  };
+
+  /* ── Atualizar tab ──────────────────────────────────────── */
+  const handleAtualizar = () => {
+    switch (activeTab) {
+      case "dashboard":  carregarDashboard(); break;
+      case "vendas":     carregarVendas();    break;
+      case "faturacao":  carregarFaturacao(); break;
+      case "pagamentos": carregarPagamentos(); break;
+      case "proformas":  carregarProformas(); break;
+      case "documentos": carregarDocumentos(); break;
     }
   };
 
-  const carregarVendas = async () => {
-    setLoading((prev) => ({ ...prev, vendas: true }));
-    try {
-      const data = await relatoriosService.getRelatorioVendas({
-        data_inicio: periodoVendas.data_inicio,
-        data_fim: periodoVendas.data_fim,
-      });
-      setRelatorioVendas(data);
-    } catch (error) {
-      toast.error("Erro ao carregar relatório de vendas");
-    } finally {
-      setLoading((prev) => ({ ...prev, vendas: false }));
-    }
-  };
-
-  const carregarFaturacao = async () => {
-    setLoading((prev) => ({ ...prev, faturacao: true }));
-    try {
-      const data = await relatoriosService.getRelatorioFaturacao({
-        data_inicio: periodoFaturacao.data_inicio,
-        data_fim: periodoFaturacao.data_fim,
-      });
-      setRelatorioFaturacao(data);
-    } catch (error) {
-      toast.error("Erro ao carregar relatório de faturação");
-    } finally {
-      setLoading((prev) => ({ ...prev, faturacao: false }));
-    }
-  };
-
-  const carregarPagamentosPendentes = async () => {
-    setLoading((prev) => ({ ...prev, pagamentos: true }));
-    try {
-      const data = await relatoriosService.getRelatorioPagamentosPendentes();
-      setRelatorioPagamentos(data);
-    } catch (error) {
-      toast.error("Erro ao carregar pagamentos pendentes");
-    } finally {
-      setLoading((prev) => ({ ...prev, pagamentos: false }));
-    }
-  };
-
-  const carregarProformas = async () => {
-    setLoading((prev) => ({ ...prev, proformas: true }));
-    try {
-      const data = await relatoriosService.getRelatorioProformas({
-        data_inicio: periodoFaturacao.data_inicio,
-        data_fim: periodoFaturacao.data_fim,
-      });
-      setRelatorioProformas(data);
-    } catch (error) {
-      toast.error("Erro ao carregar relatório de proformas");
-    } finally {
-      setLoading((prev) => ({ ...prev, proformas: false }));
-    }
-  };
-
-  const carregarDocumentos = async () => {
-    setLoading((prev) => ({ ...prev, documentos: true }));
-    try {
-      const data = await relatoriosService.getRelatorioDocumentosFiscais({
-        data_inicio: periodoDocumentos.data_inicio,
-        data_fim: periodoDocumentos.data_fim,
-      });
-      setRelatorioDocumentos(data);
-    } catch (error) {
-      toast.error("Erro ao carregar documentos fiscais");
-    } finally {
-      setLoading((prev) => ({ ...prev, documentos: false }));
-    }
-  };
-
-  // Handlers de período
-  const handlePeriodoChange = (
-    tipo: PeriodoTipo,
-    relatorio: "vendas" | "faturacao" | "documentos" | "proformas"
-  ) => {
-    const novoPeriodo = getPeriodoPredefinido(tipo);
-    const periodoAtualizado = { ...novoPeriodo, tipo };
-
-    switch (relatorio) {
-      case "vendas":
-        setPeriodoVendas(periodoAtualizado);
-        break;
-      case "faturacao":
-        setPeriodoFaturacao(periodoAtualizado);
-        break;
-      case "documentos":
-        setPeriodoDocumentos(periodoAtualizado);
-        break;
-      case "proformas":
-        setPeriodoFaturacao(periodoAtualizado);
-        break;
-    }
-  };
-
-  // Dados processados para gráficos
-  const dadosVendasPorStatus = useMemo(() => {
+  /* ── Dados para gráficos ────────────────────────────────── */
+  const dadosVendasPie = useMemo(() => {
     if (!relatorioVendas?.totais) return [];
     return [
-      {
-        name: "Vendas",
-        value: relatorioVendas.totais.total_vendas || 0,
-        color: "#123859",
-      },
-      {
-        name: "Retenções",
-        value: relatorioVendas.totais.total_retencao || 0,
-        color: "#F9941F",
-      },
-    ].filter((item) => item.value > 0);
-  }, [relatorioVendas]);
+      { name: "Vendas",    value: relatorioVendas.totais.total_vendas  || 0, color: colors.primary   },
+      { name: "Retenções", value: relatorioVendas.totais.total_retencao || 0, color: colors.secondary },
+    ].filter(d => d.value > 0);
+  }, [relatorioVendas, colors]);
 
-  const dadosFaturacaoPorStatus = useMemo(() => {
+  const dadosFaturacaoPie = useMemo(() => {
     if (!relatorioFaturacao) return [];
     return [
-      {
-        name: "Paga",
-        value: relatorioFaturacao.faturacao_paga || 0,
-        color: "#22c55e",
-      },
-      {
-        name: "Pendente",
-        value: relatorioFaturacao.faturacao_pendente || 0,
-        color: "#F9941F",
-      },
-    ].filter((item) => item.value > 0);
-  }, [relatorioFaturacao]);
+      { name: "Paga",     value: relatorioFaturacao.faturacao_paga     || 0, color: colors.success },
+      { name: "Pendente", value: relatorioFaturacao.faturacao_pendente || 0, color: colors.warning },
+    ].filter(d => d.value > 0);
+  }, [relatorioFaturacao, colors]);
 
-  const dadosPagamentosPorTipo = useMemo(() => {
-    if (!relatorioPagamentos?.resumo) return [];
-    return [
-      {
-        name: "Faturas",
-        value: relatorioPagamentos.resumo.quantidade_faturas || 0,
-        color: "#123859",
-      },
-      {
-        name: "Adiantamentos",
-        value: relatorioPagamentos.resumo.quantidade_adiantamentos || 0,
-        color: "#F9941F",
-      },
-    ].filter((item) => item.value > 0);
-  }, [relatorioPagamentos]);
+  /* ── Estilos comuns ─────────────────────────────────────── */
+  const inp = {
+    backgroundColor: colors.hover,
+    border: `1px solid ${colors.border}`,
+    color: colors.text,
+  };
 
+  const TABS: { id: TipoRelatorio; label: string }[] = [
+    { id: "dashboard",  label: "Dashboard"  },
+    { id: "vendas",     label: "Vendas"     },
+    { id: "faturacao",  label: "Faturação"  },
+    { id: "documentos", label: "Documentos" },
+    { id: "pagamentos", label: "Pagamentos" },
+    { id: "proformas",  label: "Proformas"  },
+  ];
+
+  const isLoading = loading[activeTab];
+
+  /* ══════════════════════════════════════════════════════════
+     RENDER
+  ══════════════════════════════════════════════════════════ */
   return (
     <MainEmpresa>
-      <div className="p-6 space-y-6">
-        {/* HEADER */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="p-3 sm:p-5 space-y-4" style={{ color: colors.text }}>
+
+        {/* ── Cabeçalho ── */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-[#123859]">
-              Relatórios e Análises
-            </h1>
-            <p className="text-slate-500 mt-1">
-              Visualize indicadores e relatórios detalhados do seu negócio
+            <h1 className="text-xl font-bold" style={{ color: colors.primary }}>Relatórios e Análises</h1>
+            <p className="text-sm mt-0.5" style={{ color: colors.textSecondary }}>
+              Indicadores e relatórios detalhados do seu negócio
             </p>
+          </div>
+
+          {/* Botões de acção */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button onClick={handleAtualizar} disabled={isLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors disabled:opacity-40"
+              style={inp}>
+              <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
+              <span className="hidden sm:inline">Atualizar</span>
+            </button>
+            <button onClick={handleExportExcel} disabled={exportLoading || !getDadosAtivos()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-white transition-all disabled:opacity-40"
+              style={{ backgroundColor: "#16a34a" }}>
+              <FileSpreadsheet size={14} />
+              <span>Excel</span>
+            </button>
+            <button onClick={handleExportPDF} disabled={exportLoading || !getDadosAtivos()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-white transition-all disabled:opacity-40"
+              style={{ backgroundColor: colors.primary }}>
+              {exportLoading
+                ? <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                : <Download size={14} />}
+              <span>PDF</span>
+            </button>
           </div>
         </div>
 
-        {/* TABS */}
-        <Tabs
-          value={activeTab}
-          onValueChange={(v) => setActiveTab(v as TipoRelatorio)}
-          className="space-y-6"
-        >
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-6 bg-slate-100 p-1">
-            <TabsTrigger
-              value="dashboard"
-              className="data-[state=active]:bg-[#123859] data-[state=active]:text-white"
-            >
-              Dashboard
-            </TabsTrigger>
-            <TabsTrigger
-              value="vendas"
-              className="data-[state=active]:bg-[#123859] data-[state=active]:text-white"
-            >
-              Vendas
-            </TabsTrigger>
-            <TabsTrigger
-              value="faturacao"
-              className="data-[state=active]:bg-[#123859] data-[state=active]:text-white"
-            >
-              Faturação
-            </TabsTrigger>
-            <TabsTrigger
-              value="documentos"
-              className="data-[state=active]:bg-[#123859] data-[state=active]:text-white"
-            >
-              Documentos
-            </TabsTrigger>
-            <TabsTrigger
-              value="pagamentos"
-              className="data-[state=active]:bg-[#123859] data-[state=active]:text-white"
-            >
-              Pagamentos
-            </TabsTrigger>
-            <TabsTrigger
-              value="proformas"
-              className="data-[state=active]:bg-[#123859] data-[state=active]:text-white"
-            >
-              Proformas
-            </TabsTrigger>
-          </TabsList>
+        {/* ── Tabs ── */}
+        <div className="rounded-xl border overflow-hidden" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
 
-          {/* TAB DASHBOARD */}
-          <TabsContent value="dashboard" className="space-y-6">
-            {loading.dashboard ? (
-              <LoadingGrid cols={6} />
-            ) : dashboard ? (
-              <>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                  <DashboardCard
-                    titulo="Vendas Mês"
-                    valor={formatarKwanza(dashboard.vendas?.valor_mes || 0)}
-                    icone={<TrendingUp className="h-4 w-4 text-[#F9941F]" />}
-                  />
-                  <DashboardCard
-                    titulo="Faturado Total"
-                    valor={formatarKwanza(
-                      dashboard.documentos_fiscais?.total_faturado || 0
-                    )}
-                    icone={<DollarSign className="h-4 w-4 text-[#123859]" />}
-                  />
-                  <DashboardCard
-                    titulo="Retenções Mês"
-                    valor={formatarKwanza(
-                      dashboard.documentos_fiscais?.total_retencao_mes || 0
-                    )}
-                    icone={<Percent className="h-4 w-4 text-orange-500" />}
-                  />
-                  <DashboardCard
-                    titulo="Total Clientes"
-                    valor={String(dashboard.clientes?.total || 0)}
-                    icone={<Users className="h-4 w-4 text-blue-500" />}
-                  />
-                  <DashboardCard
-                    titulo="Serviços Ativos"
-                    valor={String(dashboard.servicos?.ativos || 0)}
-                    icone={<Wrench className="h-4 w-4 text-purple-500" />}
-                  />
-                  <DashboardCard
-                    titulo="Alertas Stock"
-                    valor={String(
-                      (dashboard.produtos?.estoque_baixo || 0) +
-                      (dashboard.produtos?.sem_estoque || 0)
-                    )}
-                    icone={<AlertCircle className="h-4 w-4 text-red-500" />}
-                    alerta={
-                      (dashboard.produtos?.estoque_baixo || 0) +
-                      (dashboard.produtos?.sem_estoque || 0) >
-                      0
-                    }
-                  />
-                </div>
+          {/* Tab list — scroll horizontal no mobile */}
+          <div className="flex overflow-x-auto border-b" style={{ borderColor: colors.border }}>
+            {TABS.map(tab => {
+              const active = activeTab === tab.id;
+              return (
+                <button key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className="flex-shrink-0 px-4 py-3 text-sm font-medium transition-colors relative whitespace-nowrap"
+                  style={{
+                    color: active ? colors.primary : colors.textSecondary,
+                    backgroundColor: active ? `${colors.primary}0D` : 'transparent',
+                    borderBottom: active ? `2px solid ${colors.primary}` : '2px solid transparent',
+                  }}>
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
 
-                {dashboard.alertas && (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <AlertaCard
-                      titulo="Documentos Vencidos"
-                      valor={dashboard.alertas.documentos_vencidos || 0}
-                      tipo="warning"
-                    />
-                    <AlertaCard
-                      titulo="Proformas Antigas"
-                      valor={dashboard.alertas.proformas_antigas || 0}
-                      tipo="info"
-                    />
-                    <AlertaCard
-                      titulo="Retenções Pendentes"
-                      valor={
-                        dashboard.alertas.servicos_com_retencao_pendente || 0
-                      }
-                      tipo="error"
-                    />
+          {/* Conteúdo */}
+          <div className="p-4 space-y-4">
+
+            {/* ─── DASHBOARD ─── */}
+            {activeTab === "dashboard" && (
+              isLoading ? <SkeletonCards n={6} colors={colors} />
+              : dashboard ? (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <StatCard label="Vendas Mês"     value={formatarKwanza(dashboard.vendas?.valor_mes ?? 0)}
+                      icon={<TrendingUp size={16} />} color={colors.secondary} colors={colors} />
+                    <StatCard label="Total Faturado" value={formatarKwanza(dashboard.documentos_fiscais?.total_faturado ?? 0)}
+                      icon={<DollarSign size={16} />} color={colors.primary} colors={colors} />
+                    <StatCard label="Retenções Mês"  value={formatarKwanza(dashboard.documentos_fiscais?.total_retencao_mes ?? 0)}
+                      icon={<Percent size={16} />} color="#f97316" colors={colors} />
+                    <StatCard label="Clientes"       value={String(dashboard.clientes?.total ?? 0)}
+                      icon={<Users size={16} />} color="#3b82f6" colors={colors} />
+                    <StatCard label="Serviços Ativos" value={String(dashboard.servicos?.ativos ?? 0)}
+                      icon={<Wrench size={16} />} color="#8b5cf6" colors={colors} />
+                    <StatCard label="Alertas Stock"
+                      value={String((dashboard.produtos?.estoque_baixo ?? 0) + (dashboard.produtos?.sem_estoque ?? 0))}
+                      icon={<AlertCircle size={16} />}
+                      color={(dashboard.produtos?.estoque_baixo ?? 0) + (dashboard.produtos?.sem_estoque ?? 0) > 0 ? colors.danger : "#94a3b8"}
+                      colors={colors}
+                      alerta={(dashboard.produtos?.estoque_baixo ?? 0) + (dashboard.produtos?.sem_estoque ?? 0) > 0} />
                   </div>
-                )}
-              </>
-            ) : (
-              <EmptyState message="Nenhum dado disponível" />
-            )}
-          </TabsContent>
 
-          {/* TAB VENDAS */}
-          <TabsContent value="vendas" className="space-y-6">
-            <PeriodoSelector
-              periodo={periodoVendas}
-              onChange={(tipo) => handlePeriodoChange(tipo, "vendas")}
-            />
-
-            {loading.vendas ? (
-              <LoadingSpinner />
-            ) : relatorioVendas ? (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <KpiCard
-                    titulo="Total em Vendas"
-                    valor={formatarKwanza(
-                      relatorioVendas.totais?.total_valor || 0
-                    )}
-                    subtitulo={`${relatorioVendas.totais?.total_vendas || 0} transações`}
-                    cor="bg-[#123859]"
-                  />
-                  <KpiCard
-                    titulo="Base Tributável"
-                    valor={formatarKwanza(
-                      relatorioVendas.totais?.total_base_tributavel || 0
-                    )}
-                    cor="bg-blue-500"
-                  />
-                  <KpiCard
-                    titulo="Total IVA"
-                    valor={formatarKwanza(
-                      relatorioVendas.totais?.total_iva || 0
-                    )}
-                    cor="bg-[#F9941F]"
-                  />
-                  <KpiCard
-                    titulo="Retenções"
-                    valor={formatarKwanza(
-                      relatorioVendas.totais?.total_retencao || 0
-                    )}
-                    subtitulo={`${relatorioVendas.totais?.total_servicos || 0} serviços`}
-                    cor="bg-orange-500"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <GraficoCard titulo="Distribuição de Valores">
-                    {dadosVendasPorStatus.length > 0 ? (
-                      <ResponsiveContainer width="100%" height={300}>
-                        <PieChart>
-                          <Pie
-                            data={dadosVendasPorStatus}
-                            dataKey="value"
-                            nameKey="name"
-                            cx="50%"
-                            cy="50%"
-                            outerRadius={100}
-                            label={({ name, percent }) =>
-                              `${name}: ${(percent * 100).toFixed(0)}%`
-                            }
-                          >
-                            {dadosVendasPorStatus.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <Tooltip
-                            formatter={(value) => formatarKwanza(Number(value))}
-                          />
-                          <Legend />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <EmptyChart />
-                    )}
-                  </GraficoCard>
-
-                  <GraficoCard titulo="Últimas Vendas">
-                    <div className="overflow-auto max-h-[300px]">
-                      <table className="w-full text-sm">
-                        <thead className="bg-slate-50 sticky top-0">
-                          <tr>
-                            <th className="text-left p-2">Cliente</th>
-                            <th className="text-right p-2">Total</th>
-                            <th className="text-center p-2">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {relatorioVendas.vendas
-                            ?.slice(0, 10)
-                            .map((venda, idx) => (
-                              <tr
-                                key={idx}
-                                className="border-t border-slate-100"
-                              >
-                                <td className="p-2 truncate max-w-[150px]">
-                                  {typeof venda.cliente === "string"
-                                    ? venda.cliente
-                                    : venda.cliente?.nome || "-"}
-                                </td>
-                                <td className="p-2 text-right font-medium">
-                                  {formatarKwanza(Number(venda.total) || 0)}
-                                </td>
-                                <td className="p-2 text-center">
-                                  <Badge
-                                    variant={
-                                      venda.estado_pagamento === "paga"
-                                        ? "default"
-                                        : "outline"
-                                    }
-                                    className={
-                                      venda.estado_pagamento === "paga"
-                                        ? "bg-green-100 text-green-700"
-                                        : "bg-amber-100 text-amber-700"
-                                    }
-                                  >
-                                    {venda.estado_pagamento}
-                                  </Badge>
-                                </td>
-                              </tr>
-                            ))}
-                        </tbody>
-                      </table>
+                  {dashboard.alertas && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {[
+                        { label: "Documentos Vencidos",    val: dashboard.alertas.documentos_vencidos ?? 0,                    color: colors.warning },
+                        { label: "Proformas Antigas",      val: dashboard.alertas.proformas_antigas ?? 0,                      color: "#3b82f6" },
+                        { label: "Retenções Pendentes",    val: dashboard.alertas.servicos_com_retencao_pendente ?? 0,          color: colors.danger  },
+                      ].map(({ label, val, color }) => (
+                        <div key={label} className="flex items-center justify-between px-4 py-3 rounded-xl border"
+                          style={{ backgroundColor: `${color}0D`, borderColor: `${color}30` }}>
+                          <div className="flex items-center gap-2">
+                            <AlertTriangle size={15} style={{ color }} />
+                            <span className="text-sm font-medium" style={{ color: colors.text }}>{label}</span>
+                          </div>
+                          <span className="text-lg font-bold" style={{ color }}>{val}</span>
+                        </div>
+                      ))}
                     </div>
-                  </GraficoCard>
-                </div>
+                  )}
+                </>
+              ) : <Vazio colors={colors} />
+            )}
 
-                {relatorioVendas.agrupado &&
-                  relatorioVendas.agrupado.length > 0 && (
-                    <GraficoCard titulo="Evolução por Período">
-                      <ResponsiveContainer width="100%" height={300}>
-                        <AreaChart data={relatorioVendas.agrupado}>
-                          <defs>
-                            <linearGradient
-                              id="colorVendas"
-                              x1="0"
-                              y1="0"
-                              x2="0"
-                              y2="1"
-                            >
-                              <stop
-                                offset="5%"
-                                stopColor="#123859"
-                                stopOpacity={0.8}
-                              />
-                              <stop
-                                offset="95%"
-                                stopColor="#123859"
-                                stopOpacity={0}
-                              />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid
-                            strokeDasharray="3 3"
-                            stroke="#e2e8f0"
-                          />
-                          <XAxis dataKey="periodo" tick={{ fontSize: 12 }} />
-                          <YAxis
-                            tick={{ fontSize: 12 }}
-                            tickFormatter={(val) =>
-                              `Kz ${(val / 1000).toFixed(0)}k`
-                            }
-                          />
-                          <Tooltip
-                            formatter={(value) => formatarKwanza(Number(value))}
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="total"
-                            stroke="#123859"
-                            fillOpacity={1}
-                            fill="url(#colorVendas)"
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
+            {/* ─── VENDAS ─── */}
+            {activeTab === "vendas" && (
+              <>
+                <PeriodoSelector periodo={periodoVendas} onChange={t => setPeriodo(t, "vendas")} colors={colors} />
+                {isLoading ? <SkeletonCards n={4} colors={colors} />
+                : relatorioVendas ? (
+                  <>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <StatCard label="Total Vendas"    value={formatarKwanza(relatorioVendas.totais?.total_valor ?? 0)}
+                        icon={<DollarSign size={16} />} color={colors.primary}   colors={colors}
+                        sub={`${relatorioVendas.totais?.total_vendas ?? 0} transações`} />
+                      <StatCard label="Base Tributável" value={formatarKwanza(relatorioVendas.totais?.total_base_tributavel ?? 0)}
+                        icon={<FileText size={16} />}   color="#3b82f6"           colors={colors} />
+                      <StatCard label="Total IVA"       value={formatarKwanza(relatorioVendas.totais?.total_iva ?? 0)}
+                        icon={<Percent size={16} />}    color={colors.secondary}  colors={colors} />
+                      <StatCard label="Retenções"       value={formatarKwanza(relatorioVendas.totais?.total_retencao ?? 0)}
+                        icon={<TrendingUp size={16} />} color="#f97316"           colors={colors}
+                        sub={`${relatorioVendas.totais?.total_servicos ?? 0} serviços`} />
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      <GraficoCard titulo="Distribuição" colors={colors}>
+                        {dadosVendasPie.length > 0 ? (
+                          <ResponsiveContainer width="100%" height={260}>
+                            <PieChart>
+                              <Pie data={dadosVendasPie} dataKey="value" nameKey="name" cx="50%" cy="50%"
+                                outerRadius={90} label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}>
+                                {dadosVendasPie.map((e, i) => <Cell key={i} fill={e.color} />)}
+                              </Pie>
+                              <Tooltip formatter={v => formatarKwanza(Number(v))} />
+                              <Legend />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        ) : <SemDados colors={colors} />}
+                      </GraficoCard>
+
+                      <GraficoCard titulo="Últimas Vendas" colors={colors}>
+                        <MiniTabela
+                          headers={["Cliente", "Total", "Status"]}
+                          rows={(relatorioVendas.vendas ?? []).slice(0, 10).map(v => [
+                            typeof v.cliente === "string" ? v.cliente : v.cliente?.nome ?? "-",
+                            formatarKwanza(Number(v.total) ?? 0),
+                            <EstadoBadge key="s" estado={v.estado_pagamento} colors={colors} />,
+                          ])}
+                          aligns={["left", "right", "center"]}
+                          colors={colors}
+                        />
+                      </GraficoCard>
+                    </div>
+
+                    {(relatorioVendas.agrupado?.length ?? 0) > 0 && (
+                      <GraficoCard titulo="Evolução por Período" colors={colors}>
+                        <ResponsiveContainer width="100%" height={240}>
+                          <AreaChart data={relatorioVendas.agrupado}>
+                            <defs>
+                              <linearGradient id="gVendas" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%"  stopColor={colors.primary} stopOpacity={0.3} />
+                                <stop offset="95%" stopColor={colors.primary} stopOpacity={0}   />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+                            <XAxis dataKey="periodo" tick={{ fontSize: 11, fill: colors.textSecondary }} />
+                            <YAxis tick={{ fontSize: 11, fill: colors.textSecondary }} tickFormatter={v => `Kz ${(v/1000).toFixed(0)}k`} />
+                            <Tooltip formatter={v => formatarKwanza(Number(v))} contentStyle={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
+                            <Area type="monotone" dataKey="total" stroke={colors.primary} fill="url(#gVendas)" strokeWidth={2} />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </GraficoCard>
+                    )}
+                  </>
+                ) : <Vazio colors={colors} />}
+              </>
+            )}
+
+            {/* ─── FATURAÇÃO ─── */}
+            {activeTab === "faturacao" && (
+              <>
+                <PeriodoSelector periodo={periodoFaturacao} onChange={t => setPeriodo(t, "faturacao")} colors={colors} />
+                {isLoading ? <SkeletonCards n={3} colors={colors} />
+                : relatorioFaturacao ? (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <StatCard label="Faturação Total"    value={formatarKwanza(relatorioFaturacao.faturacao_total ?? 0)}
+                        icon={<DollarSign size={16} />} color={colors.primary}   colors={colors} />
+                      <StatCard label="Faturação Paga"     value={formatarKwanza(relatorioFaturacao.faturacao_paga ?? 0)}
+                        icon={<FileText size={16} />}   color={colors.success}   colors={colors} />
+                      <StatCard label="Faturação Pendente" value={formatarKwanza(relatorioFaturacao.faturacao_pendente ?? 0)}
+                        icon={<AlertCircle size={16} />} color={colors.secondary} colors={colors}
+                        alerta={(relatorioFaturacao.faturacao_pendente ?? 0) > 0} />
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      <GraficoCard titulo="Distribuição por Status" colors={colors}>
+                        {dadosFaturacaoPie.length > 0 ? (
+                          <ResponsiveContainer width="100%" height={260}>
+                            <PieChart>
+                              <Pie data={dadosFaturacaoPie} dataKey="value" nameKey="name"
+                                cx="50%" cy="50%" outerRadius={90}
+                                label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}>
+                                {dadosFaturacaoPie.map((e, i) => <Cell key={i} fill={e.color} />)}
+                              </Pie>
+                              <Tooltip formatter={v => formatarKwanza(Number(v))} contentStyle={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
+                              <Legend />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        ) : <SemDados colors={colors} />}
+                      </GraficoCard>
+
+                      <GraficoCard titulo="Documentos por Tipo" colors={colors}>
+                        {Object.keys(relatorioFaturacao.por_tipo ?? {}).length > 0 ? (
+                          <ResponsiveContainer width="100%" height={260}>
+                            <BarChart data={Object.entries(relatorioFaturacao.por_tipo ?? {}).map(([tipo, d]: any) => ({ tipo, quantidade: d?.quantidade ?? 0, valor: d?.total_liquido ?? 0 }))}>
+                              <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+                              <XAxis dataKey="tipo" tick={{ fontSize: 11, fill: colors.textSecondary }} />
+                              <YAxis yAxisId="left" tick={{ fontSize: 11, fill: colors.textSecondary }} />
+                              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: colors.textSecondary }} />
+                              <Tooltip contentStyle={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
+                              <Legend />
+                              <Bar yAxisId="left"  dataKey="quantidade" fill={colors.primary}   name="Quantidade" radius={[3,3,0,0]} />
+                              <Bar yAxisId="right" dataKey="valor"      fill={colors.secondary} name="Valor"      radius={[3,3,0,0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        ) : <SemDados colors={colors} />}
+                      </GraficoCard>
+                    </div>
+
+                    {(relatorioFaturacao.faturacao_por_mes?.length ?? 0) > 0 && (
+                      <GraficoCard titulo="Evolução Mensal" colors={colors}>
+                        <ResponsiveContainer width="100%" height={240}>
+                          <AreaChart data={relatorioFaturacao.faturacao_por_mes}>
+                            <defs>
+                              <linearGradient id="gFat" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%"  stopColor={colors.primary} stopOpacity={0.3} />
+                                <stop offset="95%" stopColor={colors.primary} stopOpacity={0}   />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+                            <XAxis dataKey="mes" tick={{ fontSize: 11, fill: colors.textSecondary }} />
+                            <YAxis tick={{ fontSize: 11, fill: colors.textSecondary }} tickFormatter={v => `Kz ${(v/1000).toFixed(0)}k`} />
+                            <Tooltip formatter={v => formatarKwanza(Number(v))} contentStyle={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
+                            <Area type="monotone" dataKey="total" stroke={colors.primary} fill="url(#gFat)" strokeWidth={2} />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </GraficoCard>
+                    )}
+                  </>
+                ) : <Vazio colors={colors} />}
+              </>
+            )}
+
+            {/* ─── DOCUMENTOS ─── */}
+            {activeTab === "documentos" && (
+              <>
+                <PeriodoSelector periodo={periodoDocumentos} onChange={t => setPeriodo(t, "documentos")} colors={colors} />
+                {isLoading ? <SkeletonCards n={4} colors={colors} />
+                : relatorioDocumentos ? (
+                  <>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <StatCard label="Total Docs"   value={String(relatorioDocumentos.estatisticas?.total_documentos ?? 0)}
+                        icon={<FileText size={16} />}   color={colors.primary}   colors={colors} />
+                      <StatCard label="Valor Total"  value={formatarKwanza(relatorioDocumentos.estatisticas?.total_valor ?? 0)}
+                        icon={<DollarSign size={16} />} color={colors.secondary} colors={colors} />
+                      <StatCard label="Total IVA"    value={formatarKwanza(relatorioDocumentos.estatisticas?.total_iva ?? 0)}
+                        icon={<Percent size={16} />}    color="#3b82f6"          colors={colors} />
+                      <StatCard label="Retenções"    value={formatarKwanza(relatorioDocumentos.estatisticas?.total_retencao ?? 0)}
+                        icon={<TrendingUp size={16} />} color="#f97316"          colors={colors} />
+                    </div>
+
+                    <GraficoCard titulo="Documentos por Tipo" colors={colors}>
+                      {Object.keys(relatorioDocumentos.estatisticas?.por_tipo ?? {}).length > 0 ? (
+                        <ResponsiveContainer width="100%" height={300}>
+                          <BarChart data={Object.entries(relatorioDocumentos.estatisticas?.por_tipo ?? {}).map(([tipo, d]: any) => ({ tipo, quantidade: d?.quantidade ?? 0, valor: d?.valor ?? 0, retencao: d?.retencao ?? 0 }))}>
+                            <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+                            <XAxis dataKey="tipo" tick={{ fontSize: 11, fill: colors.textSecondary }} />
+                            <YAxis yAxisId="left" tick={{ fontSize: 11, fill: colors.textSecondary }} />
+                            <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: colors.textSecondary }} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
+                            <Tooltip formatter={(v, n) => [formatarKwanza(Number(v)), n]} contentStyle={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
+                            <Legend />
+                            <Bar yAxisId="left"  dataKey="quantidade" fill={colors.primary}   name="Quantidade" radius={[3,3,0,0]} />
+                            <Bar yAxisId="right" dataKey="valor"      fill={colors.secondary} name="Valor"      radius={[3,3,0,0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      ) : <SemDados colors={colors} />}
                     </GraficoCard>
-                  )}
+                  </>
+                ) : <Vazio colors={colors} />}
               </>
-            ) : (
-              <EmptyState message="Nenhum dado disponível para o período selecionado" />
             )}
-          </TabsContent>
 
-          {/* TAB FATURAÇÃO */}
-          <TabsContent value="faturacao" className="space-y-6">
-            <PeriodoSelector
-              periodo={periodoFaturacao}
-              onChange={(tipo) => handlePeriodoChange(tipo, "faturacao")}
-            />
+            {/* ─── PAGAMENTOS ─── */}
+            {activeTab === "pagamentos" && (
+              isLoading ? <SkeletonCards n={4} colors={colors} />
+              : relatorioPagamentos ? (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <StatCard label="Total Pendente"   value={formatarKwanza(relatorioPagamentos.resumo?.total_pendente ?? 0)}
+                      icon={<DollarSign size={16} />}   color={colors.primary}   colors={colors}
+                      alerta={(relatorioPagamentos.resumo?.total_pendente ?? 0) > 0} />
+                    <StatCard label="Total Atrasado"   value={formatarKwanza(relatorioPagamentos.resumo?.total_atrasado ?? 0)}
+                      icon={<AlertCircle size={16} />}  color={colors.danger}    colors={colors}
+                      alerta={(relatorioPagamentos.resumo?.total_atrasado ?? 0) > 0} />
+                    <StatCard label="Faturas Pend."    value={String(relatorioPagamentos.resumo?.quantidade_faturas ?? 0)}
+                      icon={<FileText size={16} />}     color={colors.secondary} colors={colors} />
+                    <StatCard label="Retenção Pend."   value={formatarKwanza(relatorioPagamentos.resumo?.retencao_pendente ?? 0)}
+                      icon={<Percent size={16} />}      color="#f97316"          colors={colors} />
+                  </div>
 
-            {loading.faturacao ? (
-              <LoadingSpinner />
-            ) : relatorioFaturacao ? (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <KpiCard
-                    titulo="Faturação Total"
-                    valor={formatarKwanza(
-                      relatorioFaturacao.faturacao_total || 0
-                    )}
-                    cor="bg-[#123859]"
-                  />
-                  <KpiCard
-                    titulo="Faturação Paga"
-                    valor={formatarKwanza(
-                      relatorioFaturacao.faturacao_paga || 0
-                    )}
-                    cor="bg-emerald-500"
-                  />
-                  <KpiCard
-                    titulo="Faturação Pendente"
-                    valor={formatarKwanza(
-                      relatorioFaturacao.faturacao_pendente || 0
-                    )}
-                    cor="bg-[#F9941F]"
-                    alerta={(relatorioFaturacao.faturacao_pendente || 0) > 0}
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <GraficoCard titulo="Distribuição por Status">
-                    {dadosFaturacaoPorStatus.length > 0 ? (
-                      <ResponsiveContainer width="100%" height={300}>
-                        <PieChart>
-                          <Pie
-                            data={dadosFaturacaoPorStatus}
-                            dataKey="value"
-                            nameKey="name"
-                            cx="50%"
-                            cy="50%"
-                            outerRadius={100}
-                            label={({ name, percent }) =>
-                              `${name}: ${(percent * 100).toFixed(0)}%`
-                            }
-                          >
-                            {dadosFaturacaoPorStatus.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <Tooltip
-                            formatter={(value) => formatarKwanza(Number(value))}
-                          />
-                          <Legend />
-                        </PieChart>
-                      </ResponsiveContainer>
+                  <GraficoCard titulo="Faturas Pendentes" colors={colors}>
+                    {(relatorioPagamentos.faturas_pendentes?.length ?? 0) > 0 ? (
+                      <MiniTabela
+                        headers={["Documento", "Cliente", "Pendente", "Dias"]}
+                        rows={(relatorioPagamentos.faturas_pendentes ?? []).slice(0, 15).map(f => [
+                          <span key="d" className="font-mono text-xs">{f.numero_documento}</span>,
+                          typeof f.cliente === "string" ? f.cliente : f.cliente?.nome ?? "-",
+                          formatarKwanza(Number(f.valor_pendente) ?? 0),
+                          <EstadoBadge key="s" estado={(f.dias_atraso ?? 0) > 0 ? "atrasado" : "em_dia"} label={(f.dias_atraso ?? 0) > 0 ? `${f.dias_atraso}d` : "Em dia"} colors={colors} />,
+                        ])}
+                        aligns={["left", "left", "right", "center"]}
+                        colors={colors}
+                      />
                     ) : (
-                      <EmptyChart />
-                    )}
-                  </GraficoCard>
-
-                  <GraficoCard titulo="Documentos por Tipo">
-                    {Object.keys(relatorioFaturacao.por_tipo || {}).length >
-                      0 ? (
-                      <ResponsiveContainer width="100%" height={300}>
-                        <BarChart
-                          data={Object.entries(
-                            relatorioFaturacao.por_tipo || {}
-                          ).map(([tipo, dados]) => ({
-                            tipo,
-                            quantidade: dados?.quantidade || 0,
-                            valor: dados?.total_liquido || 0,
-                          }))}
-                        >
-                          <CartesianGrid
-                            strokeDasharray="3 3"
-                            stroke="#e2e8f0"
-                          />
-                          <XAxis dataKey="tipo" tick={{ fontSize: 12 }} />
-                          <YAxis yAxisId="left" tick={{ fontSize: 12 }} />
-                          <YAxis
-                            yAxisId="right"
-                            orientation="right"
-                            tick={{ fontSize: 12 }}
-                          />
-                          <Tooltip />
-                          <Legend />
-                          <Bar
-                            yAxisId="left"
-                            dataKey="quantidade"
-                            fill="#123859"
-                            name="Quantidade"
-                          />
-                          <Bar
-                            yAxisId="right"
-                            dataKey="valor"
-                            fill="#F9941F"
-                            name="Valor"
-                          />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <EmptyChart />
-                    )}
-                  </GraficoCard>
-                </div>
-
-                {relatorioFaturacao.faturacao_por_mes &&
-                  relatorioFaturacao.faturacao_por_mes.length > 0 && (
-                    <GraficoCard titulo="Evolução Mensal">
-                      <ResponsiveContainer width="100%" height={300}>
-                        <AreaChart data={relatorioFaturacao.faturacao_por_mes}>
-                          <defs>
-                            <linearGradient
-                              id="colorFaturacao"
-                              x1="0"
-                              y1="0"
-                              x2="0"
-                              y2="1"
-                            >
-                              <stop
-                                offset="5%"
-                                stopColor="#123859"
-                                stopOpacity={0.8}
-                              />
-                              <stop
-                                offset="95%"
-                                stopColor="#123859"
-                                stopOpacity={0}
-                              />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid
-                            strokeDasharray="3 3"
-                            stroke="#e2e8f0"
-                          />
-                          <XAxis dataKey="mes" tick={{ fontSize: 12 }} />
-                          <YAxis
-                            tick={{ fontSize: 12 }}
-                            tickFormatter={(val) =>
-                              `Kz ${(val / 1000).toFixed(0)}k`
-                            }
-                          />
-                          <Tooltip
-                            formatter={(value) => formatarKwanza(Number(value))}
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="total"
-                            stroke="#123859"
-                            fillOpacity={1}
-                            fill="url(#colorFaturacao)"
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </GraficoCard>
-                  )}
-              </>
-            ) : (
-              <EmptyState />
-            )}
-          </TabsContent>
-
-          {/* TAB DOCUMENTOS FISCAIS */}
-          <TabsContent value="documentos" className="space-y-6">
-            <PeriodoSelector
-              periodo={periodoDocumentos}
-              onChange={(tipo) => handlePeriodoChange(tipo, "documentos")}
-            />
-
-            {loading.documentos ? (
-              <LoadingSpinner />
-            ) : relatorioDocumentos ? (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <KpiCard
-                    titulo="Total Documentos"
-                    valor={String(
-                      relatorioDocumentos.estatisticas?.total_documentos || 0
-                    )}
-                    cor="bg-[#123859]"
-                  />
-                  <KpiCard
-                    titulo="Valor Total"
-                    valor={formatarKwanza(
-                      relatorioDocumentos.estatisticas?.total_valor || 0
-                    )}
-                    cor="bg-[#F9941F]"
-                  />
-                  <KpiCard
-                    titulo="Total IVA"
-                    valor={formatarKwanza(
-                      relatorioDocumentos.estatisticas?.total_iva || 0
-                    )}
-                    cor="bg-blue-500"
-                  />
-                  <KpiCard
-                    titulo="Retenções"
-                    valor={formatarKwanza(
-                      relatorioDocumentos.estatisticas?.total_retencao || 0
-                    )}
-                    cor="bg-orange-500"
-                  />
-                </div>
-
-                <GraficoCard titulo="Documentos por Tipo">
-                  {Object.keys(relatorioDocumentos.estatisticas?.por_tipo || {})
-                    .length > 0 ? (
-                    <ResponsiveContainer width="100%" height={350}>
-                      <BarChart
-                        data={Object.entries(
-                          relatorioDocumentos.estatisticas?.por_tipo || {}
-                        ).map(([tipo, dados]) => ({
-                          tipo,
-                          quantidade: dados?.quantidade || 0,
-                          valor: dados?.valor || 0,
-                          retencao: dados?.retencao || 0,
-                        }))}
-                      >
-                        <CartesianGrid
-                          strokeDasharray="3 3"
-                          stroke="#e2e8f0"
-                        />
-                        <XAxis dataKey="tipo" tick={{ fontSize: 12 }} />
-                        <YAxis yAxisId="left" tick={{ fontSize: 12 }} />
-                        <YAxis
-                          yAxisId="right"
-                          orientation="right"
-                          tick={{ fontSize: 12 }}
-                          tickFormatter={(val) =>
-                            `Kz ${(val / 1000).toFixed(0)}k`
-                          }
-                        />
-                        <Tooltip
-                          formatter={(value, name) => [
-                            formatarKwanza(Number(value)),
-                            name,
-                          ]}
-                        />
-                        <Legend />
-                        <Bar
-                          yAxisId="left"
-                          dataKey="quantidade"
-                          fill="#123859"
-                          name="Quantidade"
-                        />
-                        <Bar
-                          yAxisId="right"
-                          dataKey="valor"
-                          fill="#F9941F"
-                          name="Valor"
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <EmptyChart />
-                  )}
-                </GraficoCard>
-              </>
-            ) : (
-              <EmptyState />
-            )}
-          </TabsContent>
-
-          {/* TAB PAGAMENTOS */}
-          <TabsContent value="pagamentos" className="space-y-6">
-            {loading.pagamentos ? (
-              <LoadingSpinner />
-            ) : relatorioPagamentos ? (
-              <>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <KpiCard
-                    titulo="Total Pendente"
-                    valor={formatarKwanza(
-                      relatorioPagamentos.resumo?.total_pendente || 0
-                    )}
-                    cor="bg-[#123859]"
-                    alerta={
-                      (relatorioPagamentos.resumo?.total_pendente || 0) > 0
-                    }
-                  />
-                  <KpiCard
-                    titulo="Total Atrasado"
-                    valor={formatarKwanza(
-                      relatorioPagamentos.resumo?.total_atrasado || 0
-                    )}
-                    cor="bg-red-500"
-                    alerta={
-                      (relatorioPagamentos.resumo?.total_atrasado || 0) > 0
-                    }
-                  />
-                  <KpiCard
-                    titulo="Faturas Pendentes"
-                    valor={String(
-                      relatorioPagamentos.resumo?.quantidade_faturas || 0
-                    )}
-                    cor="bg-[#F9941F]"
-                  />
-                  <KpiCard
-                    titulo="Retenção Pendente"
-                    valor={formatarKwanza(
-                      relatorioPagamentos.resumo?.retencao_pendente || 0
-                    )}
-                    cor="bg-orange-500"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <GraficoCard titulo="Distribuição de Pendentes">
-                    {dadosPagamentosPorTipo.length > 0 ? (
-                      <ResponsiveContainer width="100%" height={300}>
-                        <PieChart>
-                          <Pie
-                            data={dadosPagamentosPorTipo}
-                            dataKey="value"
-                            nameKey="name"
-                            cx="50%"
-                            cy="50%"
-                            outerRadius={100}
-                            label
-                          >
-                            {dadosPagamentosPorTipo.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <Tooltip />
-                          <Legend />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <EmptyChart />
-                    )}
-                  </GraficoCard>
-
-                  <GraficoCard titulo="Faturas Pendentes">
-                    {relatorioPagamentos.faturas_pendentes &&
-                      relatorioPagamentos.faturas_pendentes.length > 0 ? (
-                      <div className="overflow-auto max-h-[300px]">
-                        <table className="w-full text-sm">
-                          <thead className="bg-slate-50 sticky top-0">
-                            <tr>
-                              <th className="text-left p-2">Documento</th>
-                              <th className="text-left p-2">Cliente</th>
-                              <th className="text-right p-2">Pendente</th>
-                              <th className="text-center p-2">Dias</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {relatorioPagamentos.faturas_pendentes
-                              .slice(0, 10)
-                              .map((fat, idx) => (
-                                <tr
-                                  key={idx}
-                                  className="border-t border-slate-100"
-                                >
-                                  <td className="p-2 font-mono text-xs">
-                                    {fat.numero_documento}
-                                  </td>
-                                  <td className="p-2 truncate max-w-[120px]">
-                                    {typeof fat.cliente === "string"
-                                      ? fat.cliente
-                                      : fat.cliente?.nome || "-"}
-                                  </td>
-                                  <td className="p-2 text-right font-medium">
-                                    {formatarKwanza(
-                                      Number(fat.valor_pendente) || 0
-                                    )}
-                                  </td>
-                                  <td className="p-2 text-center">
-                                    <Badge
-                                      variant={
-                                        (fat.dias_atraso || 0) > 0
-                                          ? "destructive"
-                                          : "outline"
-                                      }
-                                    >
-                                      {(fat.dias_atraso || 0) > 0
-                                        ? `${fat.dias_atraso} dias`
-                                        : "Em dia"}
-                                    </Badge>
-                                  </td>
-                                </tr>
-                              ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      <div className="h-[300px] flex items-center justify-center text-slate-400">
+                      <div className="py-8 text-center text-sm" style={{ color: colors.textSecondary }}>
                         Nenhuma fatura pendente
                       </div>
                     )}
                   </GraficoCard>
-                </div>
-              </>
-            ) : (
-              <EmptyState />
+                </>
+              ) : <Vazio colors={colors} />
             )}
-          </TabsContent>
 
-          {/* TAB PROFORMAS */}
-          <TabsContent value="proformas" className="space-y-6">
-            <PeriodoSelector
-              periodo={periodoFaturacao}
-              onChange={(tipo) => handlePeriodoChange(tipo, "proformas")}
-            />
-
-            {loading.proformas ? (
-              <LoadingSpinner />
-            ) : relatorioProformas ? (
+            {/* ─── PROFORMAS ─── */}
+            {activeTab === "proformas" && (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <KpiCard
-                    titulo="Total de Proformas"
-                    valor={String(relatorioProformas.total || 0)}
-                    cor="bg-[#123859]"
-                  />
-                  <KpiCard
-                    titulo="Valor Total"
-                    valor={formatarKwanza(relatorioProformas.valor_total || 0)}
-                    cor="bg-[#F9941F]"
-                  />
-                </div>
-
-                <GraficoCard titulo="Lista de Proformas">
-                  {relatorioProformas.proformas &&
-                    relatorioProformas.proformas.length > 0 ? (
-                    <div className="overflow-auto max-h-[400px]">
-                      <table className="w-full text-sm">
-                        <thead className="bg-slate-50 sticky top-0">
-                          <tr>
-                            <th className="text-left p-2">Nº Documento</th>
-                            <th className="text-left p-2">Cliente</th>
-                            <th className="text-left p-2">Data</th>
-                            <th className="text-right p-2">Valor</th>
-                            <th className="text-center p-2">Estado</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {relatorioProformas.proformas
-                            .slice(0, 20)
-                            .map((pro, idx) => (
-                              <tr
-                                key={idx}
-                                className="border-t border-slate-100"
-                              >
-                                <td className="p-2 font-mono text-xs">
-                                  {pro.numero_documento}
-                                </td>
-                                <td className="p-2 truncate max-w-[150px]">
-                                  {typeof pro.cliente === "string"
-                                    ? pro.cliente
-                                    : pro.cliente?.nome || "-"}
-                                </td>
-                                <td className="p-2">
-                                  {formatarData(pro.data_emissao)}
-                                </td>
-                                <td className="p-2 text-right font-medium">
-                                  {formatarKwanza(
-                                    Number(pro.total_liquido) || 0
-                                  )}
-                                </td>
-                                <td className="p-2 text-center">
-                                  <Badge
-                                    variant="outline"
-                                    className={
-                                      pro.estado === "emitido"
-                                        ? "bg-amber-100 text-amber-700"
-                                        : "bg-green-100 text-green-700"
-                                    }
-                                  >
-                                    {pro.estado}
-                                  </Badge>
-                                </td>
-                              </tr>
-                            ))}
-                        </tbody>
-                      </table>
+                <PeriodoSelector periodo={periodoFaturacao} onChange={t => setPeriodo(t, "faturacao")} colors={colors} />
+                {isLoading ? <SkeletonCards n={2} colors={colors} />
+                : relatorioProformas ? (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <StatCard label="Total de Proformas" value={String(relatorioProformas.total ?? 0)}
+                        icon={<FileText size={16} />}   color={colors.primary}   colors={colors} />
+                      <StatCard label="Valor Total"        value={formatarKwanza(relatorioProformas.valor_total ?? 0)}
+                        icon={<DollarSign size={16} />}  color={colors.secondary} colors={colors} />
                     </div>
-                  ) : (
-                    <EmptyChart message="Nenhuma proforma encontrada" />
-                  )}
-                </GraficoCard>
+
+                    <GraficoCard titulo="Lista de Proformas" colors={colors}>
+                      {(relatorioProformas.proformas?.length ?? 0) > 0 ? (
+                        <MiniTabela
+                          headers={["Nº Doc.", "Cliente", "Data", "Valor", "Estado"]}
+                          rows={(relatorioProformas.proformas ?? []).slice(0, 20).map(p => [
+                            <span key="n" className="font-mono text-xs">{p.numero_documento}</span>,
+                            typeof p.cliente === "string" ? p.cliente : p.cliente?.nome ?? "-",
+                            formatarData(p.data_emissao),
+                            formatarKwanza(Number(p.total_liquido) ?? 0),
+                            <EstadoBadge key="s" estado={p.estado} colors={colors} />,
+                          ])}
+                          aligns={["left", "left", "left", "right", "center"]}
+                          colors={colors}
+                        />
+                      ) : <SemDados colors={colors} message="Nenhuma proforma encontrada" />}
+                    </GraficoCard>
+                  </>
+                ) : <Vazio colors={colors} />}
               </>
-            ) : (
-              <EmptyState />
             )}
-          </TabsContent>
-        </Tabs>
+
+          </div>
+        </div>
       </div>
     </MainEmpresa>
   );
 }
 
-/* ================= COMPONENTES AUXILIARES ================= */
+/* ═══════════════════════════════════════════════════════════
+   COMPONENTES AUXILIARES
+═══════════════════════════════════════════════════════════ */
 
-interface PeriodoSelectorProps {
-  periodo: PeriodoConfig;
-  onChange: (tipo: PeriodoTipo) => void;
-}
-
-function PeriodoSelector({ periodo, onChange }: PeriodoSelectorProps) {
+/* ── StatCard ── */
+function StatCard({ label, value, sub, icon, color, colors, alerta }: {
+  label: string; value: string; sub?: string;
+  icon: React.ReactNode; color: string; colors: any; alerta?: boolean;
+}) {
   return (
-    <Card className="border-slate-200">
-      <CardContent className="pt-6">
-        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-          <div className="flex gap-2 flex-wrap">
-            {(
-              [
-                "hoje",
-                "ontem",
-                "este_mes",
-                "mes_passado",
-                "este_ano",
-              ] as PeriodoTipo[]
-            ).map((tipo) => (
-              <Button
-                key={tipo}
-                variant={periodo.tipo === tipo ? "default" : "outline"}
-                size="sm"
-                onClick={() => onChange(tipo)}
-                className={periodo.tipo === tipo ? "bg-[#123859]" : ""}
-              >
-                <Calendar className="h-4 w-4 mr-2" />
-                {getPeriodoLabel(tipo)}
-              </Button>
-            ))}
-          </div>
-          <Badge
-            variant="outline"
-            className="text-[#123859] border-[#123859]"
-          >
-            <Filter className="h-3 w-3 mr-1" />
-            {periodo.data_inicio} a {periodo.data_fim}
-          </Badge>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-interface DashboardCardProps {
-  titulo: string;
-  valor: string;
-  icone: React.ReactNode;
-  alerta?: boolean;
-}
-
-function DashboardCard({
-  titulo,
-  valor,
-  icone,
-  alerta,
-}: DashboardCardProps) {
-  return (
-    <Card
-      className={`border-l-4 ${alerta ? "border-l-red-500" : "border-l-[#123859]"
-        } hover:shadow-md transition-shadow`}
-    >
-      <CardContent className="p-4">
-        <div className="flex justify-between items-start">
-          <div>
-            <p className="text-xs text-slate-500 uppercase tracking-wider">
-              {titulo}
-            </p>
-            <p className="text-lg font-bold text-[#123859] mt-1">{valor}</p>
-          </div>
-          <div
-            className={`p-2 rounded-lg ${alerta ? "bg-red-100" : "bg-slate-100"
-              }`}
-          >
-            {icone}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-interface AlertaCardProps {
-  titulo: string;
-  valor: number;
-  tipo: "warning" | "info" | "error";
-}
-
-function AlertaCard({ titulo, valor, tipo }: AlertaCardProps) {
-  const cores = {
-    warning: "bg-amber-50 border-amber-200 text-amber-800",
-    info: "bg-blue-50 border-blue-200 text-blue-800",
-    error: "bg-red-50 border-red-200 text-red-800",
-  };
-
-  return (
-    <Card className={`${cores[tipo]} border`}>
-      <CardContent className="p-4 flex justify-between items-center">
-        <span className="font-medium">{titulo}</span>
-        <Badge
-          variant={tipo === "error" ? "destructive" : "default"}
-          className="text-lg"
-        >
-          {valor}
-        </Badge>
-      </CardContent>
-    </Card>
-  );
-}
-
-interface KpiCardProps {
-  titulo: string;
-  valor: string;
-  subtitulo?: string;
-  cor: string;
-  alerta?: boolean;
-}
-
-function KpiCard({
-  titulo,
-  valor,
-  subtitulo,
-  cor,
-  alerta,
-}: KpiCardProps) {
-  return (
-    <Card
-      className={`overflow-hidden ${alerta ? "border-red-300" : "border-slate-200"
-        }`}
-    >
-      <div className={`h-1 ${cor}`} />
-      <CardContent className="p-4">
-        <p className="text-sm text-slate-500">{titulo}</p>
-        <p className="text-2xl font-bold text-[#123859] mt-1">{valor}</p>
-        {subtitulo && (
-          <p className="text-xs text-slate-400 mt-1">{subtitulo}</p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-interface GraficoCardProps {
-  titulo: string;
-  children: React.ReactNode;
-}
-
-function GraficoCard({ titulo, children }: GraficoCardProps) {
-  return (
-    <Card className="border-slate-200">
-      <CardHeader className="border-b border-slate-100 pb-3">
-        <CardTitle className="text-lg text-[#123859]">{titulo}</CardTitle>
-      </CardHeader>
-      <CardContent className="pt-4">{children}</CardContent>
-    </Card>
-  );
-}
-
-function LoadingSpinner() {
-  return (
-    <div className="flex items-center justify-center py-12">
-      <Loader2 className="h-8 w-8 animate-spin text-[#123859]" />
+    <div className="flex items-center gap-3 px-4 py-3 rounded-xl border"
+      style={{
+        backgroundColor: colors.card,
+        borderColor: alerta ? `${color}50` : colors.border,
+        borderLeftColor: color,
+        borderLeftWidth: 3,
+      }}>
+      <div className="p-2 rounded-lg flex-shrink-0" style={{ backgroundColor: `${color}15` }}>
+        <span style={{ color }}>{icon}</span>
+      </div>
+      <div className="min-w-0">
+        <p className="text-[11px] font-medium uppercase tracking-wide truncate" style={{ color: colors.textSecondary }}>{label}</p>
+        <p className="text-base font-bold leading-tight" style={{ color: alerta ? color : colors.text }}>{value}</p>
+        {sub && <p className="text-[11px] mt-0.5" style={{ color: colors.textSecondary }}>{sub}</p>}
+      </div>
     </div>
   );
 }
 
-function LoadingGrid({ cols = 6 }: { cols?: number }) {
+/* ── PeriodoSelector ── */
+function PeriodoSelector({ periodo, onChange, colors }: {
+  periodo: PeriodoConfig; onChange: (t: PeriodoTipo) => void; colors: any;
+}) {
+  const opcoes: { id: PeriodoTipo; label: string }[] = [
+    { id: "hoje",        label: "Hoje"        },
+    { id: "ontem",       label: "Ontem"       },
+    { id: "este_mes",    label: "Este mês"    },
+    { id: "mes_passado", label: "Mês passado" },
+    { id: "este_ano",    label: "Este ano"    },
+  ];
   return (
-    <div
-      className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-${cols} gap-4`}
-    >
-      {[...Array(cols)].map((_, i) => (
-        <Card key={i} className="border-slate-200">
-          <CardContent className="p-4">
-            <div className="animate-pulse space-y-2">
-              <div className="h-3 bg-slate-200 rounded w-3/4"></div>
-              <div className="h-6 bg-slate-200 rounded w-1/2"></div>
-            </div>
-          </CardContent>
-        </Card>
+    <div className="flex flex-wrap items-center gap-2">
+      {opcoes.map(({ id, label }) => {
+        const active = periodo.tipo === id;
+        return (
+          <button key={id} onClick={() => onChange(id)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-all"
+            style={{
+              backgroundColor: active ? `${colors.primary}15` : 'transparent',
+              borderColor:     active ? colors.primary : colors.border,
+              color:           active ? colors.primary : colors.textSecondary,
+            }}>
+            <Calendar size={13} />
+            {label}
+          </button>
+        );
+      })}
+      <span className="ml-auto text-xs px-2 py-1 rounded-md flex items-center gap-1"
+        style={{ backgroundColor: colors.hover, color: colors.textSecondary }}>
+        <Filter size={11} />
+        {periodo.data_inicio} — {periodo.data_fim}
+      </span>
+    </div>
+  );
+}
+
+/* ── GraficoCard ── */
+function GraficoCard({ titulo, children, colors }: { titulo: string; children: React.ReactNode; colors: any }) {
+  return (
+    <div className="rounded-xl border overflow-hidden" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+      <div className="px-4 py-3 border-b" style={{ borderColor: colors.border }}>
+        <p className="text-sm font-semibold" style={{ color: colors.text }}>{titulo}</p>
+      </div>
+      <div className="p-4">{children}</div>
+    </div>
+  );
+}
+
+/* ── MiniTabela ── */
+function MiniTabela({ headers, rows, aligns, colors }: {
+  headers: string[]; rows: (string | React.ReactNode)[][]; aligns: ("left"|"right"|"center")[]; colors: any;
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr style={{ backgroundColor: colors.hover }}>
+            {headers.map((h, i) => (
+              <th key={i} className={`py-2 px-3 text-${aligns[i]} text-xs font-semibold uppercase tracking-wide`}
+                style={{ color: colors.textSecondary }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y" style={{ borderColor: colors.border }}>
+          {rows.map((row, ri) => (
+            <tr key={ri} style={{ backgroundColor: ri % 2 !== 0 ? `${colors.hover}50` : 'transparent' }}>
+              {row.map((cell, ci) => (
+                <td key={ci} className={`py-2.5 px-3 text-${aligns[ci]} truncate max-w-[180px]`}
+                  style={{ color: colors.text }}>
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ── EstadoBadge ── */
+function EstadoBadge({ estado, label, colors }: { estado?: string; label?: string; colors: any }) {
+  const text = label ?? estado ?? "-";
+  const cfg: Record<string, { bg: string; color: string }> = {
+    paga:      { bg: `${colors.success}20`,  color: colors.success },
+    pendente:  { bg: `${colors.warning}20`,  color: colors.warning },
+    atrasado:  { bg: `${colors.danger}20`,   color: colors.danger  },
+    emitido:   { bg: `${colors.warning}20`,  color: colors.warning },
+    convertido:{ bg: `${colors.success}20`,  color: colors.success },
+    em_dia:    { bg: `${colors.success}20`,  color: colors.success },
+  };
+  const s = cfg[estado ?? ""] ?? { bg: `${colors.border}`, color: colors.textSecondary };
+  return (
+    <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold"
+      style={{ backgroundColor: s.bg, color: s.color }}>{text}</span>
+  );
+}
+
+/* ── Skeleton ── */
+function SkeletonCards({ n, colors }: { n: number; colors: any }) {
+  return (
+    <div className={`grid grid-cols-2 sm:grid-cols-${Math.min(n, 4)} gap-3`}>
+      {Array.from({ length: n }).map((_, i) => (
+        <div key={i} className="h-16 rounded-xl animate-pulse" style={{ backgroundColor: colors.hover }} />
       ))}
     </div>
   );
 }
 
-function EmptyChart({ message = "Sem dados disponíveis" }: { message?: string }) {
+/* ── Vazio / SemDados ── */
+function Vazio({ colors }: { colors: any }) {
   return (
-    <div className="h-[300px] flex items-center justify-center text-slate-400">
-      {message}
+    <div className="py-12 text-center text-sm" style={{ color: colors.textSecondary }}>
+      Nenhum dado disponível
     </div>
   );
 }
-
-function EmptyState({ message = "Nenhum dado disponível" }: { message?: string }) {
-  return <div className="text-center py-12 text-slate-500">{message}</div>;
+function SemDados({ colors, message = "Sem dados disponíveis" }: { colors: any; message?: string }) {
+  return (
+    <div className="h-48 flex items-center justify-center text-sm" style={{ color: colors.textSecondary }}>
+      {message}
+    </div>
+  );
 }

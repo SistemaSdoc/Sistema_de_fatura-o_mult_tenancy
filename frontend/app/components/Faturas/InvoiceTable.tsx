@@ -5,6 +5,7 @@ import {
     DocumentoFiscal,
     TipoDocumento,
 } from "@/services/DocumentoFiscal";
+import { Eye, FileText, Printer, Download, ChevronLeft, ChevronRight, Receipt } from "lucide-react";
 
 const TIPO_LABEL: Record<TipoDocumento, string> = {
     "FT": "Fatura",
@@ -56,15 +57,15 @@ interface InvoiceTableProps {
 
 function TableSkeleton({ colors }: { colors: ColorsTheme }) {
     return (
-        <div className="animate-pulse p-4">
-            <div className="space-y-2">
+        <div className="animate-pulse p-5">
+            <div className="space-y-3">
                 {[...Array(5)].map((_, i) => (
-                    <div key={i} className="flex gap-2">
-                        <div className="h-6 flex-1 rounded" style={{ backgroundColor: colors.border }}></div>
-                        <div className="h-6 flex-1 rounded" style={{ backgroundColor: colors.border }}></div>
-                        <div className="h-6 flex-1 rounded" style={{ backgroundColor: colors.border }}></div>
-                        <div className="h-6 flex-1 rounded" style={{ backgroundColor: colors.border }}></div>
-                        <div className="h-6 w-20 rounded" style={{ backgroundColor: colors.border }}></div>
+                    <div key={i} className="flex gap-3">
+                        <div className="h-8 flex-1 rounded" style={{ backgroundColor: colors.border }}></div>
+                        <div className="h-8 flex-1 rounded" style={{ backgroundColor: colors.border }}></div>
+                        <div className="h-8 flex-1 rounded" style={{ backgroundColor: colors.border }}></div>
+                        <div className="h-8 flex-1 rounded" style={{ backgroundColor: colors.border }}></div>
+                        <div className="h-8 w-24 rounded" style={{ backgroundColor: colors.border }}></div>
                     </div>
                 ))}
             </div>
@@ -86,7 +87,7 @@ function TipoBadge({ tipo, colors }: { tipo: TipoDocumento; colors: ColorsTheme 
 
     return (
         <span
-            className="inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+            className="inline-flex px-2 py-1 rounded-full text-xs font-medium"
             style={{ backgroundColor: estilo.bg, color: estilo.text }}
         >
             {TIPO_LABEL[tipo] || tipo}
@@ -162,32 +163,30 @@ export default function InvoiceTable({
 
     if (documentos.length === 0) {
         return (
-            <div className="p-6 text-center" style={{ color: colors.textSecondary }}>
+            <div className="p-8 text-center" style={{ color: colors.textSecondary }}>
                 <div
-                    className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3"
+                    className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
                     style={{ backgroundColor: colors.hover }}
                 >
-                    <svg className="w-6 h-6" style={{ color: colors.border }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
-                    </svg>
+                    <Receipt size={32} style={{ color: colors.border }} />
                 </div>
-                <p className="text-sm font-medium" style={{ color: colors.text }}>Nenhum documento encontrado</p>
-                <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>Tente ajustar os filtros</p>
+                <p className="text-base font-medium" style={{ color: colors.text }}>Nenhum documento encontrado</p>
+                <p className="text-sm mt-2" style={{ color: colors.textSecondary }}>Tente ajustar os filtros</p>
             </div>
         );
     }
 
     return (
         <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="w-full text-sm">
                 <thead>
                     <tr className="border-b" style={{ backgroundColor: colors.primary }}>
-                        <th className="px-2 py-1.5 text-left font-semibold whitespace-nowrap text-white">Nº Doc</th>
-                        <th className="px-2 py-1.5 text-left font-semibold whitespace-nowrap text-white">Cliente</th>
-                        <th className="px-2 py-1.5 text-left font-semibold whitespace-nowrap text-white">Tipo</th>
-                        <th className="px-2 py-1.5 text-left font-semibold whitespace-nowrap text-white">Data</th>
-                        <th className="px-2 py-1.5 text-right font-semibold whitespace-nowrap text-white">Total</th>
-                        <th className="px-2 py-1.5 text-center font-semibold whitespace-nowrap min-w-[140px] text-white">Ações</th>
+                        <th className="px-3 py-3 text-left font-semibold whitespace-nowrap text-white">Nº Documento</th>
+                        <th className="px-3 py-3 text-left font-semibold whitespace-nowrap text-white">Cliente</th>
+                        <th className="px-3 py-3 text-left font-semibold whitespace-nowrap text-white">Tipo</th>
+                        <th className="px-3 py-3 text-left font-semibold whitespace-nowrap text-white">Data</th>
+                        <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white">Total</th>
+                        <th className="px-3 py-3 text-center font-semibold whitespace-nowrap min-w-[180px] text-white">Ações</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y" style={{ borderColor: colors.border }}>
@@ -205,46 +204,43 @@ export default function InvoiceTable({
                                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = colors.hover}
                                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                             >
-                                <td className="px-2 py-1.5 font-medium whitespace-nowrap" style={{ color: colors.text }}>
+                                <td className="px-3 py-3 font-medium whitespace-nowrap" style={{ color: colors.text }}>
                                     {documento.numero_documento || `${documento.serie}-${String(documento.numero).padStart(5, '0')}`}
                                 </td>
-                                <td className="px-2 py-1.5 max-w-[120px]">
+                                <td className="px-3 py-3 max-w-[150px]">
                                     <div className="font-medium truncate" style={{ color: colors.text }}>
                                         {documentoFiscalService.getNomeCliente(documento)}
                                     </div>
                                     {documentoFiscalService.getNifCliente(documento) && (
-                                        <div className="text-[9px]" style={{ color: colors.textSecondary }}>
-                                            {documentoFiscalService.getNifCliente(documento)}
+                                        <div className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+                                            NIF: {documentoFiscalService.getNifCliente(documento)}
                                         </div>
                                     )}
                                 </td>
-                                <td className="px-2 py-1.5">
+                                <td className="px-3 py-3">
                                     <TipoBadge tipo={tipo} colors={colors} />
                                 </td>
-                                <td className="px-2 py-1.5 whitespace-nowrap">
+                                <td className="px-3 py-3 whitespace-nowrap">
                                     <div style={{ color: colors.textSecondary }}>
                                         {new Date(documento.data_emissao).toLocaleDateString("pt-AO")}
                                     </div>
-                                    <div className="text-[9px]" style={{ color: colors.textSecondary }}>
+                                    <div className="text-xs mt-0.5" style={{ color: colors.textSecondary }}>
                                         {documento.hora_emissao}
                                     </div>
                                 </td>
-                                <td className="px-2 py-1.5 text-right font-medium whitespace-nowrap" style={{ color: colors.text }}>
+                                <td className="px-3 py-3 text-right font-medium whitespace-nowrap" style={{ color: colors.text }}>
                                     {formatKz(documento.total_liquido)}
                                 </td>
-                                <td className="px-2 py-1.5 text-center">
-                                    <div className="flex items-center justify-center gap-0.5">
+                                <td className="px-3 py-3 text-center">
+                                    <div className="flex items-center justify-center gap-1">
                                         {/* Ver Detalhes */}
                                         <button
                                             onClick={() => onVerDetalhes(documento)}
-                                            className="p-1 rounded transition-colors hover:opacity-70 touch-manipulation"
+                                            className="p-2 rounded transition-colors hover:opacity-70 touch-manipulation"
                                             style={{ color: colors.text }}
                                             title="Ver detalhes"
                                         >
-                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                            </svg>
+                                            <Eye size={18} />
                                         </button>
 
                                         {/* Gerar Recibo (apenas FT) */}
@@ -252,16 +248,14 @@ export default function InvoiceTable({
                                             <button
                                                 onClick={() => handleGerarRecibo(documento)}
                                                 disabled={gerandoRecibo === documento.id}
-                                                className="p-1 rounded transition-colors hover:opacity-70 touch-manipulation disabled:opacity-50"
+                                                className="p-2 rounded transition-colors hover:opacity-70 touch-manipulation disabled:opacity-50"
                                                 style={{ color: colors.success }}
                                                 title="Gerar Recibo"
                                             >
                                                 {gerandoRecibo === documento.id ? (
-                                                    <div className="w-3.5 h-3.5 border-2 border-t-current rounded-full animate-spin" style={{ borderColor: `${colors.success}30`, borderTopColor: colors.success }} />
+                                                    <div className="w-4 h-4 border-2 border-t-current rounded-full animate-spin" style={{ borderColor: `${colors.success}30`, borderTopColor: colors.success }} />
                                                 ) : (
-                                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                                    </svg>
+                                                    <FileText size={18} />
                                                 )}
                                             </button>
                                         )}
@@ -270,13 +264,11 @@ export default function InvoiceTable({
                                         {podeImprimirDoc && (
                                             <button
                                                 onClick={() => onImprimirTalao(documento)}
-                                                className="p-1 rounded transition-colors hover:opacity-70 touch-manipulation"
+                                                className="p-2 rounded transition-colors hover:opacity-70 touch-manipulation"
                                                 style={{ color: colors.secondary }}
-                                                title="Imprimir Talão"
+                                                title="Imprimir"
                                             >
-                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                                                </svg>
+                                                <Printer size={18} />
                                             </button>
                                         )}
 
@@ -285,16 +277,14 @@ export default function InvoiceTable({
                                             <button
                                                 onClick={() => handleBaixarPdf(documento)}
                                                 disabled={baixandoPdf === documento.id}
-                                                className="p-1 rounded transition-colors hover:opacity-70 touch-manipulation disabled:opacity-50"
+                                                className="p-2 rounded transition-colors hover:opacity-70 touch-manipulation disabled:opacity-50"
                                                 style={{ color: colors.primary }}
                                                 title="Baixar PDF"
                                             >
                                                 {baixandoPdf === documento.id ? (
-                                                    <div className="w-3.5 h-3.5 border-2 border-t-current rounded-full animate-spin" style={{ borderColor: `${colors.primary}30`, borderTopColor: colors.primary }} />
+                                                    <div className="w-4 h-4 border-2 border-t-current rounded-full animate-spin" style={{ borderColor: `${colors.primary}30`, borderTopColor: colors.primary }} />
                                                 ) : (
-                                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                                    </svg>
+                                                    <Download size={18} />
                                                 )}
                                             </button>
                                         )}
@@ -306,39 +296,41 @@ export default function InvoiceTable({
                 </tbody>
             </table>
 
-            {/* Paginação Compacta */}
+            {/* Paginação */}
             {totalPaginas > 1 && (
-                <div className="flex items-center justify-between px-3 py-2 border-t" style={{ borderColor: colors.border }}>
-                    <div className="text-[10px]" style={{ color: colors.textSecondary }}>
+                <div className="flex items-center justify-between px-4 py-3 border-t" style={{ borderColor: colors.border }}>
+                    <div className="text-sm" style={{ color: colors.textSecondary }}>
                         {indiceInicial + 1}-{Math.min(indiceFinal, documentos.length)} de {documentos.length}
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-2">
                         <button
                             onClick={() => irParaPagina(paginaValida - 1)}
                             disabled={paginaValida === 1}
-                            className="px-2 py-1 rounded text-[10px] font-medium transition-colors disabled:opacity-50"
+                            className="px-3 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
                             style={{
                                 backgroundColor: paginaAtual === 1 ? colors.hover : colors.primary,
                                 color: paginaAtual === 1 ? colors.textSecondary : 'white'
                             }}
                         >
-                            Anterior
+                            <ChevronLeft size={16} />
+                            <span>Anterior</span>
                         </button>
 
-                        <span className="px-2 py-1 text-[10px]" style={{ color: colors.text }}>
+                        <span className="px-3 py-1.5 text-sm" style={{ color: colors.text }}>
                             Pág {paginaValida}/{totalPaginas}
                         </span>
 
                         <button
                             onClick={() => irParaPagina(paginaValida + 1)}
                             disabled={paginaValida === totalPaginas}
-                            className="px-2 py-1 rounded text-[10px] font-medium transition-colors disabled:opacity-50"
+                            className="px-3 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
                             style={{
                                 backgroundColor: paginaAtual === totalPaginas ? colors.hover : colors.primary,
                                 color: paginaAtual === totalPaginas ? colors.textSecondary : 'white'
                             }}
                         >
-                            Próxima
+                            <span>Próxima</span>
+                            <ChevronRight size={16} />
                         </button>
                     </div>
                 </div>

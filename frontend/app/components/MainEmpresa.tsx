@@ -2,7 +2,6 @@
 
 import React, { ReactNode, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Easing } from "framer-motion";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Home,
@@ -57,17 +56,6 @@ interface MainEmpresaProps {
     companyName?: string;
 }
 
-/* ===================== CONSTANTES ===================== */
-const COLORS = {
-    primary: '#123859',
-    secondary: '#F9941F',
-    background: '#F2F2F2',
-    danger: '#dc3545',
-    success: '#28a745',
-    warning: '#ffc107',
-};
-
-/* ===================== COMPONENT ===================== */
 export default function MainEmpresa({
     children,
     companyLogo,
@@ -269,9 +257,9 @@ export default function MainEmpresa({
                 userRole === "operador" || userRole === "admin"
                     ? [
                         { label: "Nova fatura", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
-                        { label: "Fatura Proforma", path: "/dashboard/Faturas/Faturas_Proforma", icon: FileText },
-                        { label: "Faturas", path: "/dashboard/Faturas/Faturas", icon: FileText },
-                        { label: "Documentos fiscais", path: "/dashboard/Faturas/DC", icon: FileText },
+                        { label: "Proforma", path: "/dashboard/Faturas/Faturas_Proforma", icon: FileText },
+                        { label: "Documentos fiscais", path: "/dashboard/Faturas/Faturas", icon: FileText },
+                        { label: "Outros", path: "/dashboard/Faturas/DC", icon: FileText },
                     ]
                     : [],
             isGroup: true,
@@ -290,7 +278,6 @@ export default function MainEmpresa({
             icon: Archive,
             path: "/dashboard/Produtos_servicos",
             links: [
-                { label: "Novo produto/serviço", path: "/dashboard/Produtos_servicos/Novo_produto_servico", icon: Package },
                 { label: "Stock", path: "/dashboard/Produtos_servicos/Stock", icon: Package },
                 { label: "Categorias", path: "/dashboard/Produtos_servicos/categorias", icon: Package },
                 { label: "Fornecedores", path: "/dashboard/Fornecedores/Novo_fornecedor", icon: Truck },
@@ -302,7 +289,7 @@ export default function MainEmpresa({
             label: "Relatórios",
             icon: BarChart2,
             path: "/dashboard/relatorios",
-            links: [{ label: "Relatorio", path: "/dashboard/relatorios/diario", icon: BarChart2 }],
+            links: [],
             isGroup: true,
             roles: ["admin", "contabilista"],
         },

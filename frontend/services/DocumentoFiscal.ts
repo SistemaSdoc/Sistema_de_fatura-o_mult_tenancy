@@ -32,6 +32,7 @@ export interface ItemDocumento {
 }
 
 export interface DocumentoFiscal {
+    total_desconto: boolean;
     id: string;
     user_id: string;
     venda_id?: string | null;

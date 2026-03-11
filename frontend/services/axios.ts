@@ -9,7 +9,7 @@ export interface ApiErrorResponse {
 }
 
 const api = axios.create({
-  baseURL: "http://192.168.1.198:8000",
+  baseURL: "http://192.168.0.170:8000",
   withCredentials: true, // ESSENCIAL para SPA Sanctum
   headers: {
     Accept: "application/json",

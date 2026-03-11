@@ -4,70 +4,109 @@ import React, { useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { useRouter } from "next/navigation";
 import {
-  Plus, Trash2, ShoppingCart, CreditCard, CheckCircle2, ArrowLeft,
-  AlertTriangle, User, Package, FileText, Minus, Calculator
+  Plus, Trash2, ShoppingCart, CheckCircle2, ArrowLeft,
+  AlertTriangle, User, Package, FileText, Minus, Calculator, Receipt,
 } from "lucide-react";
 import { AxiosError } from "axios";
 import MainEmpresa from "../../../components/MainEmpresa";
 import { useAuth } from "@/context/authprovider";
 import { useThemeColors } from "@/context/ThemeContext";
 import {
-  vendaService, Produto, Cliente, clienteService, produtoService,
-  CriarVendaPayload, formatarNIF, isServico, formatarPreco,
-  DadosPagamento, validarPayloadVenda, TipoDocumentoFiscal,
+  vendaService, clienteService, produtoService,
+  formatarNIF, isServico, formatarPreco, validarPayloadVenda,
+} from "@/services/vendas";
+import type {
+  Produto, Cliente, CriarVendaPayload, DadosPagamento, TipoDocumentoFiscal,
 } from "@/services/vendas";
 
+/* ─── Constantes ─────────────────────────────────────────────────── */
 const ESTOQUE_MINIMO = 5;
 
+/* ─── Tipos ──────────────────────────────────────────────────────── */
 interface ItemVendaUI {
-  id: string;
-  produto_id: string;
-  descricao: string;
-  quantidade: number;
-  preco_venda: number;
-  desconto: number;
-  base_tributavel: number;
-  valor_iva: number;
-  valor_retencao: number;
-  subtotal: number;
-  taxa_iva?: number;
-  taxa_retencao?: number;
-  codigo_produto?: string;
-  eh_servico: boolean;
+  id: string; produto_id: string; descricao: string;
+  quantidade: number; preco_venda: number; desconto: number;
+  base_tributavel: number; valor_iva: number; valor_retencao: number;
+  subtotal: number; taxa_iva?: number; taxa_retencao?: number;
+  codigo_produto?: string; eh_servico: boolean;
 }
-
-interface FormItemState {
-  produto_id: string;
-  quantidade: number;
-  desconto: number;
-}
-
+interface FormItemState { produto_id: string; quantidade: number; desconto: number; }
 type ModoCliente = 'cadastrado' | 'avulso';
 
+/* ─── Helpers ────────────────────────────────────────────────────── */
 const arredondar = (v: number) => Math.round(v * 100) / 100;
 
-/* ---- Reusable section label with icon ---- */
-const SectionLabel = ({ icon: Icon, label, colors }: { icon: React.ComponentType<{ size: number; style?: React.CSSProperties }>; label: string; colors: ReturnType<typeof useThemeColors> }) => (
-  <div className="flex items-center gap-1.5 mb-1.5">
-    <Icon size={13} style={{ color: colors.primary }} />
-    <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: colors.primary }}>
-      {label}
-    </span>
-  </div>
-);
+function calcularItem(produto: Produto, qtd: number, desc: number, id = uuidv4()): ItemVendaUI {
+  const ehServico = isServico(produto);
+  const base = arredondar(arredondar(produto.preco_venda * qtd) - desc);
+  const taxaIva = produto.taxa_iva ?? 14;
+  const iva = arredondar(base * taxaIva / 100);
+  const taxaRet = ehServico ? 6.5 : 0;
+  const ret = ehServico ? arredondar(base * taxaRet / 100) : 0;
+  return {
+    id, produto_id: produto.id, descricao: produto.nome, quantidade: qtd,
+    preco_venda: produto.preco_venda, desconto: desc, base_tributavel: base,
+    valor_iva: iva, valor_retencao: ret, subtotal: arredondar(base + iva - ret),
+    taxa_iva: taxaIva, taxa_retencao: taxaRet,
+    codigo_produto: produto.codigo || undefined, eh_servico: ehServico,
+  };
+}
 
+/* ─── Linha de detalhe fiscal ──────────────────────────────────── */
+interface ThemeColors {
+  background: string;
+  card: string;
+  border: string;
+  text: string;
+  textSecondary: string;
+  primary: string;
+  secondary: string;
+  danger: string;
+  success: string;
+  warning: string;
+  hover: string;
+}
+
+function LinhaFiscal({
+  label, valor, cor, negrito, separador, colors,
+}: {
+  label: string; valor: string; cor?: string;
+  negrito?: boolean; separador?: boolean; colors: ThemeColors;
+}) {
+  return (
+    <>
+      {separador && <div className="my-1 border-t" style={{ borderColor: colors.border }} />}
+      <div className="flex items-center justify-between gap-2 py-0.5">
+        <span className={`text-sm ${negrito ? "font-semibold" : ""}`}
+          style={{ color: negrito ? colors.text : colors.textSecondary }}>
+          {label}
+        </span>
+        <span className={`text-sm ${negrito ? "font-bold" : "font-medium"} tabular-nums`}
+          style={{ color: cor || (negrito ? colors.text : colors.textSecondary) }}>
+          {valor}
+        </span>
+      </div>
+    </>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PÁGINA
+═══════════════════════════════════════════════════════════════════ */
 export default function NovaFaturaReciboPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const colors = useThemeColors();
 
-  const inputStyles = {
+  const inp = {
     backgroundColor: colors.card,
     borderColor: colors.border,
     color: colors.text,
     borderWidth: 1,
+    fontSize: '14px',
   };
 
+  /* ── Estado ── */
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [produtosEstoqueBaixo, setProdutosEstoqueBaixo] = useState<Produto[]>([]);
@@ -76,7 +115,6 @@ export default function NovaFaturaReciboPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
-
   const [modoCliente, setModoCliente] = useState<ModoCliente>('cadastrado');
   const [clienteAvulso, setClienteAvulso] = useState('');
   const [clienteAvulsoNif, setClienteAvulsoNif] = useState('');
@@ -91,13 +129,15 @@ export default function NovaFaturaReciboPage() {
   });
   const [observacoes, setObservacoes] = useState('');
 
+  /* ── Auth ── */
   useEffect(() => {
     if (!authLoading && !user) router.push("/login");
   }, [authLoading, user, router]);
 
+  /* ── Carregar dados ── */
   useEffect(() => {
     if (!user) return;
-    async function load() {
+    (async () => {
       try {
         const [clientesData, produtosData] = await Promise.all([
           clienteService.listar({ status: 'ativo' }),
@@ -112,83 +152,44 @@ export default function NovaFaturaReciboPage() {
       } catch {
         setError("Erro ao carregar dados");
       }
-    }
-    load();
+    })();
   }, [user]);
 
-  // Validação de NIF
-  const validarNif = (nif: string): boolean => {
-    const numerosApenas = nif.replace(/\D/g, '');
-    return numerosApenas.length === 9;
-  };
-
+  /* ── NIF ── */
   const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    const numerosApenas = value.replace(/\D/g, '');
-    
-    if (numerosApenas.length <= 9) {
-      setClienteAvulsoNif(numerosApenas);
-      
-      if (numerosApenas.length > 0 && numerosApenas.length !== 9) {
-        setNifError("O NIF deve ter exatamente 9 dígitos");
-      } else {
-        setNifError(null);
-      }
+    const nums = e.target.value.replace(/\D/g, '');
+    if (nums.length <= 9) {
+      setClienteAvulsoNif(nums);
+      setNifError(nums.length > 0 && nums.length !== 9 ? "NIF deve ter 9 dígitos" : null);
     }
   };
 
+  /* ── Preview item ── */
   useEffect(() => {
     if (!formItem.produto_id) { setPreviewItem(null); return; }
-    const produto = produtos.find(p => p.id === formItem.produto_id);
-    if (!produto) { setPreviewItem(null); return; }
-    const ehServico = isServico(produto);
-    const qtd = Math.min(formItem.quantidade, ehServico ? Infinity : produto.estoque_atual);
-    const base = arredondar(arredondar(produto.preco_venda * qtd) - formItem.desconto);
-    const taxaIva = produto.taxa_iva ?? 14;
-    const iva = arredondar(base * taxaIva / 100);
-    const taxaRet = ehServico ? 6.5 : 0;
-    const ret = ehServico ? arredondar(base * taxaRet / 100) : 0;
-    setPreviewItem({
-      id: "preview", produto_id: produto.id, descricao: produto.nome, quantidade: qtd,
-      preco_venda: produto.preco_venda, desconto: formItem.desconto, base_tributavel: base,
-      valor_iva: iva, valor_retencao: ret, subtotal: arredondar(base + iva - ret),
-      taxa_iva: taxaIva, taxa_retencao: taxaRet, codigo_produto: produto.codigo || undefined,
-      eh_servico: ehServico,
-    });
+    const p = produtos.find(x => x.id === formItem.produto_id);
+    if (!p) { setPreviewItem(null); return; }
+    const qtd = Math.min(formItem.quantidade, isServico(p) ? 9999 : p.estoque_atual);
+    setPreviewItem({ ...calcularItem(p, qtd, formItem.desconto), id: "preview" });
   }, [formItem, produtos]);
 
-  const calcularItem = (produto: Produto, qtd: number, desc: number, id = uuidv4()): ItemVendaUI => {
-    const ehServico = isServico(produto);
-    const base = arredondar(arredondar(produto.preco_venda * qtd) - desc);
-    const taxaIva = produto.taxa_iva ?? 14;
-    const iva = arredondar(base * taxaIva / 100);
-    const taxaRet = ehServico ? 6.5 : 0;
-    const ret = ehServico ? arredondar(base * taxaRet / 100) : 0;
-    return {
-      id, produto_id: produto.id, descricao: produto.nome, quantidade: qtd,
-      preco_venda: produto.preco_venda, desconto: desc, base_tributavel: base,
-      valor_iva: iva, valor_retencao: ret, subtotal: arredondar(base + iva - ret),
-      taxa_iva: taxaIva, taxa_retencao: taxaRet, codigo_produto: produto.codigo || undefined,
-      eh_servico: ehServico,
-    };
-  };
-
+  /* ── Adicionar item ── */
   const adicionarItem = () => {
     if (!formItem.produto_id || !previewItem) { setError("Selecione um produto"); return; }
-    const produto = produtos.find(p => p.id === formItem.produto_id);
-    if (!produto) return;
-    if (!isServico(produto) && formItem.quantidade > produto.estoque_atual) {
-      setError(`Estoque insuficiente. Disponível: ${produto.estoque_atual}`); return;
+    const p = produtos.find(x => x.id === formItem.produto_id);
+    if (!p) return;
+    if (!isServico(p) && formItem.quantidade > p.estoque_atual) {
+      setError(`Estoque insuficiente. Disponível: ${p.estoque_atual}`); return;
     }
-    const existeIdx = itens.findIndex(i => i.produto_id === formItem.produto_id);
-    if (existeIdx >= 0) {
-      const novaQtd = itens[existeIdx].quantidade + formItem.quantidade;
-      if (!isServico(produto) && novaQtd > produto.estoque_atual) {
+    const idx = itens.findIndex(i => i.produto_id === formItem.produto_id);
+    if (idx >= 0) {
+      const novaQtd = itens[idx].quantidade + formItem.quantidade;
+      if (!isServico(p) && novaQtd > p.estoque_atual) {
         setError(`Estoque insuficiente para ${novaQtd} unidades.`); return;
       }
-      setItens(prev => prev.map((it, i) => i === existeIdx ? calcularItem(produto, novaQtd, formItem.desconto, it.id) : it));
+      setItens(prev => prev.map((it, i) => i === idx ? calcularItem(p, novaQtd, formItem.desconto, it.id) : it));
     } else {
-      setItens(prev => [...prev, calcularItem(produto, formItem.quantidade, formItem.desconto)]);
+      setItens(prev => [...prev, calcularItem(p, formItem.quantidade, formItem.desconto)]);
     }
     setFormItem({ produto_id: "", quantidade: 1, desconto: 0 });
     setPreviewItem(null);
@@ -198,58 +199,53 @@ export default function NovaFaturaReciboPage() {
   const atualizarQtd = (itemId: string, novaQtd: number) => {
     const idx = itens.findIndex(i => i.id === itemId);
     if (idx < 0) return;
-    if (novaQtd < 1) { removerItem(itemId); return; }
+    if (novaQtd < 1) { setItens(p => p.filter(i => i.id !== itemId)); return; }
     const item = itens[idx];
-    const produto = produtos.find(p => p.id === item.produto_id);
-    if (!produto) return;
-    if (!isServico(produto) && novaQtd > produto.estoque_atual) {
-      setError(`Estoque insuficiente. Máximo: ${produto.estoque_atual}`); return;
+    const p = produtos.find(x => x.id === item.produto_id);
+    if (!p) return;
+    if (!isServico(p) && novaQtd > p.estoque_atual) {
+      setError(`Máximo disponível: ${p.estoque_atual}`); return;
     }
-    setItens(prev => prev.map((it, i) => i === idx ? calcularItem(produto, novaQtd, item.desconto, item.id) : it));
+    setItens(prev => prev.map((it, i) => i === idx ? calcularItem(p, novaQtd, item.desconto, item.id) : it));
   };
 
-  const removerItem = (id: string) => setItens(prev => prev.filter(i => i.id !== id));
+  const removerItem = (id: string) => setItens(p => p.filter(i => i.id !== id));
 
-  /* ---- Totais ---- */
+  /* ── Totais ── */
   const totalBase = arredondar(itens.reduce((a, i) => a + i.base_tributavel, 0));
   const totalIva = arredondar(itens.reduce((a, i) => a + i.valor_iva, 0));
   const totalRetencao = arredondar(itens.reduce((a, i) => a + i.valor_retencao, 0));
   const totalLiquido = arredondar(itens.reduce((a, i) => a + i.subtotal, 0));
+  const totalDesconto = arredondar(itens.reduce((a, i) => a + i.desconto, 0));
 
-  // Atualiza automaticamente o valor_pago quando o totalLiquido mudar
+  /* ── Sincronizar valor_pago ── */
   useEffect(() => {
-    if (itens.length > 0) {
-      setFormPagamento(prev => ({
-        ...prev,
-        valor_pago: totalLiquido.toString()
-      }));
-    } else {
-      setFormPagamento(prev => ({
-        ...prev,
-        valor_pago: ""
-      }));
-    }
+    setFormPagamento(p => ({
+      ...p, valor_pago: itens.length > 0 ? totalLiquido.toString() : "",
+    }));
   }, [itens, totalLiquido]);
 
   const valorPagamento = parseFloat(formPagamento.valor_pago) || 0;
   const troco = valorPagamento > totalLiquido ? arredondar(valorPagamento - totalLiquido) : 0;
+  const falta = valorPagamento > 0 && valorPagamento < totalLiquido ? arredondar(totalLiquido - valorPagamento) : 0;
   const pagamentoSuficiente = valorPagamento >= totalLiquido && totalLiquido > 0;
 
+  /* ── Validação ── */
   const podeFinalizar = () => {
     if (itens.length === 0) return false;
     if (modoCliente === 'cadastrado' && !clienteSelecionado) return false;
     if (modoCliente === 'avulso') {
       if (!clienteAvulso.trim()) return false;
-      if (clienteAvulsoNif.trim() && !validarNif(clienteAvulsoNif)) return false;
+      if (clienteAvulsoNif.trim() && clienteAvulsoNif.length !== 9) return false;
     }
     return pagamentoSuficiente;
   };
 
+  /* ── Finalizar ── */
   const finalizarVenda = async () => {
     if (!podeFinalizar()) return;
     setLoading(true); setError(null); setSucesso(null);
     try {
-      const valorBackend = arredondar(Math.min(valorPagamento, totalLiquido));
       const payload: CriarVendaPayload = {
         itens: itens.map(it => ({
           produto_id: it.produto_id, quantidade: it.quantidade,
@@ -259,11 +255,14 @@ export default function NovaFaturaReciboPage() {
         tipo_documento: 'FR' as TipoDocumentoFiscal,
         faturar: true,
         dados_pagamento: {
-          metodo: formPagamento.metodo, valor: valorBackend,
-          referencia: formPagamento.referencia || undefined, data: formPagamento.data_pagamento,
+          metodo: formPagamento.metodo,
+          valor: arredondar(Math.min(valorPagamento, totalLiquido)),
+          referencia: formPagamento.referencia || undefined,
+          data: formPagamento.data_pagamento,
         },
       };
-      if (modoCliente === 'cadastrado' && clienteSelecionado) payload.cliente_id = clienteSelecionado.id;
+      if (modoCliente === 'cadastrado' && clienteSelecionado)
+        payload.cliente_id = clienteSelecionado.id;
       else if (modoCliente === 'avulso' && clienteAvulso.trim()) {
         payload.cliente_nome = clienteAvulso.trim();
         if (clienteAvulsoNif.trim()) payload.cliente_nif = clienteAvulsoNif.trim();
@@ -281,108 +280,133 @@ export default function NovaFaturaReciboPage() {
     }
   };
 
-  const produtoSelecionado = produtos.find(p => p.id === formItem.produto_id);
+  const produtoSel = produtos.find(p => p.id === formItem.produto_id);
 
+  /* ══════════════════════════════════════════════════════════════════
+     RENDER
+  ══════════════════════════════════════════════════════════════════ */
   return (
     <MainEmpresa>
-      <div className="space-y-3 pb-8 px-2 sm:px-0 max-w-6xl mx-auto" style={{ backgroundColor: colors.background }}>
+      <div className="space-y-4 pb-8 px-3 sm:px-4 max-w-7xl mx-auto"
+        style={{ backgroundColor: colors.background }}>
 
         {/* ── Header ── */}
-        <div className="flex items-center gap-2">
-          <button onClick={() => router.back()} className="p-1.5 rounded-full transition-colors hover:bg-opacity-10" style={{ color: colors.primary }}>
-            <ArrowLeft size={18} />
+        <div className="flex items-center gap-3">
+          <button onClick={() => router.back()}
+            className="p-2 rounded-full transition-colors hover:opacity-70"
+            style={{ color: colors.primary }}>
+            <ArrowLeft size={20} />
           </button>
-          <h1 className="text-lg sm:text-xl font-bold" style={{ color: colors.secondary }}>Nova Fatura-Recibo</h1>
+          <div>
+            <h1 className="text-xl font-bold" style={{ color: colors.secondary }}>Nova venda</h1>
+          </div>
         </div>
 
         {/* ── Alertas ── */}
         {error && (
-          <div className="p-2.5 rounded-lg border text-xs flex items-center gap-2"
-            style={{ backgroundColor: colors.danger + '15', borderColor: colors.danger, color: colors.danger }}>
-            <AlertTriangle size={13} className="flex-shrink-0" />
+          <div className="p-3 rounded-lg border text-sm flex items-center gap-2"
+            style={{ backgroundColor: `${colors.danger}15`, borderColor: colors.danger, color: colors.danger }}>
+            <AlertTriangle size={15} className="flex-shrink-0" />
             <span className="flex-1">{error}</span>
+            <button onClick={() => setError(null)} className="opacity-60 hover:opacity-100">
+              <Minus size={14} />
+            </button>
           </div>
         )}
         {sucesso && (
-          <div className="p-2.5 rounded-lg border text-xs flex items-center gap-2"
-            style={{ backgroundColor: colors.success + '15', borderColor: colors.success, color: colors.success }}>
-            <CheckCircle2 size={13} className="flex-shrink-0" />
-            <span className="flex-1">{sucesso}</span>
+          <div className="p-3 rounded-lg border text-sm flex items-center gap-2"
+            style={{ backgroundColor: `${colors.success}15`, borderColor: colors.success, color: colors.success }}>
+            <CheckCircle2 size={15} className="flex-shrink-0" /><span>{sucesso}</span>
           </div>
         )}
         {produtosEstoqueBaixo.length > 0 && (
-          <div className="p-2.5 rounded-lg border text-xs flex items-center gap-2 flex-wrap"
-            style={{ backgroundColor: colors.warning + '15', borderColor: colors.warning }}>
-            <AlertTriangle size={13} className="flex-shrink-0" style={{ color: colors.warning }} />
-            <span style={{ color: colors.warning }} className="font-semibold">Estoque baixo:</span>
-            <span style={{ color: colors.textSecondary }} className="flex-1">
-              {produtosEstoqueBaixo.map(p => `${p.nome} (${p.estoque_atual})`).join(' · ')}
+          <div className="p-3 rounded-lg border text-sm flex items-start gap-2"
+            style={{ backgroundColor: `${colors.warning}12`, borderColor: `${colors.warning}50` }}>
+            <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" style={{ color: colors.warning }} />
+            <span style={{ color: colors.warning }}>
+              <strong>Estoque baixo: </strong>
+              <span style={{ color: colors.textSecondary }}>
+                {produtosEstoqueBaixo.map(p => `${p.nome} (${p.estoque_atual})`).join(' · ')}
+              </span>
             </span>
           </div>
         )}
 
-        {/* ══════════════════════════════════════
-            CARD: Cliente + Produto + Observações
-        ══════════════════════════════════════ */}
-        <div className="rounded-xl border shadow-sm overflow-hidden" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-          <div className="px-4 py-2 flex items-center gap-2" style={{ backgroundColor: colors.primary }}>
-            <ShoppingCart size={14} className="text-white" />
-            <span className="text-white font-semibold text-xs uppercase tracking-wide">Dados da Venda</span>
+        {/* ══════════════════════════════════════════════════════
+            CARD 1 — Dados da Venda (Cliente + Produto + Obs)
+        ══════════════════════════════════════════════════════ */}
+        <div className="rounded-xl border shadow-sm overflow-hidden"
+          style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+
+          <div className="px-4 py-2.5 flex items-center gap-2"
+            style={{ backgroundColor: colors.primary }}>
+            <ShoppingCart size={15} className="text-white" />
+            <span className="text-white font-semibold text-sm tracking-wide">Dados da Venda</span>
           </div>
 
-          {/* Layout com tabela para manter alinhamento compacto */}
           <table className="w-full border-collapse">
             <tbody>
 
               {/* ── Cliente ── */}
               <tr className="border-b" style={{ borderColor: colors.border }}>
-                <td className="py-2 pl-4 pr-2 align-middle w-[80px] sm:w-[100px]" style={{ backgroundColor: colors.hover }}>
+                <td className="py-3 pl-4 pr-3 align-middle w-[110px]"
+                  style={{ backgroundColor: colors.hover }}>
                   <div className="flex items-center gap-1.5">
-                    <User size={13} style={{ color: colors.primary }} />
-                    <span className="text-[11px] font-semibold" style={{ color: colors.primary }}>Cliente</span>
+                    <User size={14} style={{ color: colors.primary }} />
+                    <span className="text-sm font-semibold" style={{ color: colors.primary }}>Cliente</span>
                   </div>
                 </td>
-                <td className="py-2 px-3 align-middle">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {/* Botões de modo cliente - compactos */}
-                    <div className="flex rounded-lg overflow-hidden border text-xs" style={{ borderColor: colors.border }}>
+                <td className="py-3 px-3 align-middle">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Toggle modo */}
+                    <div className="inline-flex rounded-lg border overflow-hidden flex-shrink-0"
+                      style={{ borderColor: colors.border }}>
                       {(['cadastrado', 'avulso'] as ModoCliente[]).map(modo => (
                         <button key={modo} type="button"
-                          onClick={() => { setModoCliente(modo); setClienteSelecionado(null); setClienteAvulso(''); setClienteAvulsoNif(''); setNifError(null); }}
-                          className="px-2 py-1 font-medium transition-colors whitespace-nowrap text-[11px]"
-                          style={{ backgroundColor: modoCliente === modo ? colors.primary : 'transparent', color: modoCliente === modo ? 'white' : colors.textSecondary }}>
+                          onClick={() => {
+                            setModoCliente(modo);
+                            setClienteSelecionado(null);
+                            setClienteAvulso('');
+                            setClienteAvulsoNif('');
+                            setNifError(null);
+                          }}
+                          className="px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap"
+                          style={{
+                            backgroundColor: modoCliente === modo ? colors.primary : 'transparent',
+                            color: modoCliente === modo ? 'white' : colors.textSecondary,
+                          }}>
                           {modo === 'cadastrado' ? 'Cadastrado' : 'Avulso'}
                         </button>
                       ))}
                     </div>
+
                     {modoCliente === 'cadastrado' ? (
-                      <select className="flex-1 min-w-[140px] max-w-[200px] p-1 rounded-lg text-xs" style={inputStyles}
+                      <select className="flex-1 min-w-[160px] max-w-xs p-2 rounded-lg text-sm outline-none"
+                        style={inp}
                         value={clienteSelecionado?.id ?? ""}
                         onChange={e => setClienteSelecionado(clientes.find(c => c.id === e.target.value) ?? null)}>
                         <option value="">Selecione um cliente</option>
                         {clientes.map(c => (
-                          <option key={c.id} value={c.id}>{c.nome}{c.nif ? ` (${formatarNIF(c.nif)})` : ''}</option>
+                          <option key={c.id} value={c.id}>
+                            {c.nome}{c.nif ? ` — ${formatarNIF(c.nif)}` : ''}
+                          </option>
                         ))}
                       </select>
                     ) : (
-                      <>
+                      <div className="flex flex-wrap gap-2">
                         <input type="text" placeholder="Nome do cliente *"
-                          className="w-[140px] sm:w-[160px] p-1 rounded-lg text-xs" style={inputStyles}
-                          value={clienteAvulso} onChange={e => setClienteAvulso(e.target.value)} />
-                        <div className="relative inline-block">
-                          <input type="text" inputMode="numeric" placeholder="NIF"
-                            className="w-[80px] p-1 rounded-lg text-xs" style={{
-                              ...inputStyles,
-                              borderColor: nifError ? colors.danger : inputStyles.borderColor
-                            }}
-                            value={clienteAvulsoNif} onChange={handleNifChange} maxLength={9} />
-                          {nifError && (
-                            <p className="absolute -bottom-4 left-0 text-[8px]" style={{ color: colors.danger }}>
-                              {nifError}
-                            </p>
-                          )}
+                          className="w-44 p-2 rounded-lg text-sm outline-none" style={inp}
+                          value={clienteAvulso}
+                          onChange={e => setClienteAvulso(e.target.value)} />
+                        <div className="flex flex-col gap-0.5">
+                          <input type="text" inputMode="numeric" placeholder="NIF (9 dígitos)"
+                            className="w-32 p-2 rounded-lg text-sm outline-none" maxLength={9}
+                            style={{ ...inp, borderColor: nifError ? colors.danger : inp.borderColor }}
+                            value={clienteAvulsoNif}
+                            onChange={handleNifChange} />
+                          {nifError && <span className="text-xs" style={{ color: colors.danger }}>{nifError}</span>}
                         </div>
-                      </>
+                      </div>
                     )}
                   </div>
                 </td>
@@ -390,21 +414,22 @@ export default function NovaFaturaReciboPage() {
 
               {/* ── Produto ── */}
               <tr className="border-b" style={{ borderColor: colors.border }}>
-                <td className="py-2 pl-4 pr-2 align-middle w-[80px] sm:w-[100px]" style={{ backgroundColor: colors.hover }}>
+                <td className="py-3 pl-4 pr-3 align-middle"
+                  style={{ backgroundColor: colors.hover }}>
                   <div className="flex items-center gap-1.5">
-                    <Package size={13} style={{ color: colors.primary }} />
-                    <span className="text-[11px] font-semibold" style={{ color: colors.primary }}>Produto</span>
+                    <Package size={14} style={{ color: colors.primary }} />
+                    <span className="text-sm font-semibold" style={{ color: colors.primary }}>Produto</span>
                   </div>
                 </td>
-                <td className="py-2 px-3 align-middle">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <select className="w-[140px] sm:w-[160px] p-1 rounded-lg text-xs" style={inputStyles}
+                <td className="py-3 px-3 align-middle">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select className="w-48 sm:w-60 p-2 rounded-lg text-sm outline-none" style={inp}
                       value={formItem.produto_id}
                       onChange={e => {
                         const p = produtos.find(x => x.id === e.target.value);
                         setFormItem({ produto_id: e.target.value, quantidade: p ? (isServico(p) ? 1 : Math.min(1, p.estoque_atual)) : 1, desconto: 0 });
                       }}>
-                      <option value="">Selecione</option>
+                      <option value="">Selecione…</option>
                       {produtos.filter(p => p.status === 'ativo').map(p => (
                         <option key={p.id} value={p.id}>
                           {p.nome} — {formatarPreco(p.preco_venda)}{!isServico(p) ? ` (${p.estoque_atual})` : ''}
@@ -412,72 +437,76 @@ export default function NovaFaturaReciboPage() {
                       ))}
                     </select>
 
-                    {/* Stepper quantidade - compacto */}
-                    <div className="flex items-center border rounded-lg overflow-hidden" style={{ borderColor: colors.border, height: 26 }}>
+                    {/* Stepper qtd */}
+                    <div className="flex items-center rounded-lg overflow-hidden border"
+                      style={{ borderColor: colors.border }}>
                       <button type="button"
-                        className="px-1.5 h-full text-xs transition-colors disabled:opacity-30"
+                        className="w-8 h-9 flex items-center justify-center disabled:opacity-30"
                         style={{ backgroundColor: colors.hover, color: colors.primary }}
                         disabled={!formItem.produto_id || formItem.quantidade <= 1}
-                        onClick={() => {
-                          const p = produtos.find(x => x.id === formItem.produto_id);
-                          if (p) setFormItem(prev => ({ ...prev, quantidade: Math.max(1, prev.quantidade - 1) }));
-                        }}>
-                        <Minus size={10} />
+                        onClick={() => setFormItem(p => ({ ...p, quantidade: Math.max(1, p.quantidade - 1) }))}>
+                        <Minus size={13} />
                       </button>
                       <input type="number" min={1}
-                        className="w-8 text-center text-[11px] border-0 outline-none h-full"
+                        className="w-10 text-center text-sm h-9 border-0 outline-none"
                         style={{ backgroundColor: colors.card, color: colors.text }}
                         value={formItem.quantidade} disabled={!formItem.produto_id}
                         onChange={e => {
                           const p = produtos.find(x => x.id === formItem.produto_id);
                           if (p) {
-                            const max = isServico(p) ? Infinity : p.estoque_atual;
+                            const max = isServico(p) ? 9999 : p.estoque_atual;
                             setFormItem(prev => ({ ...prev, quantidade: Math.max(1, Math.min(Number(e.target.value) || 1, max)) }));
                           }
                         }} />
                       <button type="button"
-                        className="px-1.5 h-full text-xs transition-colors disabled:opacity-30"
+                        className="w-8 h-9 flex items-center justify-center disabled:opacity-30"
                         style={{ backgroundColor: colors.hover, color: colors.primary }}
-                        disabled={!formItem.produto_id || (!!produtoSelecionado && !isServico(produtoSelecionado) && formItem.quantidade >= produtoSelecionado.estoque_atual)}
+                        disabled={!formItem.produto_id || (!!produtoSel && !isServico(produtoSel) && formItem.quantidade >= produtoSel.estoque_atual)}
                         onClick={() => {
                           const p = produtos.find(x => x.id === formItem.produto_id);
                           if (p) {
-                            const max = isServico(p) ? Infinity : p.estoque_atual;
+                            const max = isServico(p) ? 9999 : p.estoque_atual;
                             setFormItem(prev => ({ ...prev, quantidade: Math.min(prev.quantidade + 1, max) }));
                           }
                         }}>
-                        <Plus size={10} />
+                        <Plus size={13} />
                       </button>
                     </div>
 
-                    <input type="number" min={0} placeholder="Desc."
-                      className="w-[70px] p-1 rounded-lg text-xs" style={inputStyles}
+                    <input type="number" min={0} placeholder="Desconto"
+                      className="w-24 p-2 rounded-lg text-sm outline-none" style={inp}
                       value={formItem.desconto || ''} disabled={!formItem.produto_id}
-                      onChange={e => setFormItem(prev => ({ ...prev, desconto: Number(e.target.value) }))} />
+                      onChange={e => setFormItem(p => ({ ...p, desconto: Number(e.target.value) }))} />
 
                     <button type="button" onClick={adicionarItem} disabled={!formItem.produto_id}
-                      className="px-2 py-1 rounded-lg text-xs font-semibold text-white flex items-center gap-0.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-40"
                       style={{ backgroundColor: colors.primary }}>
-                      <Plus size={11} /> Add
+                      <Plus size={14} />Adicionar
                     </button>
 
-                    {produtoSelecionado && !isServico(produtoSelecionado) && (
-                      <span className="text-[9px]" style={{ color: colors.textSecondary }}>
-                        disp: {produtoSelecionado.estoque_atual}
+                    {produtoSel && !isServico(produtoSel) && (
+                      <span className="text-xs" style={{ color: colors.textSecondary }}>
+                        disp.: {produtoSel.estoque_atual}
                       </span>
                     )}
                   </div>
 
                   {/* Preview cálculo */}
                   {previewItem && (
-                    <div className="mt-1.5 px-2 py-1 rounded-lg flex flex-wrap gap-2 text-[10px]"
+                    <div className="mt-2 px-3 py-2 rounded-lg flex flex-wrap gap-x-4 gap-y-1 text-sm"
                       style={{ backgroundColor: colors.hover }}>
-                      <span style={{ color: colors.textSecondary }}>Base: <span style={{ color: colors.text }}>{formatarPreco(previewItem.base_tributavel)}</span></span>
-                      <span style={{ color: colors.textSecondary }}>IVA: <span style={{ color: colors.text }}>{formatarPreco(previewItem.valor_iva)}</span></span>
-                      {previewItem.valor_retencao > 0 && (
-                        <span style={{ color: colors.textSecondary }}>Ret.: <span style={{ color: colors.danger }}>-{formatarPreco(previewItem.valor_retencao)}</span></span>
-                      )}
-                      <span style={{ color: colors.textSecondary }}>Total: <span style={{ color: colors.secondary }}>{formatarPreco(previewItem.subtotal)}</span></span>
+                      {[
+                        { label: "Base", val: formatarPreco(previewItem.base_tributavel), clr: colors.text },
+                        { label: "IVA", val: formatarPreco(previewItem.valor_iva), clr: colors.text },
+                        ...(previewItem.valor_retencao > 0
+                          ? [{ label: "Ret.", val: `-${formatarPreco(previewItem.valor_retencao)}`, clr: colors.danger }]
+                          : []),
+                        { label: "Total", val: formatarPreco(previewItem.subtotal), clr: colors.secondary },
+                      ].map(({ label, val, clr }) => (
+                        <span key={label} style={{ color: colors.textSecondary }}>
+                          {label}: <strong style={{ color: clr }}>{val}</strong>
+                        </span>
+                      ))}
                     </div>
                   )}
                 </td>
@@ -485,16 +514,18 @@ export default function NovaFaturaReciboPage() {
 
               {/* ── Observações ── */}
               <tr>
-                <td className="py-2 pl-4 pr-2 align-top w-[80px] sm:w-[100px]" style={{ backgroundColor: colors.hover }}>
+                <td className="py-3 pl-4 pr-3 align-top"
+                  style={{ backgroundColor: colors.hover }}>
                   <div className="flex items-center gap-1.5">
-                    <FileText size={13} style={{ color: colors.primary }} />
-                    <span className="text-[11px] font-semibold" style={{ color: colors.primary }}>Obs.</span>
+                    <FileText size={14} style={{ color: colors.primary }} />
+                    <span className="text-sm font-semibold" style={{ color: colors.primary }}>Obs.</span>
                   </div>
                 </td>
-                <td className="py-2 px-3">
-                  <input type="text" placeholder="Observações (opcional)..."
-                    className="w-full p-1 rounded-lg text-xs" style={inputStyles}
-                    value={observacoes} onChange={e => setObservacoes(e.target.value)} />
+                <td className="py-3 px-3">
+                  <input type="text" placeholder="Observações opcionais…"
+                    className="w-full p-2 rounded-lg text-sm outline-none" style={inp}
+                    value={observacoes}
+                    onChange={e => setObservacoes(e.target.value)} />
                 </td>
               </tr>
 
@@ -502,88 +533,110 @@ export default function NovaFaturaReciboPage() {
           </table>
         </div>
 
-        {/* ══════════════════════════
-            CARD: Itens + Totais
-        ══════════════════════════ */}
-        {itens.length > 0 && (
-          <div className="rounded-xl border shadow-sm overflow-hidden" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-            <div className="px-3 py-1.5 flex items-center justify-between" style={{ backgroundColor: colors.primary }}>
+        {/* ══════════════════════════════════════════════════════════════
+            CARD ÚNICO — Itens + Resumo Fiscal + Pagamento (empilhado)
+        ══════════════════════════════════════════════════════════════ */}
+        {itens.length > 0 ? (
+          <div className="rounded-xl border shadow-sm overflow-hidden"
+            style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+
+            {/* Header do card */}
+            <div className="px-4 py-2.5 flex items-center justify-between"
+              style={{ backgroundColor: colors.primary }}>
               <div className="flex items-center gap-2">
-                <ShoppingCart size={13} className="text-white" />
-                <span className="text-white font-semibold text-[11px] uppercase tracking-wide">Itens ({itens.length})</span>
+                <Receipt size={15} className="text-white" />
+                <span className="text-white font-semibold text-sm tracking-wide">
+                  Itens da Venda
+                  <span className="ml-1.5 text-white/60 font-normal text-xs">
+                    ({itens.length} item{itens.length !== 1 ? 's' : ''})
+                  </span>
+                </span>
               </div>
-              <button onClick={() => itens.length > 0 && confirm("Limpar todos os itens?") && setItens([])}
-                className="text-[10px] text-white/70 hover:text-white transition-colors">
-                Limpar
+              <button
+                onClick={() => window.confirm("Limpar todos os itens?") && setItens([])}
+                className="text-white/60 hover:text-white text-xs transition-colors">
+                Limpar tudo
               </button>
             </div>
 
+            {/* Tabela de Itens */}
             <div className="overflow-x-auto">
-              <table className="w-full text-[11px]">
-                <thead>
-                  <tr className="border-b" style={{ backgroundColor: colors.hover, borderColor: colors.border }}>
-                    <th className="px-2 py-1.5 text-left font-semibold" style={{ color: colors.textSecondary }}>Produto</th>
-                    <th className="px-2 py-1.5 text-center font-semibold" style={{ color: colors.textSecondary }}>Qtd</th>
-                    <th className="px-2 py-1.5 text-right font-semibold hidden xs:table-cell" style={{ color: colors.textSecondary }}>Preço</th>
-                    <th className="px-2 py-1.5 text-right font-semibold hidden sm:table-cell" style={{ color: colors.textSecondary }}>Base</th>
-                    <th className="px-2 py-1.5 text-right font-semibold hidden sm:table-cell" style={{ color: colors.textSecondary }}>IVA</th>
-                    <th className="px-2 py-1.5 text-right font-semibold hidden md:table-cell" style={{ color: colors.textSecondary }}>Ret.</th>
-                    <th className="px-2 py-1.5 text-right font-semibold" style={{ color: colors.textSecondary }}>Subtotal</th>
-                    <th className="px-2 py-1.5 w-6" />
+              <table className="w-full text-sm">
+                <thead style={{ backgroundColor: colors.hover }}>
+                  <tr className="border-b" style={{ borderColor: colors.border }}>
+                    <th className="py-2.5 px-3 text-left font-semibold text-xs" style={{ color: colors.textSecondary }}>Produto</th>
+                    <th className="py-2.5 px-3 text-center font-semibold text-xs" style={{ color: colors.textSecondary }}>Qtd.</th>
+                    <th className="py-2.5 px-3 text-right font-semibold text-xs hidden sm:table-cell" style={{ color: colors.textSecondary }}>Preço unit.</th>
+                    <th className="py-2.5 px-3 text-right font-semibold text-xs hidden md:table-cell" style={{ color: colors.textSecondary }}>IVA</th>
+                    <th className="py-2.5 px-3 text-right font-semibold text-xs hidden lg:table-cell" style={{ color: colors.textSecondary }}>Ret.</th>
+                    <th className="py-2.5 px-3 text-right font-semibold text-xs" style={{ color: colors.textSecondary }}>Subtotal</th>
+                    <th className="py-2.5 px-2 w-8" />
                   </tr>
                 </thead>
                 <tbody>
-                  {itens.map(item => {
+                  {itens.map((item, idx) => {
                     const p = produtos.find(x => x.id === item.produto_id);
-                    const maxEst = p && !isServico(p) ? p.estoque_atual : Infinity;
+                    const maxEst = p && !isServico(p) ? p.estoque_atual : 9999;
                     return (
-                      <tr key={item.id} className="border-b last:border-0" style={{ borderColor: colors.border }}>
-                        <td className="px-2 py-1.5 font-medium" style={{ color: colors.text }}>
-                          <div className="flex items-center gap-1">
-                            <span className="truncate max-w-[80px] xs:max-w-[100px] sm:max-w-[120px]">{item.descricao}</span>
+                      <tr key={item.id}
+                        className="border-b last:border-0 transition-colors"
+                        style={{
+                          borderColor: colors.border,
+                          backgroundColor: idx % 2 !== 0 ? `${colors.hover}60` : 'transparent',
+                        }}>
+
+                        {/* Produto */}
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium truncate max-w-[100px] sm:max-w-[160px]"
+                              style={{ color: colors.text }}>{item.descricao}</span>
                             {item.eh_servico && (
-                              <span className="text-[8px] px-1 py-0.5 rounded" style={{ backgroundColor: colors.primary + '20', color: colors.primary }}>
-                                S
-                              </span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded font-bold flex-shrink-0"
+                                style={{ backgroundColor: `${colors.primary}20`, color: colors.primary }}>S</span>
                             )}
                           </div>
+                          {item.desconto > 0 && (
+                            <span className="text-[10px]" style={{ color: colors.danger }}>
+                              desc. −{formatarPreco(item.desconto)}
+                            </span>
+                          )}
                         </td>
-                        <td className="px-2 py-1.5 text-center">
+
+                        {/* Qtd stepper inline */}
+                        <td className="px-3 py-2.5">
                           <div className="flex items-center justify-center gap-0.5">
                             <button onClick={() => atualizarQtd(item.id, item.quantidade - 1)}
-                              className="w-4 h-4 rounded flex items-center justify-center disabled:opacity-30"
+                              className="w-6 h-6 rounded flex items-center justify-center disabled:opacity-30"
                               style={{ backgroundColor: colors.hover, color: colors.primary }}
                               disabled={item.quantidade <= 1}>
-                              <Minus size={8} />
+                              <Minus size={11} />
                             </button>
-                            <span className="w-5 text-center" style={{ color: colors.text }}>{item.quantidade}</span>
+                            <span className="w-7 text-center text-sm font-medium"
+                              style={{ color: colors.text }}>{item.quantidade}</span>
                             <button onClick={() => atualizarQtd(item.id, item.quantidade + 1)}
-                              className="w-4 h-4 rounded flex items-center justify-center disabled:opacity-30"
+                              className="w-6 h-6 rounded flex items-center justify-center disabled:opacity-30"
                               style={{ backgroundColor: colors.hover, color: colors.primary }}
                               disabled={item.quantidade >= maxEst}>
-                              <Plus size={8} />
+                              <Plus size={11} />
                             </button>
                           </div>
                         </td>
-                        <td className="px-2 py-1.5 text-right hidden xs:table-cell" style={{ color: colors.textSecondary }}>
-                          {formatarPreco(item.preco_venda)}
-                        </td>
-                        <td className="px-2 py-1.5 text-right hidden sm:table-cell" style={{ color: colors.text }}>
-                          {formatarPreco(item.base_tributavel)}
-                        </td>
-                        <td className="px-2 py-1.5 text-right hidden sm:table-cell" style={{ color: colors.text }}>
-                          {formatarPreco(item.valor_iva)}
-                        </td>
-                        <td className="px-2 py-1.5 text-right hidden md:table-cell"
+
+                        <td className="px-3 py-2.5 text-right hidden sm:table-cell"
+                          style={{ color: colors.textSecondary }}>{formatarPreco(item.preco_venda)}</td>
+                        <td className="px-3 py-2.5 text-right hidden md:table-cell"
+                          style={{ color: colors.text }}>{formatarPreco(item.valor_iva)}</td>
+                        <td className="px-3 py-2.5 text-right hidden lg:table-cell"
                           style={{ color: item.valor_retencao > 0 ? colors.danger : colors.textSecondary }}>
-                          {item.valor_retencao > 0 ? `-${formatarPreco(item.valor_retencao)}` : '—'}
+                          {item.valor_retencao > 0 ? `−${formatarPreco(item.valor_retencao)}` : '—'}
                         </td>
-                        <td className="px-2 py-1.5 text-right font-bold" style={{ color: colors.secondary }}>
-                          {formatarPreco(item.subtotal)}
-                        </td>
-                        <td className="px-2 py-1.5 text-center">
-                          <button onClick={() => removerItem(item.id)} className="p-0.5 hover:opacity-70" style={{ color: colors.danger }}>
-                            <Trash2 size={11} />
+                        <td className="px-3 py-2.5 text-right font-bold"
+                          style={{ color: colors.secondary }}>{formatarPreco(item.subtotal)}</td>
+                        <td className="px-2 py-2.5 text-center">
+                          <button onClick={() => removerItem(item.id)}
+                            className="p-1 rounded hover:opacity-70 transition-colors"
+                            style={{ color: colors.danger }}>
+                            <Trash2 size={14} />
                           </button>
                         </td>
                       </tr>
@@ -593,112 +646,127 @@ export default function NovaFaturaReciboPage() {
               </table>
             </div>
 
-            {/* Totais no rodapé */}
-            <div className="px-3 py-1.5 flex flex-wrap justify-end gap-x-3 gap-y-0.5 border-t text-[10px]"
-              style={{ backgroundColor: colors.hover, borderColor: colors.border }}>
-              <span style={{ color: colors.textSecondary }}>Base: <span style={{ color: colors.text }}>{formatarPreco(totalBase)}</span></span>
-              <span style={{ color: colors.textSecondary }}>IVA: <span style={{ color: colors.text }}>{formatarPreco(totalIva)}</span></span>
-              {totalRetencao > 0 && (
-                <span style={{ color: colors.textSecondary }}>Ret.: <span style={{ color: colors.danger }}>-{formatarPreco(totalRetencao)}</span></span>
-              )}
-              <span style={{ color: colors.textSecondary }}>
-                Total: <span className="text-xs" style={{ color: colors.secondary }}>{formatarPreco(totalLiquido)}</span>
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* ══════════════════════════
-            CARD: Pagamento
-        ══════════════════════════ */}
-        {itens.length > 0 && (
-          <div className="rounded-xl border shadow-sm overflow-hidden" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-            <div className="px-3 py-1.5 flex items-center justify-between" style={{ backgroundColor: colors.primary }}>
-              <div className="flex items-center gap-2">
-                <CreditCard size={13} className="text-white" />
-                <span className="text-white font-semibold text-[11px] uppercase tracking-wide">Pagamento</span>
-              </div>
-            </div>
-
-            <div className="p-3 space-y-2">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                <div>
-                  <SectionLabel icon={CreditCard} label="Método" colors={colors} />
-                  <select value={formPagamento.metodo}
-                    onChange={e => setFormPagamento(p => ({ ...p, metodo: e.target.value as DadosPagamento['metodo'] }))}
-                    className="w-full p-1 rounded-lg text-xs" style={inputStyles}>
-                    <option value="dinheiro">Dinheiro</option>
-                    <option value="cartao">Cartão</option>
-                    <option value="transferencia">Transferência</option>
-                    <option value="multibanco">Multibanco</option>
-                    <option value="cheque">Cheque</option>
-                  </select>
-                </div>
-
-                <div>
-                  <div className="flex items-center gap-1.5 mb-1.5">
-                    <Calculator size={11} style={{ color: colors.primary }} />
-                    <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: colors.primary }}>
-                      Valor Pago <span style={{ color: colors.danger }}>*</span>
-                    </span>
+            {/* ── Secção: Resumo Fiscal + Pagamento (abaixo dos itens) ── */}
+            <div className="border-t" style={{ borderColor: colors.border }}>
+              {/* Resumo Fiscal - Formato original (duas colunas) */}
+              <div className="p-3 border-b" style={{ borderColor: colors.border }}>
+                <p className="text-xs font-bold uppercase tracking-wider mb-3"
+                  style={{ color: colors.textSecondary }}>Resumo Fiscal</p>
+                <div className=" flex flex-col lg:flex-row lg:items-start gap-6">
+                  <div className="flex-1 max-w-md">
+                    <LinhaFiscal label="Subtotal bruto" valor={formatarPreco(totalBase + totalDesconto)} colors={colors} />
+                    {totalDesconto > 0 && (
+                      <LinhaFiscal label="Descontos" valor={`−${formatarPreco(totalDesconto)}`} cor={colors.danger} colors={colors} />
+                    )}
+                    <LinhaFiscal label="Base tributável" valor={formatarPreco(totalBase)} colors={colors} />
+                    <LinhaFiscal label={`IVA (${itens[0]?.taxa_iva ?? 14}%)`} valor={formatarPreco(totalIva)} colors={colors} />
+                    {totalRetencao > 0 && (
+                      <LinhaFiscal label="Retenção (6.5%)" valor={`−${formatarPreco(totalRetencao)}`} cor={colors.danger} colors={colors} />
+                    )}
+                    <hr />
+                    <LinhaFiscal label="Total a pagar" valor={formatarPreco(totalLiquido)}
+                      cor={colors.secondary} negrito colors={colors} />
                   </div>
-                  <input type="number" min={0} step="0.01"
-                    placeholder={formatarPreco(totalLiquido)}
-                    value={formPagamento.valor_pago}
-                    onChange={e => setFormPagamento(p => ({ ...p, valor_pago: e.target.value }))}
-                    className="w-full p-1 rounded-lg text-xs"
-                    style={{
-                      ...inputStyles,
-                      borderColor: valorPagamento > 0 && valorPagamento < totalLiquido
-                        ? colors.danger : pagamentoSuficiente ? colors.success : inputStyles.borderColor,
-                    }} />
-                </div>
-
-                <div>
-                  <SectionLabel icon={FileText} label="Data" colors={colors} />
-                  <input type="date" className="w-full p-1 rounded-lg text-xs" style={inputStyles}
-                    value={formPagamento.data_pagamento}
-                    onChange={e => setFormPagamento(p => ({ ...p, data_pagamento: e.target.value }))} />
-                </div>
-
-                <div>
-                  <SectionLabel icon={FileText} label="Referência" colors={colors} />
-                  <input type="text" placeholder="Opcional" className="w-full p-1 rounded-lg text-xs" style={inputStyles}
-                    value={formPagamento.referencia}
-                    onChange={e => setFormPagamento(p => ({ ...p, referencia: e.target.value }))} />
                 </div>
               </div>
 
-              {valorPagamento > 0 && valorPagamento < totalLiquido && (
-                <p className="text-[10px] flex items-center gap-1" style={{ color: colors.danger }}>
-                  <AlertTriangle size={10} /> Faltam {formatarPreco(totalLiquido - valorPagamento)}
-                </p>
-              )}
-              {troco > 0 && (
-                <p className="text-[10px] flex items-center gap-1 font-semibold" style={{ color: colors.success }}>
-                  <CheckCircle2 size={10} /> Troco: {formatarPreco(troco)}
-                </p>
-              )}
-              {pagamentoSuficiente && troco === 0 && (
-                <p className="text-[10px] flex items-center gap-1" style={{ color: colors.success }}>
-                  <CheckCircle2 size={10} /> Pagamento OK
-                </p>
-              )}
+              {/* Pagamento - Linha única abaixo do Resumo Fiscal */}
+              <div className="p-4">
+                <div className="flex flex-col lg:flex-row lg:items-end gap-4">
+                  {/* Método de Pagamento */}
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium mb-1"
+                      style={{ color: colors.textSecondary }}>Método de Pagamento</label>
+                    <select
+                      value={formPagamento.metodo}
+                      onChange={e => setFormPagamento(p => ({ ...p, metodo: e.target.value as DadosPagamento['metodo'] }))}
+                      className="w-full p-2.5 rounded-lg text-sm outline-none"
+                      style={inp}>
+                      <option value="dinheiro">Dinheiro</option>
+                      <option value="cartao">Cartão</option>
+                      <option value="transferencia">Transferência</option>
+                      <option value="multibanco">Multibanco</option>
+                      <option value="cheque">Cheque</option>
+                    </select>
+                  </div>
+
+                  {/* Valor Pago */}
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-medium" style={{ color: colors.textSecondary }}>Valor Pago</label>
+                      <span className="text-xs font-semibold" style={{ color: colors.secondary }}>
+                        Total: {formatarPreco(totalLiquido)}
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <Calculator size={14} className="absolute left-3 top-1/2 -translate-y-1/2"
+                        style={{ color: colors.textSecondary }} />
+                      <input type="number" min={0} step="0.01"
+                        placeholder={formatarPreco(totalLiquido)}
+                        value={formPagamento.valor_pago}
+                        onChange={e => setFormPagamento(p => ({ ...p, valor_pago: e.target.value }))}
+                        className="w-full pl-9 pr-3 py-2.5 rounded-lg text-sm font-semibold outline-none"
+                        style={{
+                          ...inp,
+                          borderWidth: 2,
+                          borderColor: falta > 0 ? colors.danger
+                            : pagamentoSuficiente ? colors.success
+                              : inp.borderColor,
+                          color: pagamentoSuficiente ? colors.success : colors.text,
+                        }} />
+                    </div>
+                  </div>
+
+                  {/* Botão Finalizar */}
+                  <div className="flex-1 lg:flex-none lg:w-48">
+                    <button type="button" onClick={finalizarVenda}
+                      disabled={loading || !podeFinalizar()}
+                      className="w-full py-2.5 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{ backgroundColor: colors.secondary }}>
+                      {loading ? (
+                        <><div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />Processando</>
+                      ) : !pagamentoSuficiente ? (
+                        <><AlertTriangle size={15} />Pagar</>
+                      ) : (
+                        <><CheckCircle2 size={15} />
+                          Finalizar{troco > 0 ? ` · Troco ${formatarPreco(troco)}` : ''}
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Feedback do pagamento */}
+                <div className="mt-3 flex flex-wrap items-center gap-4">
+                  {falta > 0 && (
+                    <p className="text-sm flex items-center gap-1" style={{ color: colors.danger }}>
+                      <AlertTriangle size={14} />Faltam <strong>{formatarPreco(falta)}</strong>
+                    </p>
+                  )}
+                  {troco > 0 && (
+                    <p className="text-sm flex items-center gap-1 font-semibold" style={{ color: colors.success }}>
+                      <CheckCircle2 size={14} />Troco: <strong>{formatarPreco(troco)}</strong>
+                    </p>
+                  )}
+                  {pagamentoSuficiente && troco === 0 && (
+                    <p className="text-sm flex items-center gap-1" style={{ color: colors.success }}>
+                      <CheckCircle2 size={14} />Pagamento exacto
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
+        ) : (
+          /* Estado vazio */
+          <div className="text-center py-8 rounded-xl border-2 border-dashed"
+            style={{ borderColor: colors.border }}>
+            <ShoppingCart size={28} className="mx-auto mb-2" style={{ color: colors.border }} />
+            <p className="text-sm" style={{ color: colors.textSecondary }}>
+              Adicione produtos para ver o resumo e finalizar
+            </p>
+          </div>
         )}
-
-        {/* ── Botão Finalizar ── */}
-        <button type="button" onClick={finalizarVenda} disabled={loading || !podeFinalizar()}
-          className="w-full py-2.5 rounded-xl font-bold text-sm text-white shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ backgroundColor: colors.secondary }}>
-          {loading
-            ? <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> Processando...</>
-            : itens.length === 0 ? "Adicione itens para continuar"
-            : !pagamentoSuficiente ? "Informe o valor do pagamento"
-            : <><CheckCircle2 size={16} /> Finalizar Fatura-Recibo{troco > 0 ? ` · Troco ${formatarPreco(troco)}` : ''}</>
-          }
-        </button>
 
       </div>
     </MainEmpresa>
