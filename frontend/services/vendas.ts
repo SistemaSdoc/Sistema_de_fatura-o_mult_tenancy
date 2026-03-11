@@ -788,7 +788,6 @@ export interface AlertasPendentes {
             dias_pendentes: number;
         }>;
     };
-    // ✅ NOVO
     servicos_com_retencao_proximos?: {
         quantidade: number;
         valor_total: number;
@@ -820,7 +819,6 @@ export interface EvolucaoMensal {
         valor_proformas: number;
         adiantamentos: number;
         valor_adiantamentos: number;
-        // ✅ NOVO
         retencao?: number;
     }>;
 }

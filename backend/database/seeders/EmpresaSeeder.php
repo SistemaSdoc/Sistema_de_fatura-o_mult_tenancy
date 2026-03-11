@@ -20,7 +20,7 @@ class EmpresaSeeder extends Seeder
             'nome' => 'SDOCA',
             'nif' => '5001234507',
             'email' => 'sdoca@gmail.com',
-            'logo' => null,
+            'logo' => '/public/images/logo.jpg',
             'status' => 'ativo',
             'regime_fiscal' => 'geral',
             'sujeito_iva' => true,

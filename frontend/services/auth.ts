@@ -82,7 +82,7 @@ export const authService = {
         try {
             // Para Sanctum, geralmente usamos CSRF primeiro
             await api.get('/sanctum/csrf-cookie');
-            
+
             const response = await api.post('/api/login', credentials);
 
             // Se a API retornar token, salva

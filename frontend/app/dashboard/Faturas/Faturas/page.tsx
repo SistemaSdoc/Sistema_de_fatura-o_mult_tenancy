@@ -13,6 +13,8 @@ import {
   GerarReciboDTO,
 } from "@/services/DocumentoFiscal";
 import { useThemeColors } from "@/context/ThemeContext";
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 type TipoFiltro = "FR" | "FT";
 
@@ -30,7 +32,7 @@ const TIPO_LABEL: Record<TipoDocumento, string> = {
 export default function FaturasPage() {
   const router = useRouter();
   const colors = useThemeColors();
-  
+
   const [documentos, setDocumentos] = useState<DocumentoFiscal[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +41,7 @@ export default function FaturasPage() {
   const [documentoSelecionado, setDocumentoSelecionado] = useState<DocumentoFiscal | null>(null);
   const [modalTalaoAberto, setModalTalaoAberto] = useState(false);
   const [gerandoRecibo, setGerandoRecibo] = useState<string | null>(null);
+  const [baixandoPdf, setBaixandoPdf] = useState<string | null>(null);
 
   const carregarDocumentos = useCallback(async (): Promise<void> => {
     try {
@@ -63,6 +66,190 @@ export default function FaturasPage() {
   useEffect(() => {
     carregarDocumentos();
   }, [carregarDocumentos]);
+
+  // Função para baixar PDF gerado no frontend
+  const baixarPdf = async (documento: DocumentoFiscal) => {
+    if (!documento.id) return;
+
+    try {
+      setBaixandoPdf(documento.id);
+
+      // Criar novo documento PDF
+      const doc = new jsPDF();
+
+      // Configurar fonte
+      doc.setFont('helvetica');
+
+      // Título
+      doc.setFontSize(18);
+      doc.setTextColor(44, 62, 80); // Cor escura
+      doc.text(TIPO_LABEL[documento.tipo_documento] || documento.tipo_documento, 14, 20);
+
+      // Linha separadora
+      doc.setDrawColor(200, 200, 200);
+      doc.line(14, 23, 196, 23);
+
+      // Informações do documento
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+
+      const docInfo = [
+        [`Nº Documento:`, `${documento.numero_documento || `${documento.serie}-${String(documento.numero).padStart(5, '0')}`}`],
+        [`Série:`, documento.serie],
+        [`Data de Emissão:`, `${new Date(documento.data_emissao).toLocaleDateString("pt-AO")} ${documento.hora_emissao || ''}`],
+      ];
+
+      let yPos = 30;
+      docInfo.forEach(([label, value]) => {
+        doc.setFont('helvetica', 'bold');
+        doc.text(label, 14, yPos);
+        doc.setFont('helvetica', 'normal');
+        doc.text(value, 50, yPos);
+        yPos += 6;
+      });
+
+      // Cliente
+      yPos += 2;
+      doc.setFont('helvetica', 'bold');
+      doc.text('Cliente:', 14, yPos);
+      doc.setFont('helvetica', 'normal');
+      doc.text(documentoFiscalService.getNomeCliente(documento), 50, yPos);
+      yPos += 6;
+
+      const nifCliente = documentoFiscalService.getNifCliente(documento);
+      if (nifCliente) {
+        doc.setFont('helvetica', 'bold');
+        doc.text('NIF:', 14, yPos);
+        doc.setFont('helvetica', 'normal');
+        doc.text(nifCliente, 50, yPos);
+        yPos += 6;
+      }
+
+      yPos += 2;
+
+      // Tabela de itens
+      if (documento.itens && documento.itens.length > 0) {
+        const tableColumn = ["Descrição", "Qtd", "Preço Unit.", "IVA", "Total"];
+        const tableRows = documento.itens.map(item => [
+          item.descricao,
+          item.quantidade.toString(),
+          formatKz(item.preco_unitario),
+          item.taxa_iva ? `${item.taxa_iva}%` : '-',
+          formatKz(item.total_linha)
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: [tableColumn],
+          body: tableRows,
+          theme: 'striped',
+          headStyles: { fillColor: [52, 152, 219], textColor: [255, 255, 255] },
+          styles: { fontSize: 9 },
+          columnStyles: {
+            0: { cellWidth: 60 },
+            1: { cellWidth: 20, halign: 'center' },
+            2: { cellWidth: 30, halign: 'right' },
+            3: { cellWidth: 20, halign: 'center' },
+            4: { cellWidth: 30, halign: 'right' },
+          },
+        });
+
+        // Posição após a tabela
+        const lastTable = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable;
+        yPos = (lastTable?.finalY || yPos) + 10;
+      } else {
+        yPos += 10;
+      }
+
+      // Totais
+      doc.setFontSize(10);
+
+      // Base Tributável
+      doc.setFont('helvetica', 'bold');
+      doc.text('Base Tributável:', 14, yPos);
+      doc.setFont('helvetica', 'normal');
+      doc.text(formatKz(documento.base_tributavel), 196, yPos, { align: 'right' });
+      yPos += 6;
+
+      // Total IVA
+      doc.setFont('helvetica', 'bold');
+      doc.text('Total IVA:', 14, yPos);
+      doc.setFont('helvetica', 'normal');
+      doc.text(formatKz(documento.total_iva), 196, yPos, { align: 'right' });
+      yPos += 6;
+
+      // Total Retenção (se existir)
+      if (documento.total_retencao && documento.total_retencao > 0) {
+        doc.setFont('helvetica', 'bold');
+        doc.text('Total Retenção:', 14, yPos);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(220, 53, 69); // Vermelho
+        doc.text(`-${formatKz(documento.total_retencao)}`, 196, yPos, { align: 'right' });
+        doc.setTextColor(100, 100, 100);
+        yPos += 6;
+      }
+
+      // Linha separadora
+      doc.setDrawColor(52, 152, 219);
+      doc.line(14, yPos - 2, 196, yPos - 2);
+
+      // Total Líquido
+      yPos += 4;
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(52, 152, 219);
+      doc.text('TOTAL:', 14, yPos);
+      doc.text(formatKz(documento.total_liquido), 196, yPos, { align: 'right' });
+
+      // Observações (se existirem)
+      if (documento.observacoes) {
+        yPos += 10;
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(100, 100, 100);
+        doc.text('Observações:', 14, yPos);
+        yPos += 5;
+        doc.setFont('helvetica', 'normal');
+        const observacoes = doc.splitTextToSize(documento.observacoes, 180);
+        doc.text(observacoes, 14, yPos);
+      }
+
+      // Hash Fiscal (se existir)
+      if (documento.hash_fiscal) {
+        yPos += 15;
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Hash Fiscal:', 14, yPos);
+        yPos += 4;
+        doc.setFont('helvetica', 'normal');
+        const hash = doc.splitTextToSize(documento.hash_fiscal, 180);
+        doc.text(hash, 14, yPos);
+      }
+
+      // Rodapé
+      const pageCount = doc.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(150, 150, 150);
+        doc.text(
+          `Documento gerado em ${new Date().toLocaleDateString('pt-AO')} às ${new Date().toLocaleTimeString('pt-AO')}`,
+          14,
+          doc.internal.pageSize.height - 10
+        );
+      }
+
+      // Salvar PDF
+      const nomeArquivo = `${documento.tipo_documento}_${documento.numero_documento || 'documento'}.pdf`;
+      doc.save(nomeArquivo);
+
+    } catch (err) {
+      console.error('Erro ao gerar PDF:', err);
+      alert('Erro ao gerar PDF. Tente novamente.');
+    } finally {
+      setBaixandoPdf(null);
+    }
+  };
 
   const documentosFiltrados = useMemo(() => {
     let docs = documentos.filter((d) => ["FT", "FR", "RC"].includes(d.tipo_documento));
@@ -123,7 +310,6 @@ export default function FaturasPage() {
     }
   };
 
-  // Handler que gera o recibo e retorna o documento gerado para o InvoiceTable
   const gerarRecibo = async (documento: DocumentoFiscal): Promise<DocumentoFiscal | void> => {
     if (!documento.id) return;
 
@@ -135,13 +321,10 @@ export default function FaturasPage() {
         data_pagamento: new Date().toISOString().split('T')[0],
       };
 
-      // Chama a API e retorna o recibo gerado
       const reciboGerado = await documentoFiscalService.gerarRecibo(documento.id, dados);
-      
-      // Recarrega a lista de documentos
+
       await carregarDocumentos();
-      
-      // Retorna o recibo gerado para que o InvoiceTable possa abrir o modal
+
       return reciboGerado;
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Erro ao gerar recibo";
@@ -152,7 +335,6 @@ export default function FaturasPage() {
     }
   };
 
-  // Handler chamado quando o recibo é gerado com sucesso - abre o modal automaticamente
   const handleReciboGerado = (recibo: DocumentoFiscal) => {
     setDocumentoSelecionado(recibo);
     setModalTalaoAberto(true);
@@ -170,36 +352,36 @@ export default function FaturasPage() {
 
   return (
     <MainEmpresa>
-      <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 transition-colors duration-300" style={{ backgroundColor: colors.background }}>
+      <div className="space-y-3 pb-8 px-2 sm:px-0 max-w-7xl mx-auto" style={{ backgroundColor: colors.background }}>
         {/* Header */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
-          <div className="space-y-1">
-            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold leading-tight" style={{ color: colors.primary }}>
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+          <div className="space-y-0.5">
+            <h1 className="text-lg sm:text-xl md:text-2xl font-bold" style={{ color: colors.primary }}>
               Faturas e Recibos
             </h1>
-            <p className="text-xs sm:text-sm" style={{ color: colors.textSecondary }}>
-              Total: {loading ? "..." : estatisticas.total} documentos emitidos
+            <p className="text-xs" style={{ color: colors.textSecondary }}>
+              Total: {loading ? "..." : estatisticas.total} documentos
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row gap-2">
             {/* Search */}
-            <div className="relative flex-1 sm:flex-none">
+            <div className="relative w-full sm:w-auto">
               <input
                 type="text"
-                placeholder="Pesquisar por nº, cliente ou NIF..."
+                placeholder="Pesquisar..."
                 value={termoPesquisa}
                 onChange={(e) => setTermoPesquisa(e.target.value)}
-                className="w-full sm:w-64 pl-10 pr-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 text-sm"
-                style={{ 
-                  backgroundColor: colors.card, 
+                className="w-full sm:w-56 pl-8 pr-8 py-2 rounded-lg text-xs focus:outline-none focus:ring-2"
+                style={{
+                  backgroundColor: colors.card,
                   borderColor: colors.border,
                   color: colors.text,
                   borderWidth: 1
                 }}
               />
               <svg
-                className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2"
+                className="w-3.5 h-3.5 absolute left-2.5 top-1/2 transform -translate-y-1/2"
                 style={{ color: colors.textSecondary }}
                 fill="none"
                 viewBox="0 0 24 24"
@@ -210,10 +392,10 @@ export default function FaturasPage() {
               {termoPesquisa && (
                 <button
                   onClick={() => setTermoPesquisa("")}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 transition-colors"
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2"
                   style={{ color: colors.textSecondary }}
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
@@ -224,20 +406,20 @@ export default function FaturasPage() {
             <button
               onClick={carregarDocumentos}
               disabled={loading}
-              className="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-white rounded-lg disabled:opacity-50 transition-colors text-sm font-medium flex items-center justify-center gap-2 min-h-[44px] touch-manipulation"
+              className="w-full sm:w-auto px-3 py-2 rounded-lg text-white disabled:opacity-50 transition-colors text-xs font-medium flex items-center justify-center gap-1.5 touch-manipulation"
               style={{ backgroundColor: colors.primary }}
             >
               {loading ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" />
-                  <span className="whitespace-nowrap">Atualizando...</span>
+                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" />
+                  <span>Atualizando...</span>
                 </>
               ) : (
                 <>
-                  <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
-                  <span className="whitespace-nowrap">Atualizar</span>
+                  <span>Atualizar</span>
                 </>
               )}
             </button>
@@ -246,17 +428,17 @@ export default function FaturasPage() {
 
         {/* Error Message */}
         {error && (
-          <div 
-            className="p-3 sm:p-4 border rounded-lg"
-            style={{ 
-              backgroundColor: `${colors.danger}20`, 
-              borderColor: colors.danger 
+          <div
+            className="p-2.5 rounded-lg border text-xs"
+            style={{
+              backgroundColor: `${colors.danger}15`,
+              borderColor: colors.danger
             }}
           >
-            <p className="text-sm sm:text-base" style={{ color: colors.danger }}>{error}</p>
+            <p style={{ color: colors.danger }}>{error}</p>
             <button
               onClick={carregarDocumentos}
-              className="mt-2 text-sm font-medium underline"
+              className="mt-1 text-xs font-medium underline"
               style={{ color: colors.danger }}
             >
               Tentar novamente
@@ -264,16 +446,16 @@ export default function FaturasPage() {
           </div>
         )}
 
-        {/* Filter Tabs */}
+        {/* Filter Tabs - Compactos */}
         {!loading && !error && (
-          <div 
-            className="p-3 sm:p-4 rounded-xl shadow border"
-            style={{ 
-              backgroundColor: colors.card, 
-              borderColor: colors.border 
+          <div
+            className="rounded-xl border shadow-sm p-1.5"
+            style={{
+              backgroundColor: colors.card,
+              borderColor: colors.border
             }}
           >
-            <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0 sm:flex-wrap scrollbar-hide">
+            <div className="flex gap-1 overflow-x-auto scrollbar-hide">
               {[
                 { key: "FR" as TipoFiltro, label: "Faturas-Recibo", count: estatisticas.FR + estatisticas.RC },
                 { key: "FT" as TipoFiltro, label: "Faturas", count: estatisticas.FT },
@@ -281,15 +463,15 @@ export default function FaturasPage() {
                 <button
                   key={key}
                   onClick={() => setFiltro(key)}
-                  className={`flex-shrink-0 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all min-h-[44px] touch-manipulation`}
+                  className="flex-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-all touch-manipulation whitespace-nowrap"
                   style={{
                     backgroundColor: filtro === key ? colors.primary : colors.hover,
                     color: filtro === key ? 'white' : colors.textSecondary,
                   }}
                 >
-                  <span className="whitespace-nowrap">{label}</span>
-                  <span 
-                    className={`ml-1.5 px-1.5 sm:px-2 py-0.5 rounded-full text-xs`}
+                  <span>{label}</span>
+                  <span
+                    className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px]`}
                     style={{
                       backgroundColor: filtro === key ? 'rgba(255,255,255,0.2)' : colors.card,
                     }}
@@ -303,27 +485,26 @@ export default function FaturasPage() {
         )}
 
         {/* Table Container */}
-        <div 
-          className="rounded-xl shadow-lg border overflow-hidden"
-          style={{ 
-            backgroundColor: colors.card, 
-            borderColor: colors.border 
+        <div
+          className="rounded-xl border shadow-sm overflow-hidden"
+          style={{
+            backgroundColor: colors.card,
+            borderColor: colors.border
           }}
         >
           <InvoiceTable
             documentos={documentosFiltrados}
             loading={loading}
             gerandoRecibo={gerandoRecibo}
+            baixandoPdf={baixandoPdf}
             onVerDetalhes={verDetalhes}
             onGerarRecibo={gerarRecibo}
             onImprimirTalao={abrirModalTalao}
+            onBaixarPdf={baixarPdf}
             onReciboGerado={handleReciboGerado}
             formatKz={formatKz}
             formatQuantidade={formatQuantidade}
-            documentoFiscalService={{
-              getNomeCliente: documentoFiscalService.getNomeCliente,
-              getNifCliente: documentoFiscalService.getNifCliente,
-            }}
+            documentoFiscalService={documentoFiscalService}
             colors={colors}
           />
         </div>

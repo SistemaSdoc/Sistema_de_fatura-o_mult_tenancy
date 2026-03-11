@@ -28,7 +28,7 @@ export function useAuth() {
         try {
             setLoading(true);
             const result = await authService.simpleLogout();
-            
+
             if (result.success) {
                 setUser(null);
                 toast.success('Logout realizado com sucesso');
@@ -36,7 +36,7 @@ export function useAuth() {
             } else {
                 toast.error(result.message || 'Erro ao fazer logout');
             }
-            
+
             return result;
         } catch (error) {
             console.error('Erro no logout:', error);

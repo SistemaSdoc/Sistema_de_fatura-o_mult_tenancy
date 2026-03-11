@@ -469,7 +469,7 @@ const navLinks = [
   { name: 'Processo', id: 'processo' },
   { name: 'Planos', id: 'planos' },
   { name: 'FAQ', id: 'faq' },
-  { name: 'Contacto', id: 'contacto' },
+  { name: 'Comentario', id: 'contacto' },
 ];
 
 // =========================================================================
@@ -563,8 +563,8 @@ export default function App() {
           {/* Logotipo */}
           <div className="flex items-center space-x-2 cursor-pointer" onClick={() => scrollToSection('topo')}>
             <InvoiceIcon />
-            <h1 className="text-2xl font-extrabold" style={{ color: colors.text }}>
-              Fatura <span style={{ color: colors.secondary }}>Já</span>
+            <h1 className="text-2xl font-extrabold" style={{ color: colors.primary }}>
+              Fatura<span style={{ color: colors.secondary }}>Já</span>
             </h1>
           </div>
 

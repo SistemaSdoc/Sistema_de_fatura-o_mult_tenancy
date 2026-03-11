@@ -23,17 +23,18 @@ import {
     Sun,
     Moon,
     TrendingDown,
-    AlertCircle
+    AlertCircle,
+    Menu,
 } from "lucide-react";
 import { LucideIcon } from "lucide-react";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/context/authprovider";
 import { estoqueService, ResumoEstoque } from "@/services/estoque";
-import { produtoService, Produto, estaEstoqueBaixo, estaSemEstoque } from "@/services/produtos";
+import { produtoService, Produto } from "@/services/produtos";
 import { useTheme, useThemeColors } from "@/context/ThemeContext";
 
-/* ===================== TIPOS ===================== */
+/* ===================== TYPES ===================== */
 interface DropdownLink {
     label: string;
     path: string;
@@ -59,7 +60,7 @@ interface MainEmpresaProps {
 export default function MainEmpresa({
     children,
     companyLogo,
-    companyName = "Minha Empresa",
+    companyName,
 }: MainEmpresaProps) {
     const pathname = usePathname();
     const router = useRouter();
@@ -67,62 +68,75 @@ export default function MainEmpresa({
     const { theme, toggleTheme } = useTheme();
     const colors = useThemeColors();
 
-    const [sidebarOpen, setSidebarOpen] = useState(true);
+    // Sidebar: open by default on desktop, closed on mobile
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [isMobile, setIsMobile] = useState(false);
     const [dropdownOpen, setDropdownOpen] = useState<Record<string, boolean>>({});
-    const [hoveredItem, setHoveredItem] = useState<string | null>(null);
     const [isLoaded, setIsLoaded] = useState(false);
 
-    // Estados para logout
+    // Logout states
     const [logoutLoading, setLogoutLoading] = useState(false);
     const [logoutModalOpen, setLogoutModalOpen] = useState(false);
     const [logoutError, setLogoutError] = useState<string | null>(null);
 
-    // Estados para notificações de estoque
+    // Stock notification states
     const [notificacoesAberto, setNotificacoesAberto] = useState(false);
     const [produtosEstoqueBaixo, setProdutosEstoqueBaixo] = useState<Produto[]>([]);
     const [produtosSemEstoque, setProdutosSemEstoque] = useState<Produto[]>([]);
     const [resumoEstoque, setResumoEstoque] = useState<ResumoEstoque | null>(null);
     const [loadingNotificacoes, setLoadingNotificacoes] = useState(false);
     const [ultimaAtualizacao, setUltimaAtualizacao] = useState<Date | null>(null);
-    const [abaAtiva, setAbaAtiva] = useState<'baixo' | 'zero'>('baixo');
+    const [abaAtiva, setAbaAtiva] = useState<"baixo" | "zero">("baixo");
 
-    // Dados do usuário logado
+    // User data
     const userName = user?.name || "Usuário";
     const userRole = user?.role || "operador";
     const userEmail = user?.email || "";
     const userInitial = userName.charAt(0).toUpperCase();
+    const empresaLogo = companyLogo || user?.empresa?.logo || null;
+    const nomeEmpresa = companyName || user?.empresa?.nome || "Empresa";
 
-    // Animação de entrada inicial
+    /* ==================== RESPONSIVE DETECTION ==================== */
+    useEffect(() => {
+        const checkMobile = () => {
+            const mobile = window.innerWidth < 768;
+            setIsMobile(mobile);
+            // On desktop, sidebar starts open; on mobile, starts closed
+            if (!mobile) {
+                setSidebarOpen(true);
+            } else {
+                setSidebarOpen(false);
+            }
+        };
+        checkMobile();
+        window.addEventListener("resize", checkMobile);
+        return () => window.removeEventListener("resize", checkMobile);
+    }, []);
+
     useEffect(() => {
         setIsLoaded(true);
     }, []);
 
-    // Buscar produtos com estoque baixo e sem estoque
+    /* ==================== STOCK NOTIFICATIONS ==================== */
     const buscarNotificacoesEstoque = useCallback(async () => {
         setLoadingNotificacoes(true);
         try {
-            // Buscar resumo do estoque (inclui produtos críticos)
             const resumo = await estoqueService.obterResumo();
             setResumoEstoque(resumo);
-
-            // Produtos críticos do resumo (estoque baixo)
             setProdutosEstoqueBaixo(resumo.produtos_criticos || []);
 
-            // Buscar produtos sem estoque especificamente
             const responseSemEstoque = await produtoService.listarProdutos({
                 sem_estoque: true,
-                tipo: 'produto', // Apenas produtos, não serviços
-                paginar: false
+                tipo: "produto",
+                paginar: false,
             });
 
-            // Extrair array de produtos da resposta paginada ou não
             const produtosSemStock = Array.isArray(responseSemEstoque.produtos)
                 ? responseSemEstoque.produtos
                 : responseSemEstoque.produtos.data || [];
 
             setProdutosSemEstoque(produtosSemStock);
             setUltimaAtualizacao(new Date());
-
         } catch (error) {
             console.error("Erro ao buscar notificações de estoque:", error);
             setProdutosEstoqueBaixo([]);
@@ -135,26 +149,16 @@ export default function MainEmpresa({
     useEffect(() => {
         if (user) {
             buscarNotificacoesEstoque();
-            // Atualizar a cada 5 minutos
             const interval = setInterval(buscarNotificacoesEstoque, 300000);
             return () => clearInterval(interval);
         }
     }, [user, buscarNotificacoesEstoque]);
 
-    const toggleSidebar = () => {
-        setSidebarOpen(!sidebarOpen);
-        if (sidebarOpen) {
-            setDropdownOpen({});
-        }
-    };
+    /* ==================== SIDEBAR HELPERS ==================== */
+    const closeSidebar = () => setSidebarOpen(false);
 
-    const toggleDropdown = (label: string, e?: React.MouseEvent) => {
-        e?.preventDefault();
-        e?.stopPropagation();
-        setDropdownOpen((prev) => ({
-            ...prev,
-            [label]: !prev[label],
-        }));
+    const toggleDropdown = (label: string) => {
+        setDropdownOpen((prev) => ({ ...prev, [label]: !prev[label] }));
     };
 
     const handleMainItemClick = (item: MenuItem, e: React.MouseEvent) => {
@@ -162,18 +166,22 @@ export default function MainEmpresa({
             e.preventDefault();
             toggleDropdown(item.label);
         } else {
-            setDropdownOpen(prev => ({ ...prev, [item.label]: false }));
+            // Close sidebar on mobile after navigation
+            if (isMobile) closeSidebar();
         }
     };
 
+    const handleLinkClick = () => {
+        if (isMobile) closeSidebar();
+    };
+
+    /* ==================== NOTIFICATIONS ==================== */
     const toggleNotificacoes = () => {
-        setNotificacoesAberto(!notificacoesAberto);
-        if (!notificacoesAberto) {
-            buscarNotificacoesEstoque();
-        }
+        setNotificacoesAberto((prev) => !prev);
+        if (!notificacoesAberto) buscarNotificacoesEstoque();
     };
 
-    /* ==================== FUNÇÕES DE LOGOUT ==================== */
+    /* ==================== LOGOUT ==================== */
     const abrirModalLogout = () => {
         setLogoutError(null);
         setLogoutModalOpen(true);
@@ -189,33 +197,27 @@ export default function MainEmpresa({
             setLogoutLoading(true);
             setLogoutError(null);
             const result = await authLogout();
-
             if (result.success) {
-                router.push('/login');
+                router.push("/login");
             } else {
-                setLogoutError(result.message);
-                setTimeout(() => {
-                    router.push('/login');
-                }, 2000);
+                setLogoutError(result.message || "Erro ao fazer logout");
+                setTimeout(() => router.push("/login"), 2000);
             }
-        } catch (error) {
-            console.error('Erro inesperado no logout:', error);
-            setLogoutError('Erro inesperado. Redirecionando...');
-            setTimeout(() => {
-                router.push('/login');
-            }, 2000);
+        } catch {
+            setLogoutError("Erro inesperado. Redirecionando...");
+            setTimeout(() => router.push("/login"), 2000);
         } finally {
             setLogoutLoading(false);
             setLogoutModalOpen(false);
         }
     };
 
-    /* ==================== FUNÇÕES DE NAVEGAÇÃO ==================== */
+    /* ==================== NAVIGATION HELPERS ==================== */
     const isActive = (path: string) => pathname === path;
 
     const isParentActive = (item: MenuItem) => {
         if (pathname === item.path && !item.isGroup) return true;
-        return item.links.some(link => pathname === link.path);
+        return item.links.some((link) => pathname === link.path);
     };
 
     const temPermissao = (item: MenuItem): boolean => {
@@ -223,195 +225,115 @@ export default function MainEmpresa({
         return item.roles.includes(userRole);
     };
 
-    // Menu base com roles definidas
+    /* ==================== MENU ITEMS ==================== */
     const menuItems: MenuItem[] = [
         {
             label: "Dashboard",
             icon: Home,
             path: "/dashboard",
             links: [],
-            roles: ['admin', 'contabilista', 'operador']
+            roles: ["admin", "contabilista", "operador"],
         },
         {
             label: "Vendas",
             icon: ShoppingCart,
             path: "/dashboard/Vendas",
-            links: userRole === 'contabilista'
-                ? [
-                    { label: "Relatórios de vendas", path: "/dashboard/Vendas/relatorios", icon: BarChart2 }
-                ]
-                : userRole === 'operador'
-                    ? [
-                        { label: "Nova venda", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart }
-                    ]
-                    : [
-                        { label: "Nova venda", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart },
-                        { label: "Relatórios de vendas", path: "/dashboard/Vendas/relatorios", icon: BarChart2 }
-                    ],
+            links:
+                userRole === "contabilista"
+                    ? [{ label: "Relatórios de vendas", path: "/dashboard/Vendas/relatorios", icon: BarChart2 }]
+                    : userRole === "operador"
+                        ? [{ label: "Nova venda", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart }]
+                        : [
+                            { label: "Nova venda", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart },
+                            { label: "Relatórios de vendas", path: "/dashboard/Vendas/relatorios", icon: BarChart2 },
+                        ],
             isGroup: true,
-            roles: ['admin', 'contabilista', 'operador']
+            roles: ["admin", "contabilista", "operador"],
         },
         {
-            label: "Documentos Fiscais",
+            label: "Doc. Fiscais",
             icon: FileText,
             path: "/dashboard/Faturas",
-            links: userRole === 'operador' || userRole === 'admin'
-                ? [
-                    { label: "Nova fatura", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
-                    { label: "Nova Fatura Proforma", path: "/dashboard/Faturas/Faturas_Proforma", icon: FileText },
-                    { label: "Faturas", path: "/dashboard/Faturas/Faturas", icon: FileText },
-                    { label: "Documentos fiscais", path: "/dashboard/Faturas/DC", icon: FileText }
-                ]
-                : [],
+            links:
+                userRole === "operador" || userRole === "admin"
+                    ? [
+                        { label: "Nova fatura", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
+                        { label: "Fatura Proforma", path: "/dashboard/Faturas/Faturas_Proforma", icon: FileText },
+                        { label: "Faturas", path: "/dashboard/Faturas/Faturas", icon: FileText },
+                        { label: "Documentos fiscais", path: "/dashboard/Faturas/DC", icon: FileText },
+                    ]
+                    : [],
             isGroup: true,
-            roles: ['admin', 'operador']
+            roles: ["admin", "operador"],
         },
         {
             label: "Clientes",
             icon: Users,
             path: "/dashboard/Clientes",
-            links: [
-                { label: "Clientes", path: "/dashboard/Clientes/Novo_cliente", icon: Users }
-            ],
+            links: [{ label: "Clientes", path: "/dashboard/Clientes/Novo_cliente", icon: Users }],
             isGroup: true,
-            roles: ['admin']
+            roles: ["admin"],
         },
         {
-            label: "Produtos / Serviços",
+            label: "Produtos",
             icon: Archive,
             path: "/dashboard/Produtos_servicos",
             links: [
                 { label: "Stock", path: "/dashboard/Produtos_servicos/Stock", icon: Package },
-                { label: "Nova categoria", path: "/dashboard/Produtos_servicos/categorias", icon: Package },
+                { label: "Categorias", path: "/dashboard/Produtos_servicos/categorias", icon: Package },
                 { label: "Fornecedores", path: "/dashboard/Fornecedores/Novo_fornecedor", icon: Truck },
             ],
             isGroup: true,
-            roles: ['admin']
+            roles: ["admin"],
         },
         {
             label: "Relatórios",
             icon: BarChart2,
             path: "/dashboard/relatorios",
             isGroup: true,
-            roles: ['admin', 'contabilista'],
-            links: []
+            roles: ["admin", "contabilista"],
+            links: [],
         },
         {
             label: "Configurações",
             icon: Settings,
             path: "/dashboard/configuracoes",
             links: [],
-            roles: ['admin', 'contabilista', 'operador']
-        }
+            roles: ["admin", "contabilista", "operador"],
+        },
     ];
 
-    const menuItemsFiltrados = menuItems.filter(item => temPermissao(item));
-
-    // Total de notificações (estoque baixo + sem estoque)
+    const menuItemsFiltrados = menuItems.filter(temPermissao);
     const totalNotificacoes = produtosEstoqueBaixo.length + produtosSemEstoque.length;
 
-    // Variantes de animação
-    const sidebarVariants = {
-        open: { width: 260 },
-        closed: { width: 80 },
-    };
-
-    const menuItemVariants = {
-        initial: { opacity: 0, x: -20 },
-        animate: { opacity: 1, x: 0 },
-        exit: { opacity: 0, x: -20 },
-    };
-
+    /* ==================== ANIMATION VARIANTS ==================== */
     const dropdownVariants = {
-        hidden: {
-            opacity: 0,
-            height: 0,
-            transition: {
-                duration: 0.2,
-                ease: [0.42, 0, 0.58, 1]
-            }
-        },
+        hidden: { opacity: 0, height: 0 },
         visible: {
             opacity: 1,
             height: "auto",
-            transition: {
-                duration: 0.3,
-                ease: [0.34, 1.56, 0.64, 1],
-                staggerChildren: 0.05,
-                delayChildren: 0.1
-            }
+            transition: { duration: 0.25, ease: "easeOut", staggerChildren: 0.04 },
         },
     };
 
     const dropdownItemVariants = {
-        hidden: { opacity: 0, x: -10 },
+        hidden: { opacity: 0, x: -8 },
         visible: { opacity: 1, x: 0 },
     };
 
-    const contentVariants = {
-        hidden: { opacity: 0, y: 20 },
-        visible: {
-            opacity: 1,
-            y: 0,
-            transition: {
-                duration: 0.4,
-                ease: "easeOut"
-            }
-        },
+    const notificacaoVariants = {
+        hidden: { opacity: 0, y: -8, scale: 0.96 },
+        visible: { opacity: 1, y: 0, scale: 1, transition: { type: "spring" as const, stiffness: 300, damping: 30 } },
+        exit: { opacity: 0, y: -8, scale: 0.96, transition: { duration: 0.15 } },
     };
 
     const modalVariants = {
-        hidden: {
-            opacity: 0,
-            scale: 0.9,
-            y: 20
-        },
-        visible: {
-            opacity: 1,
-            scale: 1,
-            y: 0,
-            transition: {
-                type: "spring",
-                stiffness: 400,
-                damping: 30
-            }
-        },
-        exit: {
-            opacity: 0,
-            scale: 0.9,
-            y: 20,
-            transition: {
-                duration: 0.2
-            }
-        }
+        hidden: { opacity: 0, scale: 0.92, y: 16 },
+        visible: { opacity: 1, scale: 1, y: 0, transition: { type: "spring", stiffness: 400, damping: 30 } },
+        exit: { opacity: 0, scale: 0.92, y: 16, transition: { duration: 0.15 } },
     };
 
-    const notificacaoVariants = {
-        hidden: {
-            opacity: 0,
-            y: -10,
-            scale: 0.95
-        },
-        visible: {
-            opacity: 1,
-            y: 0,
-            scale: 1,
-            transition: {
-                type: "spring" as const,
-                stiffness: 300,
-                damping: 30
-            }
-        },
-        exit: {
-            opacity: 0,
-            y: -10,
-            scale: 0.95,
-            transition: {
-                duration: 0.2
-            }
-        }
-    };
-
+    /* ==================== LOADING ==================== */
     if (userLoading) {
         return (
             <div className="flex h-screen items-center justify-center" style={{ backgroundColor: colors.background }}>
@@ -420,72 +342,105 @@ export default function MainEmpresa({
         );
     }
 
+    const currentPageLabel = menuItemsFiltrados.find((item) => isParentActive(item))?.label || "Dashboard";
+
+    /* ==================== RENDER ==================== */
     return (
-        <div className="flex h-screen transition-colors duration-300" style={{ backgroundColor: colors.background, overflow: 'hidden' }}>
-            {/* SIDEBAR */}
+        <div className="flex h-screen overflow-hidden transition-colors duration-300" style={{ backgroundColor: colors.background }}>
+
+            {/* ====== MOBILE OVERLAY ====== */}
+            <AnimatePresence>
+                {sidebarOpen && isMobile && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={closeSidebar}
+                        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-30"
+                    />
+                )}
+            </AnimatePresence>
+
+            {/* ====== SIDEBAR ====== */}
             <motion.aside
                 initial={false}
-                animate={sidebarOpen ? "open" : "closed"}
-                variants={sidebarVariants}
+                animate={{ x: sidebarOpen ? 0 : isMobile ? "-100%" : 0, width: sidebarOpen ? 260 : isMobile ? 260 : 72 }}
                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                className="border-r flex flex-col relative shadow-xl z-20"
+                className="flex flex-col border-r shadow-xl z-40 flex-shrink-0"
                 style={{
                     backgroundColor: colors.card,
-                    borderColor: colors.border
+                    borderColor: colors.border,
+                    position: isMobile ? "fixed" : "relative",
+                    top: isMobile ? 0 : undefined,
+                    left: isMobile ? 0 : undefined,
+                    bottom: isMobile ? 0 : undefined,
+                    height: isMobile ? "100dvh" : "100%",
                 }}
             >
-                {/* Toggle Button */}
-                <motion.button
-                    onClick={toggleSidebar}
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="absolute -right-3 top-8 text-white p-2 rounded-full shadow-lg hover:opacity-90 transition-colors z-30"
-                    style={{ backgroundColor: colors.primary }}
-                >
-                    <motion.div
-                        animate={{ rotate: sidebarOpen ? 0 : 180 }}
-                        transition={{ duration: 0.3 }}
+                {/* Desktop collapse toggle */}
+                {!isMobile && (
+                    <motion.button
+                        onClick={() => setSidebarOpen(!sidebarOpen)}
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.95 }}
+                        className="absolute -right-3 top-8 text-white p-1.5 rounded-full shadow-lg z-50"
+                        style={{ backgroundColor: colors.primary }}
                     >
-                        <ChevronLeft size={16} />
-                    </motion.div>
-                </motion.button>
+                        <motion.div animate={{ rotate: sidebarOpen ? 0 : 180 }} transition={{ duration: 0.3 }}>
+                            <ChevronLeft size={14} />
+                        </motion.div>
+                    </motion.button>
+                )}
 
-                {/* Logo */}
-                <motion.div
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
-                    className="h-16 flex items-center gap-3 px-4 border-b overflow-hidden"
+                {/* Logo / Company */}
+                <div
+                    className="h-16 flex items-center gap-3 px-4 border-b flex-shrink-0 overflow-hidden"
                     style={{ borderColor: colors.border }}
                 >
-                    {companyLogo ? (
-                        <Image src={companyLogo} alt="Logo" width={32} height={32} className="rounded-lg" />
+                    {empresaLogo ? (
+                        <Image
+                            src={empresaLogo}
+                            alt="Logo"
+                            width={32}
+                            height={32}
+                            className="rounded-lg object-contain flex-shrink-0"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                        />
                     ) : (
-                        <div className="w-8 h-8 text-white rounded-lg flex items-center justify-center font-bold shadow-md"
-                            style={{ backgroundColor: colors.primary }}>
-                            {companyName.charAt(0)}
+                        <div
+                            className="w-8 h-8 text-white rounded-lg flex items-center justify-center font-bold shadow-md flex-shrink-0"
+                            style={{ backgroundColor: colors.primary }}
+                        >
+                            {nomeEmpresa.charAt(0).toUpperCase()}
                         </div>
                     )}
 
                     <AnimatePresence>
                         {sidebarOpen && (
                             <motion.span
-                                initial={{ opacity: 0, x: -10 }}
+                                initial={{ opacity: 0, x: -8 }}
                                 animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: -10 }}
-                                className="font-semibold text-sm whitespace-nowrap"
+                                exit={{ opacity: 0, x: -8 }}
+                                className="font-semibold text-sm whitespace-nowrap truncate"
                                 style={{ color: colors.text }}
                             >
-                                {companyName}
+                                {nomeEmpresa}
                             </motion.span>
                         )}
                     </AnimatePresence>
-                </motion.div>
 
-                {/* Menu */}
-                <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto overflow-x-hidden">
-                    <AnimatePresence>
-                        {isLoaded && menuItemsFiltrados.map((item, index) => {
+                    {/* Mobile close button */}
+                    {isMobile && sidebarOpen && (
+                        <button onClick={closeSidebar} className="ml-auto p-1" style={{ color: colors.textSecondary }}>
+                            <X size={20} />
+                        </button>
+                    )}
+                </div>
+
+                {/* Navigation */}
+                <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto overflow-x-hidden">
+                    {isLoaded &&
+                        menuItemsFiltrados.map((item, index) => {
                             const active = isParentActive(item);
                             const isOpen = dropdownOpen[item.label];
                             const hasLinks = item.links.length > 0;
@@ -493,44 +448,33 @@ export default function MainEmpresa({
                             return (
                                 <motion.div
                                     key={item.label}
-                                    variants={menuItemVariants}
-                                    initial="initial"
-                                    animate="animate"
-                                    exit="exit"
-                                    transition={{ delay: index * 0.05 }}
-                                    onMouseEnter={() => setHoveredItem(item.label)}
-                                    onMouseLeave={() => setHoveredItem(null)}
+                                    initial={{ opacity: 0, x: -16 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: index * 0.04 }}
                                 >
-                                    {/* Item Principal */}
-                                    <motion.div
-                                        whileHover={{ scale: 1.02, x: 4 }}
-                                        whileTap={{ scale: 0.98 }}
-                                        className={`group flex items-center justify-between px-3 py-3 rounded-xl cursor-pointer transition-all duration-300`}
+                                    {/* Main item */}
+                                    <div
+                                        className="flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 select-none"
                                         style={{
-                                            backgroundColor: active ? colors.secondary : 'transparent',
-                                            color: active ? 'white' : colors.text
+                                            backgroundColor: active ? colors.secondary : "transparent",
+                                            color: active ? "white" : colors.text,
                                         }}
+                                        onClick={(e) => handleMainItemClick(item, e)}
                                     >
-                                        {/* Link ou div clicável baseado em hasLinks */}
                                         {hasLinks ? (
-                                            <div
-                                                className="flex items-center gap-3 flex-1 min-w-0"
-                                                onClick={(e) => handleMainItemClick(item, e)}
-                                            >
+                                            <div className="flex items-center gap-3 flex-1 min-w-0">
                                                 <item.icon
-                                                    size={20}
-                                                    className="transition-colors duration-300"
-                                                    style={{ color: active ? 'white' : colors.primary }}
+                                                    size={19}
+                                                    style={{ color: active ? "white" : colors.primary, flexShrink: 0 }}
                                                 />
-
                                                 <AnimatePresence>
                                                     {sidebarOpen && (
                                                         <motion.span
-                                                            initial={{ opacity: 0, width: 0 }}
-                                                            animate={{ opacity: 1, width: "auto" }}
-                                                            exit={{ opacity: 0, width: 0 }}
-                                                            className="text-sm font-medium whitespace-nowrap overflow-hidden"
-                                                            style={{ color: active ? 'white' : colors.text }}
+                                                            initial={{ opacity: 0 }}
+                                                            animate={{ opacity: 1 }}
+                                                            exit={{ opacity: 0 }}
+                                                            className="text-sm font-medium whitespace-nowrap truncate"
+                                                            style={{ color: active ? "white" : colors.text }}
                                                         >
                                                             {item.label}
                                                         </motion.span>
@@ -541,22 +485,20 @@ export default function MainEmpresa({
                                             <Link
                                                 href={item.path}
                                                 className="flex items-center gap-3 flex-1 min-w-0"
-                                                onClick={(e) => handleMainItemClick(item, e)}
+                                                onClick={handleLinkClick}
                                             >
                                                 <item.icon
-                                                    size={20}
-                                                    className="transition-colors duration-300"
-                                                    style={{ color: active ? 'white' : colors.primary }}
+                                                    size={19}
+                                                    style={{ color: active ? "white" : colors.primary, flexShrink: 0 }}
                                                 />
-
                                                 <AnimatePresence>
                                                     {sidebarOpen && (
                                                         <motion.span
-                                                            initial={{ opacity: 0, width: 0 }}
-                                                            animate={{ opacity: 1, width: "auto" }}
-                                                            exit={{ opacity: 0, width: 0 }}
-                                                            className="text-sm font-medium whitespace-nowrap overflow-hidden"
-                                                            style={{ color: active ? 'white' : colors.text }}
+                                                            initial={{ opacity: 0 }}
+                                                            animate={{ opacity: 1 }}
+                                                            exit={{ opacity: 0 }}
+                                                            className="text-sm font-medium whitespace-nowrap truncate"
+                                                            style={{ color: active ? "white" : colors.text }}
                                                         >
                                                             {item.label}
                                                         </motion.span>
@@ -565,34 +507,18 @@ export default function MainEmpresa({
                                             </Link>
                                         )}
 
-                                        {active && (
-                                            <motion.div
-                                                layoutId="activeIndicator"
-                                                className="w-1.5 h-1.5 rounded-full"
-                                                style={{ backgroundColor: 'white' }}
-                                            />
-                                        )}
-
-                                        {/* Botão de chevron */}
                                         {hasLinks && sidebarOpen && (
-                                            <motion.button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    toggleDropdown(item.label);
-                                                }}
-                                                whileHover={{ scale: 1.2 }}
-                                                whileTap={{ scale: 0.9 }}
+                                            <motion.div
                                                 animate={{ rotate: isOpen ? 180 : 0 }}
-                                                transition={{ duration: 0.3 }}
-                                                className="p-1 rounded-full hover:bg-white/20 ml-1"
-                                                style={{ color: active ? 'white' : colors.text }}
+                                                transition={{ duration: 0.25 }}
+                                                className="flex-shrink-0 ml-1"
                                             >
-                                                <ChevronDown size={16} />
-                                            </motion.button>
+                                                <ChevronDown size={15} style={{ color: active ? "white" : colors.textSecondary }} />
+                                            </motion.div>
                                         )}
-                                    </motion.div>
+                                    </div>
 
-                                    {/* Dropdown de sublinks */}
+                                    {/* Dropdown */}
                                     <AnimatePresence>
                                         {isOpen && sidebarOpen && (
                                             <motion.div
@@ -600,58 +526,36 @@ export default function MainEmpresa({
                                                 initial="hidden"
                                                 animate="visible"
                                                 exit="hidden"
-                                                className="ml-4 mt-1 space-y-1 overflow-hidden"
+                                                className="ml-3 mt-0.5 space-y-0.5 overflow-hidden"
                                             >
-                                                {item.links.map((link, linkIndex) => {
+                                                {item.links.map((link) => {
                                                     const linkActive = isActive(link.path);
                                                     return (
-                                                        <motion.div
-                                                            key={link.path}
-                                                            variants={dropdownItemVariants}
-                                                            custom={linkIndex}
-                                                        >
-                                                            <Link href={link.path}>
-                                                                <motion.div
-                                                                    whileHover={{ x: 8 }}
-                                                                    whileTap={{ scale: 0.98 }}
-                                                                    className={`group flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200`}
+                                                        <motion.div key={link.path} variants={dropdownItemVariants}>
+                                                            <Link href={link.path} onClick={handleLinkClick}>
+                                                                <div
+                                                                    className="flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150"
                                                                     style={{
-                                                                        backgroundColor: linkActive ? `${colors.primary}10` : 'transparent',
-                                                                        borderLeft: linkActive ? `2px solid ${colors.secondary}` : 'none'
+                                                                        backgroundColor: linkActive ? `${colors.primary}15` : "transparent",
+                                                                        borderLeft: linkActive ? `2px solid ${colors.secondary}` : "2px solid transparent",
                                                                     }}
                                                                 >
                                                                     {link.icon && (
-                                                                        <motion.div
-                                                                            initial={{ scale: 0 }}
-                                                                            animate={{ scale: 1 }}
-                                                                            transition={{ delay: linkIndex * 0.05 }}
-                                                                        >
-                                                                            <link.icon
-                                                                                size={16}
-                                                                                className="transition-colors"
-                                                                                style={{
-                                                                                    color: linkActive ? colors.secondary : colors.textSecondary
-                                                                                }}
-                                                                            />
-                                                                        </motion.div>
+                                                                        <link.icon
+                                                                            size={15}
+                                                                            style={{ color: linkActive ? colors.secondary : colors.textSecondary, flexShrink: 0 }}
+                                                                        />
                                                                     )}
                                                                     <span
-                                                                        className={`text-sm transition-colors ${linkActive ? 'font-semibold' : ''}`}
+                                                                        className="text-xs truncate"
                                                                         style={{
-                                                                            color: linkActive ? colors.text : colors.textSecondary
+                                                                            color: linkActive ? colors.text : colors.textSecondary,
+                                                                            fontWeight: linkActive ? 600 : 400,
                                                                         }}
                                                                     >
                                                                         {link.label}
                                                                     </span>
-
-                                                                    {linkActive && (
-                                                                        <motion.div
-                                                                            layoutId="subActive"
-                                                                            className="ml-auto w-1.5 h-1.5 rounded-full"
-                                                                            style={{ backgroundColor: colors.secondary }}
-                                                                        />
-                                                                    )}
-                                                                </motion.div>
+                                                                </div>
                                                             </Link>
                                                         </motion.div>
                                                     );
@@ -662,33 +566,21 @@ export default function MainEmpresa({
                                 </motion.div>
                             );
                         })}
-                    </AnimatePresence>
                 </nav>
 
                 {/* Logout */}
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.5 }}
-                    className="p-3 border-t"
-                    style={{ borderColor: colors.border }}
-                >
-                    <motion.div
-                        whileHover={{ scale: 1.02, backgroundColor: theme === 'dark' ? '#333333' : 'rgba(239, 68, 68, 0.1)' }}
-                        whileTap={{ scale: 0.98 }}
+                <div className="p-2 border-t flex-shrink-0" style={{ borderColor: colors.border }}>
+                    <div
                         onClick={abrirModalLogout}
-                        className="group flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-300 cursor-pointer"
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 hover:bg-red-50 dark:hover:bg-red-950/20"
                     >
-                        <motion.div whileHover={{ rotate: 360 }} transition={{ duration: 0.5 }}>
-                            <LogOut size={20} className="text-red-500 group-hover:opacity-80 transition-colors" />
-                        </motion.div>
-
+                        <LogOut size={19} className="text-red-500 flex-shrink-0" />
                         <AnimatePresence>
                             {sidebarOpen && (
                                 <motion.span
-                                    initial={{ opacity: 0, x: -10 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: -10 }}
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
                                     className="text-sm font-medium whitespace-nowrap"
                                     style={{ color: colors.text }}
                                 >
@@ -696,138 +588,105 @@ export default function MainEmpresa({
                                 </motion.span>
                             )}
                         </AnimatePresence>
-
-                        {!sidebarOpen && (
-                            <motion.div
-                                initial={{ opacity: 0, x: 10, scale: 0.8 }}
-                                whileHover={{ opacity: 1, x: 0, scale: 1 }}
-                                className="absolute left-full ml-2 px-3 py-1 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none"
-                                style={{ backgroundColor: colors.secondary }}
-                            >
-                                Sair
-                            </motion.div>
-                        )}
-                    </motion.div>
-                </motion.div>
+                    </div>
+                </div>
             </motion.aside>
 
-            {/* MAIN CONTENT */}
-            <div className="flex-1 flex flex-col min-w-0">
-                {/* Header */}
-                <motion.header
-                    initial={{ y: -50, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                    className="h-16 border-b px-6 flex items-center justify-between shadow-sm relative"
-                    style={{
-                        backgroundColor: colors.card,
-                        borderColor: colors.border
-                    }}
-                >
-                    <div className="flex items-center gap-4">
-                        <motion.h1
-                            key={pathname}
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            className="text-lg font-bold"
-                            style={{ color: colors.text }}
-                        >
-                            {menuItemsFiltrados.find(item => isParentActive(item))?.label || "Dashboard"}
-                        </motion.h1>
+            {/* ====== MAIN CONTENT ====== */}
+            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
-                        {/* Badge de Role */}
+                {/* Header */}
+                <header
+                    className="h-14 md:h-16 border-b px-3 md:px-6 flex items-center justify-between shadow-sm flex-shrink-0 relative z-20"
+                    style={{ backgroundColor: colors.card, borderColor: colors.border }}
+                >
+                    {/* Left: hamburger + page title */}
+                    <div className="flex items-center gap-2 md:gap-4 min-w-0">
+                        {/* Mobile hamburger */}
+                        {isMobile && (
+                            <button
+                                onClick={() => setSidebarOpen(true)}
+                                className="p-2 rounded-lg flex-shrink-0"
+                                style={{ color: colors.primary }}
+                                aria-label="Abrir menu"
+                            >
+                                <Menu size={20} />
+                            </button>
+                        )}
+
+                        <h1 className="text-base md:text-lg font-bold truncate" style={{ color: colors.text }}>
+                            {currentPageLabel}
+                        </h1>
+
                         <span
-                            className="hidden md:inline-block text-xs px-2 py-1 rounded-full"
+                            className="hidden sm:inline-block text-xs px-2 py-1 rounded-full flex-shrink-0 whitespace-nowrap"
                             style={{
-                                backgroundColor: userRole === 'admin' ? colors.secondary + '20' :
-                                    userRole === 'contabilista' ? colors.primary + '20' : colors.border,
-                                color: userRole === 'admin' ? colors.secondary :
-                                    userRole === 'contabilista' ? colors.primary : colors.textSecondary
+                                backgroundColor:
+                                    userRole === "admin"
+                                        ? colors.secondary + "20"
+                                        : userRole === "contabilista"
+                                            ? colors.primary + "20"
+                                            : colors.border,
+                                color:
+                                    userRole === "admin"
+                                        ? colors.secondary
+                                        : userRole === "contabilista"
+                                            ? colors.primary
+                                            : colors.textSecondary,
                             }}
                         >
-                            {userRole === 'admin' ? 'Administrador' :
-                                userRole === 'contabilista' ? 'Contabilista' : 'Operador'}
+                            {userRole === "admin" ? "Administrador" : userRole === "contabilista" ? "Contabilista" : "Operador"}
                         </span>
                     </div>
 
-                    <div className="flex items-center gap-4">
-                        {/* Botão de Toggle do Tema */}
-                        <motion.button
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.95 }}
+                    {/* Right: actions */}
+                    <div className="flex items-center gap-1 md:gap-3 flex-shrink-0">
+
+                        {/* Theme toggle */}
+                        <button
                             onClick={toggleTheme}
-                            className="p-2 rounded-full transition-colors relative group"
-                            style={{
-                                backgroundColor: colors.hover,
-                                color: colors.text
-                            }}
+                            className="p-2 rounded-full transition-colors"
+                            style={{ backgroundColor: colors.hover, color: colors.text }}
                             aria-label="Alternar tema"
                         >
                             <AnimatePresence mode="wait">
                                 <motion.div
                                     key={theme}
-                                    initial={{ y: -20, opacity: 0 }}
+                                    initial={{ y: -12, opacity: 0 }}
                                     animate={{ y: 0, opacity: 1 }}
-                                    exit={{ y: 20, opacity: 0 }}
-                                    transition={{ duration: 0.2 }}
+                                    exit={{ y: 12, opacity: 0 }}
+                                    transition={{ duration: 0.15 }}
                                 >
-                                    {theme === 'dark' ? (
-                                        <Sun size={20} style={{ color: colors.secondary }} />
+                                    {theme === "dark" ? (
+                                        <Sun size={18} style={{ color: colors.secondary }} />
                                     ) : (
-                                        <Moon size={20} style={{ color: colors.primary }} />
+                                        <Moon size={18} style={{ color: colors.primary }} />
                                     )}
                                 </motion.div>
                             </AnimatePresence>
+                        </button>
 
-                            {/* Tooltip */}
-                            <motion.div
-                                initial={{ opacity: 0, x: 10, scale: 0.8 }}
-                                whileHover={{ opacity: 1, x: 0, scale: 1 }}
-                                className="absolute right-full mr-2 px-2 py-1 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none"
-                                style={{ backgroundColor: colors.primary }}
-                            >
-                                {theme === 'dark' ? 'Modo Claro' : 'Modo Escuro'}
-                            </motion.div>
-                        </motion.button>
-
-                        {/* Notificações de Estoque */}
-                        {(userRole === 'admin' || userRole === 'operador') && (
+                        {/* Stock notifications */}
+                        {(userRole === "admin" || userRole === "operador") && (
                             <div className="relative">
-                                <motion.button
+                                <button
                                     onClick={toggleNotificacoes}
-                                    whileHover={{ scale: 1.1 }}
-                                    whileTap={{ scale: 0.95 }}
-                                    className="relative p-2 rounded-full transition-colors group"
-                                    style={{
-                                        backgroundColor: notificacoesAberto ? colors.hover : 'transparent',
-                                        color: colors.text
-                                    }}
+                                    className="relative p-2 rounded-full transition-colors"
+                                    style={{ backgroundColor: notificacoesAberto ? colors.hover : "transparent" }}
                                     aria-label="Notificações de estoque"
                                 >
-                                    <Bell size={20} style={{ color: colors.primary }} />
+                                    <Bell size={18} style={{ color: colors.primary }} />
                                     {totalNotificacoes > 0 && (
                                         <motion.span
                                             initial={{ scale: 0 }}
                                             animate={{ scale: 1 }}
-                                            className="absolute -top-1 -right-1 min-w-[18px] h-[18px] text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1"
-                                            style={{
-                                                backgroundColor: produtosSemEstoque.length > 0 ? colors.danger : '#f59e0b'
-                                            }}
+                                            className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1"
+                                            style={{ backgroundColor: produtosSemEstoque.length > 0 ? colors.danger : "#f59e0b" }}
                                         >
-                                            {totalNotificacoes > 9 ? '9+' : totalNotificacoes}
+                                            {totalNotificacoes > 9 ? "9+" : totalNotificacoes}
                                         </motion.span>
                                     )}
-
-                                    {/* Tooltip */}
-                                    <motion.div
-                                        initial={{ opacity: 0, x: 10, scale: 0.8 }}
-                                        whileHover={{ opacity: 1, x: 0, scale: 1 }}
-                                        className="absolute right-full mr-2 px-2 py-1 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none"
-                                        style={{ backgroundColor: colors.primary }}
-                                    >
-                                        Notificações de Stock
-                                    </motion.div>
-                                </motion.button>
+                                </button>
 
                                 <AnimatePresence>
                                     {notificacoesAberto && (
@@ -836,317 +695,184 @@ export default function MainEmpresa({
                                             initial="hidden"
                                             animate="visible"
                                             exit="exit"
-                                            className="absolute right-0 top-full mt-2 w-96 rounded-xl shadow-2xl border overflow-hidden z-50"
+                                            className="absolute right-0 top-full mt-2 rounded-xl shadow-2xl border overflow-hidden z-50"
                                             style={{
                                                 backgroundColor: colors.card,
-                                                borderColor: colors.border
+                                                borderColor: colors.border,
+                                                width: "min(384px, calc(100vw - 16px))",
                                             }}
                                         >
-                                            {/* Header com Tabs */}
+                                            {/* Notification header */}
                                             <div
                                                 className="px-4 py-3"
                                                 style={{
-                                                    background: `linear-gradient(135deg, ${colors.primary} 0%, ${theme === 'dark' ? '#1a1a4a' : '#1a4a7a'} 100%)`
+                                                    background: `linear-gradient(135deg, ${colors.primary} 0%, ${theme === "dark" ? "#1a1a4a" : "#1a4a7a"} 100%)`,
                                                 }}
                                             >
                                                 <div className="flex items-center justify-between mb-3">
                                                     <div className="flex items-center gap-2">
-                                                        <AlertTriangle size={16} className="text-white" />
+                                                        <AlertTriangle size={15} className="text-white" />
                                                         <span className="text-white font-semibold text-sm">Alertas de Stock</span>
                                                     </div>
-                                                    <button
-                                                        onClick={() => setNotificacoesAberto(false)}
-                                                        className="text-white/80 hover:text-white transition-colors"
-                                                    >
-                                                        <X size={16} />
+                                                    <button onClick={() => setNotificacoesAberto(false)} className="text-white/80 hover:text-white">
+                                                        <X size={15} />
                                                     </button>
                                                 </div>
-
-                                                {/* Tabs */}
                                                 <div className="flex gap-1 bg-black/20 rounded-lg p-1">
                                                     <button
-                                                        onClick={() => setAbaAtiva('baixo')}
+                                                        onClick={() => setAbaAtiva("baixo")}
                                                         className="flex-1 py-1.5 px-2 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1"
-                                                        style={{
-                                                            backgroundColor: abaAtiva === 'baixo' ? 'rgba(255,255,255,0.2)' : 'transparent',
-                                                            color: 'white'
-                                                        }}
+                                                        style={{ backgroundColor: abaAtiva === "baixo" ? "rgba(255,255,255,0.2)" : "transparent", color: "white" }}
                                                     >
-                                                        <TrendingDown size={12} />
+                                                        <TrendingDown size={11} />
                                                         Baixo ({produtosEstoqueBaixo.length})
                                                     </button>
                                                     <button
-                                                        onClick={() => setAbaAtiva('zero')}
+                                                        onClick={() => setAbaAtiva("zero")}
                                                         className="flex-1 py-1.5 px-2 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1"
-                                                        style={{
-                                                            backgroundColor: abaAtiva === 'zero' ? 'rgba(255,255,255,0.2)' : 'transparent',
-                                                            color: 'white'
-                                                        }}
+                                                        style={{ backgroundColor: abaAtiva === "zero" ? "rgba(255,255,255,0.2)" : "transparent", color: "white" }}
                                                     >
-                                                        <AlertCircle size={12} />
+                                                        <AlertCircle size={11} />
                                                         Esgotado ({produtosSemEstoque.length})
                                                     </button>
                                                 </div>
                                             </div>
 
-                                            {/* Conteúdo */}
-                                            <div className="max-h-96 overflow-y-auto">
+                                            {/* Notification content */}
+                                            <div className="max-h-80 overflow-y-auto">
                                                 {loadingNotificacoes ? (
                                                     <div className="p-8 flex items-center justify-center">
                                                         <Loader2 className="h-6 w-6 animate-spin" style={{ color: colors.primary }} />
                                                     </div>
-                                                ) : abaAtiva === 'baixo' ? (
-                                                    // Aba: Estoque Baixo
+                                                ) : abaAtiva === "baixo" ? (
                                                     produtosEstoqueBaixo.length > 0 ? (
                                                         <>
-                                                            <div className="p-3 border-b" style={{
-                                                                backgroundColor: theme === 'dark' ? '#442200' : '#fff7ed',
-                                                                borderColor: colors.border
-                                                            }}>
-                                                                <p className="text-xs text-center font-medium" style={{
-                                                                    color: theme === 'dark' ? '#ffb347' : '#9a3412'
-                                                                }}>
-                                                                    Produtos com estoque abaixo do mínimo
-                                                                </p>
+                                                            <div className="p-2 border-b text-center text-xs font-medium"
+                                                                style={{ backgroundColor: theme === "dark" ? "#442200" : "#fff7ed", borderColor: colors.border, color: theme === "dark" ? "#ffb347" : "#9a3412" }}>
+                                                                Produtos com estoque abaixo do mínimo
                                                             </div>
-
                                                             {produtosEstoqueBaixo.map((produto, index) => (
                                                                 <motion.div
                                                                     key={produto.id}
-                                                                    initial={{ opacity: 0, x: -20 }}
+                                                                    initial={{ opacity: 0, x: -12 }}
                                                                     animate={{ opacity: 1, x: 0 }}
-                                                                    transition={{ delay: index * 0.05 }}
-                                                                    className="p-3 transition-colors cursor-pointer group border-b last:border-b-0"
-                                                                    style={{
-                                                                        borderColor: colors.border,
-                                                                        backgroundColor: 'transparent'
-                                                                    }}
-                                                                    onClick={() => {
-                                                                        setNotificacoesAberto(false);
-                                                                        router.push('/dashboard/Produtos_servicos/Stock');
-                                                                    }}
-                                                                    onMouseEnter={(e) => {
-                                                                        e.currentTarget.style.backgroundColor = theme === 'dark' ? colors.hover : '#f9fafb';
-                                                                    }}
-                                                                    onMouseLeave={(e) => {
-                                                                        e.currentTarget.style.backgroundColor = 'transparent';
-                                                                    }}
+                                                                    transition={{ delay: index * 0.04 }}
+                                                                    className="p-3 border-b last:border-b-0 cursor-pointer transition-colors"
+                                                                    style={{ borderColor: colors.border }}
+                                                                    onClick={() => { setNotificacoesAberto(false); router.push("/dashboard/Produtos_servicos/Stock"); }}
                                                                 >
-                                                                    <div className="flex items-start gap-3">
-                                                                        <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-                                                                            style={{
-                                                                                backgroundColor: theme === 'dark' ? '#442200' : '#fff7ed',
-                                                                                color: theme === 'dark' ? '#ffb347' : '#9a3412'
-                                                                            }}
-                                                                        >
-                                                                            <Package size={18} />
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                                                                            style={{ backgroundColor: theme === "dark" ? "#442200" : "#fff7ed", color: theme === "dark" ? "#ffb347" : "#9a3412" }}>
+                                                                            <Package size={16} />
                                                                         </div>
                                                                         <div className="flex-1 min-w-0">
-                                                                            <p className="text-sm font-medium truncate transition-colors"
-                                                                                style={{ color: colors.text }}
-                                                                            >
-                                                                                {produto.nome}
-                                                                            </p>
-                                                                            <div className="flex items-center gap-2 mt-1">
-                                                                                <span className="text-xs font-bold" style={{ color: '#f59e0b' }}>
-                                                                                    {produto.estoque_atual} unid.
-                                                                                </span>
+                                                                            <p className="text-sm font-medium truncate" style={{ color: colors.text }}>{produto.nome}</p>
+                                                                            <div className="flex items-center gap-1.5 mt-0.5">
+                                                                                <span className="text-xs font-bold" style={{ color: "#f59e0b" }}>{produto.estoque_atual} unid.</span>
                                                                                 <span className="text-xs" style={{ color: colors.textSecondary }}>•</span>
-                                                                                <span className="text-xs font-medium" style={{ color: colors.secondary }}>
-                                                                                    Mín: {produto.estoque_minimo || 5}
-                                                                                </span>
+                                                                                <span className="text-xs" style={{ color: colors.secondary }}>Mín: {produto.estoque_minimo || 5}</span>
                                                                             </div>
-                                                                            {produto.categoria && (
-                                                                                <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
-                                                                                    {produto.categoria.nome}
-                                                                                </p>
-                                                                            )}
                                                                         </div>
-                                                                        <motion.div
-                                                                            className="opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                            style={{ color: colors.secondary }}
-                                                                        >
-                                                                            <ChevronLeft size={16} className="rotate-180" />
-                                                                        </motion.div>
                                                                     </div>
                                                                 </motion.div>
                                                             ))}
                                                         </>
                                                     ) : (
                                                         <div className="p-8 text-center">
-                                                            <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center"
-                                                                style={{ backgroundColor: theme === 'dark' ? '#1a3a1a' : '#dcfce7' }}
-                                                            >
-                                                                <Package size={24} style={{ color: theme === 'dark' ? '#4ade80' : '#16a34a' }} />
+                                                            <div className="w-14 h-14 mx-auto mb-3 rounded-full flex items-center justify-center"
+                                                                style={{ backgroundColor: theme === "dark" ? "#1a3a1a" : "#dcfce7" }}>
+                                                                <Package size={22} style={{ color: theme === "dark" ? "#4ade80" : "#16a34a" }} />
                                                             </div>
-                                                            <p className="text-sm font-medium" style={{ color: colors.text }}>
-                                                                Estoque saudável
-                                                            </p>
-                                                            <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
-                                                                Nenhum produto com estoque baixo
-                                                            </p>
+                                                            <p className="text-sm font-medium" style={{ color: colors.text }}>Estoque saudável</p>
+                                                            <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>Nenhum produto com estoque baixo</p>
                                                         </div>
                                                     )
                                                 ) : (
-                                                    // Aba: Sem Estoque
                                                     produtosSemEstoque.length > 0 ? (
                                                         <>
-                                                            <div className="p-3 border-b" style={{
-                                                                backgroundColor: theme === 'dark' ? '#442222' : '#fef2f2',
-                                                                borderColor: colors.border
-                                                            }}>
-                                                                <p className="text-xs text-center font-medium" style={{
-                                                                    color: theme === 'dark' ? '#fca5a5' : '#991b1b'
-                                                                }}>
-                                                                    Produtos esgotados - reposição urgente necessária
-                                                                </p>
+                                                            <div className="p-2 border-b text-center text-xs font-medium"
+                                                                style={{ backgroundColor: theme === "dark" ? "#442222" : "#fef2f2", borderColor: colors.border, color: theme === "dark" ? "#fca5a5" : "#991b1b" }}>
+                                                                Produtos esgotados — reposição urgente
                                                             </div>
-
                                                             {produtosSemEstoque.map((produto, index) => (
                                                                 <motion.div
                                                                     key={produto.id}
-                                                                    initial={{ opacity: 0, x: -20 }}
+                                                                    initial={{ opacity: 0, x: -12 }}
                                                                     animate={{ opacity: 1, x: 0 }}
-                                                                    transition={{ delay: index * 0.05 }}
-                                                                    className="p-3 transition-colors cursor-pointer group border-b last:border-b-0"
-                                                                    style={{
-                                                                        borderColor: colors.border,
-                                                                        backgroundColor: 'transparent'
-                                                                    }}
-                                                                    onClick={() => {
-                                                                        setNotificacoesAberto(false);
-                                                                        router.push('/dashboard/Produtos_servicos/Stock');
-                                                                    }}
-                                                                    onMouseEnter={(e) => {
-                                                                        e.currentTarget.style.backgroundColor = theme === 'dark' ? colors.hover : '#f9fafb';
-                                                                    }}
-                                                                    onMouseLeave={(e) => {
-                                                                        e.currentTarget.style.backgroundColor = 'transparent';
-                                                                    }}
+                                                                    transition={{ delay: index * 0.04 }}
+                                                                    className="p-3 border-b last:border-b-0 cursor-pointer transition-colors"
+                                                                    style={{ borderColor: colors.border }}
+                                                                    onClick={() => { setNotificacoesAberto(false); router.push("/dashboard/Produtos_servicos/Stock"); }}
                                                                 >
-                                                                    <div className="flex items-start gap-3">
-                                                                        <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-                                                                            style={{
-                                                                                backgroundColor: theme === 'dark' ? '#442222' : '#fef2f2',
-                                                                                color: theme === 'dark' ? '#fca5a5' : '#dc2626'
-                                                                            }}
-                                                                        >
-                                                                            <AlertCircle size={18} />
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                                                                            style={{ backgroundColor: theme === "dark" ? "#442222" : "#fef2f2", color: theme === "dark" ? "#fca5a5" : "#dc2626" }}>
+                                                                            <AlertCircle size={16} />
                                                                         </div>
                                                                         <div className="flex-1 min-w-0">
-                                                                            <p className="text-sm font-medium truncate transition-colors"
-                                                                                style={{ color: colors.text }}
-                                                                            >
-                                                                                {produto.nome}
-                                                                            </p>
-                                                                            <div className="flex items-center gap-2 mt-1">
-                                                                                <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                                                                                    style={{
-                                                                                        backgroundColor: colors.danger + '20',
-                                                                                        color: colors.danger
-                                                                                    }}
-                                                                                >
-                                                                                    ESGOTADO
-                                                                                </span>
-                                                                                <span className="text-xs font-medium" style={{ color: colors.textSecondary }}>
-                                                                                    Mín: {produto.estoque_minimo || 5}
-                                                                                </span>
-                                                                            </div>
-                                                                            {produto.categoria && (
-                                                                                <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
-                                                                                    {produto.categoria.nome}
-                                                                                </p>
-                                                                            )}
+                                                                            <p className="text-sm font-medium truncate" style={{ color: colors.text }}>{produto.nome}</p>
+                                                                            <span className="text-xs font-bold px-1.5 py-0.5 rounded-full"
+                                                                                style={{ backgroundColor: colors.danger + "20", color: colors.danger }}>
+                                                                                ESGOTADO
+                                                                            </span>
                                                                         </div>
-                                                                        <motion.div
-                                                                            className="opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                            style={{ color: colors.secondary }}
-                                                                        >
-                                                                            <ChevronLeft size={16} className="rotate-180" />
-                                                                        </motion.div>
                                                                     </div>
                                                                 </motion.div>
                                                             ))}
                                                         </>
                                                     ) : (
                                                         <div className="p-8 text-center">
-                                                            <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center"
-                                                                style={{ backgroundColor: theme === 'dark' ? '#1a3a1a' : '#dcfce7' }}
-                                                            >
-                                                                <Package size={24} style={{ color: theme === 'dark' ? '#4ade80' : '#16a34a' }} />
+                                                            <div className="w-14 h-14 mx-auto mb-3 rounded-full flex items-center justify-center"
+                                                                style={{ backgroundColor: theme === "dark" ? "#1a3a1a" : "#dcfce7" }}>
+                                                                <Package size={22} style={{ color: theme === "dark" ? "#4ade80" : "#16a34a" }} />
                                                             </div>
-                                                            <p className="text-sm font-medium" style={{ color: colors.text }}>
-                                                                Tudo em ordem
-                                                            </p>
-                                                            <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
-                                                                Nenhum produto esgotado
-                                                            </p>
+                                                            <p className="text-sm font-medium" style={{ color: colors.text }}>Tudo em ordem</p>
+                                                            <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>Nenhum produto esgotado</p>
                                                         </div>
                                                     )
                                                 )}
 
-                                                {/* Rodapé com ações */}
-                                                <div className="p-3 border-t" style={{
-                                                    backgroundColor: theme === 'dark' ? '#1a1a1a' : '#f9fafb',
-                                                    borderColor: colors.border
-                                                }}>
+                                                {/* Footer */}
+                                                <div className="p-3 border-t" style={{ backgroundColor: theme === "dark" ? "#1a1a1a" : "#f9fafb", borderColor: colors.border }}>
                                                     <div className="flex items-center justify-between mb-2">
                                                         <span className="text-xs" style={{ color: colors.textSecondary }}>
-                                                            Atualizado: {ultimaAtualizacao?.toLocaleTimeString() || '...'}
+                                                            Atualizado: {ultimaAtualizacao?.toLocaleTimeString() || "..."}
                                                         </span>
                                                         <button
                                                             onClick={buscarNotificacoesEstoque}
-                                                            className="text-xs transition-colors"
-                                                            style={{
-                                                                color: colors.primary,
-                                                                opacity: loadingNotificacoes ? 0.5 : 1
-                                                            }}
                                                             disabled={loadingNotificacoes}
+                                                            className="text-xs disabled:opacity-50"
+                                                            style={{ color: colors.primary }}
                                                         >
-                                                            {loadingNotificacoes ? 'Atualizando...' : 'Atualizar'}
+                                                            {loadingNotificacoes ? "Atualizando..." : "Atualizar"}
                                                         </button>
                                                     </div>
 
-                                                    {/* Resumo rápido */}
                                                     {resumoEstoque && (
                                                         <div className="grid grid-cols-3 gap-2 mb-3 p-2 rounded-lg"
-                                                            style={{ backgroundColor: theme === 'dark' ? '#2a2a2a' : '#e5e7eb' }}
-                                                        >
+                                                            style={{ backgroundColor: theme === "dark" ? "#2a2a2a" : "#e5e7eb" }}>
                                                             <div className="text-center">
-                                                                <p className="text-lg font-bold" style={{ color: colors.text }}>
-                                                                    {resumoEstoque.totalProdutos}
-                                                                </p>
+                                                                <p className="text-base font-bold" style={{ color: colors.text }}>{resumoEstoque.totalProdutos}</p>
                                                                 <p className="text-[10px]" style={{ color: colors.textSecondary }}>Total</p>
                                                             </div>
-                                                            <div className="text-center border-x"
-                                                                style={{ borderColor: colors.border }}
-                                                            >
-                                                                <p className="text-lg font-bold" style={{ color: '#f59e0b' }}>
-                                                                    {resumoEstoque.produtosEstoqueBaixo}
-                                                                </p>
+                                                            <div className="text-center border-x" style={{ borderColor: colors.border }}>
+                                                                <p className="text-base font-bold" style={{ color: "#f59e0b" }}>{resumoEstoque.produtosEstoqueBaixo}</p>
                                                                 <p className="text-[10px]" style={{ color: colors.textSecondary }}>Baixo</p>
                                                             </div>
                                                             <div className="text-center">
-                                                                <p className="text-lg font-bold" style={{ color: colors.danger }}>
-                                                                    {resumoEstoque.produtosSemEstoque}
-                                                                </p>
+                                                                <p className="text-base font-bold" style={{ color: colors.danger }}>{resumoEstoque.produtosSemEstoque}</p>
                                                                 <p className="text-[10px]" style={{ color: colors.textSecondary }}>Zero</p>
                                                             </div>
                                                         </div>
                                                     )}
 
-                                                    <Link href="/dashboard/Produtos_servicos/Stock">
-                                                        <motion.div
-                                                            whileHover={{ x: 4 }}
-                                                            className="flex items-center justify-center gap-2 text-sm font-medium transition-colors w-full py-2 rounded-lg"
-                                                            style={{
-                                                                backgroundColor: colors.primary,
-                                                                color: 'white'
-                                                            }}
-                                                        >
+                                                    <Link href="/dashboard/Produtos_servicos/Stock" onClick={() => setNotificacoesAberto(false)}>
+                                                        <div className="flex items-center justify-center gap-2 text-sm font-medium py-2 rounded-lg transition-opacity hover:opacity-90"
+                                                            style={{ backgroundColor: colors.primary, color: "white" }}>
                                                             <span>Gerenciar estoque</span>
-                                                            <ChevronLeft size={16} className="rotate-180" />
-                                                        </motion.div>
+                                                            <ChevronLeft size={14} className="rotate-180" />
+                                                        </div>
                                                     </Link>
                                                 </div>
                                             </div>
@@ -1156,52 +882,47 @@ export default function MainEmpresa({
                             </div>
                         )}
 
-                        {/* Perfil */}
-                        <motion.div
-                            whileHover={{ scale: 1.05 }}
-                            className="flex items-center gap-3 pl-4 border-l cursor-pointer group relative"
+                        {/* Notification overlay closer */}
+                        <AnimatePresence>
+                            {notificacoesAberto && (
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    onClick={() => setNotificacoesAberto(false)}
+                                    className="fixed inset-0 z-40"
+                                />
+                            )}
+                        </AnimatePresence>
+
+                        {/* User avatar */}
+                        <div
+                            className="flex items-center gap-2 pl-2 md:pl-4 border-l"
                             style={{ borderColor: colors.border }}
                         >
-                            <div className="text-right hidden sm:block">
-                                <p className="text-sm font-semibold" style={{ color: colors.text }}>
-                                    {userName}
-                                </p>
+                            <div className="hidden md:block text-right">
+                                <p className="text-sm font-semibold leading-tight" style={{ color: colors.text }}>{userName}</p>
                                 <p className="text-xs capitalize" style={{ color: colors.textSecondary }}>
-                                    {userRole === 'admin' ? 'Administrador' :
-                                        userRole === 'contabilista' ? 'Contabilista' : 'Operador'}
+                                    {userRole === "admin" ? "Administrador" : userRole === "contabilista" ? "Contabilista" : "Operador"}
                                 </p>
                             </div>
-                            <motion.div
-                                whileHover={{ rotate: 360 }}
-                                transition={{ duration: 0.5 }}
-                                className="w-10 h-10 rounded-full text-white flex items-center justify-center text-sm font-bold shadow-lg"
-                                style={{
-                                    background: `linear-gradient(135deg, ${colors.secondary} 0%, ${colors.primary} 100%)`
-                                }}
+                            <div
+                                className="w-8 h-8 md:w-9 md:h-9 rounded-full text-white flex items-center justify-center text-sm font-bold shadow-md flex-shrink-0"
+                                style={{ background: `linear-gradient(135deg, ${colors.secondary} 0%, ${colors.primary} 100%)` }}
                             >
                                 {userInitial}
-                            </motion.div>
-
-                            {/* Tooltip do perfil para mobile */}
-                            <motion.div
-                                initial={{ opacity: 0, x: 10, scale: 0.8 }}
-                                whileHover={{ opacity: 1, x: 0, scale: 1 }}
-                                className="absolute right-full mr-2 px-2 py-1 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none sm:hidden"
-                                style={{ backgroundColor: colors.primary }}
-                            >
-                                Meu Perfil
-                            </motion.div>
-                        </motion.div>
+                            </div>
+                        </div>
                     </div>
-                </motion.header>
+                </header>
 
-                {/* Conteúdo */}
-                <main className="flex-1 overflow-auto p-6 relative">
+                {/* Page content */}
+                <main className="flex-1 overflow-auto p-3 md:p-6">
                     <motion.div
                         key={pathname}
-                        variants={contentVariants}
-                        initial="hidden"
-                        animate="visible"
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3, ease: "easeOut" }}
                         className="h-full"
                     >
                         {children}
@@ -1209,32 +930,7 @@ export default function MainEmpresa({
                 </main>
             </div>
 
-            {/* Overlays */}
-            <AnimatePresence>
-                {sidebarOpen && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={() => setSidebarOpen(false)}
-                        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-10 md:hidden"
-                    />
-                )}
-            </AnimatePresence>
-
-            <AnimatePresence>
-                {notificacoesAberto && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={() => setNotificacoesAberto(false)}
-                        className="fixed inset-0 z-40"
-                    />
-                )}
-            </AnimatePresence>
-
-            {/* MODAL DE CONFIRMAÇÃO DE LOGOUT */}
+            {/* ====== LOGOUT MODAL ====== */}
             <AnimatePresence>
                 {logoutModalOpen && (
                     <motion.div
@@ -1249,109 +945,67 @@ export default function MainEmpresa({
                             initial="hidden"
                             animate="visible"
                             exit="exit"
-                            className="rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
+                            className="rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
                             style={{ backgroundColor: colors.card }}
                             onClick={(e) => e.stopPropagation()}
                         >
-                            {/* Header do Modal */}
-                            <div className="p-6 pb-4">
-                                <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center"
-                                    style={{ backgroundColor: theme === 'dark' ? '#442222' : '#fee2e2' }}
-                                >
-                                    <LogOut size={32} className="text-red-500" />
+                            <div className="p-6 pb-4 text-center">
+                                <div className="w-14 h-14 mx-auto mb-4 rounded-full flex items-center justify-center"
+                                    style={{ backgroundColor: theme === "dark" ? "#442222" : "#fee2e2" }}>
+                                    <LogOut size={28} className="text-red-500" />
                                 </div>
-                                <h2 className="text-2xl font-bold text-center mb-2" style={{ color: colors.text }}>
-                                    Confirmar Logout
-                                </h2>
-                                <p className="text-center text-sm" style={{ color: colors.textSecondary }}>
-                                    Tem certeza que deseja sair do sistema? Você precisará fazer login novamente para acessar sua conta.
+                                <h2 className="text-xl font-bold mb-2" style={{ color: colors.text }}>Confirmar Logout</h2>
+                                <p className="text-sm" style={{ color: colors.textSecondary }}>
+                                    Tem certeza que deseja sair? Você precisará fazer login novamente para acessar sua conta.
                                 </p>
                             </div>
 
-                            {/* Mensagem de erro (se houver) */}
                             {logoutError && (
-                                <div className="mx-6 mb-4 p-3 rounded-lg"
-                                    style={{
-                                        backgroundColor: theme === 'dark' ? '#442200' : '#fef3c7',
-                                        border: `1px solid ${theme === 'dark' ? '#854d0e' : '#fbbf24'}`
-                                    }}
-                                >
-                                    <p className="text-xs text-center" style={{ color: theme === 'dark' ? '#fbbf24' : '#92400e' }}>
-                                        {logoutError}
-                                    </p>
+                                <div className="mx-5 mb-4 p-3 rounded-lg text-xs text-center"
+                                    style={{ backgroundColor: theme === "dark" ? "#442200" : "#fef3c7", border: `1px solid ${theme === "dark" ? "#854d0e" : "#fbbf24"}`, color: theme === "dark" ? "#fbbf24" : "#92400e" }}>
+                                    {logoutError}
                                 </div>
                             )}
 
-                            {/* Informações do usuário */}
-                            <div className="px-6 py-4 border-y" style={{
-                                backgroundColor: theme === 'dark' ? '#1a1a1a' : '#f9fafb',
-                                borderColor: colors.border
-                            }}>
+                            <div className="px-5 py-3 border-y" style={{ backgroundColor: theme === "dark" ? "#1a1a1a" : "#f9fafb", borderColor: colors.border }}>
                                 <div className="flex items-center gap-3">
-                                    <div
-                                        className="w-10 h-10 rounded-full text-white flex items-center justify-center text-sm font-bold shadow-md"
-                                        style={{
-                                            background: `linear-gradient(135deg, ${colors.secondary} 0%, ${colors.primary} 100%)`
-                                        }}
-                                    >
+                                    <div className="w-9 h-9 rounded-full text-white flex items-center justify-center text-sm font-bold flex-shrink-0"
+                                        style={{ background: `linear-gradient(135deg, ${colors.secondary} 0%, ${colors.primary} 100%)` }}>
                                         {userInitial}
                                     </div>
-                                    <div>
-                                        <p className="font-medium" style={{ color: colors.text }}>
-                                            {userName}
-                                        </p>
-                                        <p className="text-xs" style={{ color: colors.textSecondary }}>{userEmail}</p>
-                                        <p className="text-xs capitalize" style={{ color: colors.textSecondary }}>
-                                            Perfil: {userRole === 'admin' ? 'Administrador' :
-                                                userRole === 'contabilista' ? 'Contabilista' : 'Operador'}
-                                        </p>
+                                    <div className="min-w-0">
+                                        <p className="font-medium text-sm truncate" style={{ color: colors.text }}>{userName}</p>
+                                        <p className="text-xs truncate" style={{ color: colors.textSecondary }}>{userEmail}</p>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Ações */}
-                            <div className="p-6 flex gap-3">
-                                <motion.button
-                                    whileHover={{ scale: 1.02 }}
-                                    whileTap={{ scale: 0.98 }}
+                            <div className="p-5 flex gap-3">
+                                <button
                                     onClick={fecharModalLogout}
                                     disabled={logoutLoading}
-                                    className="flex-1 py-3 px-4 rounded-xl transition-colors font-medium disabled:opacity-50"
-                                    style={{
-                                        backgroundColor: theme === 'dark' ? '#333333' : '#e5e7eb',
-                                        color: colors.text
-                                    }}
+                                    className="flex-1 py-2.5 px-4 rounded-xl font-medium text-sm disabled:opacity-50 transition-opacity hover:opacity-80"
+                                    style={{ backgroundColor: theme === "dark" ? "#333" : "#e5e7eb", color: colors.text }}
                                 >
                                     Cancelar
-                                </motion.button>
-                                <motion.button
-                                    whileHover={{ scale: 1.02 }}
-                                    whileTap={{ scale: 0.98 }}
+                                </button>
+                                <button
                                     onClick={handleLogout}
                                     disabled={logoutLoading}
-                                    className="flex-1 py-3 px-4 text-white rounded-xl hover:opacity-90 transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                                    className="flex-1 py-2.5 px-4 text-white rounded-xl font-medium text-sm disabled:opacity-50 flex items-center justify-center gap-2 transition-opacity hover:opacity-90"
                                     style={{ backgroundColor: colors.danger }}
                                 >
                                     {logoutLoading ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            <span>Saindo...</span>
-                                        </>
+                                        <><Loader2 className="w-4 h-4 animate-spin" /><span>Saindo...</span></>
                                     ) : (
-                                        <>
-                                            <LogOut size={18} />
-                                            <span>Sair</span>
-                                        </>
+                                        <><LogOut size={16} /><span>Sair</span></>
                                     )}
-                                </motion.button>
+                                </button>
                             </div>
 
-                            {/* Aviso de segurança */}
-                            <div className="px-6 pb-6 text-center">
-                                <p className="text-xs" style={{ color: colors.textSecondary }}>
-                                    Ao sair, sua sessão será encerrada e todos os dados não salvos serão perdidos.
-                                </p>
-                            </div>
+                            <p className="px-5 pb-5 text-center text-xs" style={{ color: colors.textSecondary }}>
+                                Ao sair, sua sessão será encerrada e dados não salvos serão perdidos.
+                            </p>
                         </motion.div>
                     </motion.div>
                 )}

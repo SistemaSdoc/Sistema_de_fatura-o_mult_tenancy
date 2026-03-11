@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/authprovider";
+import { useThemeColors } from "@/context/ThemeContext";
 import { AxiosError } from "axios";
 import {
   Mail,
@@ -19,6 +20,17 @@ import {
 } from "lucide-react";
 
 /* ---------------- TYPES ---------------- */
+interface ThemeColors {
+  primary: string;
+  secondary: string;
+  background: string;
+  card: string;
+  text: string;
+  textSecondary: string;
+  border: string;
+  danger: string;
+}
+
 interface InputFieldProps {
   type: string;
   placeholder: string;
@@ -27,13 +39,9 @@ interface InputFieldProps {
   icon: React.ElementType;
   showPasswordToggle?: boolean;
   onTogglePassword?: () => void;
+  colors: ThemeColors;
 }
 
-interface FormErrors {
-  email?: string;
-  password?: string;
-  general?: string;
-}
 
 /* ---------------- ANIMATION VARIANTS ---------------- */
 const containerVariants: Variants = {
@@ -141,6 +149,7 @@ const InputField: React.FC<InputFieldProps> = ({
   icon: Icon,
   showPasswordToggle = false,
   onTogglePassword,
+  colors,
 }) => {
   const [isFocused, setIsFocused] = useState<boolean>(false);
 
@@ -150,8 +159,8 @@ const InputField: React.FC<InputFieldProps> = ({
       variants={itemVariants}
     >
       <motion.div
-        className={`absolute left-3 top-1/2 -translate-y-1/2 z-10 transition-colors duration-300 ${isFocused ? "text-[#F9941F]" : "text-gray-400"
-          }`}
+        className={`absolute left-3 top-1/2 -translate-y-1/2 z-10 transition-colors duration-300`}
+        style={{ color: isFocused ? colors.secondary : colors.textSecondary }}
         animate={{
           scale: isFocused ? 1.1 : 1,
           rotate: isFocused ? [0, -10, 10, 0] : 0,
@@ -169,21 +178,23 @@ const InputField: React.FC<InputFieldProps> = ({
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
         required
-        className={`w-full pl-10 pr-${showPasswordToggle ? '12' : '4'} py-3 rounded-xl border-2 bg-white/50 backdrop-blur-sm
+        className={`w-full pl-10 pr-${showPasswordToggle ? '12' : '4'} py-3 rounded-xl border-2 backdrop-blur-sm
           transition-all duration-300 outline-none
-          ${isFocused
-            ? "border-[#F9941F] shadow-lg shadow-[#F9941F]/20 bg-white"
-            : "border-gray-200 hover:border-gray-300"
-          }
-          placeholder:text-gray-400 text-gray-800
         `}
+        style={{
+          backgroundColor: isFocused ? colors.card : `${colors.card}80`,
+          borderColor: isFocused ? colors.secondary : colors.border,
+          color: colors.text,
+          boxShadow: isFocused ? `0 10px 15px -3px ${colors.secondary}20` : 'none',
+        }}
       />
 
       {showPasswordToggle && onTogglePassword && (
         <motion.button
           type="button"
           onClick={onTogglePassword}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#123859] transition-colors"
+          className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
+          style={{ color: colors.textSecondary }}
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
         >
@@ -194,15 +205,16 @@ const InputField: React.FC<InputFieldProps> = ({
   );
 };
 
-const FloatingShape: React.FC<{ className: string; delay?: number }> = ({
+const FloatingShape: React.FC<{ className: string; delay?: number; colors: ThemeColors; style?: React.CSSProperties }> = ({
   className,
-  delay = 0
+  delay = 0,
+  style
 }) => (
   <motion.div
     className={`absolute rounded-full opacity-10 pointer-events-none ${className}`}
     variants={floatingShapeVariants}
     animate="animate"
-    style={{ animationDelay: `${delay}s` }}
+    style={{ animationDelay: `${delay}s`, ...style }}
   />
 );
 
@@ -210,6 +222,7 @@ const FloatingShape: React.FC<{ className: string; delay?: number }> = ({
 export default function LoginPage(): React.ReactElement {
   const router = useRouter();
   const { login, user, loading: authLoading } = useAuth();
+  const colors = useThemeColors();
 
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
@@ -220,7 +233,7 @@ export default function LoginPage(): React.ReactElement {
   // Limpa erro quando usuário digita
   useEffect(() => {
     if (error) setError("");
-  }, [email, password]);
+  }, [email, password, error]);
 
   // Redirecionamento após login
   useEffect(() => {
@@ -267,18 +280,22 @@ export default function LoginPage(): React.ReactElement {
   const isLoading = isSubmitting || authLoading;
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden bg-gradient-to-br from-gray-100 via-gray-50 to-gray-200">
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden transition-colors duration-300"
+      style={{ backgroundColor: colors.background }}>
       {/* Background Decorativo */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <FloatingShape className="w-96 h-96 bg-[#123859] -top-20 -left-20 blur-3xl" delay={0} />
-        <FloatingShape className="w-80 h-80 bg-[#F9941F] -bottom-20 -right-20 blur-3xl" delay={5} />
-        <FloatingShape className="w-64 h-64 bg-[#123859] top-1/2 left-1/4 blur-2xl" delay={10} />
+        <FloatingShape className="w-96 h-96 -top-20 -left-20 blur-3xl" delay={0} colors={colors}
+          style={{ backgroundColor: colors.primary }} />
+        <FloatingShape className="w-80 h-80 -bottom-20 -right-20 blur-3xl" delay={5} colors={colors}
+          style={{ backgroundColor: colors.secondary }} />
+        <FloatingShape className="w-64 h-64 top-1/2 left-1/4 blur-2xl" delay={10} colors={colors}
+          style={{ backgroundColor: colors.primary }} />
 
         {/* Grid Pattern */}
         <div
           className="absolute inset-0 opacity-[0.03]"
           style={{
-            backgroundImage: `linear-gradient(#123859 1px, transparent 1px), linear-gradient(90deg, #123859 1px, transparent 1px)`,
+            backgroundImage: `linear-gradient(${colors.primary} 1px, transparent 1px), linear-gradient(90deg, ${colors.primary} 1px, transparent 1px)`,
             backgroundSize: '50px 50px',
           }}
         />
@@ -292,15 +309,19 @@ export default function LoginPage(): React.ReactElement {
       >
         {/* Card Principal */}
         <motion.div
-          className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/50 p-8 overflow-hidden relative"
+          className="backdrop-blur-xl rounded-3xl shadow-2xl border p-8 overflow-hidden relative"
+          style={{
+            backgroundColor: `${colors.card}CC`, // CC = 80% opacity
+            borderColor: colors.border,
+          }}
           variants={itemVariants}
           whileHover={{
-            boxShadow: "0 25px 50px -12px rgba(18, 56, 89, 0.25)",
+            boxShadow: `0 25px 50px -12px ${colors.primary}40`,
           }}
         >
           {/* Shine Effect */}
           <motion.div
-            className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -skew-x-12"
+            className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -skew-x-12"
             initial={{ x: "-200%" }}
             animate={{ x: "200%" }}
             transition={{
@@ -334,7 +355,8 @@ export default function LoginPage(): React.ReactElement {
                 priority
               />
               <motion.div
-                className="absolute inset-0 rounded-2xl bg-[#F9941F]/20 blur-xl -z-10"
+                className="absolute inset-0 rounded-2xl blur-xl -z-10"
+                style={{ backgroundColor: `${colors.secondary}40` }}
                 animate={{
                   scale: [1, 1.2, 1],
                   opacity: [0.5, 0.8, 0.5],
@@ -350,10 +372,10 @@ export default function LoginPage(): React.ReactElement {
 
           {/* Título */}
           <motion.div className="text-center mb-6" variants={itemVariants}>
-            <h2 className="text-3xl font-bold text-[#123859] mb-2">
+            <h2 className="text-3xl font-bold mb-2" style={{ color: colors.primary }}>
               Bem-vindo
             </h2>
-            <p className="text-gray-500 text-sm">
+            <p className="text-sm" style={{ color: colors.textSecondary }}>
               Faça login para acessar o sistema
             </p>
           </motion.div>
@@ -368,7 +390,12 @@ export default function LoginPage(): React.ReactElement {
                 exit="exit"
                 className="mb-4 overflow-hidden"
               >
-                <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 rounded-r-xl flex items-center gap-3 shadow-sm">
+                <div className="border-l-4 p-4 rounded-r-xl flex items-center gap-3 shadow-sm"
+                  style={{
+                    backgroundColor: `${colors.danger}20`,
+                    borderColor: colors.danger,
+                    color: colors.danger
+                  }}>
                   <AlertCircle size={20} className="flex-shrink-0" />
                   <span className="text-sm font-medium">{error}</span>
                 </div>
@@ -384,6 +411,7 @@ export default function LoginPage(): React.ReactElement {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               icon={Mail}
+              colors={colors}
             />
 
             <InputField
@@ -394,6 +422,7 @@ export default function LoginPage(): React.ReactElement {
               icon={Lock}
               showPasswordToggle
               onTogglePassword={() => setShowPassword(!showPassword)}
+              colors={colors}
             />
 
             {/* Esqueci senha */}
@@ -403,7 +432,8 @@ export default function LoginPage(): React.ReactElement {
             >
               <Link
                 href="/forgot-password"
-                className="text-xs text-[#123859] hover:text-[#F9941F] transition-colors font-medium"
+                className="text-xs font-medium transition-colors"
+                style={{ color: colors.primary }}
               >
                 Esqueceu a senha?
               </Link>
@@ -417,11 +447,10 @@ export default function LoginPage(): React.ReactElement {
                 w-full py-3.5 mt-2 rounded-xl font-semibold text-white
                 flex items-center justify-center gap-2
                 transition-all duration-300 relative overflow-hidden
-                ${isLoading
-                  ? "bg-[#123859]/70 cursor-not-allowed"
-                  : "bg-[#123859] hover:bg-[#0f2b4c] hover:shadow-lg hover:shadow-[#123859]/30"
-                }
               `}
+              style={{
+                backgroundColor: isLoading ? `${colors.primary}B3` : colors.primary,
+              }}
               variants={buttonVariants}
               initial="idle"
               whileHover={isLoading ? undefined : "hover"}
@@ -467,10 +496,12 @@ export default function LoginPage(): React.ReactElement {
             variants={itemVariants}
           >
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200"></div>
+              <div className="w-full border-t" style={{ borderColor: colors.border }}></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-white text-gray-400">ou</span>
+              <span className="px-4" style={{ backgroundColor: colors.card, color: colors.textSecondary }}>
+                ou
+              </span>
             </div>
           </motion.div>
 
@@ -481,7 +512,8 @@ export default function LoginPage(): React.ReactElement {
           >
             <Link
               href="/register"
-              className="group inline-flex items-center gap-2 text-[#123859] hover:text-[#F9941F] transition-colors font-medium"
+              className="group inline-flex items-center gap-2 transition-colors font-medium"
+              style={{ color: colors.primary }}
             >
               <UserPlus size={18} />
               <span>Não tem conta? Cadastre-se</span>
@@ -502,7 +534,8 @@ export default function LoginPage(): React.ReactElement {
 
         {/* Footer */}
         <motion.p
-          className="text-center text-gray-400 text-xs mt-6"
+          className="text-center text-xs mt-6"
+          style={{ color: colors.textSecondary }}
           variants={itemVariants}
         >
           © {new Date().getFullYear()} Sistema. Todos os direitos reservados.

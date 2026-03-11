@@ -8,9 +8,8 @@ import {
   PieChart, Pie, Cell
 } from "recharts";
 import {
-  TrendingUp, Users,
-  CreditCard, DollarSign, Package, Receipt,
-  FileText
+  TrendingUp, Users, CreditCard, DollarSign,
+  Package, Receipt, FileText
 } from "lucide-react";
 import Link from "next/link";
 
@@ -18,6 +17,7 @@ import MainEmpresa from "@/app/components/MainEmpresa";
 import { dashboardService } from "@/services/Dashboard";
 import { useThemeColors, useTheme } from "@/context/ThemeContext";
 
+/* ==================== HELPERS ==================== */
 const formatKz = (v: number | string): string => {
   const num = Number(v) || 0;
   return new Intl.NumberFormat("pt-AO", {
@@ -27,105 +27,99 @@ const formatKz = (v: number | string): string => {
   }).format(num).replace("AOA", "Kz");
 };
 
-// Componente Skeleton com tema e responsivo
+/* ==================== SKELETONS ==================== */
 const SkeletonCard = ({ colors }: { colors: any }) => (
   <motion.div
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
     className="p-3 sm:p-4 rounded-xl shadow border animate-pulse"
-    style={{ 
-      backgroundColor: colors.card, 
-      borderColor: colors.border 
-    }}
+    style={{ backgroundColor: colors.card, borderColor: colors.border }}
   >
-    <div 
-      className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg mb-2 sm:mb-3"
-      style={{ backgroundColor: colors.border }}
-    ></div>
-    <div 
-      className="h-3 sm:h-4 rounded w-16 sm:w-20 mb-1 sm:mb-2"
-      style={{ backgroundColor: colors.border }}
-    ></div>
-    <div 
-      className="h-4 sm:h-6 rounded w-20 sm:w-24"
-      style={{ backgroundColor: colors.border }}
-    ></div>
+    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg mb-2 sm:mb-3" style={{ backgroundColor: colors.border }} />
+    <div className="h-3 sm:h-4 rounded w-16 sm:w-20 mb-1 sm:mb-2" style={{ backgroundColor: colors.border }} />
+    <div className="h-4 sm:h-6 rounded w-20 sm:w-24" style={{ backgroundColor: colors.border }} />
   </motion.div>
 );
 
-const SkeletonChart = ({ colors }: { colors: any }) => (
-  <div 
-    className="p-3 sm:p-4 rounded-xl shadow border"
-    style={{ 
-      backgroundColor: colors.card, 
-      borderColor: colors.border 
-    }}
+const SkeletonChart = ({ colors, tall }: { colors: any; tall?: boolean }) => (
+  <motion.div
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    className="p-3 sm:p-4 rounded-xl shadow border animate-pulse"
+    style={{ backgroundColor: colors.card, borderColor: colors.border }}
   >
-    <div 
-      className="h-5 sm:h-6 rounded w-32 sm:w-40 mb-3 sm:mb-4"
-      style={{ backgroundColor: colors.border }}
-    ></div>
-    <div 
-      className="h-[250px] sm:h-[300px] md:h-[360px] rounded flex items-center justify-center"
+    <div className="h-5 sm:h-6 rounded w-32 sm:w-40 mb-3 sm:mb-4" style={{ backgroundColor: colors.border }} />
+    <div
+      className={`rounded ${tall ? "h-56 sm:h-72" : "h-48 sm:h-60"}`}
       style={{ backgroundColor: colors.hover }}
-    ></div>
-  </div>
+    />
+  </motion.div>
 );
 
 const SkeletonTable = ({ colors }: { colors: any }) => (
-  <div 
-    className="p-3 sm:p-4 rounded-xl shadow border"
-    style={{ 
-      backgroundColor: colors.card, 
-      borderColor: colors.border 
-    }}
+  <motion.div
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    className="p-3 sm:p-4 rounded-xl shadow border animate-pulse"
+    style={{ backgroundColor: colors.card, borderColor: colors.border }}
   >
-    <div 
-      className="h-5 sm:h-6 rounded w-24 sm:w-32 mb-3 sm:mb-4"
-      style={{ backgroundColor: colors.border }}
-    ></div>
+    <div className="h-5 sm:h-6 rounded w-24 sm:w-32 mb-3 sm:mb-4" style={{ backgroundColor: colors.border }} />
     <div className="space-y-2 sm:space-y-3">
       {[...Array(5)].map((_, i) => (
-        <div 
-          key={i} 
-          className="h-6 sm:h-8 rounded"
-          style={{ backgroundColor: colors.hover }}
-        ></div>
+        <div key={i} className="h-6 sm:h-8 rounded" style={{ backgroundColor: colors.hover }} />
       ))}
     </div>
-  </div>
+  </motion.div>
 );
 
+/* ==================== STATUS BADGE ==================== */
+type BadgeVariant = "green" | "yellow" | "blue" | "red" | "orange" | "gray";
+
+const badgeClasses: Record<BadgeVariant, { dark: string; light: string }> = {
+  green:  { dark: "bg-green-900/50 text-green-300",   light: "bg-green-100 text-green-700" },
+  yellow: { dark: "bg-yellow-900/50 text-yellow-300", light: "bg-yellow-100 text-yellow-700" },
+  blue:   { dark: "bg-blue-900/50 text-blue-300",     light: "bg-blue-100 text-blue-700" },
+  red:    { dark: "bg-red-900/50 text-red-300",       light: "bg-red-100 text-red-700" },
+  orange: { dark: "bg-orange-900/50 text-orange-300", light: "bg-orange-100 text-orange-700" },
+  gray:   { dark: "bg-gray-800 text-gray-300",        light: "bg-gray-100 text-gray-600" },
+};
+
+const statusMap: Record<string, { label: string; variant: BadgeVariant }> = {
+  faturada:          { label: "Faturada",  variant: "green" },
+  pendente:          { label: "Pendente",  variant: "yellow" },
+  paga:              { label: "Pago",      variant: "green" },
+  emitido:           { label: "Emitido",   variant: "blue" },
+  cancelado:         { label: "Cancelado", variant: "red" },
+  parcialmente_paga: { label: "Parcial",   variant: "orange" },
+};
+
+const StatusBadge = ({ status, theme }: { status: string; theme: string }) => {
+  const entry = statusMap[status] ?? { label: status || "-", variant: "gray" as BadgeVariant };
+  const cls = badgeClasses[entry.variant as BadgeVariant];
+  return (
+    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${theme === "dark" ? cls.dark : cls.light}`}>
+      {entry.label}
+    </span>
+  );
+};
+
+/* ==================== MAIN COMPONENT ==================== */
 export default function DashboardPage() {
-  // Todos os Hooks declarados no top level, na mesma ordem
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isMobile, setIsMobile] = useState(false);
-  
+
   const colors = useThemeColors();
   const { theme } = useTheme();
 
-  // Hook para detectar mobile
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  // Hook para buscar dados
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
         const response = await dashboardService.fetch();
-        console.log('Dados recebidos:', response);
         setData(response);
       } catch (err: any) {
-        setError(err.message);
+        setError(err?.message ?? "Erro desconhecido");
       } finally {
         setLoading(false);
       }
@@ -133,34 +127,31 @@ export default function DashboardPage() {
     fetchData();
   }, []);
 
+  /* ---- Loading state ---- */
   if (loading) {
     return (
       <MainEmpresa>
-        <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6" style={{ backgroundColor: colors.background }}>
+        <div className="space-y-4 sm:space-y-6 pb-8">
           <motion.h1
-            initial={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0, y: -16 }}
             animate={{ opacity: 1, y: 0 }}
-            style={{ color: colors.secondary }}
             className="text-xl sm:text-2xl font-bold"
+            style={{ color: colors.secondary }}
           >
             Dashboard
           </motion.h1>
-
-          <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[...Array(4)].map((_, i) => <SkeletonCard key={i} colors={colors} />)}
           </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <SkeletonChart colors={colors} tall />
+            <SkeletonChart colors={colors} tall />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <SkeletonChart colors={colors} />
             <SkeletonChart colors={colors} />
           </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-            <SkeletonChart colors={colors} />
-            <SkeletonChart colors={colors} />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <SkeletonTable colors={colors} />
             <SkeletonTable colors={colors} />
           </div>
@@ -169,246 +160,170 @@ export default function DashboardPage() {
     );
   }
 
+  /* ---- Error state ---- */
   if (error || !data) {
     return (
       <MainEmpresa>
-        <div className="p-3 sm:p-4 md:p-6" style={{ backgroundColor: colors.background, color: '#EF4444' }}>
-          <div className="text-center">
-            <p className="text-sm sm:text-base">Erro: {error || 'Sem dados'}</p>
-            <button 
-              onClick={() => window.location.reload()}
-              className="mt-3 sm:mt-4 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm rounded-lg"
-              style={{ backgroundColor: colors.primary, color: 'white' }}
-            >
-              Tentar novamente
-            </button>
-          </div>
+        <div className="flex flex-col items-center justify-center py-16 gap-4" style={{ color: "#EF4444" }}>
+          <p className="text-sm sm:text-base">Erro: {error || "Sem dados"}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 text-sm rounded-lg text-white"
+            style={{ backgroundColor: colors.primary }}
+          >
+            Tentar novamente
+          </button>
         </div>
       </MainEmpresa>
     );
   }
 
-  // Preparar dados usando os métodos do service
+  /* ---- Prepare data ---- */
   const metricas = dashboardService.calcularMetricas(data);
   const graficos = dashboardService.prepararDadosGraficos(data);
 
-  // Dados para o gráfico de produtos mais vendidos
-  const produtosData = data.indicadores?.produtosMaisVendidos?.slice(0, 5).map((p: any) => ({
-    nome: p.produto?.substring(0, 15) || 'Produto',
-    quantidade: p.quantidade || 0,
-    valor: p.valor_total || 0
-  })) || [];
+  const produtosData = (data.indicadores?.produtosMaisVendidos as any[] | undefined)
+    ?.slice(0, 5)
+    .map((p: any) => ({
+      nome: String(p.produto ?? "Produto").substring(0, 14),
+      quantidade: Number(p.quantidade) || 0,
+      valor: Number(p.valor_total) || 0,
+    })) ?? [];
 
-  // Dados para o gráfico de evolução mensal
-  const evolucaoData = graficos.evolucaoMensal.map((item: any) => ({
-    mes: item.mes,
-    total: item.Total || 0
-  })) || [];
-
-  // Dados para documentos por tipo
-  const documentosPorTipo = graficos.documentosPorTipo.map(item => ({
-    nome: item.nome,
-    quantidade: item.quantidade,
-    valor: item.valor
+  const evolucaoData = (graficos.evolucaoMensal as any[]).map((item: any) => ({
+    mes: String(item.mes),
+    total: Number(item.Total) || 0,
   }));
 
-  // Dados para documentos por estado
-  const documentosPorEstado = graficos.documentosPorEstado.reduce((acc: any, item) => {
-    const estado = item.estado;
-    if (!acc[estado]) {
-      acc[estado] = {
-        estado: estado === 'paga' ? 'Pago' :
-          estado === 'emitido' ? 'Emitido' :
-            estado === 'cancelado' ? 'Cancelado' :
-              estado === 'parcialmente_paga' ? 'Parcial' :
-                estado,
-        quantidade: 0
-      };
-    }
-    acc[estado].quantidade += item.quantidade;
-    return acc;
-  }, {});
+  const documentosPorTipo = (graficos.documentosPorTipo as any[]).map((item: any) => ({
+    nome: String(item.nome),
+    quantidade: Number(item.quantidade),
+    valor: Number(item.valor),
+  }));
 
-  const documentosEstadoData = Object.values(documentosPorEstado);
+  const estadoLabel: Record<string, string> = {
+    paga: "Pago", emitido: "Emitido", cancelado: "Cancelado", parcialmente_paga: "Parcial",
+  };
 
-  // Dados mockados para fallback
-  const mockProdutos = [
-    { nome: 'Produto A', quantidade: 50 },
-    { nome: 'Produto B', quantidade: 30 },
-    { nome: 'Produto C', quantidade: 20 },
+  const documentosPorEstado: { estado: string; quantidade: number }[] = Object.values(
+    (graficos.documentosPorEstado as any[]).reduce(
+      (acc: Record<string, { estado: string; quantidade: number }>, item: any) => {
+        const key = String(item.estado);
+        if (!acc[key]) acc[key] = { estado: estadoLabel[key] ?? key, quantidade: 0 };
+        acc[key].quantidade += Number(item.quantidade);
+        return acc;
+      },
+      {}
+    )
+  );
+
+  /* ---- Fallbacks ---- */
+  const displayProdutos = produtosData.length ? produtosData
+    : [{ nome: "Produto A", quantidade: 50, valor: 0 }, { nome: "Produto B", quantidade: 30, valor: 0 }, { nome: "Produto C", quantidade: 20, valor: 0 }];
+
+  const displayEvolucao = evolucaoData.length ? evolucaoData
+    : [{ mes: "Jan", total: 100000 }, { mes: "Fev", total: 150000 }, { mes: "Mar", total: 120000 }];
+
+  const displayDocumentosTipo = documentosPorTipo.length ? documentosPorTipo
+    : [{ nome: "Faturas", quantidade: 45, valor: 450000 }, { nome: "Proforma", quantidade: 30, valor: 300000 }, { nome: "Crédito", quantidade: 5, valor: 50000 }];
+
+  const displayDocumentosEstado = documentosPorEstado.length ? documentosPorEstado
+    : [{ estado: "Pago", quantidade: 40 }, { estado: "Emitido", quantidade: 25 }, { estado: "Parcial", quantidade: 15 }];
+
+  /* ---- Shared chart config ---- */
+  const tooltipStyle = {
+    contentStyle: {
+      backgroundColor: colors.card,
+      borderColor: colors.border,
+      color: colors.text,
+      fontSize: "11px",
+      borderRadius: "8px",
+    },
+  };
+  const gridStroke = theme === "dark" ? "#404040" : "#E5E7EB";
+  const tickStyle = { fill: colors.textSecondary, fontSize: 11 };
+  const pieColors = [colors.primary, colors.secondary, "#95a5a6", "#f39c12", "#e74c3c"];
+
+  /* ---- KPI cards ---- */
+  const kpiCards = [
+    { href: "/dashboard/Vendas/relatorios",       icon: DollarSign, label: "Total Faturado",  value: formatKz(metricas.totalFaturado) },
+    { href: "/dashboard/Clientes/Novo_cliente",   icon: Users,      label: "Clientes Ativos", value: metricas.totalClientes },
+    { href: "/dashboard/Faturas/relatorios",      icon: CreditCard, label: "Pendente",        value: formatKz(metricas.totalPendente) },
+    { href: "/dashboard/Produtos_servicos/Stock", icon: Package,    label: "Stock Baixo",     value: metricas.produtosEmStockBaixo },
   ];
 
-  const mockEvolucao = [
-    { mes: 'Jan', total: 100000 },
-    { mes: 'Fev', total: 150000 },
-    { mes: 'Mar', total: 120000 },
-  ];
-
-  const mockDocumentosTipo = [
-    { nome: 'Faturas', quantidade: 45, valor: 450000 },
-    { nome: 'Faturas-Recibo', quantidade: 30, valor: 300000 },
-    { nome: 'Notas de Crédito', quantidade: 5, valor: 50000 },
-  ];
-
-  const mockDocumentosEstado = [
-    { estado: 'Pago', quantidade: 40 },
-    { estado: 'Emitido', quantidade: 25 },
-    { estado: 'Parcial', quantidade: 15 },
-  ];
-
-  const displayProdutos = produtosData.length ? produtosData : mockProdutos;
-  const displayEvolucao = evolucaoData.length ? evolucaoData : mockEvolucao;
-  const displayDocumentosTipo = documentosPorTipo.length ? documentosPorTipo : mockDocumentosTipo;
-  const displayDocumentosEstado = documentosEstadoData.length ? documentosEstadoData : mockDocumentosEstado;
-
+  /* ---- Render ---- */
   return (
     <MainEmpresa>
-      <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 transition-colors duration-300" style={{ backgroundColor: colors.background }}>
+      {/* pb-8 garante espaço no fundo em todos os ecrãs */}
+      <div className="space-y-4 sm:space-y-6 pb-8 transition-colors duration-300">
+
         <motion.h1
-          initial={{ opacity: 0, y: -20 }}
+          initial={{ opacity: 0, y: -16 }}
           animate={{ opacity: 1, y: 0 }}
-          style={{ color: colors.secondary }}
           className="text-xl sm:text-2xl font-bold"
+          style={{ color: colors.secondary }}
         >
           Dashboard
         </motion.h1>
 
-        {/* Cards KPI com hover animation - Responsivo */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ staggerChildren: 0.1 }}
-          className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
-        >
-          <motion.div
-            whileHover={{ scale: 1.02, y: -2 }}
-            whileTap={{ scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 300 }}
-            className="w-full"
-          >
-            <Link 
-              href="/dashboard/Vendas/relatorios" 
-              className="p-3 sm:p-4 rounded-xl shadow border block hover:shadow-lg transition-all"
-              style={{ backgroundColor: colors.card, borderColor: colors.border }}
+        {/* ---- KPI Cards ---- */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {kpiCards.map(({ href, icon: Icon, label, value }, i) => (
+            <motion.div
+              key={label}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.07 }}
+              whileHover={{ scale: 1.02, y: -2 }}
+              whileTap={{ scale: 0.98 }}
             >
-              <div className="flex items-center gap-3 sm:block">
-                <DollarSign style={{ color: colors.primary }} className="mb-0 sm:mb-2" size={isMobile ? 20 : 24} />
-                <div>
-                  <div style={{ color: colors.textSecondary }} className="text-xs sm:text-sm">Total Faturado</div>
-                  <div style={{ color: colors.text }} className="text-sm sm:text-xl font-bold truncate">{formatKz(metricas.totalFaturado)}</div>
+              <Link
+                href={href}
+                className="p-3 sm:p-4 rounded-xl shadow border flex items-center gap-3 sm:block hover:shadow-lg transition-all"
+                style={{ backgroundColor: colors.card, borderColor: colors.border }}
+              >
+                <Icon style={{ color: colors.primary }} size={20} className="flex-shrink-0 sm:mb-2" />
+                <div className="min-w-0">
+                  <div className="text-xs sm:text-sm truncate" style={{ color: colors.textSecondary }}>{label}</div>
+                  <div className="text-sm sm:text-xl font-bold truncate" style={{ color: colors.text }}>{value}</div>
                 </div>
-              </div>
-            </Link>
-          </motion.div>
+              </Link>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* ---- Row 1: Top Produtos + Evolução Mensal ---- */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
           <motion.div
-            whileHover={{ scale: 1.02, y: -2 }}
-            whileTap={{ scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 300 }}
-            className="w-full"
-          >
-            <Link 
-              href="/dashboard/Clientes/Novo_cliente" 
-              className="p-3 sm:p-4 rounded-xl shadow border block hover:shadow-lg transition-all"
-              style={{ backgroundColor: colors.card, borderColor: colors.border }}
-            >
-              <div className="flex items-center gap-3 sm:block">
-                <Users style={{ color: colors.primary }} className="mb-0 sm:mb-2" size={isMobile ? 20 : 24} />
-                <div>
-                  <div style={{ color: colors.textSecondary }} className="text-xs sm:text-sm">Clientes Ativos</div>
-                  <div style={{ color: colors.text }} className="text-sm sm:text-xl font-bold">{metricas.totalClientes}</div>
-                </div>
-              </div>
-            </Link>
-          </motion.div>
-
-          <motion.div
-            whileHover={{ scale: 1.02, y: -2 }}
-            whileTap={{ scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 300 }}
-            className="w-full"
-          >
-            <Link 
-              href="/dashboard/Faturas/relatorios" 
-              className="p-3 sm:p-4 rounded-xl shadow border block hover:shadow-lg transition-all"
-              style={{ backgroundColor: colors.card, borderColor: colors.border }}
-            >
-              <div className="flex items-center gap-3 sm:block">
-                <CreditCard style={{ color: colors.primary }} className="mb-0 sm:mb-2" size={isMobile ? 20 : 24} />
-                <div>
-                  <div style={{ color: colors.textSecondary }} className="text-xs sm:text-sm">Pendente</div>
-                  <div style={{ color: colors.text }} className="text-sm sm:text-xl font-bold truncate">{formatKz(metricas.totalPendente)}</div>
-                </div>
-              </div>
-            </Link>
-          </motion.div>
-
-          <motion.div
-            whileHover={{ scale: 1.02, y: -2 }}
-            whileTap={{ scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 300 }}
-            className="w-full"
-          >
-            <Link 
-              href="/dashboard/Produtos_servicos/Stock" 
-              className="p-3 sm:p-4 rounded-xl shadow border block hover:shadow-lg transition-all"
-              style={{ backgroundColor: colors.card, borderColor: colors.border }}
-            >
-              <div className="flex items-center gap-3 sm:block">
-                <Package style={{ color: colors.primary }} className="mb-0 sm:mb-2" size={isMobile ? 20 : 24} />
-                <div>
-                  <div style={{ color: colors.textSecondary }} className="text-xs sm:text-sm">Stock Baixo</div>
-                  <div style={{ color: colors.text }} className="text-sm sm:text-xl font-bold">{metricas.produtosEmStockBaixo}</div>
-                </div>
-              </div>
-            </Link>
-          </motion.div>
-        </motion.div>
-
-        {/* Primeira linha - Gráficos */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-          {/* Produtos Mais Vendidos */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
+            initial={{ opacity: 0, x: -16 }}
             animate={{ opacity: 1, x: 0 }}
             className="p-3 sm:p-4 rounded-xl shadow border"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
           >
-            <h2 className="text-base sm:text-lg font-semibold mb-2 sm:mb-4 flex items-center gap-2" style={{ color: colors.text }}>
-              <Package style={{ color: colors.secondary }} size={isMobile ? 18 : 20} /> 
-              <span className="truncate">Top Produtos</span>
+            <h2 className="text-sm sm:text-base font-semibold mb-3 flex items-center gap-2" style={{ color: colors.text }}>
+              <Package style={{ color: colors.secondary }} size={18} />
+              Top Produtos
             </h2>
-            <div style={{ width: '100%', height: isMobile ? '250px' : '360px' }}>
-              <ResponsiveContainer>
-                <BarChart data={displayProdutos} layout={isMobile ? "horizontal" : "vertical"} margin={{ left: isMobile ? 20 : 40 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} 
-                    stroke={theme === 'dark' ? '#404040' : '#E5E7EB'} />
-                  <XAxis 
-                    type={isMobile ? "category" : "number"} 
-                    dataKey={isMobile ? "nome" : undefined}
-                    tick={{ fill: colors.textSecondary, fontSize: isMobile ? 10 : 12 }}
-                    stroke={colors.border} />
-                  <YAxis 
-                    type={isMobile ? "number" : "category"} 
-                    dataKey={isMobile ? undefined : "nome"} 
-                    width={isMobile ? 60 : 100}
-                    tick={{ fill: colors.textSecondary, fontSize: isMobile ? 10 : 12 }}
-                    stroke={colors.border} />
+            <div className="h-56 sm:h-72 lg:h-80 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={displayProdutos} layout="vertical" margin={{ left: 0, right: 8, top: 4, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={gridStroke} />
+                  <XAxis type="number" tick={tickStyle} stroke={colors.border} />
+                  <YAxis type="category" dataKey="nome" width={84} tick={tickStyle} stroke={colors.border} />
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: colors.card,
-                      borderColor: colors.border,
-                      color: colors.text,
-                      fontSize: isMobile ? '10px' : '12px'
-                    }}
-                    formatter={(value: any, name: string) => {
-                      if (name === 'quantidade') return [`${value} unidades`, 'Qtd'];
-                      return [formatKz(value), 'Valor'];
-                    }}
+                    {...tooltipStyle}
+                    formatter={(value: any, name: string) =>
+                      name === "quantidade" ? [`${value} unid.`, "Qtd"] : [formatKz(value), "Valor"]
+                    }
                   />
-                  <Bar dataKey="quantidade" fill={colors.secondary} radius={[0, 4, 4, 0]} barSize={isMobile ? 15 : 20}>
-                    {displayProdutos.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={index === 0 ? colors.secondary : `${colors.secondary}${Math.max(40, 90 - index * 15)}`} />
+                  <Bar dataKey="quantidade" radius={[0, 4, 4, 0]} barSize={16}>
+                    {displayProdutos.map((_: any, index: number) => (
+                      <Cell
+                        key={index}
+                        fill={index === 0 ? colors.secondary : `${colors.secondary}${Math.max(50, 95 - index * 15)}`}
+                      />
                     ))}
                   </Bar>
                 </BarChart>
@@ -416,42 +331,34 @@ export default function DashboardPage() {
             </div>
           </motion.div>
 
-          {/* Evolução Mensal */}
           <motion.div
-            initial={{ opacity: 0, x: 20 }}
+            initial={{ opacity: 0, x: 16 }}
             animate={{ opacity: 1, x: 0 }}
             className="p-3 sm:p-4 rounded-xl shadow border"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
           >
-            <h2 className="text-base sm:text-lg font-semibold mb-2 sm:mb-4 flex items-center gap-2" style={{ color: colors.text }}>
-              <TrendingUp style={{ color: colors.secondary }} size={isMobile ? 18 : 20} /> Evolução
+            <h2 className="text-sm sm:text-base font-semibold mb-3 flex items-center gap-2" style={{ color: colors.text }}>
+              <TrendingUp style={{ color: colors.secondary }} size={18} />
+              Evolução Mensal
             </h2>
-            <div style={{ width: '100%', height: isMobile ? '250px' : '360px' }}>
-              <ResponsiveContainer>
-                <AreaChart data={displayEvolucao}>
+            <div className="h-56 sm:h-72 lg:h-80 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={displayEvolucao} margin={{ left: 0, right: 8, top: 4, bottom: 4 }}>
                   <defs>
                     <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor={colors.primary} stopOpacity={0.3} />
                       <stop offset="95%" stopColor={colors.primary} stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" 
-                    stroke={theme === 'dark' ? '#404040' : '#12385920'} 
-                    vertical={false} />
-                  <XAxis dataKey="mes" 
-                    tick={{ fill: colors.textSecondary, fontSize: isMobile ? 10 : 12 }}
-                    stroke={colors.border} />
-                  <YAxis tickFormatter={(v) => `${(v / 1000)}k`} width={isMobile ? 40 : 60}
-                    tick={{ fill: colors.textSecondary, fontSize: isMobile ? 10 : 12 }}
-                    stroke={colors.border} />
-                  <Tooltip 
-                    contentStyle={{
-                      backgroundColor: colors.card,
-                      borderColor: colors.border,
-                      color: colors.text,
-                      fontSize: isMobile ? '10px' : '12px'
-                    }}
-                    formatter={(v) => formatKz(Number(v))} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
+                  <XAxis dataKey="mes" tick={tickStyle} stroke={colors.border} />
+                  <YAxis
+                    tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`}
+                    width={48}
+                    tick={tickStyle}
+                    stroke={colors.border}
+                  />
+                  <Tooltip {...tooltipStyle} formatter={(v: any) => [formatKz(Number(v)), "Total"]} />
                   <Area type="monotone" dataKey="total" stroke={colors.primary} fill="url(#colorTotal)" strokeWidth={2} />
                 </AreaChart>
               </ResponsiveContainer>
@@ -459,107 +366,90 @@ export default function DashboardPage() {
           </motion.div>
         </div>
 
-        {/* Segunda linha - Documentos por Tipo e Estado */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-          {/* Documentos por Tipo */}
+        {/* ---- Row 2: Docs por Tipo + Estado ---- */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
           <motion.div
-            initial={{ opacity: 0, x: -20 }}
+            initial={{ opacity: 0, x: -16 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.2 }}
+            transition={{ delay: 0.1 }}
             className="p-3 sm:p-4 rounded-xl shadow border"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
           >
-            <h2 className="text-base sm:text-lg font-semibold mb-2 sm:mb-4 flex items-center gap-2" style={{ color: colors.text }}>
-              <Receipt style={{ color: colors.secondary }} size={isMobile ? 18 : 20} /> Docs por Tipo
+            <h2 className="text-sm sm:text-base font-semibold mb-3 flex items-center gap-2" style={{ color: colors.text }}>
+              <Receipt style={{ color: colors.secondary }} size={18} />
+              Docs por Tipo
             </h2>
-            <div style={{ width: '100%', height: isMobile ? '250px' : '300px' }}>
-              <ResponsiveContainer>
-                <BarChart data={displayDocumentosTipo} margin={{ top: 10, right: 10, left: 5, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#404040' : '#E5E7EB'} />
-                  <XAxis dataKey="nome" 
-                    tick={{ fill: colors.textSecondary, fontSize: isMobile ? 9 : 11 }}
+            <div className="h-52 sm:h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={displayDocumentosTipo} margin={{ top: 4, right: 8, left: 0, bottom: 40 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                  <XAxis
+                    dataKey="nome"
+                    tick={{ ...tickStyle, fontSize: 10 }}
                     stroke={colors.border}
-                    angle={isMobile ? -45 : 0}
-                    textAnchor={isMobile ? "end" : "middle"}
-                    height={isMobile ? 60 : 30} />
-                  <YAxis yAxisId="left" orientation="left" 
-                    stroke={colors.primary}
-                    tick={{ fill: colors.textSecondary, fontSize: isMobile ? 9 : 11 }}
-                    width={isMobile ? 35 : 40} />
-                  <YAxis yAxisId="right" orientation="right" 
-                    stroke={colors.secondary}
-                    tick={{ fill: colors.textSecondary, fontSize: isMobile ? 9 : 11 }}
-                    width={isMobile ? 35 : 40} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: colors.card,
-                      borderColor: colors.border,
-                      color: colors.text,
-                      fontSize: isMobile ? '10px' : '12px'
-                    }}
-                    formatter={(value: any, name: string) => {
-                      if (name === 'quantidade') return [value, 'Qtd'];
-                      return [formatKz(value), 'Valor'];
-                    }}
+                    angle={-35}
+                    textAnchor="end"
+                    interval={0}
+                    height={52}
                   />
-                  <Bar yAxisId="left" dataKey="quantidade" fill={colors.primary} name="Qtd" radius={[4, 4, 0, 0]} barSize={isMobile ? 10 : 15} />
-                  <Bar yAxisId="right" dataKey="valor" fill={colors.secondary} name="Valor" radius={[4, 4, 0, 0]} barSize={isMobile ? 10 : 15} />
+                  <YAxis yAxisId="left"  orientation="left"  stroke={colors.primary}   tick={tickStyle} width={36} />
+                  <YAxis yAxisId="right" orientation="right" stroke={colors.secondary} tick={tickStyle} width={36} />
+                  <Tooltip
+                    {...tooltipStyle}
+                    formatter={(value: any, name: string) =>
+                      name === "quantidade" ? [value, "Qtd"] : [formatKz(value), "Valor"]
+                    }
+                  />
+                  <Bar yAxisId="left"  dataKey="quantidade" fill={colors.primary}   name="Qtd"   radius={[3, 3, 0, 0]} barSize={12} />
+                  <Bar yAxisId="right" dataKey="valor"      fill={colors.secondary} name="Valor" radius={[3, 3, 0, 0]} barSize={12} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </motion.div>
 
-          {/* Documentos por Estado */}
           <motion.div
-            initial={{ opacity: 0, x: 20 }}
+            initial={{ opacity: 0, x: 16 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.2 }}
+            transition={{ delay: 0.1 }}
             className="p-3 sm:p-4 rounded-xl shadow border"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
           >
-            <h2 className="text-base sm:text-lg font-semibold mb-2 sm:mb-4 flex items-center gap-2" style={{ color: colors.text }}>
-              <FileText style={{ color: colors.secondary }} size={isMobile ? 18 : 20} /> Docs por Estado
+            <h2 className="text-sm sm:text-base font-semibold mb-3 flex items-center gap-2" style={{ color: colors.text }}>
+              <FileText style={{ color: colors.secondary }} size={18} />
+              Docs por Estado
             </h2>
-            <div style={{ width: '100%', height: isMobile ? '250px' : '300px' }}>
-              <ResponsiveContainer>
+            <div className="h-44 sm:h-52 w-full">
+              <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={displayDocumentosEstado}
                     cx="50%"
                     cy="50%"
-                    innerRadius={isMobile ? 40 : 60}
-                    outerRadius={isMobile ? 70 : 100}
-                    paddingAngle={5}
+                    innerRadius="38%"
+                    outerRadius="68%"
+                    paddingAngle={4}
                     dataKey="quantidade"
                     nameKey="estado"
-                    label={isMobile ? false : (entry) => `${entry.estado}: ${entry.quantidade}`}
+                    label={false}
                     labelLine={false}
                   >
-                    {displayDocumentosEstado.map((_, i) => (
-                      <Cell key={i} fill={i === 0 ? colors.primary : i === 1 ? colors.secondary : '#95a5a6'} />
+                    {displayDocumentosEstado.map((_: any, i: number) => (
+                      <Cell key={i} fill={pieColors[i % pieColors.length]} />
                     ))}
                   </Pie>
-                  <Tooltip 
-                    contentStyle={{
-                      backgroundColor: colors.card,
-                      borderColor: colors.border,
-                      color: colors.text,
-                      fontSize: isMobile ? '10px' : '12px'
-                    }}
-                    formatter={(value) => [`${value} docs`, 'Quantidade']} />
+                  <Tooltip
+                    {...tooltipStyle}
+                    formatter={(value: any) => [`${value} docs`, "Quantidade"]}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             </div>
-
-            {/* Legenda responsiva */}
-            <div className={`flex ${isMobile ? 'flex-col items-start gap-1' : 'justify-center gap-4'} mt-3 sm:mt-4 pt-3 sm:pt-4 border-t`} 
-              style={{ borderColor: colors.border }}>
+            <div className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 mt-2 pt-3 border-t" style={{ borderColor: colors.border }}>
               {displayDocumentosEstado.map((item: any, i: number) => (
-                <div key={i} className="flex items-center gap-2">
-                  <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full" style={{
-                    backgroundColor: i === 0 ? colors.primary : i === 1 ? colors.secondary : '#95a5a6'
-                  }} />
-                  <span style={{ color: colors.textSecondary }} className="text-xs">
+                <div key={i} className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: pieColors[i % pieColors.length] }} />
+                  <span className="text-xs" style={{ color: colors.textSecondary }}>
                     {item.estado}: {item.quantidade}
                   </span>
                 </div>
@@ -568,130 +458,112 @@ export default function DashboardPage() {
           </motion.div>
         </div>
 
-        {/* Tabelas - Versão responsiva */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        {/* ---- Row 3: Tabelas ---- */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
           {/* Últimas Vendas */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="p-3 sm:p-4 rounded-xl shadow border overflow-x-auto"
+            transition={{ delay: 0.2 }}
+            className="p-3 sm:p-4 rounded-xl shadow border overflow-hidden"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
           >
-            <h2 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4" style={{ color: colors.text }}>Últimas Vendas</h2>
-            <div className="min-w-[300px] sm:min-w-full">
-              <table className="w-full">
+            <h2 className="text-sm sm:text-base font-semibold mb-3" style={{ color: colors.text }}>Últimas Vendas</h2>
+            <div className="overflow-x-auto -mx-1 px-1">
+              <table className="w-full min-w-[280px]">
                 <thead>
                   <tr className="border-b" style={{ borderColor: colors.border }}>
-                    <th className="text-left p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.textSecondary }}>Cliente</th>
-                    <th className="text-left p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.textSecondary }}>Total</th>
-                    <th className="text-left p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.textSecondary }}>Status</th>
-                    <th className="text-left p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.textSecondary }}>Data</th>
+                    {["Cliente", "Total", "Status", "Data"].map((h) => (
+                      <th key={h} className="text-left px-2 py-1.5 text-xs font-medium whitespace-nowrap" style={{ color: colors.textSecondary }}>
+                        {h}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {data.vendas?.ultimas?.slice(0, 5).map((v: any, i: number) => (
-                    <tr key={i} className="border-b transition-colors" 
+                  {(data.vendas?.ultimas as any[] | undefined)?.slice(0, 5).map((v: any, i: number) => (
+                    <tr
+                      key={i}
+                      className="border-b last:border-0 transition-colors"
                       style={{ borderColor: colors.border }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = theme === 'dark' ? '#333333' : '#F9FAFB';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'transparent';
-                      }}>
-                      <td className="p-1 sm:p-2 text-xs sm:text-sm truncate max-w-[80px] sm:max-w-none" style={{ color: colors.text }} title={v.cliente || '-'}>
-                        {v.cliente?.substring(0, 15) || '-'}
+                      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = theme === "dark" ? "#2a2a2a" : "#F9FAFB"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
+                    >
+                      <td className="px-2 py-2 text-xs truncate max-w-[90px]" style={{ color: colors.text }} title={v.cliente ?? "-"}>
+                        {String(v.cliente ?? "-").substring(0, 14)}
                       </td>
-                      <td className="p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.text }}>{formatKz(v.total || 0)}</td>
-                      <td className="p-1 sm:p-2">
-                        <span className={`px-1 sm:px-2 py-0.5 sm:py-1 rounded text-xs ${
-                          v.status === 'faturada' 
-                            ? theme === 'dark' ? 'bg-green-900 text-green-300' : 'bg-green-100 text-green-700'
-                            : v.status === 'pendente' 
-                              ? theme === 'dark' ? 'bg-yellow-900 text-yellow-300' : 'bg-yellow-100 text-yellow-700'
-                              : theme === 'dark' ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-700'
-                        }`}>
-                          {v.status === 'faturada' ? 'Faturada' : v.status === 'pendente' ? 'Pendente' : '-'}
-                        </span>
+                      <td className="px-2 py-2 text-xs whitespace-nowrap" style={{ color: colors.text }}>
+                        {formatKz(v.total ?? 0)}
                       </td>
-                      <td className="p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.textSecondary }}>{v.data || '-'}</td>
+                      <td className="px-2 py-2">
+                        <StatusBadge status={v.status ?? ""} theme={theme} />
+                      </td>
+                      <td className="px-2 py-2 text-xs whitespace-nowrap" style={{ color: colors.textSecondary }}>
+                        {v.data ?? "-"}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <Link 
-              href="/dashboard/Vendas/relatorios" 
-              className="block text-center mt-3 sm:mt-4 text-xs sm:text-sm hover:underline transition-colors"
-              style={{ color: colors.secondary }}
-            >
+            <Link href="/dashboard/Vendas/relatorios" className="block text-center mt-4 text-xs hover:underline" style={{ color: colors.secondary }}>
               Ver mais →
             </Link>
           </motion.div>
 
           {/* Últimos Documentos */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="p-3 sm:p-4 rounded-xl shadow border overflow-x-auto"
+            transition={{ delay: 0.25 }}
+            className="p-3 sm:p-4 rounded-xl shadow border overflow-hidden"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
           >
-            <h2 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4" style={{ color: colors.text }}>Últimos Documentos</h2>
-            <div className="min-w-[300px] sm:min-w-full">
-              <table className="w-full">
+            <h2 className="text-sm sm:text-base font-semibold mb-3" style={{ color: colors.text }}>Últimos Documentos</h2>
+            <div className="overflow-x-auto -mx-1 px-1">
+              <table className="w-full min-w-[280px]">
                 <thead>
                   <tr className="border-b" style={{ borderColor: colors.border }}>
-                    <th className="text-left p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.textSecondary }}>Tipo</th>
-                    <th className="text-left p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.textSecondary }}>Nº</th>
-                    <th className="text-left p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.textSecondary }}>Total</th>
-                    <th className="text-left p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.textSecondary }}>Estado</th>
+                    {["Tipo", "Nº", "Total", "Estado"].map((h) => (
+                      <th key={h} className="text-left px-2 py-1.5 text-xs font-medium whitespace-nowrap" style={{ color: colors.textSecondary }}>
+                        {h}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {data.documentos_fiscais?.ultimos?.slice(0, 5).map((d: any, i: number) => (
-                    <tr key={i} className="border-b transition-colors"
+                  {(data.documentos_fiscais?.ultimos as any[] | undefined)?.slice(0, 5).map((d: any, i: number) => (
+                    <tr
+                      key={i}
+                      className="border-b last:border-0 transition-colors"
                       style={{ borderColor: colors.border }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = theme === 'dark' ? '#333333' : '#F9FAFB';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'transparent';
-                      }}>
-                      <td className="p-1 sm:p-2 text-xs sm:text-sm truncate max-w-[60px] sm:max-w-none" style={{ color: colors.text }} title={d.tipo_nome || '-'}>
-                        {d.tipo_nome?.substring(0, 10) || '-'}
+                      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = theme === "dark" ? "#2a2a2a" : "#F9FAFB"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
+                    >
+                      <td className="px-2 py-2 text-xs truncate max-w-[80px]" style={{ color: colors.text }} title={d.tipo_nome ?? "-"}>
+                        {String(d.tipo_nome ?? "-").substring(0, 12)}
                       </td>
-                      <td className="p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.text }}>{d.numero || '-'}</td>
-                      <td className="p-1 sm:p-2 text-xs sm:text-sm" style={{ color: colors.text }}>{formatKz(d.total || 0)}</td>
-                      <td className="p-1 sm:p-2">
-                        <span className={`px-1 sm:px-2 py-0.5 sm:py-1 rounded text-xs ${
-                          d.estado === 'paga' 
-                            ? theme === 'dark' ? 'bg-green-900 text-green-300' : 'bg-green-100 text-green-700'
-                            : d.estado === 'emitido' 
-                              ? theme === 'dark' ? 'bg-blue-900 text-blue-300' : 'bg-blue-100 text-blue-700'
-                              : d.estado === 'cancelado' 
-                                ? theme === 'dark' ? 'bg-red-900 text-red-300' : 'bg-red-100 text-red-700'
-                                : d.estado === 'parcialmente_paga' 
-                                  ? theme === 'dark' ? 'bg-orange-900 text-orange-300' : 'bg-orange-100 text-orange-700'
-                                  : theme === 'dark' ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-700'
-                        }`}>
-                          {d.estado === 'parcialmente_paga' ? 'Parcial' : d.estado || '-'}
-                        </span>
+                      <td className="px-2 py-2 text-xs whitespace-nowrap" style={{ color: colors.text }}>
+                        {d.numero ?? "-"}
+                      </td>
+                      <td className="px-2 py-2 text-xs whitespace-nowrap" style={{ color: colors.text }}>
+                        {formatKz(d.total ?? 0)}
+                      </td>
+                      <td className="px-2 py-2">
+                        <StatusBadge status={d.estado ?? ""} theme={theme} />
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <Link 
-              href="/dashboard/Faturas/Faturas" 
-              className="block text-center mt-3 sm:mt-4 text-xs sm:text-sm hover:underline transition-colors"
-              style={{ color: colors.secondary }}
-            >
+            <Link href="/dashboard/Faturas/Faturas" className="block text-center mt-4 text-xs hover:underline" style={{ color: colors.secondary }}>
               Ver mais →
             </Link>
           </motion.div>
         </div>
+
       </div>
     </MainEmpresa>
   );

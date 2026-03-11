@@ -1,4 +1,5 @@
-'use client';
+// src/context/authprovider.tsx
+"use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import api from "@/services/axios";
@@ -9,13 +10,23 @@ export interface User {
   name: string;
   email: string;
   role: string;
+  empresa_id?: string;
+  empresa?: {
+    id: string;
+    nome: string;
+    nif: string;
+    email: string;
+    logo: string | null;
+    telefone: string | null;
+    endereco: string | null;
+  };
 }
 
 interface AuthContextData {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
+  login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
+  logout: () => Promise<{ success: boolean; message?: string }>;
   fetchUser: () => Promise<void>;
 }
 
@@ -25,12 +36,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // 🔹 Busca usuário autenticado
+  // 🔹 Busca usuário autenticado com dados da empresa
   const fetchUser = useCallback(async () => {
     try {
       const { data } = await api.get<{ user: User }>("/me");
       setUser(data.user ?? null);
-    } catch {
+    } catch (error) {
+      console.error("Erro ao buscar usuário:", error);
       setUser(null);
     }
   }, []);
@@ -44,6 +56,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // 2️⃣ Tenta buscar usuário se já estiver logado
         await fetchUser();
+      } catch (error) {
+        console.error("Erro na inicialização:", error);
       } finally {
         setLoading(false);
       }
@@ -71,6 +85,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         );
 
         await fetchUser();
+        return { success: true };
+      } catch (error: unknown) {
+        console.error("Erro no login:", error);
+        const errorMessage = error instanceof Error && 'response' in error
+          ? (error.response as any).data?.message
+          : "Erro ao fazer login";
+        return {
+          success: false,
+          message: errorMessage || "Erro ao fazer login"
+        };
       } finally {
         setLoading(false);
       }
@@ -87,6 +111,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Prepara próximo login
       await api.get("/sanctum/csrf-cookie");
+      return { success: true };
+    } catch (error: unknown) {
+      console.error("Erro no logout:", error);
+      const errorMessage = error instanceof Error && 'response' in error
+        ? (error.response as any).data?.message
+        : "Erro ao fazer logout";
+      return {
+        success: false,
+        message: errorMessage || "Erro ao fazer logout"
+      };
     } finally {
       setLoading(false);
     }

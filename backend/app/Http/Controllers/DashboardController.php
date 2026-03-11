@@ -27,10 +27,7 @@ class DashboardController extends Controller
         try {
             $user = Auth::user();
 
-            // Obtem todos os dados do dashboard via service
             $dashboardData = $this->dashboardService->getDashboard();
-
-            // ✅ Adicionar estatísticas de serviços
             $estatisticasServicos = $this->getEstatisticasServicos();
 
             return response()->json([
@@ -58,25 +55,22 @@ class DashboardController extends Controller
     }
 
     /**
-     * ✅ NOVO: Estatísticas específicas de serviços
+     * Estatísticas específicas de serviços
      */
     protected function getEstatisticasServicos(): array
     {
         $mesAtual = now()->startOfMonth();
         $mesAnterior = now()->subMonth()->startOfMonth();
 
-        // Totais de serviços
         $totalServicos = Produto::where('tipo', 'servico')->count();
         $servicosAtivos = Produto::where('tipo', 'servico')
             ->where('status', 'ativo')
             ->count();
 
-        // Preços
         $precoMedioServicos = Produto::where('tipo', 'servico')
             ->where('status', 'ativo')
             ->avg('preco_venda') ?? 0;
 
-        // Retenções
         $retencoesMesAtual = DocumentoFiscal::whereMonth('data_emissao', $mesAtual->month)
             ->whereYear('data_emissao', $mesAtual->year)
             ->where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO)
@@ -87,12 +81,10 @@ class DashboardController extends Controller
             ->where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO)
             ->sum('total_retencao') ?? 0;
 
-        // Variação percentual
         $variacaoRetencao = $retencoesMesAnterior > 0
             ? round((($retencoesMesAtual - $retencoesMesAnterior) / $retencoesMesAnterior) * 100, 2)
             : 0;
 
-        // Top serviços mais vendidos
         $topServicos = DB::table('itens_venda')
             ->join('produtos', 'itens_venda.produto_id', '=', 'produtos.id')
             ->join('vendas', 'itens_venda.venda_id', '=', 'vendas.id')
@@ -150,7 +142,6 @@ class DashboardController extends Controller
 
             $resumo = $this->dashboardService->getResumoDocumentosFiscais();
 
-            // ✅ Adicionar informações de retenção
             $retencaoTotal = DocumentoFiscal::where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO)
                 ->sum('total_retencao');
 
@@ -195,7 +186,6 @@ class DashboardController extends Controller
 
             $estatisticas = $this->dashboardService->getEstatisticasPagamentos();
 
-            // ✅ Adicionar estatísticas de pagamentos de serviços
             $pagamentosServicos = DB::table('documentos_fiscais')
                 ->join('recibos', 'documentos_fiscais.id', '=', 'recibos.fatura_id')
                 ->where('documentos_fiscais.tipo_documento', DocumentoFiscal::TIPO_FATURA)
@@ -245,7 +235,6 @@ class DashboardController extends Controller
 
             $alertas = $this->dashboardService->getAlertasPendentes();
 
-            // ✅ Adicionar alertas específicos de serviços
             $servicosComRetencaoNaoPaga = DocumentoFiscal::where('total_retencao', '>', 0)
                 ->whereIn('estado', [DocumentoFiscal::ESTADO_EMITIDO, DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA])
                 ->where('data_vencimento', '<', now()->addDays(5))
@@ -296,11 +285,8 @@ class DashboardController extends Controller
             $ano = $dados['ano'] ?? now()->year;
 
             $evolucao = $this->dashboardService->getEvolucaoMensal($ano);
-
-            // ✅ Adicionar evolução de retenções por mês
             $retencoesPorMes = DocumentoFiscal::retencaoPorMes($ano);
 
-            // Mapear retenções para o formato esperado
             $retencoesMapeadas = [];
             foreach ($retencoesPorMes as $item) {
                 $nomeMes = \Carbon\Carbon::create()->month($item->mes)->locale('pt')->monthName;
@@ -344,7 +330,7 @@ class DashboardController extends Controller
     }
 
     /**
-     * ✅ NOVO: Estatísticas detalhadas de serviços
+     * Estatísticas detalhadas de serviços
      */
     public function estatisticasServicos()
     {
@@ -377,7 +363,7 @@ class DashboardController extends Controller
     }
 
     /**
-     * ✅ NOVO: Ranking de serviços por receita
+     * Ranking de serviços por receita
      */
     public function rankingServicos(Request $request)
     {
@@ -398,7 +384,6 @@ class DashboardController extends Controller
                 ->where('produtos.tipo', 'servico')
                 ->where('vendas.status', '!=', 'cancelada');
 
-            // Filtrar por período
             switch ($periodo) {
                 case 'mes':
                     $query->whereMonth('vendas.data_venda', now()->month)
@@ -412,7 +397,6 @@ class DashboardController extends Controller
                     break;
                 case 'todo':
                 default:
-                    // Sem filtro de período
                     break;
             }
 

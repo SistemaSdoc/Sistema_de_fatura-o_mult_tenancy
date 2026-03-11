@@ -2,495 +2,378 @@
 
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
     FileText,
     Eye,
     Download,
-    Loader2,
     AlertCircle,
     ChevronLeft,
     ChevronRight,
-    Calendar,
-    User,
     FileWarning,
     CreditCard,
     FileX,
     FileCheck,
-    ArrowLeft
+    ArrowLeft,
+    RefreshCw,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
 
 import MainEmpresa from "@/app/components/MainEmpresa";
-import { documentoFiscalService, DocumentoFiscal, TipoDocumento, EstadoDocumento } from "@/services/DocumentoFiscal";
+import { documentoFiscalService } from "@/services/DocumentoFiscal";
+import type { DocumentoFiscal, TipoDocumento, EstadoDocumento } from "@/services/DocumentoFiscal";
 import { ModalVisualizacao } from "@/app/components/ModalVisualizacao";
 import { useThemeColors, useTheme } from "@/context/ThemeContext";
 
-// ==================== CONSTANTES ====================
+/* ─── Constantes ─────────────────────────────────────────────────── */
+const TIPOS_PERMITIDOS: TipoDocumento[] = ["FP", "FA", "NC", "ND", "FRt"];
 
-const TIPOS_PERMITIDOS: TipoDocumento[] = ['FP', 'FA', 'NC', 'ND', 'FRt'];
+const TIPOS_DOC = {
+    FP: { label: "Fatura Proforma", icon: FileWarning, cor: "#f97316" },
+    FA: { label: "Fatura de Adiantamento", icon: CreditCard, cor: "#8b5cf6" },
+    NC: { label: "Nota de Crédito", icon: FileX, cor: "#ef4444" },
+    ND: { label: "Nota de Débito", icon: FileX, cor: "#f59e0b" },
+    FRt: { label: "Fatura de Retificação", icon: FileCheck, cor: "#ec4899" },
+} as const;
 
-const TIPOS_DOCUMENTO = [
-    { value: 'FP' as TipoDocumento, label: 'Proforma', icon: FileWarning, cor: '#f97316' },
-    { value: 'FA' as TipoDocumento, label: 'Adiantamento', icon: CreditCard, cor: '#8b5cf6' },
-    { value: 'NC' as TipoDocumento, label: 'Nota de Crédito', icon: FileX, cor: '#ef4444' },
-    { value: 'ND' as TipoDocumento, label: 'Nota de Débito', icon: FileX, cor: '#f59e0b' },
-    { value: 'FRt' as TipoDocumento, label: 'Retificação', icon: FileCheck, cor: '#ec4899' },
-] as const;
-
-const getEstadoConfig = (estado: EstadoDocumento, theme: string) => {
-    const configs = {
-        emitido: {
-            bg: theme === 'dark' ? 'bg-blue-900/30' : 'bg-blue-100',
-            text: theme === 'dark' ? 'text-blue-300' : 'text-blue-700',
-            border: theme === 'dark' ? 'border-blue-800' : 'border-blue-200',
-            label: 'Emitido'
-        },
-        paga: {
-            bg: theme === 'dark' ? 'bg-green-900/30' : 'bg-green-100',
-            text: theme === 'dark' ? 'text-green-300' : 'text-green-700',
-            border: theme === 'dark' ? 'border-green-800' : 'border-green-200',
-            label: 'Pago'
-        },
-        parcialmente_paga: {
-            bg: theme === 'dark' ? 'bg-orange-900/30' : 'bg-orange-100',
-            text: theme === 'dark' ? 'text-orange-300' : 'text-orange-700',
-            border: theme === 'dark' ? 'border-orange-800' : 'border-orange-200',
-            label: 'Parcial'
-        },
-        cancelado: {
-            bg: theme === 'dark' ? 'bg-red-900/30' : 'bg-red-100',
-            text: theme === 'dark' ? 'text-red-300' : 'text-red-700',
-            border: theme === 'dark' ? 'border-red-800' : 'border-red-200',
-            label: 'Cancelado'
-        },
-        expirado: {
-            bg: theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100',
-            text: theme === 'dark' ? 'text-gray-300' : 'text-gray-700',
-            border: theme === 'dark' ? 'border-gray-700' : 'border-gray-200',
-            label: 'Expirado'
-        },
-    };
-    return configs[estado] || configs.emitido;
+const ESTADO_CFG: Record<EstadoDocumento, { label: string; bg: string; text: string }> = {
+    emitido: { label: "Emitido", bg: "#3B82F610", text: "#3B82F6" },
+    paga: { label: "Pago", bg: "#10B98110", text: "#10B981" },
+    parcialmente_paga: { label: "Parcial", bg: "#F97316" + "18", text: "#F97316" },
+    cancelado: { label: "Cancelado", bg: "#EF444410", text: "#EF4444" },
+    expirado: { label: "Expirado", bg: "#6B728010", text: "#6B7280" },
 };
 
-// ==================== UTILITÁRIOS ====================
+const ITENS_POR_PAG = 15;
 
-const formatarValor = (valor: number) => {
-    return valor.toLocaleString('pt-AO', {
-        style: 'currency',
-        currency: 'AOA',
-        minimumFractionDigits: 2
-    }).replace('AOA', 'Kz');
+/* ─── Utilitários ────────────────────────────────────────────────── */
+const fmtValor = (v?: number | null) =>
+    (Number(v) || 0)
+        .toLocaleString("pt-AO", { style: "currency", currency: "AOA", minimumFractionDigits: 2 })
+        .replace("AOA", "Kz");
+
+const fmtData = (d?: string | null) => {
+    if (!d) return "—";
+    try { return format(new Date(d), "dd/MM/yyyy", { locale: pt }); }
+    catch { return d; }
 };
 
-const formatarData = (data: string) => {
-    return format(new Date(data), 'dd/MM/yyyy', { locale: pt });
-};
+const getTipo = (tipo: TipoDocumento) =>
+    TIPOS_DOC[tipo as keyof typeof TIPOS_DOC] ?? { label: tipo, icon: FileText, cor: "#6b7280" };
 
-const getTipoInfo = (tipo: TipoDocumento) => {
-    return TIPOS_DOCUMENTO.find(t => t.value === tipo) || TIPOS_DOCUMENTO[0];
-};
-
-// ==================== COMPONENTES AUXILIARES ====================
-
-const SkeletonTable = ({ colors }: { colors: any }) => (
-    <div className="space-y-3">
-        {[...Array(10)].map((_, i) => (
-            <div
-                key={i}
-                className="p-4 rounded-lg border animate-pulse"
-                style={{
-                    backgroundColor: colors.card,
-                    borderColor: colors.border
-                }}
-            >
-                <div className="flex items-center gap-4">
-                    <div
-                        className="w-10 h-10 rounded-lg"
-                        style={{ backgroundColor: colors.border }}
-                    ></div>
-                    <div className="flex-1">
-                        <div
-                            className="h-4 rounded w-32 mb-2"
-                            style={{ backgroundColor: colors.border }}
-                        ></div>
-                        <div
-                            className="h-3 rounded w-48"
-                            style={{ backgroundColor: colors.border }}
-                        ></div>
+/* ─── Skeleton ───────────────────────────────────────────────────── */
+const Skeleton = ({ colors }: { colors: any }) => (
+    <div className="space-y-2 p-3">
+        {[...Array(6)].map((_, i) => (
+            <div key={i} className="p-3 rounded-lg border animate-pulse"
+                style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg shrink-0" style={{ backgroundColor: colors.border }} />
+                    <div className="flex-1 space-y-1.5">
+                        <div className="h-3 rounded w-28" style={{ backgroundColor: colors.border }} />
+                        <div className="h-2.5 rounded w-44" style={{ backgroundColor: colors.border }} />
                     </div>
-                    <div
-                        className="w-24 h-8 rounded-full"
-                        style={{ backgroundColor: colors.border }}
-                    ></div>
+                    <div className="w-16 h-6 rounded-full" style={{ backgroundColor: colors.border }} />
                 </div>
             </div>
         ))}
     </div>
 );
 
+/* ─── Badges ─────────────────────────────────────────────────────── */
 const EstadoBadge = ({ estado }: { estado: EstadoDocumento }) => {
-    const { theme } = useTheme();
-    const config = getEstadoConfig(estado, theme);
+    const cfg = ESTADO_CFG[estado] ?? ESTADO_CFG.emitido;
     return (
-        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${config.bg} ${config.text} ${config.border}`}>
-            {config.label}
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold"
+            style={{ backgroundColor: cfg.bg, color: cfg.text }}>
+            {cfg.label}
         </span>
     );
 };
 
-// ==================== COMPONENTE PRINCIPAL ====================
+const TipoBadge = ({ tipo }: { tipo: TipoDocumento }) => {
+    const t = getTipo(tipo);
+    return (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+            style={{ backgroundColor: `${t.cor}15`, color: t.cor }}>
+            <t.icon size={10} />{t.label}
+        </span>
+    );
+};
 
+/* ══════════════════════════════════════════════════════════════════
+PÁGINA PRINCIPAL
+══════════════════════════════════════════════════════════════════ */
 export default function OutrosDocumentosPage() {
     const router = useRouter();
     const colors = useThemeColors();
     const { theme } = useTheme();
 
-    // Estados
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [documentos, setDocumentos] = useState<DocumentoFiscal[]>([]);
-    const [pagination, setPagination] = useState({
-        current_page: 1,
-        last_page: 1,
-        total: 0,
-        from: 0,
-        to: 0
-    });
+    const [pagination, setPagination] = useState({ current_page: 1, last_page: 1, total: 0 });
     const [page, setPage] = useState(1);
-    const itensPorPagina = 15;
-
-    // Modal
     const [modalOpen, setModalOpen] = useState(false);
-    const [documentoSelecionado, setDocumentoSelecionado] = useState<DocumentoFiscal | null>(null);
+    const [docSel, setDocSel] = useState<DocumentoFiscal | null>(null);
 
-    // ==================== FUNÇÕES ====================
-
-    const carregarDocumentos = async () => {
+    /* ── Carregar ── */
+    const carregar = useCallback(async () => {
         setLoading(true);
         setError(null);
-
         try {
-            const data = await documentoFiscalService.listar({
-                page,
-                per_page: itensPorPagina,
-            });
-
-            const documentosFiltrados = data.data.filter(
-                (doc: DocumentoFiscal) => TIPOS_PERMITIDOS.includes(doc.tipo_documento)
+            const data = await documentoFiscalService.listar({ page, per_page: ITENS_POR_PAG });
+            const filtrados = (data.data as DocumentoFiscal[]).filter(
+                d => TIPOS_PERMITIDOS.includes(d.tipo_documento),
             );
-
-            setDocumentos(documentosFiltrados);
+            setDocumentos(filtrados);
             setPagination({
                 current_page: data.current_page,
                 last_page: data.last_page,
-                total: documentosFiltrados.length,
-                from: documentosFiltrados.length > 0 ? (page - 1) * itensPorPagina + 1 : 0,
-                to: Math.min(page * itensPorPagina, documentosFiltrados.length)
+                total: filtrados.length,
             });
         } catch (err: any) {
-            console.error('Erro ao carregar documentos:', err);
-            setError(err.message || 'Erro ao carregar documentos fiscais');
+            setError(err.message || "Erro ao carregar documentos fiscais");
         } finally {
             setLoading(false);
         }
-    };
-
-    useEffect(() => {
-        carregarDocumentos();
     }, [page]);
 
-    const handlePageChange = (novaPagina: number) => {
-        setPage(novaPagina);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+    useEffect(() => { carregar(); }, [carregar]);
+
+    /* ── Handlers ── */
+    const mudarPagina = (p: number) => { setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); };
+
+    const abrirModal = (doc: DocumentoFiscal) => { setDocSel(doc); setModalOpen(true); };
+    const fecharModal = () => { setModalOpen(false); setTimeout(() => setDocSel(null), 300); };
+
+    const handleDownload = (doc: DocumentoFiscal) =>
+        window.open(`/api/documentos-fiscais/${doc.id}/pdf`, "_blank");
+
+    /* ── Shared row hover style ── */
+    const hoverProps = {
+        onMouseEnter: (e: React.MouseEvent<HTMLElement>) => { (e.currentTarget as HTMLElement).style.backgroundColor = colors.hover; },
+        onMouseLeave: (e: React.MouseEvent<HTMLElement>) => { (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; },
     };
 
-    const abrirModal = (doc: DocumentoFiscal) => {
-        setDocumentoSelecionado(doc);
-        setModalOpen(true);
-    };
-
-    const fecharModal = () => {
-        setModalOpen(false);
-        setTimeout(() => setDocumentoSelecionado(null), 300);
-    };
-
-    const handleDownload = (doc: DocumentoFiscal) => {
-        // TODO: Implementar download específico do documento
-        console.log('Download documento:', doc.id);
-    };
-
-    // ==================== RENDER ====================
-
+    /* ────────────────────────────────────────────────────────────── */
     return (
         <MainEmpresa>
-            <div className="space-y-6 p-4 max-w-7xl mx-auto transition-colors duration-300" style={{ backgroundColor: colors.background }}>
-                {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                        <h1 className="text-2xl font-bold" style={{ color: colors.primary }}>
-                            Outros Documentos
-                        </h1>
-                        <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>
-                            Proformas, adiantamentos, notas de crédito/débito e retificações
-                        </p>
-                    </div>
+            <div className="space-y-3 p-3 sm:p-4 pb-6 max-w-7xl mx-auto"
+                style={{ backgroundColor: colors.background }}>
+
+                {/* ── Cabeçalho ── */}
+                <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => router.back()}
-                            className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-sm font-medium"
-                            style={{
-                                backgroundColor: colors.hover,
-                                color: colors.text,
-                                border: `1px solid ${colors.border}`
-                            }}
-                            onMouseEnter={(e) => {
-                                e.currentTarget.style.backgroundColor = colors.border;
-                            }}
-                            onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor = colors.hover;
-                            }}
-                        >
-                            <ArrowLeft size={16} />
-                            Voltar
+                        <button onClick={() => router.back()}
+                            className="p-1.5 rounded-lg transition-colors hover:opacity-70"
+                            style={{ color: colors.primary, backgroundColor: `${colors.primary}10` }}>
+                            <ArrowLeft className="w-4 h-4" />
                         </button>
+                        <div>
+                            <h1 className="text-lg font-bold" style={{ color: colors.primary }}>
+                                Outros Documentos
+                            </h1>
+                            <p className="text-[10px] mt-0.5" style={{ color: colors.textSecondary }}>
+                                Proformas · Adiantamentos · Notas de Crédito/Débito · Retificações
+                            </p>
+                        </div>
                     </div>
+                    <button onClick={carregar}
+                        className="p-1.5 rounded-lg border transition-colors"
+                        style={{ borderColor: colors.border, color: colors.textSecondary, backgroundColor: colors.card }}
+                        title="Recarregar">
+                        <RefreshCw className="w-3.5 h-3.5" />
+                    </button>
                 </div>
 
-                {/* Lista de Documentos */}
-                <div
-                    className="rounded-xl shadow-sm border overflow-hidden transition-colors duration-300"
-                    style={{
-                        backgroundColor: colors.card,
-                        borderColor: colors.border
-                    }}
-                >
-                    {loading ? (
-                        <div className="p-6">
-                            <SkeletonTable colors={colors} />
-                        </div>
-                    ) : error ? (
-                        <div className="p-12 text-center">
-                            <AlertCircle className="w-12 h-12 mx-auto mb-3" style={{ color: '#EF4444' }} />
-                            <p style={{ color: '#EF4444' }}>{error}</p>
-                            <button
-                                onClick={carregarDocumentos}
-                                className="mt-3 px-4 py-2 text-white rounded-lg transition-colors text-sm hover:opacity-90"
-                                style={{ backgroundColor: colors.primary }}
-                            >
+                {/* ── Card Principal ── */}
+                <div className="rounded-xl border shadow-sm overflow-hidden"
+                    style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+
+                    {/* Loading */}
+                    {loading && <Skeleton colors={colors} />}
+
+                    {/* Erro */}
+                    {!loading && error && (
+                        <div className="p-8 text-center">
+                            <AlertCircle className="w-9 h-9 mx-auto mb-2" style={{ color: "#EF4444" }} />
+                            <p className="text-sm mb-3" style={{ color: "#EF4444" }}>{error}</p>
+                            <button onClick={carregar}
+                                className="px-4 py-1.5 text-white rounded-lg text-xs"
+                                style={{ backgroundColor: colors.primary }}>
                                 Tentar novamente
                             </button>
                         </div>
-                    ) : documentos.length === 0 ? (
-                        <div className="p-12 text-center">
-                            <FileText className="w-16 h-16 mx-auto mb-4" style={{ color: colors.border }} />
-                            <h3 className="text-lg font-medium mb-2" style={{ color: colors.text }}>
+                    )}
+
+                    {/* Vazio */}
+                    {!loading && !error && documentos.length === 0 && (
+                        <div className="p-10 text-center">
+                            <FileText className="w-10 h-10 mx-auto mb-2" style={{ color: colors.border }} />
+                            <h3 className="text-sm font-medium mb-1" style={{ color: colors.text }}>
                                 Nenhum documento encontrado
                             </h3>
-                            <p style={{ color: colors.textSecondary }}>
-                                Não há proformas, adiantamentos ou notas registradas
+                            <p className="text-xs" style={{ color: colors.textSecondary }}>
+                                Não há proformas, adiantamentos ou notas registadas
                             </p>
                         </div>
-                    ) : (
-                        <>
-                            {/* Lista Mobile */}
-                            <div className="md:hidden divide-y" style={{ borderColor: colors.border }}>
-                                {documentos.map((doc) => {
-                                    const tipoInfo = getTipoInfo(doc.tipo_documento);
-                                    const Icon = tipoInfo.icon;
+                    )}
 
+                    {/* Lista */}
+                    {!loading && !error && documentos.length > 0 && (
+                        <>
+                            {/* ── Mobile ── */}
+                            <div className="md:hidden divide-y" style={{ borderColor: colors.border }}>
+                                {documentos.map(doc => {
+                                    const t = getTipo(doc.tipo_documento);
                                     return (
-                                        <motion.div
-                                            key={doc.id}
+                                        <motion.div key={doc.id}
+                                            whileTap={{ scale: 0.985 }}
                                             onClick={() => abrirModal(doc)}
-                                            whileTap={{ scale: 0.98 }}
-                                            className="p-4 transition-colors cursor-pointer active:bg-opacity-50"
-                                            style={{
-                                                backgroundColor: 'transparent',
-                                                borderColor: colors.border
-                                            }}
-                                            onMouseEnter={(e) => {
-                                                e.currentTarget.style.backgroundColor = colors.hover;
-                                            }}
-                                            onMouseLeave={(e) => {
-                                                e.currentTarget.style.backgroundColor = 'transparent';
-                                            }}
-                                        >
-                                            <div className="flex items-start justify-between mb-2">
-                                                <div className="flex items-center gap-3">
-                                                    <div
-                                                        className="p-2 rounded-lg"
-                                                        style={{ backgroundColor: `${tipoInfo.cor}15` }}
-                                                    >
-                                                        <Icon size={20} style={{ color: tipoInfo.cor }} />
-                                                    </div>
-                                                    <div>
-                                                        <span className="font-medium block text-sm" style={{ color: colors.text }}>
+                                            className="p-3 cursor-pointer transition-colors"
+                                            {...hoverProps}>
+                                            {/* Linha 1 */}
+                                            <div className="flex items-center gap-2 mb-1.5">
+                                                <div className="p-1.5 rounded-lg shrink-0"
+                                                    style={{ backgroundColor: `${t.cor}15` }}>
+                                                    <t.icon size={14} style={{ color: t.cor }} />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <span className="text-xs font-semibold truncate"
+                                                            style={{ color: colors.text }}>
                                                             {doc.numero_documento}
                                                         </span>
-                                                        <span className="text-xs" style={{ color: colors.textSecondary }}>
-                                                            {tipoInfo.label}
-                                                        </span>
+                                                        <EstadoBadge estado={doc.estado} />
                                                     </div>
-                                                </div>
-                                                <EstadoBadge estado={doc.estado} />
-                                            </div>
-
-                                            <div className="grid grid-cols-2 gap-4 text-sm mt-3">
-                                                <div>
-                                                    <p className="text-xs mb-1" style={{ color: colors.textSecondary }}>Data</p>
-                                                    <p className="font-medium" style={{ color: colors.text }}>
-                                                        {formatarData(doc.data_emissao)}
-                                                    </p>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="text-xs mb-1" style={{ color: colors.textSecondary }}>Valor</p>
-                                                    <p className="font-bold" style={{ color: colors.primary }}>
-                                                        {formatarValor(doc.total_liquido)}
+                                                    <p className="text-[10px] mt-0.5" style={{ color: colors.textSecondary }}>
+                                                        {t.label} · {fmtData(doc.data_emissao)}
                                                     </p>
                                                 </div>
                                             </div>
-
-                                            <div className="mt-3">
-                                                <p className="text-xs mb-1" style={{ color: colors.textSecondary }}>Cliente</p>
-                                                <p className="text-sm font-medium truncate" style={{ color: colors.text }}>
-                                                    {doc.cliente_nome || doc.cliente?.nome || 'Consumidor Final'}
+                                            {/* Linha 2 */}
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-xs truncate max-w-[60%]"
+                                                    style={{ color: colors.textSecondary }}>
+                                                    {doc.cliente_nome || doc.cliente?.nome || "Consumidor Final"}
                                                 </p>
+                                                <p className="text-sm font-bold" style={{ color: colors.primary }}>
+                                                    {fmtValor(doc.total_liquido)}
+                                                </p>
+                                            </div>
+                                            {/* Acções */}
+                                            <div className="flex justify-end gap-0.5 mt-2 pt-2 border-t"
+                                                style={{ borderColor: colors.border }}>
+                                                {[
+                                                    { Icon: Eye, title: "Visualizar", fn: () => abrirModal(doc) },
+                                                    { Icon: Download, title: "Download", fn: () => handleDownload(doc) },
+                                                ].map(({ Icon, title, fn }) => (
+                                                    <button key={title}
+                                                        onClick={e => { e.stopPropagation(); fn(); }}
+                                                        className="p-1.5 rounded-lg transition-colors hover:opacity-60"
+                                                        style={{ color: colors.textSecondary }}
+                                                        title={title}>
+                                                        <Icon size={14} />
+                                                    </button>
+                                                ))}
                                             </div>
                                         </motion.div>
                                     );
                                 })}
                             </div>
 
-                            {/* Tabela Desktop */}
+                            {/* ── Desktop ── */}
                             <div className="hidden md:block overflow-x-auto">
                                 <table className="w-full">
-                                    <thead className="border-b" style={{ backgroundColor: colors.hover, borderColor: colors.border }}>
+                                    <thead className="border-b"
+                                        style={{ backgroundColor: colors.hover, borderColor: colors.border }}>
                                         <tr>
-                                            <th className="py-4 px-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>
-                                                Documento
-                                            </th>
-                                            <th className="py-4 px-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>
-                                                Data
-                                            </th>
-                                            <th className="py-4 px-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>
-                                                Cliente
-                                            </th>
-                                            <th className="py-4 px-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>
-                                                Estado
-                                            </th>
-                                            <th className="py-4 px-4 text-right text-xs font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>
-                                                Valor
-                                            </th>
-                                            <th className="py-4 px-4 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>
-                                                Ações
-                                            </th>
+                                            {[
+                                                ["Documento", "left"],
+                                                ["Data", "left"],
+                                                ["Cliente", "left"],
+                                                ["Tipo", "left"],
+                                                ["Estado", "left"],
+                                                ["Valor", "right"],
+                                                ["Ações", "center"],
+                                            ].map(([h, align]) => (
+                                                <th key={h}
+                                                    className={`py-2.5 px-3 text-${align} text-[10px] font-semibold uppercase tracking-wider`}
+                                                    style={{ color: colors.textSecondary }}>
+                                                    {h}
+                                                </th>
+                                            ))}
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y" style={{ borderColor: colors.border }}>
-                                        {documentos.map((doc) => {
-                                            const tipoInfo = getTipoInfo(doc.tipo_documento);
-                                            const Icon = tipoInfo.icon;
-
+                                        {documentos.map(doc => {
+                                            const t = getTipo(doc.tipo_documento);
                                             return (
-                                                <tr
-                                                    key={doc.id}
-                                                    className="transition-colors group"
-                                                    style={{ backgroundColor: 'transparent' }}
-                                                    onMouseEnter={(e) => {
-                                                        e.currentTarget.style.backgroundColor = colors.hover;
-                                                    }}
-                                                    onMouseLeave={(e) => {
-                                                        e.currentTarget.style.backgroundColor = 'transparent';
-                                                    }}
-                                                >
-                                                    <td className="py-4 px-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <div
-                                                                className="p-2 rounded-lg transition-transform group-hover:scale-110"
-                                                                style={{ backgroundColor: `${tipoInfo.cor}15` }}
-                                                            >
-                                                                <Icon size={18} style={{ color: tipoInfo.cor }} />
+                                                <tr key={doc.id} className="transition-colors"
+                                                    style={{ backgroundColor: "transparent" }}
+                                                    {...hoverProps}>
+                                                    {/* Documento */}
+                                                    <td className="py-2.5 px-3">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="p-1.5 rounded-lg"
+                                                                style={{ backgroundColor: `${t.cor}15` }}>
+                                                                <t.icon size={13} style={{ color: t.cor }} />
                                                             </div>
-                                                            <div>
-                                                                <div className="font-semibold text-sm" style={{ color: colors.text }}>
-                                                                    {doc.numero_documento}
-                                                                </div>
-                                                                <div className="text-xs" style={{ color: colors.textSecondary }}>
-                                                                    {tipoInfo.label}
-                                                                </div>
-                                                            </div>
+                                                            <span className="text-xs font-medium"
+                                                                style={{ color: colors.text }}>
+                                                                {doc.numero_documento}
+                                                            </span>
                                                         </div>
                                                     </td>
-                                                    <td className="py-4 px-4 text-sm" style={{ color: colors.text }}>
-                                                        {formatarData(doc.data_emissao)}
+                                                    {/* Data */}
+                                                    <td className="py-2.5 px-3 text-xs whitespace-nowrap"
+                                                        style={{ color: colors.textSecondary }}>
+                                                        {fmtData(doc.data_emissao)}
                                                     </td>
-                                                    <td className="py-4 px-4">
-                                                        <div className="text-sm font-medium" style={{ color: colors.text }}>
-                                                            {doc.cliente_nome || doc.cliente?.nome || 'Consumidor Final'}
+                                                    {/* Cliente */}
+                                                    <td className="py-2.5 px-3">
+                                                        <div className="text-xs font-medium truncate max-w-[160px]"
+                                                            style={{ color: colors.text }}>
+                                                            {doc.cliente_nome || doc.cliente?.nome || "Consumidor Final"}
                                                         </div>
                                                         {doc.cliente_nif && (
-                                                            <div className="text-xs" style={{ color: colors.textSecondary }}>
+                                                            <div className="text-[10px]"
+                                                                style={{ color: colors.textSecondary }}>
                                                                 NIF: {doc.cliente_nif}
                                                             </div>
                                                         )}
                                                     </td>
-                                                    <td className="py-4 px-4">
+                                                    {/* Tipo */}
+                                                    <td className="py-2.5 px-3">
+                                                        <TipoBadge tipo={doc.tipo_documento} />
+                                                    </td>
+                                                    {/* Estado */}
+                                                    <td className="py-2.5 px-3">
                                                         <EstadoBadge estado={doc.estado} />
                                                     </td>
-                                                    <td className="py-4 px-4 text-right font-bold text-sm" style={{ color: colors.primary }}>
-                                                        {formatarValor(doc.total_liquido)}
+                                                    {/* Valor */}
+                                                    <td className="py-2.5 px-3 text-right text-xs font-bold"
+                                                        style={{ color: colors.primary }}>
+                                                        {fmtValor(doc.total_liquido)}
                                                     </td>
-                                                    <td className="py-4 px-4">
-                                                        <div className="flex items-center justify-center gap-1">
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    abrirModal(doc);
-                                                                }}
-                                                                className="p-2 rounded-lg transition-all"
-                                                                style={{
-                                                                    color: colors.textSecondary,
-                                                                    backgroundColor: 'transparent'
-                                                                }}
-                                                                onMouseEnter={(e) => {
-                                                                    e.currentTarget.style.backgroundColor = colors.hover;
-                                                                    e.currentTarget.style.color = '#3B82F6';
-                                                                }}
-                                                                onMouseLeave={(e) => {
-                                                                    e.currentTarget.style.backgroundColor = 'transparent';
-                                                                    e.currentTarget.style.color = colors.textSecondary;
-                                                                }}
-                                                                title="Visualizar"
-                                                            >
-                                                                <Eye size={18} />
-                                                            </button>
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleDownload(doc);
-                                                                }}
-                                                                className="p-2 rounded-lg transition-all"
-                                                                style={{
-                                                                    color: colors.textSecondary,
-                                                                    backgroundColor: 'transparent'
-                                                                }}
-                                                                onMouseEnter={(e) => {
-                                                                    e.currentTarget.style.backgroundColor = colors.hover;
-                                                                    e.currentTarget.style.color = '#F97316';
-                                                                }}
-                                                                onMouseLeave={(e) => {
-                                                                    e.currentTarget.style.backgroundColor = 'transparent';
-                                                                    e.currentTarget.style.color = colors.textSecondary;
-                                                                }}
-                                                                title="Download PDF"
-                                                            >
-                                                                <Download size={18} />
-                                                            </button>
+                                                    {/* Ações */}
+                                                    <td className="py-2.5 px-3">
+                                                        <div className="flex items-center justify-center gap-0.5">
+                                                            {[
+                                                                { Icon: Eye, title: "Visualizar", fn: () => abrirModal(doc) },
+                                                                { Icon: Download, title: "Download", fn: () => handleDownload(doc) },
+                                                            ].map(({ Icon, title, fn }) => (
+                                                                <button key={title} onClick={fn}
+                                                                    className="p-1.5 rounded-lg transition-colors hover:opacity-60"
+                                                                    style={{ color: colors.textSecondary }}
+                                                                    title={title}>
+                                                                    <Icon size={14} />
+                                                                </button>
+                                                            ))}
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -500,102 +383,42 @@ export default function OutrosDocumentosPage() {
                                 </table>
                             </div>
 
-                            {/* Paginação */}
+                            {/* ── Paginação ── */}
                             {pagination.last_page > 1 && (
-                                <div
-                                    className="px-6 py-4 border-t flex flex-col sm:flex-row items-center justify-between gap-4"
-                                    style={{ backgroundColor: colors.hover, borderColor: colors.border }}
-                                >
-                                    <p className="text-sm" style={{ color: colors.textSecondary }}>
-                                        Mostrando <span className="font-medium" style={{ color: colors.text }}>{pagination.from}</span> - <span className="font-medium" style={{ color: colors.text }}>{pagination.to}</span> de <span className="font-medium" style={{ color: colors.text }}>{pagination.total}</span> documentos
+                                <div className="px-3 py-2.5 border-t flex flex-col sm:flex-row items-center justify-between gap-2"
+                                    style={{ backgroundColor: colors.hover, borderColor: colors.border }}>
+                                    <p className="text-[10px]" style={{ color: colors.textSecondary }}>
+                                        {pagination.total} documentos · pág {pagination.current_page}/{pagination.last_page}
                                     </p>
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={() => handlePageChange(page - 1)}
-                                            disabled={page === 1}
-                                            className="flex items-center gap-1 px-3 py-2 text-sm rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                            style={{
-                                                backgroundColor: colors.card,
-                                                color: colors.text,
-                                                border: `1px solid ${colors.border}`
-                                            }}
-                                            onMouseEnter={(e) => {
-                                                if (!(page === 1)) {
-                                                    e.currentTarget.style.backgroundColor = colors.hover;
-                                                }
-                                            }}
-                                            onMouseLeave={(e) => {
-                                                e.currentTarget.style.backgroundColor = colors.card;
-                                            }}
-                                        >
-                                            <ChevronLeft size={16} />
-                                            Anterior
+                                    <div className="flex items-center gap-1.5">
+                                        <button onClick={() => mudarPagina(page - 1)} disabled={page === 1}
+                                            className="flex items-center gap-1 px-2.5 py-1 text-[11px] rounded-lg disabled:opacity-40 transition-colors"
+                                            style={{ backgroundColor: colors.card, color: colors.text, border: `1px solid ${colors.border}` }}>
+                                            <ChevronLeft size={12} />Anterior
                                         </button>
 
+                                        {/* Números de página */}
                                         <div className="flex items-center gap-1">
-                                            {Array.from({ length: Math.min(5, pagination.last_page) }, (_, i) => {
-                                                let pageNum;
-                                                if (pagination.last_page <= 5) {
-                                                    pageNum = i + 1;
-                                                } else if (page <= 3) {
-                                                    pageNum = i + 1;
-                                                } else if (page >= pagination.last_page - 2) {
-                                                    pageNum = pagination.last_page - 4 + i;
-                                                } else {
-                                                    pageNum = page - 2 + i;
-                                                }
-
+                                            {Array.from({ length: Math.min(pagination.last_page, 5) }, (_, i) => {
+                                                const p = i + 1;
                                                 return (
-                                                    <button
-                                                        key={pageNum}
-                                                        onClick={() => handlePageChange(pageNum)}
-                                                        className={`w-9 h-9 text-sm font-medium rounded-lg transition-colors ${page === pageNum ? 'text-white' : ''
-                                                            }`}
-                                                        style={page === pageNum
-                                                            ? { backgroundColor: colors.primary }
-                                                            : {
-                                                                backgroundColor: colors.card,
-                                                                color: colors.text,
-                                                                border: `1px solid ${colors.border}`
-                                                            }
-                                                        }
-                                                        onMouseEnter={(e) => {
-                                                            if (page !== pageNum) {
-                                                                e.currentTarget.style.backgroundColor = colors.hover;
-                                                            }
-                                                        }}
-                                                        onMouseLeave={(e) => {
-                                                            if (page !== pageNum) {
-                                                                e.currentTarget.style.backgroundColor = colors.card;
-                                                            }
-                                                        }}
-                                                    >
-                                                        {pageNum}
+                                                    <button key={p} onClick={() => mudarPagina(p)}
+                                                        className="w-7 h-7 rounded-lg text-[11px] font-medium transition-colors"
+                                                        style={{
+                                                            backgroundColor: p === page ? colors.primary : colors.card,
+                                                            color: p === page ? "#fff" : colors.text,
+                                                            border: `1px solid ${p === page ? colors.primary : colors.border}`,
+                                                        }}>
+                                                        {p}
                                                     </button>
                                                 );
                                             })}
                                         </div>
 
-                                        <button
-                                            onClick={() => handlePageChange(page + 1)}
-                                            disabled={page === pagination.last_page}
-                                            className="flex items-center gap-1 px-3 py-2 text-sm rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                            style={{
-                                                backgroundColor: colors.card,
-                                                color: colors.text,
-                                                border: `1px solid ${colors.border}`
-                                            }}
-                                            onMouseEnter={(e) => {
-                                                if (!(page === pagination.last_page)) {
-                                                    e.currentTarget.style.backgroundColor = colors.hover;
-                                                }
-                                            }}
-                                            onMouseLeave={(e) => {
-                                                e.currentTarget.style.backgroundColor = colors.card;
-                                            }}
-                                        >
-                                            Próximo
-                                            <ChevronRight size={16} />
+                                        <button onClick={() => mudarPagina(page + 1)} disabled={page === pagination.last_page}
+                                            className="flex items-center gap-1 px-2.5 py-1 text-[11px] rounded-lg disabled:opacity-40 transition-colors"
+                                            style={{ backgroundColor: colors.card, color: colors.text, border: `1px solid ${colors.border}` }}>
+                                            Próximo<ChevronRight size={12} />
                                         </button>
                                     </div>
                                 </div>
@@ -605,13 +428,13 @@ export default function OutrosDocumentosPage() {
                 </div>
             </div>
 
-            {/* Modal de Visualização */}
-            {modalOpen && documentoSelecionado && (
+            {/* Modal */}
+            {modalOpen && docSel && (
                 <ModalVisualizacao
-                    documento={documentoSelecionado}
+                    documento={docSel}
                     isOpen={modalOpen}
                     onClose={fecharModal}
-                    onDownload={() => handleDownload(documentoSelecionado)}
+                    onDownload={() => handleDownload(docSel)}
                 />
             )}
         </MainEmpresa>
