@@ -9,6 +9,7 @@ use App\Services\DashboardService;
 use App\Models\Produto;
 use App\Models\DocumentoFiscal;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 class DashboardController extends Controller
 {
@@ -20,15 +21,39 @@ class DashboardController extends Controller
     }
 
     /**
-     * Dashboard principal com todos os dados
+     * Aplicar filtros de data à query
      */
-    public function index()
+    private function aplicarFiltrosData($query, Request $request, string $coluna = 'created_at')
+    {
+        if ($request->has('data_inicio') && !empty($request->data_inicio)) {
+            $query->whereDate($coluna, '>=', Carbon::parse($request->data_inicio)->format('Y-m-d'));
+        }
+
+        if ($request->has('data_fim') && !empty($request->data_fim)) {
+            $query->whereDate($coluna, '<=', Carbon::parse($request->data_fim)->format('Y-m-d'));
+        }
+
+        return $query;
+    }
+
+    /**
+     * Dashboard principal com todos os dados (AGORA COM FILTROS)
+     */
+    public function index(Request $request)
     {
         try {
             $user = Auth::user();
 
-            $dashboardData = $this->dashboardService->getDashboard();
-            $estatisticasServicos = $this->getEstatisticasServicos();
+            // Passar os filtros para o DashboardService
+            $filtros = [
+                'data_inicio' => $request->data_inicio,
+                'data_fim' => $request->data_fim,
+            ];
+
+            $dashboardData = $this->dashboardService->getDashboard($filtros);
+
+            // Passar filtros para estatísticas de serviços
+            $estatisticasServicos = $this->getEstatisticasServicos($request);
 
             return response()->json([
                 'success' => true,
@@ -55,13 +80,13 @@ class DashboardController extends Controller
     }
 
     /**
-     * Estatísticas específicas de serviços
+     * Estatísticas específicas de serviços (COM FILTROS)
      */
-    protected function getEstatisticasServicos(): array
+    protected function getEstatisticasServicos(Request $request = null): array
     {
-        $mesAtual = now()->startOfMonth();
-        $mesAnterior = now()->subMonth()->startOfMonth();
+        $queryProdutos = Produto::where('tipo', 'servico');
 
+        // Total de serviços (não é afetado por data)
         $totalServicos = Produto::where('tipo', 'servico')->count();
         $servicosAtivos = Produto::where('tipo', 'servico')
             ->where('status', 'ativo')
@@ -71,25 +96,73 @@ class DashboardController extends Controller
             ->where('status', 'ativo')
             ->avg('preco_venda') ?? 0;
 
-        $retencoesMesAtual = DocumentoFiscal::whereMonth('data_emissao', $mesAtual->month)
-            ->whereYear('data_emissao', $mesAtual->year)
-            ->where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO)
-            ->sum('total_retencao') ?? 0;
+        // Retenções com filtros de data
+        $queryRetencoes = DocumentoFiscal::where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO);
 
-        $retencoesMesAnterior = DocumentoFiscal::whereMonth('data_emissao', $mesAnterior->month)
-            ->whereYear('data_emissao', $mesAnterior->year)
-            ->where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO)
-            ->sum('total_retencao') ?? 0;
+        if ($request) {
+            $this->aplicarFiltrosData($queryRetencoes, $request, 'data_emissao');
+        }
 
-        $variacaoRetencao = $retencoesMesAnterior > 0
-            ? round((($retencoesMesAtual - $retencoesMesAnterior) / $retencoesMesAnterior) * 100, 2)
-            : 0;
+        $retencoesPeriodo = $queryRetencoes->sum('total_retencao') ?? 0;
 
-        $topServicos = DB::table('itens_venda')
+        // Comparação com período anterior (se houver filtros)
+        $variacaoRetencao = 0;
+        $retencoesPeriodoAnterior = 0;
+        $crescimento = 0;
+
+        if ($request && $request->data_inicio && $request->data_fim) {
+            $inicio = Carbon::parse($request->data_inicio);
+            $fim = Carbon::parse($request->data_fim);
+            $diasPeriodo = $inicio->diffInDays($fim) + 1;
+
+            $inicioAnterior = (clone $inicio)->subDays($diasPeriodo);
+            $fimAnterior = (clone $inicio)->subDay();
+
+            $retencoesPeriodoAnterior = DocumentoFiscal::where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO)
+                ->whereDate('data_emissao', '>=', $inicioAnterior->format('Y-m-d'))
+                ->whereDate('data_emissao', '<=', $fimAnterior->format('Y-m-d'))
+                ->sum('total_retencao') ?? 0;
+
+            $variacaoRetencao = $retencoesPeriodoAnterior > 0
+                ? round((($retencoesPeriodo - $retencoesPeriodoAnterior) / $retencoesPeriodoAnterior) * 100, 2)
+                : 0;
+        } else {
+            // Sem filtros, compara mês atual com mês anterior
+            $mesAtual = now()->startOfMonth();
+            $mesAnterior = now()->subMonth()->startOfMonth();
+
+            $retencoesPeriodo = DocumentoFiscal::whereMonth('data_emissao', $mesAtual->month)
+                ->whereYear('data_emissao', $mesAtual->year)
+                ->where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO)
+                ->sum('total_retencao') ?? 0;
+
+            $retencoesPeriodoAnterior = DocumentoFiscal::whereMonth('data_emissao', $mesAnterior->month)
+                ->whereYear('data_emissao', $mesAnterior->year)
+                ->where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO)
+                ->sum('total_retencao') ?? 0;
+
+            $variacaoRetencao = $retencoesPeriodoAnterior > 0
+                ? round((($retencoesPeriodo - $retencoesPeriodoAnterior) / $retencoesPeriodoAnterior) * 100, 2)
+                : 0;
+        }
+
+        // Top serviços com filtros de data
+        $queryTopServicos = DB::table('itens_venda')
             ->join('produtos', 'itens_venda.produto_id', '=', 'produtos.id')
             ->join('vendas', 'itens_venda.venda_id', '=', 'vendas.id')
             ->where('produtos.tipo', 'servico')
-            ->where('vendas.status', '!=', 'cancelada')
+            ->where('vendas.status', '!=', 'cancelada');
+
+        if ($request) {
+            if ($request->data_inicio) {
+                $queryTopServicos->whereDate('vendas.data_venda', '>=', $request->data_inicio);
+            }
+            if ($request->data_fim) {
+                $queryTopServicos->whereDate('vendas.data_venda', '<=', $request->data_fim);
+            }
+        }
+
+        $topServicos = $queryTopServicos
             ->select(
                 'produtos.id',
                 'produtos.nome',
@@ -102,6 +175,11 @@ class DashboardController extends Controller
             ->limit(5)
             ->get();
 
+        // Cálculo de crescimento
+        if ($request && $request->data_inicio && $request->data_fim && $retencoesPeriodoAnterior > 0) {
+            $crescimento = round((($retencoesPeriodo - $retencoesPeriodoAnterior) / $retencoesPeriodoAnterior) * 100, 2);
+        }
+
         return [
             'servicos' => [
                 'total' => $totalServicos,
@@ -111,12 +189,13 @@ class DashboardController extends Controller
                 'preco_medio_formatado' => number_format($precoMedioServicos, 2, ',', '.') . ' Kz',
             ],
             'retencoes' => [
-                'mes_atual' => round($retencoesMesAtual, 2),
-                'mes_atual_formatado' => number_format($retencoesMesAtual, 2, ',', '.') . ' Kz',
-                'mes_anterior' => round($retencoesMesAnterior, 2),
-                'mes_anterior_formatado' => number_format($retencoesMesAnterior, 2, ',', '.') . ' Kz',
+                'periodo' => round($retencoesPeriodo, 2),
+                'periodo_formatado' => number_format($retencoesPeriodo, 2, ',', '.') . ' Kz',
+                'periodo_anterior' => round($retencoesPeriodoAnterior, 2),
+                'periodo_anterior_formatado' => number_format($retencoesPeriodoAnterior, 2, ',', '.') . ' Kz',
                 'variacao' => $variacaoRetencao,
                 'variacao_sinal' => $variacaoRetencao >= 0 ? '+' : '',
+                'crescimento' => $crescimento,
             ],
             'top_servicos' => $topServicos->map(function ($item) {
                 return [
@@ -133,24 +212,33 @@ class DashboardController extends Controller
     }
 
     /**
-     * Resumo de documentos fiscais para o dashboard
+     * Resumo de documentos fiscais para o dashboard (COM FILTROS)
      */
-    public function resumoDocumentosFiscais()
+    public function resumoDocumentosFiscais(Request $request)
     {
         try {
             $user = Auth::user();
 
-            $resumo = $this->dashboardService->getResumoDocumentosFiscais();
+            $filtros = [
+                'data_inicio' => $request->data_inicio,
+                'data_fim' => $request->data_fim,
+            ];
 
-            $retencaoTotal = DocumentoFiscal::where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO)
-                ->sum('total_retencao');
+            $resumo = $this->dashboardService->getResumoDocumentosFiscais($filtros);
+
+            $queryRetencoes = DocumentoFiscal::where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO);
+            $this->aplicarFiltrosData($queryRetencoes, $request, 'data_emissao');
+
+            $retencaoTotal = $queryRetencoes->sum('total_retencao');
+
+            $queryDocsComRetencao = DocumentoFiscal::where('total_retencao', '>', 0)
+                ->where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO);
+            $this->aplicarFiltrosData($queryDocsComRetencao, $request, 'data_emissao');
 
             $resumo['retencoes'] = [
                 'total' => round($retencaoTotal, 2),
                 'total_formatado' => number_format($retencaoTotal, 2, ',', '.') . ' Kz',
-                'documentos_com_retencao' => DocumentoFiscal::where('total_retencao', '>', 0)
-                    ->where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO)
-                    ->count(),
+                'documentos_com_retencao' => $queryDocsComRetencao->count(),
             ];
 
             return response()->json([
@@ -177,19 +265,33 @@ class DashboardController extends Controller
     }
 
     /**
-     * Estatísticas de pagamentos para o dashboard
+     * Estatísticas de pagamentos para o dashboard (COM FILTROS)
      */
-    public function estatisticasPagamentos()
+    public function estatisticasPagamentos(Request $request)
     {
         try {
             $user = Auth::user();
 
-            $estatisticas = $this->dashboardService->getEstatisticasPagamentos();
+            $filtros = [
+                'data_inicio' => $request->data_inicio,
+                'data_fim' => $request->data_fim,
+            ];
 
-            $pagamentosServicos = DB::table('documentos_fiscais')
+            $estatisticas = $this->dashboardService->getEstatisticasPagamentos($filtros);
+
+            $queryPagamentosServicos = DB::table('documentos_fiscais')
                 ->join('recibos', 'documentos_fiscais.id', '=', 'recibos.fatura_id')
                 ->where('documentos_fiscais.tipo_documento', DocumentoFiscal::TIPO_FATURA)
-                ->where('documentos_fiscais.total_retencao', '>', 0)
+                ->where('documentos_fiscais.total_retencao', '>', 0);
+
+            if ($request->data_inicio) {
+                $queryPagamentosServicos->whereDate('recibos.data_emissao', '>=', $request->data_inicio);
+            }
+            if ($request->data_fim) {
+                $queryPagamentosServicos->whereDate('recibos.data_emissao', '<=', $request->data_fim);
+            }
+
+            $pagamentosServicos = $queryPagamentosServicos
                 ->select(
                     DB::raw('SUM(recibos.total_liquido) as total_pago_com_retencao'),
                     DB::raw('COUNT(DISTINCT documentos_fiscais.id) as documentos_com_retencao_pagos')
@@ -226,19 +328,32 @@ class DashboardController extends Controller
     }
 
     /**
-     * Alertas de documentos pendentes (vencidos, próximos do vencimento)
+     * Alertas de documentos pendentes (COM FILTROS)
      */
-    public function alertasPendentes()
+    public function alertasPendentes(Request $request)
     {
         try {
             $user = Auth::user();
 
-            $alertas = $this->dashboardService->getAlertasPendentes();
+            $filtros = [
+                'data_inicio' => $request->data_inicio,
+                'data_fim' => $request->data_fim,
+            ];
 
-            $servicosComRetencaoNaoPaga = DocumentoFiscal::where('total_retencao', '>', 0)
+            $alertas = $this->dashboardService->getAlertasPendentes($filtros);
+
+            $queryServicos = DocumentoFiscal::where('total_retencao', '>', 0)
                 ->whereIn('estado', [DocumentoFiscal::ESTADO_EMITIDO, DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA])
-                ->where('data_vencimento', '<', now()->addDays(5))
-                ->count();
+                ->where('data_vencimento', '<', now()->addDays(5));
+
+            if ($request->data_inicio) {
+                $queryServicos->whereDate('data_vencimento', '>=', $request->data_inicio);
+            }
+            if ($request->data_fim) {
+                $queryServicos->whereDate('data_vencimento', '<=', $request->data_fim);
+            }
+
+            $servicosComRetencaoNaoPaga = $queryServicos->count();
 
             if ($servicosComRetencaoNaoPaga > 0) {
                 $alertas['servicos_com_retencao_proximos'] = [
@@ -284,8 +399,31 @@ class DashboardController extends Controller
 
             $ano = $dados['ano'] ?? now()->year;
 
-            $evolucao = $this->dashboardService->getEvolucaoMensal($ano);
-            $retencoesPorMes = DocumentoFiscal::retencaoPorMes($ano);
+            $filtros = [
+                'data_inicio' => $request->data_inicio,
+                'data_fim' => $request->data_fim,
+            ];
+
+            $evolucao = $this->dashboardService->getEvolucaoMensal($ano, $filtros);
+
+            $queryRetencoes = DocumentoFiscal::whereYear('data_emissao', $ano)
+                ->where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO);
+
+            if ($request->data_inicio) {
+                $queryRetencoes->whereDate('data_emissao', '>=', $request->data_inicio);
+            }
+            if ($request->data_fim) {
+                $queryRetencoes->whereDate('data_emissao', '<=', $request->data_fim);
+            }
+
+            $retencoesPorMes = $queryRetencoes
+                ->select(
+                    DB::raw('MONTH(data_emissao) as mes'),
+                    DB::raw('SUM(total_retencao) as total')
+                )
+                ->groupBy('mes')
+                ->orderBy('mes')
+                ->get();
 
             $retencoesMapeadas = [];
             foreach ($retencoesPorMes as $item) {
@@ -330,14 +468,14 @@ class DashboardController extends Controller
     }
 
     /**
-     * Estatísticas detalhadas de serviços
+     * Estatísticas detalhadas de serviços (COM FILTROS)
      */
-    public function estatisticasServicos()
+    public function estatisticasServicos(Request $request)
     {
         try {
             $user = Auth::user();
 
-            $estatisticas = $this->getEstatisticasServicos();
+            $estatisticas = $this->getEstatisticasServicos($request);
 
             return response()->json([
                 'success' => true,
@@ -363,7 +501,7 @@ class DashboardController extends Controller
     }
 
     /**
-     * Ranking de serviços por receita
+     * Ranking de serviços por receita (COM FILTROS)
      */
     public function rankingServicos(Request $request)
     {
@@ -384,20 +522,31 @@ class DashboardController extends Controller
                 ->where('produtos.tipo', 'servico')
                 ->where('vendas.status', '!=', 'cancelada');
 
-            switch ($periodo) {
-                case 'mes':
-                    $query->whereMonth('vendas.data_venda', now()->month)
-                          ->whereYear('vendas.data_venda', now()->year);
-                    break;
-                case 'trimestre':
-                    $query->where('vendas.data_venda', '>=', now()->subMonths(3));
-                    break;
-                case 'ano':
-                    $query->whereYear('vendas.data_venda', now()->year);
-                    break;
-                case 'todo':
-                default:
-                    break;
+            // Aplicar filtros de data do request primeiro (se existirem)
+            if ($request->data_inicio) {
+                $query->whereDate('vendas.data_venda', '>=', $request->data_inicio);
+            }
+            if ($request->data_fim) {
+                $query->whereDate('vendas.data_venda', '<=', $request->data_fim);
+            }
+
+            // Se não houver filtros explícitos, usar o período selecionado
+            if (!$request->data_inicio && !$request->data_fim) {
+                switch ($periodo) {
+                    case 'mes':
+                        $query->whereMonth('vendas.data_venda', now()->month)
+                              ->whereYear('vendas.data_venda', now()->year);
+                        break;
+                    case 'trimestre':
+                        $query->where('vendas.data_venda', '>=', now()->subMonths(3));
+                        break;
+                    case 'ano':
+                        $query->whereYear('vendas.data_venda', now()->year);
+                        break;
+                    case 'todo':
+                    default:
+                        break;
+                }
             }
 
             $ranking = $query->select(

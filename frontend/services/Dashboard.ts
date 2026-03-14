@@ -1,5 +1,3 @@
-// src/services/dashboard.ts
-
 import api from "./axios";
 import { AxiosError } from "axios";
 
@@ -51,7 +49,7 @@ export interface Cliente {
     nome: string;
     nif: string | null;
     tipo: 'consumidor_final' | 'empresa';
-    status?: 'ativo' | 'inativo'; // ✅ NOVO
+    status?: 'ativo' | 'inativo';
     telefone: string | null;
     email: string | null;
     endereco: string | null;
@@ -66,7 +64,6 @@ export interface Produto {
     preco_venda: number;
     estoque_atual: number;
     estoque_minimo: number;
-    // ✅ NOVO: campos de serviço
     tipo?: 'produto' | 'servico';
     retencao?: number;
 }
@@ -79,7 +76,7 @@ export interface DocumentoFiscal {
     numero_documento: string;
     data_emissao: string;
     total_liquido: number;
-    total_retencao?: number; // ✅ NOVO
+    total_retencao?: number;
     estado: EstadoDocumentoFiscal;
     cliente?: Cliente;
     cliente_nome?: string;
@@ -98,7 +95,6 @@ export interface DashboardData {
         totalFaturado: number;
         totalNotasCredito: number;
         totalLiquido: number;
-        // ✅ NOVOS
         totalRetencao?: number;
         totalRetencaoMes?: number;
     };
@@ -108,9 +104,13 @@ export interface DashboardData {
         ativos: number;
         inativos: number;
         stock_baixo: number;
+        servicos?: {
+            total: number;
+            ativos: number;
+            com_retencao: number;
+        };
     };
 
-    // ✅ NOVO: estatísticas de serviços
     servicos?: {
         total: number;
         ativos: number;
@@ -136,10 +136,9 @@ export interface DashboardData {
                 tipo: TipoDocumentoFiscal;
                 numero: string;
                 estado: EstadoDocumentoFiscal;
-                total_retencao?: number; // ✅ NOVO
+                total_retencao?: number;
             };
             data: string;
-            // ✅ NOVOS
             tem_servicos?: boolean;
             total_retencao?: number;
         }>;
@@ -151,14 +150,21 @@ export interface DashboardData {
             nome: string;
             quantidade: number;
             valor: number;
-            retencao?: number; // ✅ NOVO
+            retencao?: number;
         }>;
+        // ✅ pode ser array OU objecto indexado por tipo — ambos são tratados em prepararDadosGraficos
         por_estado: Array<{
             tipo: string;
             por_estado: Record<string, { quantidade: number; valor: number; retencao?: number }>;
             total_quantidade: number;
             total_valor: number;
-            total_retencao?: number; // ✅ NOVO
+            total_retencao?: number;
+        }> | Record<string, {
+            tipo: string;
+            por_estado: Record<string, { quantidade: number; valor: number; retencao?: number }>;
+            total_quantidade: number;
+            total_valor: number;
+            total_retencao?: number;
         }>;
         ultimos: Array<{
             id: string;
@@ -170,7 +176,7 @@ export interface DashboardData {
             estado: EstadoDocumentoFiscal;
             estado_pagamento: EstadoPagamentoVenda;
             data: string;
-            total_retencao?: number; // ✅ NOVO
+            total_retencao?: number;
         }>;
         por_mes: Array<{
             mes: string;
@@ -179,12 +185,12 @@ export interface DashboardData {
             NC: number;
             ND: number;
             total: number;
-            retencao?: number; // ✅ NOVO
+            retencao?: number;
         }>;
         por_dia: Array<{
             dia: string;
             total: number;
-            retencao?: number; // ✅ NOVO
+            retencao?: number;
         }>;
     };
 
@@ -198,14 +204,13 @@ export interface DashboardData {
             quantidade: number;
             valor_total: number;
         }>;
-        // ✅ NOVO
         recebidos_com_retencao?: number;
+        valor_retencao_recebido?: number;
     };
 
     clientes: {
         ativos: number;
         novos_mes: number;
-        // ✅ NOVO
         inativos?: number;
     };
 
@@ -216,7 +221,6 @@ export interface DashboardData {
             quantidade: number;
             valor_total: number;
         }>;
-        // ✅ NOVO: serviços mais vendidos
         servicosMaisVendidos?: Array<{
             produto: string;
             codigo?: string;
@@ -230,7 +234,6 @@ export interface DashboardData {
         documentos_vencidos: number;
         documentos_proximo_vencimento: number;
         proformas_antigas: number;
-        // ✅ NOVOS
         servicos_com_retencao_pendente?: number;
         valor_retencao_pendente?: number;
     };
@@ -250,7 +253,7 @@ export interface ResumoDocumentosFiscais {
         quantidade: number;
         valor_total: number;
         mes_atual: number;
-        retencao_total?: number; // ✅ NOVO
+        retencao_total?: number;
     }>;
     por_estado: Record<EstadoDocumentoFiscal, number>;
     periodo: {
@@ -277,7 +280,6 @@ export interface EstatisticasPagamentos {
     };
     prazo_medio_pagamento: number;
     metodos_pagamento: Record<string, number>;
-    // ✅ NOVO
     recebidos_com_retencao?: number;
     valor_retencao_recebido?: number;
 }
@@ -295,7 +297,7 @@ export interface AlertasPendentes {
             valor_pendente: number;
             data_vencimento: string;
             dias_atraso: number;
-            retencao?: number; // ✅ NOVO
+            retencao?: number;
         }>;
     };
     proximos_vencimento: {
@@ -310,7 +312,7 @@ export interface AlertasPendentes {
             valor_pendente: number;
             data_vencimento: string;
             dias_ate_vencimento: number;
-            retencao?: number; // ✅ NOVO
+            retencao?: number;
         }>;
     };
     proformas_pendentes: {
@@ -326,7 +328,6 @@ export interface AlertasPendentes {
             dias_pendentes: number;
         }>;
     };
-    // ✅ NOVOS
     servicos_com_retencao_proximos?: {
         quantidade: number;
         valor_total: number;
@@ -354,26 +355,36 @@ export interface EvolucaoMensal {
         valor_pendente: number;
         notas_credito: number;
         valor_notas_credito: number;
-        // ✅ NOVOS
         proformas?: number;
         valor_proformas?: number;
         retencao?: number;
     }>;
 }
 
+/* -------- Filtros para Dashboard -------- */
+export interface DashboardFiltros {
+    data_inicio?: string;
+    data_fim?: string;
+}
+
 /* ================== DASHBOARD SERVICE ================== */
 
 export const dashboardService = {
-    /**
-     * Obter dados completos do dashboard
-     */
-    async fetch(): Promise<DashboardData | null> {
+
+    async fetch(filtros?: DashboardFiltros): Promise<DashboardData | null> {
         try {
+            const params = new URLSearchParams();
+            if (filtros?.data_inicio) params.append('data_inicio', filtros.data_inicio);
+            if (filtros?.data_fim) params.append('data_fim', filtros.data_fim);
+
+            const queryString = params.toString();
+            const url = `/api/dashboard${queryString ? `?${queryString}` : ''}`;
+
             const { data } = await api.get<{
                 success: boolean;
                 message: string;
                 data: DashboardData;
-            }>("/api/dashboard");
+            }>(url);
 
             return data.data;
         } catch (err) {
@@ -382,18 +393,20 @@ export const dashboardService = {
         }
     },
 
-    /**
-     * Obter resumo de documentos fiscais
-     */
-    async resumoDocumentosFiscais(): Promise<ResumoDocumentosFiscais | null> {
+    async resumoDocumentosFiscais(filtros?: DashboardFiltros): Promise<ResumoDocumentosFiscais | null> {
         try {
+            const params = new URLSearchParams();
+            if (filtros?.data_inicio) params.append('data_inicio', filtros.data_inicio);
+            if (filtros?.data_fim) params.append('data_fim', filtros.data_fim);
+
+            const queryString = params.toString();
+            const url = `/api/dashboard/resumo-documentos-fiscais${queryString ? `?${queryString}` : ''}`;
+
             const { data } = await api.get<{
                 success: boolean;
                 message: string;
-                data: {
-                    resumo: ResumoDocumentosFiscais;
-                };
-            }>("/api/dashboard/resumo-documentos-fiscais");
+                data: { resumo: ResumoDocumentosFiscais };
+            }>(url);
 
             return data.data.resumo;
         } catch (err) {
@@ -402,18 +415,20 @@ export const dashboardService = {
         }
     },
 
-    /**
-     * Obter estatísticas de pagamentos
-     */
-    async estatisticasPagamentos(): Promise<EstatisticasPagamentos | null> {
+    async estatisticasPagamentos(filtros?: DashboardFiltros): Promise<EstatisticasPagamentos | null> {
         try {
+            const params = new URLSearchParams();
+            if (filtros?.data_inicio) params.append('data_inicio', filtros.data_inicio);
+            if (filtros?.data_fim) params.append('data_fim', filtros.data_fim);
+
+            const queryString = params.toString();
+            const url = `/api/dashboard/estatisticas-pagamentos${queryString ? `?${queryString}` : ''}`;
+
             const { data } = await api.get<{
                 success: boolean;
                 message: string;
-                data: {
-                    estatisticas: EstatisticasPagamentos;
-                };
-            }>("/api/dashboard/estatisticas-pagamentos");
+                data: { estatisticas: EstatisticasPagamentos };
+            }>(url);
 
             return data.data.estatisticas;
         } catch (err) {
@@ -422,18 +437,20 @@ export const dashboardService = {
         }
     },
 
-    /**
-     * Obter alertas de documentos pendentes
-     */
-    async alertasPendentes(): Promise<AlertasPendentes | null> {
+    async alertasPendentes(filtros?: DashboardFiltros): Promise<AlertasPendentes | null> {
         try {
+            const params = new URLSearchParams();
+            if (filtros?.data_inicio) params.append('data_inicio', filtros.data_inicio);
+            if (filtros?.data_fim) params.append('data_fim', filtros.data_fim);
+
+            const queryString = params.toString();
+            const url = `/api/dashboard/alertas${queryString ? `?${queryString}` : ''}`;
+
             const { data } = await api.get<{
                 success: boolean;
                 message: string;
-                data: {
-                    alertas: AlertasPendentes;
-                };
-            }>("/api/dashboard/alertas-pendentes");
+                data: { alertas: AlertasPendentes };
+            }>(url);
 
             return data.data.alertas;
         } catch (err) {
@@ -442,20 +459,21 @@ export const dashboardService = {
         }
     },
 
-    /**
-     * Obter evolução mensal de documentos
-     */
-    async evolucaoMensal(ano?: number): Promise<EvolucaoMensal | null> {
+    async evolucaoMensal(ano?: number, filtros?: DashboardFiltros): Promise<EvolucaoMensal | null> {
         try {
-            const params = ano ? `?ano=${ano}` : '';
+            const params = new URLSearchParams();
+            if (ano) params.append('ano', ano.toString());
+            if (filtros?.data_inicio) params.append('data_inicio', filtros.data_inicio);
+            if (filtros?.data_fim) params.append('data_fim', filtros.data_fim);
+
+            const queryString = params.toString();
+            const url = `/api/dashboard/evolucao-mensal${queryString ? `?${queryString}` : ''}`;
+
             const { data } = await api.get<{
                 success: boolean;
                 message: string;
-                data: {
-                    ano: number;
-                    evolucao: EvolucaoMensal;
-                };
-            }>(`/api/dashboard/evolucao-mensal${params}`);
+                data: { ano: number; evolucao: EvolucaoMensal };
+            }>(url);
 
             return data.data.evolucao;
         } catch (err) {
@@ -464,11 +482,8 @@ export const dashboardService = {
         }
     },
 
-    /* ================== MÉTODOS UTILITÁRIOS ================== */
+    /* ================== UTILITÁRIOS ================== */
 
-    /**
-     * Calcular totais e métricas a partir dos dados do dashboard
-     */
     calcularMetricas(dashboardData: DashboardData | null): {
         totalFaturado: number;
         totalPendente: number;
@@ -477,7 +492,6 @@ export const dashboardService = {
         crescimento: number;
         produtosEmStockBaixo: number;
         documentosVencidos: number;
-        // ✅ NOVOS
         totalServicos: number;
         totalRetencao: number;
         servicosComRetencao: number;
@@ -497,10 +511,12 @@ export const dashboardService = {
             };
         }
 
-        const totalServicos = dashboardData.servicos?.total || 0;
+        const totalServicos = dashboardData.produtos?.servicos?.total ||
+            dashboardData.servicos?.total || 0;
         const totalRetencao = dashboardData.kpis?.totalRetencao ||
-            dashboardData.documentos_fiscais?.por_mes?.reduce((acc, mes) => acc + (mes.retencao || 0), 0) ||
-            0;
+            dashboardData.documentos_fiscais?.por_mes?.reduce((acc, mes) => acc + (mes.retencao || 0), 0) || 0;
+        const servicosComRetencao = dashboardData.produtos?.servicos?.com_retencao ||
+            (dashboardData.servicos as any)?.comRetencao || 0;
 
         return {
             totalFaturado: dashboardData.kpis?.totalFaturado || 0,
@@ -512,13 +528,10 @@ export const dashboardService = {
             documentosVencidos: dashboardData.alertas?.documentos_vencidos || 0,
             totalServicos,
             totalRetencao,
-            servicosComRetencao: dashboardData.servicos?.comRetencao || 0,
+            servicosComRetencao,
         };
     },
 
-    /**
-     * ✅ NOVO: Calcular estatísticas de serviços
-     */
     calcularEstatisticasServicos(dashboardData: DashboardData | null): {
         totalServicos: number;
         servicosAtivos: number;
@@ -539,13 +552,14 @@ export const dashboardService = {
         }
 
         const servicos = dashboardData.indicadores?.servicosMaisVendidos || [];
-        const totalServicos = dashboardData.servicos?.total || 0;
+        const totalServicos = dashboardData.produtos?.servicos?.total || dashboardData.servicos?.total || 0;
+        const servicosAtivos = dashboardData.produtos?.servicos?.ativos || dashboardData.servicos?.ativos || 0;
         const retencaoTotal = dashboardData.kpis?.totalRetencao || 0;
         const receitaServicos = servicos.reduce((acc, s) => acc + s.valor_total, 0);
 
         return {
             totalServicos,
-            servicosAtivos: dashboardData.servicos?.ativos || 0,
+            servicosAtivos,
             receitaServicos,
             retencaoTotal,
             percentualRetencao: receitaServicos > 0 ? (retencaoTotal / receitaServicos) * 100 : 0,
@@ -560,6 +574,8 @@ export const dashboardService = {
 
     /**
      * Preparar dados para gráficos
+     * ✅ CORRIGIDO: por_estado pode vir como objecto (indexado por tipo) ou array.
+     *    O Laravel serializa groupBy() como objecto — Object.values() normaliza para array.
      */
     prepararDadosGraficos(dashboardData: DashboardData | null): {
         evolucaoMensal: Array<{
@@ -568,14 +584,14 @@ export const dashboardService = {
             'Faturas-Recibo': number;
             'Notas de Crédito': number;
             Total: number;
-            Retencao: number; // ✅ NOVO
+            Retencao: number;
         }>;
         documentosPorTipo: Array<{
             tipo: string;
             nome: string;
             quantidade: number;
             valor: number;
-            retencao?: number; // ✅ NOVO
+            retencao?: number;
         }>;
         pagamentosPorMetodo: Array<{
             metodo: string;
@@ -587,9 +603,8 @@ export const dashboardService = {
             estado: string;
             quantidade: number;
             valor: number;
-            retencao?: number; // ✅ NOVO
+            retencao?: number;
         }>;
-        // ✅ NOVO: gráfico de serviços
         servicosVendidos: Array<{
             nome: string;
             quantidade: number;
@@ -607,7 +622,6 @@ export const dashboardService = {
             };
         }
 
-        // Gráfico de evolução mensal com retenção
         const evolucaoMensal = (dashboardData.documentos_fiscais?.por_mes || []).map(item => ({
             mes: item.mes,
             Faturas: item.FT || 0,
@@ -617,41 +631,50 @@ export const dashboardService = {
             Retencao: item.retencao || 0,
         }));
 
-        // Gráfico de documentos por tipo com retenção
         const documentosPorTipo = Object.entries(dashboardData.documentos_fiscais?.por_tipo || {}).map(([tipo, info]) => ({
             tipo,
             nome: info.nome,
             quantidade: info.quantidade,
             valor: info.valor,
-            retencao: (info as any).retencao || 0,
+            retencao: info.retencao || 0,
         }));
 
-        // Gráfico de pagamentos por método
         const pagamentosPorMetodo = (dashboardData.pagamentos?.metodos || []).map(metodo => ({
             metodo: metodo.metodo_nome,
             quantidade: metodo.quantidade,
             valor: metodo.valor_total,
         }));
 
-        // Gráfico de documentos por estado com retenção
-        const documentosPorEstado: Array<{ tipo: string; estado: string; quantidade: number; valor: number; retencao?: number }> = [];
-        if (dashboardData.documentos_fiscais?.por_estado) {
-            Object.entries(dashboardData.documentos_fiscais.por_estado).forEach(([tipo, info]) => {
+        // ✅ CORRIGIDO: normaliza objecto ou array para array antes de iterar
+        const documentosPorEstado: Array<{
+            tipo: string;
+            estado: string;
+            quantidade: number;
+            valor: number;
+            retencao?: number;
+        }> = [];
+
+        const porEstadoRaw = dashboardData.documentos_fiscais?.por_estado;
+        if (porEstadoRaw) {
+            const porEstadoArray: any[] = Array.isArray(porEstadoRaw)
+                ? porEstadoRaw
+                : Object.values(porEstadoRaw);
+
+            porEstadoArray.forEach((info: any) => {
                 if (info && info.por_estado) {
-                    Object.entries(info.por_estado).forEach(([estado, dados]) => {
+                    Object.entries(info.por_estado as Record<string, any>).forEach(([estado, dados]: [string, any]) => {
                         documentosPorEstado.push({
-                            tipo,
+                            tipo: info.tipo,
                             estado,
-                            quantidade: dados.quantidade,
-                            valor: dados.valor,
-                            retencao: (dados as any).retencao || 0,
+                            quantidade: dados.quantidade ?? 0,
+                            valor: dados.valor ?? 0,
+                            retencao: dados.retencao || 0,
                         });
                     });
                 }
             });
         }
 
-        // ✅ Gráfico de serviços mais vendidos
         const servicosVendidos = (dashboardData.indicadores?.servicosMaisVendidos || []).map(s => ({
             nome: s.produto,
             quantidade: s.quantidade,
@@ -668,9 +691,6 @@ export const dashboardService = {
         };
     },
 
-    /**
-     * Obter KPIs principais para cards do dashboard
-     */
     getKPIsCards(dashboardData: DashboardData | null): Array<{
         titulo: string;
         valor: string;
@@ -714,7 +734,6 @@ export const dashboardService = {
             },
         ];
 
-        // Adicionar card de produtos em stock baixo se houver
         if (metricas.produtosEmStockBaixo > 0) {
             cards.push({
                 titulo: 'Stock Baixo',
@@ -725,7 +744,6 @@ export const dashboardService = {
             });
         }
 
-        // ✅ Adicionar card de retenção se houver
         if (metricas.totalRetencao > 0) {
             cards.push({
                 titulo: 'Retenções',
@@ -740,9 +758,6 @@ export const dashboardService = {
         return cards;
     },
 
-    /**
-     * Obter alertas formatados para exibição
-     */
     getAlertasFormatados(dashboardData: DashboardData | null): Array<{
         tipo: 'danger' | 'warning' | 'info';
         titulo: string;
@@ -787,16 +802,15 @@ export const dashboardService = {
                 titulo: 'Proformas Pendentes',
                 mensagem: `${alertas.proformas_antigas} proforma(s) com mais de 7 dias`,
                 icone: '📄',
-                acao: '/documentos?tipo=FP&estado=emitida',
+                acao: '/documentos?tipo=FP&estado=emitido',
             });
         }
 
-        // ✅ Alerta de serviços com retenção pendente
         if (alertas.servicos_com_retencao_pendente && alertas.servicos_com_retencao_pendente > 0) {
             listaAlertas.push({
                 tipo: 'warning',
                 titulo: 'Retenções Pendentes',
-                mensagem: `${alertas.servicos_com_retencao_pendente} serviço(s) com retenção a vencer`,
+                mensagem: `${alertas.servicos_com_retencao_pendente} serviço(s) com retenção a vencer (${this._formatarMoeda(alertas.valor_retencao_pendente || 0)})`,
                 icone: '🔖',
                 acao: '/documentos?com_retencao=true&estado=pendente',
             });
@@ -816,9 +830,6 @@ export const dashboardService = {
         return listaAlertas;
     },
 
-    /**
-     * Formatar valor para moeda (AOA)
-     */
     _formatarMoeda(valor: number): string {
         return new Intl.NumberFormat('pt-PT', {
             style: 'currency',
@@ -828,12 +839,8 @@ export const dashboardService = {
         }).format(valor || 0).replace('AOA', 'Kz').trim();
     },
 
-    /**
-     * Formatar data
-     */
     _formatarData(data: string | null, formato: 'short' | 'long' = 'short'): string {
         if (!data) return '-';
-
         try {
             const date = new Date(data);
             return date.toLocaleDateString('pt-PT', {
@@ -846,89 +853,67 @@ export const dashboardService = {
         }
     },
 
-    /**
-     * ✅ NOVO: Formatar percentual de retenção
-     */
     _formatarPercentual(valor: number): string {
         return `${valor.toFixed(1)}%`;
     },
 
-    /**
-     * Obter cor do badge para tipo de documento
-     */
     getTipoDocumentoColor(tipo: TipoDocumentoFiscal): string {
         const colors: Partial<Record<TipoDocumentoFiscal, string>> = {
-            FT: 'bg-blue-100 text-blue-800',
-            FR: 'bg-green-100 text-green-800',
-            FP: 'bg-orange-100 text-orange-800',
-            FA: 'bg-purple-100 text-purple-800',
-            NC: 'bg-red-100 text-red-800',
-            ND: 'bg-amber-100 text-amber-800',
-            RC: 'bg-teal-100 text-teal-800',
+            FT:  'bg-blue-100 text-blue-800',
+            FR:  'bg-green-100 text-green-800',
+            FP:  'bg-orange-100 text-orange-800',
+            FA:  'bg-purple-100 text-purple-800',
+            NC:  'bg-red-100 text-red-800',
+            ND:  'bg-amber-100 text-amber-800',
+            RC:  'bg-teal-100 text-teal-800',
             FRt: 'bg-pink-100 text-pink-800',
         };
         return colors[tipo] || 'bg-gray-100 text-gray-800';
     },
 
-    /**
-     * Obter cor do badge para estado de documento
-     */
     getEstadoDocumentoColor(estado: EstadoDocumentoFiscal): string {
         const colors: Record<EstadoDocumentoFiscal, string> = {
-            emitido: 'bg-blue-100 text-blue-800',
-            paga: 'bg-green-100 text-green-800',
+            emitido:           'bg-blue-100 text-blue-800',
+            paga:              'bg-green-100 text-green-800',
             parcialmente_paga: 'bg-teal-100 text-teal-800',
-            cancelado: 'bg-red-100 text-red-800',
-            expirado: 'bg-gray-100 text-gray-800',
+            cancelado:         'bg-red-100 text-red-800',
+            expirado:          'bg-gray-100 text-gray-800',
         };
         return colors[estado] || 'bg-gray-100 text-gray-800';
     },
 
-    /**
-     * ✅ NOVO: Obter cor do badge para retenção
-     */
     getRetencaoColor(percentual: number): string {
         if (percentual > 10) return 'bg-red-100 text-red-800';
-        if (percentual > 5) return 'bg-orange-100 text-orange-800';
-        if (percentual > 0) return 'bg-yellow-100 text-yellow-800';
+        if (percentual > 5)  return 'bg-orange-100 text-orange-800';
+        if (percentual > 0)  return 'bg-yellow-100 text-yellow-800';
         return 'bg-gray-100 text-gray-800';
     },
 
-    /**
-     * Obter nome do tipo de documento
-     */
     getNomeTipoDocumento(tipo: TipoDocumentoFiscal): string {
         const nomes: Record<TipoDocumentoFiscal, string> = {
-            FT: 'Fatura',
-            FR: 'Fatura-Recibo',
-            FP: 'Fatura Proforma',
-            RC: 'Recibo',
-            NC: 'Nota de Crédito',
-            ND: 'Nota de Débito',
-            FA: 'Fatura de Adiantamento',
+            FT:  'Fatura',
+            FR:  'Fatura-Recibo',
+            FP:  'Fatura Proforma',
+            RC:  'Recibo',
+            NC:  'Nota de Crédito',
+            ND:  'Nota de Débito',
+            FA:  'Fatura de Adiantamento',
             FRt: 'Fatura de Retificação',
         };
         return nomes[tipo] || tipo;
     },
 
-    /**
-     * Verificar se há dados suficientes para exibir o dashboard
-     */
     hasData(dashboardData: DashboardData | null): boolean {
         if (!dashboardData) return false;
-
         return (
             (dashboardData.kpis?.totalFaturado > 0) ||
             (dashboardData.vendas?.total > 0) ||
             (dashboardData.documentos_fiscais?.total > 0) ||
             (dashboardData.clientes?.ativos > 0) ||
-            (dashboardData.servicos?.total ? dashboardData.servicos.total > 0 : false)
+            (dashboardData.produtos?.servicos?.total ? dashboardData.produtos.servicos.total > 0 : false)
         );
     },
 
-    /**
-     * ✅ NOVO: Calcular resumo rápido para o dashboard
-     */
     getResumoRapido(dashboardData: DashboardData | null): {
         totalVendas: number;
         totalServicos: number;
@@ -937,45 +922,38 @@ export const dashboardService = {
         ticketMedio: number;
     } {
         if (!dashboardData) {
-            return {
-                totalVendas: 0,
-                totalServicos: 0,
-                totalClientes: 0,
-                totalRetencao: 0,
-                ticketMedio: 0,
-            };
+            return { totalVendas: 0, totalServicos: 0, totalClientes: 0, totalRetencao: 0, ticketMedio: 0 };
         }
-
         return {
-            totalVendas: dashboardData.vendas?.total || 0,
-            totalServicos: dashboardData.servicos?.total || 0,
-            totalClientes: dashboardData.clientes?.ativos || 0,
-            totalRetencao: dashboardData.kpis?.totalRetencao || 0,
-            ticketMedio: dashboardData.kpis?.ticketMedio || 0,
+            totalVendas:    dashboardData.vendas?.total || 0,
+            totalServicos:  dashboardData.produtos?.servicos?.total || dashboardData.servicos?.total || 0,
+            totalClientes:  dashboardData.clientes?.ativos || 0,
+            totalRetencao:  dashboardData.kpis?.totalRetencao || 0,
+            ticketMedio:    dashboardData.kpis?.ticketMedio || 0,
         };
-    }
+    },
 };
 
-/* ================== EXPORTAÇÕES LEGADAS (para compatibilidade) ================== */
+/* ================== EXPORTAÇÕES LEGADAS ================== */
 
-export async function obterDashboard(): Promise<DashboardData | null> {
-    return dashboardService.fetch();
+export async function obterDashboard(filtros?: DashboardFiltros): Promise<DashboardData | null> {
+    return dashboardService.fetch(filtros);
 }
 
-export async function obterResumoDocumentosFiscais(): Promise<ResumoDocumentosFiscais | null> {
-    return dashboardService.resumoDocumentosFiscais();
+export async function obterResumoDocumentosFiscais(filtros?: DashboardFiltros): Promise<ResumoDocumentosFiscais | null> {
+    return dashboardService.resumoDocumentosFiscais(filtros);
 }
 
-export async function obterEstatisticasPagamentos(): Promise<EstatisticasPagamentos | null> {
-    return dashboardService.estatisticasPagamentos();
+export async function obterEstatisticasPagamentos(filtros?: DashboardFiltros): Promise<EstatisticasPagamentos | null> {
+    return dashboardService.estatisticasPagamentos(filtros);
 }
 
-export async function obterAlertasPendentes(): Promise<AlertasPendentes | null> {
-    return dashboardService.alertasPendentes();
+export async function obterAlertasPendentes(filtros?: DashboardFiltros): Promise<AlertasPendentes | null> {
+    return dashboardService.alertasPendentes(filtros);
 }
 
-export async function obterEvolucaoMensal(ano?: number): Promise<EvolucaoMensal | null> {
-    return dashboardService.evolucaoMensal(ano);
+export async function obterEvolucaoMensal(ano?: number, filtros?: DashboardFiltros): Promise<EvolucaoMensal | null> {
+    return dashboardService.evolucaoMensal(ano, filtros);
 }
 
 export default dashboardService;

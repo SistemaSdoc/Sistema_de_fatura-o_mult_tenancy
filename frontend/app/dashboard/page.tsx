@@ -76,21 +76,21 @@ const SkeletonTable = ({ colors }: { colors: any }) => (
 type BadgeVariant = "green" | "yellow" | "blue" | "red" | "orange" | "gray";
 
 const badgeClasses: Record<BadgeVariant, { dark: string; light: string }> = {
-  green:  { dark: "bg-green-900/50 text-green-300",   light: "bg-green-100 text-green-700" },
+  green: { dark: "bg-green-900/50 text-green-300", light: "bg-green-100 text-green-700" },
   yellow: { dark: "bg-yellow-900/50 text-yellow-300", light: "bg-yellow-100 text-yellow-700" },
-  blue:   { dark: "bg-blue-900/50 text-blue-300",     light: "bg-blue-100 text-blue-700" },
-  red:    { dark: "bg-red-900/50 text-red-300",       light: "bg-red-100 text-red-700" },
+  blue: { dark: "bg-blue-900/50 text-blue-300", light: "bg-blue-100 text-blue-700" },
+  red: { dark: "bg-red-900/50 text-red-300", light: "bg-red-100 text-red-700" },
   orange: { dark: "bg-orange-900/50 text-orange-300", light: "bg-orange-100 text-orange-700" },
-  gray:   { dark: "bg-gray-800 text-gray-300",        light: "bg-gray-100 text-gray-600" },
+  gray: { dark: "bg-gray-800 text-gray-300", light: "bg-gray-100 text-gray-600" },
 };
 
 const statusMap: Record<string, { label: string; variant: BadgeVariant }> = {
-  faturada:          { label: "Faturada",  variant: "green" },
-  pendente:          { label: "Pendente",  variant: "yellow" },
-  paga:              { label: "Pago",      variant: "green" },
-  emitido:           { label: "Emitido",   variant: "blue" },
-  cancelado:         { label: "Cancelado", variant: "red" },
-  parcialmente_paga: { label: "Parcial",   variant: "orange" },
+  faturada: { label: "Faturada", variant: "green" },
+  pendente: { label: "Pendente", variant: "yellow" },
+  paga: { label: "Pago", variant: "green" },
+  emitido: { label: "Emitido", variant: "blue" },
+  cancelado: { label: "Cancelado", variant: "red" },
+  parcialmente_paga: { label: "Parcial", variant: "orange" },
 };
 
 const StatusBadge = ({ status, theme }: { status: string; theme: string }) => {
@@ -217,18 +217,11 @@ export default function DashboardPage() {
     )
   );
 
-  /* ---- Fallbacks ---- */
-  const displayProdutos = produtosData.length ? produtosData
-    : [{ nome: "Produto A", quantidade: 50, valor: 0 }, { nome: "Produto B", quantidade: 30, valor: 0 }, { nome: "Produto C", quantidade: 20, valor: 0 }];
-
-  const displayEvolucao = evolucaoData.length ? evolucaoData
-    : [{ mes: "Jan", total: 100000 }, { mes: "Fev", total: 150000 }, { mes: "Mar", total: 120000 }];
-
-  const displayDocumentosTipo = documentosPorTipo.length ? documentosPorTipo
-    : [{ nome: "Faturas", quantidade: 45, valor: 450000 }, { nome: "Proforma", quantidade: 30, valor: 300000 }, { nome: "Crédito", quantidade: 5, valor: 50000 }];
-
-  const displayDocumentosEstado = documentosPorEstado.length ? documentosPorEstado
-    : [{ estado: "Pago", quantidade: 40 }, { estado: "Emitido", quantidade: 25 }, { estado: "Parcial", quantidade: 15 }];
+  /* ---- Display Data ---- */
+  const displayProdutos = produtosData;
+  const displayEvolucao = evolucaoData;
+  const displayDocumentosTipo = documentosPorTipo;
+  const displayDocumentosEstado = documentosPorEstado;
 
   /* ---- Shared chart config ---- */
   const tooltipStyle = {
@@ -246,10 +239,10 @@ export default function DashboardPage() {
 
   /* ---- KPI cards ---- */
   const kpiCards = [
-    { href: "/dashboard/Vendas/relatorios",       icon: DollarSign, label: "Total Faturado",  value: formatKz(metricas.totalFaturado) },
-    { href: "/dashboard/Clientes/Novo_cliente",   icon: Users,      label: "Clientes Ativos", value: metricas.totalClientes },
-    { href: "/dashboard/Faturas/relatorios",      icon: CreditCard, label: "Pendente",        value: formatKz(metricas.totalPendente) },
-    { href: "/dashboard/Produtos_servicos/Stock", icon: Package,    label: "Stock Baixo",     value: metricas.produtosEmStockBaixo },
+    { href: "/dashboard/Vendas/relatorios", icon: DollarSign, label: "Total Faturado", value: formatKz(metricas.totalFaturado) },
+    { href: "/dashboard/Clientes/Novo_cliente", icon: Users, label: "Clientes Ativos", value: metricas.totalClientes },
+    { href: "/dashboard/Faturas/relatorios", icon: CreditCard, label: "Pendente", value: formatKz(metricas.totalPendente) },
+    { href: "/dashboard/Produtos_servicos/Stock", icon: Package, label: "Stock Baixo", value: metricas.produtosEmStockBaixo },
   ];
 
   /* ---- Render ---- */
@@ -283,7 +276,7 @@ export default function DashboardPage() {
                 className="p-3 sm:p-4 rounded-xl shadow border flex items-center gap-3 sm:block hover:shadow-lg transition-all"
                 style={{ backgroundColor: colors.card, borderColor: colors.border }}
               >
-                <Icon style={{ color: colors.primary }} size={20} className="flex-shrink-0 sm:mb-2" />
+                <Icon style={{ color: theme === "dark" ? colors.secondary : colors.primary }} size={20} className="flex-shrink-0 sm:mb-2" />
                 <div className="min-w-0">
                   <div className="text-xs sm:text-sm truncate" style={{ color: colors.textSecondary }}>{label}</div>
                   <div className="text-sm sm:text-xl font-bold truncate" style={{ color: colors.text }}>{value}</div>
@@ -314,9 +307,9 @@ export default function DashboardPage() {
                   <YAxis type="category" dataKey="nome" width={84} tick={tickStyle} stroke={colors.border} />
                   <Tooltip
                     {...tooltipStyle}
-                    formatter={(value: any, name: string) =>
-                      name === "quantidade" ? [`${value} unid.`, "Qtd"] : [formatKz(value), "Valor"]
-                    }
+                    formatter={(value: any, name?: string) => (
+                      (name || "") === "quantidade" ? [`${value} unid.`, "Qtd"] : [formatKz(value), "Valor"]
+                    )}
                   />
                   <Bar dataKey="quantidade" radius={[0, 4, 4, 0]} barSize={16}>
                     {displayProdutos.map((_: any, index: number) => (
@@ -393,16 +386,16 @@ export default function DashboardPage() {
                     interval={0}
                     height={52}
                   />
-                  <YAxis yAxisId="left"  orientation="left"  stroke={colors.primary}   tick={tickStyle} width={36} />
+                  <YAxis yAxisId="left" orientation="left" stroke={colors.primary} tick={tickStyle} width={36} />
                   <YAxis yAxisId="right" orientation="right" stroke={colors.secondary} tick={tickStyle} width={36} />
                   <Tooltip
                     {...tooltipStyle}
-                    formatter={(value: any, name: string) =>
-                      name === "quantidade" ? [value, "Qtd"] : [formatKz(value), "Valor"]
-                    }
+                    formatter={(value: any, name?: string) => (
+                      (name || "") === "quantidade" ? [value, "Qtd"] : [formatKz(value), "Valor"]
+                    )}
                   />
-                  <Bar yAxisId="left"  dataKey="quantidade" fill={colors.primary}   name="Qtd"   radius={[3, 3, 0, 0]} barSize={12} />
-                  <Bar yAxisId="right" dataKey="valor"      fill={colors.secondary} name="Valor" radius={[3, 3, 0, 0]} barSize={12} />
+                  <Bar yAxisId="left" dataKey="quantidade" fill={colors.primary} name="Qtd" radius={[3, 3, 0, 0]} barSize={12} />
+                  <Bar yAxisId="right" dataKey="valor" fill={colors.secondary} name="Valor" radius={[3, 3, 0, 0]} barSize={12} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

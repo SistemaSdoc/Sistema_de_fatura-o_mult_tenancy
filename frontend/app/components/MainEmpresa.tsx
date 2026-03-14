@@ -2,7 +2,7 @@
 
 import React, { ReactNode, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
     Home,
     FileText,
@@ -238,16 +238,15 @@ export default function MainEmpresa({
             icon: ShoppingCart,
             path: "/dashboard/Vendas",
             links:
-                userRole === "contabilista"
-                    ? [{ label: "Relatórios de vendas", path: "/dashboard/Vendas/relatorios", icon: BarChart2 }]
+                userRole === "admin"
+                    ? [{ label: "Nova venda", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart }]
                     : userRole === "operador"
                         ? [{ label: "Nova venda", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart }]
                         : [
                             { label: "Nova venda", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart },
-                            { label: "Relatórios de vendas", path: "/dashboard/Vendas/relatorios", icon: BarChart2 },
                         ],
             isGroup: true,
-            roles: ["admin", "contabilista", "operador"],
+            roles: ["admin", "operador"],
         },
         {
             label: "Doc. Fiscais",
@@ -256,10 +255,10 @@ export default function MainEmpresa({
             links:
                 userRole === "operador" || userRole === "admin"
                     ? [
-                        { label: "Nova fatura", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
+                        { label: "Gerar fatura", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
                         { label: "Proforma", path: "/dashboard/Faturas/Faturas_Proforma", icon: FileText },
-                        { label: "Documentos fiscais", path: "/dashboard/Faturas/Faturas", icon: FileText },
-                        { label: "Outros", path: "/dashboard/Faturas/DC", icon: FileText },
+                        { label: "Faturas e recibos", path: "/dashboard/Faturas/Faturas", icon: FileText },
+                        { label: "Documentos fiscais", path: "/dashboard/Faturas/DC", icon: FileText },
                     ]
                     : [],
             isGroup: true,
@@ -306,16 +305,16 @@ export default function MainEmpresa({
     const totalNotificacoes = produtosEstoqueBaixo.length + produtosSemEstoque.length;
 
     /* ==================== ANIMATION VARIANTS ==================== */
-    const dropdownVariants = {
+    const dropdownVariants: Variants = {
         hidden: { opacity: 0, height: 0 },
         visible: {
             opacity: 1,
             height: "auto",
-            transition: { duration: 0.25, ease: "easeOut", staggerChildren: 0.04 },
+            transition: { duration: 0.25, ease: "easeOut" as const, staggerChildren: 0.04 },
         },
     };
 
-    const dropdownItemVariants = {
+    const dropdownItemVariants: Variants = {
         hidden: { opacity: 0, x: -8 },
         visible: { opacity: 1, x: 0 },
     };
@@ -326,9 +325,9 @@ export default function MainEmpresa({
         exit: { opacity: 0, y: -8, scale: 0.96, transition: { duration: 0.15 } },
     };
 
-    const modalVariants = {
+    const modalVariants: Variants = {
         hidden: { opacity: 0, scale: 0.92, y: 16 },
-        visible: { opacity: 1, scale: 1, y: 0, transition: { type: "spring", stiffness: 400, damping: 30 } },
+        visible: { opacity: 1, scale: 1, y: 0, transition: { type: "spring" as const, stiffness: 400, damping: 30 } },
         exit: { opacity: 0, scale: 0.92, y: 16, transition: { duration: 0.15 } },
     };
 

@@ -19,7 +19,8 @@ import {
     Hash,
     Calendar,
     Phone,
-    Mail
+    Mail,
+    Download
 } from "lucide-react";
 import MainEmpresa from "@/app/components/MainEmpresa";
 import {
@@ -72,7 +73,6 @@ const formatarDataHora = (data: string | undefined | null): string => {
 
 /* ==================== COMPONENTES ==================== */
 
-// Badge de Estado
 const EstadoBadge = ({ estado }: { estado: string }) => {
     const config: Record<string, { bg: string; text: string; icon: React.ReactNode; label: string }> = {
         emitido: { bg: 'bg-blue-100', text: 'text-blue-700', icon: <Clock className="w-3 h-3" />, label: 'Emitido' },
@@ -82,7 +82,6 @@ const EstadoBadge = ({ estado }: { estado: string }) => {
         expirado: { bg: 'bg-gray-100', text: 'text-gray-700', icon: <AlertTriangle className="w-3 h-3" />, label: 'Expirado' },
     };
     const { bg, text, icon, label } = config[estado] || config.emitido;
-
     return (
         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${bg} ${text}`}>
             {icon}
@@ -91,15 +90,19 @@ const EstadoBadge = ({ estado }: { estado: string }) => {
     );
 };
 
-// Card Compacto
 const CompactCard = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
-    <div className={`bg-white rounded-lg border shadow-sm ${className}`}>
-        {children}
-    </div>
+    <div className={`bg-white rounded-lg border shadow-sm ${className}`}>{children}</div>
 );
 
-// Header do Card
-const CardHeader = ({ title, icon, action }: { title: string; icon: React.ReactNode; action?: React.ReactNode }) => (
+const CardHeader = ({
+    title,
+    icon,
+    action,
+}: {
+    title: string;
+    icon: React.ReactNode;
+    action?: React.ReactNode;
+}) => (
     <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50/50 rounded-t-lg">
         <div className="flex items-center gap-2">
             <div className="p-1.5 bg-white rounded-md shadow-sm" style={{ color: '#123859' }}>
@@ -111,15 +114,19 @@ const CardHeader = ({ title, icon, action }: { title: string; icon: React.ReactN
     </div>
 );
 
-// Grid de Info Compacto
 const InfoGrid = ({ children }: { children: React.ReactNode }) => (
-    <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-        {children}
-    </div>
+    <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">{children}</div>
 );
 
-// Item de Info
-const InfoItem = ({ label, value, highlight = false }: { label: string; value: React.ReactNode; highlight?: boolean }) => (
+const InfoItem = ({
+    label,
+    value,
+    highlight = false,
+}: {
+    label: string;
+    value: React.ReactNode;
+    highlight?: boolean;
+}) => (
     <div className="flex flex-col">
         <span className="text-xs text-gray-500 mb-0.5">{label}</span>
         <span className={`font-medium ${highlight ? 'text-base' : 'text-sm'} text-gray-900`}>
@@ -128,7 +135,6 @@ const InfoItem = ({ label, value, highlight = false }: { label: string; value: R
     </div>
 );
 
-// Tabela de Itens Compacta
 const ItensTable = ({ itens }: { itens: ItemDocumento[] }) => (
     <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -164,8 +170,11 @@ const ItensTable = ({ itens }: { itens: ItemDocumento[] }) => (
     </div>
 );
 
-// Resumo de Valores
-const ValoresResumo = ({ valores }: { valores: { base: number; iva: number; retencao: number; total: number } }) => {
+const ValoresResumo = ({
+    valores,
+}: {
+    valores: { base: number; iva: number; retencao: number; total: number };
+}) => {
     const percentualIva = valores.base > 0 ? (valores.iva / valores.base) * 100 : 0;
     const percentualRet = valores.base > 0 ? (valores.retencao / valores.base) * 100 : 0;
 
@@ -195,7 +204,6 @@ const ValoresResumo = ({ valores }: { valores: { base: number; iva: number; rete
     );
 };
 
-// Skeleton Loading
 const SkeletonLoader = () => (
     <div className="space-y-4 animate-pulse">
         <div className="h-12 bg-gray-200 rounded-lg"></div>
@@ -222,8 +230,26 @@ export default function VisualizarDocumentoPage() {
     const [error, setError] = useState<string | null>(null);
     const [errorOrigem, setErrorOrigem] = useState<string | null>(null);
     const [acaoLoading, setAcaoLoading] = useState<string | null>(null);
+    const [baixandoPdf, setBaixandoPdf] = useState(false);
 
     /* ==================== CARREGAR DADOS ==================== */
+    const carregarFaturaOrigem = useCallback(async (doc: DocumentoFiscal) => {
+        const origemId = doc.fatura_id || doc.documentoOrigem?.id;
+        if (!origemId) return;
+
+        try {
+            setLoadingOrigem(true);
+            setErrorOrigem(null);
+            const origem = await documentoFiscalService.buscarPorId(origemId);
+            setFaturaOrigem(origem);
+        } catch (err) {
+            console.error('Erro ao carregar fatura origem:', err);
+            setErrorOrigem('Não foi possível carregar a fatura de origem');
+        } finally {
+            setLoadingOrigem(false);
+        }
+    }, []);
+
     const carregarDocumento = useCallback(async () => {
         if (!documentoId) {
             setError('ID do documento não fornecido');
@@ -246,24 +272,7 @@ export default function VisualizarDocumentoPage() {
         } finally {
             setLoading(false);
         }
-    }, [documentoId]);
-
-    const carregarFaturaOrigem = async (doc: DocumentoFiscal) => {
-        const origemId = doc.fatura_id || doc.documentoOrigem?.id;
-        if (!origemId) return;
-
-        try {
-            setLoadingOrigem(true);
-            setErrorOrigem(null);
-            const origem = await documentoFiscalService.buscarPorId(origemId);
-            setFaturaOrigem(origem);
-        } catch (err) {
-            console.error('Erro ao carregar fatura origem:', err);
-            setErrorOrigem('Não foi possível carregar a fatura de origem');
-        } finally {
-            setLoadingOrigem(false);
-        }
-    };
+    }, [documentoId, carregarFaturaOrigem]);
 
     useEffect(() => {
         carregarDocumento();
@@ -272,29 +281,18 @@ export default function VisualizarDocumentoPage() {
     /* ==================== HELPERS ==================== */
     const itensParaExibir = useMemo(() => {
         if (!documento) return [];
-        if (documento.tipo_documento === 'RC' && faturaOrigem?.itens) {
-            return faturaOrigem.itens;
-        }
+        if (documento.tipo_documento === 'RC' && faturaOrigem?.itens) return faturaOrigem.itens;
         return documento.itens || [];
     }, [documento, faturaOrigem]);
 
     const valoresTotais = useMemo(() => {
         if (!documento) return { base: 0, iva: 0, retencao: 0, total: 0 };
-        
-        if (faturaOrigem) {
-            return {
-                base: faturaOrigem.base_tributavel || 0,
-                iva: faturaOrigem.total_iva || 0,
-                retencao: faturaOrigem.total_retencao || 0,
-                total: faturaOrigem.total_liquido || 0
-            };
-        }
-        
+        const src = faturaOrigem ?? documento;
         return {
-            base: documento.base_tributavel || 0,
-            iva: documento.total_iva || 0,
-            retencao: documento.total_retencao || 0,
-            total: documento.total_liquido || 0
+            base: src.base_tributavel || 0,
+            iva: src.total_iva || 0,
+            retencao: src.total_retencao || 0,
+            total: src.total_liquido || 0,
         };
     }, [documento, faturaOrigem]);
 
@@ -304,15 +302,14 @@ export default function VisualizarDocumentoPage() {
         return ['FT', 'FR'].includes(documento.tipo_documento) && itensParaExibir.length > 0;
     }, [documento, faturaOrigem, itensParaExibir]);
 
-    const podeCancelar = useMemo(() => 
-        documento && documentoFiscalService.podeCancelar(documento), 
+    const podeCancelar = useMemo(
+        () => documento && documentoFiscalService.podeCancelar(documento),
         [documento]
     );
 
     /* ==================== HANDLERS ==================== */
     const handleCancelar = async () => {
         if (!documento) return;
-        
         const motivo = prompt('Motivo do cancelamento:');
         if (!motivo) return;
 
@@ -329,6 +326,24 @@ export default function VisualizarDocumentoPage() {
 
     const handleGerarNota = (tipo: 'NC' | 'ND') => {
         router.push(`/dashboard/Faturas/Faturas/id/novo?tipo=${tipo}&origem=${documento?.id}`);
+    };
+
+    /**
+     * Download do PDF via backend (DomPDF).
+     * GET /api/documentos-fiscais/{id}/pdf/download
+     */
+    const handleDownloadPDF = async () => {
+        if (!documento?.id) return;
+        try {
+            setBaixandoPdf(true);
+            const nomeArquivo = `${documento.tipo_documento}_${documento.numero_documento || documento.id}.pdf`;
+            await documentoFiscalService.downloadPdf(documento.id, nomeArquivo);
+        } catch (err) {
+            console.error('Erro ao baixar PDF:', err);
+            alert('Erro ao baixar PDF. Tente novamente.');
+        } finally {
+            setBaixandoPdf(false);
+        }
     };
 
     /* ==================== RENDER ==================== */
@@ -370,6 +385,7 @@ export default function VisualizarDocumentoPage() {
     return (
         <MainEmpresa>
             <div className="p-4 max-w-7xl mx-auto space-y-4">
+
                 {/* Header Principal */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-lg border shadow-sm">
                     <div className="flex items-center gap-3">
@@ -397,7 +413,21 @@ export default function VisualizarDocumentoPage() {
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+                        {/* Download PDF */}
+                        <button
+                            onClick={handleDownloadPDF}
+                            disabled={baixandoPdf}
+                            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-700 bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                            title="Download PDF"
+                        >
+                            {baixandoPdf
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <Download className="w-3.5 h-3.5" />
+                            }
+                            <span>PDF</span>
+                        </button>
+
                         {podeGerarNota && (
                             <>
                                 <button
@@ -405,7 +435,10 @@ export default function VisualizarDocumentoPage() {
                                     disabled={acaoLoading === 'nc'}
                                     className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 disabled:opacity-50"
                                 >
-                                    {acaoLoading === 'nc' ? <Loader2 className="w-3 h-3 animate-spin" /> : <MinusCircle className="w-3 h-3" />}
+                                    {acaoLoading === 'nc'
+                                        ? <Loader2 className="w-3 h-3 animate-spin" />
+                                        : <MinusCircle className="w-3 h-3" />
+                                    }
                                     NC
                                 </button>
                                 <button
@@ -413,7 +446,10 @@ export default function VisualizarDocumentoPage() {
                                     disabled={acaoLoading === 'nd'}
                                     className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-white bg-amber-500 rounded-lg hover:bg-amber-600 disabled:opacity-50"
                                 >
-                                    {acaoLoading === 'nd' ? <Loader2 className="w-3 h-3 animate-spin" /> : <PlusCircle className="w-3 h-3" />}
+                                    {acaoLoading === 'nd'
+                                        ? <Loader2 className="w-3 h-3 animate-spin" />
+                                        : <PlusCircle className="w-3 h-3" />
+                                    }
                                     ND
                                 </button>
                             </>
@@ -425,18 +461,20 @@ export default function VisualizarDocumentoPage() {
                                 disabled={acaoLoading === 'cancelar'}
                                 className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50"
                             >
-                                {acaoLoading === 'cancelar' ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
+                                {acaoLoading === 'cancelar'
+                                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                                    : <XCircle className="w-3 h-3" />
+                                }
                                 Cancelar
                             </button>
                         )}
                     </div>
                 </div>
 
-                {/* Grid Principal - 3 Colunas em Desktop */}
+                {/* Grid Principal — 3 Colunas em Desktop */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                    {/* Coluna Esquerda - Documento & Cliente */}
+                    {/* Coluna Esquerda */}
                     <div className="space-y-4">
-                        {/* Info do Documento */}
                         <CompactCard>
                             <CardHeader title="Documento" icon={<FileText className="w-4 h-4" />} />
                             <div className="p-4">
@@ -444,12 +482,14 @@ export default function VisualizarDocumentoPage() {
                                     <InfoItem label="Tipo" value={TIPO_LABEL[documento.tipo_documento]} />
                                     <InfoItem label="Série" value={documento.serie} />
                                     <InfoItem label="Data Emissão" value={formatarDataHora(documento.data_emissao)} />
-                                    <InfoItem label="Vencimento" value={documento.data_vencimento ? formatarData(documento.data_vencimento) : '-'} />
+                                    <InfoItem
+                                        label="Vencimento"
+                                        value={documento.data_vencimento ? formatarData(documento.data_vencimento) : '-'}
+                                    />
                                 </InfoGrid>
                             </div>
                         </CompactCard>
 
-                        {/* Info do Cliente */}
                         <CompactCard>
                             <CardHeader title="Cliente" icon={<User className="w-4 h-4" />} />
                             <div className="p-4 space-y-3">
@@ -480,7 +520,6 @@ export default function VisualizarDocumentoPage() {
                             </div>
                         </CompactCard>
 
-                        {/* Emissor */}
                         <CompactCard>
                             <CardHeader title="Emissão" icon={<Building2 className="w-4 h-4" />} />
                             <div className="p-4">
@@ -497,12 +536,11 @@ export default function VisualizarDocumentoPage() {
                         </CompactCard>
                     </div>
 
-                    {/* Coluna Central - Itens */}
+                    {/* Coluna Central — Itens */}
                     <div className="lg:col-span-2 space-y-4">
-                        {/* Tabela de Itens */}
                         <CompactCard className="h-full">
-                            <CardHeader 
-                                title={`Itens ${documento.tipo_documento === 'RC' && faturaOrigem ? `• ${faturaOrigem.numero_documento}` : ''}`} 
+                            <CardHeader
+                                title={`Itens ${documento.tipo_documento === 'RC' && faturaOrigem ? `• ${faturaOrigem.numero_documento}` : ''}`}
                                 icon={<FileText className="w-4 h-4" />}
                             />
                             <div className="p-0">
@@ -519,7 +557,7 @@ export default function VisualizarDocumentoPage() {
                     </div>
                 </div>
 
-                {/* Grid Inferior - Valores, Pagamento e Referências */}
+                {/* Grid Inferior */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                     {/* Resumo de Valores */}
                     <CompactCard>
@@ -529,22 +567,19 @@ export default function VisualizarDocumentoPage() {
                         </div>
                     </CompactCard>
 
-                    {/* Pagamento */}
+                    {/* Pagamento & Hash */}
                     {(documento.metodo_pagamento || documento.hash_fiscal) && (
                         <CompactCard>
                             <CardHeader title="Pagamento & Autenticação" icon={<CreditCard className="w-4 h-4" />} />
                             <div className="p-4 space-y-3">
                                 {documento.metodo_pagamento && (
                                     <div className="space-y-2">
-                                        <InfoItem 
-                                            label="Método" 
-                                            value={METODO_PAGAMENTO_LABEL[documento.metodo_pagamento] || documento.metodo_pagamento} 
+                                        <InfoItem
+                                            label="Método"
+                                            value={METODO_PAGAMENTO_LABEL[documento.metodo_pagamento] || documento.metodo_pagamento}
                                         />
                                         {documento.referencia_pagamento && (
                                             <InfoItem label="Referência" value={documento.referencia_pagamento} />
-                                        )}
-                                        {documento.data_pagamento && (
-                                            <InfoItem label="Data Pagamento" value={formatarData(documento.data_pagamento)} />
                                         )}
                                     </div>
                                 )}
@@ -563,7 +598,7 @@ export default function VisualizarDocumentoPage() {
                         </CompactCard>
                     )}
 
-                    {/* Observações e Referência */}
+                    {/* Observações & Referências */}
                     <CompactCard className="lg:col-span-1">
                         <CardHeader title="Observações & Referências" icon={<Info className="w-4 h-4" />} />
                         <div className="p-4 space-y-3">

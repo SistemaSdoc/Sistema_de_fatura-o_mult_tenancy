@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
@@ -12,7 +13,8 @@ import {
     Building2,
     Hash,
     Printer,
-    Download
+    Download,
+    Loader2
 } from "lucide-react";
 import MainEmpresa from "@/app/components/MainEmpresa";
 import {
@@ -64,14 +66,12 @@ const formatarQuantidade = (valor: number | undefined | null): string => {
 
 /* ==================== COMPONENTES ==================== */
 
-// Badge de Estado
 const EstadoBadge = ({ estado }: { estado: string }) => {
     const config: Record<string, { bg: string; text: string; icon: React.ReactNode; label: string }> = {
         emitido: { bg: 'bg-blue-100', text: 'text-blue-700', icon: <FileText className="w-3 h-3" />, label: 'Emitido' },
         cancelado: { bg: 'bg-red-100', text: 'text-red-700', icon: <XCircle className="w-3 h-3" />, label: 'Cancelado' },
     };
     const { bg, text, icon, label } = config[estado] || config.emitido;
-
     return (
         <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${bg} ${text}`}>
             {icon}
@@ -80,15 +80,21 @@ const EstadoBadge = ({ estado }: { estado: string }) => {
     );
 };
 
-// Card Único de Informações
 const InfoCard = ({ children }: { children: React.ReactNode }) => (
-    <div className="bg-white rounded-lg border overflow-hidden">
-        {children}
-    </div>
+    <div className="bg-white rounded-lg border overflow-hidden">{children}</div>
 );
 
-// Seção do Card
-const CardSection = ({ title, icon, children, noBorder }: { title: string; icon: React.ReactNode; children: React.ReactNode; noBorder?: boolean }) => (
+const CardSection = ({
+    title,
+    icon,
+    children,
+    noBorder,
+}: {
+    title: string;
+    icon: React.ReactNode;
+    children: React.ReactNode;
+    noBorder?: boolean;
+}) => (
     <div className={`p-4 ${!noBorder ? 'border-b' : ''}`}>
         <div className="flex items-center gap-2 mb-3">
             <div style={{ color: '#123859' }}>{icon}</div>
@@ -98,30 +104,32 @@ const CardSection = ({ title, icon, children, noBorder }: { title: string; icon:
     </div>
 );
 
-// Linha de Informação
-const InfoRow = ({ label, value, className = "" }: { label: string; value: React.ReactNode; className?: string }) => (
+const InfoRow = ({
+    label,
+    value,
+    className = "",
+}: {
+    label: string;
+    value: React.ReactNode;
+    className?: string;
+}) => (
     <div className={`flex justify-between py-1.5 text-sm border-b border-gray-50 last:border-0 ${className}`}>
         <span className="text-gray-500">{label}:</span>
         <span className="font-medium text-right">{value}</span>
     </div>
 );
 
-// Grid de Informações
 const InfoGrid = ({ children }: { children: React.ReactNode }) => (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
-        {children}
-    </div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">{children}</div>
 );
 
-// Tabela de Itens
 const ItensTable = ({ itens, tipo }: { itens: ItemDocumento[]; tipo: 'NC' | 'ND' }) => {
-    // Garantir que todos os valores sejam números
     const itensFormatados = itens.map(item => ({
         ...item,
         quantidade: Number(item.quantidade) || 0,
         preco_unitario: Number(item.preco_unitario) || 0,
         taxa_iva: Number(item.taxa_iva) || 0,
-        total_linha: Number(item.total_linha) || 0
+        total_linha: Number(item.total_linha) || 0,
     }));
 
     return (
@@ -162,7 +170,6 @@ const ItensTable = ({ itens, tipo }: { itens: ItemDocumento[]; tipo: 'NC' | 'ND'
     );
 };
 
-// Skeleton Loading
 const SkeletonLoader = () => (
     <div className="space-y-4 animate-pulse">
         <div className="h-10 bg-gray-200 rounded w-1/3"></div>
@@ -182,10 +189,10 @@ export default function VisualizarNotaPage() {
     const [documentoOrigem, setDocumentoOrigem] = useState<DocumentoFiscal | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [baixandoPdf, setBaixandoPdf] = useState(false);
 
     const isNC = nota?.tipo_documento === 'NC';
 
-    // ==================== CARREGAR NOTA ====================
     useEffect(() => {
         const carregarNota = async () => {
             if (!notaId) {
@@ -200,9 +207,9 @@ export default function VisualizarNotaPage() {
                 const doc = await documentoFiscalService.buscarPorId(notaId);
                 setNota(doc);
 
-                // Se for NC/ND, buscar documento de origem
                 if ((doc.tipo_documento === 'NC' || doc.tipo_documento === 'ND') && doc.documentoOrigem?.id) {
-                    await carregarDocumentoOrigem(doc.documentoOrigem.id);
+                    const origem = await documentoFiscalService.buscarPorId(doc.documentoOrigem.id);
+                    setDocumentoOrigem(origem);
                 }
             } catch (err) {
                 console.error('Erro ao carregar nota:', err);
@@ -215,23 +222,27 @@ export default function VisualizarNotaPage() {
         carregarNota();
     }, [notaId]);
 
-    const carregarDocumentoOrigem = async (origemId: string) => {
+    /* ==================== HANDLERS ==================== */
+
+    /** Impressão directa da página actual */
+    const handleImprimir = () => window.print();
+
+    /**
+     * Download do PDF via backend (DomPDF).
+     * GET /api/documentos-fiscais/{id}/pdf/download
+     */
+    const handleDownloadPDF = async () => {
+        if (!nota?.id) return;
         try {
-            const origem = await documentoFiscalService.buscarPorId(origemId);
-            setDocumentoOrigem(origem);
+            setBaixandoPdf(true);
+            const nomeArquivo = `${nota.tipo_documento}_${nota.numero_documento || nota.id}.pdf`;
+            await documentoFiscalService.downloadPdf(nota.id, nomeArquivo);
         } catch (err) {
-            console.error('Erro ao carregar documento origem:', err);
+            console.error('Erro ao baixar PDF:', err);
+            alert('Erro ao baixar PDF. Tente novamente.');
+        } finally {
+            setBaixandoPdf(false);
         }
-    };
-
-    // ==================== HANDLERS ====================
-    const handleImprimir = () => {
-        window.print();
-    };
-
-    const handleDownloadPDF = () => {
-        // Implementar download de PDF
-        console.log('Download PDF');
     };
 
     const handleVoltarParaOrigem = () => {
@@ -240,7 +251,7 @@ export default function VisualizarNotaPage() {
         }
     };
 
-    // ==================== RENDER ====================
+    /* ==================== RENDER ==================== */
     if (loading) {
         return (
             <MainEmpresa>
@@ -286,6 +297,7 @@ export default function VisualizarNotaPage() {
     return (
         <MainEmpresa>
             <div className="p-3 sm:p-4 max-w-5xl mx-auto space-y-3">
+
                 {/* Cabeçalho */}
                 <div className="bg-white rounded-lg border p-3 sm:p-4">
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -297,8 +309,14 @@ export default function VisualizarNotaPage() {
                                 <ArrowLeft className="w-4 h-4" style={{ color: colors.primary }} />
                             </button>
                             <div className="min-w-0 flex-1">
-                                <h1 className="text-base sm:text-lg font-bold flex items-center gap-1.5 truncate" style={{ color: colors.primary }}>
-                                    {isNC ? <MinusCircle className="w-4 h-4 shrink-0" /> : <PlusCircle className="w-4 h-4 shrink-0" />}
+                                <h1
+                                    className="text-base sm:text-lg font-bold flex items-center gap-1.5 truncate"
+                                    style={{ color: colors.primary }}
+                                >
+                                    {isNC
+                                        ? <MinusCircle className="w-4 h-4 shrink-0" />
+                                        : <PlusCircle className="w-4 h-4 shrink-0" />
+                                    }
                                     <span className="truncate">{nota.numero_documento}</span>
                                 </h1>
                                 <p className="text-xs text-gray-500">
@@ -308,6 +326,7 @@ export default function VisualizarNotaPage() {
                         </div>
 
                         <div className="flex items-center gap-1.5 flex-wrap w-full sm:w-auto justify-end">
+                            {/* Impressão directa */}
                             <button
                                 onClick={handleImprimir}
                                 className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
@@ -315,13 +334,20 @@ export default function VisualizarNotaPage() {
                             >
                                 <Printer className="w-4 h-4" />
                             </button>
+
+                            {/* Download PDF via backend */}
                             <button
                                 onClick={handleDownloadPDF}
-                                className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                                disabled={baixandoPdf}
+                                className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
                                 title="Download PDF"
                             >
-                                <Download className="w-4 h-4" />
+                                {baixandoPdf
+                                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                                    : <Download className="w-4 h-4" />
+                                }
                             </button>
+
                             <EstadoBadge estado={nota.estado} />
                         </div>
                     </div>
@@ -336,9 +362,7 @@ export default function VisualizarNotaPage() {
                                 <InfoRow label="Tipo" value={TIPO_LABEL[nota.tipo_documento]} />
                                 <InfoRow label="Série" value={nota.serie} />
                                 <InfoRow label="Data de Emissão" value={formatarDataHora(nota.data_emissao)} />
-                                {nota.motivo && (
-                                    <InfoRow label="Motivo" value={nota.motivo} />
-                                )}
+                                {nota.motivo && <InfoRow label="Motivo" value={nota.motivo} />}
                             </div>
                             <div>
                                 <InfoRow label="Cliente" value={nomeCliente} />
@@ -386,7 +410,7 @@ export default function VisualizarNotaPage() {
                                     </div>
                                 )}
                             </div>
-                            
+
                             <div className="space-y-1 bg-gray-50 p-3 rounded-lg">
                                 <div className="flex justify-between text-sm">
                                     <span className="text-gray-600">Base Tributável:</span>
@@ -402,7 +426,11 @@ export default function VisualizarNotaPage() {
                                         <span className="font-medium text-red-600">-{formatarPreco(totalRetencao)}</span>
                                     </div>
                                 )}
-                                <div className={`flex justify-between text-base font-bold pt-2 border-t border-gray-200 mt-2 ${isNC ? 'text-red-600' : 'text-green-600'}`}>
+                                <div
+                                    className={`flex justify-between text-base font-bold pt-2 border-t border-gray-200 mt-2 ${
+                                        isNC ? 'text-red-600' : 'text-green-600'
+                                    }`}
+                                >
                                     <span>TOTAL {isNC ? '(CRÉDITO)' : '(DÉBITO)'}:</span>
                                     <span>{isNC ? '- ' : '+ '}{formatarPreco(totalLiquido)}</span>
                                 </div>
@@ -410,18 +438,14 @@ export default function VisualizarNotaPage() {
                         </div>
                     </CardSection>
 
-                    {/* Itens da Nota */}
+                    {/* Seção 4: Itens */}
                     {nota.itens && nota.itens.length > 0 && (
-                        <CardSection 
-                            title="Itens" 
-                            icon={<Package className="w-4 h-4" />}
-                            noBorder
-                        >
+                        <CardSection title="Itens" icon={<Package className="w-4 h-4" />} noBorder>
                             <ItensTable itens={nota.itens} tipo={isNC ? 'NC' : 'ND'} />
                         </CardSection>
                     )}
 
-                    {/* Hash Fiscal (se existir) */}
+                    {/* Seção 5: Hash Fiscal */}
                     {nota.hash_fiscal && (
                         <CardSection title="Autenticação" icon={<Hash className="w-4 h-4" />} noBorder>
                             <div className="bg-gray-50 p-3 rounded-lg">

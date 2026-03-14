@@ -1,5 +1,3 @@
-// src/services/vendas.ts
-
 import api from "./axios";
 import { AxiosError } from "axios";
 
@@ -35,18 +33,16 @@ export interface User {
 }
 
 /* -------- Tipos de Documento Fiscal -------- */
-// TODOS os tipos de documento
 export type TipoDocumentoFiscal =
-    | 'FT'   // Fatura - VENDA
-    | 'FR'   // Fatura-Recibo - VENDA
-    | 'FP'   // Fatura Proforma - NÃO VENDA (pré-documento)
-    | 'RC'   // Recibo - VENDA (pagamento)
-    | 'NC'   // Nota de Crédito - NÃO VENDA
-    | 'ND'   // Nota de Débito - NÃO VENDA
-    | 'FA'   // Fatura de Adiantamento - NÃO VENDA (vira venda com recibo)
-    | 'FRt'; // Fatura de Retificação - NÃO VENDA
+    | 'FT'   // Fatura
+    | 'FR'   // Fatura-Recibo
+    | 'FP'   // Fatura Proforma
+    | 'RC'   // Recibo
+    | 'NC'   // Nota de Crédito
+    | 'ND'   // Nota de Débito
+    | 'FA'   // Fatura de Adiantamento
+    | 'FRt'; // Fatura de Retificação
 
-// Nomes dos tipos para exibição
 export const NOMES_TIPO_DOCUMENTO: Record<TipoDocumentoFiscal, string> = {
     FT: 'Fatura',
     FR: 'Fatura-Recibo',
@@ -58,10 +54,7 @@ export const NOMES_TIPO_DOCUMENTO: Record<TipoDocumentoFiscal, string> = {
     FRt: 'Fatura de Retificação',
 };
 
-// Tipos que podem ser criados via venda (FT, FR, FP)
 export const TIPOS_DOCUMENTO_VENDA: TipoDocumentoFiscal[] = ['FT', 'FR', 'FP'];
-
-// Tipos que são considerados VENDAS (FT, FR, RC)
 export const TIPOS_VENDA: TipoDocumentoFiscal[] = ['FT', 'FR', 'RC'];
 
 /* -------- Estados de Documento Fiscal -------- */
@@ -80,7 +73,6 @@ export interface CriarItemVendaPayload {
     quantidade: number;
     preco_venda: number;
     desconto?: number;
-    // ✅ NOVO: taxa de retenção para serviços (opcional)
     taxa_retencao?: number;
 }
 
@@ -95,23 +87,22 @@ export interface DadosPagamento {
 /* -------- Payload de Criação de Venda -------- */
 export interface CriarVendaPayload {
     cliente_id?: string | null;
-    cliente_nome?: string;           // Para cliente avulso
-    cliente_nif?: string;            // Para cliente avulso (opcional)
-    tipo_documento?: TipoDocumentoFiscal; // FT, FR ou FP
-    faturar?: boolean;              // false para FP, true para FT/FR
+    cliente_nome?: string;
+    cliente_nif?: string;
+    tipo_documento?: TipoDocumentoFiscal;
+    faturar?: boolean;
     itens: CriarItemVendaPayload[];
-    // Obrigatório para Fatura-Recibo (FR)
     dados_pagamento?: DadosPagamento;
     observacoes?: string;
 }
 
-/* -------- Payload para Documento Fiscal (NOVO) -------- */
+/* -------- Payload para Documento Fiscal -------- */
 export interface CriarDocumentoFiscalPayload {
-    tipo_documento: TipoDocumentoFiscal; // FT, FR, FP, FA, NC, ND, RC, FRt
+    tipo_documento: TipoDocumentoFiscal;
     venda_id?: string;
     cliente_id?: string | null;
-    cliente_nome?: string;           // Para cliente avulso
-    cliente_nif?: string;            // Para cliente avulso (opcional)
+    cliente_nome?: string;
+    cliente_nif?: string;
     fatura_id?: string;
     itens: Array<{
         produto_id?: string;
@@ -120,7 +111,7 @@ export interface CriarDocumentoFiscalPayload {
         preco_unitario: number;
         desconto?: number;
         taxa_iva?: number;
-        taxa_retencao?: number;      // ✅ NOVO: taxa de retenção para serviços
+        taxa_retencao?: number;
     }>;
     dados_pagamento?: DadosPagamento;
     motivo?: string;
@@ -136,7 +127,7 @@ export interface Cliente {
     nome: string;
     nif: string | null;
     tipo: TipoCliente;
-    status?: 'ativo' | 'inativo';    // ✅ NOVO
+    status?: 'ativo' | 'inativo';
     telefone: string | null;
     email: string | null;
     endereco: string | null;
@@ -150,7 +141,7 @@ export interface CriarClienteInput {
     nome: string;
     nif?: string;
     tipo?: TipoCliente;
-    status?: 'ativo' | 'inativo';    // ✅ NOVO
+    status?: 'ativo' | 'inativo';
     telefone?: string;
     email?: string;
     endereco?: string;
@@ -212,20 +203,15 @@ export interface Produto {
     estoque_minimo: number;
     status: StatusProduto;
     tipo: TipoProduto;
-    // Campos de serviço
     retencao?: number;
     duracao_estimada?: string;
     unidade_medida?: UnidadeMedida;
-    // Campos calculados
     valor_retencao?: number;
     preco_liquido?: number;
-    // Soft delete
     deleted_at?: string | null;
     created_at?: string;
     updated_at?: string;
-    // Relacionamentos
     movimentosStock?: MovimentoStock[];
-    // Campos adicionais para listagem
     data_exclusao?: string;
     esta_deletado?: boolean;
 }
@@ -244,7 +230,6 @@ export interface CriarProdutoInput {
     estoque_atual?: number;
     estoque_minimo?: number;
     status?: StatusProduto;
-    // Campos de serviço
     retencao?: number;
     duracao_estimada?: string;
     unidade_medida?: UnidadeMedida;
@@ -264,7 +249,6 @@ export interface ListarProdutosParams {
     paginar?: boolean;
     per_page?: number;
     with_trashed?: boolean;
-    // ✅ NOVOS FILTROS
     apenas_servicos?: boolean;
     apenas_produtos?: boolean;
     com_retencao?: boolean;
@@ -304,15 +288,15 @@ export interface ItemDocumentoFiscal {
     observacoes?: string | null;
 }
 
-/* -------- Documento Fiscal (atualizado) -------- */
+/* -------- Documento Fiscal -------- */
 export interface DocumentoFiscal {
     id: string;
     user_id: string;
     venda_id?: string | null;
     cliente_id?: string | null;
     cliente?: Cliente;
-    cliente_nome?: string; // Para cliente avulso
-    cliente_nif?: string;  // Para cliente avulso
+    cliente_nome?: string;
+    cliente_nif?: string;
     fatura_id?: string | null;
     documento_origem?: DocumentoFiscal;
 
@@ -330,7 +314,7 @@ export interface DocumentoFiscal {
 
     base_tributavel: number;
     total_iva: number;
-    total_retencao: number; // ✅ Soma das retenções de serviços
+    total_retencao: number;
     total_liquido: number;
 
     estado: EstadoDocumentoFiscal;
@@ -340,11 +324,9 @@ export interface DocumentoFiscal {
     hash_fiscal?: string | null;
     referencia_externa?: string | null;
 
-    // Campos específicos de recibo
     metodo_pagamento?: 'transferencia' | 'multibanco' | 'dinheiro' | 'cheque' | 'cartao' | null;
     referencia_pagamento?: string | null;
 
-    // Relacionamentos
     itens?: ItemDocumentoFiscal[];
     recibos?: DocumentoFiscal[];
     notas_credito?: DocumentoFiscal[];
@@ -352,7 +334,6 @@ export interface DocumentoFiscal {
     adiantamentos_vinculados?: DocumentoFiscal[];
     faturas_vinculadas?: DocumentoFiscal[];
 
-    // Acessores virtuais
     valor_pendente?: number;
     valor_pago?: number;
     esta_paga?: boolean;
@@ -370,11 +351,10 @@ export interface DocumentoFiscal {
     updated_at?: string;
 }
 
-/* -------- Item de Venda (CORRIGIDO - em conformidade com VendaController) -------- */
+/* -------- Item de Venda -------- */
 export interface ItemVenda {
     id: string;
     produto_id: string;
-    // ✅ CORRIGIDO: produto é objeto ou null, NÃO boolean
     produto: {
         id: string;
         nome: string;
@@ -387,16 +367,16 @@ export interface ItemVenda {
     desconto: number;
     base_tributavel: number;
     valor_iva: number;
-    valor_retencao: number;      // Valor retido do serviço (calculado)
-    taxa_retencao?: number;      // Taxa de retenção aplicada (ex: 6.5)
+    valor_retencao: number;
+    taxa_retencao?: number;
     subtotal: number;
-    subtotal_liquido: number;    // ✅ OBRIGATÓRIO: subtotal - valor_retencao
-    eh_servico: boolean;         // ✅ Flag calculada no backend
+    subtotal_liquido: number;
+    eh_servico: boolean;
     codigo_produto?: string;
     unidade?: string;
 }
 
-/* -------- Totais por Tipo (NOVO - conforme VendaController) -------- */
+/* -------- Totais por Tipo -------- */
 export interface TotaisPorTipo {
     produtos: {
         quantidade: number;
@@ -409,63 +389,52 @@ export interface TotaisPorTipo {
     };
 }
 
-/* -------- Venda (CORRIGIDO - em conformidade com VendaController) -------- */
+/* -------- Venda -------- */
 export interface Venda {
     id: string;
-    // Dados do documento fiscal (se existir)
     numero: string;
     serie: string;
+    numero_documento?: string;
     tipo_documento: TipoDocumentoFiscal | 'venda';
     tipo_documento_nome: string;
+    tipo_documento_fiscal?: TipoDocumentoFiscal;
 
-    // Cliente
     cliente_id?: string | null;
     cliente?: Cliente | null;
-    cliente_nome?: string | null; // Para cliente avulso
-    cliente_nif?: string | null;  // Para cliente avulso
+    cliente_nome?: string | null;
+    cliente_nif?: string | null;
 
-    // Usuário
     user_id: string;
     user?: User;
 
-    // Datas
     data_venda: string;
     hora_venda: string;
     created_at?: string;
 
-    // Valores
     total: number;
     base_tributavel: number;
     total_iva: number;
-    total_retencao: number;      // Total das retenções
-
-    // ✅ NOVO: Retenção de serviços (conforme VendaController)
+    total_retencao: number;
     total_retencao_servicos: number;
     tem_servicos: boolean;
     quantidade_servicos: number;
 
-    // Status
     status: 'aberta' | 'faturada' | 'cancelada';
     estado_pagamento: EstadoPagamentoVenda;
     faturado: boolean;
-    eh_venda: boolean;           // FT, FR ou RC
-    paga: boolean;               // estado_pagamento === 'paga'
+    eh_venda: boolean;
+    paga: boolean;
 
-    // Documento fiscal completo
     documento_fiscal?: DocumentoFiscal | null;
-
-    // Itens
     itens?: ItemVenda[];
-
-    // ✅ NOVO: Totais por tipo (conforme VendaController)
     totais_por_tipo?: TotaisPorTipo;
 
-    // Campos legados/compatibilidade
-    numero_documento?: string;
-    tipo_documento_fiscal?: TipoDocumentoFiscal;
     observacoes?: string;
     hash_fiscal?: string;
     pode_receber_pagamento?: boolean;
+    pode_ser_cancelada?: boolean;
+    valor_pendente?: number;
+    valor_pago?: number;
     deleted_at?: string;
 }
 
@@ -533,10 +502,9 @@ export interface CriarMovimentoPayload {
     custo_unitario?: number;
 }
 
-/* -------- Dashboard (atualizado com tipos do dashboard.ts) -------- */
+/* -------- Dashboard -------- */
 export interface DashboardData {
     user: User;
-
     kpis: {
         ticketMedio: number;
         crescimentoPercentual: number;
@@ -544,19 +512,15 @@ export interface DashboardData {
         totalFaturado: number;
         totalNotasCredito: number;
         totalLiquido: number;
-        // ✅ NOVO
         totalRetencao?: number;
         totalRetencaoMes?: number;
     };
-
     produtos: {
         total: number;
         ativos: number;
         inativos: number;
         stock_baixo: number;
     };
-
-    // ✅ NOVO: estatísticas de serviços
     servicos?: {
         total: number;
         ativos: number;
@@ -564,7 +528,6 @@ export interface DashboardData {
         precoMedio: number;
         comRetencao: number;
     };
-
     vendas: {
         total: number;
         abertas: number;
@@ -582,19 +545,16 @@ export interface DashboardData {
                 estado: EstadoDocumentoFiscal;
             };
             data: string;
-            // ✅ NOVO
             tem_servicos?: boolean;
             total_retencao?: number;
         }>;
     };
-
     documentos_fiscais: {
         total: number;
         por_tipo: Record<TipoDocumentoFiscal, {
             nome: string;
             quantidade: number;
             valor: number;
-            // ✅ NOVO
             retencao?: number;
         }>;
         por_estado: Array<{
@@ -614,7 +574,6 @@ export interface DashboardData {
             estado: EstadoDocumentoFiscal;
             estado_pagamento: EstadoPagamentoVenda;
             data: string;
-            // ✅ NOVO
             retencao?: number;
         }>;
         por_mes: Array<{
@@ -624,7 +583,6 @@ export interface DashboardData {
             NC: number;
             ND: number;
             total: number;
-            // ✅ NOVO
             retencao?: number;
         }>;
         por_dia: Array<{
@@ -633,7 +591,6 @@ export interface DashboardData {
             retencao?: number;
         }>;
     };
-
     pagamentos: {
         hoje: number;
         total_pendente: number;
@@ -645,12 +602,10 @@ export interface DashboardData {
             valor_total: number;
         }>;
     };
-
     clientes: {
         ativos: number;
         novos_mes: number;
     };
-
     indicadores: {
         produtosMaisVendidos: Array<{
             produto: string;
@@ -658,7 +613,6 @@ export interface DashboardData {
             quantidade: number;
             valor_total: number;
         }>;
-        // ✅ NOVO: serviços mais vendidos
         servicosMaisVendidos?: Array<{
             produto: string;
             codigo?: string;
@@ -667,16 +621,13 @@ export interface DashboardData {
             retencao_total: number;
         }>;
     };
-
     alertas: {
         documentos_vencidos: number;
         documentos_proximo_vencimento: number;
         adiantamentos_pendentes: number;
         proformas_pendentes: number;
-        // ✅ NOVO
         servicos_com_retencao_pendente?: number;
     };
-
     periodo: {
         mes_atual: number;
         ano_atual: number;
@@ -695,7 +646,6 @@ export interface ResumoDocumentosFiscais {
         quantidade: number;
         valor_total: number;
         mes_atual: number;
-        // ✅ NOVO
         retencao_total?: number;
     }>;
     por_estado: Record<EstadoDocumentoFiscal, number>;
@@ -724,7 +674,6 @@ export interface EstatisticasPagamentos {
     };
     prazo_medio_pagamento: number;
     metodos_pagamento: Record<string, number>;
-    // ✅ NOVO
     recebidos_com_retencao?: number;
 }
 
@@ -742,7 +691,6 @@ export interface AlertasPendentes {
             valor_pendente: number;
             data_vencimento: string;
             dias_atraso: number;
-            // ✅ NOVO
             retencao?: number;
         }>;
     };
@@ -758,7 +706,6 @@ export interface AlertasPendentes {
             valor_pendente: number;
             data_vencimento: string;
             dias_ate_vencimento: number;
-            // ✅ NOVO
             retencao?: number;
         }>;
     };
@@ -823,20 +770,17 @@ export interface EvolucaoMensal {
     }>;
 }
 
-/* ================== SERVIÇOS ================== */
+/* ================== HELPERS DE PAYLOAD ================== */
 
-/* -------- Helper para limpar payload de venda -------- */
 function criarPayloadVenda(payload: CriarVendaPayload): Record<string, unknown> {
     const cleanPayload: Record<string, unknown> = {
         itens: payload.itens,
     };
 
-    // Para cliente cadastrado, enviar cliente_id
     if (payload.cliente_id) {
         cleanPayload.cliente_id = payload.cliente_id;
     }
 
-    // Para cliente avulso, enviar cliente_nome e opcionalmente cliente_nif
     if (payload.cliente_nome && payload.cliente_nome.trim() !== '') {
         cleanPayload.cliente_nome = payload.cliente_nome.trim();
         if (payload.cliente_nif) {
@@ -844,20 +788,16 @@ function criarPayloadVenda(payload: CriarVendaPayload): Record<string, unknown> 
         }
     }
 
-    // Enviar tipo_documento se existir (FT, FR ou FP)
     if (payload.tipo_documento) {
         cleanPayload.tipo_documento = payload.tipo_documento;
     }
 
-    // faturar false para FP, true para FT/FR
     cleanPayload.faturar = payload.tipo_documento !== 'FP';
 
-    // Dados de pagamento apenas para FR
     if (payload.dados_pagamento && payload.tipo_documento === 'FR') {
         cleanPayload.dados_pagamento = payload.dados_pagamento;
     }
 
-    // Observações
     if (payload.observacoes) {
         cleanPayload.observacoes = payload.observacoes;
     }
@@ -865,7 +805,6 @@ function criarPayloadVenda(payload: CriarVendaPayload): Record<string, unknown> 
     return cleanPayload;
 }
 
-/* -------- Helper para limpar payload de documento fiscal -------- */
 function criarPayloadDocumentoFiscal(payload: CriarDocumentoFiscalPayload): Record<string, unknown> {
     const cleanPayload: Record<string, unknown> = {
         tipo_documento: payload.tipo_documento,
@@ -876,12 +815,10 @@ function criarPayloadDocumentoFiscal(payload: CriarDocumentoFiscalPayload): Reco
         cleanPayload.venda_id = payload.venda_id;
     }
 
-    // Para cliente cadastrado, enviar cliente_id
     if (payload.cliente_id) {
         cleanPayload.cliente_id = payload.cliente_id;
     }
 
-    // Para cliente avulso, enviar cliente_nome e opcionalmente cliente_nif
     if (payload.cliente_nome && payload.cliente_nome.trim() !== '') {
         cleanPayload.cliente_nome = payload.cliente_nome.trim();
         if (payload.cliente_nif) {
@@ -912,6 +849,8 @@ function criarPayloadDocumentoFiscal(payload: CriarDocumentoFiscalPayload): Reco
     return cleanPayload;
 }
 
+/* ================== SERVIÇOS ================== */
+
 /* -------- Vendas -------- */
 export const vendaService = {
     async obterDadosNovaVenda(): Promise<{
@@ -938,11 +877,8 @@ export const vendaService = {
     async criar(payload: CriarVendaPayload): Promise<{ venda: Venda; message: string } | null> {
         try {
             const cleanPayload = criarPayloadVenda(payload);
-            console.log('[VENDA SERVICE] Payload:', cleanPayload);
-
             const { data } = await api.post("/api/vendas", cleanPayload);
             
-            // ✅ Garantir que campos calculados existam na resposta
             if (data.venda) {
                 data.venda = this.normalizarVenda(data.venda);
             }
@@ -958,15 +894,14 @@ export const vendaService = {
         status?: string;
         faturadas?: boolean;
         estado_pagamento?: EstadoPagamentoVenda;
-        apenas_vendas?: boolean;  // Filtrar apenas FT, FR, RC
+        apenas_vendas?: boolean;
         tipo_documento?: TipoDocumentoFiscal;
         cliente_id?: string;
         data_inicio?: string;
         data_fim?: string;
-        // ✅ NOVOS FILTROS
         tipo_item?: 'produto' | 'servico';
         com_retencao?: boolean;
-    }): Promise<{ message: string; vendas: Venda[] } | null> {
+    }): Promise<{ message: string; vendas: Venda[]; pagination?: any } | null> {
         try {
             const queryParams = new URLSearchParams();
             if (params?.status) queryParams.append('status', params.status);
@@ -985,7 +920,6 @@ export const vendaService = {
 
             const { data } = await api.get(url);
 
-            // ✅ Normalizar vendas para garantir conformidade com VendaController
             if (data.vendas) {
                 data.vendas = data.vendas.map((venda: Venda) => this.normalizarVenda(venda));
             }
@@ -1001,7 +935,6 @@ export const vendaService = {
         try {
             const { data } = await api.get(`/api/vendas/${id}`);
             
-            // ✅ Normalizar venda para garantir conformidade
             if (data.venda) {
                 data.venda = this.normalizarVenda(data.venda);
             }
@@ -1015,7 +948,7 @@ export const vendaService = {
 
     async cancelar(id: string): Promise<{ message: string; venda: Venda } | null> {
         try {
-            const { data } = await api.post(`/api/vendas/${id}/cancelar`);
+            const { data } = await api.post(`/api/vendas/${id}/cancelar`, { motivo: 'Cancelamento manual' });
             
             if (data.venda) {
                 data.venda = this.normalizarVenda(data.venda);
@@ -1048,7 +981,6 @@ export const vendaService = {
         }
     },
 
-    // Converter FP para FT
     async converterProformaParaFatura(id: string, dadosPagamento?: {
         valor: number;
         metodo_pagamento: 'transferencia' | 'multibanco' | 'dinheiro' | 'cheque' | 'cartao';
@@ -1068,14 +1000,50 @@ export const vendaService = {
         }
     },
 
-    // ✅ NOVO: Helper para normalizar venda e garantir conformidade com VendaController
+    async estatisticas(params?: { ano?: number; mes?: number }): Promise<any | null> {
+        try {
+            const queryParams = new URLSearchParams();
+            if (params?.ano) queryParams.append('ano', params.ano.toString());
+            if (params?.mes) queryParams.append('mes', params.mes.toString());
+
+            const queryString = queryParams.toString();
+            const url = `/api/vendas/estatisticas${queryString ? `?${queryString}` : ''}`;
+
+            const { data } = await api.get(url);
+            return data;
+        } catch (err) {
+            handleAxiosError(err, "[VENDA SERVICE] Erro ao obter estatísticas");
+            return null;
+        }
+    },
+
+    async relatorio(params?: {
+        tipo?: 'vendas' | 'proformas' | 'adiantamentos';
+        data_inicio?: string;
+        data_fim?: string;
+    }): Promise<any | null> {
+        try {
+            const queryParams = new URLSearchParams();
+            if (params?.tipo) queryParams.append('tipo', params.tipo);
+            if (params?.data_inicio) queryParams.append('data_inicio', params.data_inicio);
+            if (params?.data_fim) queryParams.append('data_fim', params.data_fim);
+
+            const queryString = queryParams.toString();
+            const url = `/api/vendas/relatorio${queryString ? `?${queryString}` : ''}`;
+
+            const { data } = await api.get(url);
+            return data;
+        } catch (err) {
+            handleAxiosError(err, "[VENDA SERVICE] Erro ao obter relatório");
+            return null;
+        }
+    },
+
     normalizarVenda(venda: Venda): Venda {
-        // Garantir que itens estejam normalizados
         if (venda.itens) {
             venda.itens = venda.itens.map(item => this.normalizarItemVenda(item));
         }
 
-        // Calcular estatísticas de serviços se não vierem do backend
         if (venda.totais_por_tipo === undefined && venda.itens) {
             const servicos = venda.itens.filter(item => item.eh_servico);
             const produtos = venda.itens.filter(item => !item.eh_servico);
@@ -1093,7 +1061,6 @@ export const vendaService = {
             };
         }
 
-        // Garantir campos de retenção
         if (venda.total_retencao_servicos === undefined && venda.itens) {
             venda.total_retencao_servicos = venda.itens
                 .filter(item => item.eh_servico)
@@ -1108,7 +1075,6 @@ export const vendaService = {
             venda.quantidade_servicos = venda.itens.filter(item => item.eh_servico).length;
         }
 
-        // Garantir flags derivadas
         if (venda.paga === undefined) {
             venda.paga = venda.estado_pagamento === 'paga';
         }
@@ -1116,14 +1082,11 @@ export const vendaService = {
         return venda;
     },
 
-    // ✅ NOVO: Helper para normalizar item de venda
     normalizarItemVenda(item: ItemVenda): ItemVenda {
-        // Garantir que eh_servico esteja calculado
         if (item.eh_servico === undefined && item.produto) {
             item.eh_servico = item.produto.tipo === 'servico';
         }
 
-        // Garantir subtotal_liquido calculado
         if (item.subtotal_liquido === undefined) {
             item.subtotal_liquido = item.subtotal - (item.valor_retencao ?? 0);
         }
@@ -1138,16 +1101,15 @@ export const documentoFiscalService = {
         tipo?: TipoDocumentoFiscal;
         estado?: EstadoDocumentoFiscal;
         cliente_id?: string;
-        cliente_nome?: string; // Para cliente avulso
+        cliente_nome?: string;
         data_inicio?: string;
         data_fim?: string;
         pendentes?: boolean;
         adiantamentos_pendentes?: boolean;
         proformas_pendentes?: boolean;
-        apenas_vendas?: boolean; // Filtrar apenas FT, FR, RC
-        apenas_nao_vendas?: boolean; // Filtrar FP, FA, NC, ND, FRt
+        apenas_vendas?: boolean;
+        apenas_nao_vendas?: boolean;
         per_page?: number;
-        // ✅ NOVOS FILTROS
         com_retencao?: boolean;
     }): Promise<{ message: string; data: { documentos: DocumentoFiscal[] } } | null> {
         try {
@@ -1177,24 +1139,11 @@ export const documentoFiscalService = {
         }
     },
 
-    /**
-     * Emitir um documento fiscal (FT, FR, FP, FA, NC, ND, RC, FRt)
-     * Para FP (Fatura Proforma): não mexe em stock, não é venda
-     */
     async emitir(payload: CriarDocumentoFiscalPayload): Promise<{
         data: unknown; message: string; documento: DocumentoFiscal
     } | null> {
         try {
             const cleanPayload = criarPayloadDocumentoFiscal(payload);
-
-            // Log para debug
-            console.log('[DOCUMENTO FISCAL SERVICE] Emitindo documento:', {
-                tipo: payload.tipo_documento,
-                cliente: payload.cliente_id ? 'cadastrado' : (payload.cliente_nome ? 'avulso' : 'não informado'),
-                itens: payload.itens.length,
-                tem_retencao: payload.itens.some(i => i.taxa_retencao && i.taxa_retencao > 0)
-            });
-
             const { data } = await api.post("/api/documentos-fiscais/emitir", cleanPayload);
             return data;
         } catch (err) {
@@ -1204,11 +1153,7 @@ export const documentoFiscalService = {
     },
 
     async obter(id: string): Promise<{ message: string; data: { documento: DocumentoFiscal } } | null> {
-        console.log('========== DOCUMENTO FISCAL SERVICE ==========');
-        console.log('1. Service obter() chamado com ID:', id);
-
         if (!id || id.trim() === '') {
-            console.error('ERRO: ID inválido no service');
             throw new Error('ID do documento não fornecido');
         }
 
@@ -1244,7 +1189,7 @@ export const documentoFiscalService = {
             quantidade: number;
             preco_unitario: number;
             taxa_iva?: number;
-            taxa_retencao?: number; // ✅ NOVO
+            taxa_retencao?: number;
         }>;
         motivo: string;
     }): Promise<{ message: string; documento: DocumentoFiscal } | null> {
@@ -1264,7 +1209,7 @@ export const documentoFiscalService = {
             quantidade: number;
             preco_unitario: number;
             taxa_iva?: number;
-            taxa_retencao?: number; // ✅ NOVO
+            taxa_retencao?: number;
         }>;
         motivo?: string;
     }): Promise<{ message: string; documento: DocumentoFiscal; data?: { documento: DocumentoFiscal } } | null> {
@@ -1290,7 +1235,7 @@ export const documentoFiscalService = {
         valor: number;
     }): Promise<{ message: string; data: { adiantamento: DocumentoFiscal; fatura: DocumentoFiscal } } | null> {
         try {
-            const { data } = await api.post(`/api/documentos-fiscais/${adiantamentoId}/vincular`, payload);
+            const { data } = await api.post(`/api/documentos-fiscais/${adiantamentoId}/vincular-adiantamento`, payload);
             return data;
         } catch (err) {
             handleAxiosError(err, "[DOCUMENTO FISCAL SERVICE] Erro ao vincular adiantamento");
@@ -1355,7 +1300,6 @@ export const documentoFiscalService = {
             adiantamentos_vencidos: { total: number; items: DocumentoFiscal[] };
             faturas_com_adiantamentos_pendentes: { total: number; items: DocumentoFiscal[] };
             proformas_pendentes: { total: number; items: DocumentoFiscal[] };
-            // ✅ NOVO
             servicos_com_retencao_proximos?: { total: number; items: DocumentoFiscal[] };
         }
     } | null> {
@@ -1388,7 +1332,6 @@ export const documentoFiscalService = {
             documentos_cancelados_mes: number;
             total_vendas_mes: number;
             total_nao_vendas_mes: number;
-            // ✅ NOVO
             total_retencao_mes?: number;
             documentos_com_retencao?: number;
         }
@@ -1399,6 +1342,26 @@ export const documentoFiscalService = {
         } catch (err) {
             handleAxiosError(err, "[DOCUMENTO FISCAL SERVICE] Erro ao obter dashboard");
             return null;
+        }
+    },
+
+    async downloadPdf(id: string, nomeArquivo?: string): Promise<void> {
+        try {
+            const response = await api.get(`/api/documentos-fiscais/${id}/pdf/download`, {
+                responseType: 'blob',
+            });
+
+            const blob = new Blob([response.data], { type: 'application/pdf' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = nomeArquivo ?? `documento-${id}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            handleAxiosError(err, "[DOCUMENTO FISCAL SERVICE] Erro ao baixar PDF");
         }
     },
 };
@@ -1416,9 +1379,7 @@ const noCacheConfig = {
 
 export const clienteService = {
     async listar(params?: { status?: 'ativo' | 'inativo' | 'todos' }): Promise<Cliente[]> {
-        console.log('[CLIENTE SERVICE] Listar clientes - Iniciando...');
         const timestamp = new Date().getTime();
-
         let url = `${API_PREFIX}/clientes?t=${timestamp}`;
         if (params?.status && params.status !== 'todos') {
             url += `&status=${params.status}`;
@@ -1433,14 +1394,12 @@ export const clienteService = {
     },
 
     async listarTodos(): Promise<Cliente[]> {
-        console.log('[CLIENTE SERVICE] Listar todos clientes - Iniciando...');
         const timestamp = new Date().getTime();
         const response = await api.get(`${API_PREFIX}/clientes/todos?t=${timestamp}`, noCacheConfig);
         return response.data.clientes || [];
     },
 
     async buscar(id: string): Promise<Cliente | null> {
-        console.log('[CLIENTE SERVICE] Buscar cliente - ID:', id);
         const timestamp = new Date().getTime();
         try {
             const response = await api.get(`${API_PREFIX}/clientes/${id}?t=${timestamp}`, noCacheConfig);
@@ -1452,7 +1411,6 @@ export const clienteService = {
     },
 
     async criar(dados: CriarClienteInput): Promise<Cliente | null> {
-        console.log('[CLIENTE SERVICE] Criar cliente - Dados:', dados);
         try {
             const response = await api.post(`${API_PREFIX}/clientes`, dados);
             return response.data.cliente;
@@ -1463,9 +1421,8 @@ export const clienteService = {
     },
 
     async atualizar(id: string, dados: AtualizarClienteInput): Promise<Cliente | null> {
-        const url = `${API_PREFIX}/clientes/${id}`;
         try {
-            const response = await api.put(url, dados);
+            const response = await api.put(`${API_PREFIX}/clientes/${id}`, dados);
             return response.data.cliente;
         } catch (err) {
             handleAxiosError(err, "[CLIENTE] Erro ao atualizar cliente");
@@ -1545,7 +1502,6 @@ export function getTipoClienteColor(tipo: TipoCliente): string {
     return tipo === "empresa" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-700";
 }
 
-// ✅ NOVO: funções para status do cliente
 export function getStatusClienteLabel(status: string): string {
     return status === 'ativo' ? 'Ativo' : 'Inativo';
 }
@@ -1653,7 +1609,7 @@ export const produtoService = {
             if (params.busca) queryParams.append("busca", params.busca);
 
             const queryString = queryParams.toString();
-            const url = `${API_PREFIX}/produtos/all${queryString ? `?${queryString}` : ""}`;
+            const url = `${API_PREFIX}/produtos/todos${queryString ? `?${queryString}` : ""}`;
 
             const response = await api.get(url);
             return response.data;
@@ -1697,7 +1653,6 @@ export const produtoService = {
 
     async criar(dados: CriarProdutoInput): Promise<Produto | null> {
         try {
-            console.log('[PRODUTO SERVICE] Criando item:', { tipo: dados.tipo, nome: dados.nome, retencao: dados.retencao });
             const response = await api.post(`${API_PREFIX}/produtos`, dados);
             return response.data.produto;
         } catch (err) {
@@ -1868,13 +1823,11 @@ export function isProduto(produto: Produto): boolean {
     return produto.tipo === "produto";
 }
 
-// ✅ NOVO: calcular retenção
 export function calcularRetencao(produto: Produto, quantidade = 1): number {
     if (!isServico(produto) || !produto.retencao) return 0;
     return (produto.preco_venda * quantidade * produto.retencao) / 100;
 }
 
-// ✅ NOVO: calcular preço líquido após retenção
 export function calcularPrecoLiquido(produto: Produto, quantidade = 1): number {
     const total = produto.preco_venda * quantidade;
     if (!isServico(produto) || !produto.retencao) return total;
@@ -2223,7 +2176,7 @@ export const stockService = {
     }
 };
 
-/* -------- Dashboard (mesclado com dashboard.ts) -------- */
+/* -------- Dashboard -------- */
 export const dashboardService = {
     async fetch(): Promise<DashboardResponse | null> {
         try {
@@ -2349,7 +2302,7 @@ export const relatorioService = {
     async vendas(params?: {
         data_inicio?: string;
         data_fim?: string;
-        apenas_vendas?: boolean; // FT, FR, RC
+        apenas_vendas?: boolean;
         tipo_item?: 'produto' | 'servico';
         com_retencao?: boolean;
     }): Promise<{ message: string; data: { vendas: Venda[] } } | null> {
@@ -2366,7 +2319,6 @@ export const relatorioService = {
 
             const { data } = await api.get(url);
             
-            // ✅ Normalizar vendas
             if (data.data?.vendas) {
                 data.data.vendas = data.data.vendas.map((venda: Venda) => 
                     vendaService.normalizarVenda(venda)
@@ -2434,7 +2386,6 @@ export const relatorioService = {
         }
     },
 
-    // ✅ NOVOS RELATÓRIOS
     async servicos(params?: {
         data_inicio?: string;
         data_fim?: string;
@@ -2480,7 +2431,8 @@ export const relatorioService = {
     },
 };
 
-/* -------- Exportações legadas (para compatibilidade) -------- */
+/* -------- Funções Utilitárias -------- */
+
 export async function obterDadosNovaVenda(): Promise<{
     clientes: Cliente[];
     produtos: Produto[];
@@ -2492,12 +2444,10 @@ export async function criarVenda(payload: CriarVendaPayload) {
     return vendaService.criar(payload);
 }
 
-// NOVA FUNÇÃO: Criar documento fiscal (FP, FT, FR, etc)
 export async function emitirDocumentoFiscal(payload: CriarDocumentoFiscalPayload) {
     return documentoFiscalService.emitir(payload);
 }
 
-// Funções utilitárias para documentos fiscais
 export function getNomeTipoDocumento(tipo: TipoDocumentoFiscal): string {
     return NOMES_TIPO_DOCUMENTO[tipo] || tipo;
 }
@@ -2556,14 +2506,11 @@ export function getMetodoPagamentoNome(metodo?: string): string {
     return nomes[metodo || ''] || 'Não especificado';
 }
 
-// Função helper para validar payload de venda
 export function validarPayloadVenda(payload: CriarVendaPayload): string | null {
-    // Validar cliente
     if (!payload.cliente_id && !payload.cliente_nome) {
         return 'É necessário informar um cliente (selecionado ou avulso)';
     }
 
-    // Validações específicas por tipo
     if (payload.tipo_documento === 'FR') {
         if (!payload.dados_pagamento) {
             return 'Fatura-Recibo requer dados de pagamento';
@@ -2578,8 +2525,6 @@ export function validarPayloadVenda(payload: CriarVendaPayload): string | null {
 
     return null;
 }
-
-/* ================== EXPORTAÇÕES LEGADAS DO DASHBOARD ================== */
 
 export async function obterDashboard(): Promise<DashboardData | null> {
     return dashboardService.fetch();

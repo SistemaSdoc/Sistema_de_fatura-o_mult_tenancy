@@ -15,21 +15,22 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
 
-   ->withMiddleware(function (Middleware $middleware) {
+    ->withMiddleware(function (Middleware $middleware) {
 
-       $middleware->append(
+        // CORS tem de ser o PRIMEIRO middleware — antes do tenancy e de tudo o resto
+        // 'append' colocava o CORS no fim, o preflight falhava antes de chegar aqui
+        $middleware->prepend(
             \Illuminate\Http\Middleware\HandleCors::class
         );
 
-    $middleware->alias([
-        'role' => RoleMiddleware::class,
-    ]);
+        $middleware->alias([
+            'role' => RoleMiddleware::class,
+        ]);
 
-    $middleware->group('api', [
-        EnsureFrontendRequestsAreStateful::class,           // Sanctum
-    ]);
-})
-
+        $middleware->group('api', [
+            EnsureFrontendRequestsAreStateful::class, // Sanctum
+        ]);
+    })
 
     ->withExceptions(function (Exceptions $exceptions) {
         //

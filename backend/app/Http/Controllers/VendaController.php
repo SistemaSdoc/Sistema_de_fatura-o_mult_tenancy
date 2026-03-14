@@ -8,9 +8,9 @@ use Illuminate\Support\Facades\Log;
 use App\Models\Venda;
 use App\Models\Cliente;
 use App\Models\Produto;
-use App\Models\DocumentoFiscal;
 use App\Services\VendaService;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 class VendaController extends Controller
 {
@@ -29,7 +29,7 @@ class VendaController extends Controller
     {
         $clientes = Cliente::where('status', 'ativo')->get();
 
-        // ✅ Separar produtos e serviços para melhor exibição
+        // Separar produtos e serviços para melhor exibição
         $produtos = Produto::where('status', 'ativo')->get();
 
         return response()->json([
@@ -43,7 +43,7 @@ class VendaController extends Controller
     }
 
     /**
-     * Listar TODAS as vendas (abertas, faturadas e canceladas)
+     * Listar TODAS as vendas com filtros melhorados
      */
     public function index(Request $request)
     {
@@ -59,204 +59,114 @@ class VendaController extends Controller
             }
         ]);
 
-        // Filtro opcional por status
-        if ($request->has('status')) {
-            $query->where('status', $request->input('status'));
-        }
+        // ===== FILTROS MELHORADOS E ORGANIZADOS =====
 
-        // Filtro opcional para mostrar apenas faturadas
-        if ($request->has('faturadas') && $request->input('faturadas') === 'true') {
-            $query->where('status', 'faturada');
+        // Filtro por status da venda
+        if ($request->has('status') && !empty($request->status)) {
+            $query->where('status', $request->status);
         }
 
         // Filtro por estado de pagamento
-        if ($request->has('estado_pagamento')) {
-            $query->where('estado_pagamento', $request->input('estado_pagamento'));
+        if ($request->has('estado_pagamento') && !empty($request->estado_pagamento)) {
+            $query->where('estado_pagamento', $request->estado_pagamento);
         }
 
         // Filtro por tipo de documento fiscal
-        if ($request->has('tipo_documento')) {
+        if ($request->has('tipo_documento') && !empty($request->tipo_documento)) {
             $query->whereHas('documentoFiscal', function ($q) use ($request) {
-                $q->where('tipo_documento', $request->input('tipo_documento'));
+                $q->where('tipo_documento', $request->tipo_documento);
             });
         }
 
-        // ✅ Filtro por tipo de item (produto/serviço)
-        if ($request->has('tipo_item')) {
+        // Filtro por tipo de item (produto/serviço)
+        if ($request->has('tipo_item') && !empty($request->tipo_item)) {
             $query->whereHas('itens.produto', function ($q) use ($request) {
-                $q->where('tipo', $request->input('tipo_item'));
+                $q->where('tipo', $request->tipo_item);
             });
         }
 
-        $vendas = $query->orderBy('created_at', 'desc')->get();
+        // Filtro por cliente (ID ou nome)
+        if ($request->has('cliente_id') && !empty($request->cliente_id)) {
+            $query->where('cliente_id', $request->cliente_id);
+        }
+
+        if ($request->has('cliente_nome') && !empty($request->cliente_nome)) {
+            $query->where('cliente_nome', 'like', '%' . $request->cliente_nome . '%');
+        }
+
+        // Filtro por período (data)
+        if ($request->has('data_inicio') && !empty($request->data_inicio)) {
+            $query->whereDate('data_venda', '>=', Carbon::parse($request->data_inicio)->format('Y-m-d'));
+        }
+
+        if ($request->has('data_fim') && !empty($request->data_fim)) {
+            $query->whereDate('data_venda', '<=', Carbon::parse($request->data_fim)->format('Y-m-d'));
+        }
+
+        // Filtro por valor mínimo/máximo
+        if ($request->has('valor_min') && is_numeric($request->valor_min)) {
+            $query->where('total', '>=', $request->valor_min);
+        }
+
+        if ($request->has('valor_max') && is_numeric($request->valor_max)) {
+            $query->where('total', '<=', $request->valor_max);
+        }
+
+        // Filtro por número do documento
+        if ($request->has('numero_documento') && !empty($request->numero_documento)) {
+            $query->where('numero_documento', 'like', '%' . $request->numero_documento . '%');
+        }
+
+        // Filtros booleanos/pré-definidos
+        if ($request->has('faturadas') && $request->faturadas === 'true') {
+            $query->where('status', 'faturada');
+        }
+
+        if ($request->has('apenas_vendas') && $request->apenas_vendas === 'true') {
+            $query->whereHas('documentoFiscal', function ($q) {
+                $q->whereIn('tipo_documento', ['FT', 'FR', 'RC']);
+            });
+        }
+
+        if ($request->has('apenas_nao_vendas') && $request->apenas_nao_vendas === 'true') {
+            $query->whereHas('documentoFiscal', function ($q) {
+                $q->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FRt']);
+            });
+        }
+
+        if ($request->has('pendentes') && $request->pendentes === 'true') {
+            $query->whereIn('estado_pagamento', ['pendente', 'parcial']);
+        }
+
+        if ($request->has('com_retencao') && $request->com_retencao === 'true') {
+            $query->where('total_retencao', '>', 0);
+        }
+
+        // Ordenação
+        $orderBy = $request->get('order_by', 'data_venda');
+        $orderDir = $request->get('order_dir', 'desc');
+
+        if (in_array($orderBy, ['data_venda', 'created_at', 'total', 'numero_documento'])) {
+            $query->orderBy($orderBy, $orderDir);
+        } else {
+            $query->orderBy('data_venda', 'desc');
+        }
+
+        // Paginação
+        $perPage = $request->get('per_page', 15);
+        $vendas = $query->paginate($perPage);
 
         return response()->json([
             'message' => 'Lista de vendas carregada',
             'vendas' => $vendas->map(function ($venda) {
-                // Determinar se é venda válida (FT, FR ou RC)
-                $ehVenda = $this->ehVendaValida($venda->documentoFiscal);
-
-                // ✅ Estatísticas de serviços na venda
-                $servicos = $venda->itens->filter(function ($item) {
-                    return $item->produto && $item->produto->tipo === 'servico';
-                });
-
-                $totalRetencaoServicos = $servicos->sum('valor_retencao');
-
-                return [
-                    'id' => $venda->id,
-
-                    // Dados do documento fiscal (se existir)
-                    'numero' => $venda->documentoFiscal?->numero_documento ?? $venda->numero ?? 'N/A',
-                    'serie' => $venda->documentoFiscal?->serie ?? $venda->serie ?? 'A',
-                    'tipo_documento' => $venda->documentoFiscal?->tipo_documento ?? 'venda',
-                    'tipo_documento_nome' => $venda->documentoFiscal?->tipo_documento_nome ?? 'Venda',
-
-                    // Cliente
-                    'cliente_id' => $venda->cliente_id,
-                    'cliente' => $venda->cliente ? [
-                        'id' => $venda->cliente->id,
-                        'nome' => $venda->cliente->nome,
-                        'nif' => $venda->cliente->nif,
-                        'tipo' => $venda->cliente->tipo,
-                        'telefone' => $venda->cliente->telefone,
-                        'email' => $venda->cliente->email,
-                        'endereco' => $venda->cliente->endereco,
-                        'status' => $venda->cliente->status,
-                    ] : null,
-
-                    // Usuário
-                    'user' => $venda->user ? [
-                        'id' => $venda->user->id,
-                        'name' => $venda->user->name,
-                        'email' => $venda->user->email,
-                    ] : null,
-
-                    // Datas
-                    'data_venda' => $venda->data_venda,
-                    'hora_venda' => $venda->hora_venda,
-                    'created_at' => $venda->created_at,
-
-                    // Valores
-                    'total' => $venda->total,
-                    'base_tributavel' => $venda->base_tributavel,
-                    'total_iva' => $venda->total_iva,
-                    'total_retencao' => $venda->total_retencao,
-
-                    // ✅ Retenção de serviços
-                    'total_retencao_servicos' => $totalRetencaoServicos,
-                    'tem_servicos' => $servicos->count() > 0,
-                    'quantidade_servicos' => $servicos->count(),
-
-                    // Status da venda
-                    'status' => $venda->status,
-                    'faturado' => !is_null($venda->documentoFiscal),
-                    'eh_venda' => $ehVenda,
-
-                    // Estado de pagamento da venda
-                    'estado_pagamento' => $this->determinarEstadoPagamentoVenda($venda),
-                    'paga' => $this->determinarEstadoPagamentoVenda($venda) === 'paga',
-
-                    // Dados do documento fiscal completo (se existir)
-                    'documento_fiscal' => $venda->documentoFiscal ? [
-                        'id' => $venda->documentoFiscal->id,
-                        'numero' => $venda->documentoFiscal->numero_documento,
-                        'serie' => $venda->documentoFiscal->serie,
-                        'tipo_documento' => $venda->documentoFiscal->tipo_documento,
-                        'tipo_documento_nome' => $venda->documentoFiscal->tipo_documento_nome,
-                        'data_emissao' => $venda->documentoFiscal->data_emissao,
-                        'hora_emissao' => $venda->documentoFiscal->hora_emissao,
-                        'data_vencimento' => $venda->documentoFiscal->data_vencimento,
-                        'estado' => $venda->documentoFiscal->estado,
-                        'hash_fiscal' => $venda->documentoFiscal->hash_fiscal,
-                        'motivo_cancelamento' => $venda->documentoFiscal->motivo_cancelamento,
-
-                        // Estado de pagamento do documento
-                        'estado_pagamento' => $this->determinarEstadoPagamentoDocumento($venda->documentoFiscal),
-                        'valor_pendente' => $this->calcularValorPendente($venda->documentoFiscal),
-
-                        // ✅ Retenção total do documento
-                        'retencao_total' => $venda->documentoFiscal->total_retencao ?? 0,
-
-                        // Recibos associados
-                        'recibos' => $venda->documentoFiscal->recibos->map(function ($recibo) {
-                            return [
-                                'id' => $recibo->id,
-                                'numero' => $recibo->numero_documento,
-                                'valor' => $recibo->total_liquido,
-                                'metodo_pagamento' => $recibo->metodo_pagamento,
-                                'data_emissao' => $recibo->data_emissao,
-                                'estado' => 'paga',
-                            ];
-                        }),
-
-                        // Notas de crédito/débito associadas
-                        'notas_credito' => $venda->documentoFiscal->notasCredito->map(function ($nc) {
-                            return [
-                                'id' => $nc->id,
-                                'numero' => $nc->numero_documento,
-                                'valor' => $nc->total_liquido,
-                                'estado' => $nc->estado,
-                            ];
-                        }),
-
-                        'notas_debito' => $venda->documentoFiscal->notasDebito->map(function ($nd) {
-                            return [
-                                'id' => $nd->id,
-                                'numero' => $nd->numero_documento,
-                                'valor' => $nd->total_liquido,
-                                'estado' => $nd->estado,
-                            ];
-                        }),
-                    ] : null,
-
-                    // Itens
-                    'itens' => $venda->itens->map(function ($item) {
-                        $ehServico = $item->produto && $item->produto->tipo === 'servico';
-
-                        return [
-                            'id' => $item->id,
-                            'produto_id' => $item->produto_id,
-                            'produto' => $item->produto ? [
-                                'id' => $item->produto->id,
-                                'nome' => $item->produto->nome,
-                                'codigo' => $item->produto->codigo,
-                                'tipo' => $item->produto->tipo,
-                            ] : null,
-                            'descricao' => $item->descricao,
-                            'quantidade' => $item->quantidade,
-                            'preco_venda' => $item->preco_venda,
-                            'desconto' => $item->desconto,
-                            'base_tributavel' => $item->base_tributavel,
-                            'valor_iva' => $item->valor_iva,
-                            'valor_retencao' => $item->valor_retencao,
-                            'taxa_retencao' => $item->taxa_retencao,
-                            'subtotal' => $item->subtotal,
-                            'eh_servico' => $ehServico,
-                            'subtotal_liquido' => $item->subtotal - ($item->valor_retencao ?? 0),
-                        ];
-                    }),
-
-                    // ✅ Totais por tipo
-                    'totais_por_tipo' => [
-                        'produtos' => [
-                            'quantidade' => $venda->itens->filter(fn($i) => $i->produto && $i->produto->tipo === 'produto')->count(),
-                            'total' => $venda->itens->filter(fn($i) => $i->produto && $i->produto->tipo === 'produto')->sum('subtotal'),
-                        ],
-                        'servicos' => [
-                            'quantidade' => $venda->itens->filter(fn($i) => $i->produto && $i->produto->tipo === 'servico')->count(),
-                            'total' => $venda->itens->filter(fn($i) => $i->produto && $i->produto->tipo === 'servico')->sum('subtotal'),
-                            'retencao' => $totalRetencaoServicos,
-                        ],
-                    ],
-                ];
-            })->filter(function ($venda) {
-                // Se solicitado, filtra apenas vendas válidas (FT/FR/RC)
-                if (request()->has('apenas_vendas') && request()->input('apenas_vendas') === 'true') {
-                    return $venda['eh_venda'];
-                }
-                return true;
-            })->values(),
+                return $this->formatarVenda($venda);
+            }),
+            'pagination' => [
+                'current_page' => $vendas->currentPage(),
+                'last_page' => $vendas->lastPage(),
+                'per_page' => $vendas->perPage(),
+                'total' => $vendas->total(),
+            ]
         ]);
     }
 
@@ -269,140 +179,9 @@ class VendaController extends Controller
 
         $venda->load(['cliente', 'user', 'itens.produto', 'documentoFiscal.recibos']);
 
-        // Determinar estado de pagamento
-        $estadoPagamento = $this->determinarEstadoPagamentoVenda($venda);
-
-        // ✅ Estatísticas de serviços
-        $servicos = $venda->itens->filter(function ($item) {
-            return $item->produto && $item->produto->tipo === 'servico';
-        });
-
-        $totalRetencaoServicos = $servicos->sum('valor_retencao');
-
         return response()->json([
             'message' => 'Venda carregada',
-            'venda' => [
-                'id' => $venda->id,
-
-                // Dados do documento fiscal
-                'numero' => $venda->documentoFiscal?->numero_documento ?? $venda->numero ?? 'N/A',
-                'serie' => $venda->documentoFiscal?->serie ?? $venda->serie ?? 'A',
-                'tipo_documento' => $venda->documentoFiscal?->tipo_documento ?? 'venda',
-                'tipo_documento_nome' => $venda->documentoFiscal?->tipo_documento_nome ?? 'Venda',
-
-                // Cliente
-                'cliente' => $venda->cliente ? [
-                    'id' => $venda->cliente->id,
-                    'nome' => $venda->cliente->nome,
-                    'nif' => $venda->cliente->nif,
-                    'tipo' => $venda->cliente->tipo,
-                    'telefone' => $venda->cliente->telefone,
-                    'email' => $venda->cliente->email,
-                    'endereco' => $venda->cliente->endereco,
-                    'status' => $venda->cliente->status,
-                ] : null,
-
-                // Usuário
-                'user' => $venda->user ? [
-                    'id' => $venda->user->id,
-                    'name' => $venda->user->name,
-                    'email' => $venda->user->email,
-                ] : null,
-
-                // Datas
-                'data_venda' => $venda->data_venda,
-                'hora_venda' => $venda->hora_venda,
-
-                // Valores
-                'total' => $venda->total,
-                'base_tributavel' => $venda->base_tributavel,
-                'total_iva' => $venda->total_iva,
-                'total_retencao' => $venda->total_retencao,
-
-                // ✅ Retenção de serviços
-                'total_retencao_servicos' => $totalRetencaoServicos,
-                'tem_servicos' => $servicos->count() > 0,
-                'quantidade_servicos' => $servicos->count(),
-
-                // Status
-                'status' => $venda->status,
-                'faturado' => !is_null($venda->documentoFiscal),
-                'eh_venda' => $this->ehVendaValida($venda->documentoFiscal),
-
-                // Estado de pagamento
-                'estado_pagamento' => $estadoPagamento,
-                'paga' => $estadoPagamento === 'paga',
-                'pode_receber_pagamento' => $this->podeReceberPagamento($venda),
-
-                // Documento fiscal completo
-                'documento_fiscal' => $venda->documentoFiscal ? [
-                    'id' => $venda->documentoFiscal->id,
-                    'numero' => $venda->documentoFiscal->numero_documento,
-                    'serie' => $venda->documentoFiscal->serie,
-                    'tipo_documento' => $venda->documentoFiscal->tipo_documento,
-                    'tipo_documento_nome' => $venda->documentoFiscal->tipo_documento_nome,
-                    'data_emissao' => $venda->documentoFiscal->data_emissao,
-                    'hora_emissao' => $venda->documentoFiscal->hora_emissao,
-                    'data_vencimento' => $venda->documentoFiscal->data_vencimento,
-                    'estado' => $venda->documentoFiscal->estado,
-                    'hash_fiscal' => $venda->documentoFiscal->hash_fiscal,
-
-                    // Pagamento
-                    'estado_pagamento' => $this->determinarEstadoPagamentoDocumento($venda->documentoFiscal),
-                    'valor_total' => $venda->documentoFiscal->total_liquido,
-                    'valor_pago' => $this->calcularValorPago($venda->documentoFiscal),
-                    'valor_pendente' => $this->calcularValorPendente($venda->documentoFiscal),
-
-                    // ✅ Retenção
-                    'retencao_total' => $venda->documentoFiscal->total_retencao ?? 0,
-
-                    // Recibos
-                    'recibos' => $venda->documentoFiscal->recibos->map(function ($recibo) {
-                        return [
-                            'id' => $recibo->id,
-                            'numero_documento' => $recibo->numero_documento,
-                            'valor' => $recibo->total_liquido,
-                            'metodo_pagamento' => $recibo->metodo_pagamento,
-                            'referencia_pagamento' => $recibo->referencia_pagamento,
-                            'data_emissao' => $recibo->data_emissao,
-                            'hora_emissao' => $recibo->hora_emissao,
-                            'estado' => 'paga',
-                        ];
-                    }),
-                ] : null,
-
-                // Itens
-                'itens' => $venda->itens->map(function ($item) {
-                    $ehServico = $item->produto && $item->produto->tipo === 'servico';
-
-                    return [
-                        'produto' => $item->produto,
-                        'quantidade' => $item->quantidade,
-                        'preco_venda' => $item->preco_venda,
-                        'desconto' => $item->desconto,
-                        'subtotal' => $item->subtotal,
-                        'base_tributavel' => $item->base_tributavel,
-                        'valor_iva' => $item->valor_iva,
-                        'valor_retencao' => $item->valor_retencao,
-                        'taxa_retencao' => $item->taxa_retencao,
-                        'eh_servico' => $ehServico,
-                        'subtotal_liquido' => $item->subtotal - ($item->valor_retencao ?? 0),
-                    ];
-                }),
-
-                // ✅ Totais por tipo
-                'totais_por_tipo' => [
-                    'produtos' => [
-                        'quantidade' => $venda->itens->filter(fn($i) => $i->produto && $i->produto->tipo === 'produto')->count(),
-                        'total' => $venda->itens->filter(fn($i) => $i->produto && $i->produto->tipo === 'produto')->sum('subtotal'),
-                    ],
-                    'servicos' => [
-                        'quantidade' => $venda->itens->filter(fn($i) => $i->produto && $i->produto->tipo === 'servico')->count(),
-                        'total' => $venda->itens->filter(fn($i) => $i->produto && $i->produto->tipo === 'servico')->sum('subtotal'),
-                        'retencao' => $totalRetencaoServicos,
-                    ],
-                ],
-            ],
+            'venda' => $this->formatarVenda($venda, true),
         ]);
     }
 
@@ -419,28 +198,24 @@ class VendaController extends Controller
             'faturar' => $request->input('faturar')
         ]);
 
-        // ✅ Validação incluindo campos de serviço
+        // Validação
         $dados = $request->validate([
             'cliente_id' => 'nullable|uuid|exists:clientes,id',
             'cliente_nome' => 'nullable|string|max:255',
+            'cliente_nif' => 'nullable|string|max:20',
             'itens' => 'required|array|min:1',
             'itens.*.produto_id' => 'required|uuid|exists:produtos,id',
             'itens.*.quantidade' => 'required|integer|min:1',
             'itens.*.preco_venda' => 'required|numeric|min:0',
             'itens.*.desconto' => 'nullable|numeric|min:0',
-            'itens.*.taxa_retencao' => 'nullable|numeric|min:0|max:100', // ✅ Para serviços
+            'itens.*.taxa_retencao' => 'nullable|numeric|min:0|max:100',
             'faturar' => 'nullable|boolean',
-            'tipo_documento' => 'nullable|in:FT,FR,FP',
+            'tipo_documento' => 'nullable|in:FT,FR,FP,FA',
             'dados_pagamento' => 'nullable|array',
             'dados_pagamento.metodo' => 'required_with:dados_pagamento|in:transferencia,multibanco,dinheiro,cheque,cartao',
             'dados_pagamento.valor' => 'required_with:dados_pagamento|numeric|min:0',
             'dados_pagamento.referencia' => 'nullable|string|max:255',
-        ]);
-
-        Log::info('VendaController::store - Dados validados', [
-            'tipo_documento' => $dados['tipo_documento'] ?? 'NÃO ENVIADO (usará FT)',
-            'faturar' => $dados['faturar'] ?? false,
-            'dados_completos' => $dados
+            'observacoes' => 'nullable|string|max:1000',
         ]);
 
         // VALIDAÇÃO PARA CLIENTE AVULSO
@@ -450,145 +225,33 @@ class VendaController extends Controller
             ], 422);
         }
 
-        // FR obrigatoriamente precisa de dados_pagamento
-        if (($dados['tipo_documento'] ?? 'FT') === 'FR') {
-            if (empty($dados['dados_pagamento'])) {
-                return response()->json([
-                    'message' => 'Campo dados_pagamento é obrigatório para Fatura-Recibo (FR).'
-                ], 422);
-            }
-
-            if ($dados['dados_pagamento']['valor'] <= 0) {
-                return response()->json([
-                    'message' => 'Valor do pagamento deve ser maior que zero.'
-                ], 422);
-            }
-
-            // ✅ VALIDAÇÃO ADICIONAL: O valor pago deve ser igual ao total da venda
-            // Calculamos o total aproximado baseado nos itens
-            $totalEstimado = 0;
-            foreach ($dados['itens'] as $item) {
-                $produto = Produto::find($item['produto_id']);
-                if ($produto) {
-                    $valorBruto = $produto->preco_venda * $item['quantidade'];
-                    $desconto = $item['desconto'] ?? 0;
-                    $baseTributavel = $valorBruto - $desconto;
-                    $taxaIva = $produto->taxa_iva ?? 14;
-                    $valorIva = ($baseTributavel * $taxaIva) / 100;
-
-                    // Retenção apenas para serviços
-                    $taxaRetencao = ($produto->tipo === 'servico') ? ($item['taxa_retencao'] ?? 6.5) : 0;
-                    $valorRetencao = ($produto->tipo === 'servico') ? ($baseTributavel * $taxaRetencao) / 100 : 0;
-
-                    $totalEstimado += round($baseTributavel + $valorIva - $valorRetencao, 2);
-                }
-            }
-
-            // 🔍 Comparação com tolerância de 0.01 (1 centavo)
-            $diferenca = abs($dados['dados_pagamento']['valor'] - $totalEstimado);
-            if ($diferenca > 0.01) {
-                return response()->json([
-                    'message' => "Para Fatura-Recibo (FR), o valor pago ({$dados['dados_pagamento']['valor']}) deve ser igual ao total da venda ({$totalEstimado}). Diferença: {$diferenca}"
-                ], 422);
-            }
-        }
-
-        // Para FP, faturar deve ser false (é proforma)
-        if (($dados['tipo_documento'] ?? 'FT') === 'FP') {
-            $dados['faturar'] = false;
-        }
-
-        // Se não especificado, assume true para FT e FR, false para FP
-        if (!isset($dados['faturar'])) {
-            $dados['faturar'] = ($dados['tipo_documento'] ?? 'FT') !== 'FP';
-        }
-
         $venda = $this->vendaService->criarVenda(
             $dados,
-            $dados['faturar'],
+            $dados['faturar'] ?? false,
             $dados['tipo_documento'] ?? 'FT'
         );
-
-        // Determinar estado de pagamento após criação
-        $estadoPagamento = $this->determinarEstadoPagamentoVenda($venda);
-
-        // ✅ Estatísticas de serviços
-        $servicos = $venda->itens->filter(function ($item) {
-            return $item->produto && $item->produto->tipo === 'servico';
-        });
 
         Log::info('VendaController::store - Venda criada', [
             'venda_id' => $venda->id,
             'tipo_documento_gerado' => $venda->documentoFiscal?->tipo_documento ?? 'N/A',
-            'estado_pagamento' => $estadoPagamento,
-            'cliente_tipo' => $venda->cliente_id ? 'cadastrado' : 'avulso',
-            'quantidade_servicos' => $servicos->count(),
-            'retencao_total' => $servicos->sum('valor_retencao')
         ]);
 
         return response()->json([
             'message' => 'Venda criada com sucesso',
-            'venda' => [
-                'id' => $venda->id,
-                'numero' => $venda->numero,
-                'serie' => $venda->serie,
-                'cliente' => $venda->cliente,
-                'user' => $venda->user,
-                'data_venda' => $venda->data_venda,
-                'hora_venda' => $venda->hora_venda,
-                'total' => $venda->total,
-                'base_tributavel' => $venda->base_tributavel,
-                'total_iva' => $venda->total_iva,
-                'total_retencao' => $venda->total_retencao,
-                'status' => $venda->status,
-
-                // Estado de pagamento
-                'estado_pagamento' => $estadoPagamento,
-                'paga' => $estadoPagamento === 'paga',
-
-                // Documento fiscal gerado
-                'documento_fiscal' => $venda->documentoFiscal ? [
-                    'id' => $venda->documentoFiscal->id,
-                    'numero_documento' => $venda->documentoFiscal->numero_documento,
-                    'tipo_documento' => $venda->documentoFiscal->tipo_documento,
-                    'tipo_documento_nome' => $venda->documentoFiscal->tipo_documento_nome,
-                    'estado' => $venda->documentoFiscal->estado,
-                    'estado_pagamento' => $this->determinarEstadoPagamentoDocumento($venda->documentoFiscal),
-                    'retencao_total' => $venda->documentoFiscal->total_retencao ?? 0,
-                ] : null,
-
-                // Itens
-                'itens' => $venda->itens->map(function ($item) {
-                    $ehServico = $item->produto && $item->produto->tipo === 'servico';
-
-                    return [
-                        'produto' => $item->produto,
-                        'quantidade' => $item->quantidade,
-                        'preco_venda' => $item->preco_venda,
-                        'desconto' => $item->desconto,
-                        'subtotal' => $item->subtotal,
-                        'base_tributavel' => $item->base_tributavel,
-                        'valor_iva' => $item->valor_iva,
-                        'valor_retencao' => $item->valor_retencao,
-                        'taxa_retencao' => $item->taxa_retencao,
-                        'eh_servico' => $ehServico,
-                    ];
-                }),
-
-                // ✅ Estatísticas de serviços
-                'tem_servicos' => $servicos->count() > 0,
-                'quantidade_servicos' => $servicos->count(),
-                'retencao_servicos' => $servicos->sum('valor_retencao'),
-            ],
+            'venda' => $this->formatarVenda($venda->load('itens.produto', 'documentoFiscal')),
         ]);
     }
 
     /**
      * Cancelar venda
      */
-    public function cancelar(Venda $venda)
+    public function cancelar(Venda $venda, Request $request)
     {
         $this->authorize('cancel', $venda);
+
+        $request->validate([
+            'motivo' => 'required|string|max:500'
+        ]);
 
         if ($venda->estado_pagamento === 'paga') {
             return response()->json([
@@ -596,24 +259,11 @@ class VendaController extends Controller
             ], 422);
         }
 
-        if ($venda->documentoFiscal) {
-            if (!in_array($venda->documentoFiscal->estado, ['emitido', 'parcialmente_paga'])) {
-                return response()->json([
-                    'message' => 'Não é possível cancelar venda com documento fiscal ' .
-                        $venda->documentoFiscal->estado . '. Cancele o documento fiscal primeiro.'
-                ], 422);
-            }
-        }
-
-        $vendaCancelada = $this->vendaService->cancelarVenda($venda->id);
+        $vendaCancelada = $this->vendaService->cancelarVenda($venda->id, $request->motivo);
 
         return response()->json([
             'message' => 'Venda cancelada com sucesso',
-            'venda' => [
-                'id' => $vendaCancelada->id,
-                'status' => $vendaCancelada->status,
-                'estado_pagamento' => $vendaCancelada->estado_pagamento,
-            ],
+            'venda' => $this->formatarVenda($vendaCancelada),
         ]);
     }
 
@@ -624,197 +274,231 @@ class VendaController extends Controller
     {
         $this->authorize('update', $venda);
 
-        if (!$venda->documentoFiscal || $venda->documentoFiscal->tipo_documento !== 'FT') {
-            return response()->json([
-                'message' => 'Apenas vendas com Fatura (FT) podem receber recibo.'
-            ], 422);
-        }
-
-        if ($venda->estado_pagamento === 'paga') {
-            return response()->json([
-                'message' => 'Venda já está totalmente paga.'
-            ], 422);
-        }
-
         $dados = $request->validate([
-            'valor' => 'required|numeric|min:0.01|max:' . $this->calcularValorPendente($venda->documentoFiscal),
+            'valor' => 'required|numeric|min:0.01',
             'metodo_pagamento' => 'required|in:transferencia,multibanco,dinheiro,cheque,cartao',
             'data_pagamento' => 'nullable|date',
             'referencia' => 'nullable|string|max:100'
         ]);
 
-        // Chamar service de documento fiscal para gerar recibo
-        $recibo = app(\App\Services\DocumentoFiscalService::class)
-            ->gerarRecibo($venda->documentoFiscal, $dados);
-
-        // Atualizar estado da venda
-        $venda->update([
-            'estado_pagamento' => $this->determinarEstadoPagamentoVenda($venda->fresh())
-        ]);
+        $resultado = $this->vendaService->processarPagamento($venda->id, $dados);
 
         return response()->json([
             'message' => 'Recibo gerado com sucesso',
-            'recibo' => $recibo,
-            'venda' => $venda->fresh()
+            'recibo' => $resultado['recibo'],
+            'venda' => $this->formatarVenda($resultado['venda']),
         ]);
     }
 
-    /* ================= MÉTODOS AUXILIARES PRIVADOS ================= */
-
     /**
-     * Verificar se é venda válida (FT, FR ou RC)
+     * Estatísticas para dashboard (AGORA COM FILTROS DE DATA)
      */
-    private function ehVendaValida(?DocumentoFiscal $documento): bool
+    public function estatisticas(Request $request)
     {
-        if (!$documento) return false;
-        return in_array($documento->tipo_documento, ['FT', 'FR', 'RC']);
-    }
+        $this->authorize('viewAny', Venda::class);
 
-    /**
-     * Determinar estado de pagamento da venda
-     */
-    private function determinarEstadoPagamentoVenda(Venda $venda): string
-    {
-        if (!$venda->documentoFiscal) {
-            return 'pendente';
+        $query = Venda::query();
+
+        // Aplicar filtros de data se fornecidos
+        if ($request->has('data_inicio') && !empty($request->data_inicio)) {
+            $query->whereDate('data_venda', '>=', Carbon::parse($request->data_inicio)->format('Y-m-d'));
         }
 
-        if ($venda->documentoFiscal->estado === 'cancelado') {
-            return 'cancelada';
+        if ($request->has('data_fim') && !empty($request->data_fim)) {
+            $query->whereDate('data_venda', '<=', Carbon::parse($request->data_fim)->format('Y-m-d'));
         }
 
-        if ($venda->documentoFiscal->tipo_documento === 'FP') {
-            return 'pendente';
-        }
+        // Se não houver filtros de data, usar ano/mês como fallback
+        if (!$request->has('data_inicio') && !$request->has('data_fim')) {
+            $ano = $request->get('ano', Carbon::now()->year);
+            $mes = $request->get('mes');
 
-        if ($venda->documentoFiscal->tipo_documento === 'FA') {
-            if ($venda->documentoFiscal->recibos()->where('estado', '!=', 'cancelado')->exists()) {
-                return 'paga';
-            }
-            return 'pendente';
-        }
-
-        if (in_array($venda->documentoFiscal->tipo_documento, ['FR', 'RC'])) {
-            return 'paga';
-        }
-
-        if ($venda->documentoFiscal->tipo_documento === 'FT') {
-            return $this->determinarEstadoPagamentoDocumento($venda->documentoFiscal);
-        }
-
-        return 'pendente';
-    }
-
-    /**
-     * Determinar estado de pagamento de um documento fiscal
-     */
-    private function determinarEstadoPagamentoDocumento(DocumentoFiscal $documento): string
-    {
-        if ($documento->tipo_documento === 'FR') {
-            return 'paga';
-        }
-
-        if ($documento->tipo_documento === 'FP') {
-            return 'pendente';
-        }
-
-        if ($documento->tipo_documento === 'FA') {
-            if ($documento->recibos()->where('estado', '!=', 'cancelado')->exists()) {
-                return 'paga';
-            }
-            return 'pendente';
-        }
-
-        if ($documento->tipo_documento === 'RC') {
-            return 'paga';
-        }
-
-        if ($documento->tipo_documento === 'FT') {
-            $valorPendente = $this->calcularValorPendente($documento);
-
-            if ($valorPendente <= 0) {
-                return 'paga';
-            }
-
-            $valorPago = $this->calcularValorPago($documento);
-            if ($valorPago > 0) {
-                return 'parcial';
+            $query->whereYear('data_venda', $ano);
+            if ($mes) {
+                $query->whereMonth('data_venda', $mes);
             }
         }
 
-        return match ($documento->estado) {
-            'paga' => 'paga',
-            'parcialmente_paga' => 'parcial',
-            'cancelado' => 'cancelada',
-            default => 'pendente',
-        };
+        $estatisticas = [
+            'total_vendas' => $query->sum('total'),
+            'total_vendas_mes' => $query->clone()->whereHas('documentoFiscal', fn($q) => $q->whereIn('tipo_documento', ['FT', 'FR']))->sum('total'),
+            'total_proformas' => $query->clone()->whereHas('documentoFiscal', fn($q) => $q->where('tipo_documento', 'FP'))->sum('total'),
+            'total_adiantamentos' => $query->clone()->whereHas('documentoFiscal', fn($q) => $q->where('tipo_documento', 'FA'))->sum('total'),
+            'total_retencao' => $query->sum('total_retencao'),
+            'total_iva' => $query->sum('total_iva'),
+
+            'quantidade_vendas' => $query->clone()->whereHas('documentoFiscal', fn($q) => $q->whereIn('tipo_documento', ['FT', 'FR']))->count(),
+            'quantidade_pendentes' => $query->clone()->whereIn('estado_pagamento', ['pendente', 'parcial'])->count(),
+            'quantidade_pagas' => $query->clone()->where('estado_pagamento', 'paga')->count(),
+
+            'vendas_por_dia' => $query->clone()
+                ->select(DB::raw('DATE(data_venda) as data'), DB::raw('SUM(total) as total'))
+                ->groupBy('data')
+                ->orderBy('data')
+                ->get(),
+        ];
+
+        return response()->json($estatisticas);
     }
 
     /**
-     * Calcular valor total pago via recibos
+     * Exportar relatório (JÁ TEM FILTROS DE DATA)
      */
-    private function calcularValorPago(DocumentoFiscal $documento): float
+    public function relatorio(Request $request)
     {
-        if (in_array($documento->tipo_documento, ['FR', 'RC'])) {
-            return $documento->total_liquido;
+        $this->authorize('viewAny', Venda::class);
+
+        $tipo = $request->get('tipo', 'vendas'); // vendas, proformas, adiantamentos
+
+        $query = Venda::with(['cliente', 'documentoFiscal']);
+
+        if ($tipo === 'vendas') {
+            $query->whereHas('documentoFiscal', fn($q) => $q->whereIn('tipo_documento', ['FT', 'FR']));
+        } elseif ($tipo === 'proformas') {
+            $query->whereHas('documentoFiscal', fn($q) => $q->where('tipo_documento', 'FP'));
+        } elseif ($tipo === 'adiantamentos') {
+            $query->whereHas('documentoFiscal', fn($q) => $q->where('tipo_documento', 'FA'));
         }
 
-        if (in_array($documento->tipo_documento, ['FA', 'FT'])) {
-            return $documento->recibos()
-                ->where('estado', '!=', 'cancelado')
-                ->sum('total_liquido') ?? 0;
+        // Aplicar filtros de data
+        if ($request->has('data_inicio')) {
+            $query->whereDate('data_venda', '>=', $request->data_inicio);
+        }
+        if ($request->has('data_fim')) {
+            $query->whereDate('data_venda', '<=', $request->data_fim);
         }
 
-        return 0;
+        $vendas = $query->orderBy('data_venda', 'desc')->get();
+
+        return response()->json([
+            'relatorio' => $vendas->map(fn($v) => [
+                'data' => $v->data_venda,
+                'numero' => $v->numero_documento,
+                'cliente' => $v->cliente_nome ?? $v->cliente?->nome ?? 'Consumidor Final',
+                'tipo' => $v->tipo_documento_nome,
+                'total' => $v->total,
+                'estado' => $v->estado_pagamento,
+            ]),
+            'total_geral' => $vendas->sum('total'),
+        ]);
     }
 
     /**
-     * Calcular valor pendente
+     * Formatar venda para resposta (evita duplicação de código)
      */
-    private function calcularValorPendente(DocumentoFiscal $documento): float
+    private function formatarVenda(Venda $venda, bool $detalhado = false): array
     {
-        if ($documento->tipo_documento === 'FP') {
-            return $documento->total_liquido;
+        $servicos = $venda->itens->filter(function ($item) {
+            return $item->produto && $item->produto->tipo === 'servico';
+        });
+
+        $totalRetencaoServicos = $servicos->sum('valor_retencao');
+
+        $dados = [
+            'id' => $venda->id,
+            'numero' => $venda->documentoFiscal?->numero_documento ?? $venda->numero ?? 'N/A',
+            'serie' => $venda->documentoFiscal?->serie ?? $venda->serie ?? 'A',
+            'numero_documento' => $venda->documentoFiscal?->numero_documento ?? $venda->numero_documento ?? 'N/A',
+            'tipo_documento' => $venda->documentoFiscal?->tipo_documento ?? 'venda',
+            'tipo_documento_nome' => $venda->tipo_documento_nome,
+            'cliente_id' => $venda->cliente_id,
+            'cliente' => $venda->cliente ? [
+                'id' => $venda->cliente->id,
+                'nome' => $venda->cliente->nome,
+                'nif' => $venda->cliente->nif,
+                'tipo' => $venda->cliente->tipo,
+                'telefone' => $venda->cliente->telefone,
+                'email' => $venda->cliente->email,
+                'endereco' => $venda->cliente->endereco,
+            ] : null,
+            'cliente_nome' => $venda->cliente_nome,
+            'cliente_nif' => $venda->cliente_nif,
+            'user' => $venda->user ? [
+                'id' => $venda->user->id,
+                'name' => $venda->user->name,
+            ] : null,
+            'data_venda' => $venda->data_venda,
+            'hora_venda' => $venda->hora_venda,
+            'created_at' => $venda->created_at,
+            'total' => (float) $venda->total,
+            'base_tributavel' => (float) $venda->base_tributavel,
+            'total_iva' => (float) $venda->total_iva,
+            'total_retencao' => (float) $venda->total_retencao,
+            'total_retencao_servicos' => (float) $totalRetencaoServicos,
+            'tem_servicos' => $servicos->count() > 0,
+            'quantidade_servicos' => $servicos->count(),
+            'status' => $venda->status,
+            'faturado' => !is_null($venda->documentoFiscal),
+            'eh_venda' => $venda->eh_venda,
+            'estado_pagamento' => $venda->estado_pagamento,
+            'paga' => $venda->estado_pagamento === 'paga',
+            'valor_pendente' => $venda->valor_pendente,
+            'valor_pago' => $venda->valor_pago,
+            'pode_receber_pagamento' => $venda->pode_receber_pagamento,
+            'pode_ser_cancelada' => $venda->pode_ser_cancelada,
+            'observacoes' => $venda->observacoes,
+        ];
+
+        if ($venda->documentoFiscal) {
+            $dados['documento_fiscal'] = [
+                'id' => $venda->documentoFiscal->id,
+                'numero_documento' => $venda->documentoFiscal->numero_documento,
+                'tipo_documento' => $venda->documentoFiscal->tipo_documento,
+                'tipo_documento_nome' => $venda->documentoFiscal->tipo_documento_nome,
+                'data_emissao' => $venda->documentoFiscal->data_emissao,
+                'hora_emissao' => $venda->documentoFiscal->hora_emissao,
+                'data_vencimento' => $venda->documentoFiscal->data_vencimento,
+                'estado' => $venda->documentoFiscal->estado,
+                'hash_fiscal' => $venda->documentoFiscal->hash_fiscal,
+                'retencao_total' => (float) ($venda->documentoFiscal->total_retencao ?? 0),
+                'recibos' => $venda->documentoFiscal->recibos->map(fn($r) => [
+                    'id' => $r->id,
+                    'numero' => $r->numero_documento,
+                    'valor' => (float) $r->total_liquido,
+                    'metodo_pagamento' => $r->metodo_pagamento,
+                    'data_emissao' => $r->data_emissao,
+                ]),
+            ];
         }
 
-        if ($documento->tipo_documento === 'FA') {
-            $totalPago = $this->calcularValorPago($documento);
-            return max(0, $documento->total_liquido - $totalPago);
+        if ($detalhado) {
+            $dados['itens'] = $venda->itens->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'produto_id' => $item->produto_id,
+                    'produto' => $item->produto ? [
+                        'id' => $item->produto->id,
+                        'nome' => $item->produto->nome,
+                        'codigo' => $item->produto->codigo,
+                        'tipo' => $item->produto->tipo,
+                    ] : null,
+                    'descricao' => $item->descricao,
+                    'quantidade' => (int) $item->quantidade,
+                    'preco_venda' => (float) $item->preco_venda,
+                    'desconto' => (float) ($item->desconto ?? 0),
+                    'base_tributavel' => (float) $item->base_tributavel,
+                    'valor_iva' => (float) $item->valor_iva,
+                    'taxa_iva' => (float) $item->taxa_iva,
+                    'valor_retencao' => (float) ($item->valor_retencao ?? 0),
+                    'taxa_retencao' => (float) ($item->taxa_retencao ?? 0),
+                    'subtotal' => (float) $item->subtotal,
+                    'eh_servico' => $item->produto && $item->produto->tipo === 'servico',
+                ];
+            });
+
+            $dados['totais_por_tipo'] = [
+                'produtos' => [
+                    'quantidade' => $venda->itens->filter(fn($i) => $i->produto && $i->produto->tipo === 'produto')->count(),
+                    'total' => $venda->itens->filter(fn($i) => $i->produto && $i->produto->tipo === 'produto')->sum('subtotal'),
+                ],
+                'servicos' => [
+                    'quantidade' => $servicos->count(),
+                    'total' => $servicos->sum('subtotal'),
+                    'retencao' => $totalRetencaoServicos,
+                ],
+            ];
         }
 
-        if (in_array($documento->tipo_documento, ['FR', 'RC'])) {
-            return 0;
-        }
-
-        if ($documento->tipo_documento === 'FT') {
-            $totalPago = $this->calcularValorPago($documento);
-            $totalAdiantamentos = DB::table('adiantamento_fatura')
-                ->where('fatura_id', $documento->id)
-                ->sum('valor_utilizado');
-            return max(0, $documento->total_liquido - $totalPago - $totalAdiantamentos);
-        }
-
-        return 0;
-    }
-
-    /**
-     * Verificar se a venda pode receber pagamento
-     */
-    private function podeReceberPagamento(Venda $venda): bool
-    {
-        if (!$venda->documentoFiscal) {
-            return false;
-        }
-
-        if (!in_array($venda->documentoFiscal->tipo_documento, ['FT', 'FA'])) {
-            return false;
-        }
-
-        if ($venda->documentoFiscal->estado === 'cancelado') {
-            return false;
-        }
-
-        $estadoPagamento = $this->determinarEstadoPagamentoVenda($venda);
-        return in_array($estadoPagamento, ['pendente', 'parcial']);
+        return $dados;
     }
 }

@@ -271,7 +271,7 @@ export default function NovaFaturaReciboPage() {
       const erroVal = validarPayloadVenda(payload);
       if (erroVal) { setError(erroVal); return; }
       await vendaService.criar(payload);
-      setSucesso(`Fatura-Recibo criada!${troco > 0 ? ` Troco: ${formatarPreco(troco)}` : ''}`);
+      setSucesso("Fatura-Recibo criada!" + (troco > 0 ? " Troco: " + formatarPreco(troco) : ""));
       setTimeout(() => router.push("/dashboard/Faturas/Faturas"), 1500);
     } catch (err: unknown) {
       setError(err instanceof AxiosError ? err.response?.data?.message || "Erro ao salvar" : "Erro ao salvar");
@@ -287,18 +287,18 @@ export default function NovaFaturaReciboPage() {
   ══════════════════════════════════════════════════════════════════ */
   return (
     <MainEmpresa>
-      <div className="space-y-4 pb-8 px-3 sm:px-4 max-w-7xl mx-auto"
+      <div className="space-y-3 pb-8 px-2 sm:px-4 max-w-5xl mx-auto" 
         style={{ backgroundColor: colors.background }}>
 
         {/* ── Header ── */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 mb-1 mt-2">
           <button onClick={() => router.back()}
-            className="p-2 rounded-full transition-colors hover:opacity-70"
+            className="p-1.5 rounded-md transition-colors hover:bg-black/5"
             style={{ color: colors.primary }}>
-            <ArrowLeft size={20} />
+            <ArrowLeft size={18} />
           </button>
           <div>
-            <h1 className="text-xl font-bold" style={{ color: colors.secondary }}>Nova venda</h1>
+            <h1 className="text-lg font-bold" style={{ color: colors.secondary }}>Nova Venda</h1>
           </div>
         </div>
 
@@ -326,7 +326,7 @@ export default function NovaFaturaReciboPage() {
             <span style={{ color: colors.warning }}>
               <strong>Estoque baixo: </strong>
               <span style={{ color: colors.textSecondary }}>
-                {produtosEstoqueBaixo.map(p => `${p.nome} (${p.estoque_atual})`).join(' · ')}
+                {produtosEstoqueBaixo.map((p) => p.nome + " (" + p.estoque_atual + ")").join(' · ')}
               </span>
             </span>
           </div>
@@ -335,13 +335,13 @@ export default function NovaFaturaReciboPage() {
         {/* ══════════════════════════════════════════════════════
             CARD 1 — Dados da Venda (Cliente + Produto + Obs)
         ══════════════════════════════════════════════════════ */}
-        <div className="rounded-xl border shadow-sm overflow-hidden"
+        <div className=" shadow-sm border overflow-hidden"
           style={{ backgroundColor: colors.card, borderColor: colors.border }}>
 
-          <div className="px-4 py-2.5 flex items-center gap-2"
+          <div className="px-3 py-1.5 flex items-center gap-2"
             style={{ backgroundColor: colors.primary }}>
-            <ShoppingCart size={15} className="text-white" />
-            <span className="text-white font-semibold text-sm tracking-wide">Dados da Venda</span>
+            <ShoppingCart size={14} className="text-white" />
+            <span className="text-white font-medium text-xs uppercase tracking-wider">Dados da Venda</span>
           </div>
 
           <table className="w-full border-collapse">
@@ -349,17 +349,17 @@ export default function NovaFaturaReciboPage() {
 
               {/* ── Cliente ── */}
               <tr className="border-b" style={{ borderColor: colors.border }}>
-                <td className="py-3 pl-4 pr-3 align-middle w-[110px]"
+                <td className="py-2 pl-3 pr-2 align-middle w-[100px]"
                   style={{ backgroundColor: colors.hover }}>
                   <div className="flex items-center gap-1.5">
-                    <User size={14} style={{ color: colors.primary }} />
-                    <span className="text-sm font-semibold" style={{ color: colors.primary }}>Cliente</span>
+                    <User size={13} style={{ color: colors.text }} />
+                    <span className="text-sm font-semibold" style={{ color: colors.text }}>Cliente</span>
                   </div>
                 </td>
-                <td className="py-3 px-3 align-middle">
+                <td className="py-2 px-2 align-middle">
                   <div className="flex flex-wrap items-center gap-2">
                     {/* Toggle modo */}
-                    <div className="inline-flex rounded-lg border overflow-hidden flex-shrink-0"
+                    <div className="inline-flex rounded-md border overflow-hidden flex-shrink-0"
                       style={{ borderColor: colors.border }}>
                       {(['cadastrado', 'avulso'] as ModoCliente[]).map(modo => (
                         <button key={modo} type="button"
@@ -370,18 +370,18 @@ export default function NovaFaturaReciboPage() {
                             setClienteAvulsoNif('');
                             setNifError(null);
                           }}
-                          className="px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap"
+                          className="px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap"
                           style={{
                             backgroundColor: modoCliente === modo ? colors.primary : 'transparent',
                             color: modoCliente === modo ? 'white' : colors.textSecondary,
                           }}>
-                          {modo === 'cadastrado' ? 'Cadastrado' : 'Avulso'}
+                          {modo === 'cadastrado' ? 'Cadastrado' : 'Não cadastrado'}
                         </button>
                       ))}
                     </div>
 
                     {modoCliente === 'cadastrado' ? (
-                      <select className="flex-1 min-w-[160px] max-w-xs p-2 rounded-lg text-sm outline-none"
+                      <select className="flex-1 min-w-[150px] max-w-xs px-2.5 py-1.5 rounded-md text-sm outline-none"
                         style={inp}
                         value={clienteSelecionado?.id ?? ""}
                         onChange={e => setClienteSelecionado(clientes.find(c => c.id === e.target.value) ?? null)}>
@@ -395,16 +395,16 @@ export default function NovaFaturaReciboPage() {
                     ) : (
                       <div className="flex flex-wrap gap-2">
                         <input type="text" placeholder="Nome do cliente *"
-                          className="w-44 p-2 rounded-lg text-sm outline-none" style={inp}
+                          className="w-40 px-2.5 py-1.5 rounded-md text-sm outline-none" style={inp}
                           value={clienteAvulso}
                           onChange={e => setClienteAvulso(e.target.value)} />
-                        <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-2 relative">
                           <input type="text" inputMode="numeric" placeholder="NIF (9 dígitos)"
-                            className="w-32 p-2 rounded-lg text-sm outline-none" maxLength={9}
+                            className="w-32 px-2.5 py-1.5 rounded-md text-sm outline-none" maxLength={9}
                             style={{ ...inp, borderColor: nifError ? colors.danger : inp.borderColor }}
                             value={clienteAvulsoNif}
                             onChange={handleNifChange} />
-                          {nifError && <span className="text-xs" style={{ color: colors.danger }}>{nifError}</span>}
+                          {nifError && <span className="text-[10px] absolute -bottom-4 right-0" style={{ color: colors.danger }}>{nifError}</span>}
                         </div>
                       </div>
                     )}
@@ -414,16 +414,16 @@ export default function NovaFaturaReciboPage() {
 
               {/* ── Produto ── */}
               <tr className="border-b" style={{ borderColor: colors.border }}>
-                <td className="py-3 pl-4 pr-3 align-middle"
+                <td className="py-2 pl-3 pr-2 align-middle"
                   style={{ backgroundColor: colors.hover }}>
                   <div className="flex items-center gap-1.5">
-                    <Package size={14} style={{ color: colors.primary }} />
-                    <span className="text-sm font-semibold" style={{ color: colors.primary }}>Produto</span>
+                    <Package size={13} style={{ color: colors.text }} />
+                    <span className="text-sm font-semibold" style={{ color: colors.text }}>Produto</span>
                   </div>
                 </td>
-                <td className="py-3 px-3 align-middle">
+                <td className="py-2 px-2 align-middle">
                   <div className="flex flex-wrap items-center gap-2">
-                    <select className="w-48 sm:w-60 p-2 rounded-lg text-sm outline-none" style={inp}
+                    <select className="w-48 sm:w-56 px-2.5 py-1.5 rounded-md text-sm outline-none" style={inp}
                       value={formItem.produto_id}
                       onChange={e => {
                         const p = produtos.find(x => x.id === e.target.value);
@@ -432,23 +432,23 @@ export default function NovaFaturaReciboPage() {
                       <option value="">Selecione…</option>
                       {produtos.filter(p => p.status === 'ativo').map(p => (
                         <option key={p.id} value={p.id}>
-                          {p.nome} — {formatarPreco(p.preco_venda)}{!isServico(p) ? ` (${p.estoque_atual})` : ''}
+                          {p.nome} — {formatarPreco(p.preco_venda)}{!isServico(p) ? " (" + p.estoque_atual + ")" : ""}
                         </option>
                       ))}
                     </select>
 
                     {/* Stepper qtd */}
-                    <div className="flex items-center rounded-lg overflow-hidden border"
+                    <div className="flex items-center rounded-md overflow-hidden border"
                       style={{ borderColor: colors.border }}>
                       <button type="button"
-                        className="w-8 h-9 flex items-center justify-center disabled:opacity-30"
-                        style={{ backgroundColor: colors.hover, color: colors.primary }}
+                        className="w-7 h-8 flex items-center justify-center disabled:opacity-30"
+                        style={{ backgroundColor: colors.hover, color: colors.text }}
                         disabled={!formItem.produto_id || formItem.quantidade <= 1}
                         onClick={() => setFormItem(p => ({ ...p, quantidade: Math.max(1, p.quantidade - 1) }))}>
-                        <Minus size={13} />
+                        <Minus size={12} style={{ color: colors.text }} />
                       </button>
                       <input type="number" min={1}
-                        className="w-10 text-center text-sm h-9 border-0 outline-none"
+                        className="w-10 text-center text-sm h-8 border-0 outline-none"
                         style={{ backgroundColor: colors.card, color: colors.text }}
                         value={formItem.quantidade} disabled={!formItem.produto_id}
                         onChange={e => {
@@ -459,8 +459,8 @@ export default function NovaFaturaReciboPage() {
                           }
                         }} />
                       <button type="button"
-                        className="w-8 h-9 flex items-center justify-center disabled:opacity-30"
-                        style={{ backgroundColor: colors.hover, color: colors.primary }}
+                        className="w-7 h-8 flex items-center justify-center disabled:opacity-30"
+                        style={{ backgroundColor: colors.hover, color: colors.text }}
                         disabled={!formItem.produto_id || (!!produtoSel && !isServico(produtoSel) && formItem.quantidade >= produtoSel.estoque_atual)}
                         onClick={() => {
                           const p = produtos.find(x => x.id === formItem.produto_id);
@@ -469,19 +469,19 @@ export default function NovaFaturaReciboPage() {
                             setFormItem(prev => ({ ...prev, quantidade: Math.min(prev.quantidade + 1, max) }));
                           }
                         }}>
-                        <Plus size={13} />
+                        <Plus size={12} style={{ color: colors.text }} />
                       </button>
                     </div>
 
                     <input type="number" min={0} placeholder="Desconto"
-                      className="w-24 p-2 rounded-lg text-sm outline-none" style={inp}
+                      className="w-20 px-2.5 py-1.5 rounded-md text-sm outline-none" style={inp}
                       value={formItem.desconto || ''} disabled={!formItem.produto_id}
                       onChange={e => setFormItem(p => ({ ...p, desconto: Number(e.target.value) }))} />
 
                     <button type="button" onClick={adicionarItem} disabled={!formItem.produto_id}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-40"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium text-white disabled:opacity-40"
                       style={{ backgroundColor: colors.primary }}>
-                      <Plus size={14} />Adicionar
+                      <Plus size={13} />Adic.
                     </button>
 
                     {produtoSel && !isServico(produtoSel) && (
@@ -490,40 +490,21 @@ export default function NovaFaturaReciboPage() {
                       </span>
                     )}
                   </div>
-
-                  {/* Preview cálculo */}
-                  {previewItem && (
-                    <div className="mt-2 px-3 py-2 rounded-lg flex flex-wrap gap-x-4 gap-y-1 text-sm"
-                      style={{ backgroundColor: colors.hover }}>
-                      {[
-                        { label: "Base", val: formatarPreco(previewItem.base_tributavel), clr: colors.text },
-                        { label: "IVA", val: formatarPreco(previewItem.valor_iva), clr: colors.text },
-                        ...(previewItem.valor_retencao > 0
-                          ? [{ label: "Ret.", val: `-${formatarPreco(previewItem.valor_retencao)}`, clr: colors.danger }]
-                          : []),
-                        { label: "Total", val: formatarPreco(previewItem.subtotal), clr: colors.secondary },
-                      ].map(({ label, val, clr }) => (
-                        <span key={label} style={{ color: colors.textSecondary }}>
-                          {label}: <strong style={{ color: clr }}>{val}</strong>
-                        </span>
-                      ))}
-                    </div>
-                  )}
                 </td>
               </tr>
 
               {/* ── Observações ── */}
               <tr>
-                <td className="py-3 pl-4 pr-3 align-top"
+                <td className="py-2 pl-3 pr-2 align-top"
                   style={{ backgroundColor: colors.hover }}>
                   <div className="flex items-center gap-1.5">
-                    <FileText size={14} style={{ color: colors.primary }} />
-                    <span className="text-sm font-semibold" style={{ color: colors.primary }}>Obs.</span>
+                    <FileText size={13} style={{ color: colors.text }} />
+                    <span className="text-sm font-semibold" style={{ color: colors.text }}>Obs.</span>
                   </div>
                 </td>
-                <td className="py-3 px-3">
-                  <input type="text" placeholder="Observações opcionais…"
-                    className="w-full p-2 rounded-lg text-sm outline-none" style={inp}
+                <td className="py-2 px-2">
+                  <input type="text" placeholder="Observações adicionais…"
+                    className="w-full px-2.5 py-1.5 rounded-md text-sm outline-none" style={inp}
                     value={observacoes}
                     onChange={e => setObservacoes(e.target.value)} />
                 </td>
@@ -537,24 +518,24 @@ export default function NovaFaturaReciboPage() {
             CARD ÚNICO — Itens + Resumo Fiscal + Pagamento (empilhado)
         ══════════════════════════════════════════════════════════════ */}
         {itens.length > 0 ? (
-          <div className="rounded-xl border shadow-sm overflow-hidden"
+          <div className=" border shadow-sm overflow-hidden"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}>
 
             {/* Header do card */}
-            <div className="px-4 py-2.5 flex items-center justify-between"
+            <div className="px-3 py-1.5 flex items-center justify-between"
               style={{ backgroundColor: colors.primary }}>
               <div className="flex items-center gap-2">
-                <Receipt size={15} className="text-white" />
-                <span className="text-white font-semibold text-sm tracking-wide">
+                <ShoppingCart size={14} className="text-white" />
+                <span className="text-white font-medium text-xs uppercase tracking-wider">
                   Itens da Venda
-                  <span className="ml-1.5 text-white/60 font-normal text-xs">
-                    ({itens.length} item{itens.length !== 1 ? 's' : ''})
+                  <span className="ml-1.5 text-white/70 font-normal text-xs normal-case">
+                    ({itens.length} {itens.length !== 1 ? "itens" : "item"})
                   </span>
                 </span>
               </div>
               <button
                 onClick={() => window.confirm("Limpar todos os itens?") && setItens([])}
-                className="text-white/60 hover:text-white text-xs transition-colors">
+                className="text-white/70 hover:text-white text-xs transition-colors">
                 Limpar tudo
               </button>
             </div>
@@ -590,10 +571,6 @@ export default function NovaFaturaReciboPage() {
                           <div className="flex items-center gap-1.5">
                             <span className="font-medium truncate max-w-[100px] sm:max-w-[160px]"
                               style={{ color: colors.text }}>{item.descricao}</span>
-                            {item.eh_servico && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded font-bold flex-shrink-0"
-                                style={{ backgroundColor: `${colors.primary}20`, color: colors.primary }}>S</span>
-                            )}
                           </div>
                           {item.desconto > 0 && (
                             <span className="text-[10px]" style={{ color: colors.danger }}>
@@ -609,7 +586,7 @@ export default function NovaFaturaReciboPage() {
                               className="w-6 h-6 rounded flex items-center justify-center disabled:opacity-30"
                               style={{ backgroundColor: colors.hover, color: colors.primary }}
                               disabled={item.quantidade <= 1}>
-                              <Minus size={11} />
+                              <Minus size={11} style={{ color: colors.text }} />
                             </button>
                             <span className="w-7 text-center text-sm font-medium"
                               style={{ color: colors.text }}>{item.quantidade}</span>
@@ -617,7 +594,7 @@ export default function NovaFaturaReciboPage() {
                               className="w-6 h-6 rounded flex items-center justify-center disabled:opacity-30"
                               style={{ backgroundColor: colors.hover, color: colors.primary }}
                               disabled={item.quantidade >= maxEst}>
-                              <Plus size={11} />
+                              <Plus size={11} style={{ color: colors.text }} />
                             </button>
                           </div>
                         </td>
@@ -652,20 +629,24 @@ export default function NovaFaturaReciboPage() {
               <div className="p-3 border-b" style={{ borderColor: colors.border }}>
                 <p className="text-xs font-bold uppercase tracking-wider mb-3"
                   style={{ color: colors.textSecondary }}>Resumo Fiscal</p>
-                <div className=" flex flex-col lg:flex-row lg:items-start gap-6">
+                <div className=" flex flex-col lg:flex-row lg:items-start gap-4">
                   <div className="flex-1 max-w-md">
                     <LinhaFiscal label="Subtotal bruto" valor={formatarPreco(totalBase + totalDesconto)} colors={colors} />
                     {totalDesconto > 0 && (
                       <LinhaFiscal label="Descontos" valor={`−${formatarPreco(totalDesconto)}`} cor={colors.danger} colors={colors} />
                     )}
                     <LinhaFiscal label="Base tributável" valor={formatarPreco(totalBase)} colors={colors} />
-                    <LinhaFiscal label={`IVA (${itens[0]?.taxa_iva ?? 14}%)`} valor={formatarPreco(totalIva)} colors={colors} />
+                    </div>
+                    <div className="flex-1 max-w-md gap-2 mt-2 lg:mt-0 lg:gap-0">
+                    <LinhaFiscal label={"IVA (" + (itens[0]?.taxa_iva ?? 14) + "%)"} valor={formatarPreco(totalIva)} colors={colors} />
                     {totalRetencao > 0 && (
                       <LinhaFiscal label="Retenção (6.5%)" valor={`−${formatarPreco(totalRetencao)}`} cor={colors.danger} colors={colors} />
                     )}
-                    <hr />
-                    <LinhaFiscal label="Total a pagar" valor={formatarPreco(totalLiquido)}
+                    <LinhaFiscal label="Total" valor={formatarPreco(totalLiquido)}
                       cor={colors.secondary} negrito colors={colors} />
+                    </div>
+                    <hr />
+
                   </div>
                 </div>
               </div>
@@ -693,10 +674,15 @@ export default function NovaFaturaReciboPage() {
                   {/* Valor Pago */}
                   <div className="flex-1">
                     <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-medium" style={{ color: colors.textSecondary }}>Valor Pago</label>
+                      <label className="text-xs font-medium" style={{ color: colors.textSecondary }}>Valor a pagar</label>
                       <span className="text-xs font-semibold" style={{ color: colors.secondary }}>
-                        Total: {formatarPreco(totalLiquido)}
+                        troco: {formatarPreco(troco)}
                       </span>
+                      {falta > 0 && (
+                        <p className="text-sm flex items-center gap-1" style={{ color: colors.danger }}>
+                          <AlertTriangle size={14} />Faltam <strong>{formatarPreco(falta)}</strong>
+                        </p>
+                      )}
                     </div>
                     <div className="relative">
                       <Calculator size={14} className="absolute left-3 top-1/2 -translate-y-1/2"
@@ -729,34 +715,14 @@ export default function NovaFaturaReciboPage() {
                         <><AlertTriangle size={15} />Pagar</>
                       ) : (
                         <><CheckCircle2 size={15} />
-                          Finalizar{troco > 0 ? ` · Troco ${formatarPreco(troco)}` : ''}
+                          Finalizar{troco > 0 ? " · Troco " + formatarPreco(troco) : ""}
                         </>
                       )}
                     </button>
                   </div>
                 </div>
-
-                {/* Feedback do pagamento */}
-                <div className="mt-3 flex flex-wrap items-center gap-4">
-                  {falta > 0 && (
-                    <p className="text-sm flex items-center gap-1" style={{ color: colors.danger }}>
-                      <AlertTriangle size={14} />Faltam <strong>{formatarPreco(falta)}</strong>
-                    </p>
-                  )}
-                  {troco > 0 && (
-                    <p className="text-sm flex items-center gap-1 font-semibold" style={{ color: colors.success }}>
-                      <CheckCircle2 size={14} />Troco: <strong>{formatarPreco(troco)}</strong>
-                    </p>
-                  )}
-                  {pagamentoSuficiente && troco === 0 && (
-                    <p className="text-sm flex items-center gap-1" style={{ color: colors.success }}>
-                      <CheckCircle2 size={14} />Pagamento exacto
-                    </p>
-                  )}
-                </div>
               </div>
             </div>
-          </div>
         ) : (
           /* Estado vazio */
           <div className="text-center py-8 rounded-xl border-2 border-dashed"

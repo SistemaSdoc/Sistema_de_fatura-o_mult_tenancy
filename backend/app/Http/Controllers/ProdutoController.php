@@ -11,8 +11,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Models\MovimentoStock;
 use Illuminate\Database\QueryException;
-use Illuminate\Database\Eloquent\ModelNotFoundException; // ✅ ADICIONADO
-use Throwable; // ✅ ADICIONADO
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Throwable;
+use Carbon\Carbon;
 
 class ProdutoController extends Controller
 {
@@ -24,7 +25,23 @@ class ProdutoController extends Controller
     }
 
     /**
-     * Listar produtos ativos (não deletados)
+     * Aplicar filtros de data à query
+     */
+    private function aplicarFiltrosData($query, Request $request, string $coluna = 'created_at')
+    {
+        if ($request->has('data_inicio') && !empty($request->data_inicio)) {
+            $query->whereDate($coluna, '>=', Carbon::parse($request->data_inicio)->format('Y-m-d'));
+        }
+
+        if ($request->has('data_fim') && !empty($request->data_fim)) {
+            $query->whereDate($coluna, '<=', Carbon::parse($request->data_fim)->format('Y-m-d'));
+        }
+
+        return $query;
+    }
+
+    /**
+     * Listar produtos ativos (não deletados) COM FILTROS DE DATA
      */
     public function index(Request $request)
     {
@@ -32,7 +49,7 @@ class ProdutoController extends Controller
 
         $query = Produto::query();
 
-        // Filtros
+        // Filtros básicos
         if ($request->has('tipo')) {
             $query->where('tipo', $request->tipo);
         }
@@ -57,6 +74,32 @@ class ProdutoController extends Controller
             $query->semEstoque();
         }
 
+        // ✅ NOVOS FILTROS
+        if ($request->has('apenas_servicos') && $request->boolean('apenas_servicos')) {
+            $query->where('tipo', 'servico');
+        }
+        if ($request->has('apenas_produtos') && $request->boolean('apenas_produtos')) {
+            $query->where('tipo', 'produto');
+        }
+        if ($request->has('com_retencao') && $request->boolean('com_retencao')) {
+            $query->where('retencao', '>', 0);
+        }
+
+        // ✅ FILTROS DE DATA (criação/atualização)
+        $this->aplicarFiltrosData($query, $request, 'created_at');
+
+        // ✅ FILTRO POR DATA DE MOVIMENTAÇÃO (através de relação)
+        if ($request->has('movimentado_entre_inicio') || $request->has('movimentado_entre_fim')) {
+            $query->whereHas('movimentosStock', function ($q) use ($request) {
+                if ($request->has('movimentado_entre_inicio') && !empty($request->movimentado_entre_inicio)) {
+                    $q->whereDate('created_at', '>=', Carbon::parse($request->movimentado_entre_inicio)->format('Y-m-d'));
+                }
+                if ($request->has('movimentado_entre_fim') && !empty($request->movimentado_entre_fim)) {
+                    $q->whereDate('created_at', '<=', Carbon::parse($request->movimentado_entre_fim)->format('Y-m-d'));
+                }
+            });
+        }
+
         // Ordenação
         $ordenar = $request->get('ordenar', 'nome');
         $direcao = $request->get('direcao', 'asc');
@@ -77,7 +120,7 @@ class ProdutoController extends Controller
     }
 
     /**
-     * Listar todos os produtos (ativos + deletados) - para admin
+     * Listar todos os produtos (ativos + deletados) - para admin COM FILTROS
      */
     public function indexWithTrashed(Request $request)
     {
@@ -96,6 +139,18 @@ class ProdutoController extends Controller
                     ->orWhere('codigo', 'like', "%{$busca}%");
             });
         }
+        if ($request->has('apenas_servicos') && $request->boolean('apenas_servicos')) {
+            $query->where('tipo', 'servico');
+        }
+        if ($request->has('apenas_produtos') && $request->boolean('apenas_produtos')) {
+            $query->where('tipo', 'produto');
+        }
+        if ($request->has('com_retencao') && $request->boolean('com_retencao')) {
+            $query->where('retencao', '>', 0);
+        }
+
+        // ✅ FILTROS DE DATA
+        $this->aplicarFiltrosData($query, $request, 'created_at');
 
         $produtos = $query->get();
 
@@ -111,7 +166,7 @@ class ProdutoController extends Controller
     }
 
     /**
-     * Listar APENAS produtos deletados (lixeira)
+     * Listar APENAS produtos deletados (lixeira) COM FILTROS
      */
     public function indexOnlyTrashed(Request $request)
     {
@@ -126,6 +181,12 @@ class ProdutoController extends Controller
                     ->orWhere('codigo', 'like', "%{$busca}%");
             });
         }
+        if ($request->has('tipo')) {
+            $query->where('tipo', $request->tipo);
+        }
+
+        // ✅ FILTROS DE DATA
+        $this->aplicarFiltrosData($query, $request, 'deleted_at');
 
         $produtos = $request->boolean('paginar')
             ? $query->paginate($request->get('per_page', 15))
@@ -391,7 +452,7 @@ class ProdutoController extends Controller
                 ], 409);
             }
 
-            // ✅ NOVO: Verificar se tem movimentações de stock
+            // Verificar se tem movimentações de stock
             if ($produto->movimentosStock()->exists()) {
                 Log::warning('[PRODUTO DELETE] Produto com movimentações sendo deletado', [
                     'produto_id' => $produto->id,
@@ -448,7 +509,7 @@ class ProdutoController extends Controller
                 'message' => 'Erro no banco de dados ao deletar produto',
                 'error' => $e->getMessage()
             ], 500);
-        } catch (Throwable $e) { // ✅ ALTERADO de \Throwable para Throwable (com import)
+        } catch (Throwable $e) {
             DB::rollBack();
 
             Log::error('[PRODUTO DELETE ERROR]', [
@@ -465,7 +526,7 @@ class ProdutoController extends Controller
     }
 
     /**
-     * Restaurar produto deletado - VERSÃO CORRIGIDA ✅
+     * Restaurar produto deletado - VERSÃO CORRIGIDA
      */
     public function restore($id)
     {
@@ -482,7 +543,7 @@ class ProdutoController extends Controller
                 ], 400);
             }
 
-            // ✅ CORREÇÃO: Verificar se categoria existe de forma mais segura
+            // Verificar se categoria existe de forma mais segura
             if ($produto->categoria_id) {
                 $categoriaExiste = Categoria::withTrashed()
                     ->where('id', $produto->categoria_id)
@@ -497,7 +558,7 @@ class ProdutoController extends Controller
                 }
             }
 
-            // ✅ CORREÇÃO: Verificar também o fornecedor se existir
+            // Verificar também o fornecedor se existir
             if ($produto->fornecedor_id) {
                 $fornecedorExiste = Fornecedor::withTrashed()
                     ->where('id', $produto->fornecedor_id)
@@ -526,12 +587,12 @@ class ProdutoController extends Controller
                 'message' => 'Produto restaurado com sucesso',
                 'produto' => $produto->fresh(['categoria', 'fornecedor']),
             ]);
-        } catch (ModelNotFoundException $e) { // ✅ CORRIGIDO: Usando a classe importada
+        } catch (ModelNotFoundException $e) {
             DB::rollBack();
             return response()->json([
                 'message' => 'Produto não encontrado',
             ], 404);
-        } catch (Throwable $e) { // ✅ CORRIGIDO: Usando a classe importada
+        } catch (Throwable $e) {
             DB::rollBack();
             Log::error('[PRODUTO RESTORE ERROR]', [
                 'produto_id' => $id,
@@ -591,7 +652,7 @@ class ProdutoController extends Controller
                 'message' => 'Erro ao remover produto permanentemente',
                 'error' => 'Erro de banco de dados: ' . $e->getMessage()
             ], 500);
-        } catch (Throwable $e) { // ✅ CORRIGIDO
+        } catch (Throwable $e) {
             Log::error('[PRODUTO FORCE DELETE ERROR]', [
                 'produto_id' => $id,
                 'error' => $e->getMessage()
@@ -600,6 +661,119 @@ class ProdutoController extends Controller
             return response()->json([
                 'message' => 'Erro ao remover produto',
                 'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Estatísticas de produtos (com filtros de data)
+     */
+    public function estatisticas(Request $request)
+    {
+        $this->authorize('viewAny', Produto::class);
+
+        try {
+            // Produtos mais vendidos (com filtros de data)
+            $queryProdutosMaisVendidos = DB::table('itens_venda')
+                ->join('produtos', 'itens_venda.produto_id', '=', 'produtos.id')
+                ->join('vendas', 'itens_venda.venda_id', '=', 'vendas.id')
+                ->where('vendas.status', '!=', 'cancelada');
+
+            if ($request->data_inicio) {
+                $queryProdutosMaisVendidos->whereDate('vendas.data_venda', '>=', $request->data_inicio);
+            }
+            if ($request->data_fim) {
+                $queryProdutosMaisVendidos->whereDate('vendas.data_venda', '<=', $request->data_fim);
+            }
+
+            $produtosMaisVendidos = $queryProdutosMaisVendidos
+                ->select(
+                    'produtos.id',
+                    'produtos.nome',
+                    'produtos.codigo',
+                    'produtos.tipo',
+                    DB::raw('SUM(itens_venda.quantidade) as total_quantidade'),
+                    DB::raw('SUM(itens_venda.subtotal) as total_vendas')
+                )
+                ->groupBy('produtos.id', 'produtos.nome', 'produtos.codigo', 'produtos.tipo')
+                ->orderByDesc('total_vendas')
+                ->limit(10)
+                ->get()
+                ->map(function ($item) {
+                    return [
+                        'id' => $item->id,
+                        'produto' => $item->nome,
+                        'codigo' => $item->codigo,
+                        'tipo' => $item->tipo,
+                        'quantidade' => (int) $item->total_quantidade,
+                        'valor_total' => round($item->total_vendas, 2),
+                    ];
+                });
+
+            // Serviços mais vendidos (com filtros)
+            $queryServicosMaisVendidos = DB::table('itens_venda')
+                ->join('produtos', 'itens_venda.produto_id', '=', 'produtos.id')
+                ->join('vendas', 'itens_venda.venda_id', '=', 'vendas.id')
+                ->where('produtos.tipo', 'servico')
+                ->where('vendas.status', '!=', 'cancelada');
+
+            if ($request->data_inicio) {
+                $queryServicosMaisVendidos->whereDate('vendas.data_venda', '>=', $request->data_inicio);
+            }
+            if ($request->data_fim) {
+                $queryServicosMaisVendidos->whereDate('vendas.data_venda', '<=', $request->data_fim);
+            }
+
+            $servicosMaisVendidos = $queryServicosMaisVendidos
+                ->select(
+                    'produtos.id',
+                    'produtos.nome',
+                    'produtos.codigo',
+                    DB::raw('SUM(itens_venda.quantidade) as total_quantidade'),
+                    DB::raw('SUM(itens_venda.subtotal) as total_receita'),
+                    DB::raw('SUM(itens_venda.valor_retencao) as total_retencao')
+                )
+                ->groupBy('produtos.id', 'produtos.nome', 'produtos.codigo')
+                ->orderByDesc('total_receita')
+                ->limit(10)
+                ->get()
+                ->map(function ($item) {
+                    return [
+                        'id' => $item->id,
+                        'nome' => $item->nome,
+                        'codigo' => $item->codigo,
+                        'quantidade' => (int) $item->total_quantidade,
+                        'receita' => round($item->total_receita, 2),
+                        'retencao' => round($item->total_retencao, 2),
+                    ];
+                });
+
+            // Estatísticas gerais
+            $queryProdutosAtivos = Produto::where('status', 'ativo');
+            $this->aplicarFiltrosData($queryProdutosAtivos, $request, 'created_at');
+
+            $queryServicosAtivos = Produto::where('tipo', 'servico')->where('status', 'ativo');
+            $this->aplicarFiltrosData($queryServicosAtivos, $request, 'created_at');
+
+            $queryProdutosComRetencao = Produto::where('tipo', 'servico')->where('retencao', '>', 0);
+            $this->aplicarFiltrosData($queryProdutosComRetencao, $request, 'created_at');
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'produtos_mais_vendidos' => $produtosMaisVendidos,
+                    'servicos_mais_vendidos' => $servicosMaisVendidos,
+                    'total_produtos_ativos' => $queryProdutosAtivos->count(),
+                    'total_servicos_ativos' => $queryServicosAtivos->count(),
+                    'total_servicos_com_retencao' => $queryProdutosComRetencao->count(),
+                ]
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[PRODUTO ESTATISTICAS ERROR]', ['error' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao carregar estatísticas',
+                'error' => $e->getMessage()
             ], 500);
         }
     }

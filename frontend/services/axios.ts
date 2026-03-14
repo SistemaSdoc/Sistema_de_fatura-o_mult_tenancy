@@ -1,4 +1,3 @@
-// src/services/axios.ts
 import axios, { AxiosError } from "axios";
 import Cookies from "js-cookie";
 
@@ -31,12 +30,9 @@ api.interceptors.request.use(
       config.headers["X-XSRF-TOKEN"] = xsrfToken;
     }
 
-    // No-cache para GET /me
-    if (method === "get" && config.url?.includes("/me")) {
-      config.headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
-      config.headers.Pragma = "no-cache";
-      config.headers.Expires = "0";
-    }
+    // REMOVIDO: Cache-Control / Pragma / Expires no GET /me
+    // Esses headers eram bloqueados pelo CORS preflight (Access-Control-Allow-Headers)
+    // O Sanctum não precisa deles — a sessão é gerida pelo cookie de sessão
 
     return config;
   },

@@ -18,10 +18,11 @@ const TIPO_LABEL: Record<TipoDocumento, string> = {
     "FRt": "Fatura de Retificação",
 };
 
-// Apenas FR e RC podem ser impressos
-const TIPOS_IMPRESSAO: TipoDocumento[] = ['FR', 'RC'];
-// Tipos que podem ter PDF baixado (exceto FT)
-const TIPOS_COM_PDF: TipoDocumento[] = ['FR', 'FP', 'FA', 'NC', 'ND', 'RC', 'FRt'];
+// Tipos que abrem o modal de talão (impressão térmica 80mm)
+const TIPOS_TALAO: TipoDocumento[] = ['FR', 'RC'];
+
+// Todos os tipos podem ter PDF descarregado via backend
+const TIPOS_COM_PDF: TipoDocumento[] = ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC', 'FRt'];
 
 interface ColorsTheme {
     border: string;
@@ -82,9 +83,7 @@ function TipoBadge({ tipo, colors }: { tipo: TipoDocumento; colors: ColorsTheme 
         "NC": { bg: `${colors.danger}20`, text: colors.danger },
         "ND": { bg: `${colors.secondary}20`, text: colors.secondary },
     };
-
     const estilo = cores[tipo] || { bg: colors.hover, text: colors.textSecondary };
-
     return (
         <span
             className="inline-flex px-2 py-1 rounded-full text-xs font-medium"
@@ -112,54 +111,34 @@ export default function InvoiceTable({
     const [paginaAtual, setPaginaAtual] = useState(1);
     const ITENS_POR_PAGINA = 10;
 
-    const podeImprimir = (tipo: TipoDocumento): boolean => {
-        return TIPOS_IMPRESSAO.includes(tipo);
-    };
-
-    const podeBaixarPdf = (tipo: TipoDocumento): boolean => {
-        return TIPOS_COM_PDF.includes(tipo);
-    };
-
-    const podeGerarRecibo = (documento: DocumentoFiscal): boolean => {
-        return documento.tipo_documento === "FT" &&
-            !["cancelado", "paga"].includes(documento.estado);
-    };
+    const podeMostrarTalao = (tipo: TipoDocumento): boolean => TIPOS_TALAO.includes(tipo);
+    const podeBaixarPdf = (tipo: TipoDocumento): boolean => TIPOS_COM_PDF.includes(tipo);
+    const podeGerarRecibo = (documento: DocumentoFiscal): boolean =>
+        documento.tipo_documento === "FT" && !["cancelado", "paga"].includes(documento.estado);
 
     const handleGerarRecibo = async (documento: DocumentoFiscal) => {
         try {
             const resultado = await onGerarRecibo(documento);
             if (resultado && onReciboGerado) {
-                setTimeout(() => {
-                    onReciboGerado(resultado);
-                }, 100);
+                setTimeout(() => onReciboGerado(resultado), 100);
             }
         } catch (error) {
             console.error('Erro ao gerar recibo:', error);
         }
     };
 
-    const handleBaixarPdf = async (documento: DocumentoFiscal) => {
-        await onBaixarPdf(documento);
-    };
-
     // Paginação
     const totalPaginas = Math.ceil(documentos.length / ITENS_POR_PAGINA);
-    const paginaValida = paginaAtual > totalPaginas ? 1 : paginaAtual;
+    const paginaValida = paginaAtual > totalPaginas && totalPaginas > 0 ? 1 : paginaAtual;
     const indiceInicial = (paginaValida - 1) * ITENS_POR_PAGINA;
     const indiceFinal = indiceInicial + ITENS_POR_PAGINA;
     const documentosPaginados = documentos.slice(indiceInicial, indiceFinal);
 
     const irParaPagina = (pagina: number) => {
-        if (pagina >= 1 && pagina <= totalPaginas) {
-            setPaginaAtual(pagina);
-        } else if (pagina > totalPaginas) {
-            setPaginaAtual(1);
-        }
+        if (pagina >= 1 && pagina <= totalPaginas) setPaginaAtual(pagina);
     };
 
-    if (loading) {
-        return <TableSkeleton colors={colors} />;
-    }
+    if (loading) return <TableSkeleton colors={colors} />;
 
     if (documentos.length === 0) {
         return (
@@ -186,23 +165,20 @@ export default function InvoiceTable({
                         <th className="px-3 py-3 text-left font-semibold whitespace-nowrap text-white">Tipo</th>
                         <th className="px-3 py-3 text-left font-semibold whitespace-nowrap text-white">Data</th>
                         <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white">Total</th>
-                        <th className="px-3 py-3 text-center font-semibold whitespace-nowrap min-w-[180px] text-white">Ações</th>
+                        <th className="px-3 py-3 text-center font-semibold whitespace-nowrap min-w-[160px] text-white">Ações</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y" style={{ borderColor: colors.border }}>
                     {documentosPaginados.map((documento) => {
                         const tipo = documento.tipo_documento;
-                        const podeImprimirDoc = podeImprimir(tipo);
-                        const podeGerarReciboDoc = podeGerarRecibo(documento);
-                        const podeBaixarPdfDoc = podeBaixarPdf(tipo);
 
                         return (
                             <tr
                                 key={documento.id}
-                                className="border-b transition-colors hover:bg-opacity-50"
+                                className="border-b transition-colors"
                                 style={{ borderColor: colors.border }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = colors.hover}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = colors.hover)}
+                                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                             >
                                 <td className="px-3 py-3 font-medium whitespace-nowrap" style={{ color: colors.text }}>
                                     {documento.numero_documento || `${documento.serie}-${String(documento.numero).padStart(5, '0')}`}
@@ -233,6 +209,7 @@ export default function InvoiceTable({
                                 </td>
                                 <td className="px-3 py-3 text-center">
                                     <div className="flex items-center justify-center gap-1">
+
                                         {/* Ver Detalhes */}
                                         <button
                                             onClick={() => onVerDetalhes(documento)}
@@ -243,8 +220,8 @@ export default function InvoiceTable({
                                             <Eye size={18} />
                                         </button>
 
-                                        {/* Gerar Recibo (apenas FT) */}
-                                        {podeGerarReciboDoc && (
+                                        {/* Gerar Recibo (apenas FT não cancelado/pago) */}
+                                        {podeGerarRecibo(documento) && (
                                             <button
                                                 onClick={() => handleGerarRecibo(documento)}
                                                 disabled={gerandoRecibo === documento.id}
@@ -253,36 +230,42 @@ export default function InvoiceTable({
                                                 title="Gerar Recibo"
                                             >
                                                 {gerandoRecibo === documento.id ? (
-                                                    <div className="w-4 h-4 border-2 border-t-current rounded-full animate-spin" style={{ borderColor: `${colors.success}30`, borderTopColor: colors.success }} />
+                                                    <div
+                                                        className="w-4 h-4 border-2 rounded-full animate-spin"
+                                                        style={{ borderColor: `${colors.success}30`, borderTopColor: colors.success }}
+                                                    />
                                                 ) : (
                                                     <FileText size={18} />
                                                 )}
                                             </button>
                                         )}
 
-                                        {/* Imprimir Talão (apenas FR e RC) */}
-                                        {podeImprimirDoc && (
+                                        {/* Talão de impressão (FR e RC) */}
+                                        {podeMostrarTalao(tipo) && (
                                             <button
                                                 onClick={() => onImprimirTalao(documento)}
                                                 className="p-2 rounded transition-colors hover:opacity-70 touch-manipulation"
                                                 style={{ color: colors.secondary }}
-                                                title="Imprimir"
+                                                title="Imprimir talão"
                                             >
                                                 <Printer size={18} />
                                             </button>
                                         )}
 
-                                        {/* Baixar PDF (exceto FT) */}
-                                        {podeBaixarPdfDoc && (
+                                        {/* Download PDF (todos os tipos) */}
+                                        {podeBaixarPdf(tipo) && (
                                             <button
-                                                onClick={() => handleBaixarPdf(documento)}
+                                                onClick={() => onBaixarPdf(documento)}
                                                 disabled={baixandoPdf === documento.id}
                                                 className="p-2 rounded transition-colors hover:opacity-70 touch-manipulation disabled:opacity-50"
                                                 style={{ color: colors.primary }}
                                                 title="Baixar PDF"
                                             >
                                                 {baixandoPdf === documento.id ? (
-                                                    <div className="w-4 h-4 border-2 border-t-current rounded-full animate-spin" style={{ borderColor: `${colors.primary}30`, borderTopColor: colors.primary }} />
+                                                    <div
+                                                        className="w-4 h-4 border-2 rounded-full animate-spin"
+                                                        style={{ borderColor: `${colors.primary}30`, borderTopColor: colors.primary }}
+                                                    />
                                                 ) : (
                                                     <Download size={18} />
                                                 )}
@@ -300,7 +283,7 @@ export default function InvoiceTable({
             {totalPaginas > 1 && (
                 <div className="flex items-center justify-between px-4 py-3 border-t" style={{ borderColor: colors.border }}>
                     <div className="text-sm" style={{ color: colors.textSecondary }}>
-                        {indiceInicial + 1}-{Math.min(indiceFinal, documentos.length)} de {documentos.length}
+                        {indiceInicial + 1}–{Math.min(indiceFinal, documentos.length)} de {documentos.length}
                     </div>
                     <div className="flex items-center gap-2">
                         <button
@@ -308,8 +291,8 @@ export default function InvoiceTable({
                             disabled={paginaValida === 1}
                             className="px-3 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
                             style={{
-                                backgroundColor: paginaAtual === 1 ? colors.hover : colors.primary,
-                                color: paginaAtual === 1 ? colors.textSecondary : 'white'
+                                backgroundColor: paginaValida === 1 ? colors.hover : colors.primary,
+                                color: paginaValida === 1 ? colors.textSecondary : 'white',
                             }}
                         >
                             <ChevronLeft size={16} />
@@ -325,8 +308,8 @@ export default function InvoiceTable({
                             disabled={paginaValida === totalPaginas}
                             className="px-3 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
                             style={{
-                                backgroundColor: paginaAtual === totalPaginas ? colors.hover : colors.primary,
-                                color: paginaAtual === totalPaginas ? colors.textSecondary : 'white'
+                                backgroundColor: paginaValida === totalPaginas ? colors.hover : colors.primary,
+                                color: paginaValida === totalPaginas ? colors.textSecondary : 'white',
                             }}
                         >
                             <span>Próxima</span>

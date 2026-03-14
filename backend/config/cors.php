@@ -20,11 +20,25 @@ return [
 
     'allowed_origins_patterns' => [],
 
-    'allowed_headers' => ['*'],
+    // '*' com supports_credentials=true não funciona como wildcard real no protocolo CORS.
+    // Os headers têm de ser listados explicitamente.
+    'allowed_headers' => [
+        'Content-Type',
+        'Authorization',
+        'X-Requested-With',
+        'Accept',
+        'Origin',
+        'X-XSRF-TOKEN',
+        'X-Tenant',
+        'Cache-Control',
+        'Pragma',
+        'Expires',
+    ],
 
     'exposed_headers' => [],
 
     'max_age' => 0,
 
     'supports_credentials' => true,
+
 ];

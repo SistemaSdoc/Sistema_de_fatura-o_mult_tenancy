@@ -23,8 +23,7 @@ import { format } from "date-fns";
 import { pt } from "date-fns/locale";
 
 import MainEmpresa from "@/app/components/MainEmpresa";
-import { documentoFiscalService } from "@/services/DocumentoFiscal";
-import type { DocumentoFiscal, TipoDocumento, EstadoDocumento } from "@/services/DocumentoFiscal";
+import { documentoFiscalService, type DocumentoFiscal, type TipoDocumento, type EstadoDocumento } from "@/services/DocumentoFiscal";
 import { ModalVisualizacao } from "@/app/components/ModalVisualizacao";
 import { useThemeColors, useTheme } from "@/context/ThemeContext";
 
@@ -125,15 +124,22 @@ export default function OutrosDocumentosPage() {
         setLoading(true);
         setError(null);
         try {
-            const data = await documentoFiscalService.listar({ page, per_page: ITENS_POR_PAG });
+            const data = await documentoFiscalService.listar({
+                page,
+                per_page: ITENS_POR_PAG,
+                apenas_nao_vendas: true // Usa o filtro do backend
+            });
+
+            // Filtra apenas os tipos permitidos (redundante com o filtro do backend, mas mantém compatibilidade)
             const filtrados = (data.data as DocumentoFiscal[]).filter(
                 d => TIPOS_PERMITIDOS.includes(d.tipo_documento),
             );
+
             setDocumentos(filtrados);
             setPagination({
                 current_page: data.current_page,
                 last_page: data.last_page,
-                total: filtrados.length,
+                total: data.total,
             });
         } catch (err: any) {
             setError(err.message || "Erro ao carregar documentos fiscais");
@@ -147,16 +153,32 @@ export default function OutrosDocumentosPage() {
     /* ── Handlers ── */
     const mudarPagina = (p: number) => { setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); };
 
-    const abrirModal = (doc: DocumentoFiscal) => { setDocSel(doc); setModalOpen(true); };
-    const fecharModal = () => { setModalOpen(false); setTimeout(() => setDocSel(null), 300); };
+    const abrirModal = (doc: DocumentoFiscal) => {
+        setDocSel(doc);
+        setModalOpen(true);
+    };
 
-    const handleDownload = (doc: DocumentoFiscal) =>
-        window.open(`/api/documentos-fiscais/${doc.id}/pdf`, "_blank");
+    const fecharModal = () => {
+        setModalOpen(false);
+        setTimeout(() => setDocSel(null), 300);
+    };
+
+    const handleDownload = async (doc: DocumentoFiscal) => {
+        try {
+            await documentoFiscalService.downloadPdf(doc.id, `${doc.numero_documento}.pdf`);
+        } catch (error) {
+            console.error("Erro ao baixar PDF:", error);
+        }
+    };
 
     /* ── Shared row hover style ── */
     const hoverProps = {
-        onMouseEnter: (e: React.MouseEvent<HTMLElement>) => { (e.currentTarget as HTMLElement).style.backgroundColor = colors.hover; },
-        onMouseLeave: (e: React.MouseEvent<HTMLElement>) => { (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; },
+        onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+            (e.currentTarget as HTMLElement).style.backgroundColor = colors.hover;
+        },
+        onMouseLeave: (e: React.MouseEvent<HTMLElement>) => {
+            (e.currentTarget as HTMLElement).style.backgroundColor = "transparent";
+        },
     };
 
     /* ────────────────────────────────────────────────────────────── */
@@ -168,7 +190,8 @@ export default function OutrosDocumentosPage() {
                 {/* ── Cabeçalho ── */}
                 <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                        <button onClick={() => router.back()}
+                        <button
+                            onClick={() => router.back()}
                             className="p-1.5 rounded-lg transition-colors hover:opacity-70"
                             style={{ color: colors.primary, backgroundColor: `${colors.primary}10` }}>
                             <ArrowLeft className="w-4 h-4" />
@@ -182,7 +205,8 @@ export default function OutrosDocumentosPage() {
                             </p>
                         </div>
                     </div>
-                    <button onClick={carregar}
+                    <button
+                        onClick={carregar}
                         className="p-1.5 rounded-lg border transition-colors"
                         style={{ borderColor: colors.border, color: colors.textSecondary, backgroundColor: colors.card }}
                         title="Recarregar">
@@ -202,7 +226,8 @@ export default function OutrosDocumentosPage() {
                         <div className="p-8 text-center">
                             <AlertCircle className="w-9 h-9 mx-auto mb-2" style={{ color: "#EF4444" }} />
                             <p className="text-sm mb-3" style={{ color: "#EF4444" }}>{error}</p>
-                            <button onClick={carregar}
+                            <button
+                                onClick={carregar}
                                 className="px-4 py-1.5 text-white rounded-lg text-xs"
                                 style={{ backgroundColor: colors.primary }}>
                                 Tentar novamente
@@ -231,7 +256,8 @@ export default function OutrosDocumentosPage() {
                                 {documentos.map(doc => {
                                     const t = getTipo(doc.tipo_documento);
                                     return (
-                                        <motion.div key={doc.id}
+                                        <motion.div
+                                            key={doc.id}
                                             whileTap={{ scale: 0.985 }}
                                             onClick={() => abrirModal(doc)}
                                             className="p-3 cursor-pointer transition-colors"
@@ -259,27 +285,29 @@ export default function OutrosDocumentosPage() {
                                             <div className="flex items-center justify-between">
                                                 <p className="text-xs truncate max-w-[60%]"
                                                     style={{ color: colors.textSecondary }}>
-                                                    {doc.cliente_nome || doc.cliente?.nome || "Consumidor Final"}
+                                                    {documentoFiscalService.getNomeCliente(doc)}
                                                 </p>
                                                 <p className="text-sm font-bold" style={{ color: colors.primary }}>
                                                     {fmtValor(doc.total_liquido)}
                                                 </p>
                                             </div>
-                                            {/* Acções */}
+                                            {/* Ações */}
                                             <div className="flex justify-end gap-0.5 mt-2 pt-2 border-t"
                                                 style={{ borderColor: colors.border }}>
-                                                {[
-                                                    { Icon: Eye, title: "Visualizar", fn: () => abrirModal(doc) },
-                                                    { Icon: Download, title: "Download", fn: () => handleDownload(doc) },
-                                                ].map(({ Icon, title, fn }) => (
-                                                    <button key={title}
-                                                        onClick={e => { e.stopPropagation(); fn(); }}
-                                                        className="p-1.5 rounded-lg transition-colors hover:opacity-60"
-                                                        style={{ color: colors.textSecondary }}
-                                                        title={title}>
-                                                        <Icon size={14} />
-                                                    </button>
-                                                ))}
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); abrirModal(doc); }}
+                                                    className="p-1.5 rounded-lg transition-colors hover:opacity-60"
+                                                    style={{ color: colors.textSecondary }}
+                                                    title="Visualizar">
+                                                    <Eye size={14} />
+                                                </button>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleDownload(doc); }}
+                                                    className="p-1.5 rounded-lg transition-colors hover:opacity-60"
+                                                    style={{ color: colors.textSecondary }}
+                                                    title="Download">
+                                                    <Download size={14} />
+                                                </button>
                                             </div>
                                         </motion.div>
                                     );
@@ -313,8 +341,10 @@ export default function OutrosDocumentosPage() {
                                         {documentos.map(doc => {
                                             const t = getTipo(doc.tipo_documento);
                                             return (
-                                                <tr key={doc.id} className="transition-colors"
+                                                <tr key={doc.id}
+                                                    className="transition-colors cursor-pointer"
                                                     style={{ backgroundColor: "transparent" }}
+                                                    onClick={() => abrirModal(doc)}
                                                     {...hoverProps}>
                                                     {/* Documento */}
                                                     <td className="py-2.5 px-3">
@@ -338,12 +368,12 @@ export default function OutrosDocumentosPage() {
                                                     <td className="py-2.5 px-3">
                                                         <div className="text-xs font-medium truncate max-w-[160px]"
                                                             style={{ color: colors.text }}>
-                                                            {doc.cliente_nome || doc.cliente?.nome || "Consumidor Final"}
+                                                            {documentoFiscalService.getNomeCliente(doc)}
                                                         </div>
-                                                        {doc.cliente_nif && (
+                                                        {documentoFiscalService.getNifCliente(doc) && (
                                                             <div className="text-[10px]"
                                                                 style={{ color: colors.textSecondary }}>
-                                                                NIF: {doc.cliente_nif}
+                                                                NIF: {documentoFiscalService.getNifCliente(doc)}
                                                             </div>
                                                         )}
                                                     </td>
@@ -363,17 +393,20 @@ export default function OutrosDocumentosPage() {
                                                     {/* Ações */}
                                                     <td className="py-2.5 px-3">
                                                         <div className="flex items-center justify-center gap-0.5">
-                                                            {[
-                                                                { Icon: Eye, title: "Visualizar", fn: () => abrirModal(doc) },
-                                                                { Icon: Download, title: "Download", fn: () => handleDownload(doc) },
-                                                            ].map(({ Icon, title, fn }) => (
-                                                                <button key={title} onClick={fn}
-                                                                    className="p-1.5 rounded-lg transition-colors hover:opacity-60"
-                                                                    style={{ color: colors.textSecondary }}
-                                                                    title={title}>
-                                                                    <Icon size={14} />
-                                                                </button>
-                                                            ))}
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); abrirModal(doc); }}
+                                                                className="p-1.5 rounded-lg transition-colors hover:opacity-60"
+                                                                style={{ color: colors.textSecondary }}
+                                                                title="Visualizar">
+                                                                <Eye size={14} />
+                                                            </button>
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); handleDownload(doc); }}
+                                                                className="p-1.5 rounded-lg transition-colors hover:opacity-60"
+                                                                style={{ color: colors.textSecondary }}
+                                                                title="Download">
+                                                                <Download size={14} />
+                                                            </button>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -391,7 +424,9 @@ export default function OutrosDocumentosPage() {
                                         {pagination.total} documentos · pág {pagination.current_page}/{pagination.last_page}
                                     </p>
                                     <div className="flex items-center gap-1.5">
-                                        <button onClick={() => mudarPagina(page - 1)} disabled={page === 1}
+                                        <button
+                                            onClick={() => mudarPagina(page - 1)}
+                                            disabled={page === 1}
                                             className="flex items-center gap-1 px-2.5 py-1 text-[11px] rounded-lg disabled:opacity-40 transition-colors"
                                             style={{ backgroundColor: colors.card, color: colors.text, border: `1px solid ${colors.border}` }}>
                                             <ChevronLeft size={12} />Anterior
@@ -402,7 +437,9 @@ export default function OutrosDocumentosPage() {
                                             {Array.from({ length: Math.min(pagination.last_page, 5) }, (_, i) => {
                                                 const p = i + 1;
                                                 return (
-                                                    <button key={p} onClick={() => mudarPagina(p)}
+                                                    <button
+                                                        key={p}
+                                                        onClick={() => mudarPagina(p)}
                                                         className="w-7 h-7 rounded-lg text-[11px] font-medium transition-colors"
                                                         style={{
                                                             backgroundColor: p === page ? colors.primary : colors.card,
@@ -415,7 +452,9 @@ export default function OutrosDocumentosPage() {
                                             })}
                                         </div>
 
-                                        <button onClick={() => mudarPagina(page + 1)} disabled={page === pagination.last_page}
+                                        <button
+                                            onClick={() => mudarPagina(page + 1)}
+                                            disabled={page === pagination.last_page}
                                             className="flex items-center gap-1 px-2.5 py-1 text-[11px] rounded-lg disabled:opacity-40 transition-colors"
                                             style={{ backgroundColor: colors.card, color: colors.text, border: `1px solid ${colors.border}` }}>
                                             Próximo<ChevronRight size={12} />
