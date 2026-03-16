@@ -88,12 +88,12 @@ export default function MainEmpresa({
     const [abaAtiva, setAbaAtiva] = useState<"baixo" | "zero">("baixo");
 
     // User data
-    const userName = user?.name || "Usuário";
-    const userRole = user?.role || "operador";
+    const userName = user?.name || "";
+    const userRole = user?.role || "";
     const userEmail = user?.email || "";
     const userInitial = userName.charAt(0).toUpperCase();
-    const empresaLogo = companyLogo || user?.empresa?.logo || null;
-    const nomeEmpresa = companyName || user?.empresa?.nome || "Empresa";
+    const empresaLogo = companyLogo || user?.empresa?.logo || "/images/3.png";
+    const nomeEmpresa = companyName || user?.empresa?.nome || "SDOCA";
 
     /* ==================== RESPONSIVE DETECTION ==================== */
     useEffect(() => {
@@ -381,7 +381,7 @@ export default function MainEmpresa({
                         onClick={() => setSidebarOpen(!sidebarOpen)}
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.95 }}
-                        className="absolute -right-3 top-8 text-white p-1.5 rounded-full shadow-lg z-50"
+                        className="rounded-full absolute -right-3 top-8 text-white p-1.5 shadow-lg z-50"
                         style={{ backgroundColor: colors.primary }}
                     >
                         <motion.div animate={{ rotate: sidebarOpen ? 0 : 180 }} transition={{ duration: 0.3 }}>
@@ -401,12 +401,12 @@ export default function MainEmpresa({
                             alt="Logo"
                             width={32}
                             height={32}
-                            className="rounded-lg object-contain flex-shrink-0"
+                            className="object-contain flex-shrink-0"
                             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                         />
                     ) : (
                         <div
-                            className="w-8 h-8 text-white rounded-lg flex items-center justify-center font-bold shadow-md flex-shrink-0"
+                            className="w-8 h-8 text-white flex items-center justify-center font-bold shadow-md flex-shrink-0"
                             style={{ backgroundColor: colors.primary }}
                         >
                             {nomeEmpresa.charAt(0).toUpperCase()}
@@ -452,7 +452,7 @@ export default function MainEmpresa({
                                 >
                                     {/* Main item */}
                                     <div
-                                        className="flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 select-none"
+                                        className="flex items-center justify-between px-3 py-2.5 cursor-pointer transition-all duration-200 select-none"
                                         style={{
                                             backgroundColor: active ? colors.secondary : "transparent",
                                             color: active ? "white" : colors.text,
@@ -532,7 +532,7 @@ export default function MainEmpresa({
                                                         <motion.div key={link.path} variants={dropdownItemVariants}>
                                                             <Link href={link.path} onClick={handleLinkClick}>
                                                                 <div
-                                                                    className="flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150"
+                                                                    className="flex items-center gap-3 px-3 py-2 transition-all duration-150"
                                                                     style={{
                                                                         backgroundColor: linkActive ? `${colors.primary}15` : "transparent",
                                                                         borderLeft: linkActive ? `2px solid ${colors.secondary}` : "2px solid transparent",
@@ -570,7 +570,7 @@ export default function MainEmpresa({
                 <div className="p-2 border-t flex-shrink-0" style={{ borderColor: colors.border }}>
                     <div
                         onClick={abrirModalLogout}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 hover:bg-red-50 dark:hover:bg-red-950/20"
+                        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all duration-200 hover:bg-red-50 dark:hover:bg-red-950/20"
                     >
                         <LogOut size={19} className="text-red-500 flex-shrink-0" />
                         <AnimatePresence>
@@ -604,7 +604,7 @@ export default function MainEmpresa({
                         {isMobile && (
                             <button
                                 onClick={() => setSidebarOpen(true)}
-                                className="p-2 rounded-lg flex-shrink-0"
+                                className=" p-2 flex-shrink-0"
                                 style={{ color: colors.primary }}
                                 aria-label="Abrir menu"
                             >
@@ -616,25 +616,6 @@ export default function MainEmpresa({
                             {currentPageLabel}
                         </h1>
 
-                        <span
-                            className="hidden sm:inline-block text-xs px-2 py-1 rounded-full flex-shrink-0 whitespace-nowrap"
-                            style={{
-                                backgroundColor:
-                                    userRole === "admin"
-                                        ? colors.secondary + "20"
-                                        : userRole === "contabilista"
-                                            ? colors.primary + "20"
-                                            : colors.border,
-                                color:
-                                    userRole === "admin"
-                                        ? colors.secondary
-                                        : userRole === "contabilista"
-                                            ? colors.primary
-                                            : colors.textSecondary,
-                            }}
-                        >
-                            {userRole === "admin" ? "Administrador" : userRole === "contabilista" ? "Contabilista" : "Operador"}
-                        </span>
                     </div>
 
                     {/* Right: actions */}
@@ -643,7 +624,7 @@ export default function MainEmpresa({
                         {/* Theme toggle */}
                         <button
                             onClick={toggleTheme}
-                            className="p-2 rounded-full transition-colors"
+                            className="rounded-full p-2 transition-colors"
                             style={{ backgroundColor: colors.hover, color: colors.text }}
                             aria-label="Alternar tema"
                         >
@@ -669,7 +650,7 @@ export default function MainEmpresa({
                             <div className="relative">
                                 <button
                                     onClick={toggleNotificacoes}
-                                    className="relative p-2 rounded-full transition-colors"
+                                    className="relative p-2 transition-colors"
                                     style={{ backgroundColor: notificacoesAberto ? colors.hover : "transparent" }}
                                     aria-label="Notificações de estoque"
                                 >
@@ -678,7 +659,7 @@ export default function MainEmpresa({
                                         <motion.span
                                             initial={{ scale: 0 }}
                                             animate={{ scale: 1 }}
-                                            className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1"
+                                            className="rounded-full absolute -top-0.5 -right-0.5 min-w-[16px] h-4 text-white text-[9px] font-bold flex items-center justify-center px-1"
                                             style={{ backgroundColor: produtosSemEstoque.length > 0 ? colors.danger : "#f59e0b" }}
                                         >
                                             {totalNotificacoes > 9 ? "9+" : totalNotificacoes}
@@ -693,7 +674,7 @@ export default function MainEmpresa({
                                             initial="hidden"
                                             animate="visible"
                                             exit="exit"
-                                            className="absolute right-0 top-full mt-2 rounded-xl shadow-2xl border overflow-hidden z-50"
+                                            className="absolute right-0 top-full mt-2 shadow-2xl border overflow-hidden z-50"
                                             style={{
                                                 backgroundColor: colors.card,
                                                 borderColor: colors.border,
@@ -716,10 +697,10 @@ export default function MainEmpresa({
                                                         <X size={15} />
                                                     </button>
                                                 </div>
-                                                <div className="flex gap-1 bg-black/20 rounded-lg p-1">
+                                                <div className="flex gap-1 bg-black/20 p-1">
                                                     <button
                                                         onClick={() => setAbaAtiva("baixo")}
-                                                        className="flex-1 py-1.5 px-2 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1"
+                                                        className="flex-1 py-1.5 px-2 text-xs font-medium transition-all flex items-center justify-center gap-1"
                                                         style={{ backgroundColor: abaAtiva === "baixo" ? "rgba(255,255,255,0.2)" : "transparent", color: "white" }}
                                                     >
                                                         <TrendingDown size={11} />
@@ -727,7 +708,7 @@ export default function MainEmpresa({
                                                     </button>
                                                     <button
                                                         onClick={() => setAbaAtiva("zero")}
-                                                        className="flex-1 py-1.5 px-2 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1"
+                                                        className="flex-1 py-1.5 px-2 text-xs font-medium transition-all flex items-center justify-center gap-1"
                                                         style={{ backgroundColor: abaAtiva === "zero" ? "rgba(255,255,255,0.2)" : "transparent", color: "white" }}
                                                     >
                                                         <AlertCircle size={11} />
@@ -760,7 +741,7 @@ export default function MainEmpresa({
                                                                     onClick={() => { setNotificacoesAberto(false); router.push("/dashboard/Produtos_servicos/Stock"); }}
                                                                 >
                                                                     <div className="flex items-center gap-3">
-                                                                        <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                                                                        <div className="w-9 h-9 flex items-center justify-center flex-shrink-0"
                                                                             style={{ backgroundColor: theme === "dark" ? "#442200" : "#fff7ed", color: theme === "dark" ? "#ffb347" : "#9a3412" }}>
                                                                             <Package size={16} />
                                                                         </div>
@@ -778,7 +759,7 @@ export default function MainEmpresa({
                                                         </>
                                                     ) : (
                                                         <div className="p-8 text-center">
-                                                            <div className="w-14 h-14 mx-auto mb-3 rounded-full flex items-center justify-center"
+                                                            <div className="w-14 h-14 mx-auto mb-3 flex items-center justify-center"
                                                                 style={{ backgroundColor: theme === "dark" ? "#1a3a1a" : "#dcfce7" }}>
                                                                 <Package size={22} style={{ color: theme === "dark" ? "#4ade80" : "#16a34a" }} />
                                                             </div>
@@ -804,13 +785,13 @@ export default function MainEmpresa({
                                                                     onClick={() => { setNotificacoesAberto(false); router.push("/dashboard/Produtos_servicos/Stock"); }}
                                                                 >
                                                                     <div className="flex items-center gap-3">
-                                                                        <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                                                                        <div className="w-9 h-9 flex items-center justify-center flex-shrink-0"
                                                                             style={{ backgroundColor: theme === "dark" ? "#442222" : "#fef2f2", color: theme === "dark" ? "#fca5a5" : "#dc2626" }}>
                                                                             <AlertCircle size={16} />
                                                                         </div>
                                                                         <div className="flex-1 min-w-0">
                                                                             <p className="text-sm font-medium truncate" style={{ color: colors.text }}>{produto.nome}</p>
-                                                                            <span className="text-xs font-bold px-1.5 py-0.5 rounded-full"
+                                                                            <span className="text-xs font-bold px-1.5 py-0.5"
                                                                                 style={{ backgroundColor: colors.danger + "20", color: colors.danger }}>
                                                                                 ESGOTADO
                                                                             </span>
@@ -821,7 +802,7 @@ export default function MainEmpresa({
                                                         </>
                                                     ) : (
                                                         <div className="p-8 text-center">
-                                                            <div className="w-14 h-14 mx-auto mb-3 rounded-full flex items-center justify-center"
+                                                            <div className="w-14 h-14 mx-auto mb-3 flex items-center justify-center"
                                                                 style={{ backgroundColor: theme === "dark" ? "#1a3a1a" : "#dcfce7" }}>
                                                                 <Package size={22} style={{ color: theme === "dark" ? "#4ade80" : "#16a34a" }} />
                                                             </div>
@@ -848,7 +829,7 @@ export default function MainEmpresa({
                                                     </div>
 
                                                     {resumoEstoque && (
-                                                        <div className="grid grid-cols-3 gap-2 mb-3 p-2 rounded-lg"
+                                                        <div className="grid grid-cols-3 gap-2 mb-3 p-2"
                                                             style={{ backgroundColor: theme === "dark" ? "#2a2a2a" : "#e5e7eb" }}>
                                                             <div className="text-center">
                                                                 <p className="text-base font-bold" style={{ color: colors.text }}>{resumoEstoque.totalProdutos}</p>
@@ -866,7 +847,7 @@ export default function MainEmpresa({
                                                     )}
 
                                                     <Link href="/dashboard/Produtos_servicos/Stock" onClick={() => setNotificacoesAberto(false)}>
-                                                        <div className="flex items-center justify-center gap-2 text-sm font-medium py-2 rounded-lg transition-opacity hover:opacity-90"
+                                                        <div className="flex items-center justify-center gap-2 text-sm font-medium py-2 transition-opacity hover:opacity-90"
                                                             style={{ backgroundColor: colors.primary, color: "white" }}>
                                                             <span>Gerenciar estoque</span>
                                                             <ChevronLeft size={14} className="rotate-180" />
@@ -895,7 +876,7 @@ export default function MainEmpresa({
 
                         {/* User avatar */}
                         <div
-                            className="flex items-center gap-2 pl-2 md:pl-4 border-l"
+                            className="rounded-full flex items-center gap-2 pl-2 md:pl-4 border-l"
                             style={{ borderColor: colors.border }}
                         >
                             <div className="hidden md:block text-right">
@@ -905,7 +886,7 @@ export default function MainEmpresa({
                                 </p>
                             </div>
                             <div
-                                className="w-8 h-8 md:w-9 md:h-9 rounded-full text-white flex items-center justify-center text-sm font-bold shadow-md flex-shrink-0"
+                                className="rounded-full w-8 h-8 md:w-9 md:h-9 text-white flex items-center justify-center text-sm font-bold shadow-md flex-shrink-0"
                                 style={{ background: `linear-gradient(135deg, ${colors.secondary} 0%, ${colors.primary} 100%)` }}
                             >
                                 {userInitial}
@@ -943,15 +924,11 @@ export default function MainEmpresa({
                             initial="hidden"
                             animate="visible"
                             exit="exit"
-                            className="rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+                            className="shadow-2xl w-full max-w-sm overflow-hidden"
                             style={{ backgroundColor: colors.card }}
                             onClick={(e) => e.stopPropagation()}
                         >
                             <div className="p-6 pb-4 text-center">
-                                <div className="w-14 h-14 mx-auto mb-4 rounded-full flex items-center justify-center"
-                                    style={{ backgroundColor: theme === "dark" ? "#442222" : "#fee2e2" }}>
-                                    <LogOut size={28} className="text-red-500" />
-                                </div>
                                 <h2 className="text-xl font-bold mb-2" style={{ color: colors.text }}>Confirmar Logout</h2>
                                 <p className="text-sm" style={{ color: colors.textSecondary }}>
                                     Tem certeza que deseja sair? Você precisará fazer login novamente para acessar sua conta.
@@ -959,7 +936,7 @@ export default function MainEmpresa({
                             </div>
 
                             {logoutError && (
-                                <div className="mx-5 mb-4 p-3 rounded-lg text-xs text-center"
+                                <div className="mx-5 mb-4 p-3 text-xs text-center"
                                     style={{ backgroundColor: theme === "dark" ? "#442200" : "#fef3c7", border: `1px solid ${theme === "dark" ? "#854d0e" : "#fbbf24"}`, color: theme === "dark" ? "#fbbf24" : "#92400e" }}>
                                     {logoutError}
                                 </div>
@@ -967,7 +944,7 @@ export default function MainEmpresa({
 
                             <div className="px-5 py-3 border-y" style={{ backgroundColor: theme === "dark" ? "#1a1a1a" : "#f9fafb", borderColor: colors.border }}>
                                 <div className="flex items-center gap-3">
-                                    <div className="w-9 h-9 rounded-full text-white flex items-center justify-center text-sm font-bold flex-shrink-0"
+                                    <div className="rounded-full w-9 h-9 text-white flex items-center justify-center text-sm font-bold flex-shrink-0"
                                         style={{ background: `linear-gradient(135deg, ${colors.secondary} 0%, ${colors.primary} 100%)` }}>
                                         {userInitial}
                                     </div>
@@ -982,7 +959,7 @@ export default function MainEmpresa({
                                 <button
                                     onClick={fecharModalLogout}
                                     disabled={logoutLoading}
-                                    className="flex-1 py-2.5 px-4 rounded-xl font-medium text-sm disabled:opacity-50 transition-opacity hover:opacity-80"
+                                    className="rounded-xl flex-1 py-2.5 px-4 font-medium text-sm disabled:opacity-50 transition-opacity hover:opacity-80"
                                     style={{ backgroundColor: theme === "dark" ? "#333" : "#e5e7eb", color: colors.text }}
                                 >
                                     Cancelar
@@ -990,7 +967,7 @@ export default function MainEmpresa({
                                 <button
                                     onClick={handleLogout}
                                     disabled={logoutLoading}
-                                    className="flex-1 py-2.5 px-4 text-white rounded-xl font-medium text-sm disabled:opacity-50 flex items-center justify-center gap-2 transition-opacity hover:opacity-90"
+                                    className="rounded-xl flex-1 py-2.5 px-4 text-white font-medium text-sm disabled:opacity-50 flex items-center justify-center gap-2 transition-opacity hover:opacity-90"
                                     style={{ backgroundColor: colors.danger }}
                                 >
                                     {logoutLoading ? (

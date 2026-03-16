@@ -2,26 +2,41 @@
 
 return [
 
+    /*
+    |--------------------------------------------------------------------------
+    | Paths
+    |--------------------------------------------------------------------------
+    */
     'paths' => ['api/*', 'sanctum/csrf-cookie', 'login', 'logout', 'me'],
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => [
-        'http://127.0.0.1:3000',
-        'http://192.168.5.184:3000',
-        'http://10.173.190.204:3000',
-        'http://192.168.1.31:3000',
-        'http://192.168.1.198:3000',
-        'http://192.168.0.146:3000',
-        'http://192.168.1.199:3000',
-        'http://10.184.232.204:3000',
-        'http://192.168.0.170:3000',
+    /*
+    |--------------------------------------------------------------------------
+    | Allowed Origins
+    |--------------------------------------------------------------------------
+    | Aceita qualquer IP local (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+    | em qualquer porta — funciona automaticamente quando o IP muda.
+    */
+    'allowed_origins' => [],
+
+    'allowed_origins_patterns' => [
+        // 192.168.x.x — redes domésticas / escritório
+        '#^http://192\.168\.\d+\.\d+(:\d+)?$#',
+        // 10.x.x.x — redes corporativas
+        '#^http://10\.\d+\.\d+\.\d+(:\d+)?$#',
+        // 172.16.x.x – 172.31.x.x — redes privadas
+        '#^http://172\.(1[6-9]|2\d|3[01])\.\d+\.\d+(:\d+)?$#',
+        // localhost e 127.0.0.1
+        '#^http://localhost(:\d+)?$#',
+        '#^http://127\.0\.0\.1(:\d+)?$#',
     ],
 
-    'allowed_origins_patterns' => [],
-
-    // '*' com supports_credentials=true não funciona como wildcard real no protocolo CORS.
-    // Os headers têm de ser listados explicitamente.
+    /*
+    |--------------------------------------------------------------------------
+    | Allowed Headers
+    |--------------------------------------------------------------------------
+    */
     'allowed_headers' => [
         'Content-Type',
         'Authorization',
@@ -39,6 +54,12 @@ return [
 
     'max_age' => 0,
 
+    /*
+    |--------------------------------------------------------------------------
+    | Supports Credentials
+    |--------------------------------------------------------------------------
+    | Obrigatório true para Sanctum SPA (cookies de sessão).
+    */
     'supports_credentials' => true,
 
 ];

@@ -15,20 +15,19 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\RelatoriosController;
 
-// Padrão UUID para validação de rotas
 $uuidPattern = '[0-9a-fA-F-]{36}';
 
-// ==================== ROTAS PÚBLICAS (sem auth) ====================
+// ==================== ROTAS PÚBLICAS ====================
 Route::post('/users', [UserController::class, 'store']);
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
-// ==================== ROTAS PROTEGIDAS (com auth:sanctum) ====================
+// ==================== ROTAS PROTEGIDAS ====================
 Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
 
     // ===== AUTENTICAÇÃO =====
     Route::get('/me', [UserController::class, 'me']);
 
-    // ===== DASHBOARD - CORRIGIDO =====
+    // ===== DASHBOARD =====
     Route::prefix('dashboard')->group(function () {
         Route::get('/', [DashboardController::class, 'index'])->name('dashboard.index');
         Route::get('/resumo-documentos-fiscais', [DashboardController::class, 'resumoDocumentosFiscais'])->name('dashboard.resumo-documentos');
@@ -39,13 +38,11 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
         Route::get('/ranking-servicos', [DashboardController::class, 'rankingServicos'])->name('dashboard.ranking-servicos');
     });
 
-    // ==================== ADMIN (acesso total) ====================
+    // ==================== ADMIN ====================
     Route::middleware('role:admin')->group(function () use ($uuidPattern) {
-        // ===== USUÁRIOS =====
         Route::get('/users/create', [UserController::class, 'create']);
         Route::apiResource('/users', UserController::class)->except(['store']);
 
-        // ===== CLIENTES - ADMIN =====
         Route::prefix('clientes')->group(function () use ($uuidPattern) {
             Route::get('/todos', [ClienteController::class, 'indexWithTrashed'])->name('clientes.todos');
             Route::post('/{id}/restore', [ClienteController::class, 'restore'])->where('id', $uuidPattern)->name('clientes.restore');
@@ -59,7 +56,7 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
     // ==================== ADMIN + OPERADOR ====================
     Route::middleware('role:admin,operador')->group(function () use ($uuidPattern) {
 
-        // ===== PRODUTOS =====
+        // PRODUTOS
         Route::prefix('produtos')->group(function () use ($uuidPattern) {
             Route::get('/todos', [ProdutoController::class, 'indexWithTrashed'])->name('produtos.todos');
             Route::get('/trashed', [ProdutoController::class, 'indexOnlyTrashed'])->name('produtos.trashed');
@@ -70,11 +67,11 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
         });
         Route::apiResource('/produtos', ProdutoController::class);
 
-        // ===== ESTOQUE =====
+        // ESTOQUE
         Route::get('/estoque/resumo', [MovimentoStockController::class, 'resumo'])->name('estoque.resumo');
         Route::get('/movimentos-stock/resumo', [MovimentoStockController::class, 'resumo'])->name('movimentos-stock.resumo');
 
-        // ===== CATEGORIAS =====
+        // CATEGORIAS
         Route::prefix('categorias')->group(function () use ($uuidPattern) {
             Route::get('/todas', [CategoriaController::class, 'indexWithTrashed'])->name('categorias.todas');
             Route::get('/deletadas', [CategoriaController::class, 'indexOnlyTrashed'])->name('categorias.deletadas');
@@ -83,7 +80,7 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
         });
         Route::apiResource('/categorias', CategoriaController::class);
 
-        // ===== FORNECEDORES =====
+        // FORNECEDORES
         Route::prefix('fornecedores')->group(function () use ($uuidPattern) {
             Route::get('/todos', [FornecedorController::class, 'indexWithTrashed'])->name('fornecedores.todos');
             Route::get('/trashed', [FornecedorController::class, 'indexOnlyTrashed'])->name('fornecedores.trashed');
@@ -93,20 +90,20 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
         });
         Route::apiResource('/fornecedores', FornecedorController::class);
 
-        // ===== CLIENTES (Operador) =====
+        // CLIENTES (Operador)
         Route::apiResource('/clientes', ClienteController::class)->except(['destroy']);
         Route::delete('/clientes/{id}', [ClienteController::class, 'destroy'])->where('id', $uuidPattern)->name('clientes.destroy');
         Route::post('/clientes/{id}/ativar', [ClienteController::class, 'ativar'])->where('id', $uuidPattern)->name('clientes.ativar');
         Route::post('/clientes/{id}/inativar', [ClienteController::class, 'inativar'])->where('id', $uuidPattern)->name('clientes.inativar');
 
-        // ===== COMPRAS =====
+        // COMPRAS
         Route::prefix('compras')->group(function () use ($uuidPattern) {
             Route::get('/', [CompraController::class, 'index'])->name('compras.index');
             Route::post('/', [CompraController::class, 'store'])->name('compras.store');
             Route::get('/{id}', [CompraController::class, 'show'])->where('id', $uuidPattern)->name('compras.show');
         });
 
-        // ===== MOVIMENTOS DE STOCK =====
+        // MOVIMENTOS DE STOCK
         Route::prefix('movimentos-stock')->group(function () use ($uuidPattern) {
             Route::get('/', [MovimentoStockController::class, 'index'])->name('movimentos-stock.index');
             Route::post('/', [MovimentoStockController::class, 'store'])->name('movimentos-stock.store');
@@ -118,7 +115,7 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
     // ==================== ADMIN + OPERADOR + CONTABILISTA ====================
     Route::middleware('role:admin,operador,contabilista')->group(function () use ($uuidPattern) {
 
-        // ===== VENDAS =====
+        // VENDAS
         Route::prefix('vendas')->group(function () use ($uuidPattern) {
             Route::get('/', [VendaController::class, 'index'])->name('vendas.index');
             Route::post('/', [VendaController::class, 'store'])->name('vendas.store');
@@ -134,7 +131,7 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
         // ===== DOCUMENTOS FISCAIS =====
         Route::prefix('documentos-fiscais')->group(function () use ($uuidPattern) {
 
-            // --- Rotas estáticas (sem parâmetro) — devem vir ANTES das rotas com {id} ---
+            // --- Rotas estáticas — ANTES das rotas com {id} ---
             Route::get('/exportar-excel', [DocumentoFiscalController::class, 'exportarExcel'])->name('documentos.exportar-excel');
             Route::get('/adiantamentos-pendentes', [DocumentoFiscalController::class, 'adiantamentosPendentes'])->name('documentos.adiantamentos-pendentes');
             Route::get('/proformas-pendentes', [DocumentoFiscalController::class, 'proformasPendentes'])->name('documentos.proformas-pendentes');
@@ -146,11 +143,15 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
             // Listagem geral
             Route::get('/', [DocumentoFiscalController::class, 'index'])->name('documentos.index');
 
-            // --- Rotas com {id} / {documento} — devem vir DEPOIS das rotas estáticas ---
+            // --- Rotas com {id} — DEPOIS das rotas estáticas ---
             Route::get('/{documento}', [DocumentoFiscalController::class, 'show'])->where('documento', $uuidPattern)->name('documentos.show');
             Route::get('/{documento}/estado-at', [DocumentoFiscalController::class, 'consultarEstado'])->where('documento', $uuidPattern)->name('documentos.estado');
             Route::get('/{id}/pdf', [DocumentoFiscalController::class, 'imprimirPdf'])->where('id', $uuidPattern)->name('documentos.pdf');
             Route::get('/{id}/pdf/download', [DocumentoFiscalController::class, 'downloadPdf'])->where('id', $uuidPattern)->name('documentos.pdf-download');
+
+            // ✅ NOVA ROTA — impressão HTML com window.print() automático
+            Route::get('/{id}/print', [DocumentoFiscalController::class, 'printView'])->where('id', $uuidPattern)->name('documentos.print');
+
             Route::get('/{documento}/recibos', [DocumentoFiscalController::class, 'recibos'])->where('documento', $uuidPattern)->name('documentos.recibos');
             Route::post('/{id}/recibo', [DocumentoFiscalController::class, 'gerarRecibo'])->where('id', $uuidPattern)->name('documentos.gerar-recibo');
             Route::post('/{documento}/cancelar', [DocumentoFiscalController::class, 'cancelar'])->where('documento', $uuidPattern)->name('documentos.cancelar');
@@ -159,7 +160,7 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
             Route::post('/{id}/vincular-adiantamento', [DocumentoFiscalController::class, 'vincularAdiantamento'])->where('id', $uuidPattern)->name('documentos.vincular');
         });
 
-        // ===== PAGAMENTOS =====
+        // PAGAMENTOS
         Route::prefix('pagamentos')->group(function () use ($uuidPattern) {
             Route::get('/', [PagamentoController::class, 'index'])->name('pagamentos.index');
             Route::post('/', [PagamentoController::class, 'store'])->name('pagamentos.store');
@@ -168,7 +169,7 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
             Route::delete('/{id}', [PagamentoController::class, 'destroy'])->where('id', $uuidPattern)->name('pagamentos.destroy');
         });
 
-        // ===== RELATÓRIOS =====
+        // RELATÓRIOS
         Route::prefix('relatorios')->group(function () {
             Route::get('/dashboard', [RelatoriosController::class, 'dashboard'])->name('relatorios.dashboard');
             Route::get('/vendas', [RelatoriosController::class, 'vendas'])->name('relatorios.vendas');

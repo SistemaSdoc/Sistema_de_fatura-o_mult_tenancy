@@ -3,18 +3,8 @@
 import React, { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
-    ArrowLeft,
-    FileText,
-    User,
-    MinusCircle,
-    PlusCircle,
-    XCircle,
-    Package,
-    Building2,
-    Hash,
-    Printer,
-    Download,
-    Loader2
+    ArrowLeft, FileText, User, MinusCircle, PlusCircle,
+    XCircle, Package, Hash, Printer, Download, Loader2
 } from "lucide-react";
 import MainEmpresa from "@/app/components/MainEmpresa";
 import {
@@ -26,253 +16,204 @@ import {
 import { useThemeColors } from "@/context/ThemeContext";
 import { useAuth } from "@/context/authprovider";
 
-/* ==================== CONSTANTES ==================== */
+/* ── Constantes ──────────────────────────────────────── */
 const TIPO_LABEL: Record<TipoDocumento, string> = {
-    'FT': 'Fatura',
-    'FR': 'Fatura-Recibo',
-    'FP': 'Fatura Proforma',
-    'FA': 'Fatura de Adiantamento',
-    'NC': 'Nota de Crédito',
-    'ND': 'Nota de Débito',
-    'RC': 'Recibo',
-    'FRt': 'Fatura de Retificação'
+    FT: "Fatura", FR: "Fatura-Recibo", FP: "Fatura Proforma",
+    FA: "Fatura de Adiantamento", NC: "Nota de Crédito",
+    ND: "Nota de Débito", RC: "Recibo", FRt: "Fatura de Retificação",
 };
 
-/* ==================== FUNÇÕES UTILITÁRIAS ==================== */
-const formatarPreco = (valor: number | undefined | null): string => {
-    if (valor === undefined || valor === null) return '0,00 Kz';
-    return Number(valor).toLocaleString('pt-AO', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    }) + ' Kz';
-};
+/* ── Utilitários ─────────────────────────────────────── */
+const fmtKz = (v?: number | null) =>
+    v == null ? "0,00 Kz"
+    : Number(v).toLocaleString("pt-AO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " Kz";
 
-const formatarData = (data: string | undefined | null): string => {
-    if (!data) return '-';
-    return new Date(data).toLocaleDateString('pt-AO');
-};
+const fmtData = (d?: string | null) =>
+    d ? new Date(d).toLocaleDateString("pt-AO") : "—";
 
-const formatarDataHora = (data: string | undefined | null): string => {
-    if (!data) return '-';
-    return new Date(data).toLocaleString('pt-AO');
-};
+const fmtDataHora = (d?: string | null) =>
+    d ? new Date(d).toLocaleString("pt-AO") : "—";
 
-const formatarQuantidade = (valor: number | undefined | null): string => {
-    if (valor === undefined || valor === null) return '0,0000';
-    const num = Number(valor);
-    if (isNaN(num)) return '0,0000';
-    return num.toFixed(4);
-};
-
-/* ==================== COMPONENTES ==================== */
-
-const EstadoBadge = ({ estado }: { estado: string }) => {
-    const config: Record<string, { bg: string; text: string; icon: React.ReactNode; label: string }> = {
-        emitido: { bg: 'bg-blue-100', text: 'text-blue-700', icon: <FileText className="w-3 h-3" />, label: 'Emitido' },
-        cancelado: { bg: 'bg-red-100', text: 'text-red-700', icon: <XCircle className="w-3 h-3" />, label: 'Cancelado' },
+/* ── Badge de estado ─────────────────────────────────── */
+function Badge({ estado }: { estado: string }) {
+    const map: Record<string, string> = {
+        emitido:           "bg-blue-50 text-blue-700 border-blue-200",
+        cancelado:         "bg-red-50 text-red-700 border-red-200",
+        paga:              "bg-green-50 text-green-700 border-green-200",
+        parcialmente_paga: "bg-yellow-50 text-yellow-700 border-yellow-200",
+        expirado:          "bg-gray-50 text-gray-500 border-gray-200",
     };
-    const { bg, text, icon, label } = config[estado] || config.emitido;
+    const labels: Record<string, string> = {
+        emitido: "Emitido", cancelado: "Cancelado", paga: "Pago",
+        parcialmente_paga: "Parcial", expirado: "Expirado",
+    };
     return (
-        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${bg} ${text}`}>
-            {icon}
-            {label}
+        <span className={`inline-flex items-center px-2 py-0.5 text-xs font-semibold border rounded ${map[estado] ?? map.emitido}`}>
+            {labels[estado] ?? estado}
         </span>
     );
-};
+}
 
-const InfoCard = ({ children }: { children: React.ReactNode }) => (
-    <div className="bg-white rounded-lg border overflow-hidden">{children}</div>
-);
-
-const CardSection = ({
-    title,
-    icon,
-    children,
-    noBorder,
-}: {
-    title: string;
-    icon: React.ReactNode;
-    children: React.ReactNode;
-    noBorder?: boolean;
-}) => (
-    <div className={`p-4 ${!noBorder ? 'border-b' : ''}`}>
-        <div className="flex items-center gap-2 mb-3">
-            <div style={{ color: '#123859' }}>{icon}</div>
-            <h3 className="text-sm font-semibold" style={{ color: '#123859' }}>{title}</h3>
+/* ── Linha de informação ─────────────────────────────── */
+function Row({ label, value, danger }: {
+    label: string; value: React.ReactNode; danger?: boolean;
+}) {
+    return (
+        <div className="flex justify-between items-start gap-4 py-1.5 text-sm border-b border-gray-100 last:border-0">
+            <span className="text-gray-500 shrink-0">{label}</span>
+            <span className={`font-medium text-right ${danger ? "text-red-600" : "text-gray-900"}`}>
+                {value || "—"}
+            </span>
         </div>
-        {children}
-    </div>
-);
+    );
+}
 
-const InfoRow = ({
-    label,
-    value,
-    className = "",
-}: {
-    label: string;
-    value: React.ReactNode;
-    className?: string;
-}) => (
-    <div className={`flex justify-between py-1.5 text-sm border-b border-gray-50 last:border-0 ${className}`}>
-        <span className="text-gray-500">{label}:</span>
-        <span className="font-medium text-right">{value}</span>
-    </div>
-);
+/* ── Cabeçalho de secção ─────────────────────────────── */
+function SectionHeader({ icon, title, accent }: {
+    icon: React.ReactNode; title: string; accent: string;
+}) {
+    return (
+        <div
+            className="flex items-center gap-2 px-4 py-2 border-b bg-gray-50/60"
+            style={{ borderLeftWidth: 3, borderLeftColor: accent, borderLeftStyle: "solid" }}
+        >
+            <span style={{ color: accent }}>{icon}</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-gray-500">{title}</span>
+        </div>
+    );
+}
 
-const InfoGrid = ({ children }: { children: React.ReactNode }) => (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">{children}</div>
-);
-
-const ItensTable = ({ itens, tipo }: { itens: ItemDocumento[]; tipo: 'NC' | 'ND' }) => {
-    const itensFormatados = itens.map(item => ({
-        ...item,
-        quantidade: Number(item.quantidade) || 0,
-        preco_unitario: Number(item.preco_unitario) || 0,
-        taxa_iva: Number(item.taxa_iva) || 0,
-        total_linha: Number(item.total_linha) || 0,
-    }));
+/* ── Tabela de itens ─────────────────────────────────── */
+function ItensTable({ itens, isNC }: { itens: ItemDocumento[]; isNC: boolean }) {
+    if (itens.length === 0) {
+        return (
+            <div className="px-4 py-6 text-center text-sm text-gray-400 italic">
+                Sem itens
+            </div>
+        );
+    }
 
     return (
-        <div className="border rounded-lg overflow-hidden">
+        <div className="overflow-x-auto">
             <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b">
-                    <tr>
-                        <th className="px-4 py-2 text-left font-semibold text-gray-700">Descrição</th>
-                        <th className="px-4 py-2 text-center font-semibold text-gray-700 w-16">Qtd</th>
-                        <th className="px-4 py-2 text-right font-semibold text-gray-700 w-28">Preço</th>
-                        <th className="px-4 py-2 text-right font-semibold text-gray-700 w-16">IVA</th>
-                        <th className="px-4 py-2 text-right font-semibold text-gray-700 w-28">Total</th>
+                <thead>
+                    <tr className="border-b bg-gray-50">
+                        <th className="px-3 py-2 text-left font-semibold text-gray-600">Descrição</th>
+                        <th className="px-3 py-2 text-center font-semibold text-gray-600 w-16">Qtd</th>
+                        <th className="px-3 py-2 text-right font-semibold text-gray-600 w-28">Preço</th>
+                        <th className="px-3 py-2 text-right font-semibold text-gray-600 w-16">IVA</th>
+                        <th className="px-3 py-2 text-right font-semibold text-gray-600 w-28">Total</th>
                     </tr>
                 </thead>
-                <tbody className="divide-y">
-                    {itensFormatados.map((item, index) => (
-                        <tr key={item.id || index} className="hover:bg-gray-50">
-                            <td className="px-4 py-2">
-                                <div className="font-medium text-gray-900">{item.descricao}</div>
-                                {item.codigo_produto && (
-                                    <div className="text-xs text-gray-500">Ref: {item.codigo_produto}</div>
-                                )}
-                                {item.eh_servico && (
-                                    <span className="text-xs text-blue-600 mt-0.5 inline-block">Serviço</span>
-                                )}
-                            </td>
-                            <td className="px-4 py-2 text-center">{formatarQuantidade(item.quantidade)}</td>
-                            <td className="px-4 py-2 text-right font-medium">{formatarPreco(item.preco_unitario)}</td>
-                            <td className="px-4 py-2 text-right text-gray-600">{item.taxa_iva.toFixed(2)}%</td>
-                            <td className={`px-4 py-2 text-right font-bold ${tipo === 'NC' ? 'text-red-600' : 'text-green-600'}`}>
-                                {tipo === 'NC' ? '- ' : '+ '}{formatarPreco(item.total_linha)}
-                            </td>
-                        </tr>
-                    ))}
+                <tbody className="divide-y divide-gray-100">
+                    {itens.map((item, i) => {
+                        const qtd   = Number(item.quantidade   ?? 0);
+                        const preco = Number(item.preco_unitario ?? 0);
+                        const taxa  = Number(item.taxa_iva      ?? 0);
+                        const total = Number(item.total_linha   ?? 0);
+
+                        return (
+                            <tr key={item.id ?? i} className="hover:bg-gray-50/50">
+                                <td className="px-3 py-2">
+                                    <div className="font-medium text-gray-900">{item.descricao}</div>
+                                    {item.codigo_produto && (
+                                        <div className="text-xs text-gray-400">Ref: {item.codigo_produto}</div>
+                                    )}
+                                    {item.eh_servico && (
+                                        <span className="text-xs text-blue-600">Serviço</span>
+                                    )}
+                                </td>
+                                <td className="px-3 py-2 text-center tabular-nums">{qtd.toFixed(2)}</td>
+                                <td className="px-3 py-2 text-right tabular-nums">{fmtKz(preco)}</td>
+                                <td className="px-3 py-2 text-right text-gray-500 tabular-nums">{taxa.toFixed(1)}%</td>
+                                <td className={`px-3 py-2 text-right font-bold tabular-nums ${isNC ? "text-red-600" : "text-green-600"}`}>
+                                    {isNC ? "−" : "+"}{fmtKz(total)}
+                                </td>
+                            </tr>
+                        );
+                    })}
                 </tbody>
             </table>
         </div>
     );
-};
+}
 
-const SkeletonLoader = () => (
-    <div className="space-y-4 animate-pulse">
-        <div className="h-10 bg-gray-200 rounded w-1/3"></div>
-        <div className="h-64 bg-gray-200 rounded"></div>
-    </div>
-);
+/* ── Skeleton ────────────────────────────────────────── */
+function Skeleton() {
+    return (
+        <div className="animate-pulse space-y-3 p-4 max-w-4xl mx-auto">
+            <div className="h-9 bg-gray-200 rounded w-1/3" />
+            <div className="h-40 bg-gray-200 rounded" />
+            <div className="h-56 bg-gray-200 rounded" />
+        </div>
+    );
+}
 
-/* ==================== COMPONENTE PRINCIPAL ==================== */
+/* ── Componente principal ────────────────────────────── */
 export default function VisualizarNotaPage() {
-    const router = useRouter();
-    const params = useParams();
-    const notaId = params?.id as string;
-    const colors = useThemeColors();
+    const router   = useRouter();
+    const params   = useParams();
+    const notaId   = params?.id as string;
+    const colors   = useThemeColors();
     const { user } = useAuth();
 
-    const [nota, setNota] = useState<DocumentoFiscal | null>(null);
+    const [nota, setNota]                       = useState<DocumentoFiscal | null>(null);
     const [documentoOrigem, setDocumentoOrigem] = useState<DocumentoFiscal | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [baixandoPdf, setBaixandoPdf] = useState(false);
-
-    const isNC = nota?.tipo_documento === 'NC';
+    const [loading, setLoading]                 = useState(true);
+    const [error, setError]                     = useState<string | null>(null);
+    const [baixandoPdf, setBaixandoPdf]         = useState(false);
 
     useEffect(() => {
-        const carregarNota = async () => {
-            if (!notaId) {
-                setError('ID da nota não fornecido');
-                setLoading(false);
-                return;
-            }
+        if (!notaId) { setError("ID não fornecido"); setLoading(false); return; }
 
+        (async () => {
             try {
-                setLoading(true);
-                setError(null);
                 const doc = await documentoFiscalService.buscarPorId(notaId);
                 setNota(doc);
-
-                if ((doc.tipo_documento === 'NC' || doc.tipo_documento === 'ND') && doc.documentoOrigem?.id) {
+                if ((doc.tipo_documento === "NC" || doc.tipo_documento === "ND") && doc.documentoOrigem?.id) {
                     const origem = await documentoFiscalService.buscarPorId(doc.documentoOrigem.id);
                     setDocumentoOrigem(origem);
                 }
-            } catch (err) {
-                console.error('Erro ao carregar nota:', err);
-                setError(err instanceof Error ? err.message : 'Erro ao carregar nota');
+            } catch (e) {
+                setError(e instanceof Error ? e.message : "Erro ao carregar");
             } finally {
                 setLoading(false);
             }
-        };
-
-        carregarNota();
+        })();
     }, [notaId]);
 
-    /* ==================== HANDLERS ==================== */
+    /* ── Handlers ──────────────────────────────────── */
+    const handleImprimir = () => {
+        if (!nota?.id) return;
+        const backend = `${window.location.protocol}//${window.location.hostname}:8000`;
+        window.open(`${backend}/api/documentos-fiscais/${nota.id}/print?auto=1`, "_blank");
+    };
 
-    /** Impressão directa da página actual */
-    const handleImprimir = () => window.print();
-
-    /**
-     * Download do PDF via backend (DomPDF).
-     * GET /api/documentos-fiscais/{id}/pdf/download
-     */
     const handleDownloadPDF = async () => {
         if (!nota?.id) return;
         try {
             setBaixandoPdf(true);
-            const nomeArquivo = `${nota.tipo_documento}_${nota.numero_documento || nota.id}.pdf`;
-            await documentoFiscalService.downloadPdf(nota.id, nomeArquivo);
-        } catch (err) {
-            console.error('Erro ao baixar PDF:', err);
-            alert('Erro ao baixar PDF. Tente novamente.');
-        } finally {
-            setBaixandoPdf(false);
-        }
+            await documentoFiscalService.downloadPdf(
+                nota.id,
+                `${nota.tipo_documento}_${nota.numero_documento ?? nota.id}.pdf`
+            );
+        } catch { alert("Erro ao baixar PDF. Tente novamente."); }
+        finally { setBaixandoPdf(false); }
     };
 
-    const handleVoltarParaOrigem = () => {
-        if (documentoOrigem) {
-            router.push(`/dashboard/Faturas/Faturas/${documentoOrigem.id}`);
-        }
-    };
-
-    /* ==================== RENDER ==================== */
-    if (loading) {
-        return (
-            <MainEmpresa>
-                <div className="p-4 max-w-5xl mx-auto">
-                    <SkeletonLoader />
-                </div>
-            </MainEmpresa>
-        );
-    }
+    /* ── Loading / Erro ──────────────────────────── */
+    if (loading) return <MainEmpresa><Skeleton /></MainEmpresa>;
 
     if (error || !nota) {
         return (
             <MainEmpresa>
-                <div className="p-4 max-w-5xl mx-auto">
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-                        <XCircle className="w-10 h-10 text-red-500 mx-auto mb-3" />
-                        <p className="text-red-700 font-medium mb-2">Erro ao carregar nota</p>
-                        <p className="text-red-600 text-sm mb-4">{error || 'Nota não encontrada'}</p>
+                <div className="p-4 max-w-4xl mx-auto">
+                    <div className="border border-red-200 bg-red-50 p-6 text-center rounded">
+                        <XCircle className="w-8 h-8 text-red-500 mx-auto mb-2" />
+                        <p className="text-red-700 font-medium mb-1">{error ?? "Nota não encontrada"}</p>
                         <button
                             onClick={() => router.back()}
-                            className="px-4 py-2 text-white rounded-lg hover:opacity-90 text-sm"
+                            className="mt-3 px-4 py-1.5 text-sm text-white rounded"
                             style={{ backgroundColor: colors.primary }}
                         >
                             Voltar
@@ -283,177 +224,184 @@ export default function VisualizarNotaPage() {
         );
     }
 
-    const nomeCliente = documentoFiscalService.getNomeCliente(nota);
-    const nifCliente = documentoFiscalService.getNifCliente(nota);
-    const nomeEmissor = nota.user?.name || user?.name || 'Sistema';
+    const isNC   = nota.tipo_documento === "NC";
+    const accent = isNC ? "#dc2626" : "#16a34a";
 
-    const totalRetencao = Number(nota.total_retencao) || 0;
-    const baseTributavel = Number(nota.base_tributavel) || 0;
-    const totalIva = Number(nota.total_iva) || 0;
-    const totalLiquido = Number(nota.total_liquido) || 0;
-    const percentualRetencao = baseTributavel > 0 ? (totalRetencao / baseTributavel) * 100 : 0;
-    const percentualIva = baseTributavel > 0 ? (totalIva / baseTributavel) * 100 : 0;
+    const nomeCliente = documentoFiscalService.getNomeCliente(nota);
+    const nifCliente  = documentoFiscalService.getNifCliente(nota);
+    const nomeEmissor = nota.user?.name ?? user?.name ?? "Sistema";
+
+    const base   = Number(nota.base_tributavel  ?? 0);
+    const iva    = Number(nota.total_iva        ?? 0);
+    const ret    = Number(nota.total_retencao   ?? 0);
+    const total  = Number(nota.total_liquido    ?? 0);
+    const pctIva = base > 0 ? (iva / base) * 100 : 0;
+    const pctRet = base > 0 ? (ret / base) * 100 : 0;
 
     return (
         <MainEmpresa>
-            <div className="p-3 sm:p-4 max-w-5xl mx-auto space-y-3">
+            <div className="p-3 sm:p-4 max-w-4xl mx-auto space-y-3">
 
-                {/* Cabeçalho */}
-                <div className="bg-white rounded-lg border p-3 sm:p-4">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                        <div className="flex items-center gap-2 w-full sm:w-auto">
-                            <button
-                                onClick={() => router.back()}
-                                className="p-1.5 hover:bg-gray-100 rounded-full transition-colors shrink-0"
-                            >
-                                <ArrowLeft className="w-4 h-4" style={{ color: colors.primary }} />
-                            </button>
-                            <div className="min-w-0 flex-1">
-                                <h1
-                                    className="text-base sm:text-lg font-bold flex items-center gap-1.5 truncate"
-                                    style={{ color: colors.primary }}
-                                >
-                                    {isNC
-                                        ? <MinusCircle className="w-4 h-4 shrink-0" />
-                                        : <PlusCircle className="w-4 h-4 shrink-0" />
-                                    }
-                                    <span className="truncate">{nota.numero_documento}</span>
-                                </h1>
-                                <p className="text-xs text-gray-500">
-                                    {TIPO_LABEL[nota.tipo_documento]} • {formatarData(nota.data_emissao)}
-                                </p>
+                {/* ── Barra de topo ──────────────────────── */}
+                <div className="flex items-center justify-between bg-white border px-3 py-2.5 rounded">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <button
+                            onClick={() => router.back()}
+                            className="p-1 hover:bg-gray-100 rounded shrink-0 transition-colors"
+                        >
+                            <ArrowLeft className="w-4 h-4" style={{ color: colors.primary }} />
+                        </button>
+
+                        <span style={{ color: accent }} className="shrink-0">
+                            {isNC
+                                ? <MinusCircle className="w-4 h-4" />
+                                : <PlusCircle  className="w-4 h-4" />
+                            }
+                        </span>
+
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-sm text-gray-900 truncate">
+                                    {nota.numero_documento}
+                                </span>
+                                <span className="text-xs text-gray-400 shrink-0 hidden sm:inline">
+                                    {TIPO_LABEL[nota.tipo_documento]}
+                                </span>
+                                <Badge estado={nota.estado} />
                             </div>
+                            <p className="text-xs text-gray-400">
+                                {TIPO_LABEL[nota.tipo_documento]} · {fmtData(nota.data_emissao)}
+                            </p>
                         </div>
+                    </div>
 
-                        <div className="flex items-center gap-1.5 flex-wrap w-full sm:w-auto justify-end">
-                            {/* Impressão directa */}
-                            <button
-                                onClick={handleImprimir}
-                                className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                                title="Imprimir"
-                            >
-                                <Printer className="w-4 h-4" />
-                            </button>
-
-                            {/* Download PDF via backend */}
-                            <button
-                                onClick={handleDownloadPDF}
-                                disabled={baixandoPdf}
-                                className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
-                                title="Download PDF"
-                            >
-                                {baixandoPdf
-                                    ? <Loader2 className="w-4 h-4 animate-spin" />
-                                    : <Download className="w-4 h-4" />
-                                }
-                            </button>
-
-                            <EstadoBadge estado={nota.estado} />
-                        </div>
+                    <div className="flex items-center gap-1 shrink-0 ml-2">
+                        <button
+                            onClick={handleImprimir}
+                            title="Imprimir"
+                            className="p-1.5 text-gray-500 hover:bg-gray-100 rounded transition-colors"
+                        >
+                            <Printer className="w-4 h-4" />
+                        </button>
+                        <button
+                            onClick={handleDownloadPDF}
+                            disabled={baixandoPdf}
+                            title="Baixar PDF"
+                            className="p-1.5 text-gray-500 hover:bg-gray-100 rounded transition-colors disabled:opacity-40"
+                        >
+                            {baixandoPdf
+                                ? <Loader2 className="w-4 h-4 animate-spin" />
+                                : <Download className="w-4 h-4" />
+                            }
+                        </button>
                     </div>
                 </div>
 
-                {/* CARD ÚNICO COM TODAS AS INFORMAÇÕES */}
-                <InfoCard>
-                    {/* Seção 1: Documento e Cliente */}
-                    <CardSection title="Documento" icon={<FileText className="w-4 h-4" />}>
-                        <InfoGrid>
-                            <div>
-                                <InfoRow label="Tipo" value={TIPO_LABEL[nota.tipo_documento]} />
-                                <InfoRow label="Série" value={nota.serie} />
-                                <InfoRow label="Data de Emissão" value={formatarDataHora(nota.data_emissao)} />
-                                {nota.motivo && <InfoRow label="Motivo" value={nota.motivo} />}
-                            </div>
-                            <div>
-                                <InfoRow label="Cliente" value={nomeCliente} />
-                                {nifCliente && <InfoRow label="NIF" value={nifCliente} />}
-                                {nota.cliente?.telefone && <InfoRow label="Telefone" value={nota.cliente.telefone} />}
-                                {nota.cliente?.email && <InfoRow label="Email" value={nota.cliente.email} />}
-                            </div>
-                        </InfoGrid>
-                    </CardSection>
+                {/* ── Card principal ──────────────────────── */}
+                <div className="bg-white border rounded divide-y divide-gray-100">
 
-                    {/* Seção 2: Documento de Origem */}
-                    {documentoOrigem && (
-                        <CardSection title="Documento de Origem" icon={<FileText className="w-4 h-4" />}>
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="font-medium">{documentoOrigem.numero_documento}</p>
-                                    <p className="text-xs text-gray-500 mt-0.5">
-                                        {TIPO_LABEL[documentoOrigem.tipo_documento]} • {formatarData(documentoOrigem.data_emissao)}
-                                    </p>
-                                </div>
-                                <button
-                                    onClick={handleVoltarParaOrigem}
-                                    className="px-3 py-1 text-xs font-medium rounded-md border hover:bg-gray-50"
-                                    style={{ borderColor: colors.border }}
-                                >
-                                    Ver Original
-                                </button>
-                            </div>
-                        </CardSection>
-                    )}
+                    {/* Bloco 1: Cliente + Documento em 2 colunas */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
 
-                    {/* Seção 3: Emissor e Valores */}
-                    <CardSection title="Emissão e Valores" icon={<Building2 className="w-4 h-4" />}>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <div className="flex items-center gap-2 text-sm">
-                                    <User className="w-4 h-4 text-gray-400" />
-                                    <span className="text-gray-600">Emissor:</span>
-                                    <span className="font-medium">{nomeEmissor}</span>
-                                </div>
-                                {nota.observacoes && (
-                                    <div className="text-sm bg-gray-50 p-2 rounded">
-                                        <span className="text-gray-500">Obs:</span>
-                                        <p className="mt-1 text-gray-700">{nota.observacoes}</p>
+                        {/* Cliente */}
+                        <div>
+                            <SectionHeader
+                                icon={<User className="w-3.5 h-3.5" />}
+                                title="Cliente"
+                                accent={accent}
+                            />
+                            <div className="px-4 py-3">
+                                <Row label="Nome"   value={nomeCliente} />
+                                {nifCliente              && <Row label="NIF"    value={nifCliente} />}
+                                {nota.cliente?.telefone  && <Row label="Tel."   value={nota.cliente.telefone} />}
+                                {nota.cliente?.email     && <Row label="Email"  value={nota.cliente.email} />}
+                                {nota.cliente?.endereco  && <Row label="Morada" value={nota.cliente.endereco} />}
+                                <Row label="Emissor" value={nomeEmissor} />
+                            </div>
+                        </div>
+
+                        {/* Documento */}
+                        <div>
+                            <SectionHeader
+                                icon={<FileText className="w-3.5 h-3.5" />}
+                                title="Documento"
+                                accent={accent}
+                            />
+                            <div className="px-4 py-3">
+                                <Row label="Tipo"    value={TIPO_LABEL[nota.tipo_documento]} />
+                                <Row label="Série"   value={nota.serie} />
+                                <Row label="Emissão" value={fmtDataHora(nota.data_emissao)} />
+                                {nota.motivo && <Row label="Motivo" value={nota.motivo} />}
+                                {nota.observacoes && <Row label="Obs." value={nota.observacoes} />}
+
+                                {/* Documento de origem */}
+                                {documentoOrigem && (
+                                    <div className="flex justify-between items-center gap-4 py-1.5 text-sm border-b border-gray-100 last:border-0">
+                                        <span className="text-gray-500 shrink-0">Referente a</span>
+                                        <button
+                                            onClick={() => router.push(`/dashboard/Faturas/Faturas/${documentoOrigem.id}/Ver`)}
+                                            className="font-medium text-right underline underline-offset-2 hover:opacity-80 transition-opacity"
+                                            style={{ color: colors.primary }}
+                                        >
+                                            {documentoOrigem.numero_documento}
+                                        </button>
                                     </div>
                                 )}
                             </div>
+                        </div>
+                    </div>
 
-                            <div className="space-y-1 bg-gray-50 p-3 rounded-lg">
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-gray-600">Base Tributável:</span>
-                                    <span className="font-medium">{formatarPreco(baseTributavel)}</span>
-                                </div>
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-gray-600">IVA ({percentualIva.toFixed(1)}%):</span>
-                                    <span className="font-medium">{formatarPreco(totalIva)}</span>
-                                </div>
-                                {totalRetencao > 0 && (
-                                    <div className="flex justify-between text-sm">
-                                        <span className="text-gray-600">Retenção ({percentualRetencao.toFixed(1)}%):</span>
-                                        <span className="font-medium text-red-600">-{formatarPreco(totalRetencao)}</span>
-                                    </div>
+                    {/* Bloco 2: Itens */}
+                    <div>
+                        <SectionHeader
+                            icon={<Package className="w-3.5 h-3.5" />}
+                            title="Itens"
+                            accent={accent}
+                        />
+                        <ItensTable itens={nota.itens ?? []} isNC={isNC} />
+                    </div>
+
+                    {/* Bloco 3: Totais */}
+                    <div className="px-4 py-3">
+                        <div className="flex justify-end">
+                            <div className="w-full sm:w-64 space-y-0">
+                                <Row label="Base Tributável"                    value={fmtKz(base)} />
+                                <Row label={`IVA (${pctIva.toFixed(1)}%)`}      value={fmtKz(iva)} />
+                                {ret > 0 && (
+                                    <Row
+                                        label={`Retenção (${pctRet.toFixed(1)}%)`}
+                                        value={`−${fmtKz(ret)}`}
+                                        danger
+                                    />
                                 )}
-                                <div
-                                    className={`flex justify-between text-base font-bold pt-2 border-t border-gray-200 mt-2 ${
-                                        isNC ? 'text-red-600' : 'text-green-600'
-                                    }`}
-                                >
-                                    <span>TOTAL {isNC ? '(CRÉDITO)' : '(DÉBITO)'}:</span>
-                                    <span>{isNC ? '- ' : '+ '}{formatarPreco(totalLiquido)}</span>
+                                <div className="flex justify-between items-center pt-2 mt-1 border-t border-gray-200">
+                                    <span className="text-sm font-bold text-gray-900">
+                                        TOTAL {isNC ? "(CRÉDITO)" : "(DÉBITO)"}
+                                    </span>
+                                    <span className="text-base font-bold" style={{ color: accent }}>
+                                        {isNC ? "−" : "+"}{fmtKz(total)}
+                                    </span>
                                 </div>
                             </div>
                         </div>
-                    </CardSection>
+                    </div>
 
-                    {/* Seção 4: Itens */}
-                    {nota.itens && nota.itens.length > 0 && (
-                        <CardSection title="Itens" icon={<Package className="w-4 h-4" />} noBorder>
-                            <ItensTable itens={nota.itens} tipo={isNC ? 'NC' : 'ND'} />
-                        </CardSection>
-                    )}
-
-                    {/* Seção 5: Hash Fiscal */}
+                    {/* Bloco 4: Hash fiscal */}
                     {nota.hash_fiscal && (
-                        <CardSection title="Autenticação" icon={<Hash className="w-4 h-4" />} noBorder>
-                            <div className="bg-gray-50 p-3 rounded-lg">
-                                <p className="text-xs break-all font-mono">{nota.hash_fiscal}</p>
+                        <div>
+                            <SectionHeader
+                                icon={<Hash className="w-3.5 h-3.5" />}
+                                title="Hash Fiscal"
+                                accent={accent}
+                            />
+                            <div className="px-4 py-3">
+                                <p className="text-xs font-mono text-gray-600 break-all bg-gray-50 p-2 rounded border">
+                                    {nota.hash_fiscal}
+                                </p>
                             </div>
-                        </CardSection>
+                        </div>
                     )}
-                </InfoCard>
+                </div>
             </div>
         </MainEmpresa>
     );
