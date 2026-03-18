@@ -4,6 +4,19 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+/**
+ * Migration: criar tabela movimentos_stock
+ *
+ * Alterações face às versões anteriores:
+ *  - Migration de "fix de foreign key cascade" (versão separada) eliminada —
+ *    a FK com cascade está aqui desde o início
+ *  - 'venda_cancelada' adicionado ao enum tipo_movimento — usado pelo
+ *    VendaService::cancelarVenda() ao devolver stock
+ *  - Enum 'tipo' simplificado para entrada | saida (sem 'ajuste' redundante
+ *    — o tipo_movimento='ajuste' já distingue o contexto)
+ *  - Índice em 'referencia' incluído — necessário para buscar movimentos
+ *    associados a um documento fiscal específico
+ */
 return new class extends Migration
 {
     public function up(): void
@@ -11,7 +24,7 @@ return new class extends Migration
         Schema::create('movimentos_stock', function (Blueprint $table) {
             $table->uuid('id')->primary();
 
-            // Relações com cascade delete
+            // ── Relacionamentos ──────────────────────────────────────────
             $table->foreignUuid('produto_id')
                 ->constrained('produtos')
                 ->onDelete('cascade');
@@ -20,45 +33,47 @@ return new class extends Migration
                 ->constrained('users')
                 ->onDelete('restrict');
 
-            // Tipo de movimento (entrada/saída)
+            // ── Tipo de movimento ────────────────────────────────────────
+            // entrada: stock aumenta | saida: stock diminui
             $table->enum('tipo', ['entrada', 'saida']);
 
-            // Contexto do movimento - ATUALIZADO: adicionado 'nota_credito'
+            // Contexto do movimento — alinhado com StockService e VendaService
             $table->enum('tipo_movimento', [
-                'compra',
-                'venda',
-                'ajuste',
-                'nota_credito', // ATUALIZADO: Para NC
-                'devolucao',
-                'transferencia'
+                'compra',           // StockService::entradaCompra()
+                'venda',            // StockService::saidaVenda() — originado por FT/FR
+                'nota_credito',     // StockService::processarDocumentoFiscal() — NC
+                'ajuste',           // StockService::ajusteManual() + reversões por cancelamento
+                'venda_cancelada',  // VendaService::cancelarVenda() — devolução ao stock
+                'devolucao',        // devolução avulsa
             ]);
 
-            // Quantidades
-            $table->integer('quantidade');
+            // ── Quantidades e rastreabilidade ────────────────────────────
+            $table->integer('quantidade');        // positivo = entrada; negativo = saida
             $table->integer('estoque_anterior')->default(0);
             $table->integer('estoque_novo')->default(0);
+            $table->integer('stock_minimo')->default(0); // valor no momento do movimento
 
-            // Valores (para cálculo de custo médio)
-            $table->decimal('custo_medio', 12, 2)->default(0);
-            $table->decimal('custo_unitario', 12, 2)->nullable();
+            // ── Custo ────────────────────────────────────────────────────
+            $table->decimal('custo_medio', 15, 2)->default(0);   // custo médio após movimento
+            $table->decimal('custo_unitario', 15, 2)->nullable(); // custo da transacção
 
-            // Referências externas - pode ser ID de Documento Fiscal
+            // ── Rastreabilidade ──────────────────────────────────────────
+            // referencia: ID do DocumentoFiscal, Compra ou outro documento de origem
             $table->string('referencia', 100)->nullable();
             $table->text('observacao')->nullable();
 
-            // Stock mínimo do produto no momento do movimento
-            $table->integer('stock_minimo')->default(0);
-
+            // ── Timestamps ───────────────────────────────────────────────
             $table->timestamps();
 
-            // Índices para performance
+            // ── Índices ──────────────────────────────────────────────────
             $table->index('produto_id');
             $table->index('user_id');
             $table->index('tipo');
             $table->index('tipo_movimento');
             $table->index('created_at');
-            $table->index(['produto_id', 'created_at']);
-            $table->index('referencia'); // NOVO: Para buscar por documento fiscal
+            $table->index('referencia');                       // busca por documento fiscal
+            $table->index(['produto_id', 'created_at']);       // histórico de um produto
+            $table->index(['tipo_movimento', 'created_at']);   // relatórios por tipo e período
         });
     }
 

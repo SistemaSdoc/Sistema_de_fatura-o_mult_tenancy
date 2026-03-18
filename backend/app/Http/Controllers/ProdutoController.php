@@ -3,695 +3,331 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Database\QueryException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Models\Produto;
 use App\Models\Categoria;
 use App\Models\Fornecedor;
 use App\Services\ProdutoService;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-use App\Models\MovimentoStock;
-use Illuminate\Database\QueryException;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Throwable;
 use Carbon\Carbon;
+use Throwable;
 
+/**
+ * ProdutoController
+ *
+ * Delega toda a lógica ao ProdutoService.
+ * O controller faz apenas: validação de request, autorização e resposta JSON.
+ *
+ * Taxas de retenção válidas (Angola): 2%, 5%, 6,5%, 10%, 15%
+ */
 class ProdutoController extends Controller
 {
-    protected $produtoService;
+    public function __construct(protected ProdutoService $produtoService) {}
 
-    public function __construct(ProdutoService $produtoService)
-    {
-        $this->produtoService = $produtoService;
-    }
+    /* =====================================================================
+     | LISTAGEM
+     | ================================================================== */
 
-    /**
-     * Aplicar filtros de data à query
-     */
-    private function aplicarFiltrosData($query, Request $request, string $coluna = 'created_at')
-    {
-        if ($request->has('data_inicio') && !empty($request->data_inicio)) {
-            $query->whereDate($coluna, '>=', Carbon::parse($request->data_inicio)->format('Y-m-d'));
-        }
-
-        if ($request->has('data_fim') && !empty($request->data_fim)) {
-            $query->whereDate($coluna, '<=', Carbon::parse($request->data_fim)->format('Y-m-d'));
-        }
-
-        return $query;
-    }
-
-    /**
-     * Listar produtos ativos (não deletados) COM FILTROS DE DATA
-     */
     public function index(Request $request)
     {
         $this->authorize('viewAny', Produto::class);
 
-        $query = Produto::query();
-
-        // Filtros básicos
-        if ($request->has('tipo')) {
-            $query->where('tipo', $request->tipo);
-        }
-        if ($request->has('status')) {
-            $query->where('status', $request->status);
-        }
-        if ($request->has('categoria_id')) {
-            $query->where('categoria_id', $request->categoria_id);
-        }
-        if ($request->has('busca')) {
-            $busca = $request->busca;
-            $query->where(function ($q) use ($busca) {
-                $q->where('nome', 'like', "%{$busca}%")
-                    ->orWhere('codigo', 'like', "%{$busca}%")
-                    ->orWhere('descricao', 'like', "%{$busca}%");
-            });
-        }
-        if ($request->boolean('estoque_baixo')) {
-            $query->estoqueBaixo();
-        }
-        if ($request->boolean('sem_estoque')) {
-            $query->semEstoque();
-        }
-
-        // ✅ NOVOS FILTROS
-        if ($request->has('apenas_servicos') && $request->boolean('apenas_servicos')) {
-            $query->where('tipo', 'servico');
-        }
-        if ($request->has('apenas_produtos') && $request->boolean('apenas_produtos')) {
-            $query->where('tipo', 'produto');
-        }
-        if ($request->has('com_retencao') && $request->boolean('com_retencao')) {
-            $query->where('retencao', '>', 0);
-        }
-
-        // ✅ FILTROS DE DATA (criação/atualização)
-        $this->aplicarFiltrosData($query, $request, 'created_at');
-
-        // ✅ FILTRO POR DATA DE MOVIMENTAÇÃO (através de relação)
-        if ($request->has('movimentado_entre_inicio') || $request->has('movimentado_entre_fim')) {
-            $query->whereHas('movimentosStock', function ($q) use ($request) {
-                if ($request->has('movimentado_entre_inicio') && !empty($request->movimentado_entre_inicio)) {
-                    $q->whereDate('created_at', '>=', Carbon::parse($request->movimentado_entre_inicio)->format('Y-m-d'));
-                }
-                if ($request->has('movimentado_entre_fim') && !empty($request->movimentado_entre_fim)) {
-                    $q->whereDate('created_at', '<=', Carbon::parse($request->movimentado_entre_fim)->format('Y-m-d'));
-                }
-            });
-        }
-
-        // Ordenação
-        $ordenar = $request->get('ordenar', 'nome');
-        $direcao = $request->get('direcao', 'asc');
-        $query->orderBy($ordenar, $direcao);
-
-        // Paginação ou todos
-        if ($request->boolean('paginar')) {
-            $perPage = $request->get('per_page', 15);
-            $produtos = $query->paginate($perPage);
-        } else {
-            $produtos = $query->get();
-        }
+        $filtros = $this->extrairFiltros($request);
+        $produtos = $this->produtoService->listarProdutos($filtros);
 
         return response()->json([
-            'message' => 'Lista de produtos carregada com sucesso',
-            'produtos' => $produtos
+            'message'  => 'Lista de produtos carregada com sucesso',
+            'produtos' => $produtos,
         ]);
     }
 
-    /**
-     * Listar todos os produtos (ativos + deletados) - para admin COM FILTROS
-     */
     public function indexWithTrashed(Request $request)
     {
         $this->authorize('viewAny', Produto::class);
 
-        $query = Produto::withTrashed();
-
-        // Aplicar mesmos filtros do index
-        if ($request->has('tipo')) {
-            $query->where('tipo', $request->tipo);
-        }
-        if ($request->has('busca')) {
-            $busca = $request->busca;
-            $query->where(function ($q) use ($busca) {
-                $q->where('nome', 'like', "%{$busca}%")
-                    ->orWhere('codigo', 'like', "%{$busca}%");
-            });
-        }
-        if ($request->has('apenas_servicos') && $request->boolean('apenas_servicos')) {
-            $query->where('tipo', 'servico');
-        }
-        if ($request->has('apenas_produtos') && $request->boolean('apenas_produtos')) {
-            $query->where('tipo', 'produto');
-        }
-        if ($request->has('com_retencao') && $request->boolean('com_retencao')) {
-            $query->where('retencao', '>', 0);
-        }
-
-        // ✅ FILTROS DE DATA
-        $this->aplicarFiltrosData($query, $request, 'created_at');
-
-        $produtos = $query->get();
+        $filtros = array_merge($this->extrairFiltros($request), ['com_deletados' => true]);
+        $produtos = $this->produtoService->listarProdutos($filtros);
 
         return response()->json([
-            'message' => 'Lista completa de produtos',
-            'produtos' => $produtos,
-            'total' => $produtos->count(),
-            'ativos' => $produtos->whereNull('deleted_at')->count(),
-            'deletados' => $produtos->whereNotNull('deleted_at')->count(),
+            'message'          => 'Lista completa de produtos',
+            'produtos'         => $produtos,
+            'total'            => $produtos->count(),
+            'ativos'           => $produtos->whereNull('deleted_at')->count(),
+            'deletados'        => $produtos->whereNotNull('deleted_at')->count(),
             'produtos_fisicos' => $produtos->where('tipo', 'produto')->count(),
-            'servicos' => $produtos->where('tipo', 'servico')->count(),
+            'servicos'         => $produtos->where('tipo', 'servico')->count(),
         ]);
     }
 
-    /**
-     * Listar APENAS produtos deletados (lixeira) COM FILTROS
-     */
     public function indexOnlyTrashed(Request $request)
     {
         $this->authorize('viewAny', Produto::class);
 
         $query = Produto::onlyTrashed();
 
-        if ($request->has('busca')) {
+        if ($request->filled('busca')) {
             $busca = $request->busca;
-            $query->where(function ($q) use ($busca) {
-                $q->where('nome', 'like', "%{$busca}%")
-                    ->orWhere('codigo', 'like', "%{$busca}%");
-            });
+            $query->where(fn ($q) => $q->where('nome', 'like', "%{$busca}%")->orWhere('codigo', 'like', "%{$busca}%"));
         }
-        if ($request->has('tipo')) {
+        if ($request->filled('tipo')) {
             $query->where('tipo', $request->tipo);
         }
-
-        // ✅ FILTROS DE DATA
-        $this->aplicarFiltrosData($query, $request, 'deleted_at');
+        if ($request->filled('data_inicio')) {
+            $query->whereDate('deleted_at', '>=', Carbon::parse($request->data_inicio));
+        }
+        if ($request->filled('data_fim')) {
+            $query->whereDate('deleted_at', '<=', Carbon::parse($request->data_fim));
+        }
 
         $produtos = $request->boolean('paginar')
             ? $query->paginate($request->get('per_page', 15))
             : $query->get();
 
         return response()->json([
-            'message' => 'Produtos deletados',
-            'produtos' => $produtos,
+            'message'         => 'Produtos na lixeira',
+            'produtos'        => $produtos,
             'total_deletados' => $produtos instanceof \Illuminate\Pagination\LengthAwarePaginator
                 ? $produtos->total()
                 : $produtos->count(),
         ]);
     }
 
-    /**
-     * Mostrar produto específico
-     */
-    public function show($id)
+    /* =====================================================================
+     | DETALHE
+     | ================================================================== */
+
+    public function show(string $id)
     {
         $produto = Produto::withTrashed()
-            ->with(['categoria', 'fornecedor', 'movimentosStock' => function ($q) {
-                $q->limit(10);
-            }])
+            ->with(['categoria', 'fornecedor', 'movimentosStock' => fn ($q) => $q->limit(10)])
             ->findOrFail($id);
 
         $this->authorize('view', $produto);
 
         return response()->json([
             'message' => 'Produto carregado com sucesso',
-            'produto' => $produto
+            'produto' => $produto,
         ]);
     }
 
-    /**
-     * Criar novo produto
-     */
+    /* =====================================================================
+     | CRIAR
+     | ================================================================== */
+
     public function store(Request $request)
     {
         $this->authorize('create', Produto::class);
 
-        // Validação base
-        $regras = [
-            'tipo' => 'required|in:produto,servico',
-            'nome' => 'required|string|max:255',
-            'descricao' => 'nullable|string',
-            'preco_venda' => 'required|numeric|min:0',
-            'taxa_iva' => 'nullable|numeric|min:0|max:100',
-            'sujeito_iva' => 'nullable|boolean',
-            'status' => 'nullable|in:ativo,inativo',
-        ];
-
-        // Regras específicas para produtos
-        if ($request->tipo === 'produto') {
-            $regras['categoria_id'] = 'required|uuid|exists:categorias,id';
-            $regras['fornecedor_id'] = 'nullable|uuid|exists:fornecedores,id';
-            $regras['codigo'] = 'nullable|string|max:50|unique:produtos,codigo';
-            $regras['preco_compra'] = 'required|numeric|min:0';
-            $regras['custo_medio'] = 'nullable|numeric|min:0';
-            $regras['estoque_atual'] = 'nullable|integer|min:0';
-            $regras['estoque_minimo'] = 'nullable|integer|min:0';
-        } else {
-            // Regras para serviços
-            $regras['retencao'] = 'nullable|numeric|min:0|max:100';
-            $regras['duracao_estimada'] = 'required|string|max:50';
-            $regras['unidade_medida'] = 'required|in:hora,dia,semana,mes';
-        }
-
-        $dados = $request->validate($regras);
-
-        // Adicionar user_id do usuário autenticado
-        $dados['user_id'] = auth()->id();
-
-        // Definir valores padrão
-        $dados['taxa_iva'] = $dados['taxa_iva'] ?? 14;
-        $dados['status'] = $dados['status'] ?? 'ativo';
-        $dados['sujeito_iva'] = $dados['sujeito_iva'] ?? true;
-
-        // Valores padrão para produtos
-        if ($dados['tipo'] === 'produto') {
-            $dados['estoque_atual'] = $dados['estoque_atual'] ?? 0;
-            $dados['estoque_minimo'] = $dados['estoque_minimo'] ?? 5;
-            $dados['custo_medio'] = $dados['custo_medio'] ?? ($dados['preco_compra'] ?? 0);
-
-            // Limpar campos de serviço
-            $dados['retencao'] = null;
-            $dados['duracao_estimada'] = null;
-            $dados['unidade_medida'] = null;
-        } else {
-            // Valores para serviços
-            $dados['categoria_id'] = null;
-            $dados['fornecedor_id'] = null;
-            $dados['codigo'] = null;
-            $dados['preco_compra'] = 0;
-            $dados['custo_medio'] = 0;
-            $dados['estoque_atual'] = 0;
-            $dados['estoque_minimo'] = 0;
-        }
+        $dados = $request->validate($this->regrasValidacao($request->tipo));
 
         try {
-            DB::beginTransaction();
-
-            $produto = Produto::create($dados);
-
-            // Se houver estoque inicial, registrar movimento
-            if ($dados['tipo'] === 'produto' && $dados['estoque_atual'] > 0) {
-                MovimentoStock::create([
-                    'produto_id' => $produto->id,
-                    'user_id' => auth()->id(),
-                    'tipo' => 'entrada',
-                    'tipo_movimento' => 'ajuste',
-                    'quantidade' => $dados['estoque_atual'],
-                    'observacao' => 'Estoque inicial',
-                    'custo_medio' => $produto->custo_medio,
-                ]);
-            }
-
-            DB::commit();
+            $produto = $this->produtoService->criarProduto($dados);
 
             return response()->json([
                 'message' => $dados['tipo'] === 'servico' ? 'Serviço criado com sucesso' : 'Produto criado com sucesso',
-                'produto' => $produto->fresh()
+                'produto' => $produto->fresh(),
             ], 201);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('[PRODUTO STORE ERROR]', ['error' => $e->getMessage()]);
 
-            return response()->json([
-                'message' => 'Erro ao criar produto',
-                'error' => $e->getMessage()
-            ], 500);
+        } catch (\Exception $e) {
+            Log::error('[PRODUTO STORE ERROR]', ['error' => $e->getMessage()]);
+            return response()->json(['message' => 'Erro ao criar produto', 'error' => $e->getMessage()], 500);
         }
     }
 
-    /**
-     * Atualizar produto
-     */
-    public function update(Request $request, $id)
+    /* =====================================================================
+     | ACTUALIZAR
+     | ================================================================== */
+
+    public function update(Request $request, string $id)
     {
         $produto = Produto::findOrFail($id);
-
         $this->authorize('update', $produto);
 
-        // Validação condicional baseada no tipo atual ou novo tipo
-        $tipo = $request->get('tipo', $produto->tipo);
-
-        $regras = [
-            'tipo' => 'sometimes|required|in:produto,servico',
-            'nome' => 'sometimes|required|string|max:255',
-            'descricao' => 'nullable|string',
-            'preco_venda' => 'sometimes|required|numeric|min:0',
-            'taxa_iva' => 'nullable|numeric|min:0|max:100',
-            'sujeito_iva' => 'nullable|boolean',
-            'status' => 'nullable|in:ativo,inativo',
-        ];
-
-        if ($tipo === 'produto') {
-            $regras['categoria_id'] = 'sometimes|required|uuid|exists:categorias,id';
-            $regras['fornecedor_id'] = 'nullable|uuid|exists:fornecedores,id';
-            $regras['codigo'] = 'nullable|string|max:50|unique:produtos,codigo,' . $id;
-            $regras['preco_compra'] = 'sometimes|required|numeric|min:0';
-            $regras['custo_medio'] = 'nullable|numeric|min:0';
-            $regras['estoque_minimo'] = 'nullable|integer|min:0';
-        } else {
-            $regras['retencao'] = 'nullable|numeric|min:0|max:100';
-            $regras['duracao_estimada'] = 'sometimes|required|string|max:50';
-            $regras['unidade_medida'] = 'sometimes|required|in:hora,dia,semana,mes';
-        }
-
-        $dados = $request->validate($regras);
+        $tipo  = $request->get('tipo', $produto->tipo);
+        $dados = $request->validate($this->regrasValidacao($tipo, $id));
 
         try {
-            DB::beginTransaction();
-
-            // Se mudando de produto para serviço
-            if (isset($dados['tipo']) && $dados['tipo'] === 'servico' && $produto->tipo === 'produto') {
-                // Verificar se tem movimentações de estoque
-                if ($produto->movimentosStock()->exists()) {
-                    DB::rollBack();
-                    return response()->json([
-                        'message' => 'Não é possível converter produto com movimentações de estoque para serviço'
-                    ], 422);
-                }
-            }
-
-            $produto->update($dados);
-            $produto->refresh();
-
-            DB::commit();
+            $produto = $this->produtoService->editarProduto($id, $dados);
 
             return response()->json([
-                'message' => 'Produto atualizado com sucesso',
-                'produto' => $produto
+                'message' => 'Produto actualizado com sucesso',
+                'produto' => $produto,
             ]);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('[PRODUTO UPDATE ERROR]', ['error' => $e->getMessage()]);
 
-            return response()->json([
-                'message' => 'Erro ao atualizar produto',
-                'error' => $e->getMessage()
-            ], 500);
+        } catch (\Exception $e) {
+            Log::error('[PRODUTO UPDATE ERROR]', ['error' => $e->getMessage()]);
+            return response()->json(['message' => $e->getMessage()], 422);
         }
     }
 
-    /**
-     * Alterar status (ativo/inativo)
-     */
-    public function alterarStatus($id, Request $request)
+    /* =====================================================================
+     | ESTADO
+     | ================================================================== */
+
+    public function alterarStatus(string $id, Request $request)
     {
         $produto = Produto::findOrFail($id);
-
         $this->authorize('update', $produto);
 
-        $status = $request->validate([
-            'status' => 'required|in:ativo,inativo'
-        ])['status'];
-
-        $produto->update(['status' => $status]);
-        $produto->refresh();
+        $status = $request->validate(['status' => 'required|in:ativo,inativo'])['status'];
+        $produto = $this->produtoService->alterarStatus($id, $status);
 
         return response()->json([
-            'message' => 'Status do produto atualizado',
-            'produto' => $produto
+            'message' => 'Status actualizado',
+            'produto' => $produto,
         ]);
     }
 
-    /**
-     * Deletar produto (SOFT DELETE) - VERSÃO CORRIGIDA
-     */
-    public function destroy($id)
+    /* =====================================================================
+     | APAGAR (SOFT DELETE)
+     | ================================================================== */
+
+    public function destroy(string $id)
     {
         try {
-            DB::beginTransaction();
-
-            // Buscar incluindo deletados para verificar se já está deletado
-            $produto = Produto::withTrashed()->find($id);
-
-            if (!$produto) {
-                return response()->json([
-                    'message' => 'Produto não encontrado',
-                ], 404);
-            }
-
+            $produto = Produto::withTrashed()->findOrFail($id);
             $this->authorize('delete', $produto);
 
             if ($produto->trashed()) {
-                return response()->json([
-                    'message' => 'Produto já está deletado',
-                    'soft_deleted' => true,
-                ], 400);
+                return response()->json(['message' => 'Produto já está na lixeira'], 400);
             }
 
-            // Verificar se tem vendas pendentes
             $vendasPendentes = $produto->itensVenda()
-                ->whereHas('venda', function ($q) {
-                    $q->where('status', 'pendente');
-                })->exists();
+                ->whereHas('venda', fn ($q) => $q->where('status', 'pendente'))
+                ->exists();
 
             if ($vendasPendentes) {
-                DB::rollBack();
-                return response()->json([
-                    'message' => 'Não é possível deletar produto com vendas pendentes',
-                ], 409);
-            }
-
-            // Verificar se tem movimentações de stock
-            if ($produto->movimentosStock()->exists()) {
-                Log::warning('[PRODUTO DELETE] Produto com movimentações sendo deletado', [
-                    'produto_id' => $produto->id,
-                    'nome' => $produto->nome,
-                    'total_movimentacoes' => $produto->movimentosStock()->count()
-                ]);
-
-                // Opcional: Impedir deleção se houver movimentações
-                // Descomente se quiser impedir:
-                /*
-                DB::rollBack();
-                return response()->json([
-                    'message' => 'Não é possível deletar produto com histórico de movimentações de estoque',
-                    'suggestion' => 'Altere o status para "inativo" para descontinuar o produto'
-                ], 409);
-                */
+                return response()->json(['message' => 'Não é possível apagar produto com vendas pendentes'], 409);
             }
 
             $produto->delete();
 
-            DB::commit();
-
-            Log::info('[PRODUTO DELETE]', [
-                'id' => $produto->id,
-                'nome' => $produto->nome,
-                'deleted_at' => $produto->deleted_at,
-                'trashed' => $produto->trashed()
-            ]);
-
             return response()->json([
-                'message' => 'Produto deletado com sucesso',
+                'message'      => 'Produto removido com sucesso',
                 'soft_deleted' => true,
-                'id' => $produto->id,
-                'deleted_at' => $produto->deleted_at,
+                'id'           => $produto->id,
+                'deleted_at'   => $produto->deleted_at,
             ]);
+
         } catch (QueryException $e) {
-            DB::rollBack();
-
-            // Verifica se é erro de constraint de foreign key
             if ($e->getCode() == 23000 || str_contains($e->getMessage(), 'foreign key constraint')) {
-                Log::error('[PRODUTO DELETE] Foreign key constraint violation', [
-                    'produto_id' => $id,
-                    'error' => $e->getMessage()
-                ]);
-
                 return response()->json([
-                    'message' => 'Não é possível deletar este produto pois existem registros vinculados',
-                    'error' => 'constraint_violation',
-                    'details' => 'O produto possui histórico que impede a exclusão. Considere inativar o produto alterando o status.'
+                    'message' => 'Não é possível remover — existem registos vinculados. Considere inactivar o produto.',
+                    'error'   => 'constraint_violation',
                 ], 409);
             }
+            return response()->json(['message' => 'Erro de base de dados', 'error' => $e->getMessage()], 500);
 
-            return response()->json([
-                'message' => 'Erro no banco de dados ao deletar produto',
-                'error' => $e->getMessage()
-            ], 500);
         } catch (Throwable $e) {
-            DB::rollBack();
-
-            Log::error('[PRODUTO DELETE ERROR]', [
-                'produto_id' => $id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return response()->json([
-                'message' => 'Erro ao deletar produto',
-                'error' => $e->getMessage(),
-            ], 500);
+            Log::error('[PRODUTO DELETE ERROR]', ['produto_id' => $id, 'error' => $e->getMessage()]);
+            return response()->json(['message' => 'Erro ao remover produto', 'error' => $e->getMessage()], 500);
         }
     }
 
-    /**
-     * Restaurar produto deletado - VERSÃO CORRIGIDA
-     */
-    public function restore($id)
+    /* =====================================================================
+     | RESTAURAR
+     | ================================================================== */
+
+    public function restore(string $id)
     {
         try {
-            DB::beginTransaction();
-
             $produto = Produto::withTrashed()->findOrFail($id);
-
             $this->authorize('restore', $produto);
 
-            if (!$produto->trashed()) {
+            if (! $produto->trashed()) {
+                return response()->json(['message' => 'Produto não está na lixeira'], 400);
+            }
+
+            if ($produto->categoria_id && ! Categoria::withTrashed()->where('id', $produto->categoria_id)->exists()) {
                 return response()->json([
-                    'message' => 'Produto não está deletado',
-                ], 400);
+                    'message' => 'Não é possível restaurar: a categoria foi removida permanentemente.',
+                ], 422);
             }
 
-            // Verificar se categoria existe de forma mais segura
-            if ($produto->categoria_id) {
-                $categoriaExiste = Categoria::withTrashed()
-                    ->where('id', $produto->categoria_id)
-                    ->exists();
-
-                if (!$categoriaExiste) {
-                    DB::rollBack();
-                    return response()->json([
-                        'message' => 'Não é possível restaurar: categoria associada foi removida permanentemente',
-                        'suggestion' => 'Associe uma nova categoria ao produto antes de restaurar'
-                    ], 422);
-                }
-            }
-
-            // Verificar também o fornecedor se existir
-            if ($produto->fornecedor_id) {
-                $fornecedorExiste = Fornecedor::withTrashed()
-                    ->where('id', $produto->fornecedor_id)
-                    ->exists();
-
-                if (!$fornecedorExiste) {
-                    DB::rollBack();
-                    return response()->json([
-                        'message' => 'Não é possível restaurar: fornecedor associado foi removido permanentemente',
-                        'suggestion' => 'Remova o fornecedor do produto ou associe um novo antes de restaurar'
-                    ], 422);
-                }
+            if ($produto->fornecedor_id && ! Fornecedor::withTrashed()->where('id', $produto->fornecedor_id)->exists()) {
+                return response()->json([
+                    'message' => 'Não é possível restaurar: o fornecedor foi removido permanentemente.',
+                ], 422);
             }
 
             $produto->restore();
-
-            DB::commit();
-
-            Log::info('[PRODUTO RESTORE]', [
-                'id' => $produto->id,
-                'nome' => $produto->nome,
-                'restored_at' => now()
-            ]);
 
             return response()->json([
                 'message' => 'Produto restaurado com sucesso',
                 'produto' => $produto->fresh(['categoria', 'fornecedor']),
             ]);
-        } catch (ModelNotFoundException $e) {
-            DB::rollBack();
-            return response()->json([
-                'message' => 'Produto não encontrado',
-            ], 404);
-        } catch (Throwable $e) {
-            DB::rollBack();
-            Log::error('[PRODUTO RESTORE ERROR]', [
-                'produto_id' => $id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
 
-            return response()->json([
-                'message' => 'Erro ao restaurar produto',
-                'error' => $e->getMessage(),
-            ], 500);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['message' => 'Produto não encontrado'], 404);
+        } catch (Throwable $e) {
+            Log::error('[PRODUTO RESTORE ERROR]', ['produto_id' => $id, 'error' => $e->getMessage()]);
+            return response()->json(['message' => 'Erro ao restaurar produto', 'error' => $e->getMessage()], 500);
         }
     }
 
-    /**
-     * Remover produto permanentemente (FORCE DELETE)
-     */
-    public function forceDelete($id)
+    /* =====================================================================
+     | REMOVER PERMANENTEMENTE
+     | ================================================================== */
+
+    public function forceDelete(string $id)
     {
         try {
             $produto = Produto::withTrashed()->findOrFail($id);
-
             $this->authorize('forceDelete', $produto);
 
             if ($produto->itensVenda()->exists() || $produto->itensCompra()->exists()) {
                 return response()->json([
-                    'message' => 'Não é possível remover permanentemente um produto com vendas/compras associadas',
+                    'message' => 'Não é possível remover permanentemente um produto com vendas/compras associadas.',
                 ], 409);
             }
 
             if ($produto->movimentosStock()->exists()) {
                 return response()->json([
-                    'message' => 'Não é possível remover permanentemente um produto com movimentações de stock',
+                    'message' => 'Não é possível remover permanentemente um produto com movimentações de stock.',
                 ], 409);
             }
 
             $nome = $produto->nome;
             $produto->forceDelete();
 
-            Log::info('[PRODUTO FORCE DELETE]', [
-                'id' => $id,
-                'nome' => $nome,
-                'deleted_permanently' => true
-            ]);
+            Log::info('[PRODUTO FORCE DELETE]', ['id' => $id, 'nome' => $nome]);
 
             return response()->json([
-                'message' => 'Produto removido permanentemente',
-                'id' => $id
-            ]);
-        } catch (QueryException $e) {
-            Log::error('[PRODUTO FORCE DELETE] Database error', [
-                'produto_id' => $id,
-                'error' => $e->getMessage()
+                'message' => "Produto \"{$nome}\" removido permanentemente",
+                'id'      => $id,
             ]);
 
-            return response()->json([
-                'message' => 'Erro ao remover produto permanentemente',
-                'error' => 'Erro de banco de dados: ' . $e->getMessage()
-            ], 500);
         } catch (Throwable $e) {
-            Log::error('[PRODUTO FORCE DELETE ERROR]', [
-                'produto_id' => $id,
-                'error' => $e->getMessage()
-            ]);
-
-            return response()->json([
-                'message' => 'Erro ao remover produto',
-                'error' => $e->getMessage(),
-            ], 500);
+            Log::error('[PRODUTO FORCE DELETE ERROR]', ['produto_id' => $id, 'error' => $e->getMessage()]);
+            return response()->json(['message' => 'Erro ao remover produto', 'error' => $e->getMessage()], 500);
         }
     }
 
-    /**
-     * Estatísticas de produtos (com filtros de data)
-     */
+    /* =====================================================================
+     | ESTATÍSTICAS
+     | ================================================================== */
+
     public function estatisticas(Request $request)
     {
         $this->authorize('viewAny', Produto::class);
 
         try {
-            // Produtos mais vendidos (com filtros de data)
-            $queryProdutosMaisVendidos = DB::table('itens_venda')
+            $dataInicio = $request->data_inicio;
+            $dataFim    = $request->data_fim;
+
+            $queryBase = fn ($q) => $q
                 ->join('produtos', 'itens_venda.produto_id', '=', 'produtos.id')
                 ->join('vendas', 'itens_venda.venda_id', '=', 'vendas.id')
-                ->where('vendas.status', '!=', 'cancelada');
+                ->where('vendas.status', '!=', 'cancelada')
+                ->when($dataInicio, fn ($q) => $q->whereDate('vendas.data_venda', '>=', $dataInicio))
+                ->when($dataFim,    fn ($q) => $q->whereDate('vendas.data_venda', '<=', $dataFim));
 
-            if ($request->data_inicio) {
-                $queryProdutosMaisVendidos->whereDate('vendas.data_venda', '>=', $request->data_inicio);
-            }
-            if ($request->data_fim) {
-                $queryProdutosMaisVendidos->whereDate('vendas.data_venda', '<=', $request->data_fim);
-            }
-
-            $produtosMaisVendidos = $queryProdutosMaisVendidos
+            // Top 10 — todos os tipos
+            $maisVendidos = DB::table('itens_venda')->tap($queryBase)
                 ->select(
-                    'produtos.id',
-                    'produtos.nome',
-                    'produtos.codigo',
-                    'produtos.tipo',
+                    'produtos.id', 'produtos.nome', 'produtos.codigo', 'produtos.tipo',
                     DB::raw('SUM(itens_venda.quantidade) as total_quantidade'),
                     DB::raw('SUM(itens_venda.subtotal) as total_vendas')
                 )
@@ -699,36 +335,20 @@ class ProdutoController extends Controller
                 ->orderByDesc('total_vendas')
                 ->limit(10)
                 ->get()
-                ->map(function ($item) {
-                    return [
-                        'id' => $item->id,
-                        'produto' => $item->nome,
-                        'codigo' => $item->codigo,
-                        'tipo' => $item->tipo,
-                        'quantidade' => (int) $item->total_quantidade,
-                        'valor_total' => round($item->total_vendas, 2),
-                    ];
-                });
+                ->map(fn ($i) => [
+                    'id'          => $i->id,
+                    'produto'     => $i->nome,
+                    'codigo'      => $i->codigo,
+                    'tipo'        => $i->tipo,
+                    'quantidade'  => (int) $i->total_quantidade,
+                    'valor_total' => round($i->total_vendas, 2),
+                ]);
 
-            // Serviços mais vendidos (com filtros)
-            $queryServicosMaisVendidos = DB::table('itens_venda')
-                ->join('produtos', 'itens_venda.produto_id', '=', 'produtos.id')
-                ->join('vendas', 'itens_venda.venda_id', '=', 'vendas.id')
+            // Top 10 serviços (com retenção)
+            $servicosMaisVendidos = DB::table('itens_venda')->tap($queryBase)
                 ->where('produtos.tipo', 'servico')
-                ->where('vendas.status', '!=', 'cancelada');
-
-            if ($request->data_inicio) {
-                $queryServicosMaisVendidos->whereDate('vendas.data_venda', '>=', $request->data_inicio);
-            }
-            if ($request->data_fim) {
-                $queryServicosMaisVendidos->whereDate('vendas.data_venda', '<=', $request->data_fim);
-            }
-
-            $servicosMaisVendidos = $queryServicosMaisVendidos
                 ->select(
-                    'produtos.id',
-                    'produtos.nome',
-                    'produtos.codigo',
+                    'produtos.id', 'produtos.nome', 'produtos.codigo',
                     DB::raw('SUM(itens_venda.quantidade) as total_quantidade'),
                     DB::raw('SUM(itens_venda.subtotal) as total_receita'),
                     DB::raw('SUM(itens_venda.valor_retencao) as total_retencao')
@@ -737,44 +357,84 @@ class ProdutoController extends Controller
                 ->orderByDesc('total_receita')
                 ->limit(10)
                 ->get()
-                ->map(function ($item) {
-                    return [
-                        'id' => $item->id,
-                        'nome' => $item->nome,
-                        'codigo' => $item->codigo,
-                        'quantidade' => (int) $item->total_quantidade,
-                        'receita' => round($item->total_receita, 2),
-                        'retencao' => round($item->total_retencao, 2),
-                    ];
-                });
-
-            // Estatísticas gerais
-            $queryProdutosAtivos = Produto::where('status', 'ativo');
-            $this->aplicarFiltrosData($queryProdutosAtivos, $request, 'created_at');
-
-            $queryServicosAtivos = Produto::where('tipo', 'servico')->where('status', 'ativo');
-            $this->aplicarFiltrosData($queryServicosAtivos, $request, 'created_at');
-
-            $queryProdutosComRetencao = Produto::where('tipo', 'servico')->where('retencao', '>', 0);
-            $this->aplicarFiltrosData($queryProdutosComRetencao, $request, 'created_at');
+                ->map(fn ($i) => [
+                    'id'         => $i->id,
+                    'nome'       => $i->nome,
+                    'codigo'     => $i->codigo,
+                    'quantidade' => (int) $i->total_quantidade,
+                    'receita'    => round($i->total_receita, 2),
+                    'retencao'   => round($i->total_retencao, 2),
+                ]);
 
             return response()->json([
                 'success' => true,
-                'data' => [
-                    'produtos_mais_vendidos' => $produtosMaisVendidos,
-                    'servicos_mais_vendidos' => $servicosMaisVendidos,
-                    'total_produtos_ativos' => $queryProdutosAtivos->count(),
-                    'total_servicos_ativos' => $queryServicosAtivos->count(),
-                    'total_servicos_com_retencao' => $queryProdutosComRetencao->count(),
-                ]
+                'data'    => [
+                    'produtos_mais_vendidos'   => $maisVendidos,
+                    'servicos_mais_vendidos'   => $servicosMaisVendidos,
+                    'total_produtos_ativos'    => Produto::where('tipo', 'produto')->where('status', 'ativo')->count(),
+                    'total_servicos_ativos'    => Produto::where('tipo', 'servico')->where('status', 'ativo')->count(),
+                    'total_servicos_com_retencao' => Produto::where('tipo', 'servico')->where('taxa_retencao', '>', 0)->count(),
+                ],
             ]);
+
         } catch (\Exception $e) {
             Log::error('[PRODUTO ESTATISTICAS ERROR]', ['error' => $e->getMessage()]);
-            return response()->json([
-                'success' => false,
-                'message' => 'Erro ao carregar estatísticas',
-                'error' => $e->getMessage()
-            ], 500);
+            return response()->json(['success' => false, 'message' => 'Erro ao carregar estatísticas', 'error' => $e->getMessage()], 500);
         }
+    }
+
+    /* =====================================================================
+     | HELPERS PRIVADOS
+     | ================================================================== */
+
+    /**
+     * Regras de validação por tipo (produto / serviço).
+     * Centralizado aqui para evitar duplicação entre store() e update().
+     */
+    private function regrasValidacao(string $tipo, ?string $id = null): array
+    {
+        $base = [
+            'tipo'        => 'required|in:produto,servico',
+            'nome'        => 'required|string|max:255',
+            'descricao'   => 'nullable|string',
+            'preco_venda' => 'required|numeric|min:0',
+            'taxa_iva'    => 'nullable|numeric|in:0,5,14',   // apenas taxas legais angola
+            'sujeito_iva' => 'nullable|boolean',
+            'status'      => 'nullable|in:ativo,inativo',
+        ];
+
+        if ($tipo === 'produto') {
+            return array_merge($base, [
+                'categoria_id'   => 'required|uuid|exists:categorias,id',
+                'fornecedor_id'  => 'nullable|uuid|exists:fornecedores,id',
+                'codigo'         => $id
+                    ? 'nullable|string|max:50|unique:produtos,codigo,' . $id
+                    : 'nullable|string|max:50|unique:produtos,codigo',
+                'preco_compra'   => 'required|numeric|min:0',
+                'custo_medio'    => 'nullable|numeric|min:0',
+                'estoque_atual'  => 'nullable|integer|min:0',
+                'estoque_minimo' => 'nullable|integer|min:0',
+            ]);
+        }
+
+        // Serviço
+        return array_merge($base, [
+            // Taxas de retenção válidas em Angola: 2%, 5%, 6.5%, 10%, 15%
+            'taxa_retencao'    => 'nullable|numeric|in:0,2,5,6.5,10,15',
+            'codigo_isencao'   => 'nullable|string|in:M00,M01,M02,M03,M04,M05,M06,M99',
+            'duracao_estimada' => 'required|string|max:50',
+            'unidade_medida'   => 'required|in:hora,dia,semana,mes',
+        ]);
+    }
+
+    /** Extrai filtros de listagem do request */
+    private function extrairFiltros(Request $request): array
+    {
+        return array_filter([
+            'tipo'         => $request->tipo,
+            'status'       => $request->status,
+            'categoria_id' => $request->categoria_id,
+            'busca'        => $request->busca,
+        ], fn ($v) => ! is_null($v) && $v !== '');
     }
 }

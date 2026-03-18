@@ -1,24 +1,45 @@
+# Logs
 *.log
+
+# Sistema e cache de arquivos
 .DS_Store
+Thumbs.db
+
+# Arquivos de ambiente
 .env
 .env.backup
 .env.production
+
+# PHP / Testes
 .phpactor.json
 .phpunit.result.cache
+/.phpunit.cache
+
+# IDEs e editores
 /.fleet
 /.idea
 /.nova
-/.phpunit.cache
 /.vscode
 /.zed
+
+# Autenticação
 /auth.json
+
+# Node
 /node_modules
+
+# Build do frontend
 /public/build
 /public/hot
 /public/storage
-/storage/*.key
+
+# Storage (mantendo pastas, mas permitindo que as chaves subam)
+# /storage/*.key  <-- REMOVIDO para permitir subir as chaves
 /storage/pail
+
+# Vendor do Composer
 /vendor
+
+# Homestead
 Homestead.json
 Homestead.yaml
-Thumbs.db

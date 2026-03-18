@@ -4,6 +4,13 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+/**
+ * Migration: criar tabela fornecedores
+ *
+ * Deve ser executada ANTES da migration de produtos,
+ * pois produtos tem FK para fornecedores.
+ * Garante que o timestamp deste ficheiro é anterior ao de produtos.
+ */
 return new class extends Migration
 {
     public function up(): void
@@ -11,33 +18,24 @@ return new class extends Migration
         Schema::create('fornecedores', function (Blueprint $table) {
             $table->uuid('id')->primary();
 
-            // Relacionamento com usuário
-            $table->uuid('user_id');
-            $table->foreign('user_id')
-                  ->references('id')
-                  ->on('users')
-                  ->onDelete('cascade');
+            $table->foreignUuid('user_id')
+                ->constrained('users')
+                ->onDelete('cascade');
 
-            // Dados do fornecedor
             $table->string('nome');
-            $table->string('nif')->nullable()->unique(); // NIF pode ser nulo para internacionais
+            $table->string('nif')->nullable()->unique();
             $table->string('telefone')->nullable();
             $table->string('email')->nullable();
             $table->text('endereco')->nullable();
-
-            // Estado e tipo
-            $table->enum('tipo', ['nacional', 'internacional'])->default('nacional'); // ✅ CORRIGIDO (espaço removido)
+            $table->enum('tipo', ['nacional', 'internacional'])->default('nacional');
             $table->enum('status', ['ativo', 'inativo'])->default('ativo');
 
-            // Timestamps
             $table->timestamps();
-            $table->softDeletes(); // ✅ Adicionado soft delete
+            $table->softDeletes();
 
-            // Índices para performance
             $table->index('nome');
             $table->index('tipo');
             $table->index('status');
-            $table->index('nif');
         });
     }
 

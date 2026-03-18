@@ -77,21 +77,21 @@ export default function NovaFaturaReciboPage() {
     color: colors.text, borderWidth: 1, fontSize: '14px',
   };
 
-  const [clientes, setClientes]                         = useState<Cliente[]>([]);
-  const [produtos, setProdutos]                         = useState<Produto[]>([]);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [produtos, setProdutos] = useState<Produto[]>([]);
   const [produtosEstoqueBaixo, setProdutosEstoqueBaixo] = useState<Produto[]>([]);
-  const [clienteSelecionado, setClienteSelecionado]     = useState<Cliente | null>(null);
-  const [itens, setItens]                               = useState<ItemVendaUI[]>([]);
-  const [loading, setLoading]                           = useState(false);
-  const [error, setError]                               = useState<string | null>(null);
-  const [sucesso, setSucesso]                           = useState<string | null>(null);
-  const [modoCliente, setModoCliente]                   = useState<ModoCliente>('cadastrado');
-  const [clienteAvulso, setClienteAvulso]               = useState('');
-  const [clienteAvulsoNif, setClienteAvulsoNif]         = useState('');
-  const [nifError, setNifError]                         = useState<string | null>(null);
-  const [formItem, setFormItem]                         = useState<FormItemState>({ produto_id: "", quantidade: 1, desconto: 0 });
-  const [previewItem, setPreviewItem]                   = useState<ItemVendaUI | null>(null);
-  const [formPagamento, setFormPagamento]               = useState({
+  const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
+  const [itens, setItens] = useState<ItemVendaUI[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sucesso, setSucesso] = useState<string | null>(null);
+  const [modoCliente, setModoCliente] = useState<ModoCliente>('cadastrado');
+  const [clienteAvulso, setClienteAvulso] = useState('');
+  const [clienteAvulsoNif, setClienteAvulsoNif] = useState('');
+  const [nifError, setNifError] = useState<string | null>(null);
+  const [formItem, setFormItem] = useState<FormItemState>({ produto_id: "", quantidade: 1, desconto: 0 });
+  const [previewItem, setPreviewItem] = useState<ItemVendaUI | null>(null);
+  const [formPagamento, setFormPagamento] = useState({
     metodo: "dinheiro" as DadosPagamento['metodo'],
     valor_pago: "", referencia: "",
     data_pagamento: new Date().toISOString().split('T')[0],
@@ -167,19 +167,19 @@ export default function NovaFaturaReciboPage() {
 
   const removerItem = (id: string) => setItens(p => p.filter(i => i.id !== id));
 
-  const totalBase     = arredondar(itens.reduce((a, i) => a + i.base_tributavel, 0));
-  const totalIva      = arredondar(itens.reduce((a, i) => a + i.valor_iva, 0));
+  const totalBase = arredondar(itens.reduce((a, i) => a + i.base_tributavel, 0));
+  const totalIva = arredondar(itens.reduce((a, i) => a + i.valor_iva, 0));
   const totalRetencao = arredondar(itens.reduce((a, i) => a + i.valor_retencao, 0));
-  const totalLiquido  = arredondar(itens.reduce((a, i) => a + i.subtotal, 0));
+  const totalLiquido = arredondar(itens.reduce((a, i) => a + i.subtotal, 0));
   const totalDesconto = arredondar(itens.reduce((a, i) => a + i.desconto, 0));
 
   useEffect(() => {
     setFormPagamento(p => ({ ...p, valor_pago: itens.length > 0 ? totalLiquido.toString() : "" }));
   }, [itens, totalLiquido]);
 
-  const valorPagamento     = parseFloat(formPagamento.valor_pago) || 0;
-  const troco              = valorPagamento > totalLiquido ? arredondar(valorPagamento - totalLiquido) : 0;
-  const falta              = valorPagamento > 0 && valorPagamento < totalLiquido ? arredondar(totalLiquido - valorPagamento) : 0;
+  const valorPagamento = parseFloat(formPagamento.valor_pago) || 0;
+  const troco = valorPagamento > totalLiquido ? arredondar(valorPagamento - totalLiquido) : 0;
+  const falta = valorPagamento > 0 && valorPagamento < totalLiquido ? arredondar(totalLiquido - valorPagamento) : 0;
   const pagamentoSuficiente = valorPagamento >= totalLiquido && totalLiquido > 0;
 
   const podeFinalizar = () => {

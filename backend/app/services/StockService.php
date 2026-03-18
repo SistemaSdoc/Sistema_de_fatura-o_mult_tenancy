@@ -10,26 +10,37 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * StockService
+ *
+ * Gestão de movimentações de stock.
+ * Serviços são sempre ignorados — não têm stock físico.
+ * Custo médio ponderado actualizado em cada entrada de compra.
+ */
 class StockService
 {
+    /* =====================================================================
+     | MOVIMENTAÇÃO GENÉRICA
+     | ================================================================== */
+
     /**
-     * Movimentação genérica de stock (entrada / saída)
-     * ATUALIZADO: Verificação de serviço e logs detalhados
+     * Movimentação genérica de stock (entrada / saída).
+     * Retorna null e regista warning se o produto for um serviço.
      */
     public function movimentar(
         string $produtoId,
         int $quantidade,
-        string $tipo, // entrada | saida
-        string $tipoMovimento, // compra | venda | ajuste | nota_credito
-        ?string $referencia = null,
-        ?string $observacao = null
+        string $tipo,           // entrada | saida
+        string $tipoMovimento,  // compra | venda | ajuste | nota_credito | venda_cancelada
+        ?string $referencia  = null,
+        ?string $observacao  = null
     ): ?MovimentoStock {
 
         Log::info('[StockService] Iniciando movimentação', [
-            'produto_id' => $produtoId,
-            'quantidade' => $quantidade,
-            'tipo' => $tipo,
-            'tipo_movimento' => $tipoMovimento
+            'produto_id'     => $produtoId,
+            'quantidade'     => $quantidade,
+            'tipo'           => $tipo,
+            'tipo_movimento' => $tipoMovimento,
         ]);
 
         return DB::transaction(function () use (
@@ -41,25 +52,25 @@ class StockService
                 throw new \Exception('Quantidade inválida para movimentação de stock.');
             }
 
-            // ✅ VERIFICAÇÃO: Serviços não têm stock
+            // Serviços não têm stock físico — ignorar silenciosamente
             if ($produto->tipo === 'servico') {
                 Log::warning('[StockService] Tentativa de movimentar serviço ignorada', [
-                    'produto' => $produto->nome,
-                    'quantidade' => $quantidade
+                    'produto'    => $produto->nome,
+                    'quantidade' => $quantidade,
                 ]);
                 return null;
             }
 
             $estoqueAnterior = $produto->estoque_atual;
 
-            // Calcular nova quantidade
             if ($tipo === 'entrada') {
                 $novaQuantidade = $estoqueAnterior + $quantidade;
+
                 Log::info('[StockService] Entrada de stock', [
-                    'produto' => $produto->nome,
+                    'produto'  => $produto->nome,
                     'anterior' => $estoqueAnterior,
-                    'entrada' => $quantidade,
-                    'novo' => $novaQuantidade
+                    'entrada'  => $quantidade,
+                    'novo'     => $novaQuantidade,
                 ]);
             } else {
                 if ($estoqueAnterior < $quantidade) {
@@ -69,89 +80,89 @@ class StockService
                     );
                 }
                 $novaQuantidade = $estoqueAnterior - $quantidade;
+
                 Log::info('[StockService] Saída de stock', [
-                    'produto' => $produto->nome,
+                    'produto'  => $produto->nome,
                     'anterior' => $estoqueAnterior,
-                    'saida' => $quantidade,
-                    'novo' => $novaQuantidade
+                    'saida'    => $quantidade,
+                    'novo'     => $novaQuantidade,
                 ]);
             }
 
-            // Atualizar produto
             $produto->estoque_atual = $novaQuantidade;
             $produto->save();
 
-            // Criar movimento
             $movimento = MovimentoStock::create([
-                'id' => Str::uuid(),
-                'produto_id' => $produto->id,
-                'user_id' => Auth::id(),
-                'tipo' => $tipo,
-                'tipo_movimento' => $tipoMovimento,
-                'quantidade' => $tipo === 'entrada' ? $quantidade : -$quantidade,
+                'id'               => Str::uuid(),
+                'produto_id'       => $produto->id,
+                'user_id'          => Auth::id(),
+                'tipo'             => $tipo,
+                'tipo_movimento'   => $tipoMovimento,
+                'quantidade'       => $tipo === 'entrada' ? $quantidade : -$quantidade,
                 'estoque_anterior' => $estoqueAnterior,
-                'estoque_novo' => $novaQuantidade,
-                'custo_medio' => $produto->custo_medio,
-                'stock_minimo' => $produto->estoque_minimo,
-                'referencia' => $referencia,
-                'observacao' => $observacao,
+                'estoque_novo'     => $novaQuantidade,
+                'custo_medio'      => $produto->custo_medio,
+                'stock_minimo'     => $produto->estoque_minimo,
+                'referencia'       => $referencia,
+                'observacao'       => $observacao,
             ]);
 
             Log::info('[StockService] Movimento registrado', [
                 'movimento_id' => $movimento->id,
-                'produto' => $produto->nome,
-                'estoque_novo' => $novaQuantidade
+                'produto'      => $produto->nome,
+                'estoque_novo' => $novaQuantidade,
             ]);
 
             return $movimento;
         });
     }
 
+    /* =====================================================================
+     | PROCESSAMENTO DE DOCUMENTO FISCAL
+     | ================================================================== */
+
     /**
-     * Processar stock de documento fiscal completo
-     * ATUALIZADO: Ignora serviços e verifica estado cancelado
+     * Processa stock de documento fiscal completo (FT, FR, NC).
+     * Ignora serviços e documentos cancelados.
      */
     public function processarDocumentoFiscal(DocumentoFiscal $documento): void
     {
         Log::info('[StockService] Processando documento fiscal', [
             'documento_id' => $documento->id,
-            'numero' => $documento->numero_documento,
-            'tipo' => $documento->tipo_documento,
-            'estado' => $documento->estado
+            'numero'       => $documento->numero_documento,
+            'tipo'         => $documento->tipo_documento,
+            'estado'       => $documento->estado,
         ]);
 
-        // Não processar se cancelado
         if ($documento->estado === 'cancelado') {
             Log::warning('[StockService] Documento cancelado, ignorando', [
-                'documento' => $documento->numero_documento
+                'documento' => $documento->numero_documento,
             ]);
             return;
         }
 
-        // Apenas FT, FR, NC afetam stock
-        if (!$documento->afetaStock()) {
+        if (! $documento->afetaStock()) {
             Log::info('[StockService] Documento não afeta stock', [
-                'tipo' => $documento->tipo_documento
+                'tipo' => $documento->tipo_documento,
             ]);
             return;
         }
 
-        $tipo = $documento->tipo_documento === 'NC' ? 'entrada' : 'saida';
+        $tipo          = $documento->tipo_documento === 'NC' ? 'entrada' : 'saida';
         $tipoMovimento = $documento->tipo_documento === 'NC' ? 'nota_credito' : 'venda';
 
         foreach ($documento->itens as $item) {
-            // ✅ Ignorar serviços
-            if (!$item->produto_id || $item->produto?->tipo === 'servico') {
-                Log::info('[StockService] Item ignorado (serviço)', [
-                    'descricao' => $item->descricao
+            if (! $item->produto_id || $item->produto?->tipo === 'servico') {
+                Log::info('[StockService] Item ignorado (serviço ou sem produto)', [
+                    'descricao' => $item->descricao,
                 ]);
                 continue;
             }
 
             Log::info('[StockService] Processando item', [
-                'produto' => $item->produto?->nome,
+                'produto'    => $item->produto?->nome,
                 'quantidade' => $item->quantidade,
-                'tipo' => $tipo
+                'tipo'       => $tipo,
             ]);
 
             $this->movimentar(
@@ -166,26 +177,25 @@ class StockService
     }
 
     /**
-     * Reverter stock de documento fiscal cancelado
+     * Reverte stock de documento fiscal cancelado.
+     * A lógica é inversa: NC (entrada) reverte para saída, outros revertem para entrada.
      */
     public function reverterDocumentoFiscal(DocumentoFiscal $documento): void
     {
         Log::info('[StockService] Revertendo documento fiscal', [
             'documento_id' => $documento->id,
-            'numero' => $documento->numero_documento
+            'numero'       => $documento->numero_documento,
         ]);
 
-        if (!$documento->afetaStock()) {
+        if (! $documento->afetaStock()) {
             return;
         }
 
-        // Inverter o movimento (saida vira entrada, entrada vira saida)
-        $tipo = $documento->tipo_documento === 'NC' ? 'saida' : 'entrada';
+        $tipo          = $documento->tipo_documento === 'NC' ? 'saida' : 'entrada';
         $tipoMovimento = 'ajuste'; // Ajuste por cancelamento
 
         foreach ($documento->itens as $item) {
-            // ✅ Ignorar serviços
-            if (!$item->produto_id || $item->produto?->tipo === 'servico') {
+            if (! $item->produto_id || $item->produto?->tipo === 'servico') {
                 continue;
             }
 
@@ -200,25 +210,28 @@ class StockService
         }
     }
 
+    /* =====================================================================
+     | ENTRADA DE COMPRA
+     | ================================================================== */
+
     /**
-     * Entrada de compra com cálculo de custo médio ponderado
-     * ATUALIZADO: Verifica se é produto
+     * Regista entrada de compra com cálculo de custo médio ponderado.
+     * Apenas para produtos físicos — serviços são ignorados.
      */
     public function entradaCompra(
         string $produtoId,
         int $quantidade,
         float $precoCompra,
         ?string $compraId = null
-    ): void {
-        DB::transaction(function () use ($produtoId, $quantidade, $precoCompra, $compraId) {
+    ): ?MovimentoStock {
+        return DB::transaction(function () use ($produtoId, $quantidade, $precoCompra, $compraId) {
             $produto = Produto::lockForUpdate()->findOrFail($produtoId);
 
-            // ✅ Verificar se é produto
             if ($produto->tipo === 'servico') {
                 Log::warning('[StockService] Tentativa de entrada em serviço ignorada', [
-                    'produto' => $produto->nome
+                    'produto' => $produto->nome,
                 ]);
-                return;
+                return null;
             }
 
             if ($quantidade <= 0 || $precoCompra <= 0) {
@@ -226,7 +239,7 @@ class StockService
             }
 
             $stockAnterior = $produto->estoque_atual;
-            $novoStock = $stockAnterior + $quantidade;
+            $novoStock     = $stockAnterior + $quantidade;
 
             // Custo médio ponderado
             $custoAnterior = $produto->custo_medio ?? 0;
@@ -235,50 +248,53 @@ class StockService
                 ($quantidade * $precoCompra)
             ) / max($novoStock, 1);
 
-            Log::info('[StockService] Entrada compra - custo médio', [
-                'produto' => $produto->nome,
+            Log::info('[StockService] Entrada compra — custo médio', [
+                'produto'        => $produto->nome,
                 'stock_anterior' => $stockAnterior,
                 'custo_anterior' => $custoAnterior,
-                'quantidade' => $quantidade,
-                'preco_compra' => $precoCompra,
-                'novo_custo' => $novoCustoMedio
+                'quantidade'     => $quantidade,
+                'preco_compra'   => $precoCompra,
+                'novo_custo'     => $novoCustoMedio,
             ]);
 
             $produto->estoque_atual = $novoStock;
-            $produto->custo_medio = round($novoCustoMedio, 2);
+            $produto->custo_medio   = round($novoCustoMedio, 2);
             $produto->save();
 
-            $this->movimentar(
+            return $this->movimentar(
                 $produtoId,
                 $quantidade,
                 'entrada',
                 'compra',
                 $compraId,
-                'Entrada de compra com custo médio atualizado'
+                'Entrada de compra com custo médio actualizado'
             );
         });
     }
 
+    /* =====================================================================
+     | SAÍDA DE VENDA
+     | ================================================================== */
+
     /**
-     * Saída de stock por venda
-     * ATUALIZADO: Verifica se é produto
+     * Regista saída de stock por venda.
+     * Apenas para produtos físicos.
      */
     public function saidaVenda(
         string $produtoId,
         int $quantidade,
         ?string $vendaId = null
-    ): void {
+    ): ?MovimentoStock {
         $produto = Produto::find($produtoId);
 
-        // ✅ Verificar se é produto
         if ($produto && $produto->tipo === 'servico') {
             Log::warning('[StockService] Tentativa de saída em serviço ignorada', [
-                'produto' => $produto->nome
+                'produto' => $produto->nome,
             ]);
-            return;
+            return null;
         }
 
-        $this->movimentar(
+        return $this->movimentar(
             $produtoId,
             $quantidade,
             'saida',
@@ -288,28 +304,35 @@ class StockService
         );
     }
 
+    /* =====================================================================
+     | AJUSTE MANUAL
+     | ================================================================== */
+
     /**
-     * Ajuste manual de stock
-     * ATUALIZADO: Verifica se é produto
+     * Ajuste manual de stock (inventário, correcção, etc.).
+     * Apenas para produtos físicos.
      */
     public function ajusteManual(
         string $produtoId,
         int $quantidade,
-        string $tipo, // entrada | saida
-        ?string $referencia = null,
-        ?string $observacao = null
-    ): void {
+        string $tipo,           // entrada | saida
+        ?string $referencia  = null,
+        ?string $observacao  = null
+    ): ?MovimentoStock {
         $produto = Produto::find($produtoId);
 
-        // ✅ Verificar se é produto
         if ($produto && $produto->tipo === 'servico') {
             Log::warning('[StockService] Tentativa de ajuste em serviço ignorada', [
-                'produto' => $produto->nome
+                'produto' => $produto->nome,
             ]);
-            return;
+            return null;
         }
 
-        $this->movimentar(
+        if (! in_array($tipo, ['entrada', 'saida'])) {
+            throw new \InvalidArgumentException("Tipo deve ser 'entrada' ou 'saida'.");
+        }
+
+        return $this->movimentar(
             $produtoId,
             $quantidade,
             $tipo,
@@ -319,15 +342,18 @@ class StockService
         );
     }
 
+    /* =====================================================================
+     | DISPONIBILIDADE
+     | ================================================================== */
+
     /**
-     * Verificar disponibilidade de estoque
-     * ATUALIZADO: Serviços sempre disponíveis
+     * Verifica disponibilidade de estoque.
+     * Serviços são sempre considerados disponíveis.
      */
     public function verificarDisponibilidade(string $produtoId, int $quantidade): bool
     {
         $produto = Produto::findOrFail($produtoId);
 
-        // ✅ Serviços sempre disponíveis
         if ($produto->tipo === 'servico') {
             return true;
         }
@@ -335,8 +361,12 @@ class StockService
         return $produto->estoque_atual >= $quantidade;
     }
 
+    /* =====================================================================
+     | CONSULTAS E RELATÓRIOS
+     | ================================================================== */
+
     /**
-     * Obter histórico de movimentações de um produto
+     * Histórico de movimentações de um produto.
      */
     public function historico(string $produtoId, int $limite = 50)
     {
@@ -348,20 +378,19 @@ class StockService
     }
 
     /**
-     * Produtos com stock em risco (<= estoque mínimo)
-     * ATUALIZADO: Exclui serviços explicitamente
+     * Produtos com stock em risco (estoque_atual <= estoque_minimo).
+     * Apenas produtos físicos — serviços excluídos.
      */
     public function produtosEmRisco()
     {
         return Produto::whereColumn('estoque_atual', '<=', 'estoque_minimo')
-            ->where('tipo', 'produto') // ✅ Apenas produtos
+            ->where('tipo', 'produto')
             ->where('status', 'ativo')
             ->get();
     }
 
     /**
-     * Relatório completo de stock
-     * ATUALIZADO: Apenas produtos
+     * Relatório completo de stock (apenas produtos físicos).
      */
     public function relatorio()
     {
@@ -380,36 +409,33 @@ class StockService
             ->get()
             ->map(function ($produto) {
                 return [
-                    'id' => $produto->id,
-                    'nome' => $produto->nome,
-                    'codigo' => $produto->codigo,
-                    'estoque_atual' => $produto->estoque_atual,
+                    'id'             => $produto->id,
+                    'nome'           => $produto->nome,
+                    'codigo'         => $produto->codigo,
+                    'estoque_atual'  => $produto->estoque_atual,
                     'estoque_minimo' => $produto->estoque_minimo,
-                    'custo_medio' => $produto->custo_medio,
-                    'preco_venda' => $produto->preco_venda,
-                    'valor_total' => $produto->estoque_atual * $produto->custo_medio,
-                    'status' => $produto->status,
-                    'em_risco' => $produto->estoque_atual <= $produto->estoque_minimo,
+                    'custo_medio'    => $produto->custo_medio,
+                    'preco_venda'    => $produto->preco_venda,
+                    'valor_total'    => $produto->estoque_atual * $produto->custo_medio,
+                    'status'         => $produto->status,
+                    'em_risco'       => $produto->estoque_atual <= $produto->estoque_minimo,
                 ];
             });
     }
 
     /**
-     * Dashboard de stock
-     * ATUALIZADO: Apenas produtos nos cálculos
+     * Dashboard de stock.
      */
     public function dashboard(): array
     {
         $produtosEmRisco = $this->produtosEmRisco();
 
-        // ✅ Valor total do estoque (apenas produtos)
         $valorStock = Produto::where('tipo', 'produto')
             ->get()
             ->sum(function ($produto) {
                 return $produto->estoque_atual * ($produto->custo_medio ?? 0);
             });
 
-        // ✅ Movimentações de hoje (apenas produtos)
         $movimentosHoje = MovimentoStock::whereDate('created_at', today())
             ->whereHas('produto', function ($q) {
                 $q->where('tipo', 'produto');
@@ -424,19 +450,19 @@ class StockService
             ->count();
 
         return [
-            'produtos_total' => Produto::where('tipo', 'produto')->count(),
-            'stock_baixo' => $produtosEmRisco->count(),
-            'valor_stock' => round($valorStock, 2),
+            'produtos_total'    => Produto::where('tipo', 'produto')->count(),
+            'stock_baixo'       => $produtosEmRisco->count(),
+            'valor_stock'       => round($valorStock, 2),
             'produtos_em_risco' => $produtosEmRisco->map(function ($p) {
                 return [
-                    'id' => $p->id,
-                    'nome' => $p->nome,
-                    'estoque_atual' => $p->estoque_atual,
+                    'id'             => $p->id,
+                    'nome'           => $p->nome,
+                    'estoque_atual'  => $p->estoque_atual,
                     'estoque_minimo' => $p->estoque_minimo,
                 ];
             })->toArray(),
-            'movimentos_hoje' => $movimentosHoje,
-            'saidas_por_venda' => $saidasHoje,
+            'movimentos_hoje'    => $movimentosHoje,
+            'saidas_por_venda'   => $saidasHoje,
         ];
     }
 }

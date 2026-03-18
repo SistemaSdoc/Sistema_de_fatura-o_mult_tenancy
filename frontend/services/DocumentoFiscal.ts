@@ -5,12 +5,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 // ==================== TIPOS ====================
 
-export type TipoDocumento   = 'FT' | 'FR' | 'FP' | 'FA' | 'NC' | 'ND' | 'RC' | 'FRt';
+export type TipoDocumento = 'FT' | 'FR' | 'FP' | 'FA' | 'NC' | 'ND' | 'RC' | 'FRt';
 export type EstadoDocumento = 'emitido' | 'paga' | 'parcialmente_paga' | 'cancelado' | 'expirado';
 export type MetodoPagamento = 'transferencia' | 'multibanco' | 'dinheiro' | 'cheque' | 'cartao';
 
-export const TIPOS_VENDA:           TipoDocumento[] = ['FT', 'FR', 'RC'];
-export const TIPOS_NAO_VENDA:       TipoDocumento[] = ['FP', 'FA', 'NC', 'ND', 'FRt'];
+export const TIPOS_VENDA: TipoDocumento[] = ['FT', 'FR', 'RC'];
+export const TIPOS_NAO_VENDA: TipoDocumento[] = ['FP', 'FA', 'NC', 'ND', 'FRt'];
 export const TIPOS_DOCUMENTO_VENDA: TipoDocumento[] = ['FT', 'FR', 'FP'];
 
 export interface ItemDocumento {
@@ -192,10 +192,10 @@ export interface DashboardDocumentos {
 }
 
 export interface AlertasDocumentos {
-    adiantamentos_vencidos:              { total: number; items: DocumentoFiscal[] };
+    adiantamentos_vencidos: { total: number; items: DocumentoFiscal[] };
     faturas_com_adiantamentos_pendentes: { total: number; items: DocumentoFiscal[] };
-    proformas_pendentes:                 { total: number; items: DocumentoFiscal[] };
-    faturas_vencidas?:                   { total: number; items: DocumentoFiscal[] };
+    proformas_pendentes: { total: number; items: DocumentoFiscal[] };
+    faturas_vencidas?: { total: number; items: DocumentoFiscal[] };
 }
 
 export interface EvolucaoDados {
@@ -208,12 +208,12 @@ export interface EvolucaoDados {
 }
 
 export interface ResumoDashboard {
-    user:          { id: string; name: string; role: string };
-    resumo?:       DashboardDocumentos;
+    user: { id: string; name: string; role: string };
+    resumo?: DashboardDocumentos;
     estatisticas?: Record<string, number | string>;
-    alertas?:      AlertasDocumentos;
-    ano?:          number;
-    evolucao?:     EvolucaoDados[];
+    alertas?: AlertasDocumentos;
+    ano?: number;
+    evolucao?: EvolucaoDados[];
 }
 
 // ==================== SERVICE ====================
@@ -234,14 +234,10 @@ class DocumentoFiscalService {
         if (!response.data.success) throw new Error(response.data.message);
 
         const documentos = response.data.data;
+
+        // ✅ REMOVIDO O SORT - APENAS ENRIQUECE OS DADOS
         documentos.data = documentos.data
-            .map(this._enriquecerDocumento.bind(this))
-            .sort((a, b) => {
-                const dtA = new Date(`${a.data_emissao}T${a.hora_emissao || '00:00:00'}`).getTime();
-                const dtB = new Date(`${b.data_emissao}T${b.hora_emissao || '00:00:00'}`).getTime();
-                if (dtB !== dtA) return dtB - dtA;
-                return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-            });
+            .map(this._enriquecerDocumento.bind(this));
 
         return documentos;
     }
@@ -356,7 +352,7 @@ class DocumentoFiscalService {
         if (!response.data.success) throw new Error(response.data.message);
         return {
             adiantamento: this._enriquecerDocumento(response.data.data.adiantamento),
-            fatura:       this._enriquecerDocumento(response.data.data.fatura),
+            fatura: this._enriquecerDocumento(response.data.data.fatura),
         };
     }
 
@@ -439,9 +435,9 @@ class DocumentoFiscalService {
             responseType: 'blob',
         });
         const blob = new Blob([response.data], { type: 'application/pdf' });
-        const url  = URL.createObjectURL(blob);
+        const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.href     = url;
+        link.href = url;
         link.download = nomeArquivo ?? `documento-${id}.pdf`;
         document.body.appendChild(link);
         link.click();
@@ -467,9 +463,9 @@ class DocumentoFiscalService {
             [response.data],
             { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
         );
-        const url  = URL.createObjectURL(blob);
+        const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.href     = url;
+        link.href = url;
         link.download = `documentos-fiscais-${new Date().toISOString().slice(0, 10)}.xlsx`;
         document.body.appendChild(link);
         link.click();
@@ -523,12 +519,12 @@ class DocumentoFiscalService {
             && documento.estado !== 'cancelado';
     }
 
-    ehVenda(documento: DocumentoFiscal): boolean            { return TIPOS_VENDA.includes(documento.tipo_documento); }
-    ehProforma(documento: DocumentoFiscal): boolean         { return documento.tipo_documento === 'FP'; }
-    ehAdiantamento(documento: DocumentoFiscal): boolean     { return documento.tipo_documento === 'FA'; }
-    ehNotaCredito(documento: DocumentoFiscal): boolean      { return documento.tipo_documento === 'NC'; }
-    ehNotaDebito(documento: DocumentoFiscal): boolean       { return documento.tipo_documento === 'ND'; }
-    ehFaturaRetificacao(documento: DocumentoFiscal): boolean{ return documento.tipo_documento === 'FRt'; }
+    ehVenda(documento: DocumentoFiscal): boolean { return TIPOS_VENDA.includes(documento.tipo_documento); }
+    ehProforma(documento: DocumentoFiscal): boolean { return documento.tipo_documento === 'FP'; }
+    ehAdiantamento(documento: DocumentoFiscal): boolean { return documento.tipo_documento === 'FA'; }
+    ehNotaCredito(documento: DocumentoFiscal): boolean { return documento.tipo_documento === 'NC'; }
+    ehNotaDebito(documento: DocumentoFiscal): boolean { return documento.tipo_documento === 'ND'; }
+    ehFaturaRetificacao(documento: DocumentoFiscal): boolean { return documento.tipo_documento === 'FRt'; }
 
     getNomeCliente(documento: DocumentoFiscal): string {
         return documento.cliente?.nome ?? documento.cliente_nome ?? 'Consumidor Final';
@@ -599,10 +595,10 @@ class DocumentoFiscalService {
         const servicos = doc.itens?.filter(item => item.eh_servico) ?? [];
         return {
             ...doc,
-            tem_servicos:             servicos.length > 0,
-            quantidade_servicos:      servicos.length,
-            total_retencao_servicos:  servicos.reduce((acc, item) => acc + (item.valor_retencao ?? 0), 0),
-            percentual_retencao:      Number(doc.base_tributavel) > 0
+            tem_servicos: servicos.length > 0,
+            quantidade_servicos: servicos.length,
+            total_retencao_servicos: servicos.reduce((acc, item) => acc + (item.valor_retencao ?? 0), 0),
+            percentual_retencao: Number(doc.base_tributavel) > 0
                 ? Math.round((Number(doc.total_retencao) / Number(doc.base_tributavel)) * 100 * 100) / 100
                 : 0,
         };
@@ -617,13 +613,13 @@ export const documentoFiscalService = new DocumentoFiscalService();
 
 const QUERY_KEYS = {
     documentos: 'documentos-fiscais',
-    documento:  'documento-fiscal',
-    dashboard:  'dashboard',
-    resumo:     'resumo-documentos',
+    documento: 'documento-fiscal',
+    dashboard: 'dashboard',
+    resumo: 'resumo-documentos',
     estatisticas: 'estatisticas-pagamentos',
-    alertas:    'alertas-pendentes',
-    evolucao:   'evolucao-mensal',
-    recibos:    'recibos-documento',
+    alertas: 'alertas-pendentes',
+    evolucao: 'evolucao-mensal',
+    recibos: 'recibos-documento',
 } as const;
 
 // ==================== HOOKS ====================
@@ -631,18 +627,18 @@ const QUERY_KEYS = {
 export const useDocumentosFiscais = (filtros: FiltrosDocumento = {}) =>
     useQuery({
         queryKey: [QUERY_KEYS.documentos, filtros],
-        queryFn:  () => documentoFiscalService.listar(filtros),
+        queryFn: () => documentoFiscalService.listar(filtros),
         staleTime: 30 * 1000,
     });
 
 export const useDocumentoFiscal = (id: string | null) =>
     useQuery({
         queryKey: [QUERY_KEYS.documento, id],
-        queryFn:  () => {
+        queryFn: () => {
             if (!id) throw new Error('ID não fornecido');
             return documentoFiscalService.buscarPorId(id);
         },
-        enabled:   !!id,
+        enabled: !!id,
         staleTime: 60 * 1000,
     });
 
@@ -707,7 +703,7 @@ export const useGerarRecibo = () => {
 export const useListarRecibos = (documentoId: string | null) =>
     useQuery({
         queryKey: [QUERY_KEYS.recibos, documentoId],
-        queryFn:  () => {
+        queryFn: () => {
             if (!documentoId) throw new Error('ID não fornecido');
             return documentoFiscalService.listarRecibos(documentoId);
         },
@@ -747,41 +743,41 @@ export const useVincularAdiantamento = () => {
 
 export const useDashboard = () =>
     useQuery({
-        queryKey:       [QUERY_KEYS.dashboard],
-        queryFn:        () => documentoFiscalService.getDashboard(),
+        queryKey: [QUERY_KEYS.dashboard],
+        queryFn: () => documentoFiscalService.getDashboard(),
         refetchInterval: 5 * 60 * 1000,
-        staleTime:       2 * 60 * 1000,
+        staleTime: 2 * 60 * 1000,
     });
 
 export const useResumoDocumentosFiscais = () =>
     useQuery({
-        queryKey:       [QUERY_KEYS.resumo],
-        queryFn:        () => documentoFiscalService.getResumoDocumentosFiscais(),
+        queryKey: [QUERY_KEYS.resumo],
+        queryFn: () => documentoFiscalService.getResumoDocumentosFiscais(),
         refetchInterval: 5 * 60 * 1000,
-        staleTime:       2 * 60 * 1000,
+        staleTime: 2 * 60 * 1000,
     });
 
 export const useEstatisticasPagamentos = () =>
     useQuery({
-        queryKey:       [QUERY_KEYS.estatisticas],
-        queryFn:        () => documentoFiscalService.getEstatisticasPagamentos(),
+        queryKey: [QUERY_KEYS.estatisticas],
+        queryFn: () => documentoFiscalService.getEstatisticasPagamentos(),
         refetchInterval: 5 * 60 * 1000,
-        staleTime:       2 * 60 * 1000,
+        staleTime: 2 * 60 * 1000,
     });
 
 export const useAlertasPendentes = () =>
     useQuery({
-        queryKey:       [QUERY_KEYS.alertas],
-        queryFn:        () => documentoFiscalService.getAlertasPendentes(),
+        queryKey: [QUERY_KEYS.alertas],
+        queryFn: () => documentoFiscalService.getAlertasPendentes(),
         refetchInterval: 5 * 60 * 1000,
-        staleTime:       2 * 60 * 1000,
+        staleTime: 2 * 60 * 1000,
     });
 
 export const useEvolucaoMensal = (ano?: number) =>
     useQuery({
-        queryKey:        [QUERY_KEYS.evolucao, ano],
-        queryFn:         () => documentoFiscalService.getEvolucaoMensal(ano),
-        staleTime:       5 * 60 * 1000,
+        queryKey: [QUERY_KEYS.evolucao, ano],
+        queryFn: () => documentoFiscalService.getEvolucaoMensal(ano),
+        staleTime: 5 * 60 * 1000,
         placeholderData: [],
     });
 

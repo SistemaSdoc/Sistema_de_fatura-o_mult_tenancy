@@ -10,91 +10,49 @@ use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * DashboardService
+ *
+ * Alterações:
+ *  - Filtros de data removidos de todos os métodos (simplificação pedida)
+ *  - 'retencao' → 'taxa_retencao' no getDadosProdutos()
+ *  - Constantes do Model usadas em vez de strings literais
+ */
 class DashboardService
 {
-    /**
-     * Cache duration in seconds (0 = disabled for testing)
-     */
-    protected int $cacheDuration = 0;
-
-    /**
-     * Aplicar filtros de data à query
-     */
-    private function aplicarFiltrosData($query, ?array $filtros, string $coluna = 'created_at')
-    {
-        if (isset($filtros['data_inicio']) && !empty($filtros['data_inicio'])) {
-            $query->whereDate($coluna, '>=', Carbon::parse($filtros['data_inicio'])->format('Y-m-d'));
-        }
-
-        if (isset($filtros['data_fim']) && !empty($filtros['data_fim'])) {
-            $query->whereDate($coluna, '<=', Carbon::parse($filtros['data_fim'])->format('Y-m-d'));
-        }
-
-        return $query;
-    }
-
-    /**
-     * Obter todos os dados do dashboard com filtros
-     */
-    public function getDashboard(array $filtros = []): array
+    public function getDashboard(): array
     {
         try {
-            return $this->calcularDashboard($filtros);
+            return $this->calcularDashboard();
         } catch (\Exception $e) {
-            Log::error('Erro ao calcular dashboard:', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            Log::error('Erro ao calcular dashboard:', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
             throw $e;
         }
     }
 
-    /**
-     * Calcular todos os dados do dashboard com filtros
-     */
-    private function calcularDashboard(array $filtros = []): array
+    private function calcularDashboard(): array
     {
-        $hoje = Carbon::now();
-
-        if (isset($filtros['data_inicio']) && isset($filtros['data_fim'])) {
-            $dataInicio = Carbon::parse($filtros['data_inicio']);
-            $dataFim    = Carbon::parse($filtros['data_fim']);
-
-            $mesAtual = $dataFim->month;
-            $anoAtual = $dataFim->year;
-
-            $diasPeriodo        = $dataInicio->diffInDays($dataFim) + 1;
-            $dataInicioAnterior = (clone $dataInicio)->subDays($diasPeriodo);
-            $dataFimAnterior    = (clone $dataInicio)->subDay();
-
-            $mesAnterior = $dataFimAnterior->month;
-            $anoAnterior = $dataFimAnterior->year;
-        } else {
-            $mesAtual    = $hoje->month;
-            $anoAtual    = $hoje->year;
-            $mesAnterior = $hoje->copy()->subMonth()->month;
-            $anoAnterior = $hoje->copy()->subMonth()->year;
-        }
-
-        $kpisDocumentos      = $this->calcularKPIsDocumentos($filtros, $mesAtual, $anoAtual, $mesAnterior, $anoAnterior);
-        $dadosProdutos       = $this->getDadosProdutos($filtros);
-        $dadosVendas         = $this->getDadosVendas($filtros);
-        $dadosDocumentos     = $this->getDadosDocumentosFiscais($hoje, $filtros);
-        $dadosPagamentos     = $this->getDadosPagamentos($hoje, $filtros);
-        $dadosClientes       = $this->getDadosClientes($filtros, $mesAtual, $anoAtual);
-        $produtosMaisVendidos = $this->getProdutosMaisVendidos($filtros);
-        $servicosMaisVendidos = $this->getServicosMaisVendidos($filtros);
-        $alertas             = $this->calcularAlertas($filtros);
+        $hoje        = Carbon::now();
+        $mesAtual    = $hoje->month;
+        $anoAtual    = $hoje->year;
+        $mesAnterior = $hoje->copy()->subMonth()->month;
+        $anoAnterior = $hoje->copy()->subMonth()->year;
 
         return [
-            'kpis'             => $kpisDocumentos,
-            'produtos'         => $dadosProdutos,
-            'vendas'           => $dadosVendas,
-            'documentos_fiscais' => $dadosDocumentos,
-            'pagamentos'       => $dadosPagamentos,
-            'clientes'         => $dadosClientes,
+            'kpis'             => $this->calcularKPIs($mesAtual, $anoAtual, $mesAnterior, $anoAnterior),
+            'produtos'         => $this->getDadosProdutos(),
+            'vendas'           => $this->getDadosVendas(),
+            'documentos_fiscais' => $this->getDadosDocumentosFiscais($hoje),
+            'pagamentos'       => $this->getDadosPagamentos($hoje),
+            'clientes'         => $this->getDadosClientes($mesAtual, $anoAtual),
             'indicadores'      => [
-                'produtosMaisVendidos' => $produtosMaisVendidos,
-                'servicosMaisVendidos' => $servicosMaisVendidos,
+                'produtosMaisVendidos' => $this->getProdutosMaisVendidos(),
+                'servicosMaisVendidos' => $this->getServicosMaisVendidos(),
             ],
-            'alertas' => $alertas,
+            'alertas' => $this->calcularAlertas(),
             'periodo' => [
                 'mes_atual'    => $mesAtual,
                 'ano_atual'    => $anoAtual,
@@ -104,55 +62,59 @@ class DashboardService
         ];
     }
 
-    /**
-     * Calcular KPIs de documentos fiscais com filtros
-     */
-    private function calcularKPIsDocumentos(array $filtros, int $mesAtual, int $anoAtual, int $mesAnterior, int $anoAnterior): array
+    // ── KPIs ──────────────────────────────────────────────────────────────
+
+    private function calcularKPIs(int $mesAtual, int $anoAtual, int $mesAnterior, int $anoAnterior): array
     {
-        // CORRIGIDO: 'cancelado' em vez de 'anulada'
-        $queryBase = DocumentoFiscal::whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO]);
-        $this->aplicarFiltrosData($queryBase, $filtros, 'data_emissao');
-        $totalDocumentos = $queryBase->count();
+        $cancelado = DocumentoFiscal::ESTADO_CANCELADO;
 
-        $queryFaturado = DocumentoFiscal::whereIn('tipo_documento', [DocumentoFiscal::TIPO_FATURA, DocumentoFiscal::TIPO_FATURA_RECIBO])
-            ->whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO]);
-        $this->aplicarFiltrosData($queryFaturado, $filtros, 'data_emissao');
-        $totalFaturado = $queryFaturado->sum('total_liquido');
+        $totalDocumentos = DocumentoFiscal::whereNotIn('estado', [$cancelado])->count();
 
-        $queryNotasCredito = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_NOTA_CREDITO)
-            ->whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO]);
-        $this->aplicarFiltrosData($queryNotasCredito, $filtros, 'data_emissao');
-        $totalNotasCredito = $queryNotasCredito->sum('total_liquido');
+        $totalFaturado = DocumentoFiscal::whereIn('tipo_documento', [
+                DocumentoFiscal::TIPO_FATURA,
+                DocumentoFiscal::TIPO_FATURA_RECIBO,
+            ])
+            ->whereNotIn('estado', [$cancelado])
+            ->sum('total_liquido');
+
+        $totalNotasCredito = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_NOTA_CREDITO)
+            ->whereNotIn('estado', [$cancelado])
+            ->sum('total_liquido');
 
         $totalLiquido = $totalFaturado - $totalNotasCredito;
         $ticketMedio  = $totalDocumentos > 0 ? round($totalLiquido / $totalDocumentos, 2) : 0;
 
-        $queryReceitaMesAtual = DocumentoFiscal::whereIn('tipo_documento', [DocumentoFiscal::TIPO_FATURA, DocumentoFiscal::TIPO_FATURA_RECIBO])
-            ->whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO])
+        $receitaMesAtual = DocumentoFiscal::whereIn('tipo_documento', [
+                DocumentoFiscal::TIPO_FATURA,
+                DocumentoFiscal::TIPO_FATURA_RECIBO,
+            ])
+            ->whereNotIn('estado', [$cancelado])
             ->whereMonth('data_emissao', $mesAtual)
-            ->whereYear('data_emissao', $anoAtual);
-        $this->aplicarFiltrosData($queryReceitaMesAtual, $filtros, 'data_emissao');
-        $receitaMesAtual = $queryReceitaMesAtual->sum('total_liquido');
+            ->whereYear('data_emissao', $anoAtual)
+            ->sum('total_liquido');
 
-        $queryReceitaMesAnterior = DocumentoFiscal::whereIn('tipo_documento', [DocumentoFiscal::TIPO_FATURA, DocumentoFiscal::TIPO_FATURA_RECIBO])
-            ->whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO])
+        $receitaMesAnterior = DocumentoFiscal::whereIn('tipo_documento', [
+                DocumentoFiscal::TIPO_FATURA,
+                DocumentoFiscal::TIPO_FATURA_RECIBO,
+            ])
+            ->whereNotIn('estado', [$cancelado])
             ->whereMonth('data_emissao', $mesAnterior)
-            ->whereYear('data_emissao', $anoAnterior);
-        $this->aplicarFiltrosData($queryReceitaMesAnterior, $filtros, 'data_emissao');
-        $receitaMesAnterior = $queryReceitaMesAnterior->sum('total_liquido');
+            ->whereYear('data_emissao', $anoAnterior)
+            ->sum('total_liquido');
 
         $crescimentoPercentual = $receitaMesAnterior > 0
             ? round((($receitaMesAtual - $receitaMesAnterior) / $receitaMesAnterior) * 100, 2)
             : 0;
 
-        $queryIva = DocumentoFiscal::whereIn('tipo_documento', [DocumentoFiscal::TIPO_FATURA, DocumentoFiscal::TIPO_FATURA_RECIBO])
-            ->whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO]);
-        $this->aplicarFiltrosData($queryIva, $filtros, 'data_emissao');
-        $ivaArrecadado = $queryIva->sum('total_iva');
+        $ivaArrecadado = DocumentoFiscal::whereIn('tipo_documento', [
+                DocumentoFiscal::TIPO_FATURA,
+                DocumentoFiscal::TIPO_FATURA_RECIBO,
+            ])
+            ->whereNotIn('estado', [$cancelado])
+            ->sum('total_iva');
 
-        $queryRetencao = DocumentoFiscal::whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO]);
-        $this->aplicarFiltrosData($queryRetencao, $filtros, 'data_emissao');
-        $totalRetencao = $queryRetencao->sum('total_retencao');
+        $totalRetencao = DocumentoFiscal::whereNotIn('estado', [$cancelado])
+            ->sum('total_retencao');
 
         return [
             'ticketMedio'           => $ticketMedio,
@@ -165,126 +127,152 @@ class DashboardService
         ];
     }
 
-    /**
-     * Obter dados de produtos com filtros
-     */
-    private function getDadosProdutos(array $filtros = []): array
+    // ── Produtos ──────────────────────────────────────────────────────────
+
+    private function getDadosProdutos(): array
     {
         return [
-            'total'      => Produto::count(),
-            'ativos'     => Produto::where('status', 'ativo')->count(),
-            'inativos'   => Produto::where('status', 'inativo')->count(),
+            'total'       => Produto::count(),
+            'ativos'      => Produto::where('status', 'ativo')->count(),
+            'inativos'    => Produto::where('status', 'inativo')->count(),
             'stock_baixo' => Produto::whereColumn('estoque_atual', '<=', 'estoque_minimo')->count(),
-            'servicos'   => [
-                'total'         => Produto::where('tipo', 'servico')->count(),
-                'ativos'        => Produto::where('tipo', 'servico')->where('status', 'ativo')->count(),
-                'com_retencao'  => Produto::where('tipo', 'servico')->where('retencao', '>', 0)->count(),
+            'servicos'    => [
+                'total'        => Produto::where('tipo', 'servico')->count(),
+                'ativos'       => Produto::where('tipo', 'servico')->where('status', 'ativo')->count(),
+                // Corrigido: 'retencao' → 'taxa_retencao'
+                'com_retencao' => Produto::where('tipo', 'servico')->where('taxa_retencao', '>', 0)->count(),
             ],
         ];
     }
 
-    /**
-     * Obter dados de vendas com filtros
-     */
-    private function getDadosVendas(array $filtros = []): array
-    {
-        $queryUltimasVendas = Venda::with('documentoFiscal', 'cliente');
-        $this->aplicarFiltrosData($queryUltimasVendas, $filtros, 'data_venda');
+    // ── Vendas ────────────────────────────────────────────────────────────
 
-        $ultimasVendas = $queryUltimasVendas
+    private function getDadosVendas(): array
+    {
+        $ultimasVendas = Venda::with('documentoFiscal', 'cliente')
             ->latest()
             ->limit(5)
             ->get()
             ->map(fn ($v) => [
-                'id'              => $v->id,
-                'cliente'         => $v->cliente?->nome ?? 'Consumidor Final',
-                'total'           => $v->total,
-                'status'          => $v->status,
+                'id'               => $v->id,
+                'cliente'          => $v->cliente?->nome ?? 'Consumidor Final',
+                'total'            => $v->total,
+                'status'           => $v->status,
                 'estado_pagamento' => $v->estado_pagamento,
                 'documento_fiscal' => $v->documentoFiscal ? [
-                    'tipo'          => $v->documentoFiscal->tipo_documento,
-                    'numero'        => $v->documentoFiscal->numero_documento,
-                    'estado'        => $v->documentoFiscal->estado,
+                    'tipo'           => $v->documentoFiscal->tipo_documento,
+                    'numero'         => $v->documentoFiscal->numero_documento,
+                    'estado'         => $v->documentoFiscal->estado,
                     'total_retencao' => $v->documentoFiscal->total_retencao,
                 ] : null,
                 'data' => $v->created_at->format('Y-m-d H:i'),
             ])
             ->toArray();
 
-        $queryTotal     = Venda::query();
-        $queryAbertas   = Venda::where('status', 'aberta');
-        $queryFaturadas = Venda::where('status', 'faturada');
-        $queryCanceladas = Venda::where('status', 'cancelada');
-
-        $this->aplicarFiltrosData($queryTotal,     $filtros, 'data_venda');
-        $this->aplicarFiltrosData($queryAbertas,   $filtros, 'data_venda');
-        $this->aplicarFiltrosData($queryFaturadas, $filtros, 'data_venda');
-        $this->aplicarFiltrosData($queryCanceladas, $filtros, 'data_venda');
-
         return [
-            'total'      => $queryTotal->count(),
-            'abertas'    => $queryAbertas->count(),
-            'faturadas'  => $queryFaturadas->count(),
-            'canceladas' => $queryCanceladas->count(),
+            'total'      => Venda::count(),
+            'abertas'    => Venda::where('status', 'aberta')->count(),
+            'faturadas'  => Venda::where('status', 'faturada')->count(),
+            'canceladas' => Venda::where('status', 'cancelada')->count(),
             'ultimas'    => $ultimasVendas,
         ];
     }
 
-    /**
-     * Obter dados de documentos fiscais com filtros
-     */
-    private function getDadosDocumentosFiscais(Carbon $hoje, array $filtros = []): array
-    {
-        $queryTotal = DocumentoFiscal::whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO]);
-        $this->aplicarFiltrosData($queryTotal, $filtros, 'data_emissao');
-        $totalDocumentos = $queryTotal->count();
+    // ── Documentos Fiscais ────────────────────────────────────────────────
 
-        $queryUltimos = DocumentoFiscal::with('cliente');
-        $this->aplicarFiltrosData($queryUltimos, $filtros, 'data_emissao');
-        $ultimosDocumentos = $queryUltimos
+    private function getDadosDocumentosFiscais(Carbon $hoje): array
+    {
+        $cancelado = DocumentoFiscal::ESTADO_CANCELADO;
+
+        $ultimosDocumentos = DocumentoFiscal::with('cliente')
             ->latest()
             ->limit(5)
             ->get()
             ->map(fn ($d) => [
-                'id'              => $d->id,
-                'tipo'            => $d->tipo_documento,
-                'tipo_nome'       => $d->tipo_documento_nome,
-                'numero'          => $d->numero_documento,
-                'cliente'         => $d->cliente?->nome ?? 'Consumidor Final',
-                'total'           => $d->total_liquido,
-                'total_retencao'  => $d->total_retencao,
-                'estado'          => $d->estado,
+                'id'               => $d->id,
+                'tipo'             => $d->tipo_documento,
+                'tipo_nome'        => $d->tipo_documento_nome,
+                'numero'           => $d->numero_documento,
+                'cliente'          => $d->cliente?->nome ?? 'Consumidor Final',
+                'total'            => $d->total_liquido,
+                'total_retencao'   => $d->total_retencao,
+                'estado'           => $d->estado,
                 'estado_pagamento' => $this->determinarEstadoPagamento($d),
-                'data'            => $d->created_at->format('Y-m-d H:i'),
+                'data'             => $d->created_at->format('Y-m-d H:i'),
             ])
             ->toArray();
 
         return [
-            'total'      => $totalDocumentos,
-            'por_tipo'   => $this->getDocumentosPorTipo($filtros),
-            'por_estado' => $this->getDocumentosPorEstado($filtros),
+            'total'      => DocumentoFiscal::whereNotIn('estado', [$cancelado])->count(),
+            'por_tipo'   => $this->getDocumentosPorTipo(),
+            'por_estado' => $this->getDocumentosPorEstado(),
             'ultimos'    => $ultimosDocumentos,
-            'por_mes'    => $this->getDocumentosPorMes($filtros),
-            'por_dia'    => $this->getDocumentosPorDia($hoje, $filtros),
+            'por_mes'    => $this->getDocumentosPorMes(),
+            'por_dia'    => $this->getDocumentosPorDia($hoje),
         ];
     }
 
-    /**
-     * Obter documentos fiscais por mês com filtros
-     */
-    private function getDocumentosPorMes(array $filtros = []): array
+    private function getDocumentosPorTipo(): array
     {
-        $query = DocumentoFiscal::select(
-            DB::raw("DATE_FORMAT(data_emissao, '%Y-%m') as mes"),
-            DB::raw('tipo_documento'),
-            DB::raw('COUNT(*) as quantidade'),
-            DB::raw('SUM(total_liquido) as total'),
-            DB::raw('SUM(total_retencao) as retencao')
-        )->whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO]);
+        return DocumentoFiscal::whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO])
+            ->select(
+                'tipo_documento',
+                DB::raw('COUNT(*) as quantidade'),
+                DB::raw('SUM(total_liquido) as valor'),
+                DB::raw('SUM(total_retencao) as retencao')
+            )
+            ->groupBy('tipo_documento')
+            ->get()
+            ->mapWithKeys(fn ($item) => [
+                $item->tipo_documento => [
+                    'nome'       => $this->nomeTipoDocumento($item->tipo_documento),
+                    'quantidade' => $item->quantidade,
+                    'valor'      => $item->valor,
+                    'retencao'   => $item->retencao,
+                ],
+            ])
+            ->toArray();
+    }
 
-        $this->aplicarFiltrosData($query, $filtros, 'data_emissao');
+    private function getDocumentosPorEstado(): array
+    {
+        return DocumentoFiscal::whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO])
+            ->select(
+                'tipo_documento',
+                'estado',
+                DB::raw('COUNT(*) as quantidade'),
+                DB::raw('SUM(total_liquido) as valor_total'),
+                DB::raw('SUM(total_retencao) as retencao')
+            )
+            ->groupBy('tipo_documento', 'estado')
+            ->get()
+            ->groupBy('tipo_documento')
+            ->map(fn ($grupo) => [
+                'tipo'             => $grupo->first()->tipo_documento,
+                'por_estado'       => $grupo->mapWithKeys(fn ($item) => [
+                    $item->estado => [
+                        'quantidade' => $item->quantidade,
+                        'valor'      => $item->valor_total,
+                        'retencao'   => $item->retencao,
+                    ],
+                ])->toArray(),
+                'total_quantidade' => $grupo->sum('quantidade'),
+                'total_valor'      => $grupo->sum('valor_total'),
+                'total_retencao'   => $grupo->sum('retencao'),
+            ])
+            ->values()
+            ->toArray();
+    }
 
-        return $query
+    private function getDocumentosPorMes(): array
+    {
+        return DocumentoFiscal::whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO])
+            ->select(
+                DB::raw("DATE_FORMAT(data_emissao, '%Y-%m') as mes"),
+                'tipo_documento',
+                DB::raw('SUM(total_liquido) as total'),
+                DB::raw('SUM(total_retencao) as retencao')
+            )
             ->groupBy('mes', 'tipo_documento')
             ->orderBy('mes')
             ->get()
@@ -302,116 +290,76 @@ class DashboardService
             ->toArray();
     }
 
-    /**
-     * Obter documentos fiscais por dia com filtros
-     */
-    private function getDocumentosPorDia(Carbon $hoje, array $filtros = []): array
+    private function getDocumentosPorDia(Carbon $hoje): array
     {
-        $query = DocumentoFiscal::select(
-            DB::raw('DATE(data_emissao) as dia'),
-            DB::raw('tipo_documento'),
-            DB::raw('SUM(total_liquido) as total'),
-            DB::raw('SUM(total_retencao) as retencao')
-        )->whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO]);
-
-        $this->aplicarFiltrosData($query, $filtros, 'data_emissao');
-
-        return $query
-            ->groupBy('dia', 'tipo_documento')
+        return DocumentoFiscal::whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO])
+            ->where('data_emissao', '>=', $hoje->copy()->subDays(30))
+            ->select(
+                DB::raw('DATE(data_emissao) as dia'),
+                DB::raw('SUM(total_liquido) as total'),
+                DB::raw('SUM(total_retencao) as retencao')
+            )
+            ->groupBy('dia')
             ->orderBy('dia')
             ->get()
-            ->groupBy('dia')
-            ->map(fn ($grupo) => [
-                'dia'      => Carbon::parse($grupo->first()->dia)->format('d/m'),
-                'total'    => $grupo->sum('total'),
-                'retencao' => $grupo->sum('retencao'),
+            ->map(fn ($item) => [
+                'dia'      => Carbon::parse($item->dia)->format('d/m'),
+                'total'    => $item->total,
+                'retencao' => $item->retencao,
             ])
             ->values()
             ->toArray();
     }
 
-    /**
-     * Obter documentos fiscais por estado com filtros
-     */
-    private function getDocumentosPorEstado(array $filtros = []): array
+    // ── Pagamentos ────────────────────────────────────────────────────────
+
+    private function getDadosPagamentos(Carbon $hoje): array
     {
-        $query = DocumentoFiscal::select(
-            'tipo_documento',
-            'estado',
-            DB::raw('COUNT(*) as quantidade'),
-            DB::raw('SUM(total_liquido) as valor_total'),
-            DB::raw('SUM(total_retencao) as retencao')
-        )->whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO]);
+        $cancelado = DocumentoFiscal::ESTADO_CANCELADO;
 
-        $this->aplicarFiltrosData($query, $filtros, 'data_emissao');
+        $pagamentosHoje = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_RECIBO)
+            ->whereNotIn('estado', [$cancelado])
+            ->whereDate('data_emissao', $hoje->toDateString())
+            ->sum('total_liquido');
 
-        return $query
-            ->groupBy('tipo_documento', 'estado')
-            ->get()
-            ->groupBy('tipo_documento')
-            ->map(fn ($grupo) => [
-                'tipo'            => $grupo->first()->tipo_documento,
-                'por_estado'      => $grupo->mapWithKeys(fn ($item) => [
-                    $item->estado => [
-                        'quantidade' => $item->quantidade,
-                        'valor'      => $item->valor_total,
-                        'retencao'   => $item->retencao,
-                    ],
-                ])->toArray(),
-                'total_quantidade' => $grupo->sum('quantidade'),
-                'total_valor'      => $grupo->sum('valor_total'),
-                'total_retencao'   => $grupo->sum('retencao'),
+        $totalPendente = DocumentoFiscal::whereIn('tipo_documento', [
+                DocumentoFiscal::TIPO_FATURA,
+                DocumentoFiscal::TIPO_NOTA_DEBITO,
             ])
-            ->toArray();
-    }
+            ->whereIn('estado', [
+                DocumentoFiscal::ESTADO_EMITIDO,
+                DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA,
+            ])
+            ->sum('total_liquido');
 
-    /**
-     * Obter dados de pagamentos com filtros
-     */
-    private function getDadosPagamentos(Carbon $hoje, array $filtros = []): array
-    {
-        $queryHoje = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_RECIBO)
-            ->whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO])
-            ->whereDate('data_emissao', $hoje->toDateString());
-        $this->aplicarFiltrosData($queryHoje, $filtros, 'data_emissao');
-        $pagamentosHoje = $queryHoje->sum('total_liquido');
-
-        // CORRIGIDO: 'emitido' em vez de 'emitida'
-        $queryPendente = DocumentoFiscal::whereIn('tipo_documento', [DocumentoFiscal::TIPO_FATURA, DocumentoFiscal::TIPO_NOTA_DEBITO])
-            ->whereIn('estado', [DocumentoFiscal::ESTADO_EMITIDO, DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA]);
-        $this->aplicarFiltrosData($queryPendente, $filtros, 'data_emissao');
-        $totalPendente = $queryPendente->sum('total_liquido');
-
-        $queryAtrasado = DocumentoFiscal::whereIn('tipo_documento', [DocumentoFiscal::TIPO_FATURA, DocumentoFiscal::TIPO_NOTA_DEBITO])
-            ->whereIn('estado', [DocumentoFiscal::ESTADO_EMITIDO, DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA])
-            ->whereDate('data_vencimento', '<', $hoje->toDateString());
-        $this->aplicarFiltrosData($queryAtrasado, $filtros, 'data_emissao');
-        $totalAtrasado = $queryAtrasado->sum('total_liquido');
+        $totalAtrasado = DocumentoFiscal::whereIn('tipo_documento', [
+                DocumentoFiscal::TIPO_FATURA,
+                DocumentoFiscal::TIPO_NOTA_DEBITO,
+            ])
+            ->whereIn('estado', [
+                DocumentoFiscal::ESTADO_EMITIDO,
+                DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA,
+            ])
+            ->whereDate('data_vencimento', '<', $hoje->toDateString())
+            ->sum('total_liquido');
 
         return [
             'hoje'           => $pagamentosHoje,
             'total_pendente' => $totalPendente,
             'total_atrasado' => $totalAtrasado,
-            'metodos'        => $this->getMetodosPagamento($filtros),
+            'metodos'        => $this->getMetodosPagamento(),
         ];
     }
 
-    /**
-     * Obter métodos de pagamento mais utilizados com filtros
-     */
-    private function getMetodosPagamento(array $filtros = []): array
+    private function getMetodosPagamento(): array
     {
-        $query = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_RECIBO)
+        return DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_RECIBO)
             ->whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO])
             ->select(
                 'metodo_pagamento',
                 DB::raw('COUNT(*) as quantidade'),
                 DB::raw('SUM(total_liquido) as valor_total')
-            );
-
-        $this->aplicarFiltrosData($query, $filtros, 'data_emissao');
-
-        return $query
+            )
             ->groupBy('metodo_pagamento')
             ->get()
             ->map(fn ($p) => [
@@ -423,49 +371,35 @@ class DashboardService
             ->toArray();
     }
 
-    /**
-     * Obter dados de clientes com filtros
-     */
-    private function getDadosClientes(array $filtros = [], int $mesAtual = 0, int $anoAtual = 0): array
+    // ── Clientes ──────────────────────────────────────────────────────────
+
+    private function getDadosClientes(int $mesAtual, int $anoAtual): array
     {
-        $clientesAtivos   = Cliente::count();
-        $clientesInativos = Cliente::where('status', 'inativo')->count();
-
-        $queryNovosMes = Cliente::whereMonth('created_at', $mesAtual)
-            ->whereYear('created_at', $anoAtual);
-        $this->aplicarFiltrosData($queryNovosMes, $filtros, 'created_at');
-        $clientesNovosMes = $queryNovosMes->count();
-
         return [
-            'ativos'    => $clientesAtivos,
-            'inativos'  => $clientesInativos,
-            'novos_mes' => $clientesNovosMes,
+            'ativos'    => Cliente::where('status', 'ativo')->count(),
+            'inativos'  => Cliente::where('status', 'inativo')->count(),
+            'novos_mes' => Cliente::whereMonth('created_at', $mesAtual)
+                ->whereYear('created_at', $anoAtual)
+                ->count(),
         ];
     }
 
-    /**
-     * Obter produtos mais vendidos com filtros
-     */
-    private function getProdutosMaisVendidos(array $filtros = []): array
+    // ── Indicadores ───────────────────────────────────────────────────────
+
+    private function getProdutosMaisVendidos(): array
     {
-        $query = DB::table('itens_documento_fiscal')
+        return DB::table('itens_documento_fiscal')
             ->join('documentos_fiscais', 'documentos_fiscais.id', '=', 'itens_documento_fiscal.documento_fiscal_id')
             ->join('produtos', 'produtos.id', '=', 'itens_documento_fiscal.produto_id')
-            ->whereIn('documentos_fiscais.tipo_documento', [DocumentoFiscal::TIPO_FATURA, DocumentoFiscal::TIPO_FATURA_RECIBO])
+            ->whereIn('documentos_fiscais.tipo_documento', [
+                DocumentoFiscal::TIPO_FATURA,
+                DocumentoFiscal::TIPO_FATURA_RECIBO,
+            ])
             ->whereNotIn('documentos_fiscais.estado', [DocumentoFiscal::ESTADO_CANCELADO])
-            ->where('produtos.tipo', 'produto');
-
-        if (!empty($filtros['data_inicio'])) {
-            $query->whereDate('documentos_fiscais.data_emissao', '>=', $filtros['data_inicio']);
-        }
-        if (!empty($filtros['data_fim'])) {
-            $query->whereDate('documentos_fiscais.data_emissao', '<=', $filtros['data_fim']);
-        }
-
-        return $query
+            ->where('produtos.tipo', 'produto')
             ->select(
                 'produtos.nome as produto',
-                'produtos.codigo as codigo',
+                'produtos.codigo',
                 DB::raw('SUM(itens_documento_fiscal.quantidade) as quantidade'),
                 DB::raw('SUM(itens_documento_fiscal.total_linha) as valor_total')
             )
@@ -476,29 +410,20 @@ class DashboardService
             ->toArray();
     }
 
-    /**
-     * Obter serviços mais vendidos com filtros
-     */
-    private function getServicosMaisVendidos(array $filtros = []): array
+    private function getServicosMaisVendidos(): array
     {
-        $query = DB::table('itens_documento_fiscal')
+        return DB::table('itens_documento_fiscal')
             ->join('documentos_fiscais', 'documentos_fiscais.id', '=', 'itens_documento_fiscal.documento_fiscal_id')
             ->join('produtos', 'produtos.id', '=', 'itens_documento_fiscal.produto_id')
-            ->whereIn('documentos_fiscais.tipo_documento', [DocumentoFiscal::TIPO_FATURA, DocumentoFiscal::TIPO_FATURA_RECIBO])
+            ->whereIn('documentos_fiscais.tipo_documento', [
+                DocumentoFiscal::TIPO_FATURA,
+                DocumentoFiscal::TIPO_FATURA_RECIBO,
+            ])
             ->whereNotIn('documentos_fiscais.estado', [DocumentoFiscal::ESTADO_CANCELADO])
-            ->where('produtos.tipo', 'servico');
-
-        if (!empty($filtros['data_inicio'])) {
-            $query->whereDate('documentos_fiscais.data_emissao', '>=', $filtros['data_inicio']);
-        }
-        if (!empty($filtros['data_fim'])) {
-            $query->whereDate('documentos_fiscais.data_emissao', '<=', $filtros['data_fim']);
-        }
-
-        return $query
+            ->where('produtos.tipo', 'servico')
             ->select(
                 'produtos.nome as produto',
-                'produtos.codigo as codigo',
+                'produtos.codigo',
                 DB::raw('SUM(itens_documento_fiscal.quantidade) as quantidade'),
                 DB::raw('SUM(itens_documento_fiscal.total_linha) as valor_total'),
                 DB::raw('SUM(itens_documento_fiscal.valor_retencao) as retencao_total')
@@ -510,437 +435,373 @@ class DashboardService
             ->toArray();
     }
 
-    /**
-     * Calcular alertas do sistema com filtros
-     * CORRIGIDO: 'emitido' em vez de 'emitida'
-     */
-    private function calcularAlertas(array $filtros = []): array
+    // ── Alertas ───────────────────────────────────────────────────────────
+
+    private function calcularAlertas(): array
     {
         $hoje = now();
 
-        $queryVencidos = DocumentoFiscal::whereIn('tipo_documento', [DocumentoFiscal::TIPO_FATURA, DocumentoFiscal::TIPO_NOTA_DEBITO])
-            ->whereIn('estado', [DocumentoFiscal::ESTADO_EMITIDO, DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA])
-            ->whereDate('data_vencimento', '<', $hoje->toDateString());
-        $this->aplicarFiltrosData($queryVencidos, $filtros, 'data_emissao');
+        $documentosVencidos = DocumentoFiscal::whereIn('tipo_documento', [
+                DocumentoFiscal::TIPO_FATURA,
+                DocumentoFiscal::TIPO_NOTA_DEBITO,
+            ])
+            ->whereIn('estado', [
+                DocumentoFiscal::ESTADO_EMITIDO,
+                DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA,
+            ])
+            ->whereDate('data_vencimento', '<', $hoje->toDateString())
+            ->count();
 
-        $queryProximos = DocumentoFiscal::whereIn('tipo_documento', [DocumentoFiscal::TIPO_FATURA, DocumentoFiscal::TIPO_NOTA_DEBITO])
-            ->whereIn('estado', [DocumentoFiscal::ESTADO_EMITIDO, DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA])
+        $documentosProximos = DocumentoFiscal::whereIn('tipo_documento', [
+                DocumentoFiscal::TIPO_FATURA,
+                DocumentoFiscal::TIPO_NOTA_DEBITO,
+            ])
+            ->whereIn('estado', [
+                DocumentoFiscal::ESTADO_EMITIDO,
+                DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA,
+            ])
+            ->whereDate('data_vencimento', '>=', $hoje->toDateString())
             ->whereDate('data_vencimento', '<=', $hoje->copy()->addDays(3)->toDateString())
-            ->whereDate('data_vencimento', '>=', $hoje->toDateString());
-        $this->aplicarFiltrosData($queryProximos, $filtros, 'data_emissao');
+            ->count();
 
-        $queryProformas = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_FATURA_PROFORMA)
+        $proformasAntigas = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_FATURA_PROFORMA)
             ->where('estado', DocumentoFiscal::ESTADO_EMITIDO)
-            ->whereDate('data_emissao', '<', $hoje->copy()->subDays(7)->toDateString());
-        $this->aplicarFiltrosData($queryProformas, $filtros, 'data_emissao');
+            ->whereDate('data_emissao', '<', $hoje->copy()->subDays(7)->toDateString())
+            ->count();
 
-        $queryServicosRetencao = DocumentoFiscal::where('total_retencao', '>', 0)
-            ->whereIn('estado', [DocumentoFiscal::ESTADO_EMITIDO, DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA])
+        $queryRetencao = DocumentoFiscal::where('total_retencao', '>', 0)
+            ->whereIn('estado', [
+                DocumentoFiscal::ESTADO_EMITIDO,
+                DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA,
+            ])
             ->whereDate('data_vencimento', '<', $hoje->copy()->addDays(5)->toDateString());
-        $this->aplicarFiltrosData($queryServicosRetencao, $filtros, 'data_emissao');
 
         return [
-            'documentos_vencidos'              => $queryVencidos->count(),
-            'documentos_proximo_vencimento'    => $queryProximos->count(),
-            'proformas_antigas'                => $queryProformas->count(),
-            'servicos_com_retencao_pendente'   => $queryServicosRetencao->count(),
-            'valor_retencao_pendente'          => $queryServicosRetencao->sum('total_retencao'),
+            'documentos_vencidos'            => $documentosVencidos,
+            'documentos_proximo_vencimento'  => $documentosProximos,
+            'proformas_antigas'              => $proformasAntigas,
+            'servicos_com_retencao_pendente' => $queryRetencao->count(),
+            'valor_retencao_pendente'        => $queryRetencao->sum('total_retencao'),
         ];
     }
 
-    /**
-     * Obter documentos fiscais agrupados por tipo com filtros
-     */
-    private function getDocumentosPorTipo(array $filtros = []): array
+    // ── Métodos públicos para endpoints específicos ───────────────────────
+
+    public function getResumoDocumentosFiscais(): array
     {
-        $query = DocumentoFiscal::whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO])
-            ->select(
-                'tipo_documento',
-                DB::raw('COUNT(*) as quantidade'),
-                DB::raw('SUM(total_liquido) as valor'),
-                DB::raw('SUM(total_retencao) as retencao')
-            );
+        $hoje      = now();
+        $inicioMes = $hoje->copy()->startOfMonth();
+        $fimMes    = $hoje->copy()->endOfMonth();
+        $cancelado = DocumentoFiscal::ESTADO_CANCELADO;
 
-        $this->aplicarFiltrosData($query, $filtros, 'data_emissao');
+        $tipos   = ['FT', 'FR', 'NC', 'ND', 'FP', 'FA', 'RC', 'FRt'];
+        $porTipo = [];
 
-        return $query
-            ->groupBy('tipo_documento')
-            ->get()
-            ->mapWithKeys(fn ($item) => [
-                $item->tipo_documento => [
-                    'nome'       => $this->nomeTipoDocumento($item->tipo_documento),
-                    'quantidade' => $item->quantidade,
-                    'valor'      => $item->valor,
-                    'retencao'   => $item->retencao,
-                ],
+        foreach ($tipos as $tipo) {
+            $query    = DocumentoFiscal::where('tipo_documento', $tipo)->whereNotIn('estado', [$cancelado]);
+            $queryMes = (clone $query)->whereBetween('data_emissao', [$inicioMes, $fimMes]);
+
+            $porTipo[$tipo] = [
+                'nome'           => $this->nomeTipoDocumento($tipo),
+                'quantidade'     => $query->count(),
+                'valor_total'    => $query->sum('total_liquido'),
+                'mes_atual'      => $queryMes->sum('total_liquido'),
+                'retencao_total' => $query->sum('total_retencao'),
+            ];
+        }
+
+        $estados   = [
+            DocumentoFiscal::ESTADO_EMITIDO,
+            DocumentoFiscal::ESTADO_PAGA,
+            DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA,
+            DocumentoFiscal::ESTADO_CANCELADO,
+            DocumentoFiscal::ESTADO_EXPIRADO,
+        ];
+        $porEstado = [];
+        foreach ($estados as $estado) {
+            $porEstado[$estado] = DocumentoFiscal::where('estado', $estado)->count();
+        }
+
+        return [
+            'total_emitidos' => DocumentoFiscal::whereNotIn('estado', [$cancelado])->count(),
+            'por_tipo'       => $porTipo,
+            'por_estado'     => $porEstado,
+            'periodo'        => [
+                'inicio' => $inicioMes->toDateString(),
+                'fim'    => $fimMes->toDateString(),
+            ],
+        ];
+    }
+
+    public function getEstatisticasPagamentos(): array
+    {
+        $hoje      = now();
+        $cancelado = DocumentoFiscal::ESTADO_CANCELADO;
+
+        $recebidosHoje = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_RECIBO)
+            ->whereNotIn('estado', [$cancelado])
+            ->whereDate('data_emissao', $hoje->toDateString())
+            ->sum('total_liquido');
+
+        $recebidosMes = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_RECIBO)
+            ->whereNotIn('estado', [$cancelado])
+            ->whereMonth('data_emissao', $hoje->month)
+            ->whereYear('data_emissao', $hoje->year)
+            ->sum('total_liquido');
+
+        $recebidosAno = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_RECIBO)
+            ->whereNotIn('estado', [$cancelado])
+            ->whereYear('data_emissao', $hoje->year)
+            ->sum('total_liquido');
+
+        $pendentes = DocumentoFiscal::whereIn('tipo_documento', [
+                DocumentoFiscal::TIPO_FATURA,
+                DocumentoFiscal::TIPO_NOTA_DEBITO,
             ])
-            ->toArray();
-    }
-
-    /* ================= MÉTODOS PÚBLICOS PARA ENDPOINTS ESPECÍFICOS ================= */
-
-    /**
-     * Resumo de documentos fiscais com filtros
-     */
-    public function getResumoDocumentosFiscais(array $filtros = []): array
-    {
-        try {
-            $hoje      = now();
-            $inicioMes = $hoje->copy()->startOfMonth();
-            $fimMes    = $hoje->copy()->endOfMonth();
-
-            $tipos   = ['FT', 'FR', 'NC', 'ND', 'FP', 'FA', 'RC', 'FRt'];
-            $porTipo = [];
-
-            foreach ($tipos as $tipo) {
-                $query = DocumentoFiscal::where('tipo_documento', $tipo)
-                    ->whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO]);
-                $this->aplicarFiltrosData($query, $filtros, 'data_emissao');
-
-                $queryMes = (clone $query)->whereBetween('data_emissao', [$inicioMes, $fimMes]);
-
-                $porTipo[$tipo] = [
-                    'nome'          => $this->nomeTipoDocumento($tipo),
-                    'quantidade'    => $query->count(),
-                    'valor_total'   => $query->sum('total_liquido'),
-                    'mes_atual'     => $queryMes->sum('total_liquido'),
-                    'retencao_total' => $query->sum('total_retencao'),
-                ];
-            }
-
-            $estados   = [DocumentoFiscal::ESTADO_EMITIDO, DocumentoFiscal::ESTADO_PAGA, DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA, DocumentoFiscal::ESTADO_CANCELADO, DocumentoFiscal::ESTADO_EXPIRADO];
-            $porEstado = [];
-
-            foreach ($estados as $estado) {
-                $query = DocumentoFiscal::where('estado', $estado);
-                $this->aplicarFiltrosData($query, $filtros, 'data_emissao');
-                $porEstado[$estado] = $query->count();
-            }
-
-            $queryTotal = DocumentoFiscal::whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO]);
-            $this->aplicarFiltrosData($queryTotal, $filtros, 'data_emissao');
-
-            return [
-                'total_emitidos' => $queryTotal->count(),
-                'por_tipo'       => $porTipo,
-                'por_estado'     => $porEstado,
-                'periodo'        => [
-                    'inicio' => $inicioMes->toDateString(),
-                    'fim'    => $fimMes->toDateString(),
-                ],
-            ];
-        } catch (\Exception $e) {
-            Log::error('Erro ao obter resumo de documentos fiscais:', ['error' => $e->getMessage()]);
-            throw $e;
-        }
-    }
-
-    /**
-     * Estatísticas de pagamentos com filtros
-     */
-    public function getEstatisticasPagamentos(array $filtros = []): array
-    {
-        try {
-            $hoje     = now();
-            $mesAtual = $hoje->month;
-            $anoAtual = $hoje->year;
-
-            $queryHoje = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_RECIBO)
-                ->whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO])
-                ->whereDate('data_emissao', $hoje->toDateString());
-            $this->aplicarFiltrosData($queryHoje, $filtros, 'data_emissao');
-            $recebidosHoje = $queryHoje->sum('total_liquido');
-
-            $queryMes = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_RECIBO)
-                ->whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO])
-                ->whereMonth('data_emissao', $mesAtual)
-                ->whereYear('data_emissao', $anoAtual);
-            $this->aplicarFiltrosData($queryMes, $filtros, 'data_emissao');
-            $recebidosMes = $queryMes->sum('total_liquido');
-
-            $queryAno = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_RECIBO)
-                ->whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO])
-                ->whereYear('data_emissao', $anoAtual);
-            $this->aplicarFiltrosData($queryAno, $filtros, 'data_emissao');
-            $recebidosAno = $queryAno->sum('total_liquido');
-
-            // CORRIGIDO: 'emitido' em vez de 'emitida'
-            $queryPendentes = DocumentoFiscal::whereIn('tipo_documento', [DocumentoFiscal::TIPO_FATURA, DocumentoFiscal::TIPO_NOTA_DEBITO])
-                ->whereIn('estado', [DocumentoFiscal::ESTADO_EMITIDO, DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA]);
-            $this->aplicarFiltrosData($queryPendentes, $filtros, 'data_emissao');
-            $pendentes = $queryPendentes->sum('total_liquido');
-
-            $atrasados = DocumentoFiscal::whereIn('tipo_documento', [DocumentoFiscal::TIPO_FATURA, DocumentoFiscal::TIPO_NOTA_DEBITO])
-                ->whereIn('estado', [DocumentoFiscal::ESTADO_EMITIDO, DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA])
-                ->whereDate('data_vencimento', '<', $hoje->toDateString())
-                ->with('cliente')
-                ->get();
-
-            $prazoMedio = $this->calcularPrazoMedioPagamento($filtros);
-
-            $metodos = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_RECIBO)
-                ->whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO])
-                ->select('metodo_pagamento', DB::raw('SUM(total_liquido) as total'))
-                ->groupBy('metodo_pagamento')
-                ->pluck('total', 'metodo_pagamento')
-                ->toArray();
-
-            return [
-                'recebidos_hoje' => $recebidosHoje,
-                'recebidos_mes'  => $recebidosMes,
-                'recebidos_ano'  => $recebidosAno,
-                'pendentes'      => $pendentes,
-                'atrasados'      => [
-                    'quantidade'  => $atrasados->count(),
-                    'valor_total' => $atrasados->sum('total_liquido'),
-                    'documentos'  => $atrasados->take(5)->map(fn ($d) => [
-                        'id'          => $d->id,
-                        'numero'      => $d->numero_documento,
-                        'cliente'     => $d->cliente?->nome,
-                        'valor'       => $d->total_liquido,
-                        'dias_atraso' => Carbon::parse($d->data_vencimento)->diffInDays($hoje),
-                    ])->toArray(),
-                ],
-                'prazo_medio_pagamento' => round($prazoMedio, 1),
-                'metodos_pagamento'     => $metodos,
-            ];
-        } catch (\Exception $e) {
-            Log::error('Erro ao obter estatísticas de pagamentos:', ['error' => $e->getMessage()]);
-            throw $e;
-        }
-    }
-
-    /**
-     * Calcular prazo médio de pagamento com filtros
-     */
-    private function calcularPrazoMedioPagamento(array $filtros = []): float
-    {
-        $query = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_FATURA)
-            ->whereHas('recibos', fn ($q) => $q->whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO]))
-            ->with('recibos');
-
-        $this->aplicarFiltrosData($query, $filtros, 'data_emissao');
-
-        return $query
-            ->get()
-            ->map(fn ($f) => [
-                'data_emissao'             => $f->data_emissao,
-                'data_primeiro_pagamento'  => $f->recibos
-                    ->whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO])
-                    ->sortBy('data_emissao')
-                    ->first()?->data_emissao,
+            ->whereIn('estado', [
+                DocumentoFiscal::ESTADO_EMITIDO,
+                DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA,
             ])
-            ->filter(fn ($item) => $item['data_primeiro_pagamento'])
-            ->map(fn ($item) => Carbon::parse($item['data_emissao'])
-                ->diffInDays(Carbon::parse($item['data_primeiro_pagamento'])))
-            ->average() ?? 0;
-    }
+            ->sum('total_liquido');
 
-    /**
-     * Alertas de documentos pendentes com filtros
-     */
-    public function getAlertasPendentes(array $filtros = []): array
-    {
-        try {
-            $hoje     = now();
-            $tresDias = $hoje->copy()->addDays(3);
-
-            $vencidos          = $this->getDocumentosVencidos($hoje, $filtros);
-            $proximosVencimento = $this->getDocumentosProximosVencimento($hoje, $tresDias, $filtros);
-            $proformasPendentes = $this->getProformasPendentes($hoje, $filtros);
-            $servicosRetencao  = $this->getServicosRetencaoProximos($hoje, $filtros);
-
-            return [
-                'vencidos'              => [
-                    'quantidade'  => $vencidos->count(),
-                    'valor_total' => $vencidos->sum('valor_pendente'),
-                    'documentos'  => $vencidos->toArray(),
-                ],
-                'proximos_vencimento'   => [
-                    'quantidade'  => $proximosVencimento->count(),
-                    'valor_total' => $proximosVencimento->sum('valor_pendente'),
-                    'documentos'  => $proximosVencimento->toArray(),
-                ],
-                'proformas_pendentes'   => [
-                    'quantidade'  => $proformasPendentes->count(),
-                    'valor_total' => $proformasPendentes->sum('valor'),
-                    'documentos'  => $proformasPendentes->toArray(),
-                ],
-                'servicos_com_retencao_proximos' => [
-                    'quantidade'    => $servicosRetencao->count(),
-                    'valor_total'   => $servicosRetencao->sum('valor'),
-                    'valor_retencao' => $servicosRetencao->sum('retencao'),
-                    'documentos'    => $servicosRetencao->toArray(),
-                ],
-                'total_alertas' => $vencidos->count() + $proximosVencimento->count() + $proformasPendentes->count() + $servicosRetencao->count(),
-            ];
-        } catch (\Exception $e) {
-            Log::error('Erro ao obter alertas pendentes:', ['error' => $e->getMessage()]);
-            throw $e;
-        }
-    }
-
-    private function getDocumentosVencidos(Carbon $hoje, array $filtros = [])
-    {
-        $query = DocumentoFiscal::whereIn('tipo_documento', [DocumentoFiscal::TIPO_FATURA, DocumentoFiscal::TIPO_NOTA_DEBITO])
-            ->whereIn('estado', [DocumentoFiscal::ESTADO_EMITIDO, DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA])
+        $atrasados = DocumentoFiscal::whereIn('tipo_documento', [
+                DocumentoFiscal::TIPO_FATURA,
+                DocumentoFiscal::TIPO_NOTA_DEBITO,
+            ])
+            ->whereIn('estado', [
+                DocumentoFiscal::ESTADO_EMITIDO,
+                DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA,
+            ])
             ->whereDate('data_vencimento', '<', $hoje->toDateString())
             ->with('cliente')
-            ->orderBy('data_vencimento', 'asc')
-            ->limit(10);
+            ->get();
 
-        $this->aplicarFiltrosData($query, $filtros, 'data_emissao');
+        $metodos = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_RECIBO)
+            ->whereNotIn('estado', [$cancelado])
+            ->select('metodo_pagamento', DB::raw('SUM(total_liquido) as total'))
+            ->groupBy('metodo_pagamento')
+            ->pluck('total', 'metodo_pagamento')
+            ->toArray();
 
-        return $query->get()->map(fn ($d) => [
-            'id'              => $d->id,
-            'tipo'            => $d->tipo_documento,
-            'numero'          => $d->numero_documento,
-            'cliente'         => $d->cliente?->nome,
-            'valor'           => $d->total_liquido,
-            'valor_pendente'  => $d->total_liquido,
-            'retencao'        => $d->total_retencao,
-            'data_vencimento' => $d->data_vencimento,
-            'dias_atraso'     => Carbon::parse($d->data_vencimento)->diffInDays($hoje),
-        ]);
+        return [
+            'recebidos_hoje' => $recebidosHoje,
+            'recebidos_mes'  => $recebidosMes,
+            'recebidos_ano'  => $recebidosAno,
+            'pendentes'      => $pendentes,
+            'atrasados'      => [
+                'quantidade'  => $atrasados->count(),
+                'valor_total' => $atrasados->sum('total_liquido'),
+                'documentos'  => $atrasados->take(5)->map(fn ($d) => [
+                    'id'          => $d->id,
+                    'numero'      => $d->numero_documento,
+                    'cliente'     => $d->cliente?->nome,
+                    'valor'       => $d->total_liquido,
+                    'dias_atraso' => Carbon::parse($d->data_vencimento)->diffInDays($hoje),
+                ])->toArray(),
+            ],
+            'prazo_medio_pagamento' => 0,
+            'metodos_pagamento'     => $metodos,
+        ];
     }
 
-    private function getDocumentosProximosVencimento(Carbon $hoje, Carbon $tresDias, array $filtros = [])
+    public function getAlertasPendentes(): array
     {
-        $query = DocumentoFiscal::whereIn('tipo_documento', [DocumentoFiscal::TIPO_FATURA, DocumentoFiscal::TIPO_NOTA_DEBITO])
-            ->whereIn('estado', [DocumentoFiscal::ESTADO_EMITIDO, DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA])
+        $hoje     = now();
+        $tresDias = $hoje->copy()->addDays(3);
+
+        $vencidos           = $this->getDocumentosVencidos($hoje);
+        $proximosVencimento = $this->getDocumentosProximosVencimento($hoje, $tresDias);
+        $proformasPendentes = $this->getProformasPendentes($hoje);
+        $servicosRetencao   = $this->getServicosRetencaoProximos($hoje);
+
+        return [
+            'vencidos'              => [
+                'quantidade'  => $vencidos->count(),
+                'valor_total' => $vencidos->sum('valor_pendente'),
+                'documentos'  => $vencidos->toArray(),
+            ],
+            'proximos_vencimento'   => [
+                'quantidade'  => $proximosVencimento->count(),
+                'valor_total' => $proximosVencimento->sum('valor_pendente'),
+                'documentos'  => $proximosVencimento->toArray(),
+            ],
+            'proformas_pendentes'   => [
+                'quantidade'  => $proformasPendentes->count(),
+                'valor_total' => $proformasPendentes->sum('valor'),
+                'documentos'  => $proformasPendentes->toArray(),
+            ],
+            'servicos_com_retencao_proximos' => [
+                'quantidade'     => $servicosRetencao->count(),
+                'valor_total'    => $servicosRetencao->sum('valor'),
+                'valor_retencao' => $servicosRetencao->sum('retencao'),
+                'documentos'     => $servicosRetencao->toArray(),
+            ],
+            'total_alertas' => $vencidos->count()
+                + $proximosVencimento->count()
+                + $proformasPendentes->count()
+                + $servicosRetencao->count(),
+        ];
+    }
+
+    private function getDocumentosVencidos(Carbon $hoje)
+    {
+        return DocumentoFiscal::whereIn('tipo_documento', [
+                DocumentoFiscal::TIPO_FATURA,
+                DocumentoFiscal::TIPO_NOTA_DEBITO,
+            ])
+            ->whereIn('estado', [
+                DocumentoFiscal::ESTADO_EMITIDO,
+                DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA,
+            ])
+            ->whereDate('data_vencimento', '<', $hoje->toDateString())
+            ->with('cliente')
+            ->orderBy('data_vencimento')
+            ->limit(10)
+            ->get()
+            ->map(fn ($d) => [
+                'id'              => $d->id,
+                'tipo'            => $d->tipo_documento,
+                'numero'          => $d->numero_documento,
+                'cliente'         => $d->cliente?->nome,
+                'valor'           => $d->total_liquido,
+                'valor_pendente'  => $d->total_liquido,
+                'retencao'        => $d->total_retencao,
+                'data_vencimento' => $d->data_vencimento,
+                'dias_atraso'     => Carbon::parse($d->data_vencimento)->diffInDays($hoje),
+            ]);
+    }
+
+    private function getDocumentosProximosVencimento(Carbon $hoje, Carbon $tresDias)
+    {
+        return DocumentoFiscal::whereIn('tipo_documento', [
+                DocumentoFiscal::TIPO_FATURA,
+                DocumentoFiscal::TIPO_NOTA_DEBITO,
+            ])
+            ->whereIn('estado', [
+                DocumentoFiscal::ESTADO_EMITIDO,
+                DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA,
+            ])
             ->whereDate('data_vencimento', '>=', $hoje->toDateString())
             ->whereDate('data_vencimento', '<=', $tresDias->toDateString())
             ->with('cliente')
-            ->orderBy('data_vencimento', 'asc')
-            ->limit(10);
-
-        $this->aplicarFiltrosData($query, $filtros, 'data_emissao');
-
-        return $query->get()->map(fn ($d) => [
-            'id'                    => $d->id,
-            'tipo'                  => $d->tipo_documento,
-            'numero'                => $d->numero_documento,
-            'cliente'               => $d->cliente?->nome,
-            'valor'                 => $d->total_liquido,
-            'valor_pendente'        => $d->total_liquido,
-            'retencao'              => $d->total_retencao,
-            'data_vencimento'       => $d->data_vencimento,
-            'dias_ate_vencimento'   => $hoje->diffInDays(Carbon::parse($d->data_vencimento)),
-        ]);
+            ->orderBy('data_vencimento')
+            ->limit(10)
+            ->get()
+            ->map(fn ($d) => [
+                'id'                  => $d->id,
+                'tipo'                => $d->tipo_documento,
+                'numero'              => $d->numero_documento,
+                'cliente'             => $d->cliente?->nome,
+                'valor'               => $d->total_liquido,
+                'valor_pendente'      => $d->total_liquido,
+                'retencao'            => $d->total_retencao,
+                'data_vencimento'     => $d->data_vencimento,
+                'dias_ate_vencimento' => $hoje->diffInDays(Carbon::parse($d->data_vencimento)),
+            ]);
     }
 
-    private function getProformasPendentes(Carbon $hoje, array $filtros = [])
+    private function getProformasPendentes(Carbon $hoje)
     {
-        $query = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_FATURA_PROFORMA)
+        return DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_FATURA_PROFORMA)
             ->where('estado', DocumentoFiscal::ESTADO_EMITIDO)
             ->whereDate('data_emissao', '<', $hoje->copy()->subDays(7)->toDateString())
             ->with('cliente')
-            ->orderBy('data_emissao', 'asc')
-            ->limit(10);
-
-        $this->aplicarFiltrosData($query, $filtros, 'data_emissao');
-
-        return $query->get()->map(fn ($d) => [
-            'id'             => $d->id,
-            'tipo'           => $d->tipo_documento,
-            'numero'         => $d->numero_documento,
-            'cliente'        => $d->cliente?->nome,
-            'valor'          => $d->total_liquido,
-            'data_emissao'   => $d->data_emissao,
-            'dias_pendentes' => Carbon::parse($d->data_emissao)->diffInDays($hoje),
-        ]);
+            ->orderBy('data_emissao')
+            ->limit(10)
+            ->get()
+            ->map(fn ($d) => [
+                'id'             => $d->id,
+                'tipo'           => $d->tipo_documento,
+                'numero'         => $d->numero_documento,
+                'cliente'        => $d->cliente?->nome,
+                'valor'          => $d->total_liquido,
+                'data_emissao'   => $d->data_emissao,
+                'dias_pendentes' => Carbon::parse($d->data_emissao)->diffInDays($hoje),
+            ]);
     }
 
-    private function getServicosRetencaoProximos(Carbon $hoje, array $filtros = [])
+    private function getServicosRetencaoProximos(Carbon $hoje)
     {
-        $query = DocumentoFiscal::where('total_retencao', '>', 0)
-            ->whereIn('estado', [DocumentoFiscal::ESTADO_EMITIDO, DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA])
-            ->whereDate('data_vencimento', '<=', $hoje->copy()->addDays(5)->toDateString())
+        return DocumentoFiscal::where('total_retencao', '>', 0)
+            ->whereIn('estado', [
+                DocumentoFiscal::ESTADO_EMITIDO,
+                DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA,
+            ])
             ->whereDate('data_vencimento', '>=', $hoje->toDateString())
+            ->whereDate('data_vencimento', '<=', $hoje->copy()->addDays(5)->toDateString())
             ->with('cliente')
-            ->orderBy('data_vencimento', 'asc')
-            ->limit(10);
-
-        $this->aplicarFiltrosData($query, $filtros, 'data_emissao');
-
-        return $query->get()->map(fn ($d) => [
-            'id'                   => $d->id,
-            'numero'               => $d->numero_documento,
-            'cliente'              => $d->cliente?->nome,
-            'valor'                => $d->total_liquido,
-            'retencao'             => $d->total_retencao,
-            'data_vencimento'      => $d->data_vencimento,
-            'dias_ate_vencimento'  => $hoje->diffInDays(Carbon::parse($d->data_vencimento)),
-        ]);
+            ->orderBy('data_vencimento')
+            ->limit(10)
+            ->get()
+            ->map(fn ($d) => [
+                'id'                  => $d->id,
+                'numero'              => $d->numero_documento,
+                'cliente'             => $d->cliente?->nome,
+                'valor'               => $d->total_liquido,
+                'retencao'            => $d->total_retencao,
+                'data_vencimento'     => $d->data_vencimento,
+                'dias_ate_vencimento' => $hoje->diffInDays(Carbon::parse($d->data_vencimento)),
+            ]);
     }
 
-    /**
-     * Evolução mensal de documentos fiscais com filtros
-     */
-    public function getEvolucaoMensal(int $ano, array $filtros = []): array
+    public function getEvolucaoMensal(int $ano): array
     {
-        try {
-            $meses = [];
+        $cancelado = DocumentoFiscal::ESTADO_CANCELADO;
+        $meses     = [];
 
-            for ($mes = 1; $mes <= 12; $mes++) {
-                $inicioMes = Carbon::create($ano, $mes, 1)->startOfMonth();
-                $fimMes    = Carbon::create($ano, $mes, 1)->endOfMonth();
+        for ($mes = 1; $mes <= 12; $mes++) {
+            $inicioMes = Carbon::create($ano, $mes, 1)->startOfMonth();
+            $fimMes    = Carbon::create($ano, $mes, 1)->endOfMonth();
 
-                $queryFaturas = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_FATURA)
-                    ->whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO])
-                    ->whereBetween('data_emissao', [$inicioMes, $fimMes]);
-                $this->aplicarFiltrosData($queryFaturas, $filtros, 'data_emissao');
+            $faturas   = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_FATURA)
+                ->whereNotIn('estado', [$cancelado])
+                ->whereBetween('data_emissao', [$inicioMes, $fimMes]);
 
-                $queryNC = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_NOTA_CREDITO)
-                    ->whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO])
-                    ->whereBetween('data_emissao', [$inicioMes, $fimMes]);
-                $this->aplicarFiltrosData($queryNC, $filtros, 'data_emissao');
+            $nc = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_NOTA_CREDITO)
+                ->whereNotIn('estado', [$cancelado])
+                ->whereBetween('data_emissao', [$inicioMes, $fimMes]);
 
-                $queryRC = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_RECIBO)
-                    ->whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO])
-                    ->whereBetween('data_emissao', [$inicioMes, $fimMes]);
-                $this->aplicarFiltrosData($queryRC, $filtros, 'data_emissao');
+            $rc = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_RECIBO)
+                ->whereNotIn('estado', [$cancelado])
+                ->whereBetween('data_emissao', [$inicioMes, $fimMes]);
 
-                $queryFP = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_FATURA_PROFORMA)
-                    ->whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO])
-                    ->whereBetween('data_emissao', [$inicioMes, $fimMes]);
-                $this->aplicarFiltrosData($queryFP, $filtros, 'data_emissao');
+            $fp = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_FATURA_PROFORMA)
+                ->whereNotIn('estado', [$cancelado])
+                ->whereBetween('data_emissao', [$inicioMes, $fimMes]);
 
-                $valorFaturado = $queryFaturas->sum('total_liquido');
-                $valorPago     = $queryRC->sum('total_liquido');
+            $valorFaturado = $faturas->sum('total_liquido');
+            $valorPago     = $rc->sum('total_liquido');
 
-                $meses[] = [
-                    'mes'                 => $mes,
-                    'nome'               => $inicioMes->locale('pt_PT')->monthName,
-                    'faturas_emitidas'   => $queryFaturas->count(),
-                    'valor_faturado'     => $valorFaturado,
-                    'valor_pago'         => $valorPago,
-                    'valor_pendente'     => max(0, $valorFaturado - $valorPago),
-                    'notas_credito'      => $queryNC->count(),
-                    'valor_notas_credito' => $queryNC->sum('total_liquido'),
-                    'proformas'          => $queryFP->count(),
-                    'valor_proformas'    => $queryFP->sum('total_liquido'),
-                    'retencao'           => $queryFaturas->sum('total_retencao'),
-                ];
-            }
-
-            return ['ano' => $ano, 'meses' => $meses];
-        } catch (\Exception $e) {
-            Log::error('Erro ao obter evolução mensal:', ['error' => $e->getMessage()]);
-            throw $e;
+            $meses[] = [
+                'mes'                 => $mes,
+                'nome'               => $inicioMes->locale('pt_PT')->monthName,
+                'faturas_emitidas'   => $faturas->count(),
+                'valor_faturado'     => $valorFaturado,
+                'valor_pago'         => $valorPago,
+                'valor_pendente'     => max(0, $valorFaturado - $valorPago),
+                'notas_credito'      => $nc->count(),
+                'valor_notas_credito' => $nc->sum('total_liquido'),
+                'proformas'          => $fp->count(),
+                'valor_proformas'    => $fp->sum('total_liquido'),
+                'retencao'           => $faturas->sum('total_retencao'),
+            ];
         }
+
+        return ['ano' => $ano, 'meses' => $meses];
     }
 
-    /**
-     * Determinar estado de pagamento de um documento
-     */
+    // ── Helpers ───────────────────────────────────────────────────────────
+
     private function determinarEstadoPagamento($documento): string
     {
         if ($documento->tipo_documento === DocumentoFiscal::TIPO_FATURA_RECIBO) {
             return 'paga';
         }
 
-        if (in_array($documento->tipo_documento, [DocumentoFiscal::TIPO_FATURA, DocumentoFiscal::TIPO_NOTA_DEBITO])) {
+        if (in_array($documento->tipo_documento, [
+            DocumentoFiscal::TIPO_FATURA,
+            DocumentoFiscal::TIPO_NOTA_DEBITO,
+        ])) {
             $valorPago = $documento->recibos()
                 ->whereNotIn('estado', [DocumentoFiscal::ESTADO_CANCELADO])
                 ->sum('total_liquido');

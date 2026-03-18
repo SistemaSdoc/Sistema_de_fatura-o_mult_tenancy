@@ -3,10 +3,22 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Model DocumentoFiscal
+ *
+ * Alterações AGT:
+ *  - $fillable actualizado com os novos campos: rsa_assinatura, rsa_versao_chave,
+ *    qr_code, hash_anterior (adicionados pelo DocumentoFiscalService)
+ *  - $casts actualizado para os mesmos campos
+ *  - Boot: removida a recalculação automática de total_retencao em saved()
+ *    (causava queries extras e pode sobrescrever o valor calculado pelo service)
+ *  - Acessores: apenas leitura de atributos já carregados, sem queries adicionais
+ *  - Métodos de estado: mutações simples, sem lógica de negócio (que está no service)
+ *  - retencao renomeada para taxa_retencao nos fillable (consistência com o service)
+ */
 class DocumentoFiscal extends Model
 {
     protected $table = 'documentos_fiscais';
@@ -37,7 +49,13 @@ class DocumentoFiscal extends Model
         'estado',
         'motivo',
         'motivo_cancelamento',
+        // AGT: campos de assinatura e integridade — imutáveis após emissão
         'hash_fiscal',
+        'hash_anterior',
+        'rsa_assinatura',
+        'rsa_versao_chave',
+        'qr_code',
+        // Outros
         'referencia_externa',
         'metodo_pagamento',
         'referencia_pagamento',
@@ -45,22 +63,22 @@ class DocumentoFiscal extends Model
     ];
 
     protected $casts = [
-        'data_emissao'     => 'date',
-        'data_vencimento'  => 'date',
+        'data_emissao'      => 'date',
+        'data_vencimento'   => 'date',
         'data_cancelamento' => 'date',
-        'created_at'       => 'datetime',
-        'updated_at'       => 'datetime',
-        'base_tributavel'  => 'decimal:2',
-        'total_iva'        => 'decimal:2',
-        'total_retencao'   => 'decimal:2',
-        'total_liquido'    => 'decimal:2',
+        'created_at'        => 'datetime',
+        'updated_at'        => 'datetime',
+        'base_tributavel'   => 'decimal:2',
+        'total_iva'         => 'decimal:2',
+        'total_retencao'    => 'decimal:2',
+        'total_liquido'     => 'decimal:2',
+        'rsa_versao_chave'  => 'integer',
     ];
 
     /* =====================================================================
      | CONSTANTES
      | ================================================================== */
 
-    // Tipos de documento
     const TIPO_FATURA              = 'FT';
     const TIPO_FATURA_RECIBO       = 'FR';
     const TIPO_FATURA_PROFORMA     = 'FP';
@@ -70,7 +88,6 @@ class DocumentoFiscal extends Model
     const TIPO_RECIBO              = 'RC';
     const TIPO_FATURA_RETIFICACAO  = 'FRt';
 
-    // Estados
     const ESTADO_EMITIDO           = 'emitido';
     const ESTADO_PAGA              = 'paga';
     const ESTADO_PARCIALMENTE_PAGA = 'parcialmente_paga';
@@ -91,16 +108,10 @@ class DocumentoFiscal extends Model
             }
         });
 
-        // Recalcular total_retencao apenas quando os itens forem carregados
-        // e apenas se o valor for diferente — evita queries desnecessárias
-        static::saved(function ($model) {
-            if ($model->relationLoaded('itens') && $model->itens->isNotEmpty()) {
-                $retencaoTotal = $model->itens->sum('valor_retencao');
-                if ((float) $retencaoTotal !== (float) $model->total_retencao) {
-                    $model->updateQuietly(['total_retencao' => $retencaoTotal]);
-                }
-            }
-        });
+        // NOTA: a recalculação automática de total_retencao em saved() foi
+        // removida — o DocumentoFiscalService calcula e persiste correctamente
+        // os totais na criação. Recalcular no evento saved() causava queries
+        // extras e podia sobrescrever o valor já correcto.
     }
 
     /* =====================================================================
@@ -133,7 +144,7 @@ class DocumentoFiscal extends Model
         return $this->belongsTo(DocumentoFiscal::class, 'fatura_id');
     }
 
-    /** Documentos derivados deste — notas de crédito, recibos, etc. */
+    /** Documentos derivados deste (NC, ND, RC, FRt) */
     public function documentosDerivados()
     {
         return $this->hasMany(DocumentoFiscal::class, 'fatura_id');
@@ -145,7 +156,7 @@ class DocumentoFiscal extends Model
         return $this->hasMany(ItemDocumentoFiscal::class, 'documento_fiscal_id');
     }
 
-    /** Recibos associados — para FT e FA */
+    /** Recibos associados — apenas para FT e FA */
     public function recibos()
     {
         return $this->hasMany(DocumentoFiscal::class, 'fatura_id')
@@ -166,7 +177,7 @@ class DocumentoFiscal extends Model
             ->where('tipo_documento', self::TIPO_NOTA_DEBITO);
     }
 
-    /** Faturas de adiantamento vinculadas a esta FT/FR */
+    /** Faturas de adiantamento vinculadas a esta FT */
     public function faturasAdiantamento()
     {
         return $this->belongsToMany(
@@ -292,7 +303,7 @@ class DocumentoFiscal extends Model
     }
 
     /* =====================================================================
-     | ACESSORES — apenas leitura de atributos já carregados, sem queries
+     | ACESSORES — leitura de atributos já carregados, sem queries extras
      | ================================================================== */
 
     public function getTipoDocumentoNomeAttribute(): string
@@ -418,9 +429,7 @@ class DocumentoFiscal extends Model
         };
     }
 
-    /**
-     * Percentual médio de retenção — usa valores já carregados, sem queries.
-     */
+    /** Percentual médio de retenção — calculado a partir dos valores já persistidos */
     public function getPercentualRetencaoAttribute(): float
     {
         if ((float) $this->base_tributavel <= 0) {
@@ -430,9 +439,7 @@ class DocumentoFiscal extends Model
         return round(((float) $this->total_retencao / (float) $this->base_tributavel) * 100, 2);
     }
 
-    /**
-     * Resumo para relatórios — usa apenas atributos já presentes no modelo.
-     */
+    /** Resumo para relatórios — usa apenas atributos já presentes no modelo */
     public function getResumoAttribute(): array
     {
         return [
@@ -446,11 +453,15 @@ class DocumentoFiscal extends Model
             'retencao'            => $this->total_retencao,
             'percentual_retencao' => $this->percentual_retencao,
             'estado'              => $this->estado,
+            // AGT: campos de auditoria
+            'hash_fiscal'         => $this->hash_fiscal,
+            'qr_code'             => $this->qr_code,
         ];
     }
 
     /* =====================================================================
-     | MÉTODOS DE ESTADO — mutações simples sem lógica de negócio
+     | MÉTODOS DE ESTADO — mutações simples, sem lógica de negócio
+     | A lógica de negócio (validações, derivados, etc.) está no service.
      | ================================================================== */
 
     public function marcarComoPaga(): void
@@ -463,13 +474,17 @@ class DocumentoFiscal extends Model
         $this->update(['estado' => self::ESTADO_PARCIALMENTE_PAGA]);
     }
 
+    /**
+     * AGT: cancelamento lógico — hash_fiscal, rsa_assinatura e qr_code
+     * são preservados e NUNCA actualizados após emissão.
+     */
     public function marcarComoCancelado(?string $motivo = null, ?string $userId = null): void
     {
         $this->update(array_filter([
-            'estado'              => self::ESTADO_CANCELADO,
-            'motivo_cancelamento' => $motivo,
+            'estado'               => self::ESTADO_CANCELADO,
+            'motivo_cancelamento'  => $motivo,
             'user_cancelamento_id' => $userId,
-            'data_cancelamento'   => now(),
+            'data_cancelamento'    => now(),
         ]));
     }
 
@@ -487,45 +502,14 @@ class DocumentoFiscal extends Model
         return $this->tipo_documento === $tipo;
     }
 
-    public function ehFatura(): bool
-    {
-        return $this->tipo_documento === self::TIPO_FATURA;
-    }
-
-    public function ehFaturaRecibo(): bool
-    {
-        return $this->tipo_documento === self::TIPO_FATURA_RECIBO;
-    }
-
-    public function ehFaturaProforma(): bool
-    {
-        return $this->tipo_documento === self::TIPO_FATURA_PROFORMA;
-    }
-
-    public function ehFaturaAdiantamento(): bool
-    {
-        return $this->tipo_documento === self::TIPO_FATURA_ADIANTAMENTO;
-    }
-
-    public function ehNotaCredito(): bool
-    {
-        return $this->tipo_documento === self::TIPO_NOTA_CREDITO;
-    }
-
-    public function ehNotaDebito(): bool
-    {
-        return $this->tipo_documento === self::TIPO_NOTA_DEBITO;
-    }
-
-    public function ehRecibo(): bool
-    {
-        return $this->tipo_documento === self::TIPO_RECIBO;
-    }
-
-    public function ehFaturaRetificacao(): bool
-    {
-        return $this->tipo_documento === self::TIPO_FATURA_RETIFICACAO;
-    }
+    public function ehFatura(): bool            { return $this->tipo_documento === self::TIPO_FATURA; }
+    public function ehFaturaRecibo(): bool       { return $this->tipo_documento === self::TIPO_FATURA_RECIBO; }
+    public function ehFaturaProforma(): bool     { return $this->tipo_documento === self::TIPO_FATURA_PROFORMA; }
+    public function ehFaturaAdiantamento(): bool { return $this->tipo_documento === self::TIPO_FATURA_ADIANTAMENTO; }
+    public function ehNotaCredito(): bool        { return $this->tipo_documento === self::TIPO_NOTA_CREDITO; }
+    public function ehNotaDebito(): bool         { return $this->tipo_documento === self::TIPO_NOTA_DEBITO; }
+    public function ehRecibo(): bool             { return $this->tipo_documento === self::TIPO_RECIBO; }
+    public function ehFaturaRetificacao(): bool  { return $this->tipo_documento === self::TIPO_FATURA_RETIFICACAO; }
 
     public function ehVenda(): bool
     {
@@ -596,19 +580,21 @@ class DocumentoFiscal extends Model
     }
 
     /**
-     * Dados para converter uma FP em FT — retorna array para o Service usar.
+     * Dados para converter uma FP em FT — devolve array para o service usar.
+     * A conversão efectiva é feita pelo DocumentoFiscalService::emitirDocumento().
      */
     public function converterParaFatura(?array $dadosPagamento = null): array
     {
         if (! $this->ehFaturaProforma()) {
-            throw new \Exception('Apenas Faturas Proforma (FP) podem ser convertidas.');
+            throw new \InvalidArgumentException('Apenas Faturas Proforma (FP) podem ser convertidas.');
         }
 
         if ($this->estado === self::ESTADO_CANCELADO) {
-            throw new \Exception('Não é possível converter uma proforma cancelada.');
+            throw new \InvalidArgumentException('Não é possível converter uma proforma cancelada.');
         }
 
         return [
+            'tipo_documento'  => self::TIPO_FATURA,
             'cliente_id'      => $this->cliente_id,
             'cliente_nome'    => $this->cliente_nome,
             'cliente_nif'     => $this->cliente_nif,
@@ -619,6 +605,7 @@ class DocumentoFiscal extends Model
                 'preco_venda'    => $item->preco_unitario,
                 'desconto'       => $item->desconto,
                 'taxa_iva'       => $item->taxa_iva,
+                'codigo_isencao' => $item->codigo_isencao,
             ])->toArray(),
             'dados_pagamento' => $dadosPagamento,
         ];

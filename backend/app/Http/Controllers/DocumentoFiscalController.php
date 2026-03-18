@@ -14,6 +14,14 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
+/**
+ * DocumentoFiscalController
+ *
+ * Responsável apenas por: validação de request, autorização, chamar o service
+ * e devolver resposta JSON/PDF/Excel.
+ * Toda a lógica de negócio (assinatura RSA, QR Code, IVA, SAF-T) está no
+ * DocumentoFiscalService.
+ */
 class DocumentoFiscalController extends Controller
 {
     public function __construct(
@@ -50,8 +58,7 @@ class DocumentoFiscalController extends Controller
                 'data'    => $documentos,
             ]);
         } catch (\Exception $e) {
-            Log::error('Erro ao listar documentos', ['error' => $e->getMessage()]);
-            return response()->json(['success' => false, 'message' => 'Erro ao carregar documentos', 'error' => $e->getMessage()], 500);
+            return $this->erroInterno('Erro ao listar documentos', $e);
         }
     }
 
@@ -63,14 +70,18 @@ class DocumentoFiscalController extends Controller
     {
         try {
             $documento = $this->documentoService->buscarDocumento($id);
-            return response()->json(['success' => true, 'message' => 'Documento carregado com sucesso', 'data' => ['documento' => $documento]]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Documento carregado com sucesso',
+                'data'    => ['documento' => $documento],
+            ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             return response()->json(['success' => false, 'message' => 'Documento não encontrado'], 404);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 400);
         } catch (\Exception $e) {
-            Log::error('Erro ao carregar documento', ['id' => $id, 'error' => $e->getMessage()]);
-            return response()->json(['success' => false, 'message' => 'Erro ao carregar documento', 'error' => $e->getMessage()], 500);
+            return $this->erroInterno('Erro ao carregar documento', $e);
         }
     }
 
@@ -82,46 +93,59 @@ class DocumentoFiscalController extends Controller
     {
         try {
             $dados = $request->validate([
-                'tipo_documento'               => 'required|in:FT,FR,FP,FA,NC,ND,RC,FRt',
-                'venda_id'                     => 'nullable|uuid|exists:vendas,id',
-                'cliente_id'                   => 'nullable|uuid|exists:clientes,id',
-                'cliente_nome'                 => 'nullable|string|max:255',
-                'cliente_nif'                  => 'nullable|string|max:20',
-                'fatura_id'                    => 'nullable|uuid|exists:documentos_fiscais,id',
-                'itens'                        => 'required_unless:tipo_documento,FA|array',
-                'itens.*.produto_id'           => 'nullable|uuid|exists:produtos,id',
-                'itens.*.descricao'            => 'required_with:itens|string',
-                'itens.*.quantidade'           => 'required_with:itens|numeric|min:0.01',
-                'itens.*.preco_unitario'       => 'required_with:itens|numeric|min:0',
-                'itens.*.taxa_iva'             => 'required_with:itens|numeric|min:0',
-                'itens.*.desconto'             => 'nullable|numeric|min:0',
-                'dados_pagamento'              => 'nullable|array',
-                'dados_pagamento.metodo'       => 'required_with:dados_pagamento|in:transferencia,multibanco,dinheiro,cheque,cartao',
-                'dados_pagamento.valor'        => 'required_with:dados_pagamento|numeric|min:0.01',
-                'dados_pagamento.data'         => 'nullable|date',
-                'dados_pagamento.referencia'   => 'nullable|string|max:100',
-                'motivo'                       => 'nullable|string|max:500',
-                'data_vencimento'              => 'nullable|date',
-                'referencia_externa'           => 'nullable|string|max:100',
+                'tipo_documento'             => 'required|in:FT,FR,FP,FA,NC,ND,RC,FRt',
+                'venda_id'                   => 'nullable|uuid|exists:vendas,id',
+                'cliente_id'                 => 'nullable|uuid|exists:clientes,id',
+                'cliente_nome'               => 'nullable|string|max:255',
+                'cliente_nif'                => 'nullable|string|max:20',
+                'fatura_id'                  => 'nullable|uuid|exists:documentos_fiscais,id',
+                'itens'                      => 'required_unless:tipo_documento,FA|array',
+                'itens.*.produto_id'         => 'nullable|uuid|exists:produtos,id',
+                'itens.*.descricao'          => 'required_with:itens|string',
+                'itens.*.quantidade'         => 'required_with:itens|numeric|min:0.01',
+                'itens.*.preco_unitario'     => 'required_with:itens|numeric|min:0',
+                // Taxas de IVA válidas em Angola: 0%, 5%, 14%
+                'itens.*.taxa_iva'           => 'required_with:itens|numeric|in:0,5,14',
+                'itens.*.desconto'           => 'nullable|numeric|min:0',
+                // Código de isenção obrigatório quando taxa_iva = 0
+                'itens.*.codigo_isencao'     => 'nullable|string|in:M00,M01,M02,M03,M04,M05,M06,M99',
+                // Taxas de retenção válidas em Angola
+                'itens.*.taxa_retencao'      => 'nullable|numeric|in:0,2,5,6.5,10,15',
+                'dados_pagamento'            => 'nullable|array',
+                'dados_pagamento.metodo'     => 'required_with:dados_pagamento|in:transferencia,multibanco,dinheiro,cheque,cartao',
+                'dados_pagamento.valor'      => 'required_with:dados_pagamento|numeric|min:0.01',
+                'dados_pagamento.data'       => 'nullable|date',
+                'dados_pagamento.referencia' => 'nullable|string|max:100',
+                'motivo'                     => 'nullable|string|max:500',
+                'data_vencimento'            => 'nullable|date',
+                'referencia_externa'         => 'nullable|string|max:100',
             ]);
 
+            // Consumidor Final quando não há identificação de cliente
             if (empty($dados['cliente_id']) && empty($dados['cliente_nome'])) {
                 if ($dados['tipo_documento'] === 'FR') {
-                    return response()->json(['success' => false, 'message' => 'Fatura-Recibo (FR) requer um cliente (seleccionado ou avulso)'], 422);
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Fatura-Recibo (FR) requer um cliente (seleccionado ou avulso)',
+                    ], 422);
                 }
                 $dados['cliente_nome'] = 'Consumidor Final';
             }
 
             $documento = $this->documentoService->emitirDocumento($dados);
 
-            return response()->json(['success' => true, 'message' => 'Documento emitido com sucesso', 'data' => $documento], 201);
+            return response()->json([
+                'success' => true,
+                'message' => 'Documento emitido com sucesso',
+                'data'    => $documento,
+            ], 201);
+
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json(['success' => false, 'message' => 'Erro de validação', 'errors' => $e->errors()], 422);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
-            Log::error('Erro ao emitir documento', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
-            return response()->json(['success' => false, 'message' => 'Erro ao emitir documento: ' . $e->getMessage()], 500);
+            return $this->erroInterno('Erro ao emitir documento', $e);
         }
     }
 
@@ -132,16 +156,7 @@ class DocumentoFiscalController extends Controller
     public function gerarRecibo(Request $request, string $documentoId): JsonResponse
     {
         try {
-            $documento = $this->documentoService->buscarDocumento($documentoId);
-
-            if (! in_array($documento->tipo_documento, ['FT', 'FA'])) {
-                return response()->json(['success' => false, 'message' => 'Apenas FT e FA podem receber recibo. Tipo: ' . $documento->tipo_documento], 422);
-            }
-
-            if (in_array($documento->estado, ['paga', 'cancelado'])) {
-                return response()->json(['success' => false, 'message' => 'Documento já se encontra pago ou cancelado'], 422);
-            }
-
+            $documento     = $this->documentoService->buscarDocumento($documentoId);
             $valorPendente = $this->documentoService->calcularValorPendente($documento);
 
             $dados = $request->validate([
@@ -153,14 +168,18 @@ class DocumentoFiscalController extends Controller
 
             $recibo = $this->documentoService->gerarRecibo($documento, $dados);
 
-            return response()->json(['success' => true, 'message' => 'Recibo gerado com sucesso', 'data' => $recibo], 201);
+            return response()->json([
+                'success' => true,
+                'message' => 'Recibo gerado com sucesso',
+                'data'    => $recibo,
+            ], 201);
+
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             return response()->json(['success' => false, 'message' => 'Documento não encontrado'], 404);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
-            Log::error('Erro ao gerar recibo', ['documento_id' => $documentoId, 'error' => $e->getMessage()]);
-            return response()->json(['success' => false, 'message' => 'Erro ao gerar recibo: ' . $e->getMessage()], 500);
+            return $this->erroInterno('Erro ao gerar recibo', $e);
         }
     }
 
@@ -173,30 +192,31 @@ class DocumentoFiscalController extends Controller
         try {
             $documento = $this->documentoService->buscarDocumento($documentoId);
 
-            if (! in_array($documento->tipo_documento, ['FT', 'FR'])) {
-                return response()->json(['success' => false, 'message' => 'NC só pode ser gerada a partir de FT ou FR. Tipo: ' . $documento->tipo_documento], 422);
-            }
-
             $dados = $request->validate([
                 'itens'                  => 'required|array|min:1',
                 'itens.*.produto_id'     => 'nullable|uuid|exists:produtos,id',
                 'itens.*.descricao'      => 'required|string',
                 'itens.*.quantidade'     => 'required|numeric|min:0.01',
                 'itens.*.preco_unitario' => 'required|numeric|min:0',
-                'itens.*.taxa_iva'       => 'required|numeric|min:0',
+                'itens.*.taxa_iva'       => 'required|numeric|in:0,5,14',
+                'itens.*.codigo_isencao' => 'nullable|string|in:M00,M01,M02,M03,M04,M05,M06,M99',
                 'motivo'                 => 'required|string|max:500',
             ]);
 
             $nc = $this->documentoService->criarNotaCredito($documento, $dados);
 
-            return response()->json(['success' => true, 'message' => 'Nota de Crédito emitida com sucesso', 'data' => $nc], 201);
+            return response()->json([
+                'success' => true,
+                'message' => 'Nota de Crédito emitida com sucesso',
+                'data'    => $nc,
+            ], 201);
+
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             return response()->json(['success' => false, 'message' => 'Documento de origem não encontrado'], 404);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
-            Log::error('Erro ao criar Nota de Crédito', ['error' => $e->getMessage()]);
-            return response()->json(['success' => false, 'message' => 'Erro ao emitir Nota de Crédito: ' . $e->getMessage()], 500);
+            return $this->erroInterno('Erro ao emitir Nota de Crédito', $e);
         }
     }
 
@@ -209,23 +229,25 @@ class DocumentoFiscalController extends Controller
         try {
             $documento = $this->documentoService->buscarDocumento($documentoId);
 
-            if (! in_array($documento->tipo_documento, ['FT', 'FR'])) {
-                return response()->json(['success' => false, 'message' => 'ND só pode ser gerada a partir de FT ou FR. Tipo: ' . $documento->tipo_documento], 422);
-            }
-
             $dados = $request->validate([
                 'itens'                  => 'required|array|min:1',
                 'itens.*.produto_id'     => 'nullable|uuid|exists:produtos,id',
                 'itens.*.descricao'      => 'required|string',
                 'itens.*.quantidade'     => 'required|numeric|min:0.01',
                 'itens.*.preco_unitario' => 'required|numeric|min:0',
-                'itens.*.taxa_iva'       => 'required|numeric|min:0',
+                'itens.*.taxa_iva'       => 'required|numeric|in:0,5,14',
+                'itens.*.codigo_isencao' => 'nullable|string|in:M00,M01,M02,M03,M04,M05,M06,M99',
                 'motivo'                 => 'nullable|string|max:500',
             ]);
 
             $nd = $this->documentoService->criarNotaDebito($documento, $dados);
 
-            return response()->json(['success' => true, 'message' => 'Nota de Débito emitida com sucesso', 'data' => $nd], 201);
+            return response()->json([
+                'success' => true,
+                'message' => 'Nota de Débito emitida com sucesso',
+                'data'    => $nd,
+            ], 201);
+
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             return response()->json(['success' => false, 'message' => 'Documento de origem não encontrado'], 404);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -233,8 +255,7 @@ class DocumentoFiscalController extends Controller
         } catch (\InvalidArgumentException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
-            Log::error('Erro ao criar Nota de Débito', ['documento_id' => $documentoId, 'error' => $e->getMessage()]);
-            return response()->json(['success' => false, 'message' => 'Erro ao emitir Nota de Débito: ' . $e->getMessage()], 500);
+            return $this->erroInterno('Erro ao emitir Nota de Débito', $e);
         }
     }
 
@@ -247,54 +268,50 @@ class DocumentoFiscalController extends Controller
         try {
             $adiantamento = $this->documentoService->buscarDocumento($adiantamentoId);
 
-            if ($adiantamento->tipo_documento !== 'FA') {
-                return response()->json(['success' => false, 'message' => 'Apenas FA pode ser vinculada. Tipo: ' . $adiantamento->tipo_documento], 422);
-            }
-
             $dados = $request->validate([
                 'fatura_id' => 'required|uuid|exists:documentos_fiscais,id',
                 'valor'     => 'required|numeric|min:0.01|max:' . $adiantamento->total_liquido,
             ]);
 
-            $fatura = $this->documentoService->buscarDocumento($dados['fatura_id']);
-
-            if ($fatura->tipo_documento !== 'FT') {
-                return response()->json(['success' => false, 'message' => 'O destino deve ser uma FT. Tipo: ' . $fatura->tipo_documento], 422);
-            }
-
+            $fatura    = $this->documentoService->buscarDocumento($dados['fatura_id']);
             $resultado = $this->documentoService->vincularAdiantamento($adiantamento, $fatura, (float) $dados['valor']);
 
-            return response()->json(['success' => true, 'message' => 'Adiantamento vinculado com sucesso', 'data' => $resultado]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Adiantamento vinculado com sucesso',
+                'data'    => $resultado,
+            ]);
+
         } catch (\InvalidArgumentException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
-            Log::error('Erro ao vincular adiantamento', ['error' => $e->getMessage()]);
-            return response()->json(['success' => false, 'message' => 'Erro ao vincular adiantamento: ' . $e->getMessage()], 500);
+            return $this->erroInterno('Erro ao vincular adiantamento', $e);
         }
     }
 
     /* =====================================================================
      | CANCELAMENTO
+     | AGT: cancelamento é lógico — o hash_fiscal e a assinatura RSA
+     |      são preservados. Apenas o estado é alterado.
      | ================================================================== */
 
     public function cancelar(Request $request, string $documentoId): JsonResponse
     {
         try {
             $documento = $this->documentoService->buscarDocumento($documentoId);
+            $dados     = $request->validate(['motivo' => 'required|string|min:10|max:500']);
+            $resultado = $this->documentoService->cancelarDocumento($documento, $dados['motivo']);
 
-            if ($documento->estado === 'cancelado') {
-                return response()->json(['success' => false, 'message' => 'Documento já se encontra cancelado'], 422);
-            }
+            return response()->json([
+                'success' => true,
+                'message' => 'Documento cancelado com sucesso',
+                'data'    => $resultado,
+            ]);
 
-            $dados = $request->validate(['motivo' => 'required|string|min:10|max:500']);
-            $documento = $this->documentoService->cancelarDocumento($documento, $dados['motivo']);
-
-            return response()->json(['success' => true, 'message' => 'Documento cancelado com sucesso', 'data' => $documento]);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
-            Log::error('Erro ao cancelar documento', ['error' => $e->getMessage()]);
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            return $this->erroInterno('Erro ao cancelar documento', $e);
         }
     }
 
@@ -306,17 +323,15 @@ class DocumentoFiscalController extends Controller
     {
         try {
             $documento = $this->documentoService->buscarDocumento($documentoId);
+            $recibos   = $documento->recibos()->with('user')->get();
 
-            if (! in_array($documento->tipo_documento, ['FT', 'FA'])) {
-                return response()->json(['success' => false, 'message' => 'Apenas FT e FA possuem recibos. Tipo: ' . $documento->tipo_documento], 422);
-            }
-
-            $recibos = $documento->recibos()->with('user')->get();
-
-            return response()->json(['success' => true, 'message' => 'Recibos carregados com sucesso', 'data' => $recibos]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Recibos carregados com sucesso',
+                'data'    => $recibos,
+            ]);
         } catch (\Exception $e) {
-            Log::error('Erro ao listar recibos', ['error' => $e->getMessage()]);
-            return response()->json(['success' => false, 'message' => 'Erro ao carregar recibos: ' . $e->getMessage()], 500);
+            return $this->erroInterno('Erro ao carregar recibos', $e);
         }
     }
 
@@ -332,15 +347,21 @@ class DocumentoFiscalController extends Controller
                 'cliente_nome' => 'nullable|string|max:255',
             ]);
 
-            $query = DocumentoFiscal::where('tipo_documento', 'FA')->whereIn('estado', ['emitido', 'parcialmente_paga']);
+            $query = DocumentoFiscal::adiantamentosPendentes()->with('cliente');
 
-            if (! empty($dados['cliente_id'])) $query->where('cliente_id', $dados['cliente_id']);
-            elseif (! empty($dados['cliente_nome'])) $query->where('cliente_nome', 'like', '%' . $dados['cliente_nome'] . '%');
+            if (! empty($dados['cliente_id'])) {
+                $query->where('cliente_id', $dados['cliente_id']);
+            } elseif (! empty($dados['cliente_nome'])) {
+                $query->where('cliente_nome', 'like', '%' . $dados['cliente_nome'] . '%');
+            }
 
-            return response()->json(['success' => true, 'message' => 'Adiantamentos pendentes carregados', 'data' => $query->get()]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Adiantamentos pendentes carregados',
+                'data'    => $query->get(),
+            ]);
         } catch (\Exception $e) {
-            Log::error('Erro ao listar adiantamentos', ['error' => $e->getMessage()]);
-            return response()->json(['success' => false, 'message' => 'Erro ao carregar adiantamentos: ' . $e->getMessage()], 500);
+            return $this->erroInterno('Erro ao carregar adiantamentos', $e);
         }
     }
 
@@ -352,15 +373,21 @@ class DocumentoFiscalController extends Controller
                 'cliente_nome' => 'nullable|string|max:255',
             ]);
 
-            $query = DocumentoFiscal::where('tipo_documento', 'FP')->where('estado', 'emitido');
+            $query = DocumentoFiscal::proformasPendentes()->with('cliente');
 
-            if (! empty($dados['cliente_id'])) $query->where('cliente_id', $dados['cliente_id']);
-            elseif (! empty($dados['cliente_nome'])) $query->where('cliente_nome', 'like', '%' . $dados['cliente_nome'] . '%');
+            if (! empty($dados['cliente_id'])) {
+                $query->where('cliente_id', $dados['cliente_id']);
+            } elseif (! empty($dados['cliente_nome'])) {
+                $query->where('cliente_nome', 'like', '%' . $dados['cliente_nome'] . '%');
+            }
 
-            return response()->json(['success' => true, 'message' => 'Proformas pendentes carregadas', 'data' => $query->get()]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Proformas pendentes carregadas',
+                'data'    => $query->get(),
+            ]);
         } catch (\Exception $e) {
-            Log::error('Erro ao listar proformas', ['error' => $e->getMessage()]);
-            return response()->json(['success' => false, 'message' => 'Erro ao carregar proformas: ' . $e->getMessage()], 500);
+            return $this->erroInterno('Erro ao carregar proformas', $e);
         }
     }
 
@@ -371,55 +398,34 @@ class DocumentoFiscalController extends Controller
     public function alertas(): JsonResponse
     {
         try {
-            $vencidos = DocumentoFiscal::where('tipo_documento', 'FA')->where('estado', 'emitido')
-                ->where('data_vencimento', '<', now())->with('cliente')->get();
-
-            $faturasComAdiantamentosPendentes = DocumentoFiscal::whereIn('tipo_documento', ['FT'])
-                ->whereIn('estado', ['emitido', 'parcialmente_paga'])
-                ->whereHas('faturasAdiantamento', fn ($q) => $q->where('estado', 'emitido'))
-                ->with(['cliente', 'faturasAdiantamento'])->get();
-
-            $proformasPendentes = DocumentoFiscal::where('tipo_documento', 'FP')
-                ->where('estado', 'emitido')->where('data_emissao', '<', now()->subDays(30))->with('cliente')->get();
+            $alertas = $this->documentoService->alertasPendentes();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Alertas de documentos fiscais',
-                'data'    => [
-                    'adiantamentos_vencidos'              => ['total' => $vencidos->count(), 'items' => $vencidos],
-                    'faturas_com_adiantamentos_pendentes' => ['total' => $faturasComAdiantamentosPendentes->count(), 'items' => $faturasComAdiantamentosPendentes],
-                    'proformas_pendentes'                 => ['total' => $proformasPendentes->count(), 'items' => $proformasPendentes],
-                ],
+                'data'    => ['alertas' => $alertas],
             ]);
         } catch (\Exception $e) {
-            Log::error('Erro ao gerar alertas', ['error' => $e->getMessage()]);
-            return response()->json(['success' => false, 'message' => 'Erro ao gerar alertas: ' . $e->getMessage()], 500);
-        }
-    }
-
-    public function alertasPendentes(): JsonResponse
-    {
-        try {
-            $alertas = $this->documentoService->alertasPendentes();
-            return response()->json(['success' => true, 'message' => 'Alertas carregados com sucesso', 'data' => ['alertas' => $alertas]]);
-        } catch (\Exception $e) {
-            Log::error('Erro ao carregar alertas pendentes', ['error' => $e->getMessage()]);
-            return response()->json(['success' => false, 'message' => 'Erro ao carregar alertas: ' . $e->getMessage()], 500);
+            return $this->erroInterno('Erro ao gerar alertas', $e);
         }
     }
 
     /* =====================================================================
-     | PROCESSAMENTO DE EXPIRADOS
+     | PROCESSAMENTO DE ADIANTAMENTOS EXPIRADOS
      | ================================================================== */
 
     public function processarExpirados(): JsonResponse
     {
         try {
             $count = $this->documentoService->processarAdiantamentosExpirados();
-            return response()->json(['success' => true, 'message' => "Processamento concluído. {$count} adiantamentos expirados.", 'data' => ['expirados' => $count]]);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Processamento concluído. {$count} adiantamentos expirados.",
+                'data'    => ['expirados' => $count],
+            ]);
         } catch (\Exception $e) {
-            Log::error('Erro ao processar expirados', ['error' => $e->getMessage()]);
-            return response()->json(['success' => false, 'message' => 'Erro ao processar adiantamentos expirados: ' . $e->getMessage()], 500);
+            return $this->erroInterno('Erro ao processar adiantamentos expirados', $e);
         }
     }
 
@@ -431,10 +437,14 @@ class DocumentoFiscalController extends Controller
     {
         try {
             $resumo = $this->documentoService->dadosDashboard();
-            return response()->json(['success' => true, 'message' => 'Dashboard carregado com sucesso', 'data' => $resumo]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Dashboard carregado com sucesso',
+                'data'    => $resumo,
+            ]);
         } catch (\Exception $e) {
-            Log::error('Erro ao carregar dashboard', ['error' => $e->getMessage()]);
-            return response()->json(['success' => false, 'message' => 'Erro ao carregar dashboard: ' . $e->getMessage()], 500);
+            return $this->erroInterno('Erro ao carregar dashboard', $e);
         }
     }
 
@@ -442,12 +452,20 @@ class DocumentoFiscalController extends Controller
     {
         try {
             $ano = (int) $request->input('ano', now()->year);
-            if ($ano < 2020 || $ano > 2100) $ano = now()->year;
+
+            if ($ano < 2020 || $ano > 2100) {
+                $ano = now()->year;
+            }
+
             $evolucao = $this->documentoService->evolucaoMensal($ano);
-            return response()->json(['success' => true, 'message' => 'Evolução mensal carregada com sucesso', 'data' => ['ano' => $ano, 'evolucao' => $evolucao]]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Evolução mensal carregada com sucesso',
+                'data'    => ['ano' => $ano, 'evolucao' => $evolucao],
+            ]);
         } catch (\Exception $e) {
-            Log::error('Erro ao carregar evolução mensal', ['error' => $e->getMessage()]);
-            return response()->json(['success' => false, 'message' => 'Erro ao carregar evolução mensal: ' . $e->getMessage()], 500);
+            return $this->erroInterno('Erro ao carregar evolução mensal', $e);
         }
     }
 
@@ -455,38 +473,34 @@ class DocumentoFiscalController extends Controller
     {
         try {
             $estatisticas = $this->documentoService->estatisticasPagamentos();
-            return response()->json(['success' => true, 'message' => 'Estatísticas de pagamentos carregadas com sucesso', 'data' => ['estatisticas' => $estatisticas]]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Estatísticas de pagamentos carregadas com sucesso',
+                'data'    => ['estatisticas' => $estatisticas],
+            ]);
         } catch (\Exception $e) {
-            Log::error('Erro ao carregar estatísticas de pagamentos', ['error' => $e->getMessage()]);
-            return response()->json(['success' => false, 'message' => 'Erro ao carregar estatísticas: ' . $e->getMessage()], 500);
+            return $this->erroInterno('Erro ao carregar estatísticas de pagamentos', $e);
         }
     }
 
     /* =====================================================================
-     | IMPRESSÃO — template HTML com window.print() automático
+     | IMPRESSÃO — HTML com window.print()
      | ================================================================== */
 
-    /**
-     * GET /api/documentos-fiscais/{id}/print
-     *
-     * Devolve página HTML pronta para impressão.
-     * Com ?auto=1 o JS chama window.print() imediatamente ao carregar.
-     * Funciona para todos os tipos: FT, FR, RC, NC, ND, FP, FA, FRt.
-     */
     public function printView(string $id): \Illuminate\Contracts\View\View
     {
         try {
             $documento = $this->documentoService->buscarDocumento($id);
             $dados     = $this->documentoService->dadosParaPdf($documento);
 
-            // Para RC: carregar o documento de origem para mostrar referência e itens
+            // RC: itens e totais vêm do documento de origem (FT/FA)
             $documentoOrigem = null;
             if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
                 $documentoOrigem = DocumentoFiscal::with(['itens.produto', 'cliente'])
                     ->find($documento->fatura_id);
             }
 
-            // docInfo: RC usa itens/totais do documento de origem; outros usam o próprio
             $docInfo = $documentoOrigem ?? $documento;
 
             return view('documentos.print', [
@@ -496,7 +510,10 @@ class DocumentoFiscalController extends Controller
                 'docInfo'         => $docInfo,
                 'itens'           => collect($docInfo->itens ?? []),
                 'cliente'         => $dados['cliente'],
+                // AGT: QR Code para exibição no documento impresso
+                'qr_code'         => $dados['qr_code'],
             ]);
+
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             abort(404, 'Documento não encontrado');
         } catch (\Exception $e) {
@@ -517,9 +534,15 @@ class DocumentoFiscalController extends Controller
 
             $pdf = Pdf::loadView('documentos.pdf', $dados)
                 ->setPaper('a4', 'portrait')
-                ->setOptions(['defaultFont' => 'DejaVu Sans', 'isRemoteEnabled' => true, 'isHtml5ParserEnabled' => true, 'dpi' => 150]);
+                ->setOptions([
+                    'defaultFont'         => 'DejaVu Sans',
+                    'isRemoteEnabled'     => true,
+                    'isHtml5ParserEnabled' => true,
+                    'dpi'                 => 150,
+                ]);
 
             return $pdf->stream($documento->numero_documento . '.pdf');
+
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             abort(404, 'Documento não encontrado');
         } catch (\Exception $e) {
@@ -536,9 +559,15 @@ class DocumentoFiscalController extends Controller
 
             $pdf = Pdf::loadView('documentos.pdf', $dados)
                 ->setPaper('a4', 'portrait')
-                ->setOptions(['defaultFont' => 'DejaVu Sans', 'isRemoteEnabled' => true, 'isHtml5ParserEnabled' => true, 'dpi' => 150]);
+                ->setOptions([
+                    'defaultFont'         => 'DejaVu Sans',
+                    'isRemoteEnabled'     => true,
+                    'isHtml5ParserEnabled' => true,
+                    'dpi'                 => 150,
+                ]);
 
             return $pdf->download($documento->numero_documento . '.pdf');
+
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             abort(404, 'Documento não encontrado');
         } catch (\Exception $e) {
@@ -574,16 +603,21 @@ class DocumentoFiscalController extends Controller
             $sheet->fromArray([$cabecalho], null, 'A1');
 
             $ultimaColuna = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($cabecalho));
+
             $sheet->getStyle("A1:{$ultimaColuna}1")->applyFromArray([
                 'font'      => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
                 'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1a1a2e']],
                 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
             ]);
 
-            if (! empty($linhas)) $sheet->fromArray($linhas, null, 'A2');
+            if (! empty($linhas)) {
+                $sheet->fromArray($linhas, null, 'A2');
+            }
 
             foreach (range(1, count($cabecalho)) as $col) {
-                $sheet->getColumnDimension(\PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col))->setAutoSize(true);
+                $sheet->getColumnDimension(
+                    \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col)
+                )->setAutoSize(true);
             }
 
             $sheet->freezePane('A2');
@@ -596,9 +630,25 @@ class DocumentoFiscalController extends Controller
                 'Content-Disposition' => "attachment; filename=\"{$nomeArquivo}\"",
                 'Cache-Control'       => 'max-age=0',
             ]);
+
         } catch (\Exception $e) {
             Log::error('Erro ao exportar Excel', ['error' => $e->getMessage()]);
             abort(500, 'Erro ao exportar Excel: ' . $e->getMessage());
         }
+    }
+
+    /* =====================================================================
+     | HELPER PRIVADO
+     | ================================================================== */
+
+    private function erroInterno(string $mensagem, \Exception $e): JsonResponse
+    {
+        Log::error($mensagem . ':', ['error' => $e->getMessage()]);
+
+        return response()->json([
+            'success' => false,
+            'message' => $mensagem,
+            'error'   => $e->getMessage(),
+        ], 500);
     }
 }
