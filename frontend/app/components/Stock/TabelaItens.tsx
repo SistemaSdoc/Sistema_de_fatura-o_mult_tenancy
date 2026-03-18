@@ -9,10 +9,12 @@ interface TabelaItensProps {
     itens: Produto[];
     onRegistrarEntrada: (item: Produto) => void;
     onMoverParaLixeira: (item: Produto) => void;
+    colors?: any;
 }
 
-export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira }: TabelaItensProps) {
-    const colors = useThemeColors();
+export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira, colors: propColors }: TabelaItensProps) {
+    const contextColors = useThemeColors();
+    const colors = propColors || contextColors;
 
     if (itens.length === 0) {
         return (
@@ -44,14 +46,12 @@ export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira }: T
                         // Cores para o tipo badge baseadas no tema
                         const tipoBadgeStyle = {
                             produto: {
-                                bg: `${colors.primary}20`,
-                                text: colors.primary,
-                                icon: colors.primary
+                                bg: `${colors.primary}10`,
+                                text: colors.secondary,
                             },
                             servico: {
-                                bg: `${colors.secondary}20`,
-                                text: colors.secondary,
-                                icon: colors.secondary
+                                bg: `${colors.secondary}10`,
+                                text: colors.text,
                             }
                         };
 
@@ -74,7 +74,6 @@ export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira }: T
                                         className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs"
                                         style={{ backgroundColor: badgeStyle.bg, color: badgeStyle.text }}
                                     >
-                                        {isServicoItem ? <Wrench className="w-3 h-3" /> : <Package className="w-3 h-3" />}
                                         {tipoBadge.texto}
                                     </span>
                                 </td>
@@ -83,7 +82,7 @@ export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira }: T
                                     {isServicoItem ? (
                                         <span style={{ color: colors.textSecondary }}>—</span>
                                     ) : (
-                                        <span style={{ color: colors.primary }}>{item.estoque_atual}</span>
+                                        <span style={{ color: colors.text }}>{item.estoque_atual}</span>
                                     )}
                                 </td>
                                 <td className="py-3 px-4 text-right font-medium" style={{ color: colors.text }}>

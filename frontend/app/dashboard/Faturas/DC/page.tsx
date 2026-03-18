@@ -1,47 +1,39 @@
-// src/app/dashboard/Faturas/OutrosDocumentos/page.tsx
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { motion } from "framer-motion";
 import {
-    FileText,
-    Eye,
-    Download,
-    AlertCircle,
-    ChevronLeft,
-    ChevronRight,
-    FileWarning,
-    CreditCard,
-    FileX,
-    FileCheck,
-    ArrowLeft,
-    RefreshCw,
+    FileText, Eye, Download, Printer, AlertCircle,
+    ChevronLeft, ChevronRight, ArrowLeft,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
 
 import MainEmpresa from "@/app/components/MainEmpresa";
-import { documentoFiscalService, type DocumentoFiscal, type TipoDocumento, type EstadoDocumento } from "@/services/DocumentoFiscal";
+import {
+    documentoFiscalService,
+    type DocumentoFiscal,
+    type TipoDocumento,
+    type EstadoDocumento,
+} from "@/services/DocumentoFiscal";
 import { ModalVisualizacao } from "@/app/components/ModalVisualizacao";
-import { useThemeColors, useTheme } from "@/context/ThemeContext";
+import { useThemeColors } from "@/context/ThemeContext";
 
-/* ─── Constantes ─────────────────────────────────────────────────── */
+/* ─── Tipos permitidos nesta página ─────────────────────────────── */
 const TIPOS_PERMITIDOS: TipoDocumento[] = ["FP", "FA", "NC", "ND", "FRt"];
 
 const TIPOS_DOC = {
-    FP: { label: "Fatura Proforma", icon: FileWarning, cor: "#f97316" },
-    FA: { label: "Fatura de Adiantamento", icon: CreditCard, cor: "#8b5cf6" },
-    NC: { label: "Nota de Crédito", icon: FileX, cor: "#ef4444" },
-    ND: { label: "Nota de Débito", icon: FileX, cor: "#f59e0b" },
-    FRt: { label: "Fatura de Retificação", icon: FileCheck, cor: "#ec4899" },
+    FP: { label: "Fatura Proforma", cor: "#F9941F" },
+    FA: { label: "Fatura de Adiantamento", cor: "#F9941F" },
+    NC: { label: "Nota de Crédito", cor: "#ef4444" },
+    ND: { label: "Nota de Débito", cor: "#F9941F" },
+    FRt: { label: "Fatura de Retificação", cor: "#ec4899" },
 } as const;
 
 const ESTADO_CFG: Record<EstadoDocumento, { label: string; bg: string; text: string }> = {
-    emitido: { label: "Emitido", bg: "#3B82F610", text: "#3B82F6" },
+    emitido: { label: "Emitido", bg: "#123859", text: "#3B82F6" },
     paga: { label: "Pago", bg: "#10B98110", text: "#10B981" },
-    parcialmente_paga: { label: "Parcial", bg: "#F97316" + "18", text: "#F97316" },
+    parcialmente_paga: { label: "Parcial", bg: "#F9731618", text: "#F97316" },
     cancelado: { label: "Cancelado", bg: "#EF444410", text: "#EF4444" },
     expirado: { label: "Expirado", bg: "#6B728010", text: "#6B7280" },
 };
@@ -63,30 +55,11 @@ const fmtData = (d?: string | null) => {
 const getTipo = (tipo: TipoDocumento) =>
     TIPOS_DOC[tipo as keyof typeof TIPOS_DOC] ?? { label: tipo, icon: FileText, cor: "#6b7280" };
 
-/* ─── Skeleton ───────────────────────────────────────────────────── */
-const Skeleton = ({ colors }: { colors: any }) => (
-    <div className="space-y-2 p-3">
-        {[...Array(6)].map((_, i) => (
-            <div key={i} className="p-3 rounded-lg border animate-pulse"
-                style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-                <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg shrink-0" style={{ backgroundColor: colors.border }} />
-                    <div className="flex-1 space-y-1.5">
-                        <div className="h-3 rounded w-28" style={{ backgroundColor: colors.border }} />
-                        <div className="h-2.5 rounded w-44" style={{ backgroundColor: colors.border }} />
-                    </div>
-                    <div className="w-16 h-6 rounded-full" style={{ backgroundColor: colors.border }} />
-                </div>
-            </div>
-        ))}
-    </div>
-);
-
 /* ─── Badges ─────────────────────────────────────────────────────── */
 const EstadoBadge = ({ estado }: { estado: EstadoDocumento }) => {
     const cfg = ESTADO_CFG[estado] ?? ESTADO_CFG.emitido;
     return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold"
+        <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-semibold"
             style={{ backgroundColor: cfg.bg, color: cfg.text }}>
             {cfg.label}
         </span>
@@ -96,20 +69,19 @@ const EstadoBadge = ({ estado }: { estado: EstadoDocumento }) => {
 const TipoBadge = ({ tipo }: { tipo: TipoDocumento }) => {
     const t = getTipo(tipo);
     return (
-        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium"
             style={{ backgroundColor: `${t.cor}15`, color: t.cor }}>
-            <t.icon size={10} />{t.label}
+            {t.label}
         </span>
     );
 };
 
 /* ══════════════════════════════════════════════════════════════════
-PÁGINA PRINCIPAL
+   PÁGINA PRINCIPAL
 ══════════════════════════════════════════════════════════════════ */
 export default function OutrosDocumentosPage() {
     const router = useRouter();
     const colors = useThemeColors();
-    const { theme } = useTheme();
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -118,6 +90,7 @@ export default function OutrosDocumentosPage() {
     const [page, setPage] = useState(1);
     const [modalOpen, setModalOpen] = useState(false);
     const [docSel, setDocSel] = useState<DocumentoFiscal | null>(null);
+    const [baixandoPdf, setBaixandoPdf] = useState<string | null>(null);
 
     /* ── Carregar ── */
     const carregar = useCallback(async () => {
@@ -127,13 +100,11 @@ export default function OutrosDocumentosPage() {
             const data = await documentoFiscalService.listar({
                 page,
                 per_page: ITENS_POR_PAG,
-                apenas_nao_vendas: true // Usa o filtro do backend
+                apenas_nao_vendas: true,
             });
 
-            // Filtra apenas os tipos permitidos (redundante com o filtro do backend, mas mantém compatibilidade)
-            const filtrados = (data.data as DocumentoFiscal[]).filter(
-                d => TIPOS_PERMITIDOS.includes(d.tipo_documento),
-            );
+            // Garante que só aparecem os tipos desta página
+            const filtrados = data.data.filter(d => TIPOS_PERMITIDOS.includes(d.tipo_documento));
 
             setDocumentos(filtrados);
             setPagination({
@@ -141,8 +112,8 @@ export default function OutrosDocumentosPage() {
                 last_page: data.last_page,
                 total: data.total,
             });
-        } catch (err: any) {
-            setError(err.message || "Erro ao carregar documentos fiscais");
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "Erro ao carregar documentos fiscais");
         } finally {
             setLoading(false);
         }
@@ -150,8 +121,31 @@ export default function OutrosDocumentosPage() {
 
     useEffect(() => { carregar(); }, [carregar]);
 
-    /* ── Handlers ── */
-    const mudarPagina = (p: number) => { setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); };
+    /* ── Impressão — idêntica à FaturasPage ── */
+    const imprimirDocumento = useCallback((doc: DocumentoFiscal) => {
+        if (!doc.id) return;
+        const backend = `${window.location.protocol}//${window.location.hostname}:8000`;
+        window.open(`${backend}/api/documentos-fiscais/${doc.id}/print`, "_blank");
+    }, []);
+
+    /* ── Download PDF — idêntico à FaturasPage ── */
+    const baixarPdf = useCallback(async (doc: DocumentoFiscal) => {
+        if (!doc.id) return;
+        try {
+            setBaixandoPdf(doc.id);
+            await documentoFiscalService.downloadPdf(doc.id, `${doc.numero_documento}.pdf`);
+        } catch {
+            alert("Erro ao baixar PDF. Tente novamente.");
+        } finally {
+            setBaixandoPdf(null);
+        }
+    }, []);
+
+    /* ── Handlers UI ── */
+    const mudarPagina = (p: number) => {
+        setPage(p);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    };
 
     const abrirModal = (doc: DocumentoFiscal) => {
         setDocSel(doc);
@@ -163,15 +157,6 @@ export default function OutrosDocumentosPage() {
         setTimeout(() => setDocSel(null), 300);
     };
 
-    const handleDownload = async (doc: DocumentoFiscal) => {
-        try {
-            await documentoFiscalService.downloadPdf(doc.id, `${doc.numero_documento}.pdf`);
-        } catch (error) {
-            console.error("Erro ao baixar PDF:", error);
-        }
-    };
-
-    /* ── Shared row hover style ── */
     const hoverProps = {
         onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
             (e.currentTarget as HTMLElement).style.backgroundColor = colors.hover;
@@ -181,61 +166,46 @@ export default function OutrosDocumentosPage() {
         },
     };
 
-    /* ────────────────────────────────────────────────────────────── */
+    /* ── Render ── */
     return (
         <MainEmpresa>
             <div className="space-y-3 p-3 sm:p-4 pb-6 max-w-7xl mx-auto"
                 style={{ backgroundColor: colors.background }}>
 
-                {/* ── Cabeçalho ── */}
+                {/* Cabeçalho - BOTÃO DE RECARREGAR REMOVIDO */}
                 <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                         <button
                             onClick={() => router.back()}
-                            className="p-1.5 rounded-lg transition-colors hover:opacity-70"
+                            className="p-1.5 transition-colors hover:opacity-70"
                             style={{ color: colors.primary, backgroundColor: `${colors.primary}10` }}>
                             <ArrowLeft className="w-4 h-4" />
                         </button>
                         <div>
-                            <h1 className="text-lg font-bold" style={{ color: colors.primary }}>
+                            <h1 className="text-lg font-bold" style={{ color: colors.secondary }}>
                                 Outros Documentos
                             </h1>
-                            <p className="text-[10px] mt-0.5" style={{ color: colors.textSecondary }}>
-                                Proformas · Adiantamentos · Notas de Crédito/Débito · Retificações
-                            </p>
                         </div>
                     </div>
-                    <button
-                        onClick={carregar}
-                        className="p-1.5 rounded-lg border transition-colors"
-                        style={{ borderColor: colors.border, color: colors.textSecondary, backgroundColor: colors.card }}
-                        title="Recarregar">
-                        <RefreshCw className="w-3.5 h-3.5" />
-                    </button>
+                    {/* BOTÃO DE RECARREGAR REMOVIDO */}
                 </div>
 
-                {/* ── Card Principal ── */}
-                <div className="rounded-xl border shadow-sm overflow-hidden"
+                {/* Card principal - SEM ROUNDED */}
+                <div className="border shadow-sm overflow-hidden"
                     style={{ backgroundColor: colors.card, borderColor: colors.border }}>
 
-                    {/* Loading */}
-                    {loading && <Skeleton colors={colors} />}
-
-                    {/* Erro */}
                     {!loading && error && (
                         <div className="p-8 text-center">
                             <AlertCircle className="w-9 h-9 mx-auto mb-2" style={{ color: "#EF4444" }} />
                             <p className="text-sm mb-3" style={{ color: "#EF4444" }}>{error}</p>
-                            <button
-                                onClick={carregar}
-                                className="px-4 py-1.5 text-white rounded-lg text-xs"
+                            <button onClick={carregar}
+                                className="px-4 py-1.5 text-white text-xs"
                                 style={{ backgroundColor: colors.primary }}>
                                 Tentar novamente
                             </button>
                         </div>
                     )}
 
-                    {/* Vazio */}
                     {!loading && !error && documentos.length === 0 && (
                         <div className="p-10 text-center">
                             <FileText className="w-10 h-10 mx-auto mb-2" style={{ color: colors.border }} />
@@ -248,26 +218,18 @@ export default function OutrosDocumentosPage() {
                         </div>
                     )}
 
-                    {/* Lista */}
                     {!loading && !error && documentos.length > 0 && (
                         <>
-                            {/* ── Mobile ── */}
+                            {/* Mobile - SEM ANIMAÇÕES */}
                             <div className="md:hidden divide-y" style={{ borderColor: colors.border }}>
                                 {documentos.map(doc => {
                                     const t = getTipo(doc.tipo_documento);
                                     return (
-                                        <motion.div
-                                            key={doc.id}
-                                            whileTap={{ scale: 0.985 }}
+                                        <div key={doc.id}
                                             onClick={() => abrirModal(doc)}
                                             className="p-3 cursor-pointer transition-colors"
                                             {...hoverProps}>
-                                            {/* Linha 1 */}
                                             <div className="flex items-center gap-2 mb-1.5">
-                                                <div className="p-1.5 rounded-lg shrink-0"
-                                                    style={{ backgroundColor: `${t.cor}15` }}>
-                                                    <t.icon size={14} style={{ color: t.cor }} />
-                                                </div>
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center justify-between gap-2">
                                                         <span className="text-xs font-semibold truncate"
@@ -281,40 +243,44 @@ export default function OutrosDocumentosPage() {
                                                     </p>
                                                 </div>
                                             </div>
-                                            {/* Linha 2 */}
                                             <div className="flex items-center justify-between">
                                                 <p className="text-xs truncate max-w-[60%]"
                                                     style={{ color: colors.textSecondary }}>
                                                     {documentoFiscalService.getNomeCliente(doc)}
                                                 </p>
-                                                <p className="text-sm font-bold" style={{ color: colors.primary }}>
+                                                <p className="text-sm font-bold" style={{ color: colors.secondary }}>
                                                     {fmtValor(doc.total_liquido)}
                                                 </p>
                                             </div>
-                                            {/* Ações */}
+                                            {/* Acções mobile - SEM ROUNDED */}
                                             <div className="flex justify-end gap-0.5 mt-2 pt-2 border-t"
                                                 style={{ borderColor: colors.border }}>
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); abrirModal(doc); }}
-                                                    className="p-1.5 rounded-lg transition-colors hover:opacity-60"
-                                                    style={{ color: colors.textSecondary }}
-                                                    title="Visualizar">
+                                                <button onClick={(e) => { e.stopPropagation(); abrirModal(doc); }}
+                                                    className="p-1 hover:opacity-60" title="Visualizar"
+                                                    style={{ color: colors.textSecondary }}>
                                                     <Eye size={14} />
                                                 </button>
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); handleDownload(doc); }}
-                                                    className="p-1.5 rounded-lg transition-colors hover:opacity-60"
-                                                    style={{ color: colors.textSecondary }}
-                                                    title="Download">
-                                                    <Download size={14} />
+                                                <button onClick={(e) => { e.stopPropagation(); imprimirDocumento(doc); }}
+                                                    className="p-1 hover:opacity-60" title="Imprimir"
+                                                    style={{ color: colors.secondary }}>
+                                                    <Printer size={14} />
+                                                </button>
+                                                <button onClick={(e) => { e.stopPropagation(); baixarPdf(doc); }}
+                                                    disabled={baixandoPdf === doc.id}
+                                                    className="p-1 hover:opacity-60 disabled:opacity-40" title="Download PDF"
+                                                    style={{ color: colors.primary }}>
+                                                    {baixandoPdf === doc.id
+                                                        ? <div className="w-3.5 h-3.5 border-2 animate-spin"
+                                                            style={{ borderColor: `${colors.primary}30`, borderTopColor: colors.primary }} />
+                                                        : <Download size={14} />}
                                                 </button>
                                             </div>
-                                        </motion.div>
+                                        </div>
                                     );
                                 })}
                             </div>
 
-                            {/* ── Desktop ── */}
+                            {/* Desktop - SEM ROUNDED */}
                             <div className="hidden md:block overflow-x-auto">
                                 <table className="w-full">
                                     <thead className="border-b"
@@ -346,24 +312,23 @@ export default function OutrosDocumentosPage() {
                                                     style={{ backgroundColor: "transparent" }}
                                                     onClick={() => abrirModal(doc)}
                                                     {...hoverProps}>
+
                                                     {/* Documento */}
                                                     <td className="py-2.5 px-3">
                                                         <div className="flex items-center gap-2">
-                                                            <div className="p-1.5 rounded-lg"
-                                                                style={{ backgroundColor: `${t.cor}15` }}>
-                                                                <t.icon size={13} style={{ color: t.cor }} />
-                                                            </div>
                                                             <span className="text-xs font-medium"
                                                                 style={{ color: colors.text }}>
                                                                 {doc.numero_documento}
                                                             </span>
                                                         </div>
                                                     </td>
+
                                                     {/* Data */}
                                                     <td className="py-2.5 px-3 text-xs whitespace-nowrap"
                                                         style={{ color: colors.textSecondary }}>
                                                         {fmtData(doc.data_emissao)}
                                                     </td>
+
                                                     {/* Cliente */}
                                                     <td className="py-2.5 px-3">
                                                         <div className="text-xs font-medium truncate max-w-[160px]"
@@ -377,35 +342,50 @@ export default function OutrosDocumentosPage() {
                                                             </div>
                                                         )}
                                                     </td>
+
                                                     {/* Tipo */}
                                                     <td className="py-2.5 px-3">
                                                         <TipoBadge tipo={doc.tipo_documento} />
                                                     </td>
+
                                                     {/* Estado */}
                                                     <td className="py-2.5 px-3">
                                                         <EstadoBadge estado={doc.estado} />
                                                     </td>
+
                                                     {/* Valor */}
                                                     <td className="py-2.5 px-3 text-right text-xs font-bold"
-                                                        style={{ color: colors.primary }}>
+                                                        style={{ color: colors.text }}>
                                                         {fmtValor(doc.total_liquido)}
                                                     </td>
-                                                    {/* Ações */}
-                                                    <td className="py-2.5 px-3">
+
+                                                    {/* Ações - SEM ROUNDED */}
+                                                    <td className="py-2.5 px-3" onClick={(e) => e.stopPropagation()}>
                                                         <div className="flex items-center justify-center gap-0.5">
                                                             <button
-                                                                onClick={(e) => { e.stopPropagation(); abrirModal(doc); }}
-                                                                className="p-1.5 rounded-lg transition-colors hover:opacity-60"
+                                                                onClick={() => abrirModal(doc)}
+                                                                className="p-1 hover:opacity-60 transition-opacity"
                                                                 style={{ color: colors.textSecondary }}
                                                                 title="Visualizar">
                                                                 <Eye size={14} />
                                                             </button>
                                                             <button
-                                                                onClick={(e) => { e.stopPropagation(); handleDownload(doc); }}
-                                                                className="p-1.5 rounded-lg transition-colors hover:opacity-60"
+                                                                onClick={() => imprimirDocumento(doc)}
+                                                                className="p-1 hover:opacity-60 transition-opacity"
+                                                                style={{ color: colors.secondary }}
+                                                                title="Imprimir">
+                                                                <Printer size={14} />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => baixarPdf(doc)}
+                                                                disabled={baixandoPdf === doc.id}
+                                                                className="p-1 hover:opacity-60 transition-opacity disabled:opacity-40"
                                                                 style={{ color: colors.textSecondary }}
-                                                                title="Download">
-                                                                <Download size={14} />
+                                                                title="Download PDF">
+                                                                {baixandoPdf === doc.id
+                                                                    ? <div className="w-3.5 h-3.5 border-2 animate-spin"
+                                                                        style={{ borderColor: `${colors.textSecondary}30`, borderTopColor: colors.textSecondary }} />
+                                                                    : <Download size={14} />}
                                                             </button>
                                                         </div>
                                                     </td>
@@ -416,7 +396,7 @@ export default function OutrosDocumentosPage() {
                                 </table>
                             </div>
 
-                            {/* ── Paginação ── */}
+                            {/* Paginação - SEM ROUNDED */}
                             {pagination.last_page > 1 && (
                                 <div className="px-3 py-2.5 border-t flex flex-col sm:flex-row items-center justify-between gap-2"
                                     style={{ backgroundColor: colors.hover, borderColor: colors.border }}>
@@ -427,20 +407,16 @@ export default function OutrosDocumentosPage() {
                                         <button
                                             onClick={() => mudarPagina(page - 1)}
                                             disabled={page === 1}
-                                            className="flex items-center gap-1 px-2.5 py-1 text-[11px] rounded-lg disabled:opacity-40 transition-colors"
+                                            className="flex items-center gap-1 px-2.5 py-1 text-[11px] disabled:opacity-40 transition-colors"
                                             style={{ backgroundColor: colors.card, color: colors.text, border: `1px solid ${colors.border}` }}>
                                             <ChevronLeft size={12} />Anterior
                                         </button>
-
-                                        {/* Números de página */}
                                         <div className="flex items-center gap-1">
                                             {Array.from({ length: Math.min(pagination.last_page, 5) }, (_, i) => {
                                                 const p = i + 1;
                                                 return (
-                                                    <button
-                                                        key={p}
-                                                        onClick={() => mudarPagina(p)}
-                                                        className="w-7 h-7 rounded-lg text-[11px] font-medium transition-colors"
+                                                    <button key={p} onClick={() => mudarPagina(p)}
+                                                        className="w-7 h-7 text-[11px] font-medium transition-colors"
                                                         style={{
                                                             backgroundColor: p === page ? colors.primary : colors.card,
                                                             color: p === page ? "#fff" : colors.text,
@@ -451,11 +427,10 @@ export default function OutrosDocumentosPage() {
                                                 );
                                             })}
                                         </div>
-
                                         <button
                                             onClick={() => mudarPagina(page + 1)}
                                             disabled={page === pagination.last_page}
-                                            className="flex items-center gap-1 px-2.5 py-1 text-[11px] rounded-lg disabled:opacity-40 transition-colors"
+                                            className="flex items-center gap-1 px-2.5 py-1 text-[11px] disabled:opacity-40 transition-colors"
                                             style={{ backgroundColor: colors.card, color: colors.text, border: `1px solid ${colors.border}` }}>
                                             Próximo<ChevronRight size={12} />
                                         </button>
@@ -467,13 +442,13 @@ export default function OutrosDocumentosPage() {
                 </div>
             </div>
 
-            {/* Modal */}
+            {/* Modal de visualização */}
             {modalOpen && docSel && (
                 <ModalVisualizacao
                     documento={docSel}
                     isOpen={modalOpen}
                     onClose={fecharModal}
-                    onDownload={() => handleDownload(docSel)}
+                    onDownload={() => baixarPdf(docSel)}
                 />
             )}
         </MainEmpresa>

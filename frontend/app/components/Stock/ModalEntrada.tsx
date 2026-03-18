@@ -9,6 +9,7 @@ interface ModalEntradaProps {
     onClose: () => void;
     produto: Produto | null;
     onConfirm: (quantidade: number, motivo: string) => Promise<void>;
+    colors?: any;
 }
 
 export function ModalEntrada({
@@ -16,8 +17,10 @@ export function ModalEntrada({
     onClose,
     produto,
     onConfirm,
+    colors: propColors
 }: ModalEntradaProps) {
-    const colors = useThemeColors();
+    const contextColors = useThemeColors();
+    const colors = propColors || contextColors;
     const [quantidade, setQuantidade] = useState("");
     const [motivo, setMotivo] = useState("");
     const [erro, setErro] = useState("");
@@ -66,7 +69,7 @@ export function ModalEntrada({
                     <div className="mb-4 p-3 rounded-lg" style={{ backgroundColor: colors.hover }}>
                         <p className="font-medium" style={{ color: colors.text }}>{produto.nome}</p>
                         <p className="text-sm" style={{ color: colors.textSecondary }}>
-                            Stock atual: <span className="font-semibold" style={{ color: colors.primary }}>{produto.estoque_atual}</span> unidades
+                            Stock atual: <span className="font-semibold" style={{ color: colors.text }}>{produto.estoque_atual}</span> unidades
                         </p>
                     </div>
 

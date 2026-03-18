@@ -267,7 +267,7 @@ export default function MainEmpresa({
         {
             label: "Clientes",
             icon: Users,
-            path: "/dashboard/Clientes",
+            path: "/dashboard/Clientes/Novo_cliente",
             links: [{ label: "Clientes", path: "/dashboard/Clientes/Novo_cliente", icon: Users }],
             isGroup: true,
             roles: ["admin"],
@@ -463,7 +463,7 @@ export default function MainEmpresa({
                                             <div className="flex items-center gap-3 flex-1 min-w-0">
                                                 <item.icon
                                                     size={19}
-                                                    style={{ color: active ? "white" : colors.primary, flexShrink: 0 }}
+                                                    style={{ color: active ? "white" : colors.secondary, flexShrink: 0 }}
                                                 />
                                                 <AnimatePresence>
                                                     {sidebarOpen && (
@@ -487,7 +487,7 @@ export default function MainEmpresa({
                                             >
                                                 <item.icon
                                                     size={19}
-                                                    style={{ color: active ? "white" : colors.primary, flexShrink: 0 }}
+                                                    style={{ color: active ? "white" : colors.secondary, flexShrink: 0 }}
                                                 />
                                                 <AnimatePresence>
                                                     {sidebarOpen && (

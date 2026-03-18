@@ -10,6 +10,7 @@ interface ConfirmacaoModalProps {
     titulo: string;
     mensagem: string;
     tipo: "delete" | "restore" | "warning";
+    colors?: any;
 }
 
 export function ModalConfirmacao({
@@ -19,8 +20,10 @@ export function ModalConfirmacao({
     titulo,
     mensagem,
     tipo,
+    colors: propColors
 }: ConfirmacaoModalProps) {
-    const colors = useThemeColors();
+    const contextColors = useThemeColors();
+    const colors = propColors || contextColors;
     const [loading, setLoading] = useState(false);
 
     if (!isOpen) return null;

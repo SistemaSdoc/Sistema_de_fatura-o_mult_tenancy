@@ -17,6 +17,7 @@ interface FiltrosEstoqueProps {
     loading: boolean;
     onAplicarFiltros: () => void;
     showEstoqueFilter: boolean;
+    colors?: any;
 }
 
 export function FiltrosEstoque({
@@ -31,8 +32,10 @@ export function FiltrosEstoque({
     categorias,
     onAplicarFiltros,
     showEstoqueFilter,
+    colors: propColors
 }: FiltrosEstoqueProps) {
-    const colors = useThemeColors();
+    const contextColors = useThemeColors();
+    const colors = propColors || contextColors;
 
     // Aplica filtros automaticamente quando qualquer filtro mudar
     useEffect(() => {

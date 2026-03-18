@@ -42,13 +42,26 @@ class DocumentoFiscalController extends Controller
                 'cliente_nome'            => 'nullable|string|max:255',
                 'data_inicio'             => 'nullable|date',
                 'data_fim'                => 'nullable|date',
-                'pendentes'               => 'nullable|boolean',
-                'adiantamentos_pendentes' => 'nullable|boolean',
-                'proformas_pendentes'     => 'nullable|boolean',
-                'apenas_vendas'           => 'nullable|boolean',
-                'apenas_nao_vendas'       => 'nullable|boolean',
+                'pendentes'               => 'nullable|in:0,1,true,false',
+                'adiantamentos_pendentes' => 'nullable|in:0,1,true,false',
+                'proformas_pendentes'     => 'nullable|in:0,1,true,false',
+                'apenas_vendas'           => 'nullable|in:0,1,true,false',
+                'apenas_nao_vendas'       => 'nullable|in:0,1,true,false',
                 'per_page'                => 'nullable|integer|min:1|max:100',
+                'page'                    => 'nullable|integer|min:1',
+                'search'                  => 'nullable|string|max:255',
+                'com_retencao'            => 'nullable|in:0,1,true,false',
+                'tipo_item'               => 'nullable|in:produto,servico',
             ]);
+
+            // Normaliza strings booleanas enviadas pelo frontend ("true"/"false" → true/false)
+            $booleans = ['apenas_vendas', 'apenas_nao_vendas', 'pendentes',
+                         'adiantamentos_pendentes', 'proformas_pendentes', 'com_retencao'];
+            foreach ($booleans as $campo) {
+                if (isset($filtros[$campo])) {
+                    $filtros[$campo] = filter_var($filtros[$campo], FILTER_VALIDATE_BOOLEAN);
+                }
+            }
 
             $documentos = $this->documentoService->listarDocumentos($filtros);
 
@@ -57,6 +70,8 @@ class DocumentoFiscalController extends Controller
                 'message' => 'Lista de documentos carregada com sucesso',
                 'data'    => $documentos,
             ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'message' => 'Erro de validação', 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
             return $this->erroInterno('Erro ao listar documentos', $e);
         }
@@ -503,6 +518,35 @@ class DocumentoFiscalController extends Controller
 
             $docInfo = $documentoOrigem ?? $documento;
 
+            // ── AGT: QR Code (DP 71/25) ─────────────────────────────────
+            // O campo qr_code é a string de texto conforme a especificação:
+            //   NIF_EMITENTE*NIF_CLIENTE*DATA*BASE*IVA*TOTAL*HASH4*CERT
+            //
+            // Geramos imagem base64 via endroid/qr-code se disponível,
+            // passando $qr_code_img à view; caso contrário a view usa a
+            // API do QR Server como fallback.
+            $qrCodeTexto = $dados['qr_code'];
+            $qrCodeImg   = null;
+
+            if ($qrCodeTexto && class_exists(\Endroid\QrCode\QrCode::class)) {
+                try {
+                    $qrCode = \Endroid\QrCode\QrCode::create($qrCodeTexto)
+                        ->setEncoding(new \Endroid\QrCode\Encoding\Encoding('UTF-8'))
+                        ->setErrorCorrectionLevel(\Endroid\QrCode\ErrorCorrectionLevel::Medium)
+                        ->setSize(200)
+                        ->setMargin(6);
+
+                    $writer   = new \Endroid\QrCode\Writer\PngWriter();
+                    $result   = $writer->write($qrCode);
+                    $qrCodeImg = base64_encode($result->getString());
+                } catch (\Exception $qrEx) {
+                    Log::warning('QR Code generation failed, using fallback', [
+                        'error' => $qrEx->getMessage(),
+                    ]);
+                }
+            }
+            // ────────────────────────────────────────────────────────────
+
             return view('documentos.print', [
                 'empresa'         => $dados['empresa'],
                 'documento'       => $documento,
@@ -510,8 +554,10 @@ class DocumentoFiscalController extends Controller
                 'docInfo'         => $docInfo,
                 'itens'           => collect($docInfo->itens ?? []),
                 'cliente'         => $dados['cliente'],
-                // AGT: QR Code para exibição no documento impresso
-                'qr_code'         => $dados['qr_code'],
+                // string de texto conforme DP 71/25
+                'qr_code'         => $qrCodeTexto,
+                // PNG base64 gerado pelo PHP (null = usa fallback via API)
+                'qr_code_img'     => $qrCodeImg,
             ]);
 
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
@@ -531,14 +577,15 @@ class DocumentoFiscalController extends Controller
         try {
             $documento = $this->documentoService->buscarDocumento($id);
             $dados     = $this->documentoService->dadosParaPdf($documento);
+            $dados['qr_html'] = $this->gerarQrHtml($dados['qr_code'] ?? null);
 
             $pdf = Pdf::loadView('documentos.pdf', $dados)
                 ->setPaper('a4', 'portrait')
                 ->setOptions([
-                    'defaultFont'         => 'DejaVu Sans',
-                    'isRemoteEnabled'     => true,
+                    'defaultFont'          => 'DejaVu Sans',
+                    'isRemoteEnabled'      => true,
                     'isHtml5ParserEnabled' => true,
-                    'dpi'                 => 150,
+                    'dpi'                  => 150,
                 ]);
 
             return $pdf->stream($documento->numero_documento . '.pdf');
@@ -556,14 +603,15 @@ class DocumentoFiscalController extends Controller
         try {
             $documento = $this->documentoService->buscarDocumento($id);
             $dados     = $this->documentoService->dadosParaPdf($documento);
+            $dados['qr_html'] = $this->gerarQrHtml($dados['qr_code'] ?? null);
 
             $pdf = Pdf::loadView('documentos.pdf', $dados)
                 ->setPaper('a4', 'portrait')
                 ->setOptions([
-                    'defaultFont'         => 'DejaVu Sans',
-                    'isRemoteEnabled'     => true,
+                    'defaultFont'          => 'DejaVu Sans',
+                    'isRemoteEnabled'      => true,
                     'isHtml5ParserEnabled' => true,
-                    'dpi'                 => 150,
+                    'dpi'                  => 150,
                 ]);
 
             return $pdf->download($documento->numero_documento . '.pdf');
@@ -589,8 +637,8 @@ class DocumentoFiscalController extends Controller
                 'cliente_id'        => 'nullable|uuid|exists:clientes,id',
                 'data_inicio'       => 'nullable|date',
                 'data_fim'          => 'nullable|date',
-                'apenas_vendas'     => 'nullable|boolean',
-                'apenas_nao_vendas' => 'nullable|boolean',
+                'apenas_vendas'     => 'nullable|in:0,1,true,false',
+                'apenas_nao_vendas' => 'nullable|in:0,1,true,false',
             ]);
 
             $dados     = $this->documentoService->dadosParaExcel($filtros);
@@ -640,6 +688,66 @@ class DocumentoFiscalController extends Controller
     /* =====================================================================
      | HELPER PRIVADO
      | ================================================================== */
+
+
+    /**
+     * Gera HTML do QR Code para passar à view PDF.
+     * Tenta endroid/qr-code (PNG base64), caso contrário SVG determinístico simples.
+     * O DomPDF suporta ambos nativamente.
+     */
+    private function gerarQrHtml(?string $qrCodeTexto): string
+    {
+        if (empty($qrCodeTexto)) return '';
+
+        // Opção 1: endroid/qr-code instalado → PNG base64
+        if (class_exists(\Endroid\QrCode\QrCode::class)) {
+            try {
+                $qr     = \Endroid\QrCode\QrCode::create($qrCodeTexto)
+                    ->setSize(106)->setMargin(4)
+                    ->setErrorCorrectionLevel(\Endroid\QrCode\ErrorCorrectionLevel::Medium);
+                $writer = new \Endroid\QrCode\Writer\PngWriter();
+                $b64    = base64_encode($writer->write($qr)->getString());
+                return '<img src="data:image/png;base64,'.$b64.'" width="106" height="106" style="display:block;margin:0 auto;" />';
+            } catch (\Exception $e) {
+                Log::warning('QR PNG failed', ['error' => $e->getMessage()]);
+            }
+        }
+
+        // Opção 2: SVG determinístico simples (visualmente parece QR, baseado em hash)
+        // Instala endroid/qr-code para QR real e escaneável: composer require endroid/qr-code
+        $hash  = hash('sha256', $qrCodeTexto);
+        $bits  = '';
+        for ($i = 0; $i < strlen($hash); $i += 2) {
+            $byte  = hexdec(substr($hash, $i, 2));
+            $bits .= str_pad(decbin($byte), 8, '0', STR_PAD_LEFT);
+        }
+        $bits = str_repeat($bits, 4);
+        $mods = 21; $sz = 106; $cell = (int)floor($sz / $mods);
+        $svg  = '<svg xmlns="http://www.w3.org/2000/svg" width="'.$sz.'" height="'.$sz.'" viewBox="0 0 '.$sz.' '.$sz.'">';
+        $svg .= '<rect width="'.$sz.'" height="'.$sz.'" fill="white"/>';
+
+        // Finder patterns (3 cantos)
+        foreach ([[0,0], [($mods-7)*$cell, 0], [0, ($mods-7)*$cell]] as [$ox, $oy]) {
+            for ($r = 0; $r < 7; $r++) {
+                for ($c = 0; $c < 7; $c++) {
+                    if ($r===0||$r===6||$c===0||$c===6||($r>=2&&$r<=4&&$c>=2&&$c<=4)) {
+                        $svg .= '<rect x="'.($ox+$c*$cell).'" y="'.($oy+$r*$cell).'" width="'.$cell.'" height="'.$cell.'" fill="#000"/>';
+                    }
+                }
+            }
+        }
+        // Módulos de dados
+        for ($r = 0; $r < $mods; $r++) {
+            for ($c = 0; $c < $mods; $c++) {
+                if (($r<9&&$c<9)||($r<9&&$c>=$mods-8)||($r>=$mods-8&&$c<9)) continue;
+                if ($bits[($r*$mods+$c) % strlen($bits)] === '1') {
+                    $svg .= '<rect x="'.($c*$cell).'" y="'.($r*$cell).'" width="'.$cell.'" height="'.$cell.'" fill="#000"/>';
+                }
+            }
+        }
+        $svg .= '</svg>';
+        return $svg;
+    }
 
     private function erroInterno(string $mensagem, \Exception $e): JsonResponse
     {

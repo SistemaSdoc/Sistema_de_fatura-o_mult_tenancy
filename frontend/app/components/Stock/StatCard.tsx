@@ -10,6 +10,7 @@ interface ColorScheme {
     hover: string;
     text: string;
     textSecondary: string;
+    secondary: string
 }
 
 interface StatCardProps {
@@ -25,7 +26,7 @@ export function StatCard({ icon, label, value, trend = "neutral", colors }: Stat
         switch (trend) {
             case "up": return colors.success;
             case "down": return colors.warning;
-            default: return colors.primary;
+            default: return colors.secondary;
         }
     };
 

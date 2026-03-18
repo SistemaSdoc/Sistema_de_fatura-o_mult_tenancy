@@ -11,7 +11,7 @@ import {
   GerarReciboDTO,
 } from "@/services/DocumentoFiscal";
 import { useThemeColors } from "@/context/ThemeContext";
-import { RefreshCw, Search, X } from "lucide-react";
+import { RefreshCw, Search, X, ArrowLeft } from "lucide-react";
 
 type TipoFiltro = "FR" | "FT";
 
@@ -19,13 +19,13 @@ export default function FaturasPage() {
   const router = useRouter();
   const colors = useThemeColors();
 
-  const [documentos, setDocumentos]       = useState<DocumentoFiscal[]>([]);
-  const [loading, setLoading]             = useState(true);
-  const [error, setError]                 = useState<string | null>(null);
-  const [filtro, setFiltro]               = useState<TipoFiltro>("FR");
+  const [documentos, setDocumentos] = useState<DocumentoFiscal[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filtro, setFiltro] = useState<TipoFiltro>("FR");
   const [termoPesquisa, setTermoPesquisa] = useState("");
   const [gerandoRecibo, setGerandoRecibo] = useState<string | null>(null);
-  const [baixandoPdf, setBaixandoPdf]     = useState<string | null>(null);
+  const [baixandoPdf, setBaixandoPdf] = useState<string | null>(null);
 
   /* ── Carregar documentos ─────────────────────────────────── */
   const carregarDocumentos = useCallback(async () => {
@@ -44,14 +44,14 @@ export default function FaturasPage() {
   }, []);
 
   useEffect(() => { carregarDocumentos(); }, [carregarDocumentos]);
-
-  /* ── Impressão via Laravel ──────────────────────────────── */
-  // O ?auto=1 faz o JavaScript da view chamar window.print() imediatamente.
-  // Usa sempre o mesmo hostname do browser mas na porta 8000 (Laravel).
   const imprimirDocumento = useCallback((documento: DocumentoFiscal) => {
     if (!documento.id) return;
+
+    // URL do backend — lida do env para não hardcodar porta
+    // No next.config.js deve existir: NEXT_PUBLIC_API_URL=http://192.168.x.x:8000
     const backend = `${window.location.protocol}//${window.location.hostname}:8000`;
-    window.open(`${backend}/api/documentos-fiscais/${documento.id}/print?auto=1`, "_blank");
+    const url = `${backend}/api/documentos-fiscais/${documento.id}/print`;
+    window.open(url, "_blank");
   }, []);
 
   /* ── Download PDF via Laravel (DomPDF) ─────────────────── */
@@ -79,9 +79,9 @@ export default function FaturasPage() {
     if (termoPesquisa.trim()) {
       const t = termoPesquisa.toLowerCase();
       docs = docs.filter((d) => {
-        const num  = (d.numero_documento ?? `${d.serie}-${String(d.numero).padStart(5, "0")}`).toLowerCase();
+        const num = (d.numero_documento ?? `${d.serie}-${String(d.numero).padStart(5, "0")}`).toLowerCase();
         const nome = documentoFiscalService.getNomeCliente(d).toLowerCase();
-        const nif  = (documentoFiscalService.getNifCliente(d) ?? "").toLowerCase();
+        const nif = (documentoFiscalService.getNifCliente(d) ?? "").toLowerCase();
         return num.includes(t) || nome.includes(t) || nif.includes(t);
       });
     }
@@ -95,12 +95,12 @@ export default function FaturasPage() {
 
   const stats = useMemo(() => ({
     total: documentos.filter((d) => ["FT", "FR", "RC"].includes(d.tipo_documento)).length,
-    FT:   documentos.filter((d) => d.tipo_documento === "FT").length,
-    FR:   documentos.filter((d) => d.tipo_documento === "FR").length,
-    RC:   documentos.filter((d) => d.tipo_documento === "RC").length,
+    FT: documentos.filter((d) => d.tipo_documento === "FT").length,
+    FR: documentos.filter((d) => d.tipo_documento === "FR").length,
+    RC: documentos.filter((d) => d.tipo_documento === "RC").length,
   }), [documentos]);
 
-  /* ── Formatação ──────────────────────────────────────── */
+  /* ── Formatação ─────────────────────────────────────────── */
   const formatKz = (valor: number | string | undefined) =>
     new Intl.NumberFormat("pt-AO", { style: "currency", currency: "AOA", minimumFractionDigits: 2 })
       .format(Number(valor) || 0);
@@ -108,7 +108,7 @@ export default function FaturasPage() {
   const formatQuantidade = (qtd: number | string | undefined) =>
     Math.round(Number(qtd) || 0).toString();
 
-  /* ── Acções ──────────────────────────────────────────── */
+  /* ── Acções ─────────────────────────────────────────────── */
   const verDetalhes = (doc: DocumentoFiscal) => {
     if (doc.id) router.push(`/dashboard/Faturas/Faturas/${doc.id}/Ver`);
   };
@@ -124,9 +124,11 @@ export default function FaturasPage() {
       };
       const recibo = await documentoFiscalService.gerarRecibo(doc.id, dados);
       await carregarDocumentos();
-      // Abre impressão do recibo gerado automaticamente
-      const backend = `${window.location.protocol}//${window.location.hostname}:8000`;
-      window.open(`${backend}/api/documentos-fiscais/${recibo.id}/print?auto=1`, "_blank");
+      // Imprimir recibo gerado automaticamente (mesma lógica silenciosa)
+      if (recibo?.id) {
+        const backend = `${window.location.protocol}//${window.location.hostname}:8000`;
+        window.open(`${backend}/api/documentos-fiscais/${recibo.id}/print`, "_blank");
+      }
       return recibo;
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Erro ao gerar recibo");
@@ -136,24 +138,24 @@ export default function FaturasPage() {
     }
   };
 
-  /* ── Render ──────────────────────────────────────────── */
+  /* ── Render ──────────────────────────────────────────────── */
   return (
     <MainEmpresa>
       <div className="pb-6 px-3 sm:px-4 max-w-7xl mx-auto space-y-3" style={{ backgroundColor: colors.background }}>
 
-        {/* ── Cabeçalho ─────────────────────────────── */}
+        {/* Cabeçalho */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-1">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold leading-tight" style={{ color: colors.primary }}>
-              Faturas e Recibos
-            </h1>
+          <div className="flex items-center gap-2 mt-2">
+            <button onClick={() => router.back()} className="p-1.5 hover:opacity-70 shrink-0" style={{ color: colors.primary }}>
+              <ArrowLeft size={18} />
+            </button>
+            <h1 className="text-lg font-bold" style={{ color: colors.secondary }}>Faturas e Recibos</h1>
             <p className="text-xs mt-0.5" style={{ color: colors.textSecondary }}>
-              {loading ? "A carregar…" : `${stats.total} documentos`}
+              {loading ? "..." : `${stats.total} documentos`}
             </p>
           </div>
 
           <div className="flex gap-2 items-center">
-            {/* Pesquisa */}
             <div className="relative">
               <input
                 type="text"
@@ -161,26 +163,16 @@ export default function FaturasPage() {
                 value={termoPesquisa}
                 onChange={(e) => setTermoPesquisa(e.target.value)}
                 className="pl-8 pr-7 py-2 text-sm focus:outline-none focus:ring-2 w-44 sm:w-52"
-                style={{
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                  color: colors.text,
-                  borderWidth: 1,
-                }}
+                style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text, borderWidth: 1 }}
               />
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: colors.textSecondary }} />
               {termoPesquisa && (
-                <button
-                  onClick={() => setTermoPesquisa("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2"
-                  style={{ color: colors.textSecondary }}
-                >
+                <button onClick={() => setTermoPesquisa("")} className="absolute right-2 top-1/2 -translate-y-1/2" style={{ color: colors.textSecondary }}>
                   <X size={13} />
                 </button>
               )}
             </div>
 
-            {/* Actualizar */}
             <button
               onClick={carregarDocumentos}
               disabled={loading}
@@ -193,47 +185,29 @@ export default function FaturasPage() {
           </div>
         </div>
 
-        {/* ── Erro ──────────────────────────────────── */}
+        {/* Erro */}
         {error && (
-          <div
-            className="p-3 border text-sm flex items-center justify-between"
-            style={{ backgroundColor: `${colors.danger}12`, borderColor: colors.danger }}
-          >
+          <div className="p-3 border text-sm flex items-center justify-between" style={{ backgroundColor: `${colors.danger}12`, borderColor: colors.danger }}>
             <span style={{ color: colors.danger }}>{error}</span>
-            <button
-              onClick={carregarDocumentos}
-              className="underline text-xs ml-3"
-              style={{ color: colors.danger }}
-            >
-              Tentar novamente
-            </button>
+            <button onClick={carregarDocumentos} className="underline text-xs ml-3" style={{ color: colors.danger }}>Tentar novamente</button>
           </div>
         )}
 
-        {/* ── Filtros ───────────────────────────────── */}
+        {/* Filtros */}
         {!loading && !error && (
-          <div
-            className="border p-1.5 flex gap-1.5"
-            style={{ backgroundColor: colors.card, borderColor: colors.border }}
-          >
+          <div className="border p-1.5 flex gap-1.5" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
             {([
               { key: "FR" as TipoFiltro, label: "Fatura-Recibo / Recibo", count: stats.FR + stats.RC },
-              { key: "FT" as TipoFiltro, label: "Faturas",                 count: stats.FT },
+              { key: "FT" as TipoFiltro, label: "Faturas", count: stats.FT },
             ] as const).map(({ key, label, count }) => (
               <button
                 key={key}
                 onClick={() => setFiltro(key)}
-                className=" rounded flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium transition-all"
-                style={{
-                  backgroundColor: filtro === key ? colors.primary : "transparent",
-                  color: filtro === key ? "white" : colors.textSecondary,
-                }}
+                className="rounded flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium transition-all"
+                style={{ backgroundColor: filtro === key ? colors.primary : "transparent", color: filtro === key ? "white" : colors.textSecondary }}
               >
                 {label}
-                <span
-                  className="px-1.5 py-0.5 text-xs"
-                  style={{ backgroundColor: filtro === key ? "rgba(255,255,255,.2)" : colors.hover }}
-                >
+                <span className="px-1.5 py-0.5 text-xs" style={{ backgroundColor: filtro === key ? "rgba(255,255,255,.2)" : colors.hover }}>
                   {count}
                 </span>
               </button>
@@ -241,11 +215,8 @@ export default function FaturasPage() {
           </div>
         )}
 
-        {/* ── Tabela ────────────────────────────────── */}
-        <div
-          className="border overflow-hidden shadow-sm"
-          style={{ backgroundColor: colors.card, borderColor: colors.border }}
-        >
+        {/* Tabela */}
+        <div className="border overflow-hidden shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
           <InvoiceTable
             documentos={documentosFiltrados}
             loading={loading}

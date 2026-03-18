@@ -8,10 +8,12 @@ interface TabsEstoqueProps {
     onAbaChange: (aba: "itens" | "movimentacoes" | "deletados") => void;
     totalItens: number;
     totalDeletados: number;
+    colors?: any;
 }
 
-export function TabsEstoque({ abaAtiva, onAbaChange, totalItens, totalDeletados }: TabsEstoqueProps) {
-    const colors = useThemeColors();
+export function TabsEstoque({ abaAtiva, onAbaChange, totalItens, totalDeletados, colors: propColors }: TabsEstoqueProps) {
+    const contextColors = useThemeColors();
+    const colors = propColors || contextColors;
 
     return (
         <div className="border-b" style={{ borderColor: colors.border }}>
@@ -21,7 +23,7 @@ export function TabsEstoque({ abaAtiva, onAbaChange, totalItens, totalDeletados 
                     className="px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2"
                     style={{
                         borderColor: abaAtiva === "itens" ? colors.primary : 'transparent',
-                        color: abaAtiva === "itens" ? colors.primary : colors.textSecondary
+                        color: abaAtiva === "itens" ? colors.text : colors.textSecondary
                     }}
                 >
                     <Layers className="w-4 h-4" />
@@ -42,7 +44,7 @@ export function TabsEstoque({ abaAtiva, onAbaChange, totalItens, totalDeletados 
                     className="px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2"
                     style={{
                         borderColor: abaAtiva === "movimentacoes" ? colors.primary : 'transparent',
-                        color: abaAtiva === "movimentacoes" ? colors.primary : colors.textSecondary
+                        color: abaAtiva === "movimentacoes" ? colors.text : colors.textSecondary
                     }}
                 >
                     <History className="w-4 h-4" />
@@ -54,7 +56,7 @@ export function TabsEstoque({ abaAtiva, onAbaChange, totalItens, totalDeletados 
                     className="px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2"
                     style={{
                         borderColor: abaAtiva === "deletados" ? colors.primary : 'transparent',
-                        color: abaAtiva === "deletados" ? colors.primary : colors.textSecondary
+                        color: abaAtiva === "deletados" ? colors.text : colors.textSecondary
                     }}
                 >
                     <Archive className="w-4 h-4" />

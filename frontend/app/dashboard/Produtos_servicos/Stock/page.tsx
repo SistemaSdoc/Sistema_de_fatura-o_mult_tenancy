@@ -1,10 +1,9 @@
-// src/app/(empresa)/estoque/page.tsx
 "use client";
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import MainEmpresa from "../../../components/MainEmpresa";
-import { Plus, Package, AlertTriangle, Wrench, XCircle } from "lucide-react";
+import { Plus, Package, AlertTriangle, Wrench, XCircle, ArrowLeft } from "lucide-react";
 import { useThemeColors } from "@/context/ThemeContext";
 
 // Componentes
@@ -115,7 +114,11 @@ export default function EstoquePage() {
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl md:text-3xl font-bold" style={{ color: colors.primary }}>Seu Stock</h1>
+                        <button className="flex items-center gap-2 p-1.5 rounded-lg transition-colors hover:opacity-70"
+                            style={{ color: colors.primary }} onClick={() => router.back()}> <ArrowLeft className="w-4 h-4" />
+                        <h1 className="text-2xl md:text-3xl font-bold" style={{ color: colors.secondary }}>Seu Stock</h1>
+                        </button>
+                        
                         <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>Gerencie seu catálogo e controle de estoque</p>
                     </div>
                     <button

@@ -8,10 +8,12 @@ interface TabelaLixeiraProps {
     itens: Produto[];
     onRestaurar: (item: Produto) => void;
     onDeletarPermanentemente: (item: Produto) => void;
+    colors?: any;
 }
 
-export function TabelaLixeira({ itens, onRestaurar, onDeletarPermanentemente }: TabelaLixeiraProps) {
-    const colors = useThemeColors();
+export function TabelaLixeira({ itens, onRestaurar, onDeletarPermanentemente, colors: propColors }: TabelaLixeiraProps) {
+    const contextColors = useThemeColors();
+    const colors = propColors || contextColors;
 
     if (itens.length === 0) {
         return (

@@ -238,528 +238,420 @@ export default function CategoriasPage() {
         }
     };
 
-    const stats = {
-        total: categorias.length,
-        ativos: categorias.filter((c) => c.status === "ativo").length,
-        inativos: categorias.filter((c) => c.status === "inativo").length,
-        produtos: categorias.filter((c) => c.tipo === "produto").length,
-        servicos: categorias.filter((c) => c.tipo === "servico").length,
-    };
+    const stats = [
+        { 
+            icon: LayoutGrid, 
+            label: "Total", 
+            value: categorias.length, 
+            color: colors.text,
+            bg: `${colors.text}15`
+        },
+        { 
+            icon: CheckCircle2, 
+            label: "Ativos", 
+            value: categorias.filter(c => c.status === "ativo").length, 
+            color: colors.success,
+            bg: `${colors.success}15`
+        },
+        { 
+            icon: Package, 
+            label: "Produtos", 
+            value: categorias.filter(c => c.tipo === "produto").length, 
+            color: colors.primary,
+            bg: `${colors.primary}15`
+        },
+        { 
+            icon: Wrench, 
+            label: "Serviços", 
+            value: categorias.filter(c => c.tipo === "servico").length, 
+            color: colors.secondary,
+            bg: `${colors.secondary}15`
+        },
+    ];
 
     return (
         <MainEmpresa>
-            <div className="flex flex-col gap-6 p-6 transition-colors duration-300" style={{ backgroundColor: colors.background }}>
-                {/* Header */}
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-4 p-4 transition-colors duration-300" style={{ backgroundColor: colors.background }}>
+                {/* Header + Filtros + Botão - TUDO NA MESMA LINHA */}
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                     <div>
-                        <h1 className="text-2xl font-semibold" style={{ color: colors.primary }}>
+                        <h1 className="text-xl font-semibold" style={{ color: colors.primary }}>
                             Categorias
                         </h1>
-                        <p className="mt-1 text-sm" style={{ color: colors.textSecondary }}>
-                            Gerencie as categorias de produtos e serviços do sistema
+                        <p className="text-xs" style={{ color: colors.textSecondary }}>
+                            Gerencie categorias de produtos e serviços
                         </p>
                     </div>
-                    <Button
-                        onClick={handleNovo}
-                        className="gap-2 text-white"
-                        style={{ backgroundColor: colors.secondary }}
-                    >
-                        <Plus className="h-4 w-4" />
-                        Nova Categoria
-                    </Button>
+                    
+                    <div className="flex flex-col sm:flex-row gap-2">
+                        {/* Busca */}
+                        <div className="relative">
+                            <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: colors.textSecondary }} />
+                            <Input
+                                placeholder="Buscar..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="pl-7 h-8 text-xs w-[180px]"
+                                style={{
+                                    backgroundColor: colors.card,
+                                    borderColor: colors.border,
+                                    color: colors.text
+                                }}
+                            />
+                        </div>
+
+                        {/* Filtro Status */}
+                        <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+                            <SelectTrigger 
+                                className="h-8 text-xs w-[120px]"
+                                style={{
+                                    backgroundColor: colors.card,
+                                    borderColor: colors.border,
+                                    color: colors.text
+                                }}
+                            >
+                                <Filter className="mr-1 h-3 w-3" style={{ color: colors.textSecondary }} />
+                                <SelectValue placeholder="Status" />
+                            </SelectTrigger>
+                            <SelectContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                                <SelectItem value="todos" className="text-xs">Todos</SelectItem>
+                                <SelectItem value="ativo" className="text-xs">Ativo</SelectItem>
+                                <SelectItem value="inativo" className="text-xs">Inativo</SelectItem>
+                            </SelectContent>
+                        </Select>
+
+                        {/* Filtro Tipo */}
+                        <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+                            <SelectTrigger 
+                                className="h-8 text-xs w-[120px]"
+                                style={{
+                                    backgroundColor: colors.card,
+                                    borderColor: colors.border,
+                                    color: colors.text
+                                }}
+                            >
+                                <Filter className="mr-1 h-3 w-3" style={{ color: colors.textSecondary }} />
+                                <SelectValue placeholder="Tipo" />
+                            </SelectTrigger>
+                            <SelectContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                                <SelectItem value="todos" className="text-xs">Todos</SelectItem>
+                                <SelectItem value="produto" className="text-xs">Produto</SelectItem>
+                                <SelectItem value="servico" className="text-xs">Serviço</SelectItem>
+                            </SelectContent>
+                        </Select>
+
+                        {/* Botão Nova Categoria */}
+                        <Button
+                            onClick={handleNovo}
+                            size="sm"
+                            className="h-8 gap-1 text-white text-xs px-3"
+                            style={{ backgroundColor: colors.secondary }}
+                        >
+                            <Plus className="h-3.5 w-3.5" />
+                            Nova
+                        </Button>
+                    </div>
                 </div>
 
-                {/* Cards de Estatísticas */}
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-                        <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                            <CardTitle className="text-sm font-medium" style={{ color: colors.textSecondary }}>
-                                Total Categorias
-                            </CardTitle>
-                            <LayoutGrid className="h-4 w-4" style={{ color: colors.textSecondary }} />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold" style={{ color: colors.text }}>
-                                {stats.total}
+                {/* Cards de Estatísticas - MAIS COMPACTOS E SEM ROUNDED */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {stats.map(({ icon: Icon, label, value, color, bg }) => (
+                        <div key={label} 
+                            className="p-2 border flex items-center gap-2"
+                            style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                            <div className="p-1.5" style={{ backgroundColor: bg }}>
+                                <Icon className="h-3.5 w-3.5" style={{ color }} />
                             </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-                        <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                            <CardTitle className="text-sm font-medium" style={{ color: colors.textSecondary }}>
-                                Ativas
-                            </CardTitle>
-                            <CheckCircle2 className="h-4 w-4" style={{ color: colors.success }} />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold" style={{ color: colors.success }}>
-                                {stats.ativos}
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-                        <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                            <CardTitle className="text-sm font-medium" style={{ color: colors.textSecondary }}>
-                                Produtos
-                            </CardTitle>
-                            <Package className="h-4 w-4" style={{ color: colors.primary }} />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold" style={{ color: colors.primary }}>
-                                {stats.produtos}
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-                        <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                            <CardTitle className="text-sm font-medium" style={{ color: colors.textSecondary }}>
-                                Serviços
-                            </CardTitle>
-                            <Wrench className="h-4 w-4" style={{ color: colors.secondary }} />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold" style={{ color: colors.secondary }}>
-                                {stats.servicos}
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Filtros */}
-                <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-                    <CardContent className="pt-6">
-                        <div className="flex flex-col gap-4 md:flex-row">
-                            <div className="relative flex-1">
-                                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: colors.textSecondary }} />
-                                <Input
-                                    placeholder="Buscar por nome ou descrição..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="pl-10"
-                                    style={{
-                                        backgroundColor: colors.card,
-                                        borderColor: colors.border,
-                                        color: colors.text
-                                    }}
-                                />
-                            </div>
-                            <div className="flex gap-2">
-                                <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-                                    <SelectTrigger 
-                                        className="w-[140px]"
-                                        style={{
-                                            backgroundColor: colors.card,
-                                            borderColor: colors.border,
-                                            color: colors.text
-                                        }}
-                                    >
-                                        <Filter className="mr-2 h-4 w-4" style={{ color: colors.textSecondary }} />
-                                        <SelectValue placeholder="Status" />
-                                    </SelectTrigger>
-                                    <SelectContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-                                        <SelectItem value="todos" style={{ color: colors.text }}>Todos Status</SelectItem>
-                                        <SelectItem value="ativo" style={{ color: colors.success }}>Ativo</SelectItem>
-                                        <SelectItem value="inativo" style={{ color: colors.textSecondary }}>Inativo</SelectItem>
-                                    </SelectContent>
-                                </Select>
-
-                                <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-                                    <SelectTrigger 
-                                        className="w-[140px]"
-                                        style={{
-                                            backgroundColor: colors.card,
-                                            borderColor: colors.border,
-                                            color: colors.text
-                                        }}
-                                    >
-                                        <Filter className="mr-2 h-4 w-4" style={{ color: colors.textSecondary }} />
-                                        <SelectValue placeholder="Tipo" />
-                                    </SelectTrigger>
-                                    <SelectContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-                                        <SelectItem value="todos" style={{ color: colors.text }}>Todos Tipos</SelectItem>
-                                        <SelectItem value="produto" style={{ color: colors.primary }}>Produto</SelectItem>
-                                        <SelectItem value="servico" style={{ color: colors.secondary }}>Serviço</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                            <div>
+                                <div className="text-xs" style={{ color: colors.textSecondary }}>{label}</div>
+                                <div className="text-sm font-bold" style={{ color: colors.text }}>{value}</div>
                             </div>
                         </div>
-                    </CardContent>
-                </Card>
+                    ))}
+                </div>
 
-                {/* Lista de Categorias */}
-                <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-                    <CardHeader className="border-b" style={{ borderColor: colors.border }}>
-                        <CardTitle className="text-lg" style={{ color: colors.text }}>
-                            Lista de Categorias
-                            <span className="ml-2 text-sm font-normal" style={{ color: colors.textSecondary }}>
-                                ({categoriasFiltradas.length})
-                            </span>
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        {isLoading ? (
-                            <div className="flex items-center justify-center py-12">
-                                <div 
-                                    className="h-8 w-8 animate-spin rounded-full border-b-2" 
-                                    style={{ borderColor: colors.primary }}
-                                />
-                            </div>
-                        ) : categoriasFiltradas.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-12 text-center">
-                                <LayoutGrid className="h-12 w-12 mb-4" style={{ color: colors.border }} />
-                                <h3 className="text-lg font-semibold" style={{ color: colors.text }}>
-                                    Nenhuma categoria encontrada
-                                </h3>
-                                <p className="mt-1 text-sm" style={{ color: colors.textSecondary }}>
-                                    {searchTerm || filtroStatus !== "todos" || filtroTipo !== "todos"
-                                        ? "Tente ajustar os filtros de busca"
-                                        : "Clique em 'Nova Categoria' para começar"}
-                                </p>
-                            </div>
-                        ) : (
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead className="border-b" style={{ borderColor: colors.border, backgroundColor: colors.hover }}>
-                                        <tr>
-                                            <th className="text-left py-3 px-4 font-medium text-sm" style={{ color: colors.primary }}>
-                                                Nome
-                                            </th>
-                                            <th className="text-left py-3 px-4 font-medium text-sm" style={{ color: colors.primary }}>
-                                                Tipo
-                                            </th>
-                                            <th className="text-left py-3 px-4 font-medium text-sm" style={{ color: colors.primary }}>
-                                                Status
-                                            </th>
-                                            <th className="text-left py-3 px-4 font-medium text-sm hidden md:table-cell" style={{ color: colors.primary }}>
-                                                Descrição
-                                            </th>
-                                            <th className="text-right py-3 px-4 font-medium text-sm" style={{ color: colors.primary }}>
-                                                Ações
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y" style={{ borderColor: colors.border }}>
-                                        {categoriasFiltradas.map((categoria) => (
-                                            <tr
-                                                key={categoria.id}
-                                                className="transition-colors hover:bg-opacity-50"
-                                                style={{ backgroundColor: 'transparent' }}
-                                            >
-                                                <td className="py-3 px-4">
-                                                    <div className="font-medium" style={{ color: colors.text }}>
-                                                        {categoria.nome}
-                                                    </div>
-                                                </td>
-                                                <td className="py-3 px-4">
-                                                    <Badge
-                                                        variant="secondary"
-                                                        className="border-0 font-medium"
-                                                        style={{
-                                                            backgroundColor: `${colors.primary}20`,
-                                                            color: colors.primary
-                                                        }}
-                                                    >
-                                                        {categoria.tipo === "produto" ? (
-                                                            <Package className="mr-1 h-3 w-3" />
-                                                        ) : (
-                                                            <Wrench className="mr-1 h-3 w-3" style={{ color: colors.secondary }} />
-                                                        )}
-                                                        {getTipoLabel(categoria.tipo)}
-                                                    </Badge>
-                                                </td>
-                                                <td className="py-3 px-4">
-                                                    <Badge
-                                                        variant="secondary"
-                                                        className="border-0 font-medium"
-                                                        style={{
-                                                            backgroundColor: categoria.status === "ativo" ? `${colors.success}20` : `${colors.textSecondary}20`,
-                                                            color: categoria.status === "ativo" ? colors.success : colors.textSecondary
-                                                        }}
-                                                    >
-                                                        {categoria.status === "ativo" ? (
-                                                            <CheckCircle2 className="mr-1 h-3 w-3" />
-                                                        ) : (
-                                                            <XCircle className="mr-1 h-3 w-3" />
-                                                        )}
-                                                        {getStatusLabel(categoria.status)}
-                                                    </Badge>
-                                                </td>
-                                                <td className="py-3 px-4 text-sm hidden md:table-cell max-w-xs" style={{ color: colors.textSecondary }}>
-                                                    {categoria.descricao ? (
-                                                        <span className="line-clamp-1">
-                                                            {categoria.descricao}
-                                                        </span>
+                {/* Lista de Categorias - SEM ROUNDED */}
+                <div className="border" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                    {isLoading ? (
+                        <div className="flex items-center justify-center py-8">
+                            <div 
+                                className="h-6 w-6 border-2 border-b-0 border-l-0" 
+                                style={{ 
+                                    borderColor: colors.primary,
+                                    animation: 'spin 1s linear infinite'
+                                }}
+                            />
+                        </div>
+                    ) : categoriasFiltradas.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-8 text-center">
+                            <LayoutGrid className="h-8 w-8 mb-2" style={{ color: colors.border }} />
+                            <h3 className="text-sm font-semibold" style={{ color: colors.text }}>
+                                Nenhuma categoria encontrada
+                            </h3>
+                            <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+                                {searchTerm || filtroStatus !== "todos" || filtroTipo !== "todos"
+                                    ? "Ajuste os filtros de busca"
+                                    : "Clique em 'Nova' para começar"}
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead className="border-b text-xs" style={{ borderColor: colors.border, backgroundColor: colors.hover }}>
+                                    <tr>
+                                        <th className="text-left py-2 px-3 font-medium" style={{ color: colors.text }}>Nome</th>
+                                        <th className="text-left py-2 px-3 font-medium" style={{ color: colors.text }}>Tipo</th>
+                                        <th className="text-left py-2 px-3 font-medium" style={{ color: colors.text }}>Status</th>
+                                        <th className="text-left py-2 px-3 font-medium hidden md:table-cell" style={{ color: colors.text }}>Descrição</th>
+                                        <th className="text-right py-2 px-3 font-medium" style={{ color: colors.text }}>Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y text-sm" style={{ borderColor: colors.border }}>
+                                    {categoriasFiltradas.map((categoria) => (
+                                        <tr key={categoria.id} className="hover:bg-opacity-50" style={{ backgroundColor: 'transparent' }}>
+                                            <td className="py-2 px-3">
+                                                <span className="text-xs font-medium" style={{ color: colors.text }}>{categoria.nome}</span>
+                                            </td>
+                                            <td className="py-2 px-3">
+                                                <Badge
+                                                    variant="secondary"
+                                                    className="border-0 font-medium text-[10px] px-1.5 py-0.5"
+                                                    style={{
+                                                        backgroundColor: `${colors.primary}15`,
+                                                        color: colors.primary
+                                                    }}
+                                                >
+                                                    {categoria.tipo === "produto" ? (
+                                                        <Package className="mr-1 h-2.5 w-2.5" />
                                                     ) : (
-                                                        <span className="italic" style={{ color: colors.textSecondary }}>
-                                                            Sem descrição
-                                                        </span>
+                                                        <Wrench className="mr-1 h-2.5 w-2.5" style={{ color: colors.secondary }} />
                                                     )}
-                                                </td>
-                                                <td className="py-3 px-4 text-right">
-                                                    <DropdownMenu>
-                                                        <DropdownMenuTrigger asChild>
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="sm"
-                                                                className="h-8 w-8 p-0"
-                                                                style={{ color: colors.textSecondary }}
-                                                            >
-                                                                <MoreVertical className="h-4 w-4" />
-                                                            </Button>
-                                                        </DropdownMenuTrigger>
-                                                        <DropdownMenuContent 
-                                                            align="end" 
-                                                            className="w-40"
-                                                            style={{ 
-                                                                backgroundColor: colors.card, 
-                                                                borderColor: colors.border 
-                                                            }}
+                                                    {getTipoLabel(categoria.tipo)}
+                                                </Badge>
+                                            </td>
+                                            <td className="py-2 px-3">
+                                                <Badge
+                                                    variant="secondary"
+                                                    className="border-0 font-medium text-[10px] px-1.5 py-0.5"
+                                                    style={{
+                                                        backgroundColor: categoria.status === "ativo" ? `${colors.success}15` : `${colors.textSecondary}15`,
+                                                        color: categoria.status === "ativo" ? colors.success : colors.textSecondary
+                                                    }}
+                                                >
+                                                    {categoria.status === "ativo" ? (
+                                                        <CheckCircle2 className="mr-1 h-2.5 w-2.5" />
+                                                    ) : (
+                                                        <XCircle className="mr-1 h-2.5 w-2.5" />
+                                                    )}
+                                                    {getStatusLabel(categoria.status)}
+                                                </Badge>
+                                            </td>
+                                            <td className="py-2 px-3 text-xs hidden md:table-cell max-w-[200px]" style={{ color: colors.textSecondary }}>
+                                                {categoria.descricao ? (
+                                                    <span className="line-clamp-1">{categoria.descricao}</span>
+                                                ) : (
+                                                    <span className="italic">—</span>
+                                                )}
+                                            </td>
+                                            <td className="py-2 px-3 text-right">
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-7 w-7 p-0"
+                                                            style={{ color: colors.textSecondary }}
                                                         >
-                                                            <DropdownMenuItem
-                                                                onClick={() => handleEditar(categoria)}
-                                                                className="gap-2 cursor-pointer"
-                                                                style={{ color: colors.text }}
-                                                            >
-                                                                <Edit2 className="h-4 w-4" style={{ color: colors.primary }} />
-                                                                Editar
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem
-                                                                onClick={() => handleConfirmarDelete(categoria)}
-                                                                className="gap-2 cursor-pointer"
-                                                                style={{ color: colors.danger }}
-                                                            >
-                                                                <Trash2 className="h-4 w-4" />
-                                                                Excluir
-                                                            </DropdownMenuItem>
-                                                        </DropdownMenuContent>
-                                                    </DropdownMenu>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
+                                                            <MoreVertical className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent 
+                                                        align="end" 
+                                                        className="w-32 min-w-0"
+                                                        style={{ 
+                                                            backgroundColor: colors.card, 
+                                                            borderColor: colors.border 
+                                                        }}
+                                                    >
+                                                        <DropdownMenuItem
+                                                            onClick={() => handleEditar(categoria)}
+                                                            className="gap-2 cursor-pointer text-xs py-1.5"
+                                                            style={{ color: colors.text }}
+                                                        >
+                                                            <Edit2 className="h-3 w-3" style={{ color: colors.primary }} />
+                                                            Editar
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem
+                                                            onClick={() => handleConfirmarDelete(categoria)}
+                                                            className="gap-2 cursor-pointer text-xs py-1.5"
+                                                            style={{ color: colors.danger }}
+                                                        >
+                                                            <Trash2 className="h-3 w-3" />
+                                                            Excluir
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
             </div>
 
-            {/* Modal de Formulário */}
+            {/* Modal de Formulário - SEM ROUNDED */}
             <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
                 <DialogContent 
-                    className="sm:max-w-[500px]"
+                    className="sm:max-w-[450px] p-0"
                     style={{ 
                         backgroundColor: colors.card, 
                         borderColor: colors.border 
                     }}
                 >
-                    <DialogHeader>
-                        <DialogTitle style={{ color: colors.primary }}>
+                    <DialogHeader className="p-4 border-b" style={{ borderColor: colors.border }}>
+                        <DialogTitle className="text-base" style={{ color: colors.primary }}>
                             {categoriaSelecionada ? "Editar Categoria" : "Nova Categoria"}
                         </DialogTitle>
-                        <DialogDescription style={{ color: colors.textSecondary }}>
+                        <DialogDescription className="text-xs" style={{ color: colors.textSecondary }}>
                             {categoriaSelecionada
-                                ? "Atualize as informações da categoria abaixo."
-                                : "Preencha as informações para criar uma nova categoria."
-                            }
+                                ? "Atualize as informações da categoria"
+                                : "Preencha as informações para criar uma nova categoria"}
                         </DialogDescription>
                     </DialogHeader>
 
-                    <form onSubmit={handleSubmit} className="space-y-4 pt-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="nome" style={{ color: colors.text }}>
-                                Nome <span style={{ color: colors.danger }}>*</span>
-                            </Label>
+                    <form onSubmit={handleSubmit} className="p-4 space-y-3">
+                        <div className="space-y-1">
+                            <Label className="text-xs" style={{ color: colors.text }}>Nome <span style={{ color: colors.danger }}>*</span></Label>
                             <Input
-                                id="nome"
                                 name="nome"
                                 value={formData.nome}
                                 onChange={handleInputChange}
                                 placeholder="Ex: Eletrônicos"
+                                className="h-8 text-xs"
                                 style={{
                                     backgroundColor: colors.card,
                                     borderColor: errors.nome ? colors.danger : colors.border,
                                     color: colors.text
                                 }}
-                                className={errors.nome ? "border-red-500" : ""}
                             />
-                            {errors.nome && (
-                                <p className="text-sm" style={{ color: colors.danger }}>{errors.nome}</p>
-                            )}
+                            {errors.nome && <p className="text-xs" style={{ color: colors.danger }}>{errors.nome}</p>}
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label style={{ color: colors.text }}>Tipo</Label>
-                                <Select
-                                    value={formData.tipo}
-                                    onValueChange={(value) => handleSelectChange("tipo", value as "produto" | "servico")}
-                                >
-                                    <SelectTrigger 
-                                        style={{
-                                            backgroundColor: colors.card,
-                                            borderColor: colors.border,
-                                            color: colors.text
-                                        }}
-                                    >
+                        <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                                <Label className="text-xs" style={{ color: colors.text }}>Tipo</Label>
+                                <Select value={formData.tipo} onValueChange={(v) => handleSelectChange("tipo", v)}>
+                                    <SelectTrigger className="h-8 text-xs" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-                                        <SelectItem value="produto">
-                                            <div className="flex items-center gap-2">
-                                                <Package className="h-4 w-4" style={{ color: colors.primary }} />
-                                                <span style={{ color: colors.text }}>Produto</span>
-                                            </div>
-                                        </SelectItem>
-                                        <SelectItem value="servico">
-                                            <div className="flex items-center gap-2">
-                                                <Wrench className="h-4 w-4" style={{ color: colors.secondary }} />
-                                                <span style={{ color: colors.text }}>Serviço</span>
-                                            </div>
-                                        </SelectItem>
+                                        <SelectItem value="produto" className="text-xs">Produto</SelectItem>
+                                        <SelectItem value="servico" className="text-xs">Serviço</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
 
-                            <div className="space-y-2">
-                                <Label style={{ color: colors.text }}>Status</Label>
-                                <Select
-                                    value={formData.status}
-                                    onValueChange={(value) => handleSelectChange("status", value as "ativo" | "inativo")}
-                                >
-                                    <SelectTrigger 
-                                        style={{
-                                            backgroundColor: colors.card,
-                                            borderColor: colors.border,
-                                            color: colors.text
-                                        }}
-                                    >
+                            <div className="space-y-1">
+                                <Label className="text-xs" style={{ color: colors.text }}>Status</Label>
+                                <Select value={formData.status} onValueChange={(v) => handleSelectChange("status", v)}>
+                                    <SelectTrigger className="h-8 text-xs" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-                                        <SelectItem value="ativo">
-                                            <div className="flex items-center gap-2">
-                                                <CheckCircle2 className="h-4 w-4" style={{ color: colors.success }} />
-                                                <span style={{ color: colors.text }}>Ativo</span>
-                                            </div>
-                                        </SelectItem>
-                                        <SelectItem value="inativo">
-                                            <div className="flex items-center gap-2">
-                                                <XCircle className="h-4 w-4" style={{ color: colors.textSecondary }} />
-                                                <span style={{ color: colors.text }}>Inativo</span>
-                                            </div>
-                                        </SelectItem>
+                                        <SelectItem value="ativo" className="text-xs">Ativo</SelectItem>
+                                        <SelectItem value="inativo" className="text-xs">Inativo</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
                         </div>
 
-                        <div className="space-y-2">
-                            <Label htmlFor="descricao" style={{ color: colors.text }}>
-                                Descrição
-                            </Label>
+                        <div className="space-y-1">
+                            <Label className="text-xs" style={{ color: colors.text }}>Descrição</Label>
                             <Textarea
-                                id="descricao"
                                 name="descricao"
                                 value={formData.descricao}
                                 onChange={handleInputChange}
-                                placeholder="Descreva a categoria (opcional)..."
-                                rows={3}
+                                placeholder="Descrição (opcional)..."
+                                rows={2}
+                                className="text-xs resize-none"
                                 style={{
                                     backgroundColor: colors.card,
                                     borderColor: colors.border,
                                     color: colors.text
                                 }}
-                                className="resize-none"
                             />
                         </div>
 
-                        <DialogFooter className="pt-4 gap-2">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => setIsModalOpen(false)}
-                                disabled={isSubmitting}
-                                style={{
-                                    borderColor: colors.border,
-                                    color: colors.textSecondary
-                                }}
-                            >
+                        <div className="flex gap-2 pt-2 border-t" style={{ borderColor: colors.border }}>
+                            <Button type="button" variant="outline" size="sm" onClick={() => setIsModalOpen(false)} disabled={isSubmitting}
+                                className="flex-1 h-8 text-xs" style={{ borderColor: colors.border, color: colors.textSecondary }}>
                                 Cancelar
                             </Button>
-                            <Button
-                                type="submit"
-                                disabled={isSubmitting}
-                                className="gap-2 text-white"
-                                style={{ backgroundColor: colors.primary }}
-                            >
+                            <Button type="submit" size="sm" disabled={isSubmitting}
+                                className="flex-1 h-8 gap-1 text-white text-xs" style={{ backgroundColor: colors.primary }}>
                                 {isSubmitting ? (
                                     <>
-                                        <div 
-                                            className="h-4 w-4 animate-spin rounded-full border-b-2" 
-                                            style={{ borderColor: 'white' }}
-                                        />
-                                        Salvando...
+                                        <div className="h-3 w-3 border-2 border-b-0 border-l-0" style={{ borderColor: 'white', animation: 'spin 1s linear infinite' }} />
+                                        Salvando
                                     </>
                                 ) : (
                                     <>
-                                        <CheckCircle2 className="h-4 w-4" />
+                                        <CheckCircle2 className="h-3 w-3" />
                                         {categoriaSelecionada ? "Atualizar" : "Criar"}
                                     </>
                                 )}
                             </Button>
-                        </DialogFooter>
+                        </div>
                     </form>
                 </DialogContent>
             </Dialog>
 
-            {/* Modal de Confirmação de Delete */}
+            {/* Modal de Confirmação de Delete - SEM ROUNDED */}
             <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
                 <DialogContent 
-                    className="sm:max-w-[400px]"
+                    className="sm:max-w-[350px] p-0"
                     style={{ 
                         backgroundColor: colors.card, 
                         borderColor: colors.border 
                     }}
                 >
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2" style={{ color: colors.danger }}>
-                            <AlertTriangle className="h-5 w-5" />
+                    <DialogHeader className="p-4 border-b" style={{ borderColor: colors.border }}>
+                        <DialogTitle className="flex items-center gap-2 text-sm" style={{ color: colors.danger }}>
+                            <AlertTriangle className="h-4 w-4" />
                             Confirmar Exclusão
                         </DialogTitle>
-                        <DialogDescription style={{ color: colors.textSecondary }}>
+                    </DialogHeader>
+                    
+                    <div className="p-4">
+                        <p className="text-xs mb-4" style={{ color: colors.textSecondary }}>
                             Tem certeza que deseja excluir a categoria{" "}
                             <strong style={{ color: colors.text }}>"{categoriaSelecionada?.nome}"</strong>?
-                            <br />
-                            Esta ação não pode ser desfeita.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter className="pt-4 gap-2">
-                        <Button
-                            variant="outline"
-                            onClick={() => setIsDeleteModalOpen(false)}
-                            style={{
-                                borderColor: colors.border,
-                                color: colors.textSecondary
-                            }}
-                        >
-                            Cancelar
-                        </Button>
-                        <Button
-                            variant="destructive"
-                            onClick={handleDeletar}
-                            className="gap-2 text-white"
-                            style={{ backgroundColor: colors.danger }}
-                        >
-                            <Trash2 className="h-4 w-4" />
-                            Excluir
-                        </Button>
-                    </DialogFooter>
+                            <br />Esta ação não pode ser desfeita.
+                        </p>
+
+                        <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={() => setIsDeleteModalOpen(false)}
+                                className="flex-1 h-8 text-xs" style={{ borderColor: colors.border, color: colors.textSecondary }}>
+                                Cancelar
+                            </Button>
+                            <Button size="sm" onClick={handleDeletar}
+                                className="flex-1 h-8 gap-1 text-white text-xs" style={{ backgroundColor: colors.danger }}>
+                                <Trash2 className="h-3 w-3" />
+                                Excluir
+                            </Button>
+                        </div>
+                    </div>
                 </DialogContent>
             </Dialog>
+
+            <style jsx>{`
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+            `}</style>
         </MainEmpresa>
     );
 }

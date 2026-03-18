@@ -13,7 +13,7 @@ import type { Cliente, CriarClienteInput, AtualizarClienteInput } from "@/servic
 import {
   Users, Plus, Search, Edit2, Eye, Building2, User,
   Phone, Mail, MapPin, Calendar, X, AlertCircle,
-  CheckCircle, XCircle, Power, Globe, RefreshCw,
+  CheckCircle, XCircle, Power, Globe,
 } from "lucide-react";
 import { useThemeColors } from "@/context/ThemeContext";
 
@@ -43,12 +43,12 @@ function Modal({
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden"
+      <div className="shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden"
         style={{ backgroundColor: colors.card }}>
         <div className="flex items-center justify-between px-5 py-4 border-b"
           style={{ borderColor: colors.border }}>
           <h3 className="text-base font-semibold" style={{ color: colors.primary }}>{title}</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg transition-colors hover:opacity-70"
+          <button onClick={onClose} className="p-1.5 transition-colors hover:opacity-70"
             style={{ color: colors.textSecondary }}>
             <X className="w-5 h-5" />
           </button>
@@ -78,9 +78,9 @@ function ConfirmModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="rounded-xl shadow-xl max-w-md w-full p-5" style={{ backgroundColor: colors.card }}>
+      <div className="shadow-xl max-w-md w-full p-5" style={{ backgroundColor: colors.card }}>
         <div className="flex items-center gap-3 mb-3">
-          <div className="p-2.5 rounded-full" style={{ backgroundColor: iconBg }}>
+          <div className="p-2.5" style={{ backgroundColor: iconBg }}>
             <AlertCircle className="w-5 h-5" style={{ color: iconClr }} />
           </div>
           <h3 className="text-base font-semibold" style={{ color: colors.text }}>{title}</h3>
@@ -88,15 +88,15 @@ function ConfirmModal({
         <p className="text-sm mb-5 ml-[52px]" style={{ color: colors.textSecondary }}>{message}</p>
         <div className="flex gap-3">
           <button onClick={onClose} disabled={loading}
-            className="flex-1 px-4 py-2 rounded-lg text-sm transition-colors"
+            className="flex-1 px-4 py-2 text-sm transition-colors"
             style={{ color: colors.textSecondary, border: `1px solid ${colors.border}` }}>
             {cancelText}
           </button>
           <button onClick={onConfirm} disabled={loading}
-            className="flex-1 px-4 py-2 text-white rounded-lg text-sm flex items-center justify-center gap-2 transition-opacity disabled:opacity-60"
+            className="flex-1 px-4 py-2 text-white text-sm flex items-center justify-center gap-2 transition-opacity disabled:opacity-60"
             style={{ backgroundColor: btnColor }}>
             {loading
-              ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Processando…</>
+              ? <><div className="w-4 h-4 border-2 border-white border-t-transparent animate-spin" />Processando…</>
               : confirmText}
           </button>
         </div>
@@ -105,18 +105,17 @@ function ConfirmModal({
   );
 }
 
-/* ─── Skeletons ──────────────────────────────────────────────────── */
-function SkeletonStats({ colors }: { colors: any }) {
+/* ─── Loading States (SEM ANIMAÇÃO) ──────────────────────────────── */
+function LoadingStats({ colors }: { colors: any }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       {[...Array(4)].map((_, i) => (
-        <div key={i} className="p-4 rounded-xl border animate-pulse"
-          style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+        <div key={i} className="p-4 border" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg" style={{ backgroundColor: colors.border }} />
+            <div className="w-10 h-10" style={{ backgroundColor: colors.border }} />
             <div className="space-y-1.5">
-              <div className="h-5 rounded w-10" style={{ backgroundColor: colors.border }} />
-              <div className="h-3.5 rounded w-14" style={{ backgroundColor: colors.border }} />
+              <div className="h-5 w-10" style={{ backgroundColor: colors.border }} />
+              <div className="h-3.5 w-14" style={{ backgroundColor: colors.border }} />
             </div>
           </div>
         </div>
@@ -125,24 +124,24 @@ function SkeletonStats({ colors }: { colors: any }) {
   );
 }
 
-function SkeletonTabela({ colors }: { colors: any }) {
+function LoadingTabela({ colors }: { colors: any }) {
   return (
-    <div className="rounded-xl border overflow-hidden" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+    <div className="border overflow-hidden" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
       <div className="h-11" style={{ backgroundColor: colors.primary }} />
       <div className="divide-y" style={{ borderColor: colors.border }}>
         {[...Array(5)].map((_, i) => (
-          <div key={i} className="flex items-center gap-4 px-5 py-3.5 animate-pulse">
-            <div className="w-9 h-9 rounded-full" style={{ backgroundColor: colors.border }} />
+          <div key={i} className="flex items-center gap-4 px-5 py-3.5">
+            <div className="w-9 h-9" style={{ backgroundColor: colors.border }} />
             <div className="flex-1 space-y-1.5">
-              <div className="h-3.5 rounded w-36" style={{ backgroundColor: colors.border }} />
-              <div className="h-3 rounded w-28" style={{ backgroundColor: colors.border }} />
+              <div className="h-3.5 w-36" style={{ backgroundColor: colors.border }} />
+              <div className="h-3 w-28" style={{ backgroundColor: colors.border }} />
             </div>
-            <div className="w-20 h-6 rounded-full" style={{ backgroundColor: colors.border }} />
-            <div className="w-20 h-6 rounded-full" style={{ backgroundColor: colors.border }} />
-            <div className="w-28 h-4 rounded" style={{ backgroundColor: colors.border }} />
+            <div className="w-20 h-6" style={{ backgroundColor: colors.border }} />
+            <div className="w-20 h-6" style={{ backgroundColor: colors.border }} />
+            <div className="w-28 h-4" style={{ backgroundColor: colors.border }} />
             <div className="flex gap-1.5">
               {[...Array(3)].map((_, j) => (
-                <div key={j} className="w-8 h-8 rounded-lg" style={{ backgroundColor: colors.border }} />
+                <div key={j} className="w-8 h-8" style={{ backgroundColor: colors.border }} />
               ))}
             </div>
           </div>
@@ -152,7 +151,7 @@ function SkeletonTabela({ colors }: { colors: any }) {
   );
 }
 
-/* ─── Formulário de cliente ──────────────────────────────────────── */
+/* ─── Formulário de cliente (MAIS COMPACTO) ──────────────────────── */
 function FormCliente({
   cliente, onSubmit, onCancel, loading,
 }: {
@@ -241,170 +240,141 @@ function FormCliente({
 
   const empresa = form.tipo === "empresa";
 
-  /* Estilos reutilizáveis */
-  const inputCls = "w-full px-3.5 py-2.5 rounded-lg border outline-none transition-all text-sm";
+  /* Estilos reutilizáveis - SEM ROUNDED */
+  const inputCls = "w-full px-3 py-2 border outline-none transition-all text-sm";
   const inputStyle = (err?: string) => ({
     backgroundColor: colors.card,
     borderColor: err ? colors.danger : colors.border,
     color: colors.text,
   });
-  const labelCls = "block text-sm font-medium mb-1.5";
+  const labelCls = "block text-xs font-medium mb-1";
 
   return (
-    <form onSubmit={e => { e.preventDefault(); if (validate()) onSubmit(form); }} className="space-y-5">
+    <form onSubmit={e => { e.preventDefault(); if (validate()) onSubmit(form); }} className="space-y-4">
 
-      {/* Tipo */}
-      <div>
-        <label className={labelCls} style={{ color: colors.text }}>Tipo de Cliente</label>
-        <div className="grid grid-cols-2 gap-3">
-          {(["consumidor_final", "empresa"] as const).map(t => {
-            const active = form.tipo === t;
-            const clr = t === "empresa" ? colors.secondary : colors.primary;
-            return (
-              <label key={t} className="flex items-center gap-3 p-3.5 rounded-lg border-2 cursor-pointer transition-all"
-                style={{ borderColor: active ? clr : colors.border, backgroundColor: active ? `${clr}10` : "transparent" }}>
-                <input type="radio" name="tipo" value={t} checked={active}
-                  onChange={() => { setField("tipo", t); setField("nif", ""); }} className="hidden" />
-                {t === "empresa"
-                  ? <Building2 className="w-4 h-4" style={{ color: active ? clr : colors.textSecondary }} />
-                  : <User className="w-4 h-4" style={{ color: active ? clr : colors.textSecondary }} />}
-                <div>
-                  <div className="text-sm font-medium" style={{ color: active ? clr : colors.text }}>
-                    {t === "empresa" ? "Empresa" : "Consumidor Final"}
-                  </div>
-                  <div className="text-xs" style={{ color: colors.textSecondary }}>
-                    {t === "empresa" ? "Pessoa jurídica" : "Particular"}
-                  </div>
-                </div>
-              </label>
-            );
-          })}
-        </div>
+      {/* Tipo - linha compacta */}
+      <div className="grid grid-cols-2 gap-3">
+        {(["consumidor_final", "empresa"] as const).map(t => {
+          const active = form.tipo === t;
+          const clr = t === "empresa" ? colors.secondary : colors.secondary;
+          return (
+            <label key={t} className="flex items-center gap-2 p-2 border cursor-pointer transition-all"
+              style={{ borderColor: active ? clr : colors.border, backgroundColor: active ? `${clr}10` : "transparent" }}>
+              <input type="radio" name="tipo" value={t} checked={active}
+                onChange={() => { setField("tipo", t); setField("nif", ""); }} className="hidden" />
+              {t === "empresa"
+                ? <Building2 className="w-4 h-4" style={{ color: active ? clr : colors.textSecondary }} />
+                : <User className="w-4 h-4" style={{ color: active ? clr : colors.textSecondary }} />}
+              <span className="text-xs font-medium" style={{ color: active ? clr : colors.text }}>
+                {t === "empresa" ? "Empresa" : "Consumidor"}
+              </span>
+            </label>
+          );
+        })}
       </div>
 
-      {/* Nome */}
-      <div>
-        <label className={labelCls} style={{ color: colors.text }}>
-          {empresa ? "Nome da Empresa" : "Nome Completo"}
-        </label>
-        <input type="text" name="nome" value={form.nome} onChange={handleChange}
-          placeholder={empresa ? "Ex: Empresa XYZ, Lda" : "Ex: João Silva"}
-          className={inputCls} style={inputStyle(errors.nome)} />
-        {errors.nome && <p className="mt-1 text-sm" style={{ color: colors.danger }}>{errors.nome}</p>}
-      </div>
-
-      {/* Status */}
-      <div>
-        <label className={labelCls} style={{ color: colors.text }}>Status</label>
-        <div className="grid grid-cols-2 gap-3">
-          {(["ativo", "inativo"] as const).map(s => {
-            const active = form.status === s;
-            const clr = s === "ativo" ? colors.success : colors.textSecondary;
-            return (
-              <label key={s} className="flex items-center gap-3 p-3.5 rounded-lg border-2 cursor-pointer transition-all"
-                style={{ borderColor: active ? clr : colors.border, backgroundColor: active ? `${clr}10` : "transparent" }}>
-                <input type="radio" name="status" value={s} checked={active} onChange={handleChange} className="hidden" />
-                {s === "ativo"
-                  ? <CheckCircle className="w-4 h-4" style={{ color: active ? clr : colors.textSecondary }} />
-                  : <XCircle className="w-4 h-4" style={{ color: active ? clr : colors.textSecondary }} />}
-                <div>
-                  <div className="text-sm font-medium" style={{ color: active ? clr : colors.text }}>
-                    {s === "ativo" ? "Ativo" : "Inativo"}
-                  </div>
-                  <div className="text-xs" style={{ color: colors.textSecondary }}>
-                    {s === "ativo" ? "Pode realizar compras" : "Sem acesso a compras"}
-                  </div>
-                </div>
-              </label>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* NIF + Telefone */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Nome + Email lado a lado */}
+      <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className={labelCls} style={{ color: colors.text }}>
-            NIF {empresa ? "da Empresa" : "do Cliente"}
-            <span className="text-xs ml-1.5 font-normal" style={{ color: colors.textSecondary }}>
-              {empresa ? "(10 dígitos)" : "(máx. 14 caracteres)"}
-            </span>
-          </label>
+          <label className={labelCls} style={{ color: colors.text }}>Nome</label>
+          <input type="text" name="nome" value={form.nome} onChange={handleChange}
+            placeholder={empresa ? "Empresa XYZ" : "João Silva"}
+            className={inputCls} style={inputStyle(errors.nome)} />
+          {errors.nome && <p className="mt-1 text-xs" style={{ color: colors.danger }}>{errors.nome}</p>}
+        </div>
+
+        <div>
+          <label className={labelCls} style={{ color: colors.text }}>Email</label>
+          <div className="relative">
+            <Mail className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: colors.textSecondary }} />
+            <input type="email" name="email" value={form.email} onChange={handleChange}
+              placeholder="email@exemplo.com"
+              className={`${inputCls} pl-7`} style={inputStyle(errors.email)} />
+          </div>
+          {errors.email && <p className="mt-1 text-xs" style={{ color: colors.danger }}>{errors.email}</p>}
+        </div>
+      </div>
+
+      {/* Status + NIF */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={labelCls} style={{ color: colors.text }}>Status</label>
+          <div className="grid grid-cols-2 gap-2">
+            {(["ativo", "inativo"] as const).map(s => {
+              const active = form.status === s;
+              const clr = s === "ativo" ? colors.success : colors.textSecondary;
+              return (
+                <label key={s} className="flex items-center gap-1.5 p-2 border cursor-pointer"
+                  style={{ borderColor: active ? clr : colors.border, backgroundColor: active ? `${clr}10` : "transparent" }}>
+                  <input type="radio" name="status" value={s} checked={active} onChange={handleChange} className="hidden" />
+                  {s === "ativo" ? <CheckCircle className="w-3.5 h-3.5" style={{ color: active ? clr : colors.textSecondary }} />
+                    : <XCircle className="w-3.5 h-3.5" style={{ color: active ? clr : colors.textSecondary }} />}
+                  <span className="text-xs">{s === "ativo" ? "Ativo" : "Inativo"}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <label className={labelCls} style={{ color: colors.text }}>NIF</label>
           <input type="text" name="nif" value={form.nif} onChange={handleChange}
             placeholder={empresa ? "0000000000" : "000000000LA000"}
             maxLength={empresa ? 10 : 14}
-            className={`${inputCls} font-mono`} style={inputStyle(errors.nif)} />
-          {errors.nif && <p className="mt-1 text-sm" style={{ color: colors.danger }}>{errors.nif}</p>}
-          {empresa && form.nif && (
-            <p className="mt-1 text-xs" style={{ color: colors.textSecondary }}>{form.nif.length}/10</p>
-          )}
-        </div>
-
-        <div>
-          <label className={labelCls} style={{ color: colors.text }}>
-            Telefone
-            <span className="text-xs ml-1.5 font-normal" style={{ color: colors.textSecondary }}>(9 dígitos)</span>
-          </label>
-          <div className="flex gap-2">
-            <div className="relative">
-              <Globe className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: colors.textSecondary }} />
-              <select value={codPais} onChange={handleCodPais}
-                className="pl-7 pr-2 py-2.5 rounded-lg border outline-none text-sm appearance-none"
-                style={inputStyle(errors.telefone)}>
-                {CODIGOS_PAIS.map(p => (
-                  <option key={p.codigo} value={p.codigo}>{p.bandeira} {p.codigo}</option>
-                ))}
-              </select>
-            </div>
-            <div className="relative flex-1">
-              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: colors.textSecondary }} />
-              <input type="tel" value={numTel} onChange={handleTelNum}
-                placeholder="900 000 000" maxLength={9}
-                className={`${inputCls} pl-9`} style={inputStyle(errors.telefone)} />
-            </div>
-          </div>
-          {errors.telefone && <p className="mt-1 text-sm" style={{ color: colors.danger }}>{errors.telefone}</p>}
-          {numTel && <p className="mt-1 text-xs" style={{ color: colors.textSecondary }}>{numTel.length}/9</p>}
+            className={`${inputCls} font-mono text-xs`} style={inputStyle(errors.nif)} />
+          {errors.nif && <p className="mt-1 text-xs" style={{ color: colors.danger }}>{errors.nif}</p>}
         </div>
       </div>
 
-      {/* Email */}
+      {/* Telefone + Código País */}
       <div>
-        <label className={labelCls} style={{ color: colors.text }}>Email</label>
-        <div className="relative">
-          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: colors.textSecondary }} />
-          <input type="email" name="email" value={form.email} onChange={handleChange}
-            placeholder="email@exemplo.com"
-            className={`${inputCls} pl-9`} style={inputStyle(errors.email)} />
+        <label className={labelCls} style={{ color: colors.text }}>Telefone</label>
+        <div className="flex gap-2">
+          <div className="relative w-24">
+            <Globe className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: colors.textSecondary }} />
+            <select value={codPais} onChange={handleCodPais}
+              className="w-full pl-7 pr-1 py-2 border outline-none text-xs appearance-none"
+              style={inputStyle(errors.telefone)}>
+              {CODIGOS_PAIS.map(p => (
+                <option key={p.codigo} value={p.codigo}>{p.bandeira} {p.codigo}</option>
+              ))}
+            </select>
+          </div>
+          <div className="relative flex-1">
+            <Phone className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: colors.textSecondary }} />
+            <input type="tel" value={numTel} onChange={handleTelNum}
+              placeholder="900 000 000" maxLength={9}
+              className={`${inputCls} pl-7`} style={inputStyle(errors.telefone)} />
+          </div>
         </div>
-        {errors.email && <p className="mt-1 text-sm" style={{ color: colors.danger }}>{errors.email}</p>}
+        {errors.telefone && <p className="mt-1 text-xs" style={{ color: colors.danger }}>{errors.telefone}</p>}
       </div>
 
       {/* Endereço */}
       <div>
         <label className={labelCls} style={{ color: colors.text }}>Endereço</label>
         <div className="relative">
-          <MapPin className="absolute left-3 top-3 w-4 h-4" style={{ color: colors.textSecondary }} />
-          <textarea name="endereco" value={form.endereco} onChange={handleChange} rows={3}
+          <MapPin className="absolute left-2 top-2.5 w-3.5 h-3.5" style={{ color: colors.textSecondary }} />
+          <textarea name="endereco" value={form.endereco} onChange={handleChange} rows={2}
             placeholder="Rua, número, bairro, cidade…"
-            className={`${inputCls} pl-9 resize-none`} style={inputStyle(errors.endereco)} />
+            className={`${inputCls} pl-7 resize-none text-xs`} style={inputStyle(errors.endereco)} />
         </div>
-        {errors.endereco && <p className="mt-1 text-sm" style={{ color: colors.danger }}>{errors.endereco}</p>}
+        {errors.endereco && <p className="mt-1 text-xs" style={{ color: colors.danger }}>{errors.endereco}</p>}
       </div>
 
-      {/* Botões */}
-      <div className="flex gap-3 pt-3 border-t" style={{ borderColor: colors.border }}>
+      {/* Botões compactos */}
+      <div className="flex gap-2 pt-2 border-t" style={{ borderColor: colors.border }}>
         <button type="button" onClick={onCancel}
-          className="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+          className="flex-1 px-3 py-2 text-xs font-medium transition-colors"
           style={{ color: colors.textSecondary, border: `1px solid ${colors.border}` }}>
           Cancelar
         </button>
         <button type="submit" disabled={loading}
-          className="flex-1 px-4 py-2.5 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-60"
+          className="flex-1 px-3 py-2 text-white text-xs font-medium flex items-center justify-center gap-1 disabled:opacity-60"
           style={{ backgroundColor: colors.primary }}>
           {loading
-            ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />A guardar…</>
-            : `${cliente ? "Atualizar" : "Criar"} Cliente`}
+            ? <><div className="w-3 h-3 border-2 border-white border-t-transparent animate-spin" />Guardar</>
+            : `${cliente ? "Atualizar" : "Criar"}`}
         </button>
       </div>
     </form>
@@ -504,7 +474,7 @@ export default function ClientesPage() {
 
   /* ── Estatísticas ── */
   const stats = [
-    { icon: Users, label: "Total", value: clientes.length, color: colors.primary },
+    { icon: Users, label: "Total", value: clientes.length, color: colors.text },
     { icon: CheckCircle, label: "Ativos", value: clientes.filter(c => c.status === "ativo").length, color: colors.success },
     { icon: XCircle, label: "Inativos", value: clientes.filter(c => c.status !== "ativo").length, color: colors.textSecondary },
     { icon: Building2, label: "Empresas", value: clientes.filter(c => c.tipo === "empresa").length, color: colors.secondary },
@@ -518,7 +488,7 @@ export default function ClientesPage() {
         {/* ── Cabeçalho ── */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h1 className="text-xl font-bold" style={{ color: colors.primary }}>Clientes</h1>
+            <h1 className="text-xl font-bold" style={{ color: colors.secondary }}>Clientes</h1>
             <p className="text-sm mt-0.5" style={{ color: colors.textSecondary }}>
               Gerencie os seus clientes e empresas
             </p>
@@ -529,41 +499,34 @@ export default function ClientesPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: colors.textSecondary }} />
               <input type="text" value={busca} onChange={e => setBusca(e.target.value)}
                 placeholder="Nome, NIF, email ou telefone…"
-                className="w-full pl-9 pr-4 py-2 rounded-lg border outline-none text-sm"
+                className="w-full pl-9 pr-4 py-2 border outline-none text-sm"
                 style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text }} />
             </div>
             {/* Filtro status */}
             <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value as any)}
-              className="px-3 py-2 rounded-lg border outline-none text-sm"
+              className="px-3 py-2 border outline-none text-sm"
               style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text }}>
-              <option value="ativos">Apenas Ativos</option>
-              <option value="inativos">Apenas Inativos</option>
+              <option value="ativos">Ativos</option>
+              <option value="inativos">Inativos</option>
               <option value="todos">Todos</option>
             </select>
-            {/* Atualizar */}
-            <button onClick={carregar}
-              className="p-2 rounded-lg border transition-colors"
-              style={{ borderColor: colors.border, color: colors.textSecondary, backgroundColor: colors.card }}
-              title="Recarregar">
-              <RefreshCw className="w-4 h-4" />
-            </button>
-            {/* Novo */}
+            {/* Novo - BOTÃO DE ATUALIZAR REMOVIDO */}
             <button onClick={abrirCriar}
-              className="flex items-center gap-1.5 px-4 py-2 text-white rounded-lg text-sm font-medium"
-              style={{ backgroundColor: colors.secondary }}>
-              <Plus className="w-4 h-4" />Novo Cliente
+              className="flex items-center gap-1.5 px-4 py-2 text-white text-sm font-medium"
+              style={{ backgroundColor: colors.primary }}>
+              <Plus className="w-4 h-4" />Novo
             </button>
           </div>
         </div>
 
-        {/* ── Stats ── */}
-        {loading ? <SkeletonStats colors={colors} /> : (
+        {/* ── Stats (SEM ROUNDED) ── */}
+        {loading ? <LoadingStats colors={colors} /> : (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {stats.map(({ icon: Icon, label, value, color }) => (
-              <div key={label} className="p-4 rounded-xl border"
+              <div key={label} className="p-4 border"
                 style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg" style={{ backgroundColor: `${color}18` }}>
+                  <div className="p-2" style={{ backgroundColor: `${color}18` }}>
                     <Icon className="w-5 h-5" style={{ color }} />
                   </div>
                   <div>
@@ -576,9 +539,9 @@ export default function ClientesPage() {
           </div>
         )}
 
-        {/* ── Tabela ── */}
-        {loading ? <SkeletonTabela colors={colors} /> : clientes.length === 0 ? (
-          <div className="rounded-xl border text-center py-14"
+        {/* ── Tabela (SEM ROUNDED) ── */}
+        {loading ? <LoadingTabela colors={colors} /> : clientes.length === 0 ? (
+          <div className="border text-center py-14"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}>
             <Users className="w-14 h-14 mx-auto mb-3" style={{ color: colors.border }} />
             <p className="text-sm mb-4" style={{ color: colors.textSecondary }}>
@@ -587,13 +550,13 @@ export default function ClientesPage() {
                   "Nenhum cliente encontrado."}
             </p>
             <button onClick={abrirCriar}
-              className="px-4 py-2 text-white rounded-lg text-sm"
+              className="px-4 py-2 text-white text-sm"
               style={{ backgroundColor: colors.primary }}>
               Cadastrar primeiro cliente
             </button>
           </div>
         ) : (
-          <div className="rounded-xl border overflow-hidden shadow-sm"
+          <div className="border overflow-hidden shadow-sm"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -619,7 +582,7 @@ export default function ClientesPage() {
                         {/* Cliente */}
                         <td className="py-3 px-5">
                           <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+                            <div className="w-9 h-9 flex items-center justify-center flex-shrink-0"
                               style={{ backgroundColor: c.tipo === "empresa" ? `${colors.secondary}20` : colors.hover }}>
                               {c.tipo === "empresa"
                                 ? <Building2 className="w-4 h-4" style={{ color: colors.secondary }} />
@@ -634,15 +597,15 @@ export default function ClientesPage() {
 
                         {/* Tipo */}
                         <td className="py-3 px-5">
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium"
-                            style={{ backgroundColor: `${colors.primary}18`, color: colors.primary }}>
+                          <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium"
+                            style={{ backgroundColor: `${colors.primary}18`, color: colors.textSecondary }}>
                             {getTipoClienteLabel(c.tipo)}
                           </span>
                         </td>
 
                         {/* Status */}
                         <td className="py-3 px-5">
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium"
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium"
                             style={{
                               backgroundColor: c.status === "ativo" ? `${colors.success}18` : `${colors.textSecondary}18`,
                               color: c.status === "ativo" ? colors.success : colors.textSecondary,
@@ -672,7 +635,7 @@ export default function ClientesPage() {
                         <td className="py-3 px-5">
                           <div className="flex items-center justify-center gap-1">
                             {[
-                              { Icon: Eye, title: "Ver detalhes", fn: () => abrirDetalhes(c), color: colors.primary },
+                              { Icon: Eye, title: "Ver detalhes", fn: () => abrirDetalhes(c), color: colors.text },
                               { Icon: Edit2, title: "Editar", fn: () => abrirEditar(c), color: colors.secondary },
                               {
                                 Icon: Power, title: c.status === "ativo" ? "Inativar" : "Ativar",
@@ -681,7 +644,7 @@ export default function ClientesPage() {
                               },
                             ].map(({ Icon, title, fn, color }) => (
                               <button key={title} onClick={fn}
-                                className="p-2 rounded-lg transition-colors hover:opacity-70"
+                                className="p-2 transition-colors hover:opacity-70"
                                 style={{ color }} title={title}>
                                 <Icon className="w-4 h-4" />
                               </button>
@@ -721,10 +684,10 @@ export default function ClientesPage() {
       {/* ── Modal Detalhes ── */}
       <Modal isOpen={modalDetalhes} onClose={fecharDetalhes} title="Detalhes do Cliente">
         {selecao && (
-          <div className="space-y-5">
+          <div className="space-y-4">
             {/* Avatar + nome */}
-            <div className="flex items-center gap-4 pb-5 border-b" style={{ borderColor: colors.border }}>
-              <div className="w-14 h-14 rounded-full flex items-center justify-center"
+            <div className="flex items-center gap-4 pb-4 border-b" style={{ borderColor: colors.border }}>
+              <div className="w-14 h-14 flex items-center justify-center"
                 style={{ backgroundColor: `${colors.secondary}20` }}>
                 {selecao.tipo === "empresa"
                   ? <Building2 className="w-7 h-7" style={{ color: colors.secondary }} />
@@ -733,11 +696,11 @@ export default function ClientesPage() {
               <div>
                 <h4 className="text-lg font-semibold" style={{ color: colors.text }}>{selecao.nome}</h4>
                 <div className="flex flex-wrap items-center gap-2 mt-1">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                  <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium"
                     style={{ backgroundColor: `${colors.primary}18`, color: colors.primary }}>
                     {getTipoClienteLabel(selecao.tipo)}
                   </span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium"
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium"
                     style={{
                       backgroundColor: selecao.status === "ativo" ? `${colors.success}18` : `${colors.textSecondary}18`,
                       color: selecao.status === "ativo" ? colors.success : colors.textSecondary,
@@ -749,15 +712,15 @@ export default function ClientesPage() {
               </div>
             </div>
 
-            {/* Grid de detalhes */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Grid de detalhes - MAIS COMPACTO */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {[
                 { Icon: Phone, label: "Telefone", value: selecao.telefone || "—" },
                 { Icon: Mail, label: "Email", value: selecao.email || "—" },
-                { Icon: Calendar, label: "Data de Registo", value: new Date(selecao.data_registro).toLocaleDateString("pt-PT") },
+                { Icon: Calendar, label: "Registo", value: new Date(selecao.data_registro).toLocaleDateString("pt-PT") },
                 { Icon: Building2, label: "NIF", value: formatarNIF(selecao.nif) || "—" },
               ].map(({ Icon, label, value }) => (
-                <div key={label} className="flex items-start gap-3 p-3 rounded-lg"
+                <div key={label} className="flex items-start gap-2 p-2"
                   style={{ backgroundColor: colors.hover }}>
                   <Icon className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: colors.textSecondary }} />
                   <div>
@@ -769,7 +732,7 @@ export default function ClientesPage() {
             </div>
 
             {selecao.endereco && (
-              <div className="flex items-start gap-3 p-3 rounded-lg" style={{ backgroundColor: colors.hover }}>
+              <div className="flex items-start gap-2 p-2" style={{ backgroundColor: colors.hover }}>
                 <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: colors.textSecondary }} />
                 <div>
                   <p className="text-xs" style={{ color: colors.textSecondary }}>Endereço</p>
@@ -778,9 +741,9 @@ export default function ClientesPage() {
               </div>
             )}
 
-            <div className="flex gap-3 pt-2">
+            <div className="flex gap-2 pt-2">
               <button onClick={() => { fecharDetalhes(); abrirEditar(selecao); }}
-                className="flex-1 px-4 py-2.5 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2"
+                className="flex-1 px-3 py-2 text-white text-sm font-medium flex items-center justify-center gap-2"
                 style={{ backgroundColor: colors.primary }}>
                 <Edit2 className="w-4 h-4" />Editar
               </button>

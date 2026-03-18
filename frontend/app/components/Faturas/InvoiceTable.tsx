@@ -42,25 +42,11 @@ interface InvoiceTableProps {
 
 const POR_PAGINA = 10;
 
-/* ── Skeleton ──────────────────────────────────────────────── */
-function TableSkeleton({ colors }: { colors: ColorsTheme }) {
-  return (
-    <div className="animate-pulse p-5 space-y-3">
-      {[...Array(5)].map((_, i) => (
-        <div key={i} className="flex gap-3">
-          {[...Array(5)].map((__, j) => (
-            <div key={j} className="h-8 flex-1" style={{ backgroundColor: colors.border }} />
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}
 
 /* ── Tipo badge ────────────────────────────────────────────── */
 function TipoBadge({ tipo, colors }: { tipo: TipoDocumento; colors: ColorsTheme }) {
   const palette: Partial<Record<TipoDocumento, { bg: string; text: string }>> = {
-    FT:  { bg: `${colors.primary}1a`,           text: colors.primary },
+    FT:  { bg: `${colors.textSecondary}1a`,           text: colors.secondary },
     FR:  { bg: `${colors.success}1a`,            text: colors.success },
     RC:  { bg: `${(colors.teal ?? colors.success)}1a`, text: colors.teal ?? colors.success },
     FP:  { bg: `${colors.warning}1a`,            text: colors.warning },
@@ -105,7 +91,7 @@ function IconBtn({
 function Spinner({ color }: { color: string }) {
   return (
     <div
-      className="w-4 h-4 border-2 animate-spin"
+      className="w-4 h-4 border-2 animate-spin rounded-full"
       style={{ borderColor: `${color}30`, borderTopColor: color }}
     />
   );
@@ -141,8 +127,6 @@ export default function InvoiceTable({
     catch { /* erro já tratado no pai */ }
   };
 
-  /* ── Loading ──────────────────────────────────────────── */
-  if (loading) return <TableSkeleton colors={colors} />;
 
   /* ── Empty ────────────────────────────────────────────── */
   if (documentos.length === 0) {
@@ -277,10 +261,10 @@ export default function InvoiceTable({
                       onClick={() => onBaixarPdf(doc)}
                       disabled={baixandoPdf === doc.id}
                       title="Baixar PDF"
-                      color={colors.primary}
+                      color={colors.text}
                     >
                       {baixandoPdf === doc.id
-                        ? <Spinner color={colors.primary} />
+                        ? <Spinner color={colors.text} />
                         : <Download size={16} />}
                     </IconBtn>
 

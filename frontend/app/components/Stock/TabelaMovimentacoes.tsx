@@ -6,10 +6,12 @@ import { useThemeColors } from "@/context/ThemeContext";
 
 interface TabelaMovimentacoesProps {
     movimentacoes: MovimentoStock[];
+    colors?: any;
 }
 
-export function TabelaMovimentacoes({ movimentacoes }: TabelaMovimentacoesProps) {
-    const colors = useThemeColors();
+export function TabelaMovimentacoes({ movimentacoes, colors: propColors }: TabelaMovimentacoesProps) {
+    const contextColors = useThemeColors();
+    const colors = propColors || contextColors;
 
     const getCorMovimento = (tipo: string): { bg: string; text: string } => {
         switch (tipo) {
