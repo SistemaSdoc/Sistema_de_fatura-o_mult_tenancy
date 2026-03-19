@@ -115,7 +115,7 @@ const ModalHeader: React.FC<ModalHeaderProps> = ({ documento, onClose, onPrint }
 
     return (
         <div
-            className="flex items-center justify-between p-3 sm:p-4 border-b shrink-0"
+            className="flex items-center justify-between p-3 border-b sm:p-4 shrink-0"
             style={{ backgroundColor: colors.primary, borderColor: colors.border }}
         >
             <div className="flex items-center gap-2 sm:gap-3">
@@ -123,7 +123,7 @@ const ModalHeader: React.FC<ModalHeaderProps> = ({ documento, onClose, onPrint }
                     <Icon size={16} className="text-white sm:w-5 sm:h-5" />
                 </div>
                 <div>
-                    <h2 className="text-sm sm:text-lg font-bold text-white break-all sm:break-normal">
+                    <h2 className="text-sm font-bold text-white break-all sm:text-lg sm:break-normal">
                         {documento.numero_documento}
                     </h2>
                     <p className="text-white/80 text-[10px] sm:text-xs">{tipoInfo.label}</p>
@@ -156,20 +156,17 @@ const InfoGrid: React.FC<InfoGridProps> = ({ documento }) => {
     const colors = useThemeColors();
 
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
             {/* Cliente */}
             <div
-                className="rounded-lg p-2 sm:p-3 border"
-                style={{
-                    backgroundColor: colors.hover,
-                    borderColor: colors.border
-                }}
+                className="p-2 border rounded-lg sm:p-3"
+                style={{ backgroundColor: colors.hover, borderColor: colors.border }}
             >
                 <h3 className="text-[10px] sm:text-xs font-semibold mb-1.5 sm:mb-2 flex items-center gap-1 sm:gap-1.5" style={{ color: colors.text }}>
                     <User size={12} className="sm:w-[14px] sm:h-[14px]" />
                     Cliente
                 </h3>
-                <p className="text-xs sm:text-sm font-medium break-words" style={{ color: colors.text }}>
+                <p className="text-xs font-medium break-words sm:text-sm" style={{ color: colors.text }}>
                     {documento.cliente_nome || documento.cliente?.nome || 'Consumidor Final'}
                 </p>
                 {(documento.cliente_nif || documento.cliente?.telefone) && (
@@ -191,17 +188,14 @@ const InfoGrid: React.FC<InfoGridProps> = ({ documento }) => {
             {/* Documento Origem */}
             {documento.documentoOrigem && (
                 <div
-                    className="rounded-lg p-2 sm:p-3 border"
-                    style={{
-                        backgroundColor: colors.hover,
-                        borderColor: colors.border
-                    }}
+                    className="p-2 border rounded-lg sm:p-3"
+                    style={{ backgroundColor: colors.hover, borderColor: colors.border }}
                 >
                     <h3 className="text-[10px] sm:text-xs font-semibold mb-1.5 sm:mb-2 flex items-center gap-1 sm:gap-1.5" style={{ color: colors.text }}>
                         <FileText size={12} className="sm:w-[14px] sm:h-[14px]" />
                         Doc. Origem
                     </h3>
-                    <p className="text-xs sm:text-sm font-medium break-words" style={{ color: colors.text }}>
+                    <p className="text-xs font-medium break-words sm:text-sm" style={{ color: colors.text }}>
                         {documento.documentoOrigem.numero_documento}
                     </p>
                     <p className="text-[10px] sm:text-xs mt-0.5" style={{ color: colors.textSecondary }}>
@@ -223,12 +217,8 @@ const ItensTable: React.FC<ItensTableProps> = ({ itens }) => {
     if (!itens || itens.length === 0) {
         return (
             <div
-                className="text-center py-3 sm:py-4 text-xs sm:text-sm rounded-lg border"
-                style={{
-                    backgroundColor: colors.hover,
-                    borderColor: colors.border,
-                    color: colors.textSecondary
-                }}
+                className="py-3 text-xs text-center border rounded-lg sm:py-4 sm:text-sm"
+                style={{ backgroundColor: colors.hover, borderColor: colors.border, color: colors.textSecondary }}
             >
                 Nenhum item encontrado
             </div>
@@ -236,18 +226,12 @@ const ItensTable: React.FC<ItensTableProps> = ({ itens }) => {
     }
 
     return (
-        <div
-            className="border rounded-lg overflow-hidden"
-            style={{ borderColor: colors.border }}
-        >
+        <div className="overflow-hidden border rounded-lg" style={{ borderColor: colors.border }}>
             <div className="overflow-x-auto">
                 <table className="w-full text-xs sm:text-sm">
                     <thead
                         className="border-b"
-                        style={{
-                            backgroundColor: colors.hover,
-                            borderColor: colors.border
-                        }}
+                        style={{ backgroundColor: colors.hover, borderColor: colors.border }}
                     >
                         <tr>
                             <th className="text-left py-2 sm:py-3 px-2 sm:px-3 text-[10px] sm:text-xs font-medium uppercase" style={{ color: colors.textSecondary }}>
@@ -267,7 +251,7 @@ const ItensTable: React.FC<ItensTableProps> = ({ itens }) => {
                     <tbody className="divide-y" style={{ borderColor: colors.border }}>
                         {itens.map((item, index) => (
                             <tr key={item.id || `item-${index}`} className="transition-colors hover:bg-opacity-50">
-                                <td className="py-2 sm:py-3 px-2 sm:px-3">
+                                <td className="px-2 py-2 sm:py-3 sm:px-3">
                                     <div className="break-words max-w-[150px] sm:max-w-[250px]" style={{ color: colors.text }}>
                                         {item.descricao}
                                     </div>
@@ -277,7 +261,7 @@ const ItensTable: React.FC<ItensTableProps> = ({ itens }) => {
                                         </span>
                                     )}
                                 </td>
-                                <td className="py-2 sm:py-3 px-1 sm:px-2 text-center" style={{ color: colors.textSecondary }}>
+                                <td className="px-1 py-2 text-center sm:py-3 sm:px-2" style={{ color: colors.textSecondary }}>
                                     <span className="text-[11px] sm:text-sm">{item.quantidade}</span>
                                     {item.unidade && (
                                         <span className="text-[9px] sm:text-xs ml-0.5" style={{ color: colors.textSecondary }}>
@@ -309,11 +293,8 @@ const TotaisSection: React.FC<TotaisSectionProps> = ({ documento }) => {
 
     return (
         <div
-            className="rounded-lg p-2 sm:p-3 border space-y-1 text-xs sm:text-sm"
-            style={{
-                backgroundColor: colors.hover,
-                borderColor: colors.border
-            }}
+            className="p-2 space-y-1 text-xs border rounded-lg sm:p-3 sm:text-sm"
+            style={{ backgroundColor: colors.hover, borderColor: colors.border }}
         >
             <div className="flex justify-between text-[11px] sm:text-sm">
                 <span style={{ color: colors.textSecondary }}>Base Tributável</span>
@@ -330,8 +311,8 @@ const TotaisSection: React.FC<TotaisSectionProps> = ({ documento }) => {
                 </div>
             )}
             <div className="border-t pt-1.5 sm:pt-2 mt-1.5 sm:mt-2 flex justify-between items-center" style={{ borderColor: colors.border }}>
-                <span className="font-semibold text-sm sm:text-base" style={{ color: colors.text }}>Total</span>
-                <span className="font-bold text-sm sm:text-lg" style={{ color: colors.primary }}>
+                <span className="text-sm font-semibold sm:text-base" style={{ color: colors.text }}>Total</span>
+                <span className="text-sm font-bold sm:text-lg" style={{ color: colors.primary }}>
                     {formatarValor(documento.total_liquido)}
                 </span>
             </div>
@@ -340,17 +321,18 @@ const TotaisSection: React.FC<TotaisSectionProps> = ({ documento }) => {
 };
 
 interface ObservacoesSectionProps {
-    observacoes?: string;
+    observacoes?: string | null;
 }
 
 const ObservacoesSection: React.FC<ObservacoesSectionProps> = ({ observacoes }) => {
     const colors = useThemeColors();
+    const { theme } = useTheme(); // ✅ hook adicionado — theme estava indefinido antes
 
     if (!observacoes) return null;
 
     return (
         <div
-            className="rounded-lg p-2 sm:p-3 border"
+            className="p-2 border rounded-lg sm:p-3"
             style={{
                 backgroundColor: theme === 'dark' ? 'rgba(234, 179, 8, 0.1)' : '#fefce8',
                 borderColor: theme === 'dark' ? '#854d0e' : '#fde047'
@@ -363,7 +345,7 @@ const ObservacoesSection: React.FC<ObservacoesSectionProps> = ({ observacoes }) 
 };
 
 interface HashFiscalSectionProps {
-    hashFiscal?: string;
+    hashFiscal?: string | null;
 }
 
 const HashFiscalSection: React.FC<HashFiscalSectionProps> = ({ hashFiscal }) => {
@@ -372,7 +354,7 @@ const HashFiscalSection: React.FC<HashFiscalSectionProps> = ({ hashFiscal }) => 
     if (!hashFiscal) return null;
 
     return (
-        <div className="text-center pt-2">
+        <div className="pt-2 text-center">
             <p className="text-[8px] sm:text-[10px] font-mono break-all leading-tight" style={{ color: colors.textSecondary }}>
                 Hash: {hashFiscal}
             </p>
@@ -390,32 +372,21 @@ const ModalFooter: React.FC<ModalFooterProps> = ({ onClose, onDownload }) => {
 
     return (
         <div
-            className="p-3 sm:p-4 border-t flex flex-col sm:flex-row justify-end gap-2 shrink-0"
-            style={{
-                backgroundColor: colors.hover,
-                borderColor: colors.border
-            }}
+            className="flex flex-col justify-end gap-2 p-3 border-t sm:p-4 sm:flex-row shrink-0"
+            style={{ backgroundColor: colors.hover, borderColor: colors.border }}
         >
             <button
                 onClick={onClose}
-                className="w-full sm:w-auto px-3 sm:px-4 py-2 text-xs sm:text-sm rounded-lg transition-colors order-2 sm:order-1"
-                style={{
-                    backgroundColor: colors.card,
-                    color: colors.text,
-                    border: `1px solid ${colors.border}`
-                }}
-                onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = colors.hover;
-                }}
-                onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = colors.card;
-                }}
+                className="order-2 w-full px-3 py-2 text-xs transition-colors rounded-lg sm:w-auto sm:px-4 sm:text-sm sm:order-1"
+                style={{ backgroundColor: colors.card, color: colors.text, border: `1px solid ${colors.border}` }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.hover; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = colors.card; }}
             >
                 Fechar
             </button>
             <button
                 onClick={onDownload}
-                className="w-full sm:w-auto px-3 sm:px-4 py-2 text-xs sm:text-sm text-white rounded-lg transition-colors hover:opacity-90 flex items-center justify-center gap-1 sm:gap-2 order-1 sm:order-2"
+                className="flex items-center justify-center order-1 w-full gap-1 px-3 py-2 text-xs text-white transition-colors rounded-lg sm:w-auto sm:px-4 sm:text-sm hover:opacity-90 sm:gap-2 sm:order-2"
                 style={{ backgroundColor: colors.secondary }}
             >
                 <Download size={14} className="sm:w-4 sm:h-4" />
@@ -465,7 +436,6 @@ export const ModalVisualizacao: React.FC<ModalVisualizacaoProps> = ({
     onDownload
 }) => {
     const colors = useThemeColors();
-    const { theme } = useTheme();
 
     const handlePrint = () => window.print();
 
@@ -507,13 +477,13 @@ export const ModalVisualizacao: React.FC<ModalVisualizacaoProps> = ({
                         className="fixed inset-0 z-[101] overflow-y-auto"
                         onClick={onClose}
                     >
-                        <div className="flex min-h-full items-center justify-center p-2 sm:p-4 text-center">
+                        <div className="flex items-center justify-center min-h-full p-2 text-center sm:p-4">
                             <motion.div
                                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                                 animate={{ opacity: 1, scale: 1, y: 0 }}
                                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
                                 transition={{ duration: 0.2 }}
-                                className="relative w-full max-w-3xl transform overflow-hidden rounded-xl sm:rounded-2xl text-left align-middle shadow-xl transition-all"
+                                className="relative w-full max-w-3xl overflow-hidden text-left align-middle transition-all transform shadow-xl rounded-xl sm:rounded-2xl"
                                 style={{ backgroundColor: colors.card }}
                                 onClick={(e) => e.stopPropagation()}
                             >

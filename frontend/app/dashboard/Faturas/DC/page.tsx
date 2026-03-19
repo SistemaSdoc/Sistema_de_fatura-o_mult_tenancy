@@ -169,7 +169,7 @@ export default function OutrosDocumentosPage() {
     /* ── Render ── */
     return (
         <MainEmpresa>
-            <div className="space-y-3 p-3 sm:p-4 pb-6 max-w-7xl mx-auto"
+            <div className="p-3 pb-6 mx-auto space-y-3 sm:p-4 max-w-7xl"
                 style={{ backgroundColor: colors.background }}>
 
                 {/* Cabeçalho - BOTÃO DE RECARREGAR REMOVIDO */}
@@ -209,7 +209,7 @@ export default function OutrosDocumentosPage() {
                     {!loading && !error && documentos.length === 0 && (
                         <div className="p-10 text-center">
                             <FileText className="w-10 h-10 mx-auto mb-2" style={{ color: colors.border }} />
-                            <h3 className="text-sm font-medium mb-1" style={{ color: colors.text }}>
+                            <h3 className="mb-1 text-sm font-medium" style={{ color: colors.text }}>
                                 Nenhum documento encontrado
                             </h3>
                             <p className="text-xs" style={{ color: colors.textSecondary }}>
@@ -227,7 +227,7 @@ export default function OutrosDocumentosPage() {
                                     return (
                                         <div key={doc.id}
                                             onClick={() => abrirModal(doc)}
-                                            className="p-3 cursor-pointer transition-colors"
+                                            className="p-3 transition-colors cursor-pointer"
                                             {...hoverProps}>
                                             <div className="flex items-center gap-2 mb-1.5">
                                                 <div className="flex-1 min-w-0">

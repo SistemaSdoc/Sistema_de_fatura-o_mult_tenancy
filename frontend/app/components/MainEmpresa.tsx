@@ -334,8 +334,8 @@ export default function MainEmpresa({
     /* ==================== LOADING ==================== */
     if (userLoading) {
         return (
-            <div className="flex h-screen items-center justify-center" style={{ backgroundColor: colors.background }}>
-                <Loader2 className="h-8 w-8 animate-spin" style={{ color: colors.primary }} />
+            <div className="flex items-center justify-center h-screen" style={{ backgroundColor: colors.background }}>
+                <Loader2 className="w-8 h-8 animate-spin" style={{ color: colors.primary }} />
             </div>
         );
     }
@@ -354,7 +354,7 @@ export default function MainEmpresa({
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={closeSidebar}
-                        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-30"
+                        className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm"
                     />
                 )}
             </AnimatePresence>
@@ -364,7 +364,7 @@ export default function MainEmpresa({
                 initial={false}
                 animate={{ x: sidebarOpen ? 0 : isMobile ? "-100%" : 0, width: sidebarOpen ? 260 : isMobile ? 260 : 72 }}
                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                className="flex flex-col border-r shadow-xl z-40 flex-shrink-0"
+                className="z-40 flex flex-col flex-shrink-0 border-r shadow-xl"
                 style={{
                     backgroundColor: colors.card,
                     borderColor: colors.border,
@@ -392,7 +392,7 @@ export default function MainEmpresa({
 
                 {/* Logo / Company */}
                 <div
-                    className="h-16 flex items-center gap-3 px-4 border-b flex-shrink-0 overflow-hidden"
+                    className="flex items-center flex-shrink-0 h-16 gap-3 px-4 overflow-hidden border-b"
                     style={{ borderColor: colors.border }}
                 >
                     {empresaLogo ? (
@@ -401,12 +401,12 @@ export default function MainEmpresa({
                             alt="Logo"
                             width={32}
                             height={32}
-                            className="object-contain flex-shrink-0"
+                            className="flex-shrink-0 object-contain"
                             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                         />
                     ) : (
                         <div
-                            className="w-8 h-8 text-white flex items-center justify-center font-bold shadow-md flex-shrink-0"
+                            className="flex items-center justify-center flex-shrink-0 w-8 h-8 font-bold text-white shadow-md"
                             style={{ backgroundColor: colors.primary }}
                         >
                             {nomeEmpresa.charAt(0).toUpperCase()}
@@ -419,7 +419,7 @@ export default function MainEmpresa({
                                 initial={{ opacity: 0, x: -8 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: -8 }}
-                                className="font-semibold text-sm whitespace-nowrap truncate"
+                                className="text-sm font-semibold truncate whitespace-nowrap"
                                 style={{ color: colors.text }}
                             >
                                 {nomeEmpresa}
@@ -429,7 +429,7 @@ export default function MainEmpresa({
 
                     {/* Mobile close button */}
                     {isMobile && sidebarOpen && (
-                        <button onClick={closeSidebar} className="ml-auto p-1" style={{ color: colors.textSecondary }}>
+                        <button onClick={closeSidebar} className="p-1 ml-auto" style={{ color: colors.textSecondary }}>
                             <X size={20} />
                         </button>
                     )}
@@ -460,7 +460,7 @@ export default function MainEmpresa({
                                         onClick={(e) => handleMainItemClick(item, e)}
                                     >
                                         {hasLinks ? (
-                                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                                            <div className="flex items-center flex-1 min-w-0 gap-3">
                                                 <item.icon
                                                     size={19}
                                                     style={{ color: active ? "white" : colors.secondary, flexShrink: 0 }}
@@ -471,7 +471,7 @@ export default function MainEmpresa({
                                                             initial={{ opacity: 0 }}
                                                             animate={{ opacity: 1 }}
                                                             exit={{ opacity: 0 }}
-                                                            className="text-sm font-medium whitespace-nowrap truncate"
+                                                            className="text-sm font-medium truncate whitespace-nowrap"
                                                             style={{ color: active ? "white" : colors.text }}
                                                         >
                                                             {item.label}
@@ -482,7 +482,7 @@ export default function MainEmpresa({
                                         ) : (
                                             <Link
                                                 href={item.path}
-                                                className="flex items-center gap-3 flex-1 min-w-0"
+                                                className="flex items-center flex-1 min-w-0 gap-3"
                                                 onClick={handleLinkClick}
                                             >
                                                 <item.icon
@@ -495,7 +495,7 @@ export default function MainEmpresa({
                                                             initial={{ opacity: 0 }}
                                                             animate={{ opacity: 1 }}
                                                             exit={{ opacity: 0 }}
-                                                            className="text-sm font-medium whitespace-nowrap truncate"
+                                                            className="text-sm font-medium truncate whitespace-nowrap"
                                                             style={{ color: active ? "white" : colors.text }}
                                                         >
                                                             {item.label}
@@ -567,12 +567,12 @@ export default function MainEmpresa({
                 </nav>
 
                 {/* Logout */}
-                <div className="p-2 border-t flex-shrink-0" style={{ borderColor: colors.border }}>
+                <div className="flex-shrink-0 p-2 border-t" style={{ borderColor: colors.border }}>
                     <div
                         onClick={abrirModalLogout}
                         className="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all duration-200 hover:bg-red-50 dark:hover:bg-red-950/20"
                     >
-                        <LogOut size={19} className="text-red-500 flex-shrink-0" />
+                        <LogOut size={19} className="flex-shrink-0 text-red-500" />
                         <AnimatePresence>
                             {sidebarOpen && (
                                 <motion.span
@@ -591,20 +591,20 @@ export default function MainEmpresa({
             </motion.aside>
 
             {/* ====== MAIN CONTENT ====== */}
-            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+            <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
 
                 {/* Header */}
                 <header
-                    className="h-14 md:h-16 border-b px-3 md:px-6 flex items-center justify-between shadow-sm flex-shrink-0 relative z-20"
+                    className="relative z-20 flex items-center justify-between flex-shrink-0 px-3 border-b shadow-sm h-14 md:h-16 md:px-6"
                     style={{ backgroundColor: colors.card, borderColor: colors.border }}
                 >
                     {/* Left: hamburger + page title */}
-                    <div className="flex items-center gap-2 md:gap-4 min-w-0">
+                    <div className="flex items-center min-w-0 gap-2 md:gap-4">
                         {/* Mobile hamburger */}
                         {isMobile && (
                             <button
                                 onClick={() => setSidebarOpen(true)}
-                                className=" p-2 flex-shrink-0"
+                                className="flex-shrink-0 p-2 "
                                 style={{ color: colors.primary }}
                                 aria-label="Abrir menu"
                             >
@@ -612,19 +612,19 @@ export default function MainEmpresa({
                             </button>
                         )}
 
-                        <h1 className="text-base md:text-lg font-bold truncate" style={{ color: colors.text }}>
+                        <h1 className="text-base font-bold truncate md:text-lg" style={{ color: colors.text }}>
                             {currentPageLabel}
                         </h1>
 
                     </div>
 
                     {/* Right: actions */}
-                    <div className="flex items-center gap-1 md:gap-3 flex-shrink-0">
+                    <div className="flex items-center flex-shrink-0 gap-1 md:gap-3">
 
                         {/* Theme toggle */}
                         <button
                             onClick={toggleTheme}
-                            className="rounded-full p-2 transition-colors"
+                            className="p-2 transition-colors rounded-full"
                             style={{ backgroundColor: colors.hover, color: colors.text }}
                             aria-label="Alternar tema"
                         >
@@ -674,7 +674,7 @@ export default function MainEmpresa({
                                             initial="hidden"
                                             animate="visible"
                                             exit="exit"
-                                            className="absolute right-0 top-full mt-2 shadow-2xl border overflow-hidden z-50"
+                                            className="absolute right-0 z-50 mt-2 overflow-hidden border shadow-2xl top-full"
                                             style={{
                                                 backgroundColor: colors.card,
                                                 borderColor: colors.border,
@@ -691,13 +691,13 @@ export default function MainEmpresa({
                                                 <div className="flex items-center justify-between mb-3">
                                                     <div className="flex items-center gap-2">
                                                         <AlertTriangle size={15} className="text-white" />
-                                                        <span className="text-white font-semibold text-sm">Alertas de Stock</span>
+                                                        <span className="text-sm font-semibold text-white">Alertas de Stock</span>
                                                     </div>
                                                     <button onClick={() => setNotificacoesAberto(false)} className="text-white/80 hover:text-white">
                                                         <X size={15} />
                                                     </button>
                                                 </div>
-                                                <div className="flex gap-1 bg-black/20 p-1">
+                                                <div className="flex gap-1 p-1 bg-black/20">
                                                     <button
                                                         onClick={() => setAbaAtiva("baixo")}
                                                         className="flex-1 py-1.5 px-2 text-xs font-medium transition-all flex items-center justify-center gap-1"
@@ -718,15 +718,15 @@ export default function MainEmpresa({
                                             </div>
 
                                             {/* Notification content */}
-                                            <div className="max-h-80 overflow-y-auto">
+                                            <div className="overflow-y-auto max-h-80">
                                                 {loadingNotificacoes ? (
-                                                    <div className="p-8 flex items-center justify-center">
-                                                        <Loader2 className="h-6 w-6 animate-spin" style={{ color: colors.primary }} />
+                                                    <div className="flex items-center justify-center p-8">
+                                                        <Loader2 className="w-6 h-6 animate-spin" style={{ color: colors.primary }} />
                                                     </div>
                                                 ) : abaAtiva === "baixo" ? (
                                                     produtosEstoqueBaixo.length > 0 ? (
                                                         <>
-                                                            <div className="p-2 border-b text-center text-xs font-medium"
+                                                            <div className="p-2 text-xs font-medium text-center border-b"
                                                                 style={{ backgroundColor: theme === "dark" ? "#442200" : "#fff7ed", borderColor: colors.border, color: theme === "dark" ? "#ffb347" : "#9a3412" }}>
                                                                 Produtos com estoque abaixo do mínimo
                                                             </div>
@@ -736,12 +736,12 @@ export default function MainEmpresa({
                                                                     initial={{ opacity: 0, x: -12 }}
                                                                     animate={{ opacity: 1, x: 0 }}
                                                                     transition={{ delay: index * 0.04 }}
-                                                                    className="p-3 border-b last:border-b-0 cursor-pointer transition-colors"
+                                                                    className="p-3 transition-colors border-b cursor-pointer last:border-b-0"
                                                                     style={{ borderColor: colors.border }}
                                                                     onClick={() => { setNotificacoesAberto(false); router.push("/dashboard/Produtos_servicos/Stock"); }}
                                                                 >
                                                                     <div className="flex items-center gap-3">
-                                                                        <div className="w-9 h-9 flex items-center justify-center flex-shrink-0"
+                                                                        <div className="flex items-center justify-center flex-shrink-0 w-9 h-9"
                                                                             style={{ backgroundColor: theme === "dark" ? "#442200" : "#fff7ed", color: theme === "dark" ? "#ffb347" : "#9a3412" }}>
                                                                             <Package size={16} />
                                                                         </div>
@@ -759,18 +759,18 @@ export default function MainEmpresa({
                                                         </>
                                                     ) : (
                                                         <div className="p-8 text-center">
-                                                            <div className="w-14 h-14 mx-auto mb-3 flex items-center justify-center"
+                                                            <div className="flex items-center justify-center mx-auto mb-3 w-14 h-14"
                                                                 style={{ backgroundColor: theme === "dark" ? "#1a3a1a" : "#dcfce7" }}>
                                                                 <Package size={22} style={{ color: theme === "dark" ? "#4ade80" : "#16a34a" }} />
                                                             </div>
                                                             <p className="text-sm font-medium" style={{ color: colors.text }}>Estoque saudável</p>
-                                                            <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>Nenhum produto com estoque baixo</p>
+                                                            <p className="mt-1 text-xs" style={{ color: colors.textSecondary }}>Nenhum produto com estoque baixo</p>
                                                         </div>
                                                     )
                                                 ) : (
                                                     produtosSemEstoque.length > 0 ? (
                                                         <>
-                                                            <div className="p-2 border-b text-center text-xs font-medium"
+                                                            <div className="p-2 text-xs font-medium text-center border-b"
                                                                 style={{ backgroundColor: theme === "dark" ? "#442222" : "#fef2f2", borderColor: colors.border, color: theme === "dark" ? "#fca5a5" : "#991b1b" }}>
                                                                 Produtos esgotados — reposição urgente
                                                             </div>
@@ -780,12 +780,12 @@ export default function MainEmpresa({
                                                                     initial={{ opacity: 0, x: -12 }}
                                                                     animate={{ opacity: 1, x: 0 }}
                                                                     transition={{ delay: index * 0.04 }}
-                                                                    className="p-3 border-b last:border-b-0 cursor-pointer transition-colors"
+                                                                    className="p-3 transition-colors border-b cursor-pointer last:border-b-0"
                                                                     style={{ borderColor: colors.border }}
                                                                     onClick={() => { setNotificacoesAberto(false); router.push("/dashboard/Produtos_servicos/Stock"); }}
                                                                 >
                                                                     <div className="flex items-center gap-3">
-                                                                        <div className="w-9 h-9 flex items-center justify-center flex-shrink-0"
+                                                                        <div className="flex items-center justify-center flex-shrink-0 w-9 h-9"
                                                                             style={{ backgroundColor: theme === "dark" ? "#442222" : "#fef2f2", color: theme === "dark" ? "#fca5a5" : "#dc2626" }}>
                                                                             <AlertCircle size={16} />
                                                                         </div>
@@ -802,12 +802,12 @@ export default function MainEmpresa({
                                                         </>
                                                     ) : (
                                                         <div className="p-8 text-center">
-                                                            <div className="w-14 h-14 mx-auto mb-3 flex items-center justify-center"
+                                                            <div className="flex items-center justify-center mx-auto mb-3 w-14 h-14"
                                                                 style={{ backgroundColor: theme === "dark" ? "#1a3a1a" : "#dcfce7" }}>
                                                                 <Package size={22} style={{ color: theme === "dark" ? "#4ade80" : "#16a34a" }} />
                                                             </div>
                                                             <p className="text-sm font-medium" style={{ color: colors.text }}>Tudo em ordem</p>
-                                                            <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>Nenhum produto esgotado</p>
+                                                            <p className="mt-1 text-xs" style={{ color: colors.textSecondary }}>Nenhum produto esgotado</p>
                                                         </div>
                                                     )
                                                 )}
@@ -829,7 +829,7 @@ export default function MainEmpresa({
                                                     </div>
 
                                                     {resumoEstoque && (
-                                                        <div className="grid grid-cols-3 gap-2 mb-3 p-2"
+                                                        <div className="grid grid-cols-3 gap-2 p-2 mb-3"
                                                             style={{ backgroundColor: theme === "dark" ? "#2a2a2a" : "#e5e7eb" }}>
                                                             <div className="text-center">
                                                                 <p className="text-base font-bold" style={{ color: colors.text }}>{resumoEstoque.totalProdutos}</p>
@@ -847,7 +847,7 @@ export default function MainEmpresa({
                                                     )}
 
                                                     <Link href="/dashboard/Produtos_servicos/Stock" onClick={() => setNotificacoesAberto(false)}>
-                                                        <div className="flex items-center justify-center gap-2 text-sm font-medium py-2 transition-opacity hover:opacity-90"
+                                                        <div className="flex items-center justify-center gap-2 py-2 text-sm font-medium transition-opacity hover:opacity-90"
                                                             style={{ backgroundColor: colors.primary, color: "white" }}>
                                                             <span>Gerenciar estoque</span>
                                                             <ChevronLeft size={14} className="rotate-180" />
@@ -876,17 +876,17 @@ export default function MainEmpresa({
 
                         {/* User avatar */}
                         <div
-                            className="rounded-full flex items-center gap-2 pl-2 md:pl-4 border-l"
+                            className="flex items-center gap-2 pl-2 border-l rounded-full md:pl-4"
                             style={{ borderColor: colors.border }}
                         >
-                            <div className="hidden md:block text-right">
+                            <div className="hidden text-right md:block">
                                 <p className="text-sm font-semibold leading-tight" style={{ color: colors.text }}>{userName}</p>
                                 <p className="text-xs capitalize" style={{ color: colors.textSecondary }}>
                                     {userRole === "admin" ? "Administrador" : userRole === "contabilista" ? "Contabilista" : "Operador"}
                                 </p>
                             </div>
                             <div
-                                className="rounded-full w-8 h-8 md:w-9 md:h-9 text-white flex items-center justify-center text-sm font-bold shadow-md flex-shrink-0"
+                                className="flex items-center justify-center flex-shrink-0 w-8 h-8 text-sm font-bold text-white rounded-full shadow-md md:w-9 md:h-9"
                                 style={{ background: `linear-gradient(135deg, ${colors.secondary} 0%, ${colors.primary} 100%)` }}
                             >
                                 {userInitial}
@@ -896,7 +896,7 @@ export default function MainEmpresa({
                 </header>
 
                 {/* Page content */}
-                <main className="flex-1 overflow-auto p-3 md:p-6">
+                <main className="flex-1 p-3 overflow-auto md:p-6">
                     <motion.div
                         key={pathname}
                         initial={{ opacity: 0, y: 12 }}
@@ -916,7 +916,7 @@ export default function MainEmpresa({
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
                         onClick={fecharModalLogout}
                     >
                         <motion.div
@@ -924,19 +924,19 @@ export default function MainEmpresa({
                             initial="hidden"
                             animate="visible"
                             exit="exit"
-                            className="shadow-2xl w-full max-w-sm overflow-hidden"
+                            className="w-full max-w-sm overflow-hidden shadow-2xl"
                             style={{ backgroundColor: colors.card }}
                             onClick={(e) => e.stopPropagation()}
                         >
                             <div className="p-6 pb-4 text-center">
-                                <h2 className="text-xl font-bold mb-2" style={{ color: colors.text }}>Confirmar Logout</h2>
+                                <h2 className="mb-2 text-xl font-bold" style={{ color: colors.text }}>Confirmar Logout</h2>
                                 <p className="text-sm" style={{ color: colors.textSecondary }}>
                                     Tem certeza que deseja sair? Você precisará fazer login novamente para acessar sua conta.
                                 </p>
                             </div>
 
                             {logoutError && (
-                                <div className="mx-5 mb-4 p-3 text-xs text-center"
+                                <div className="p-3 mx-5 mb-4 text-xs text-center"
                                     style={{ backgroundColor: theme === "dark" ? "#442200" : "#fef3c7", border: `1px solid ${theme === "dark" ? "#854d0e" : "#fbbf24"}`, color: theme === "dark" ? "#fbbf24" : "#92400e" }}>
                                     {logoutError}
                                 </div>
@@ -944,18 +944,18 @@ export default function MainEmpresa({
 
                             <div className="px-5 py-3 border-y" style={{ backgroundColor: theme === "dark" ? "#1a1a1a" : "#f9fafb", borderColor: colors.border }}>
                                 <div className="flex items-center gap-3">
-                                    <div className="rounded-full w-9 h-9 text-white flex items-center justify-center text-sm font-bold flex-shrink-0"
+                                    <div className="flex items-center justify-center flex-shrink-0 text-sm font-bold text-white rounded-full w-9 h-9"
                                         style={{ background: `linear-gradient(135deg, ${colors.secondary} 0%, ${colors.primary} 100%)` }}>
                                         {userInitial}
                                     </div>
                                     <div className="min-w-0">
-                                        <p className="font-medium text-sm truncate" style={{ color: colors.text }}>{userName}</p>
+                                        <p className="text-sm font-medium truncate" style={{ color: colors.text }}>{userName}</p>
                                         <p className="text-xs truncate" style={{ color: colors.textSecondary }}>{userEmail}</p>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="p-5 flex gap-3">
+                            <div className="flex gap-3 p-5">
                                 <button
                                     onClick={fecharModalLogout}
                                     disabled={logoutLoading}
@@ -978,7 +978,7 @@ export default function MainEmpresa({
                                 </button>
                             </div>
 
-                            <p className="px-5 pb-5 text-center text-xs" style={{ color: colors.textSecondary }}>
+                            <p className="px-5 pb-5 text-xs text-center" style={{ color: colors.textSecondary }}>
                                 Ao sair, sua sessão será encerrada e dados não salvos serão perdidos.
                             </p>
                         </motion.div>

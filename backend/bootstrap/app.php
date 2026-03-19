@@ -26,8 +26,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => RoleMiddleware::class,
         ]);
 
-        $middleware->group('api', [
-            EnsureFrontendRequestsAreStateful::class, // Sanctum
+        // Adiciona o Sanctum no INÍCIO do grupo api sem substituir os defaults do Laravel
+        // (throttle:api, SubstituteBindings, etc. são preservados)
+        $middleware->prependToGroup('api', [
+            EnsureFrontendRequestsAreStateful::class,
         ]);
     })
 
