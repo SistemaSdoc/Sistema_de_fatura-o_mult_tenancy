@@ -44,6 +44,7 @@ return [
         'Accept',
         'Origin',
         'X-XSRF-TOKEN',
+        'X-Print-Preview',
         'X-Tenant',
         'Cache-Control',
         'Pragma',

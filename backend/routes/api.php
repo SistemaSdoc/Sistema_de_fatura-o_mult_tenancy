@@ -148,8 +148,9 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
             Route::get('/{documento}/estado-at', [DocumentoFiscalController::class, 'consultarEstado'])->where('documento', $uuidPattern)->name('documentos.estado');
             Route::get('/{id}/pdf', [DocumentoFiscalController::class, 'imprimirPdf'])->where('id', $uuidPattern)->name('documentos.pdf');
             Route::get('/{id}/pdf/download', [DocumentoFiscalController::class, 'downloadPdf'])->where('id', $uuidPattern)->name('documentos.pdf-download');
-
-            // ✅ NOVA ROTA — impressão HTML com window.print() automático
+            Route::get('/{id}/imprimir-termica', [DocumentoFiscalController::class, 'imprimirTermica'])
+                ->where('id', $uuidPattern)
+                ->name('documentos.imprimir-termica');
             Route::get('/{id}/print', [DocumentoFiscalController::class, 'printView'])->where('id', $uuidPattern)->name('documentos.print');
 
             Route::get('/{documento}/recibos', [DocumentoFiscalController::class, 'recibos'])->where('documento', $uuidPattern)->name('documentos.recibos');

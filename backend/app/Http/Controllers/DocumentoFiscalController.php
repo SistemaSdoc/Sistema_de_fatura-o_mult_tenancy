@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\DocumentoFiscal;
 use App\Services\DocumentoFiscalService;
+use App\Services\ImpressoraTermicaService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -500,6 +501,47 @@ class DocumentoFiscalController extends Controller
     }
 
     /* =====================================================================
+     | IMPRESSÃO TÉRMICA - DIRETO NA IMPRESSORA SEM PDF
+     | ================================================================== */
+
+public function imprimirTermica(string $id, ImpressoraTermicaService $impressoraService): JsonResponse
+{
+    try {
+        $documento = $this->documentoService->buscarDocumento($id);
+        $dados = $this->documentoService->dadosParaPdf($documento);
+        
+        // Buscar itens
+        $docInfo = $documento;
+        if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
+            $docInfo = DocumentoFiscal::with(['itens.produto', 'cliente'])
+                ->find($documento->fatura_id);
+        }
+        
+        $dados['itens'] = $docInfo->itens ?? [];
+        $dados['docInfo'] = $docInfo;
+        
+        // Imprimir na térmica
+        $impressoraService->imprimirDocumento($documento, $dados);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Documento impresso com sucesso'
+        ]);
+        
+    } catch (\Exception $e) {
+        Log::error('Erro na impressão térmica', [
+            'id' => $id,
+            'error' => $e->getMessage()
+        ]);
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Erro ao imprimir: ' . $e->getMessage()
+        ], 500);
+    }
+}
+
+    /* =====================================================================
      | IMPRESSÃO — HTML com window.print()
      | ================================================================== */
 
@@ -519,12 +561,6 @@ class DocumentoFiscalController extends Controller
             $docInfo = $documentoOrigem ?? $documento;
 
             // ── AGT: QR Code (DP 71/25) ─────────────────────────────────
-            // O campo qr_code é a string de texto conforme a especificação:
-            //   NIF_EMITENTE*NIF_CLIENTE*DATA*BASE*IVA*TOTAL*HASH4*CERT
-            //
-            // Geramos imagem base64 via endroid/qr-code se disponível,
-            // passando $qr_code_img à view; caso contrário a view usa a
-            // API do QR Server como fallback.
             $qrCodeTexto = $dados['qr_code'];
             $qrCodeImg   = null;
 
@@ -545,7 +581,6 @@ class DocumentoFiscalController extends Controller
                     ]);
                 }
             }
-            // ────────────────────────────────────────────────────────────
 
             return view('documentos.print', [
                 'empresa'         => $dados['empresa'],
@@ -554,9 +589,7 @@ class DocumentoFiscalController extends Controller
                 'docInfo'         => $docInfo,
                 'itens'           => collect($docInfo->itens ?? []),
                 'cliente'         => $dados['cliente'],
-                // string de texto conforme DP 71/25
                 'qr_code'         => $qrCodeTexto,
-                // PNG base64 gerado pelo PHP (null = usa fallback via API)
                 'qr_code_img'     => $qrCodeImg,
             ]);
 
@@ -689,7 +722,6 @@ class DocumentoFiscalController extends Controller
      | HELPER PRIVADO
      | ================================================================== */
 
-
     /**
      * Gera HTML do QR Code para passar à view PDF.
      * Tenta endroid/qr-code (PNG base64), caso contrário SVG determinístico simples.
@@ -713,8 +745,7 @@ class DocumentoFiscalController extends Controller
             }
         }
 
-        // Opção 2: SVG determinístico simples (visualmente parece QR, baseado em hash)
-        // Instala endroid/qr-code para QR real e escaneável: composer require endroid/qr-code
+        // Opção 2: SVG determinístico simples
         $hash  = hash('sha256', $qrCodeTexto);
         $bits  = '';
         for ($i = 0; $i < strlen($hash); $i += 2) {
@@ -726,7 +757,6 @@ class DocumentoFiscalController extends Controller
         $svg  = '<svg xmlns="http://www.w3.org/2000/svg" width="'.$sz.'" height="'.$sz.'" viewBox="0 0 '.$sz.' '.$sz.'">';
         $svg .= '<rect width="'.$sz.'" height="'.$sz.'" fill="white"/>';
 
-        // Finder patterns (3 cantos)
         foreach ([[0,0], [($mods-7)*$cell, 0], [0, ($mods-7)*$cell]] as [$ox, $oy]) {
             for ($r = 0; $r < 7; $r++) {
                 for ($c = 0; $c < 7; $c++) {
@@ -736,7 +766,7 @@ class DocumentoFiscalController extends Controller
                 }
             }
         }
-        // Módulos de dados
+
         for ($r = 0; $r < $mods; $r++) {
             for ($c = 0; $c < $mods; $c++) {
                 if (($r<9&&$c<9)||($r<9&&$c>=$mods-8)||($r>=$mods-8&&$c<9)) continue;
