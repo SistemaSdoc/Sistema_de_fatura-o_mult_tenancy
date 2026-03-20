@@ -1,0 +1,8 @@
+<?php
+$fp = fopen("/dev/usb/lp0", "w");
+if (!$fp) {
+    echo "Erro ao abrir /dev/usb/lp0";
+} else {
+    fwrite($fp, "TESTE PHP\n");
+    fclose($fp);
+    echo "Enviado com sucesso"

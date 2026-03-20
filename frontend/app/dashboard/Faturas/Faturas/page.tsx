@@ -44,16 +44,36 @@ export default function FaturasPage() {
   }, []);
 
   useEffect(() => { carregarDocumentos(); }, [carregarDocumentos]);
-  const imprimirDocumento = useCallback((documento: DocumentoFiscal) => {
+  const imprimirDocumento = useCallback(async (documento: DocumentoFiscal) => {
     if (!documento.id) return;
 
-    // URL do backend — lida do env para não hardcodar porta
-    // No next.config.js deve existir: NEXT_PUBLIC_API_URL=http://192.168.x.x:8000
-    const backend = `${window.location.protocol}//${window.location.hostname}:8000`;
-    const url = `${backend}/api/documentos-fiscais/${documento.id}/print`;
-    window.open(url, "_blank");
-  }, []);
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.1.175';
+    const url = `${baseUrl}/api/documentos-fiscais/${documento.id}/imprimir-termica`;
 
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+        credentials: 'include',
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Sucesso! Não precisa abrir nada
+        console.log('✅ Documento impresso na térmica');
+        // Opcional: mostrar toast de sucesso
+      } else {
+        console.error('❌ Erro:', result.message);
+        alert('Erro ao imprimir: ' + result.message);
+      }
+    } catch (error) {
+      console.error('❌ Erro na requisição:', error);
+      alert('Erro ao conectar com a impressora');
+    }
+  }, []);
   /* ── Download PDF via Laravel (DomPDF) ─────────────────── */
   const baixarPdf = useCallback(async (documento: DocumentoFiscal) => {
     if (!documento.id) return;
