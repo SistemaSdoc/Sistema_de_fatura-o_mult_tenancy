@@ -1,4 +1,3 @@
-// src/app/(dashboard)/categorias/page.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -27,7 +26,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
     Dialog,
     DialogContent,
@@ -70,7 +68,7 @@ const INITIAL_FORM_DATA: FormCategoriaData = {
 
 export default function CategoriasPage() {
     const colors = useThemeColors();
-    
+
     // Estados
     const [categorias, setCategorias] = useState<Categoria[]>([]);
     const [categoriasFiltradas, setCategoriasFiltradas] = useState<Categoria[]>([]);
@@ -239,31 +237,31 @@ export default function CategoriasPage() {
     };
 
     const stats = [
-        { 
-            icon: LayoutGrid, 
-            label: "Total", 
-            value: categorias.length, 
+        {
+            icon: LayoutGrid,
+            label: "Total",
+            value: categorias.length,
             color: colors.text,
             bg: `${colors.text}15`
         },
-        { 
-            icon: CheckCircle2, 
-            label: "Ativos", 
-            value: categorias.filter(c => c.status === "ativo").length, 
+        {
+            icon: CheckCircle2,
+            label: "Ativos",
+            value: categorias.filter(c => c.status === "ativo").length,
             color: colors.success,
             bg: `${colors.success}15`
         },
-        { 
-            icon: Package, 
-            label: "Produtos", 
-            value: categorias.filter(c => c.tipo === "produto").length, 
-            color: colors.primary,
+        {
+            icon: Package,
+            label: "Produtos",
+            value: categorias.filter(c => c.tipo === "produto").length,
+            color: colors.text,
             bg: `${colors.primary}15`
         },
-        { 
-            icon: Wrench, 
-            label: "Serviços", 
-            value: categorias.filter(c => c.tipo === "servico").length, 
+        {
+            icon: Wrench,
+            label: "Serviços",
+            value: categorias.filter(c => c.tipo === "servico").length,
             color: colors.secondary,
             bg: `${colors.secondary}15`
         },
@@ -275,14 +273,14 @@ export default function CategoriasPage() {
                 {/* Header + Filtros + Botão - TUDO NA MESMA LINHA */}
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                     <div>
-                        <h1 className="text-xl font-semibold" style={{ color: colors.primary }}>
+                        <h1 className="text-xl font-bold" style={{ color: colors.secondary }}>
                             Categorias
                         </h1>
                         <p className="text-xs" style={{ color: colors.textSecondary }}>
                             Gerencie categorias de produtos e serviços
                         </p>
                     </div>
-                    
+
                     <div className="flex flex-col sm:flex-row gap-2">
                         {/* Busca */}
                         <div className="relative">
@@ -302,7 +300,7 @@ export default function CategoriasPage() {
 
                         {/* Filtro Status */}
                         <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-                            <SelectTrigger 
+                            <SelectTrigger
                                 className="h-8 text-xs w-[120px]"
                                 style={{
                                     backgroundColor: colors.card,
@@ -322,7 +320,7 @@ export default function CategoriasPage() {
 
                         {/* Filtro Tipo */}
                         <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-                            <SelectTrigger 
+                            <SelectTrigger
                                 className="h-8 text-xs w-[120px]"
                                 style={{
                                     backgroundColor: colors.card,
@@ -356,7 +354,7 @@ export default function CategoriasPage() {
                 {/* Cards de Estatísticas - MAIS COMPACTOS E SEM ROUNDED */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {stats.map(({ icon: Icon, label, value, color, bg }) => (
-                        <div key={label} 
+                        <div key={label}
                             className="p-2 border flex items-center gap-2"
                             style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                             <div className="p-1.5" style={{ backgroundColor: bg }}>
@@ -374,9 +372,9 @@ export default function CategoriasPage() {
                 <div className="border" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                     {isLoading ? (
                         <div className="flex items-center justify-center py-8">
-                            <div 
-                                className="h-6 w-6 border-2 border-b-0 border-l-0" 
-                                style={{ 
+                            <div
+                                className="h-6 w-6 border-2 border-b-0 border-l-0"
+                                style={{
                                     borderColor: colors.primary,
                                     animation: 'spin 1s linear infinite'
                                 }}
@@ -417,15 +415,9 @@ export default function CategoriasPage() {
                                                     variant="secondary"
                                                     className="border-0 font-medium text-[10px] px-1.5 py-0.5"
                                                     style={{
-                                                        backgroundColor: `${colors.primary}15`,
-                                                        color: colors.primary
-                                                    }}
-                                                >
-                                                    {categoria.tipo === "produto" ? (
-                                                        <Package className="mr-1 h-2.5 w-2.5" />
-                                                    ) : (
-                                                        <Wrench className="mr-1 h-2.5 w-2.5" style={{ color: colors.secondary }} />
-                                                    )}
+                                                        backgroundColor: `${colors.secondary}15`,
+                                                        color: colors.text
+                                                    }}>
                                                     {getTipoLabel(categoria.tipo)}
                                                 </Badge>
                                             </td>
@@ -465,13 +457,9 @@ export default function CategoriasPage() {
                                                             <MoreVertical className="h-3.5 w-3.5" />
                                                         </Button>
                                                     </DropdownMenuTrigger>
-                                                    <DropdownMenuContent 
-                                                        align="end" 
+                                                    <DropdownMenuContent
+                                                        align="end"
                                                         className="w-32 min-w-0"
-                                                        style={{ 
-                                                            backgroundColor: colors.card, 
-                                                            borderColor: colors.border 
-                                                        }}
                                                     >
                                                         <DropdownMenuItem
                                                             onClick={() => handleEditar(categoria)}
@@ -503,15 +491,15 @@ export default function CategoriasPage() {
 
             {/* Modal de Formulário - SEM ROUNDED */}
             <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                <DialogContent 
+                <DialogContent
                     className="sm:max-w-[450px] p-0"
-                    style={{ 
-                        backgroundColor: colors.card, 
-                        borderColor: colors.border 
+                    style={{
+                        backgroundColor: colors.card,
+                        borderColor: colors.border
                     }}
                 >
                     <DialogHeader className="p-4 border-b" style={{ borderColor: colors.border }}>
-                        <DialogTitle className="text-base" style={{ color: colors.primary }}>
+                        <DialogTitle className="text-base" style={{ color: colors.secondary }}>
                             {categoriaSelecionada ? "Editar Categoria" : "Nova Categoria"}
                         </DialogTitle>
                         <DialogDescription className="text-xs" style={{ color: colors.textSecondary }}>
@@ -610,11 +598,11 @@ export default function CategoriasPage() {
 
             {/* Modal de Confirmação de Delete - SEM ROUNDED */}
             <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
-                <DialogContent 
+                <DialogContent
                     className="sm:max-w-[350px] p-0"
-                    style={{ 
-                        backgroundColor: colors.card, 
-                        borderColor: colors.border 
+                    style={{
+                        backgroundColor: colors.card,
+                        borderColor: colors.border
                     }}
                 >
                     <DialogHeader className="p-4 border-b" style={{ borderColor: colors.border }}>
@@ -623,7 +611,7 @@ export default function CategoriasPage() {
                             Confirmar Exclusão
                         </DialogTitle>
                     </DialogHeader>
-                    
+
                     <div className="p-4">
                         <p className="text-xs mb-4" style={{ color: colors.textSecondary }}>
                             Tem certeza que deseja excluir a categoria{" "}
