@@ -205,7 +205,7 @@ export function getStatusColor(status: StatusFornecedor): string {
 export function getTipoColor(tipo: TipoFornecedor): string {
     return tipo === "Nacional"
         ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-        : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400";
+        : "bg-[#123859] text-[#F2F2F2] dark:bg-[#123859] dark:text-[#F2F2F2]";
 }
 
 export function getStatusLabel(status: StatusFornecedor): string {

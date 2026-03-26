@@ -1,4 +1,3 @@
-// src/app/(dashboard)/relatorios/page.tsx
 "use client";
 
 import React, { useEffect, useMemo, useState, useCallback } from "react";
@@ -39,28 +38,37 @@ async function exportarPDF(tab: TipoRelatorio, dados: any, periodo: string) {
   const autoTableFn = autoTableModule.default;
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
   if (typeof (doc as any).autoTable !== "function" && typeof autoTableFn === "function") {
-    (doc as any).autoTable = function(...args: any[]) { return autoTableFn(this, ...args); };
+    (doc as any).autoTable = function (options: any) {
+      return autoTableFn(doc, options);
+    };
   }
 
   const pw = doc.internal.pageSize.getWidth();
-  const P  = [18,  56,  89]  as [number, number, number];
-  const A  = [249, 148, 31]  as [number, number, number];
+  const P = [18, 56, 89] as [number, number, number];
+  const A = [249, 148, 31] as [number, number, number];
   const GR = [100, 100, 100] as [number, number, number];
   const LG = [230, 230, 230] as [number, number, number];
   const WH = [255, 255, 255] as [number, number, number];
   const ST = [245, 247, 250] as [number, number, number];
 
-  const autoT = (opts: any) => { if (typeof (doc as any).autoTable === "function") (doc as any).autoTable(opts); };
+  const autoT = (opts: any) => {
+    if (typeof (doc as any).autoTable === "function") {
+      (doc as any).autoTable(opts);
+    } else if (typeof autoTableFn === "function") {
+      autoTableFn(doc, opts);
+    }
+  };
+
   const lastY = () => ((doc as any).lastAutoTable?.finalY ?? 0) + 8;
 
   const titulos: Record<TipoRelatorio, string> = {
     vendas: "RELATÓRIO DE VENDAS ",
     documentos: "DOCUMENTOS FISCAIS E PROFORMAS",
-    pagamentos: "PAGAMENTOS ",
+    pagamentos: "PAGAMENTOS PENDENTES",
   };
 
-  // Cabeçalho
   doc.setFillColor(...P); doc.rect(0, 0, pw, 22, "F");
   doc.setFillColor(...A); doc.rect(0, 22, pw, 2, "F");
   doc.setTextColor(...WH); doc.setFont("helvetica", "bold"); doc.setFontSize(14);
@@ -70,12 +78,10 @@ async function exportarPDF(tab: TipoRelatorio, dados: any, periodo: string) {
 
   let y = 32;
 
-  // Conteúdo por tab
   if (tab === "vendas" && dados) {
-    // Dados de vendas e faturação combinados
     const vendasData = dados.vendas || {};
     const faturacaoData = dados.faturacao || {};
-    
+
     const kpis = [
       ["Total Vendas", formatarKwanza(vendasData.totais?.total_valor ?? 0)],
       ["Base Tributável", formatarKwanza(vendasData.totais?.total_base_tributavel ?? 0)],
@@ -96,9 +102,10 @@ async function exportarPDF(tab: TipoRelatorio, dados: any, periodo: string) {
       doc.text(val, x + (cw - 3) / 2, rowY + 12, { align: "center" });
     });
     y += 48;
-    
+
     if (vendasData.vendas?.length > 0) {
-      autoT({ startY: y, head: [["Cliente", "Total", "Status"]],
+      autoT({
+        startY: y, head: [["Cliente", "Total", "Status"]],
         body: vendasData.vendas.slice(0, 50).map((v: any) => [
           typeof v.cliente === "string" ? v.cliente : v.cliente?.nome ?? "-",
           formatarKwanza(Number(v.total) ?? 0),
@@ -106,25 +113,28 @@ async function exportarPDF(tab: TipoRelatorio, dados: any, periodo: string) {
         ]),
         theme: "grid", headStyles: { fillColor: P, fontSize: 7.5, fontStyle: "bold" },
         bodyStyles: { fontSize: 7.5 }, alternateRowStyles: { fillColor: ST },
-        columnStyles: { 1: { halign: "right" }, 2: { halign: "center" } }, margin: { left: 14, right: 14 } });
+        columnStyles: { 1: { halign: "right" }, 2: { halign: "center" } }, margin: { left: 14, right: 14 }
+      });
       y = lastY();
     }
-    
+
     if (faturacaoData.por_tipo) {
-      autoT({ startY: y, head: [["Tipo Documento", "Quantidade", "Valor"]],
+      autoT({
+        startY: y, head: [["Tipo Documento", "Quantidade", "Valor"]],
         body: Object.entries(faturacaoData.por_tipo).map(([tipo, d]: any) => [
           tipo, String(d?.quantidade ?? 0), formatarKwanza(d?.total_liquido ?? 0),
         ]),
         theme: "grid", headStyles: { fillColor: P, fontSize: 7.5, fontStyle: "bold" },
         bodyStyles: { fontSize: 7.5 }, alternateRowStyles: { fillColor: ST },
-        columnStyles: { 1: { halign: "center" }, 2: { halign: "right" } }, margin: { left: 14, right: 14 } });
+        columnStyles: { 1: { halign: "center" }, 2: { halign: "right" } }, margin: { left: 14, right: 14 }
+      });
     }
   }
 
   if (tab === "documentos" && dados) {
     const docsData = dados.documentos || {};
     const proformasData = dados.proformas || {};
-    
+
     const kpis = [
       ["Total Docs", String(docsData.estatisticas?.total_documentos ?? 0)],
       ["Valor Total Docs", formatarKwanza(docsData.estatisticas?.total_valor ?? 0)],
@@ -144,21 +154,24 @@ async function exportarPDF(tab: TipoRelatorio, dados: any, periodo: string) {
       doc.text(val, x + (cw - 3) / 2, rowY + 12, { align: "center" });
     });
     y += 44;
-    
+
     if (docsData.estatisticas?.por_tipo) {
-      autoT({ startY: y, head: [["Tipo", "Quantidade", "Valor", "Retenção"]],
+      autoT({
+        startY: y, head: [["Tipo", "Quantidade", "Valor", "Retenção"]],
         body: Object.entries(docsData.estatisticas.por_tipo).map(([tipo, d]: any) => [
           tipo, String(d?.quantidade ?? 0), formatarKwanza(d?.valor ?? 0), formatarKwanza(d?.retencao ?? 0),
         ]),
         theme: "grid", headStyles: { fillColor: P, fontSize: 7.5, fontStyle: "bold" },
         bodyStyles: { fontSize: 7.5 }, alternateRowStyles: { fillColor: ST },
         columnStyles: { 1: { halign: "center" }, 2: { halign: "right" }, 3: { halign: "right" } },
-        margin: { left: 14, right: 14 } });
+        margin: { left: 14, right: 14 }
+      });
       y = lastY();
     }
-    
+
     if (proformasData.proformas?.length > 0) {
-      autoT({ startY: y, head: [["Nº Doc.", "Cliente", "Data", "Valor", "Estado"]],
+      autoT({
+        startY: y, head: [["Nº Doc.", "Cliente", "Data", "Valor", "Estado"]],
         body: proformasData.proformas.slice(0, 30).map((p: any) => [
           p.numero_documento ?? "-",
           typeof p.cliente === "string" ? p.cliente : p.cliente?.nome ?? "-",
@@ -168,7 +181,8 @@ async function exportarPDF(tab: TipoRelatorio, dados: any, periodo: string) {
         ]),
         theme: "grid", headStyles: { fillColor: P, fontSize: 7.5, fontStyle: "bold" },
         bodyStyles: { fontSize: 7.5 }, alternateRowStyles: { fillColor: ST },
-        columnStyles: { 3: { halign: "right" }, 4: { halign: "center" } }, margin: { left: 14, right: 14 } });
+        columnStyles: { 3: { halign: "right" }, 4: { halign: "center" } }, margin: { left: 14, right: 14 }
+      });
     }
   }
 
@@ -177,8 +191,8 @@ async function exportarPDF(tab: TipoRelatorio, dados: any, periodo: string) {
     const kpis = [
       ["Total Pendente", formatarKwanza(resumo.total_pendente ?? 0)],
       ["Total Atrasado", formatarKwanza(resumo.total_atrasado ?? 0)],
-      ["Faturas Pend.",  String(resumo.quantidade_faturas ?? 0)],
-      ["Ret. Pendente",  formatarKwanza(resumo.retencao_pendente ?? 0)],
+      ["Faturas Pend.", String(resumo.quantidade_faturas ?? 0)],
+      ["Ret. Pendente", formatarKwanza(resumo.retencao_pendente ?? 0)],
     ];
     const cw = (pw - 28) / 4;
     kpis.forEach(([lbl, val], i) => {
@@ -191,7 +205,8 @@ async function exportarPDF(tab: TipoRelatorio, dados: any, periodo: string) {
     });
     y += 24;
     if (dados.faturas_pendentes?.length > 0) {
-      autoT({ startY: y, head: [["Documento", "Cliente", "Pendente", "Dias Atraso"]],
+      autoT({
+        startY: y, head: [["Documento", "Cliente", "Pendente", "Dias Atraso"]],
         body: dados.faturas_pendentes.slice(0, 50).map((f: any) => [
           f.numero_documento ?? "-",
           typeof f.cliente === "string" ? f.cliente : f.cliente?.nome ?? "-",
@@ -200,11 +215,11 @@ async function exportarPDF(tab: TipoRelatorio, dados: any, periodo: string) {
         ]),
         theme: "grid", headStyles: { fillColor: P, fontSize: 7.5, fontStyle: "bold" },
         bodyStyles: { fontSize: 7.5 }, alternateRowStyles: { fillColor: ST },
-        columnStyles: { 2: { halign: "right" }, 3: { halign: "center" } }, margin: { left: 14, right: 14 } });
+        columnStyles: { 2: { halign: "right" }, 3: { halign: "center" } }, margin: { left: 14, right: 14 }
+      });
     }
   }
 
-  // Rodapé em todas as páginas
   const total = (doc as any).internal.pages.length - 1;
   for (let i = 1; i <= total; i++) {
     doc.setPage(i);
@@ -236,7 +251,7 @@ async function exportarExcel(tab: TipoRelatorio, dados: any, periodo: string) {
     const vendasData = dados.vendas || {};
     const faturacaoData = dados.faturacao || {};
     const totais = vendasData.totais || {};
-    
+
     addSheet("Resumo Vendas", [
       header, [],
       ["Métrica", "Valor"],
@@ -246,14 +261,14 @@ async function exportarExcel(tab: TipoRelatorio, dados: any, periodo: string) {
       ["Retenções", formatarKwanza(totais.total_retencao ?? 0)],
       ["Nº Vendas", totais.total_vendas ?? 0],
     ]);
-    
+
     addSheet("Resumo Faturação", [
       header, [],
       ["Faturação Total", formatarKwanza(faturacaoData.faturacao_total ?? 0)],
       ["Faturação Paga", formatarKwanza(faturacaoData.faturacao_paga ?? 0)],
       ["Faturação Pendente", formatarKwanza(faturacaoData.faturacao_pendente ?? 0)],
     ]);
-    
+
     if (vendasData.vendas?.length > 0) {
       addSheet("Vendas", [
         ["Cliente", "Total", "Status"],
@@ -264,7 +279,7 @@ async function exportarExcel(tab: TipoRelatorio, dados: any, periodo: string) {
         ]),
       ]);
     }
-    
+
     if (faturacaoData.por_tipo) {
       addSheet("Faturação por Tipo", [
         ["Tipo", "Quantidade", "Valor"],
@@ -279,7 +294,7 @@ async function exportarExcel(tab: TipoRelatorio, dados: any, periodo: string) {
     const docsData = dados.documentos || {};
     const proformasData = dados.proformas || {};
     const est = docsData.estatisticas || {};
-    
+
     addSheet("Resumo Documentos", [
       header, [],
       ["Total Documentos", est.total_documentos ?? 0],
@@ -287,13 +302,13 @@ async function exportarExcel(tab: TipoRelatorio, dados: any, periodo: string) {
       ["Total IVA", formatarKwanza(est.total_iva ?? 0)],
       ["Retenções", formatarKwanza(est.total_retencao ?? 0)],
     ]);
-    
+
     addSheet("Resumo Proformas", [
       header, [],
       ["Total de Proformas", proformasData.total ?? 0],
       ["Valor Total", formatarKwanza(proformasData.valor_total ?? 0)],
     ]);
-    
+
     if (est.por_tipo) {
       addSheet("Documentos por Tipo", [
         ["Tipo", "Quantidade", "Valor", "Retenção"],
@@ -302,7 +317,7 @@ async function exportarExcel(tab: TipoRelatorio, dados: any, periodo: string) {
         ]),
       ]);
     }
-    
+
     if (proformasData.proformas?.length > 0) {
       addSheet("Proformas", [
         ["Nº Doc.", "Cliente", "Data", "Valor", "Estado"],
@@ -368,12 +383,19 @@ export default function RelatoriosPage() {
     setLoading(p => ({ ...p, vendas: true }));
     try {
       const [vendas, faturacao] = await Promise.all([
-        relatoriosService.getRelatorioVendas({ data_inicio: periodoVendas.data_inicio, data_fim: periodoVendas.data_fim }),
-        relatoriosService.getRelatorioFaturacao({ data_inicio: periodoVendas.data_inicio, data_fim: periodoVendas.data_fim })
+        relatoriosService.getRelatorioVendas({
+          data_inicio: periodoVendas.data_inicio,
+          data_fim: periodoVendas.data_fim
+        }),
+        relatoriosService.getRelatorioFaturacao({
+          data_inicio: periodoVendas.data_inicio,
+          data_fim: periodoVendas.data_fim
+        })
       ]);
       setRelatorioVendas(vendas);
       setRelatorioFaturacao(faturacao);
-    } catch {
+    } catch (err) {
+      console.error(err);
       toast.error("Erro ao carregar vendas e faturação");
     } finally {
       setLoading(p => ({ ...p, vendas: false }));
@@ -383,8 +405,10 @@ export default function RelatoriosPage() {
   const carregarPagamentos = useCallback(async () => {
     setLoading(p => ({ ...p, pagamentos: true }));
     try {
-      setRelatorioPagamentos(await relatoriosService.getRelatorioPagamentosPendentes());
-    } catch {
+      const pagamentos = await relatoriosService.getRelatorioPagamentosPendentes();
+      setRelatorioPagamentos(pagamentos);
+    } catch (err) {
+      console.error(err);
       toast.error("Erro ao carregar pagamentos");
     } finally {
       setLoading(p => ({ ...p, pagamentos: false }));
@@ -395,26 +419,33 @@ export default function RelatoriosPage() {
     setLoading(p => ({ ...p, documentos: true }));
     try {
       const [documentos, proformas] = await Promise.all([
-        relatoriosService.getRelatorioDocumentosFiscais({ data_inicio: periodoDocumentos.data_inicio, data_fim: periodoDocumentos.data_fim }),
-        relatoriosService.getRelatorioProformas({ data_inicio: periodoDocumentos.data_inicio, data_fim: periodoDocumentos.data_fim })
+        relatoriosService.getRelatorioDocumentosFiscais({
+          data_inicio: periodoDocumentos.data_inicio,
+          data_fim: periodoDocumentos.data_fim
+        }),
+        relatoriosService.getRelatorioProformas({
+          data_inicio: periodoDocumentos.data_inicio,
+          data_fim: periodoDocumentos.data_fim
+        })
       ]);
       setRelatorioDocumentos(documentos);
       setRelatorioProformas(proformas);
-    } catch {
+    } catch (err) {
+      console.error(err);
       toast.error("Erro ao carregar documentos e proformas");
     } finally {
       setLoading(p => ({ ...p, documentos: false }));
     }
   }, [periodoDocumentos]);
 
-  useEffect(() => { carregarPagamentos(); }, []);
+  useEffect(() => { carregarPagamentos(); }, [carregarPagamentos]);
 
   useEffect(() => {
     switch (activeTab) {
       case "vendas": carregarVendas(); break;
       case "documentos": carregarDocumentos(); break;
     }
-  }, [activeTab, periodoVendas, periodoDocumentos]);
+  }, [activeTab, carregarVendas, carregarDocumentos]);
 
   /* ── Período ────────────────────────────────────────────── */
   const setPeriodo = (tipo: PeriodoTipo, rel: "vendas" | "documentos") => {
@@ -429,9 +460,10 @@ export default function RelatoriosPage() {
       case "vendas": return { vendas: relatorioVendas, faturacao: relatorioFaturacao };
       case "documentos": return { documentos: relatorioDocumentos, proformas: relatorioProformas };
       case "pagamentos": return relatorioPagamentos;
+      default: return null;
     }
   };
-  
+
   const getPeriodoAtivo = () => {
     if (activeTab === "vendas") return `${periodoVendas.data_inicio} a ${periodoVendas.data_fim}`;
     if (activeTab === "documentos") return `${periodoDocumentos.data_inicio} a ${periodoDocumentos.data_fim}`;
@@ -444,8 +476,9 @@ export default function RelatoriosPage() {
     setExportLoading(true);
     try {
       await exportarPDF(activeTab, dados, getPeriodoAtivo());
-      toast.success("PDF exportado");
-    } catch {
+      toast.success("PDF exportado com sucesso");
+    } catch (err) {
+      console.error(err);
       toast.error("Erro ao exportar PDF");
     } finally {
       setExportLoading(false);
@@ -458,8 +491,9 @@ export default function RelatoriosPage() {
     setExportLoading(true);
     try {
       await exportarExcel(activeTab, dados, getPeriodoAtivo());
-      toast.success("Excel exportado");
-    } catch {
+      toast.success("Excel exportado com sucesso");
+    } catch (err) {
+      console.error(err);
       toast.error("Erro ao exportar Excel");
     } finally {
       setExportLoading(false);
@@ -479,18 +513,18 @@ export default function RelatoriosPage() {
   const dadosVendasPie = useMemo(() => {
     if (!relatorioVendas?.totais) return [];
     return [
-      { name: "Vendas", value: relatorioVendas.totais.total_vendas || 0, color: colors.primary },
+      { name: "Vendas", value: relatorioVendas.totais.total_valor || 0, color: colors.primary },
       { name: "Retenções", value: relatorioVendas.totais.total_retencao || 0, color: colors.secondary },
-    ].filter(d => d.value > 0);
+    ].filter((d: any) => d.value > 0);
   }, [relatorioVendas, colors]);
 
   const dadosFaturacaoPie = useMemo(() => {
     if (!relatorioFaturacao) return [];
     return [
-      { name: "Paga", value: relatorioFaturacao.faturacao_paga || 0, color: colors.success },
-      { name: "Pendente", value: relatorioFaturacao.faturacao_pendente || 0, color: colors.warning },
-    ].filter(d => d.value > 0);
-  }, [relatorioFaturacao, colors]);
+      { name: "Paga", value: relatorioFaturacao.faturacao_paga || 0, color: "#22c55e" },
+      { name: "Pendente", value: relatorioFaturacao.faturacao_pendente || 0, color: "#f97316" },
+    ].filter((d: any) => d.value > 0);
+  }, [relatorioFaturacao]);
 
   const dadosDocumentosPie = useMemo(() => {
     if (!relatorioDocumentos?.estatisticas?.por_tipo) return [];
@@ -509,16 +543,13 @@ export default function RelatoriosPage() {
   };
 
   const TABS: { id: TipoRelatorio; label: string }[] = [
-    { id: "vendas", label: "Vendas " },
+    { id: "vendas", label: "Vendas" },
     { id: "documentos", label: "Documentos e Proformas" },
     { id: "pagamentos", label: "Pagamentos Pendentes" },
   ];
 
   const isLoading = loading[activeTab];
 
-  /* ══════════════════════════════════════════════════════════
-     RENDER
-  ══════════════════════════════════════════════════════════ */
   return (
     <MainEmpresa>
       <div className="p-3 sm:p-5 space-y-4" style={{ color: colors.text }}>
@@ -587,115 +618,128 @@ export default function RelatoriosPage() {
               <>
                 <PeriodoSelector periodo={periodoVendas} onChange={t => setPeriodo(t, "vendas")} colors={colors} />
                 {isLoading ? <SkeletonCards n={7} colors={colors} />
-                : relatorioVendas && relatorioFaturacao ? (
-                  <>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <StatCard label="Total Vendas" value={formatarKwanza(relatorioVendas.totais?.total_valor ?? 0)}
-                        icon={<DollarSign size={16} />} color={colors.primary} colors={colors}
-                        sub={`${relatorioVendas.totais?.total_vendas ?? 0} transações`} />
-                      <StatCard label="Base Tributável" value={formatarKwanza(relatorioVendas.totais?.total_base_tributavel ?? 0)}
-                        icon={<FileText size={16} />} color="#3b82f6" colors={colors} />
-                      <StatCard label="Total IVA" value={formatarKwanza(relatorioVendas.totais?.total_iva ?? 0)}
-                        icon={<Percent size={16} />} color={colors.secondary} colors={colors} />
-                      <StatCard label="Retenções" value={formatarKwanza(relatorioVendas.totais?.total_retencao ?? 0)}
-                        icon={<TrendingUp size={16} />} color="#f97316" colors={colors}
-                        sub={`${relatorioVendas.totais?.total_servicos ?? 0} serviços`} />
-                    </div>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <StatCard label="Faturação Total" value={formatarKwanza(relatorioFaturacao.faturacao_total ?? 0)}
-                        icon={<DollarSign size={16} />} color={colors.primary} colors={colors} />
-                      <StatCard label="Faturação Paga" value={formatarKwanza(relatorioFaturacao.faturacao_paga ?? 0)}
-                        icon={<FileText size={16} />} color={colors.success} colors={colors} />
-                      <StatCard label="Faturação Pendente" value={formatarKwanza(relatorioFaturacao.faturacao_pendente ?? 0)}
-                        icon={<AlertCircle size={16} />} color={colors.secondary} colors={colors}
-                        alerta={(relatorioFaturacao.faturacao_pendente ?? 0) > 0} />
-                    </div>
+                  : relatorioVendas && relatorioFaturacao ? (
+                    <>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <StatCard label="Total Vendas" value={formatarKwanza(relatorioVendas.totais?.total_valor ?? 0)}
+                          icon={<DollarSign size={16} />} color={colors.primary} colors={colors}
+                          sub={`${relatorioVendas.totais?.total_vendas ?? 0} transações`} />
+                        <StatCard label="Base Tributável" value={formatarKwanza(relatorioVendas.totais?.total_base_tributavel ?? 0)}
+                          icon={<FileText size={16} />} color="#3b82f6" colors={colors} />
+                        <StatCard label="Total IVA" value={formatarKwanza(relatorioVendas.totais?.total_iva ?? 0)}
+                          icon={<Percent size={16} />} color={colors.secondary} colors={colors} />
+                        <StatCard label="Retenções" value={formatarKwanza(relatorioVendas.totais?.total_retencao ?? 0)}
+                          icon={<TrendingUp size={16} />} color="#f97316" colors={colors}
+                          sub={`${relatorioVendas.totais?.total_servicos ?? 0} serviços`} />
+                      </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                      <GraficoCard titulo="Distribuição Vendas" colors={colors}>
-                        {dadosVendasPie.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <StatCard label="Faturação Total" value={formatarKwanza(relatorioFaturacao.faturacao_total ?? 0)}
+                          icon={<DollarSign size={16} />} color={colors.primary} colors={colors} />
+                        <StatCard label="Faturação Paga" value={formatarKwanza(relatorioFaturacao.faturacao_paga ?? 0)}
+                          icon={<FileText size={16} />} color="#22c55e" colors={colors} />
+                        <StatCard label="Faturação Pendente" value={formatarKwanza(relatorioFaturacao.faturacao_pendente ?? 0)}
+                          icon={<AlertCircle size={16} />} color="#f97316" colors={colors}
+                          alerta={(relatorioFaturacao.faturacao_pendente ?? 0) > 0} />
+                      </div>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <GraficoCard titulo="Distribuição Vendas" colors={colors}>
+                          {dadosVendasPie.length > 0 ? (
+                            <ResponsiveContainer width="100%" height={260}>
+                              <PieChart>
+                                <Pie
+                                  data={dadosVendasPie}
+                                  dataKey="value"
+                                  nameKey="name"
+                                  cx="50%"
+                                  cy="50%"
+                                  outerRadius={90}
+                                  label={(entry: any) => `${entry.name}: ${((entry.percent ?? 0) * 100).toFixed(0)}%`}
+                                >
+                                  {dadosVendasPie.map((e: any, i: number) => <Cell key={i} fill={e.color} />)}
+                                </Pie>
+                                <Tooltip formatter={(v: any) => formatarKwanza(Number(v))} />
+                                <Legend />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          ) : <SemDados colors={colors} />}
+                        </GraficoCard>
+
+                        <GraficoCard titulo="Distribuição Faturação" colors={colors}>
+                          {dadosFaturacaoPie.length > 0 ? (
+                            <ResponsiveContainer width="100%" height={260}>
+                              <PieChart>
+                                <Pie
+                                  data={dadosFaturacaoPie}
+                                  dataKey="value"
+                                  nameKey="name"
+                                  cx="50%"
+                                  cy="50%"
+                                  outerRadius={90}
+                                  label={(entry: any) => `${entry.name}: ${((entry.percent ?? 0) * 100).toFixed(0)}%`}
+                                >
+                                  {dadosFaturacaoPie.map((e: any, i: number) => <Cell key={i} fill={e.color} />)}
+                                </Pie>
+                                <Tooltip formatter={(v: any) => formatarKwanza(Number(v))} contentStyle={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
+                                <Legend />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          ) : <SemDados colors={colors} />}
+                        </GraficoCard>
+                      </div>
+
+                      <GraficoCard titulo="Últimas Vendas" colors={colors}>
+                        <MiniTabela
+                          headers={["Cliente", "Total", "Status"]}
+                          rows={(relatorioVendas.vendas ?? []).slice(0, 10).map((v: any) => [
+                            typeof v.cliente === "string" ? v.cliente : v.cliente?.nome ?? "-",
+                            formatarKwanza(Number(v.total) ?? 0),
+                            <EstadoBadge key="s" estado={v.estado_pagamento} colors={colors} />,
+                          ])}
+                          aligns={["left", "right", "center"]}
+                          colors={colors}
+                        />
+                      </GraficoCard>
+
+                      {Object.keys(relatorioFaturacao.por_tipo ?? {}).length > 0 && (
+                        <GraficoCard titulo="Documentos Fiscais por Tipo" colors={colors}>
                           <ResponsiveContainer width="100%" height={260}>
-                            <PieChart>
-                              <Pie data={dadosVendasPie} dataKey="value" nameKey="name" cx="50%" cy="50%"
-                                outerRadius={90} label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}>
-                                {dadosVendasPie.map((e, i) => <Cell key={i} fill={e.color} />)}
-                              </Pie>
-                              <Tooltip formatter={v => formatarKwanza(Number(v))} />
+                            <BarChart data={Object.entries(relatorioFaturacao.por_tipo ?? {}).map(([tipo, d]: any) => ({ tipo, quantidade: d?.quantidade ?? 0, valor: d?.total_liquido ?? 0 }))}>
+                              <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+                              <XAxis dataKey="tipo" tick={{ fontSize: 11, fill: colors.textSecondary }} />
+                              <YAxis yAxisId="left" tick={{ fontSize: 11, fill: colors.textSecondary }} />
+                              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: colors.textSecondary }} />
+                              <Tooltip contentStyle={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
                               <Legend />
-                            </PieChart>
+                              <Bar yAxisId="left" dataKey="quantidade" fill={colors.primary} name="Quantidade" radius={[3, 3, 0, 0]} />
+                              <Bar yAxisId="right" dataKey="valor" fill={colors.secondary} name="Valor" radius={[3, 3, 0, 0]} />
+                            </BarChart>
                           </ResponsiveContainer>
-                        ) : <SemDados colors={colors} />}
-                      </GraficoCard>
+                        </GraficoCard>
+                      )}
 
-                      <GraficoCard titulo="Distribuição Faturação" colors={colors}>
-                        {dadosFaturacaoPie.length > 0 ? (
-                          <ResponsiveContainer width="100%" height={260}>
-                            <PieChart>
-                              <Pie data={dadosFaturacaoPie} dataKey="value" nameKey="name"
-                                cx="50%" cy="50%" outerRadius={90}
-                                label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}>
-                                {dadosFaturacaoPie.map((e, i) => <Cell key={i} fill={e.color} />)}
-                              </Pie>
-                              <Tooltip formatter={v => formatarKwanza(Number(v))} contentStyle={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
-                              <Legend />
-                            </PieChart>
+                      {(relatorioVendas.agrupado?.length ?? 0) > 0 && (
+                        <GraficoCard titulo="Evolução de Vendas" colors={colors}>
+                          <ResponsiveContainer width="100%" height={240}>
+                            <AreaChart data={relatorioVendas.agrupado}>
+                              <defs>
+                                <linearGradient id="gVendas" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor={colors.primary} stopOpacity={0.3} />
+                                  <stop offset="95%" stopColor={colors.primary} stopOpacity={0} />
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+                              <XAxis dataKey="periodo" tick={{ fontSize: 11, fill: colors.textSecondary }} />
+                              <YAxis tick={{ fontSize: 11, fill: colors.textSecondary }} tickFormatter={(v: any) => `Kz ${(v / 1000).toFixed(0)}k`} />
+                              <Tooltip formatter={(v: any) => formatarKwanza(Number(v))} contentStyle={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
+                              <Area type="monotone" dataKey="total" stroke={colors.primary} fill="url(#gVendas)" strokeWidth={2} />
+                            </AreaChart>
                           </ResponsiveContainer>
-                        ) : <SemDados colors={colors} />}
-                      </GraficoCard>
-                    </div>
-
-                    <GraficoCard titulo="Últimas Vendas" colors={colors}>
-                      <MiniTabela
-                        headers={["Cliente", "Total", "Status"]}
-                        rows={(relatorioVendas.vendas ?? []).slice(0, 10).map(v => [
-                          typeof v.cliente === "string" ? v.cliente : v.cliente?.nome ?? "-",
-                          formatarKwanza(Number(v.total) ?? 0),
-                          <EstadoBadge key="s" estado={v.estado_pagamento} colors={colors} />,
-                        ])}
-                        aligns={["left", "right", "center"]}
-                        colors={colors}
-                      />
-                    </GraficoCard>
-
-                    {Object.keys(relatorioFaturacao.por_tipo ?? {}).length > 0 && (
-                      <GraficoCard titulo="Documentos Fiscais por Tipo" colors={colors}>
-                        <ResponsiveContainer width="100%" height={260}>
-                          <BarChart data={Object.entries(relatorioFaturacao.por_tipo ?? {}).map(([tipo, d]: any) => ({ tipo, quantidade: d?.quantidade ?? 0, valor: d?.total_liquido ?? 0 }))}>
-                            <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
-                            <XAxis dataKey="tipo" tick={{ fontSize: 11, fill: colors.textSecondary }} />
-                            <YAxis yAxisId="left" tick={{ fontSize: 11, fill: colors.textSecondary }} />
-                            <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: colors.textSecondary }} />
-                            <Tooltip contentStyle={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
-                            <Legend />
-                            <Bar yAxisId="left" dataKey="quantidade" fill={colors.primary} name="Quantidade" radius={[3, 3, 0, 0]} />
-                            <Bar yAxisId="right" dataKey="valor" fill={colors.secondary} name="Valor" radius={[3, 3, 0, 0]} />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </GraficoCard>
-                    )}
-
-                    {(relatorioVendas.agrupado?.length ?? 0) > 0 && (
-                      <GraficoCard titulo="Evolução de Vendas" colors={colors}>
-                        <ResponsiveContainer width="100%" height={240}>
-                          <AreaChart data={relatorioVendas.agrupado}>
-                            <defs>
-                              <linearGradient id="gVendas" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor={colors.primary} stopOpacity={0.3} />
-                                <stop offset="95%" stopColor={colors.primary} stopOpacity={0} />
-                              </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
-                            <XAxis dataKey="periodo" tick={{ fontSize: 11, fill: colors.textSecondary }} />
-                            <YAxis tick={{ fontSize: 11, fill: colors.textSecondary }} tickFormatter={v => `Kz ${(v / 1000).toFixed(0)}k`} />
-                            <Tooltip formatter={v => formatarKwanza(Number(v))} contentStyle={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
-                            <Area type="monotone" dataKey="total" stroke={colors.primary} fill="url(#gVendas)" strokeWidth={2} />
-                          </AreaChart>
-                        </ResponsiveContainer>
-                      </GraficoCard>
-                    )}
-                  </>
-                ) : <Vazio colors={colors} />}
+                        </GraficoCard>
+                      )}
+                    </>
+                  ) : <Vazio colors={colors} />}
               </>
             )}
 
@@ -704,103 +748,103 @@ export default function RelatoriosPage() {
               <>
                 <PeriodoSelector periodo={periodoDocumentos} onChange={t => setPeriodo(t, "documentos")} colors={colors} />
                 {isLoading ? <SkeletonCards n={6} colors={colors} />
-                : relatorioDocumentos && relatorioProformas ? (
-                  <>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <StatCard label="Total Docs" value={String(relatorioDocumentos.estatisticas?.total_documentos ?? 0)}
-                        icon={<FileText size={16} />} color={colors.primary} colors={colors} />
-                      <StatCard label="Valor Total Docs" value={formatarKwanza(relatorioDocumentos.estatisticas?.total_valor ?? 0)}
-                        icon={<DollarSign size={16} />} color={colors.secondary} colors={colors} />
-                      <StatCard label="Total IVA" value={formatarKwanza(relatorioDocumentos.estatisticas?.total_iva ?? 0)}
-                        icon={<Percent size={16} />} color="#3b82f6" colors={colors} />
-                      <StatCard label="Retenções" value={formatarKwanza(relatorioDocumentos.estatisticas?.total_retencao ?? 0)}
-                        icon={<TrendingUp size={16} />} color="#f97316" colors={colors} />
-                    </div>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <StatCard label="Total Proformas" value={String(relatorioProformas.total ?? 0)}
-                        icon={<FileText size={16} />} color={colors.primary} colors={colors} />
-                      <StatCard label="Valor Proformas" value={formatarKwanza(relatorioProformas.valor_total ?? 0)}
-                        icon={<DollarSign size={16} />} color={colors.secondary} colors={colors} />
-                    </div>
+                  : relatorioDocumentos && relatorioProformas ? (
+                    <>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <StatCard label="Total Docs" value={String(relatorioDocumentos.estatisticas?.total_documentos ?? 0)}
+                          icon={<FileText size={16} />} color={colors.primary} colors={colors} />
+                        <StatCard label="Valor Total Docs" value={formatarKwanza(relatorioDocumentos.estatisticas?.total_valor ?? 0)}
+                          icon={<DollarSign size={16} />} color={colors.secondary} colors={colors} />
+                        <StatCard label="Total IVA" value={formatarKwanza(relatorioDocumentos.estatisticas?.total_iva ?? 0)}
+                          icon={<Percent size={16} />} color="#3b82f6" colors={colors} />
+                        <StatCard label="Retenções" value={formatarKwanza(relatorioDocumentos.estatisticas?.total_retencao ?? 0)}
+                          icon={<TrendingUp size={16} />} color="#f97316" colors={colors} />
+                      </div>
 
-                    <GraficoCard titulo="Documentos por Tipo" colors={colors}>
-                      {Object.keys(relatorioDocumentos.estatisticas?.por_tipo ?? {}).length > 0 ? (
-                        <ResponsiveContainer width="100%" height={300}>
-                          <BarChart data={Object.entries(relatorioDocumentos.estatisticas?.por_tipo ?? {}).map(([tipo, d]: any) => ({ tipo, quantidade: d?.quantidade ?? 0, valor: d?.valor ?? 0, retencao: d?.retencao ?? 0 }))}>
-                            <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
-                            <XAxis dataKey="tipo" tick={{ fontSize: 11, fill: colors.textSecondary }} />
-                            <YAxis yAxisId="left" tick={{ fontSize: 11, fill: colors.textSecondary }} />
-                            <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: colors.textSecondary }} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
-                            <Tooltip formatter={(v, n) => [formatarKwanza(Number(v)), n]} contentStyle={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
-                            <Legend />
-                            <Bar yAxisId="left" dataKey="quantidade" fill={colors.primary} name="Quantidade" radius={[3, 3, 0, 0]} />
-                            <Bar yAxisId="right" dataKey="valor" fill={colors.secondary} name="Valor" radius={[3, 3, 0, 0]} />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      ) : <SemDados colors={colors} />}
-                    </GraficoCard>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <StatCard label="Total Proformas" value={String(relatorioProformas.total ?? 0)}
+                          icon={<FileText size={16} />} color={colors.primary} colors={colors} />
+                        <StatCard label="Valor Proformas" value={formatarKwanza(relatorioProformas.valor_total ?? 0)}
+                          icon={<DollarSign size={16} />} color={colors.secondary} colors={colors} />
+                      </div>
 
-                    <GraficoCard titulo="Lista de Proformas" colors={colors}>
-                      {(relatorioProformas.proformas?.length ?? 0) > 0 ? (
-                        <MiniTabela
-                          headers={["Nº Doc.", "Cliente", "Data", "Valor", "Estado"]}
-                          rows={(relatorioProformas.proformas ?? []).slice(0, 20).map(p => [
-                            <span key="n" className="font-mono text-xs">{p.numero_documento}</span>,
-                            typeof p.cliente === "string" ? p.cliente : p.cliente?.nome ?? "-",
-                            formatarData(p.data_emissao),
-                            formatarKwanza(Number(p.total_liquido) ?? 0),
-                            <EstadoBadge key="s" estado={p.estado} colors={colors} />,
-                          ])}
-                          aligns={["left", "left", "left", "right", "center"]}
-                          colors={colors}
-                        />
-                      ) : <SemDados colors={colors} message="Nenhuma proforma encontrada" />}
-                    </GraficoCard>
-                  </>
-                ) : <Vazio colors={colors} />}
+                      <GraficoCard titulo="Documentos por Tipo" colors={colors}>
+                        {Object.keys(relatorioDocumentos.estatisticas?.por_tipo ?? {}).length > 0 ? (
+                          <ResponsiveContainer width="100%" height={300}>
+                            <BarChart data={Object.entries(relatorioDocumentos.estatisticas?.por_tipo ?? {}).map(([tipo, d]: any) => ({ tipo, quantidade: d?.quantidade ?? 0, valor: d?.valor ?? 0, retencao: d?.retencao ?? 0 }))}>
+                              <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+                              <XAxis dataKey="tipo" tick={{ fontSize: 11, fill: colors.textSecondary }} />
+                              <YAxis yAxisId="left" tick={{ fontSize: 11, fill: colors.textSecondary }} />
+                              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: colors.textSecondary }} tickFormatter={(v: any) => `${(v / 1000).toFixed(0)}k`} />
+                              <Tooltip formatter={(v: any, n: string | number | undefined) => [formatarKwanza(Number(v)), String(n ?? "")]} contentStyle={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: 8 }} />
+                              <Legend />
+                              <Bar yAxisId="left" dataKey="quantidade" fill={colors.primary} name="Quantidade" radius={[3, 3, 0, 0]} />
+                              <Bar yAxisId="right" dataKey="valor" fill={colors.secondary} name="Valor" radius={[3, 3, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        ) : <SemDados colors={colors} />}
+                      </GraficoCard>
+
+                      <GraficoCard titulo="Lista de Proformas" colors={colors}>
+                        {(relatorioProformas.proformas?.length ?? 0) > 0 ? (
+                          <MiniTabela
+                            headers={["Nº Doc.", "Cliente", "Data", "Valor", "Estado"]}
+                            rows={(relatorioProformas.proformas ?? []).slice(0, 20).map((p: any) => [
+                              <span key="n" className="font-mono text-xs">{p.numero_documento}</span>,
+                              typeof p.cliente === "string" ? p.cliente : p.cliente?.nome ?? "-",
+                              formatarData(p.data_emissao),
+                              formatarKwanza(Number(p.total_liquido) ?? 0),
+                              <EstadoBadge key="s" estado={p.estado} colors={colors} />,
+                            ])}
+                            aligns={["left", "left", "left", "right", "center"]}
+                            colors={colors}
+                          />
+                        ) : <SemDados colors={colors} message="Nenhuma proforma encontrada" />}
+                      </GraficoCard>
+                    </>
+                  ) : <Vazio colors={colors} />}
               </>
             )}
 
             {/* ─── PAGAMENTOS ─── */}
             {activeTab === "pagamentos" && (
               isLoading ? <SkeletonCards n={4} colors={colors} />
-              : relatorioPagamentos ? (
-                <>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <StatCard label="Total Pendente" value={formatarKwanza(relatorioPagamentos.resumo?.total_pendente ?? 0)}
-                      icon={<DollarSign size={16} />} color={colors.primary} colors={colors}
-                      alerta={(relatorioPagamentos.resumo?.total_pendente ?? 0) > 0} />
-                    <StatCard label="Total Atrasado" value={formatarKwanza(relatorioPagamentos.resumo?.total_atrasado ?? 0)}
-                      icon={<AlertCircle size={16} />} color={colors.danger} colors={colors}
-                      alerta={(relatorioPagamentos.resumo?.total_atrasado ?? 0) > 0} />
-                    <StatCard label="Faturas Pend." value={String(relatorioPagamentos.resumo?.quantidade_faturas ?? 0)}
-                      icon={<FileText size={16} />} color={colors.secondary} colors={colors} />
-                    <StatCard label="Retenção Pend." value={formatarKwanza(relatorioPagamentos.resumo?.retencao_pendente ?? 0)}
-                      icon={<Percent size={16} />} color="#f97316" colors={colors} />
-                  </div>
+                : relatorioPagamentos ? (
+                  <>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <StatCard label="Total Pendente" value={formatarKwanza(relatorioPagamentos.resumo?.total_pendente ?? 0)}
+                        icon={<DollarSign size={16} />} color={colors.primary} colors={colors}
+                        alerta={(relatorioPagamentos.resumo?.total_pendente ?? 0) > 0} />
+                      <StatCard label="Total Atrasado" value={formatarKwanza(relatorioPagamentos.resumo?.total_atrasado ?? 0)}
+                        icon={<AlertCircle size={16} />} color="#dc2626" colors={colors}
+                        alerta={(relatorioPagamentos.resumo?.total_atrasado ?? 0) > 0} />
+                      <StatCard label="Faturas Pend." value={String(relatorioPagamentos.resumo?.quantidade_faturas ?? 0)}
+                        icon={<FileText size={16} />} color={colors.secondary} colors={colors} />
+                      <StatCard label="Retenção Pend." value={formatarKwanza(relatorioPagamentos.resumo?.retencao_pendente ?? 0)}
+                        icon={<Percent size={16} />} color="#f97316" colors={colors} />
+                    </div>
 
-                  <GraficoCard titulo="Faturas Pendentes" colors={colors}>
-                    {(relatorioPagamentos.faturas_pendentes?.length ?? 0) > 0 ? (
-                      <MiniTabela
-                        headers={["Documento", "Cliente", "Pendente", "Dias"]}
-                        rows={(relatorioPagamentos.faturas_pendentes ?? []).slice(0, 15).map(f => [
-                          <span key="d" className="font-mono text-xs">{f.numero_documento}</span>,
-                          typeof f.cliente === "string" ? f.cliente : f.cliente?.nome ?? "-",
-                          formatarKwanza(Number(f.valor_pendente) ?? 0),
-                          <EstadoBadge key="s" estado={(f.dias_atraso ?? 0) > 0 ? "atrasado" : "em_dia"} label={(f.dias_atraso ?? 0) > 0 ? `${f.dias_atraso}d` : "Em dia"} colors={colors} />,
-                        ])}
-                        aligns={["left", "left", "right", "center"]}
-                        colors={colors}
-                      />
-                    ) : (
-                      <div className="py-8 text-center text-sm" style={{ color: colors.textSecondary }}>
-                        Nenhuma fatura pendente
-                      </div>
-                    )}
-                  </GraficoCard>
-                </>
-              ) : <Vazio colors={colors} />
+                    <GraficoCard titulo="Faturas Pendentes" colors={colors}>
+                      {(relatorioPagamentos.faturas_pendentes?.length ?? 0) > 0 ? (
+                        <MiniTabela
+                          headers={["Documento", "Cliente", "Pendente", "Dias"]}
+                          rows={(relatorioPagamentos.faturas_pendentes ?? []).slice(0, 15).map((f: any) => [
+                            <span key="d" className="font-mono text-xs">{f.numero_documento}</span>,
+                            typeof f.cliente === "string" ? f.cliente : f.cliente?.nome ?? "-",
+                            formatarKwanza(Number(f.valor_pendente) ?? 0),
+                            <EstadoBadge key="s" estado={(f.dias_atraso ?? 0) > 0 ? "atrasado" : "em_dia"} label={(f.dias_atraso ?? 0) > 0 ? `${f.dias_atraso}d` : "Em dia"} colors={colors} />,
+                          ])}
+                          aligns={["left", "left", "right", "center"]}
+                          colors={colors}
+                        />
+                      ) : (
+                        <div className="py-8 text-center text-sm" style={{ color: colors.textSecondary }}>
+                          Nenhuma fatura pendente
+                        </div>
+                      )}
+                    </GraficoCard>
+                  </>
+                ) : <Vazio colors={colors} />
             )}
 
           </div>
@@ -810,11 +854,10 @@ export default function RelatoriosPage() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════
-   COMPONENTES AUXILIARES
-═══════════════════════════════════════════════════════════ */
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+/* COMPONENTES AUXILIARES */
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
-/* ── StatCard ── */
 function StatCard({ label, value, sub, icon, color, colors, alerta }: {
   label: string; value: string; sub?: string;
   icon: React.ReactNode; color: string; colors: any; alerta?: boolean;
@@ -839,7 +882,6 @@ function StatCard({ label, value, sub, icon, color, colors, alerta }: {
   );
 }
 
-/* ── PeriodoSelector ── */
 function PeriodoSelector({ periodo, onChange, colors }: {
   periodo: PeriodoConfig; onChange: (t: PeriodoTipo) => void; colors: any;
 }) {
@@ -876,7 +918,6 @@ function PeriodoSelector({ periodo, onChange, colors }: {
   );
 }
 
-/* ── GraficoCard ── */
 function GraficoCard({ titulo, children, colors }: { titulo: string; children: React.ReactNode; colors: any }) {
   return (
     <div className="rounded-xl border overflow-hidden" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
@@ -888,7 +929,6 @@ function GraficoCard({ titulo, children, colors }: { titulo: string; children: R
   );
 }
 
-/* ── MiniTabela ── */
 function MiniTabela({ headers, rows, aligns, colors }: {
   headers: string[]; rows: (string | React.ReactNode)[][]; aligns: ("left" | "right" | "center")[]; colors: any;
 }) {
@@ -901,7 +941,7 @@ function MiniTabela({ headers, rows, aligns, colors }: {
               <th key={i} className={`py-2 px-3 text-${aligns[i]} text-xs font-semibold uppercase tracking-wide`}
                 style={{ color: colors.textSecondary }}>{h}</th>
             ))}
-           </tr>
+          </tr>
         </thead>
         <tbody className="divide-y" style={{ borderColor: colors.border }}>
           {rows.map((row, ri) => (
@@ -920,16 +960,15 @@ function MiniTabela({ headers, rows, aligns, colors }: {
   );
 }
 
-/* ── EstadoBadge ── */
 function EstadoBadge({ estado, label, colors }: { estado?: string; label?: string; colors: any }) {
   const text = label ?? estado ?? "-";
   const cfg: Record<string, { bg: string; color: string }> = {
-    paga: { bg: `${colors.success}20`, color: colors.success },
-    pendente: { bg: `${colors.warning}20`, color: colors.warning },
-    atrasado: { bg: `${colors.danger}20`, color: colors.danger },
-    emitido: { bg: `${colors.warning}20`, color: colors.warning },
-    convertido: { bg: `${colors.success}20`, color: colors.success },
-    em_dia: { bg: `${colors.success}20`, color: colors.success },
+    paga: { bg: `#22c55e20`, color: "#22c55e" },
+    pendente: { bg: `#f9731620`, color: "#f97316" },
+    atrasado: { bg: `#dc262620`, color: "#dc2626" },
+    emitido: { bg: `#f9731620`, color: "#f97316" },
+    convertido: { bg: `#22c55e20`, color: "#22c55e" },
+    em_dia: { bg: `#22c55e20`, color: "#22c55e" },
   };
   const s = cfg[estado ?? ""] ?? { bg: `${colors.border}`, color: colors.textSecondary };
   return (
@@ -938,10 +977,9 @@ function EstadoBadge({ estado, label, colors }: { estado?: string; label?: strin
   );
 }
 
-/* ── Skeleton ── */
 function SkeletonCards({ n, colors }: { n: number; colors: any }) {
   return (
-    <div className={`grid grid-cols-2 sm:grid-cols-${Math.min(n, 4)} gap-3`}>
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {Array.from({ length: n }).map((_, i) => (
         <div key={i} className="h-16 rounded-xl animate-pulse" style={{ backgroundColor: colors.hover }} />
       ))}
@@ -949,7 +987,6 @@ function SkeletonCards({ n, colors }: { n: number; colors: any }) {
   );
 }
 
-/* ── Vazio / SemDados ── */
 function Vazio({ colors }: { colors: any }) {
   return (
     <div className="py-12 text-center text-sm" style={{ color: colors.textSecondary }}>

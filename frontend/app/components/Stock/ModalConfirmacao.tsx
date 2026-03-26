@@ -70,10 +70,10 @@ export function ModalConfirmacao({
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="rounded-xl shadow-xl max-w-md w-full" style={{ backgroundColor: colors.card }}>
+            <div className="shadow-xl max-w-md w-full" style={{ backgroundColor: colors.card }}>
                 <div className="p-6">
                     <div className="flex items-center gap-3 mb-4">
-                        <div className="p-2 rounded-lg" style={{ backgroundColor: `${config.buttonColor}20` }}>
+                        <div className="p-2 " style={{ backgroundColor: `${config.buttonColor}20` }}>
                             <div style={{ color: config.buttonColor }}>
                                 {config.icon}
                             </div>
@@ -87,7 +87,7 @@ export function ModalConfirmacao({
                         <button
                             onClick={onClose}
                             disabled={loading}
-                            className="flex-1 px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+                            className="flex-1 px-4 py-2 transition-colors disabled:opacity-50"
                             style={{ color: colors.textSecondary }}
                         >
                             Cancelar
@@ -95,7 +95,7 @@ export function ModalConfirmacao({
                         <button
                             onClick={handleConfirm}
                             disabled={loading}
-                            className="flex-1 px-4 py-2 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            className="flex-1 px-4 py-2 text-white transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                             style={{ backgroundColor: config.buttonColor }}
                         >
                             {loading && <RefreshCcw className="w-4 h-4 animate-spin" />}

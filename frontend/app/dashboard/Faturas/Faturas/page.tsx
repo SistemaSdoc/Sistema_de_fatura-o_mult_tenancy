@@ -11,7 +11,7 @@ import {
   GerarReciboDTO,
 } from "@/services/DocumentoFiscal";
 import { useThemeColors } from "@/context/ThemeContext";
-import { RefreshCw, Search, X, ArrowLeft } from "lucide-react";
+import { RefreshCw, Search, X, ArrowLeft, Plus } from "lucide-react";
 
 type TipoFiltro = "FR" | "FT";
 
@@ -47,7 +47,7 @@ export default function FaturasPage() {
   const imprimirDocumento = useCallback(async (documento: DocumentoFiscal) => {
     if (!documento.id) return;
 
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.1.175';
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.1.199';
     const url = `${baseUrl}/api/documentos-fiscais/${documento.id}/imprimir-termica`;
 
     try {
@@ -63,14 +63,14 @@ export default function FaturasPage() {
 
       if (result.success) {
         // Sucesso! Não precisa abrir nada
-        console.log('✅ Documento impresso na térmica');
+        console.log('👌Documento impresso na térmica com sucesso');
         // Opcional: mostrar toast de sucesso
       } else {
-        console.error('❌ Erro:', result.message);
+        console.error('Erro:', result.message);
         alert('Erro ao imprimir: ' + result.message);
       }
     } catch (error) {
-      console.error('❌ Erro na requisição:', error);
+      console.error('Erro na requisição:', error);
       alert('Erro ao conectar com a impressora');
     }
   }, []);
@@ -194,13 +194,12 @@ export default function FaturasPage() {
             </div>
 
             <button
-              onClick={carregarDocumentos}
-              disabled={loading}
+              onClick={() => router.push("/dashboard/Vendas/Nova_venda")}
               className="flex items-center gap-1.5 px-2 py-2 text-white text-sm font-medium disabled:opacity-50 transition-opacity"
-              style={{ backgroundColor: colors.primary }}
+              style={{ backgroundColor: colors.secondary }}
             >
-              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-              <span className="hidden sm:inline">{loading ? "A atualizar…" : "Atualizar"}</span>
+              <Plus size={14} className="" />
+              <span className="hidden sm:inline">Nova venda</span>
             </button>
           </div>
         </div>

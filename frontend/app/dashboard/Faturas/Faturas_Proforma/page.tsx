@@ -76,21 +76,21 @@ export default function NovaFaturaProformaPage() {
         fontSize: '14px',
     };
 
-    const [clientes, setClientes]                           = useState<Cliente[]>([]);
-    const [produtos, setProdutos]                           = useState<Produto[]>([]);
-    const [produtosEstoqueBaixo, setProdutosEstoqueBaixo]   = useState<Produto[]>([]);
-    const [clienteSelecionado, setClienteSelecionado]       = useState<Cliente | null>(null);
-    const [itens, setItens]                                 = useState<ItemDocumentoUI[]>([]);
-    const [loading, setLoading]                             = useState(false);
-    const [error, setError]                                 = useState<string | null>(null);
-    const [sucesso, setSucesso]                             = useState<string | null>(null);
-    const [modoCliente, setModoCliente]                     = useState<ModoCliente>('cadastrado');
-    const [clienteAvulso, setClienteAvulso]                 = useState('');
-    const [clienteAvulsoNif, setClienteAvulsoNif]           = useState('');
-    const [nifError, setNifError]                           = useState<string | null>(null);
-    const [formItem, setFormItem]                           = useState<FormItemState>({ produto_id: "", quantidade: 1, desconto: 0 });
-    const [previewItem, setPreviewItem]                     = useState<ItemDocumentoUI | null>(null);
-    const [observacoes, setObservacoes]                     = useState('');
+    const [clientes, setClientes] = useState<Cliente[]>([]);
+    const [produtos, setProdutos] = useState<Produto[]>([]);
+    const [produtosEstoqueBaixo, setProdutosEstoqueBaixo] = useState<Produto[]>([]);
+    const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
+    const [itens, setItens] = useState<ItemDocumentoUI[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [sucesso, setSucesso] = useState<string | null>(null);
+    const [modoCliente, setModoCliente] = useState<ModoCliente>('cadastrado');
+    const [clienteAvulso, setClienteAvulso] = useState('');
+    const [clienteAvulsoNif, setClienteAvulsoNif] = useState('');
+    const [nifError, setNifError] = useState<string | null>(null);
+    const [formItem, setFormItem] = useState<FormItemState>({ produto_id: "", quantidade: 1, desconto: 0 });
+    const [previewItem, setPreviewItem] = useState<ItemDocumentoUI | null>(null);
+    const [observacoes, setObservacoes] = useState('');
 
     useEffect(() => {
         if (!authLoading && !user) router.push("/login");
@@ -121,7 +121,11 @@ export default function NovaFaturaProformaPage() {
         const nums = e.target.value.replace(/\D/g, '');
         if (nums.length <= 9) {
             setClienteAvulsoNif(nums);
-            setNifError(nums.length > 0 && nums.length !== 9 ? "NIF deve ter 9 dígitos" : null);
+            if (nums.length > 0 && nums.length !== 9) {
+                setNifError("NIF deve ter 9 dígitos");
+            } else {
+                setNifError(null);
+            }
         }
     };
 
@@ -194,25 +198,23 @@ export default function NovaFaturaProformaPage() {
             setError(`Máximo disponível: ${p.estoque_atual}`); return;
         }
         setItens(prev => prev.map((it, i) => i === idx ? calcularItem(p, novaQtd, item.desconto, item.id) : it));
+        setError(null);
     };
 
     const removerItem = (id: string) => setItens(p => p.filter(i => i.id !== id));
 
     /* ── Totais ── */
-    const totalBase     = arredondar(itens.reduce((a, i) => a + i.base_tributavel, 0));
-    const totalIva      = arredondar(itens.reduce((a, i) => a + i.valor_iva, 0));
+    const totalBase = arredondar(itens.reduce((a, i) => a + i.base_tributavel, 0));
+    const totalIva = arredondar(itens.reduce((a, i) => a + i.valor_iva, 0));
     const totalRetencao = arredondar(itens.reduce((a, i) => a + i.valor_retencao, 0));
-    const totalLiquido  = arredondar(totalBase + totalIva - totalRetencao);
+    const totalLiquido = arredondar(totalBase + totalIva - totalRetencao);
     const totalDesconto = arredondar(itens.reduce((a, i) => a + i.desconto, 0));
 
     /* ── Validação ── */
     const podeFinalizar = () => {
         if (itens.length === 0) return false;
         if (modoCliente === 'cadastrado' && !clienteSelecionado) return false;
-        if (modoCliente === 'avulso') {
-            if (!clienteAvulso.trim()) return false;
-            if (clienteAvulsoNif.trim() && clienteAvulsoNif.length !== 9) return false;
-        }
+        // Modo avulso: sempre válido, pois será "Consumidor Final" se não preenchido
         return true;
     };
 
@@ -229,12 +231,25 @@ export default function NovaFaturaProformaPage() {
                     desconto: arredondar(item.desconto), taxa_iva: item.taxa_iva,
                 })),
             };
-            if (modoCliente === 'cadastrado' && clienteSelecionado)
+
+            if (modoCliente === 'cadastrado' && clienteSelecionado) {
                 payload.cliente_id = clienteSelecionado.id;
-            else if (modoCliente === 'avulso' && clienteAvulso.trim()) {
-                payload.cliente_nome = clienteAvulso.trim();
-                if (clienteAvulsoNif.trim()) payload.cliente_nif = clienteAvulsoNif.trim();
+            } else if (modoCliente === 'avulso') {
+                // Se o nome não foi informado, usa "Consumidor Final"
+                if (clienteAvulso.trim()) {
+                    payload.cliente_nome = clienteAvulso.trim();
+                } else {
+                    payload.cliente_nome = "Consumidor Final";
+                }
+
+                // Se o NIF não foi informado ou é inválido, usa "999999999"
+                if (clienteAvulsoNif.trim() && clienteAvulsoNif.length === 9) {
+                    payload.cliente_nif = clienteAvulsoNif.trim();
+                } else {
+                    payload.cliente_nif = "999999999";
+                }
             }
+
             if (observacoes.trim()) payload.motivo = observacoes.trim();
 
             const resultado = await emitirDocumentoFiscal(payload);
@@ -242,8 +257,8 @@ export default function NovaFaturaProformaPage() {
                 (resultado as { documento?: { numero_documento?: string } })?.documento?.numero_documento ||
                 (resultado as { data?: { documento?: { numero_documento?: string } } })?.data?.documento?.numero_documento ||
                 'N/A';
-            setSucesso(`Fatura Proforma criada com sucesso! Nº: ${numDoc}`);
-            setTimeout(() => router.push("/dashboard/Faturas/Faturas"), 1500);
+            setSucesso(` Proforma criada com sucesso! Nº: ${numDoc}`);
+            setTimeout(() => router.push("/dashboard/Faturas/DC"), 1500);
         } catch (err: unknown) {
             setError(err instanceof AxiosError ? err.response?.data?.message || "Erro ao salvar proforma" : "Erro ao salvar proforma");
         } finally {
@@ -269,8 +284,7 @@ export default function NovaFaturaProformaPage() {
                         <ArrowLeft size={18} />
                     </button>
                     <div>
-                        <h1 className="text-lg font-bold" style={{ color: colors.secondary }}>Nova Fatura Proforma</h1>
-                        <p className="text-xs" style={{ color: colors.textSecondary }}>Documento comercial sem validade fiscal</p>
+                        <h1 className="text-lg font-bold" style={{ color: colors.secondary }}>Gerar Proforma</h1>
                     </div>
                 </div>
 
@@ -342,7 +356,7 @@ export default function NovaFaturaProformaPage() {
                                                 backgroundColor: modoCliente === modo ? colors.primary : 'transparent',
                                                 color: modoCliente === modo ? 'white' : colors.textSecondary,
                                             }}>
-                                            {modo === 'cadastrado' ? 'Cadastrado' : 'Avulso'}
+                                            {modo === 'cadastrado' ? 'Cadastrado' : 'Não cadastrado'}
                                         </button>
                                     ))}
                                 </div>
@@ -362,13 +376,13 @@ export default function NovaFaturaProformaPage() {
                                     </select>
                                 ) : (
                                     <>
-                                        <input type="text" placeholder="Nome do cliente *"
+                                        <input type="text" placeholder="Nome (opcional - Consumidor Final)"
                                             className="flex-1 min-w-0 px-3 py-1.5 text-sm outline-none"
                                             style={inp}
                                             value={clienteAvulso}
                                             onChange={e => setClienteAvulso(e.target.value)} />
                                         <div className="relative w-32 sm:w-36 shrink-0">
-                                            <input type="text" inputMode="numeric" placeholder="NIF (9 dígitos)"
+                                            <input type="text" inputMode="numeric" placeholder="NIF (opcional)"
                                                 className="w-full px-3 py-1.5 text-sm outline-none" maxLength={9}
                                                 style={{ ...inp, borderColor: nifError ? colors.danger : inp.borderColor }}
                                                 value={clienteAvulsoNif}
@@ -383,33 +397,74 @@ export default function NovaFaturaProformaPage() {
                             </div>
                         </div>
 
-                        {/* ── Produto ── */}
+                        {/* ── Produto e Serviço ── */}
                         <div className="flex min-h-[44px]" style={{ borderColor: colors.border }}>
                             <div className="flex items-center gap-1.5 px-3 py-2.5 w-24 sm:w-28 shrink-0"
                                 style={{ backgroundColor: colors.hover }}>
                                 <Package size={13} style={{ color: colors.text }} />
-                                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>Produto</span>
+                                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>Itens</span>
                             </div>
                             <div className="flex-1 px-3 py-2.5 min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
-                                    {/* Select produto — cresce */}
+                                    {/* Select de Produtos Físicos */}
                                     <select className="flex-1 min-w-[140px] px-3 py-1.5 text-sm outline-none"
                                         style={inp}
                                         value={formItem.produto_id}
                                         onChange={e => {
                                             const p = produtos.find(x => x.id === e.target.value);
-                                            setFormItem({
-                                                produto_id: e.target.value,
-                                                quantidade: p ? (isServico(p) ? 1 : Math.min(1, p.estoque_atual)) : 1,
-                                                desconto: 0,
-                                            });
+                                            if (p && p.tipo === 'produto') {
+                                                setFormItem({
+                                                    produto_id: e.target.value,
+                                                    quantidade: Math.min(1, p.estoque_atual),
+                                                    desconto: 0,
+                                                });
+                                            } else if (p && p.tipo === 'servico') {
+                                                setFormItem({
+                                                    produto_id: e.target.value,
+                                                    quantidade: 1,
+                                                    desconto: 0,
+                                                });
+                                            }
                                         }}>
-                                        <option value="">Selecione um produto…</option>
-                                        {produtos.filter(p => p.status === 'ativo').map(p => (
-                                            <option key={p.id} value={p.id}>
-                                                {p.nome} — {formatarPreco(p.preco_venda)}{!isServico(p) ? ` (${p.estoque_atual})` : ''}
-                                            </option>
-                                        ))}
+                                        <option value="">Selecione um produto...</option>
+                                        {produtos
+                                            .filter(p => p.status === 'ativo' && p.tipo === 'produto')
+                                            .map(p => (
+                                                <option key={p.id} value={p.id}>
+                                                    {p.nome} — {formatarPreco(p.preco_venda)} ({p.estoque_atual} em stock)
+                                                </option>
+                                            ))}
+                                    </select>
+
+                                    {/* Select de Serviços */}
+                                    <select className="flex-1 min-w-[140px] px-3 py-1.5 text-sm outline-none"
+                                        style={inp}
+                                        value={formItem.produto_id}
+                                        onChange={e => {
+                                            const p = produtos.find(x => x.id === e.target.value);
+                                            if (p && p.tipo === 'servico') {
+                                                setFormItem({
+                                                    produto_id: e.target.value,
+                                                    quantidade: 1,
+                                                    desconto: 0,
+                                                });
+                                            } else if (p && p.tipo === 'produto') {
+                                                setFormItem({
+                                                    produto_id: e.target.value,
+                                                    quantidade: Math.min(1, p.estoque_atual),
+                                                    desconto: 0,
+                                                });
+                                            }
+                                        }}>
+                                        <option value="">Selecione um serviço...</option>
+                                        {produtos
+                                            .filter(p => p.status === 'ativo' && p.tipo === 'servico')
+                                            .map(p => (
+                                                <option key={p.id} value={p.id}>
+                                                    {p.nome} — {formatarPreco(p.preco_venda)}
+                                                    {p.taxa_retencao ? ` (Retenção: ${p.taxa_retencao}%)` : ''}
+                                                </option>
+                                            ))}
                                     </select>
 
                                     {/* Stepper quantidade */}
@@ -430,18 +485,18 @@ export default function NovaFaturaProformaPage() {
                                             onChange={e => {
                                                 const p = produtos.find(x => x.id === formItem.produto_id);
                                                 if (p) {
-                                                    const max = isServico(p) ? 9999 : p.estoque_atual;
+                                                    const max = p.tipo === 'servico' ? 9999 : p.estoque_atual;
                                                     setFormItem(prev => ({ ...prev, quantidade: Math.max(1, Math.min(Number(e.target.value) || 1, max)) }));
                                                 }
                                             }} />
                                         <button type="button"
                                             className="w-8 h-9 flex items-center justify-center disabled:opacity-30"
                                             style={{ backgroundColor: colors.hover }}
-                                            disabled={!formItem.produto_id || (!!produtoSel && !isServico(produtoSel) && formItem.quantidade >= produtoSel.estoque_atual)}
+                                            disabled={!formItem.produto_id || (!!produtoSel && produtoSel.tipo === 'produto' && formItem.quantidade >= produtoSel.estoque_atual)}
                                             onClick={() => {
                                                 const p = produtos.find(x => x.id === formItem.produto_id);
                                                 if (p) {
-                                                    const max = isServico(p) ? 9999 : p.estoque_atual;
+                                                    const max = p.tipo === 'servico' ? 9999 : p.estoque_atual;
                                                     setFormItem(prev => ({ ...prev, quantidade: Math.min(prev.quantidade + 1, max) }));
                                                 }
                                             }}>
@@ -457,7 +512,7 @@ export default function NovaFaturaProformaPage() {
                                         disabled={!formItem.produto_id}
                                         onChange={e => setFormItem(p => ({ ...p, desconto: Number(e.target.value) }))} />
 
-                                    {/* Botão Adicionar — tamanho fixo */}
+                                    {/* Botão Adicionar */}
                                     <button type="button" onClick={adicionarItem}
                                         disabled={!formItem.produto_id}
                                         className="shrink-0 flex items-center gap-1.5 px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40 transition-opacity"
@@ -465,7 +520,8 @@ export default function NovaFaturaProformaPage() {
                                         <Plus size={13} />Adicionar
                                     </button>
 
-                                    {produtoSel && !isServico(produtoSel) && (
+                                    {/* Indicador de estoque (apenas para produtos) */}
+                                    {produtoSel && produtoSel.tipo === 'produto' && (
                                         <span className="text-xs shrink-0" style={{ color: colors.textSecondary }}>
                                             disp.: {produtoSel.estoque_atual}
                                         </span>
@@ -478,7 +534,7 @@ export default function NovaFaturaProformaPage() {
                                         style={{ backgroundColor: colors.hover }}>
                                         {[
                                             { label: "Base", val: formatarPreco(previewItem.base_tributavel), clr: colors.text },
-                                            { label: "IVA",  val: formatarPreco(previewItem.valor_iva),       clr: colors.text },
+                                            { label: "IVA", val: formatarPreco(previewItem.valor_iva), clr: colors.text },
                                             ...(previewItem.valor_retencao > 0
                                                 ? [{ label: "Ret.", val: `-${formatarPreco(previewItem.valor_retencao)}`, clr: colors.danger }]
                                                 : []),
@@ -676,7 +732,7 @@ export default function NovaFaturaProformaPage() {
                             className="w-full sm:w-48 py-2.5 font-bold text-sm text-white flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                             style={{ backgroundColor: colors.secondary }}>
                             {loading ? (
-                                <><div className="w-4 h-4 border-2 border-white border-t-transparent animate-spin" />A processar…</>
+                                <><div className="w-4 rounded-full h-4 border-2 border-white border-t-transparent animate-spin" />A processar…</>
                             ) : (
                                 <><CheckCircle2 size={15} />Finalizar Proforma</>
                             )}

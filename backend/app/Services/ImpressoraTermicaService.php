@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\DocumentoFiscal;
 use Mike42\Escpos\PrintConnectors\CupsPrintConnector;
+use Mike42\Escpos\PrintConnectors\WindowsPrintConnector;
+use Mike42\Escpos\PrintConnectors\NetworkPrintConnector;
 use Mike42\Escpos\Printer;
 use Mike42\Escpos\CapabilityProfile;
 use Mike42\Escpos\EscposImage;
@@ -36,7 +38,7 @@ class ImpressoraTermicaService
 
     public function __construct()
     {
-        $this->nomeImpressora = env('IMPRESSORA_TERMICA_CUPS', 'POS-80-2');
+        $this->nomeImpressora = env('IMPRESSORA_TERMICA', 'POS-80');
     }
 
     /* ── Público: imprimir ─────────────────────────────────────────── */
@@ -72,7 +74,6 @@ class ImpressoraTermicaService
             $this->printer->cut();
             $this->printer->close();
             return true;
-
         } catch (\Exception $e) {
             Log::error('Erro térmica', ['error' => $e->getMessage(), 'doc' => $documento->id ?? null]);
             $this->fechar();
@@ -80,28 +81,6 @@ class ImpressoraTermicaService
         }
     }
 
-    /* ── Público: teste ────────────────────────────────────────────── */
-
-    public function testarConexao(): bool
-    {
-        try {
-            $this->conectar();
-            $this->printer->setJustification(Printer::JUSTIFY_CENTER);
-            $this->printer->setEmphasis(true);
-            $this->printer->text("TESTE DE IMPRESSAO\n");
-            $this->printer->setEmphasis(false);
-            $this->printer->text(date('d/m/Y H:i:s') . "\n");
-            $this->printer->text($this->sep() . "\n");
-            $this->printer->text("OK\n");
-            $this->printer->cut();
-            $this->printer->close();
-            return true;
-        } catch (\Exception $e) {
-            Log::error('Teste térmica', ['error' => $e->getMessage()]);
-            $this->fechar();
-            return false;
-        }
-    }
 
     /* ══════════════════════════════════════════════════════════════════
        BLOCOS
@@ -142,11 +121,10 @@ class ImpressoraTermicaService
         $this->printer->setEmphasis(true);
         $this->printer->text(mb_strtoupper($empresa['nome'] ?? '') . "\n");
         $this->printer->setEmphasis(false);
-
         $this->printer->text('NIF: ' . ($empresa['nif'] ?? '') . "\n");
-        if (!empty($empresa['morada']))   $this->printer->text($this->fit($empresa['morada']) . "\n");
-        if (!empty($empresa['telefone'])) $this->printer->text('Tel: ' . $empresa['telefone'] . "\n");
-
+        $this->printer->text($this->fit('Rua Fictícia, nº 123 - Luanda, Angola') . "\n");
+        $this->printer->text('Tel: 923 000 000' . "\n");
+        $this->printer->text($this->fit("Email: [EMAIL_ADDRESS]") . "\n");
         $this->printer->text($this->sep() . "\n");
         $this->printer->setJustification(Printer::JUSTIFY_LEFT);
     }
@@ -167,6 +145,7 @@ class ImpressoraTermicaService
         $this->printer->text(
             $this->cols('Serie: ' . ($documento->serie ?? ''), $data . ' ' . $hora) . "\n"
         );
+        $this->printer->text("Operador: " . $documento->user->name . "\n");
         $this->printer->text($this->sep() . "\n");
     }
 
@@ -205,8 +184,8 @@ class ImpressoraTermicaService
         $this->printer->setEmphasis(true);
         $this->printer->text(
             str_pad('Desc', $wD) . ' ' .
-            str_pad('Qtd', $wQ, ' ', STR_PAD_LEFT) . ' ' .
-            str_pad('Total', $wT, ' ', STR_PAD_LEFT) . "\n"
+                str_pad('Qtd', $wQ, ' ', STR_PAD_LEFT) . ' ' .
+                str_pad('Total', $wT, ' ', STR_PAD_LEFT) . "\n"
         );
         $this->printer->setEmphasis(false);
         $this->printer->text($this->sep('-') . "\n");
@@ -301,12 +280,12 @@ class ImpressoraTermicaService
     {
         $this->printer->setJustification(Printer::JUSTIFY_CENTER);
         $this->printer->setFont(Printer::FONT_B);
-        $this->printer->text("Banco: BAI\n");
-        $this->printer->text("IBAN: AO06 0004 0000 1234 5678 9012 3\n");
+        $this->printer->text("Processado por computador\n");
         $this->printer->setFont(Printer::FONT_A);
         $this->printer->text($this->sep('-') . "\n");
         $this->printer->setEmphasis(true);
-        $this->printer->text("Obrigado!\n");
+        $this->printer->text("Obrigado pela preferência!\n");
+        $this->printer->text("Volte sempre!\n");
         $this->printer->setEmphasis(false);
         $this->printer->text("*** Fim do Documento ***\n");
         $this->printer->setJustification(Printer::JUSTIFY_LEFT);
@@ -319,14 +298,31 @@ class ImpressoraTermicaService
 
     private function conectar(): void
     {
-        $connector     = new CupsPrintConnector($this->nomeImpressora);
+        $so = strtoupper(substr(PHP_OS, 0, 3));
+
+        if ($so === 'WIN') {
+            // WINDOWS — use o nome exato da impressora local USB
+            // Abra "Dispositivos e Impressoras" e copie o nome que aparece
+            $nomeWindows = 'TM-T88IV'; // substitua pelo nome correto da sua impressora
+            $connector = new WindowsPrintConnector("POS-80");
+        } elseif ($so === 'LIN') {
+            // LINUX (CUPS)
+            $connector = new CupsPrintConnector("POS-80");
+        } else {
+            // FALLBACK (rede TCP/IP)
+            $connector = new NetworkPrintConnector($this->nomeImpressora, 9100);
+        }
+
         $profile       = CapabilityProfile::load('default');
         $this->printer = new Printer($connector, $profile);
     }
 
     private function fechar(): void
     {
-        try { $this->printer?->close(); } catch (\Throwable) {}
+        try {
+            $this->printer?->close();
+        } catch (\Throwable) {
+        }
     }
 
     /** Separador exato da largura do papel */
@@ -406,8 +402,6 @@ class ImpressoraTermicaService
 
         $tmp = sys_get_temp_dir() . '/logo_termica_' . uniqid() . '.png';
         imagepng($dst, $tmp);
-        imagedestroy($src);
-        imagedestroy($dst);
 
         return $tmp;
     }

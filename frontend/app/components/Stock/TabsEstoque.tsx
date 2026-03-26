@@ -29,7 +29,7 @@ export function TabsEstoque({ abaAtiva, onAbaChange, totalItens, totalDeletados,
                     <Layers className="w-4 h-4" />
                     Todos os Itens
                     <span 
-                        className="ml-1 px-2 py-0.5 rounded-full text-xs"
+                        className="ml-1 px-2 py-0.5 text-xs"
                         style={{ 
                             backgroundColor: colors.hover, 
                             color: colors.textSecondary 
@@ -63,7 +63,7 @@ export function TabsEstoque({ abaAtiva, onAbaChange, totalItens, totalDeletados,
                     Lixeira
                     {totalDeletados > 0 && (
                         <span 
-                            className="px-2 py-0.5 rounded-full text-xs"
+                            className="px-2 py-0.5 text-xs"
                             style={{ 
                                 backgroundColor: `${colors.warning}20`, 
                                 color: colors.warning 

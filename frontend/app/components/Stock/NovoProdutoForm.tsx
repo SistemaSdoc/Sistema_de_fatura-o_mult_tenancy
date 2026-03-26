@@ -1,4 +1,3 @@
-// src/app/(empresa)/produtos/components/NovoProdutoForm.tsx
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
@@ -35,7 +34,7 @@ interface FormData {
     sujeito_iva: boolean;
     estoque_atual: string;
     estoque_minimo: string;
-    retencao: string;
+    taxa_retencao: string;
     duracao_estimada: string;
     unidade_medida: UnidadeMedida;
 }
@@ -75,7 +74,7 @@ export function NovoProdutoForm({
         sujeito_iva: true,
         estoque_atual: "0",
         estoque_minimo: "5",
-        retencao: "0",
+        taxa_retencao: "0",
         duracao_estimada: "1",
         unidade_medida: "hora",
     });
@@ -115,9 +114,9 @@ export function NovoProdutoForm({
     const valorRetencao = useMemo(() => {
         if (!isServico) return 0;
         const venda = parseFloat(formData.preco_venda) || 0;
-        const retencao = parseFloat(formData.retencao) || 0;
-        return venda * (retencao / 100);
-    }, [formData.preco_venda, formData.retencao, isServico]);
+        const taxaRetencao = parseFloat(formData.taxa_retencao) || 0;
+        return venda * (taxaRetencao / 100);
+    }, [formData.preco_venda, formData.taxa_retencao, isServico]);
 
     const valorLiquido = useMemo(() => {
         const venda = parseFloat(formData.preco_venda) || 0;
@@ -146,7 +145,7 @@ export function NovoProdutoForm({
             preco_compra: tipo === "servico" ? "0" : prev.preco_compra,
             estoque_atual: tipo === "servico" ? "0" : prev.estoque_atual,
             estoque_minimo: tipo === "servico" ? "0" : prev.estoque_minimo,
-            retencao: tipo === "produto" ? "0" : prev.retencao,
+            taxa_retencao: tipo === "produto" ? "0" : prev.taxa_retencao,
         }));
         setErrors({});
     };
@@ -185,7 +184,7 @@ export function NovoProdutoForm({
             };
 
             if (isServico) {
-                dados.retencao = parseFloat(formData.retencao) || 0;
+                dados.taxa_retencao = parseFloat(formData.taxa_retencao) || 0;
                 dados.duracao_estimada = `${formData.duracao_estimada} ${formData.unidade_medida}`;
                 dados.unidade_medida = formData.unidade_medida;
                 dados.categoria_id = null;
@@ -243,7 +242,7 @@ export function NovoProdutoForm({
                 <div className="flex items-center gap-3 mb-6">
                     <button
                         onClick={handleCancel}
-                        className="p-2 rounded-lg transition-colors"
+                        className="p-2 transition-colors"
                         style={{ color: colors.textSecondary }}
                         type="button"
                     >
@@ -263,7 +262,7 @@ export function NovoProdutoForm({
             {/* Título simplificado para quando está em modal */}
             {onCancel && (
                 <div className="mb-6">
-                    <h2 className="text-lg font-semibold" style={{ color: colors.primary }}>
+                    <h2 className="text-lg font-semibold" style={{ color: colors.secondary }}>
                         Novo {isServico ? "Serviço" : "Produto"}
                     </h2>
                     <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
@@ -274,7 +273,7 @@ export function NovoProdutoForm({
 
             {/* Alertas */}
             {success && (
-                <div className="mb-4 p-3 rounded-lg flex items-center gap-2 text-sm animate-pulse" style={{
+                <div className="mb-4 p-3 flex items-center gap-2 text-sm animate-pulse" style={{
                     backgroundColor: `${colors.success}20`,
                     borderColor: colors.success,
                     borderWidth: 1,
@@ -286,7 +285,7 @@ export function NovoProdutoForm({
             )}
 
             {errors.submit && (
-                <div className="mb-4 p-3 rounded-lg flex items-center gap-2 text-sm" style={{
+                <div className="mb-4 p-3 flex items-center gap-2 text-sm" style={{
                     backgroundColor: `${colors.danger}20`,
                     borderColor: colors.danger,
                     borderWidth: 1,
@@ -299,7 +298,7 @@ export function NovoProdutoForm({
 
             <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Tipo */}
-                <div className="p-4 rounded-lg shadow-sm border" style={{
+                <div className="p-4 shadow-sm border" style={{
                     backgroundColor: colors.card,
                     borderColor: colors.border
                 }}>
@@ -307,11 +306,11 @@ export function NovoProdutoForm({
                         <button
                             type="button"
                             onClick={() => handleTipoChange("produto")}
-                            className="flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-all"
+                            className="flex items-center justify-center gap-2 p-3 border-2 transition-all"
                             style={{
                                 borderColor: !isServico ? colors.primary : colors.border,
                                 backgroundColor: !isServico ? `${colors.primary}10` : 'transparent',
-                                color: !isServico ? colors.primary : colors.textSecondary
+                                color: !isServico ? colors.textSecondary : colors.textSecondary
                             }}
                         >
                             <Package className="w-5 h-5" />
@@ -320,7 +319,7 @@ export function NovoProdutoForm({
                         <button
                             type="button"
                             onClick={() => handleTipoChange("servico")}
-                            className="flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-all"
+                            className="flex items-center justify-center gap-2 p-3 border-2 transition-all"
                             style={{
                                 borderColor: isServico ? colors.secondary : colors.border,
                                 backgroundColor: isServico ? `${colors.secondary}10` : 'transparent',
@@ -334,21 +333,21 @@ export function NovoProdutoForm({
                 </div>
 
                 {/* Informações Principais */}
-                <div className="p-4 rounded-lg shadow-sm border space-y-4" style={{
+                <div className="p-4 shadow-sm border space-y-4" style={{
                     backgroundColor: colors.card,
                     borderColor: colors.border
                 }}>
                     <div>
                         <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
-                            Nome <span style={{ color: colors.danger }}>*</span>
+                            Nome 
                         </label>
                         <input
                             type="text"
                             name="nome"
                             value={formData.nome}
                             onChange={handleChange}
-                            placeholder={isServico ? "Ex: Consultoria TI" : "Ex: Notebook Dell"}
-                            className="w-full px-3 py-2 rounded-lg border outline-none transition-all"
+                            placeholder={isServico ? "Insira o nome do serviço" : "Insira o nome do produto"}
+                            className="w-full px-3 py-2 border outline-none transition-all"
                             style={{
                                 backgroundColor: colors.card,
                                 borderColor: errors.nome ? colors.danger : colors.border,
@@ -362,14 +361,14 @@ export function NovoProdutoForm({
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
-                                    Categoria <span style={{ color: colors.danger }}>*</span>
+                                    Categoria
                                 </label>
                                 <select
                                     name="categoria_id"
                                     value={formData.categoria_id}
                                     onChange={handleChange}
                                     disabled={loadingCategorias}
-                                    className="w-full px-3 py-2 rounded-lg border outline-none"
+                                    className="w-full px-3 py-2 border outline-none"
                                     style={{
                                         backgroundColor: colors.card,
                                         borderColor: errors.categoria_id ? colors.danger : colors.border,
@@ -377,7 +376,7 @@ export function NovoProdutoForm({
                                     }}
                                 >
                                     <option value="">
-                                        {loadingCategorias ? "Carregando..." : "Selecione"}
+                                        {loadingCategorias ? "Carregando..." : "Selecione a categoria do produto"}
                                     </option>
                                     {categorias.map((cat) => (
                                         <option key={cat.id} value={cat.id}>
@@ -399,7 +398,7 @@ export function NovoProdutoForm({
                                     value={formData.codigo}
                                     onChange={handleChange}
                                     placeholder="PROD-001"
-                                    className="w-full px-3 py-2 rounded-lg border outline-none"
+                                    className="w-full px-3 py-2 border outline-none"
                                     style={{
                                         backgroundColor: colors.card,
                                         borderColor: colors.border,
@@ -412,7 +411,7 @@ export function NovoProdutoForm({
                 </div>
 
                 {/* Preços */}
-                <div className="p-4 rounded-lg shadow-sm border" style={{
+                <div className="p-4 shadow-sm border" style={{
                     backgroundColor: colors.card,
                     borderColor: colors.border
                 }}>
@@ -420,7 +419,7 @@ export function NovoProdutoForm({
                         {!isServico && (
                             <div>
                                 <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
-                                    Preço Compra <span style={{ color: colors.danger }}>*</span>
+                                    Preço Compra
                                 </label>
                                 <div className="relative">
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: colors.textSecondary }}>Kz</span>
@@ -430,8 +429,8 @@ export function NovoProdutoForm({
                                         value={formData.preco_compra}
                                         onChange={handleChange}
                                         min="0"
-                                        step="0.01"
-                                        className="w-full pl-10 pr-3 py-2 rounded-lg border outline-none"
+                                        step="1"
+                                        className="w-full pl-10 pr-3 py-2 border outline-none"
                                         style={{
                                             backgroundColor: colors.card,
                                             borderColor: errors.preco_compra ? colors.danger : colors.border,
@@ -444,7 +443,7 @@ export function NovoProdutoForm({
 
                         <div className={isServico ? "md:col-span-2" : ""}>
                             <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
-                                Preço Venda <span style={{ color: colors.danger }}>*</span>
+                                Preço Venda 
                             </label>
                             <div className="relative">
                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: colors.textSecondary }}>Kz</span>
@@ -455,7 +454,7 @@ export function NovoProdutoForm({
                                     onChange={handleChange}
                                     min="0.01"
                                     step="0.01"
-                                    className="w-full pl-10 pr-3 py-2 rounded-lg border outline-none"
+                                    className="w-full pl-10 pr-3 py-2 border outline-none"
                                     style={{
                                         backgroundColor: colors.card,
                                         borderColor: errors.preco_venda ? colors.danger : colors.border,
@@ -473,7 +472,7 @@ export function NovoProdutoForm({
                                 name="sujeito_iva"
                                 checked={formData.sujeito_iva}
                                 onChange={handleChange}
-                                className="w-4 h-4 rounded"
+                                className="w-4 h-4 "
                                 style={{ accentColor: colors.primary }}
                             />
                             <span className="text-sm" style={{ color: colors.text }}>IVA</span>
@@ -488,7 +487,7 @@ export function NovoProdutoForm({
                                     onChange={handleChange}
                                     min="0"
                                     max="100"
-                                    className="w-20 px-2 py-1 rounded border text-sm"
+                                    className="w-20 px-2 py-1 border text-sm"
                                     style={{
                                         backgroundColor: colors.card,
                                         borderColor: colors.border,
@@ -507,11 +506,11 @@ export function NovoProdutoForm({
                                     <input
                                         type="number"
                                         name="retencao"
-                                        value={formData.retencao}
+                                        value={formData.taxa_retencao}
                                         onChange={handleChange}
                                         min="0"
                                         max="100"
-                                        className="w-20 px-2 py-1 rounded border text-sm"
+                                        className="w-20 px-2 py-1 border text-sm"
                                         style={{
                                             backgroundColor: colors.card,
                                             borderColor: colors.border,
@@ -525,13 +524,13 @@ export function NovoProdutoForm({
                     </div>
 
                     {/* Preview */}
-                    <div className="mt-4 p-3 rounded-lg flex flex-wrap items-center justify-between gap-2 text-sm" style={{
+                    <div className="mt-4 p-3 flex flex-wrap items-center justify-between gap-2 text-sm" style={{
                         backgroundColor: colors.hover
                     }}>
                         <div className="flex items-center gap-2" style={{ color: colors.textSecondary }}>
                             <Calculator className="w-4 h-4" />
                             <span>Total c/ IVA:</span>
-                            <span className="font-semibold" style={{ color: colors.primary }}>{formatarPreco(precoComIva)}</span>
+                            <span className="font-semibold" style={{ color: colors.textSecondary }}>{formatarPreco(precoComIva)}</span>
                         </div>
 
                         {!isServico ? (
@@ -548,7 +547,7 @@ export function NovoProdutoForm({
 
                 {/* Campos Específicos */}
                 {!isServico ? (
-                    <div className="p-4 rounded-lg shadow-sm border" style={{
+                    <div className="p-4 shadow-sm border" style={{
                         backgroundColor: colors.card,
                         borderColor: colors.border
                     }}>
@@ -563,7 +562,7 @@ export function NovoProdutoForm({
                                     value={formData.estoque_atual}
                                     onChange={handleChange}
                                     min="0"
-                                    className="w-full px-3 py-2 rounded-lg border outline-none"
+                                    className="w-full px-3 py-2 border outline-none"
                                     style={{
                                         backgroundColor: colors.card,
                                         borderColor: colors.border,
@@ -581,7 +580,7 @@ export function NovoProdutoForm({
                                     value={formData.estoque_minimo}
                                     onChange={handleChange}
                                     min="0"
-                                    className="w-full px-3 py-2 rounded-lg border outline-none"
+                                    className="w-full px-3 py-2 border outline-none"
                                     style={{
                                         backgroundColor: colors.card,
                                         borderColor: colors.border,
@@ -592,7 +591,7 @@ export function NovoProdutoForm({
                         </div>
                     </div>
                 ) : (
-                    <div className="p-4 rounded-lg shadow-sm border" style={{
+                    <div className="p-4 shadow-sm border" style={{
                         backgroundColor: colors.card,
                         borderColor: colors.border
                     }}>
@@ -606,7 +605,7 @@ export function NovoProdutoForm({
                                 value={formData.duracao_estimada}
                                 onChange={handleChange}
                                 min="1"
-                                className="flex-1 px-3 py-2 rounded-lg border outline-none"
+                                className="flex-1 px-3 py-2 border outline-none"
                                 style={{
                                     backgroundColor: colors.card,
                                     borderColor: colors.border,
@@ -617,7 +616,7 @@ export function NovoProdutoForm({
                                 name="unidade_medida"
                                 value={formData.unidade_medida}
                                 onChange={handleChange}
-                                className="px-3 py-2 rounded-lg border outline-none"
+                                className="px-3 py-2 border outline-none"
                                 style={{
                                     backgroundColor: colors.card,
                                     borderColor: colors.border,
@@ -638,7 +637,7 @@ export function NovoProdutoForm({
                     <button
                         type="button"
                         onClick={handleCancel}
-                        className="px-4 py-2 rounded-lg transition-colors text-sm font-medium"
+                        className="px-4 py-2 transition-colors text-sm font-medium"
                         style={{ color: colors.textSecondary }}
                     >
                         Cancelar
@@ -646,7 +645,7 @@ export function NovoProdutoForm({
                     <button
                         type="submit"
                         disabled={loading}
-                        className="flex items-center gap-2 px-6 py-2 text-white rounded-lg transition-colors font-medium disabled:opacity-50"
+                        className="flex items-center gap-2 px-6 py-2 text-white transition-colors font-medium disabled:opacity-50"
                         style={{ backgroundColor: colors.primary }}
                     >
                         {loading ? (

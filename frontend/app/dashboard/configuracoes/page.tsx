@@ -2,34 +2,15 @@
 "use client";
 
 import React, { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import {
+    CheckCircle2, AlertCircle, Eye, EyeOff, Save, Upload, Loader2,
+    Trash2, Sun, Moon, Download, RefreshCcw, Globe, LogOut, Settings, Bell, Shield, User, Building2
+} from "lucide-react";
 import MainEmpresa from "@/app/components/MainEmpresa";
 import { useThemeColors, useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/authprovider";
-import {
-    Settings,
-    User,
-    Building2,
-    Bell,
-    Shield,
-    Globe,
-    Moon,
-    Sun,
-    Save,
-    Loader2,
-    CheckCircle2,
-    AlertCircle,
-    Eye,
-    EyeOff,
-    Key,
-    RefreshCcw,
-    Download,
-    Upload,
-    Trash2,
-    LogOut,
-} from "lucide-react";
 import { toast } from "sonner";
-
+import { motion } from "framer-motion";
 // UI Components
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,12 +36,23 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 
 // ===== TYPES =====
 interface User {
-    name?: string;
-    email?: string;
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    empresa_id?: string;
+    empresa?: {
+        id: string;
+        nome: string;
+        nif: string;
+        email: string;
+        logo: string | null;
+        telefone: string | null;
+        endereco: string | null;
+    };
 }
 
 interface ThemeColors {
@@ -94,6 +86,8 @@ interface EmpresaFormData {
     endereco: string;
     website: string;
     logo: string;
+    serie_padrao: string;
+    iva_padrao: string;
 }
 
 interface SenhaFormData {
@@ -132,7 +126,7 @@ const AlertMessage = ({
             backgroundColor: `${colors[type]}20`,
             border: `1px solid ${colors[type]}`,
             color: colors[type],
-        }}
+        } as React.CSSProperties}
     >
         {type === "success" ? (
             <CheckCircle2 className="w-5 h-5" />
@@ -260,7 +254,7 @@ const PerfilTab = ({
     user,
 }: {
     colors: ThemeColors;
-    user: User | undefined;
+    user: User | null;
 }) => {
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
@@ -299,16 +293,16 @@ const PerfilTab = ({
 
     return (
         <div className="space-y-6">
-            <AnimatePresence>
-                {success && (
-                    <AlertMessage
-                        type="success"
-                        message="Alterações salvas com sucesso!"
-                        colors={colors}
-                    />
-                )}
-                {error && <AlertMessage type="error" message={error} colors={colors} />}
-            </AnimatePresence>
+
+            {success && (
+                <AlertMessage
+                    type="success"
+                    message="Alterações salvas com sucesso!"
+                    colors={colors}
+                />
+            )}
+            {error && <AlertMessage type="error" message={error} colors={colors} />}
+
 
             <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                 <CardHeader>
@@ -469,6 +463,8 @@ const EmpresaTab = ({ colors }: { colors: ThemeColors }) => {
         endereco: "Rua Principal, 123, Luanda, Angola",
         website: "www.minhaempresa.ao",
         logo: "",
+        serie_padrao: "FT",
+        iva_padrao: "14",
     });
 
     const handleChange = (
@@ -492,15 +488,15 @@ const EmpresaTab = ({ colors }: { colors: ThemeColors }) => {
 
     return (
         <div className="space-y-6">
-            <AnimatePresence>
-                {success && (
-                    <AlertMessage
-                        type="success"
-                        message="Dados salvos com sucesso!"
-                        colors={colors}
-                    />
-                )}
-            </AnimatePresence>
+
+            {success && (
+                <AlertMessage
+                    type="success"
+                    message="Dados salvos com sucesso!"
+                    colors={colors}
+                />
+            )}
+
 
             <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                 <CardHeader>
@@ -587,13 +583,17 @@ const EmpresaTab = ({ colors }: { colors: ThemeColors }) => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <FormInput
                             label="Série padrão"
-                            defaultValue="FT"
+                            name="serie_padrao"
+                            value={form.serie_padrao}
+                            onChange={handleChange}
                             colors={colors}
                         />
                         <FormInput
                             label="IVA padrão (%)"
+                            name="iva_padrao"
                             type="number"
-                            defaultValue="14"
+                            value={form.iva_padrao}
+                            onChange={handleChange}
                             colors={colors}
                         />
                     </div>
@@ -656,15 +656,15 @@ const SegurancaTab = ({ colors }: { colors: ThemeColors }) => {
 
     return (
         <div className="space-y-6">
-            <AnimatePresence>
-                {success && (
-                    <AlertMessage
-                        type="success"
-                        message="Senha alterada com sucesso!"
-                        colors={colors}
-                    />
-                )}
-            </AnimatePresence>
+
+            {success && (
+                <AlertMessage
+                    type="success"
+                    message="Senha alterada com sucesso!"
+                    colors={colors}
+                />
+            )}
+
 
             <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                 <CardHeader>
@@ -702,12 +702,15 @@ const SegurancaTab = ({ colors }: { colors: ThemeColors }) => {
                                 </span>
                                 <span style={{ color: strength.color }}>{strength.text}</span>
                             </div>
-                            <Progress
-                                value={strength.progress}
-                                style={{ backgroundColor: colors.border }}
-                                // @ts-ignore
-                                indicatorStyle={{ backgroundColor: strength.color }}
-                            />
+                            <div className="relative h-2 w-full overflow-hidden rounded-full" style={{ backgroundColor: colors.border }}>
+                                <div
+                                    className="h-full transition-all"
+                                    style={{
+                                        width: `${strength.progress}%`,
+                                        backgroundColor: strength.color,
+                                    }}
+                                />
+                            </div>
                         </div>
                     )}
 
@@ -829,15 +832,15 @@ const NotificacoesTab = ({ colors }: { colors: ThemeColors }) => {
                 </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-                <AnimatePresence>
-                    {success && (
-                        <AlertMessage
-                            type="success"
-                            message="Preferências salvas!"
-                            colors={colors}
-                        />
-                    )}
-                </AnimatePresence>
+
+                {success && (
+                    <AlertMessage
+                        type="success"
+                        message="Preferências salvas!"
+                        colors={colors}
+                    />
+                )}
+
 
                 <div className="space-y-4">
                     <h3 className="font-medium" style={{ color: colors.text }}>

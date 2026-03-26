@@ -20,7 +20,7 @@ export function StatusEstoqueBadge({ item }: StatusEstoqueBadgeProps) {
     const IconComponent = icones[status.icone as keyof typeof icones];
 
     return (
-        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${status.cor}`}>
+        <span className={`inline-flex items-center gap-1 px-2 py-1  text-xs ${status.cor}`}>
             {IconComponent && <IconComponent className="w-3 h-3" />}
             {status.label}
         </span>

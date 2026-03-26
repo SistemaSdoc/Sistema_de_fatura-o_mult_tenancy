@@ -124,7 +124,11 @@ export default function NovaFaturaReciboPage() {
     const nums = e.target.value.replace(/\D/g, '');
     if (nums.length <= 9) {
       setClienteAvulsoNif(nums);
-      setNifError(nums.length > 0 && nums.length !== 9 ? "NIF deve ter 9 dígitos" : null);
+      if (nums.length > 0 && nums.length !== 9) {
+        setNifError("NIF deve ter 9 dígitos");
+      } else {
+        setNifError(null);
+      }
     }
   };
 
@@ -185,10 +189,7 @@ export default function NovaFaturaReciboPage() {
   const podeFinalizar = () => {
     if (itens.length === 0) return false;
     if (modoCliente === 'cadastrado' && !clienteSelecionado) return false;
-    if (modoCliente === 'avulso') {
-      if (!clienteAvulso.trim()) return false;
-      if (clienteAvulsoNif.trim() && clienteAvulsoNif.length !== 9) return false;
-    }
+    // Modo avulso: sempre válido, pois será "Consumidor Final" se não preenchido
     return pagamentoSuficiente;
   };
 
@@ -210,14 +211,30 @@ export default function NovaFaturaReciboPage() {
           data: formPagamento.data_pagamento,
         },
       };
-      if (modoCliente === 'cadastrado' && clienteSelecionado) payload.cliente_id = clienteSelecionado.id;
-      else if (modoCliente === 'avulso' && clienteAvulso.trim()) {
-        payload.cliente_nome = clienteAvulso.trim();
-        if (clienteAvulsoNif.trim()) payload.cliente_nif = clienteAvulsoNif.trim();
+
+      if (modoCliente === 'cadastrado' && clienteSelecionado) {
+        payload.cliente_id = clienteSelecionado.id;
+      } else if (modoCliente === 'avulso') {
+        // Se o nome não foi informado, usa "Consumidor Final"
+        if (clienteAvulso.trim()) {
+          payload.cliente_nome = clienteAvulso.trim();
+        } else {
+          payload.cliente_nome = "Consumidor Final";
+        }
+
+        // Se o NIF não foi informado ou é inválido, usa "999999999"
+        if (clienteAvulsoNif.trim() && clienteAvulsoNif.length === 9) {
+          payload.cliente_nif = clienteAvulsoNif.trim();
+        } else {
+          payload.cliente_nif = "999999999";
+        }
       }
+
       if (observacoes.trim()) payload.observacoes = observacoes.trim();
+
       const erroVal = validarPayloadVenda(payload);
       if (erroVal) { setError(erroVal); return; }
+
       await vendaService.criar(payload);
       setSucesso("Fatura-Recibo criada!" + (troco > 0 ? " Troco: " + formatarPreco(troco) : ""));
       setTimeout(() => router.push("/dashboard/Faturas/Faturas"), 1500);
@@ -251,7 +268,7 @@ export default function NovaFaturaReciboPage() {
           </div>
         )}
         {sucesso && (
-          <div className="p-3 border text-sm flex items-center gap-2"
+          <div className="p-3 rounded-full border text-sm flex items-center gap-2"
             style={{ backgroundColor: `${colors.success}15`, borderColor: colors.success, color: colors.success }}>
             <CheckCircle2 size={15} className="shrink-0" /><span>{sucesso}</span>
           </div>
@@ -282,7 +299,7 @@ export default function NovaFaturaReciboPage() {
 
           <div className="divide-y" style={{ borderColor: colors.border }}>
 
-            {/* ── Cliente — numa única linha ── */}
+            {/* ── Cliente ── */}
             <div className="flex min-h-[44px]">
               <div className="flex items-center gap-1.5 px-3 py-2.5 w-24 sm:w-28 shrink-0"
                 style={{ backgroundColor: colors.hover }}>
@@ -296,7 +313,7 @@ export default function NovaFaturaReciboPage() {
                       onClick={() => { setModoCliente(modo); setClienteSelecionado(null); setClienteAvulso(''); setClienteAvulsoNif(''); setNifError(null); }}
                       className="px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap"
                       style={{ backgroundColor: modoCliente === modo ? colors.primary : 'transparent', color: modoCliente === modo ? 'white' : colors.textSecondary }}>
-                      {modo === 'cadastrado' ? 'Cadastrado' : 'Avulso'}
+                      {modo === 'cadastrado' ? 'Cadastrado' : 'Não cadastrado'}
                     </button>
                   ))}
                 </div>
@@ -309,11 +326,11 @@ export default function NovaFaturaReciboPage() {
                   </select>
                 ) : (
                   <>
-                    <input type="text" placeholder="Nome do cliente *"
+                    <input type="text" placeholder="Nome (opcional - Consumidor Final)"
                       className="flex-1 min-w-0 px-3 py-1.5 text-sm outline-none" style={inp}
                       value={clienteAvulso} onChange={e => setClienteAvulso(e.target.value)} />
                     <div className="relative w-32 sm:w-36 shrink-0">
-                      <input type="text" inputMode="numeric" placeholder="NIF (9 dígitos)"
+                      <input type="text" inputMode="numeric" placeholder="NIF (opcional)"
                         className="w-full px-3 py-1.5 text-sm outline-none" maxLength={9}
                         style={{ ...inp, borderColor: nifError ? colors.danger : inp.borderColor }}
                         value={clienteAvulsoNif} onChange={handleNifChange} />
@@ -324,27 +341,63 @@ export default function NovaFaturaReciboPage() {
               </div>
             </div>
 
-            {/* ── Produto ── */}
+            {/* ── Produto e Serviços ── */}
             <div className="flex min-h-[44px]">
               <div className="flex items-center gap-1.5 px-3 py-2.5 w-24 sm:w-28 shrink-0"
                 style={{ backgroundColor: colors.hover }}>
                 <Package size={13} style={{ color: colors.text }} />
-                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>Produto</span>
+                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>itens</span>
               </div>
               <div className="flex-1 px-3 py-2.5 min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
+                  {/* Select de Produtos Físicos */}
                   <select className="flex-1 min-w-[140px] px-3 py-1.5 text-sm outline-none" style={inp}
                     value={formItem.produto_id}
                     onChange={e => {
                       const p = produtos.find(x => x.id === e.target.value);
-                      setFormItem({ produto_id: e.target.value, quantidade: p ? (isServico(p) ? 1 : Math.min(1, p.estoque_atual)) : 1, desconto: 0 });
+                      if (p && p.tipo === 'produto') {
+                        setFormItem({
+                          produto_id: e.target.value,
+                          quantidade: Math.min(1, p.estoque_atual),
+                          desconto: 0
+                        });
+                      }
                     }}>
-                    <option value="">Selecione um produto…</option>
-                    {produtos.filter(p => p.status === 'ativo').map(p => (
-                      <option key={p.id} value={p.id}>{p.nome} — {formatarPreco(p.preco_venda)}{!isServico(p) ? ` (${p.estoque_atual})` : ''}</option>
-                    ))}
+                    <option value="">Selecione um produto...</option>
+                    {produtos
+                      .filter(p => p.status === 'ativo' && p.tipo === 'produto')
+                      .map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.nome} — {formatarPreco(p.preco_venda)} ({p.estoque_atual} em stock)
+                        </option>
+                      ))}
                   </select>
 
+                  {/* Select de Serviços */}
+                  <select className="flex-1 min-w-[140px] px-3 py-1.5 text-sm outline-none" style={inp}
+                    value={formItem.produto_id}
+                    onChange={e => {
+                      const p = produtos.find(x => x.id === e.target.value);
+                      if (p && p.tipo === 'servico') {
+                        setFormItem({
+                          produto_id: e.target.value,
+                          quantidade: 1,
+                          desconto: 0
+                        });
+                      }
+                    }}>
+                    <option value="">Selecione um serviço...</option>
+                    {produtos
+                      .filter(p => p.status === 'ativo' && p.tipo === 'servico')
+                      .map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.nome} — {formatarPreco(p.preco_venda)}
+                          {p.taxa_retencao ? ` (Retenção: ${p.taxa_retencao}%)` : ''}
+                        </option>
+                      ))}
+                  </select>
+
+                  {/* Controles de quantidade */}
                   <div className="flex items-center border overflow-hidden shrink-0" style={{ borderColor: colors.border }}>
                     <button type="button" className="w-8 h-9 flex items-center justify-center disabled:opacity-30"
                       style={{ backgroundColor: colors.hover }}
@@ -357,31 +410,40 @@ export default function NovaFaturaReciboPage() {
                       value={formItem.quantidade} disabled={!formItem.produto_id}
                       onChange={e => {
                         const p = produtos.find(x => x.id === formItem.produto_id);
-                        if (p) setFormItem(prev => ({ ...prev, quantidade: Math.max(1, Math.min(Number(e.target.value) || 1, isServico(p) ? 9999 : p.estoque_atual)) }));
+                        if (p) {
+                          const maxQtd = p.tipo === 'servico' ? 9999 : p.estoque_atual;
+                          setFormItem(prev => ({ ...prev, quantidade: Math.max(1, Math.min(Number(e.target.value) || 1, maxQtd)) }));
+                        }
                       }} />
                     <button type="button" className="w-8 h-9 flex items-center justify-center disabled:opacity-30"
                       style={{ backgroundColor: colors.hover }}
-                      disabled={!formItem.produto_id || (!!produtoSel && !isServico(produtoSel) && formItem.quantidade >= produtoSel.estoque_atual)}
+                      disabled={!formItem.produto_id || (produtoSel && produtoSel.tipo === 'produto' && formItem.quantidade >= produtoSel.estoque_atual)}
                       onClick={() => {
                         const p = produtos.find(x => x.id === formItem.produto_id);
-                        if (p) setFormItem(prev => ({ ...prev, quantidade: Math.min(prev.quantidade + 1, isServico(p) ? 9999 : p.estoque_atual) }));
+                        if (p) {
+                          const maxQtd = p.tipo === 'servico' ? 9999 : p.estoque_atual;
+                          setFormItem(prev => ({ ...prev, quantidade: Math.min(prev.quantidade + 1, maxQtd) }));
+                        }
                       }}>
                       <Plus size={12} style={{ color: colors.text }} />
                     </button>
                   </div>
 
+                  {/* Campo de desconto */}
                   <input type="number" min={0} placeholder="Desconto"
                     className="w-24 shrink-0 px-3 py-1.5 text-sm outline-none" style={inp}
                     value={formItem.desconto || ''} disabled={!formItem.produto_id}
                     onChange={e => setFormItem(p => ({ ...p, desconto: Number(e.target.value) }))} />
 
+                  {/* Botão adicionar */}
                   <button type="button" onClick={adicionarItem} disabled={!formItem.produto_id}
                     className="shrink-0 flex items-center gap-1.5 px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40"
                     style={{ backgroundColor: colors.primary }}>
                     <Plus size={13} />Adicionar
                   </button>
 
-                  {produtoSel && !isServico(produtoSel) && (
+                  {/* Indicador de estoque (apenas para produtos) */}
+                  {produtoSel && produtoSel.tipo === 'produto' && (
                     <span className="text-xs shrink-0" style={{ color: colors.textSecondary }}>disp.: {produtoSel.estoque_atual}</span>
                   )}
                 </div>
@@ -548,7 +610,7 @@ export default function NovaFaturaReciboPage() {
                     className="w-full py-2.5 font-bold text-sm text-white flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{ backgroundColor: colors.secondary }}>
                     {loading
-                      ? <><div className="w-4 h-4 border-2 border-white border-t-transparent animate-spin" />A processar…</>
+                      ? <><div className="w-4 rounded-full h-4 border-2 border-white border-t-transparent animate-spin" />A processar…</>
                       : !pagamentoSuficiente
                         ? <><AlertTriangle size={15} />Pagar</>
                         : <><CheckCircle2 size={15} />Finalizar{troco > 0 ? ` · Troco ${formatarPreco(troco)}` : ""}</>

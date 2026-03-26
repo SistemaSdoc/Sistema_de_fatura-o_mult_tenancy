@@ -122,10 +122,34 @@ export default function OutrosDocumentosPage() {
     useEffect(() => { carregar(); }, [carregar]);
 
     /* ── Impressão — idêntica à FaturasPage ── */
-    const imprimirDocumento = useCallback((doc: DocumentoFiscal) => {
+    const imprimirDocumento = useCallback(async (doc: DocumentoFiscal) => {
         if (!doc.id) return;
-        const backend = `${window.location.protocol}//${window.location.hostname}:8000`;
-        window.open(`${backend}/api/documentos-fiscais/${doc.id}/print`, "_blank");
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.1.199';
+        const url = `${baseUrl}/api/documentos-fiscais/${doc.id}/imprimir-termica`;
+
+        try {
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                },
+                credentials: 'include',
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                // Sucesso! Não precisa abrir nada
+                console.log('✅ Documento impresso na térmica');
+                // Opcional: mostrar toast de sucesso
+            } else {
+                console.error('❌ Erro:', result.message);
+                alert('Erro ao imprimir: ' + result.message);
+            }
+        } catch (error) {
+            console.error('❌ Erro na requisição:', error);
+            alert('Erro ao conectar com a impressora');
+        }
     }, []);
 
     /* ── Download PDF — idêntico à FaturasPage ── */

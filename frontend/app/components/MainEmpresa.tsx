@@ -2,7 +2,6 @@
 
 import React, { ReactNode, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
     Home,
     FileText,
@@ -22,16 +21,17 @@ import {
     Sun,
     Moon,
     Menu,
+    AlertCircle,
+    TrendingDown,
 } from "lucide-react";
 import { LucideIcon } from "lucide-react";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useAuth } from "@/context/authprovider"; // CORRIGIDO: importar do AuthContext
+import { useAuth } from "@/context/authprovider";
 import { estoqueService, ResumoEstoque } from "@/services/estoque";
 import { produtoService, Produto } from "@/services/produtos";
 import { useTheme, useThemeColors } from "@/context/ThemeContext";
 
-/* ===================== TYPES ===================== */
 interface DropdownLink {
     label: string;
     path: string;
@@ -60,32 +60,27 @@ export default function MainEmpresa({
 }: MainEmpresaProps) {
     const pathname = usePathname();
     const router = useRouter();
-    
-    // CORRIGIDO: usar o AuthContext correto
-    const { user, loading: userLoading, isAdmin, logout: authLogout } = useAuth();
-    
+
+    const { user, loading: userLoading, logout: authLogout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const colors = useThemeColors();
 
-    // Sidebar: open by default on desktop, closed on mobile
+    // State management
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
     const [dropdownOpen, setDropdownOpen] = useState<Record<string, boolean>>({});
     const [isLoaded, setIsLoaded] = useState(false);
-
-    // Logout states
     const [logoutLoading, setLogoutLoading] = useState(false);
     const [logoutModalOpen, setLogoutModalOpen] = useState(false);
     const [logoutError, setLogoutError] = useState<string | null>(null);
-
-    // Stock notification states
     const [notificacoesAberto, setNotificacoesAberto] = useState(false);
     const [produtosEstoqueBaixo, setProdutosEstoqueBaixo] = useState<Produto[]>([]);
     const [produtosSemEstoque, setProdutosSemEstoque] = useState<Produto[]>([]);
-    const [resumoEstoque, setResumoEstoque] = useState<ResumoEstoque | null>(null);
     const [loadingNotificacoes, setLoadingNotificacoes] = useState(false);
     const [ultimaAtualizacao, setUltimaAtualizacao] = useState<Date | null>(null);
     const [abaAtiva, setAbaAtiva] = useState<"baixo" | "zero">("baixo");
+    const [modalAnimating, setModalAnimating] = useState(false);
+    const [panelAnimating, setPanelAnimating] = useState(false);
 
     // User data
     const userName = user?.name || "";
@@ -95,12 +90,11 @@ export default function MainEmpresa({
     const empresaLogo = companyLogo || user?.empresa?.logo || "/images/3.png";
     const nomeEmpresa = companyName || user?.empresa?.nome || "SDOCA";
 
-    /* ==================== RESPONSIVE DETECTION ==================== */
+    // Responsive detection
     useEffect(() => {
         const checkMobile = () => {
             const mobile = window.innerWidth < 768;
             setIsMobile(mobile);
-            // On desktop, sidebar starts open; on mobile, starts closed
             if (!mobile) {
                 setSidebarOpen(true);
             } else {
@@ -112,19 +106,28 @@ export default function MainEmpresa({
         return () => window.removeEventListener("resize", checkMobile);
     }, []);
 
+    // Fechar sidebar ao mudar de rota no mobile
+    useEffect(() => {
+        if (isMobile) {
+            setSidebarOpen(false);
+        }
+    }, [pathname, isMobile]);
+
     useEffect(() => {
         setIsLoaded(true);
     }, []);
 
-    /* ==================== STOCK NOTIFICATIONS ==================== */
+    // Stock notifications
     const buscarNotificacoesEstoque = useCallback(async () => {
-        if (!user) return; // Só busca se tiver usuário logado
-        
+        if (!user) return;
+
         setLoadingNotificacoes(true);
         try {
             const resumo = await estoqueService.obterResumo();
-            setResumoEstoque(resumo);
-            setProdutosEstoqueBaixo(resumo.produtos_criticos || []);
+            const produtosCriticos = resumo.produtos_criticos || [];
+            setProdutosEstoqueBaixo(
+                produtosCriticos.filter((p: Produto) => p.estoque_atual > 0 && p.estoque_atual <= p.estoque_minimo)
+            );
 
             const responseSemEstoque = await produtoService.listarProdutos({
                 sem_estoque: true,
@@ -136,7 +139,7 @@ export default function MainEmpresa({
                 ? responseSemEstoque.produtos
                 : responseSemEstoque.produtos.data || [];
 
-            setProdutosSemEstoque(produtosSemStock);
+            setProdutosSemEstoque(produtosSemStock.filter((p: Produto) => p.estoque_atual === 0));
             setUltimaAtualizacao(new Date());
         } catch (error) {
             console.error("Erro ao buscar produtos com estoque baixo:", error);
@@ -148,14 +151,14 @@ export default function MainEmpresa({
     }, [user]);
 
     useEffect(() => {
-        if (user) {
+        if (user && (userRole === "admin" || userRole === "operador")) {
             buscarNotificacoesEstoque();
             const interval = setInterval(buscarNotificacoesEstoque, 300000);
             return () => clearInterval(interval);
         }
-    }, [user, buscarNotificacoesEstoque]);
+    }, [user, userRole, buscarNotificacoesEstoque]);
 
-    /* ==================== SIDEBAR HELPERS ==================== */
+    // Helpers
     const closeSidebar = () => setSidebarOpen(false);
 
     const toggleDropdown = (label: string) => {
@@ -167,7 +170,6 @@ export default function MainEmpresa({
             e.preventDefault();
             toggleDropdown(item.label);
         } else {
-            // Close sidebar on mobile after navigation
             if (isMobile) closeSidebar();
         }
     };
@@ -176,21 +178,36 @@ export default function MainEmpresa({
         if (isMobile) closeSidebar();
     };
 
-    /* ==================== NOTIFICATIONS ==================== */
     const toggleNotificacoes = () => {
-        setNotificacoesAberto((prev) => !prev);
-        if (!notificacoesAberto) buscarNotificacoesEstoque();
+        if (!notificacoesAberto) {
+            setNotificacoesAberto(true);
+            setPanelAnimating(true);
+            setTimeout(() => setPanelAnimating(false), 200);
+            buscarNotificacoesEstoque();
+        } else {
+            setPanelAnimating(true);
+            setTimeout(() => {
+                setNotificacoesAberto(false);
+                setPanelAnimating(false);
+            }, 150);
+        }
     };
 
-    /* ==================== LOGOUT ==================== */
+    // Logout handlers com animação
     const abrirModalLogout = () => {
         setLogoutError(null);
+        setModalAnimating(true);
         setLogoutModalOpen(true);
+        setTimeout(() => setModalAnimating(false), 200);
     };
 
     const fecharModalLogout = () => {
-        setLogoutModalOpen(false);
-        setLogoutError(null);
+        setModalAnimating(true);
+        setTimeout(() => {
+            setLogoutModalOpen(false);
+            setLogoutError(null);
+            setModalAnimating(false);
+        }, 150);
     };
 
     const handleLogout = async () => {
@@ -209,11 +226,11 @@ export default function MainEmpresa({
             setTimeout(() => router.push("/login"), 2000);
         } finally {
             setLogoutLoading(false);
-            setLogoutModalOpen(false);
+            fecharModalLogout();
         }
     };
 
-    /* ==================== NAVIGATION HELPERS ==================== */
+    // Navigation helpers
     const isActive = (path: string) => pathname === path;
 
     const isParentActive = (item: MenuItem) => {
@@ -226,7 +243,7 @@ export default function MainEmpresa({
         return item.roles.includes(userRole);
     };
 
-    /* ==================== MENU ITEMS ==================== */
+    // Menu items
     const menuItems: MenuItem[] = [
         {
             label: "Dashboard",
@@ -248,11 +265,10 @@ export default function MainEmpresa({
                         { label: "Cancelamentos", path: "/dashboard/Vendas/Cancelamentos", icon: X }
                     ]
                     : userRole === "operador"
-                        ? [{ label: "Nova venda", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart }]
+                        ? [{ label: "Venda a pronto", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart },
+                        { label: "Venda a prazo", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
+                        { label: "Proforma", path: "/dashboard/Faturas/Faturas_Proforma", icon: FileText },]
                         : [
-                            { label: "Venda a pronto", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart },
-                            { label: "Venda a prazo", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
-                            { label: "Proforma", path: "/dashboard/Faturas/Faturas_Proforma", icon: FileText },
                             { label: "Cancelamentos", path: "/dashboard/Vendas/Cancelamentos", icon: ShoppingCart }
                         ],
             isGroup: true,
@@ -282,7 +298,7 @@ export default function MainEmpresa({
                 { label: "Fornecedores", path: "/dashboard/Fornecedores/Novo_fornecedor", icon: Truck },
             ],
             isGroup: true,
-            roles: ["admin"],
+            roles: ["admin", "operador"],
         },
         {
             label: "Clientes",
@@ -298,112 +314,70 @@ export default function MainEmpresa({
             links: [],
             roles: ["admin", "contabilista"],
         },
-        ...(userRole === "admin" ? [{
-            label: "Configurações",
-            icon: Settings,
-            path: "/dashboard/configuracoes",
-            links: [],
-            roles: ["admin", "contabilista", "operador"],
-        }] : []),
+        ...(userRole === "admin"
+            ? [{
+                label: "Configurações",
+                icon: Settings,
+                path: "/dashboard/configuracoes",
+                links: [],
+                roles: ["admin"],
+            }]
+            : []),
     ];
 
     const menuItemsFiltrados = menuItems.filter(temPermissao);
     const totalNotificacoes = produtosEstoqueBaixo.length + produtosSemEstoque.length;
 
-    /* ==================== ANIMATION VARIANTS ==================== */
-    const dropdownVariants: Variants = {
-        hidden: { opacity: 0, height: 0 },
-        visible: {
-            opacity: 1,
-            height: "auto",
-            transition: { duration: 0.25, ease: "easeOut" as const, staggerChildren: 0.04 },
-        },
-    };
-
-    const dropdownItemVariants: Variants = {
-        hidden: { opacity: 0, x: -8 },
-        visible: { opacity: 1, x: 0 },
-    };
-
-    const notificacaoVariants = {
-        hidden: { opacity: 0, y: -8, scale: 0.96 },
-        visible: { opacity: 1, y: 0, scale: 1, transition: { type: "spring" as const, stiffness: 300, damping: 30 } },
-        exit: { opacity: 0, y: -8, scale: 0.96, transition: { duration: 0.15 } },
-    };
-
-    const modalVariants: Variants = {
-        hidden: { opacity: 0, scale: 0.92, y: 16 },
-        visible: { opacity: 1, scale: 1, y: 0, transition: { type: "spring" as const, stiffness: 400, damping: 30 } },
-        exit: { opacity: 0, scale: 0.92, y: 16, transition: { duration: 0.15 } },
-    };
-
-    /* ==================== LOADING ==================== */
+    // Loading
     if (userLoading) {
         return (
-            <div className="flex items-center justify-center h-screen" style={{ backgroundColor: colors.background }}>
+            <div className="flex items-center justify-center w-screen h-screen" style={{ backgroundColor: colors.background }}>
                 <Loader2 className="w-8 h-8 animate-spin" style={{ color: colors.primary }} />
             </div>
         );
     }
 
-    // Se não tem usuário, não renderiza nada (o middleware vai redirecionar)
     if (!user) {
         return null;
     }
 
     const currentPageLabel = menuItemsFiltrados.find((item) => isParentActive(item))?.label || "Dashboard";
 
-    /* ==================== RENDER ==================== */
     return (
-        <div className="flex h-screen overflow-hidden transition-colors duration-300" style={{ backgroundColor: colors.background }}>
+        <div className="flex w-screen h-screen overflow-hidden" style={{ backgroundColor: colors.background }}>
+            {/* Mobile overlay com fade animation */}
+            {sidebarOpen && isMobile && (
+                <div
+                    onClick={closeSidebar}
+                    className="fixed inset-0 z-30 transition-opacity duration-300 animate-fade-in"
+                    style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }}
+                />
+            )}
 
-            {/* ====== MOBILE OVERLAY ====== */}
-            <AnimatePresence>
-                {sidebarOpen && isMobile && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={closeSidebar}
-                        className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm"
-                    />
-                )}
-            </AnimatePresence>
-
-            {/* ====== SIDEBAR ====== */}
-            <motion.aside
-                initial={false}
-                animate={{ x: sidebarOpen ? 0 : isMobile ? "-100%" : 0, width: sidebarOpen ? 260 : isMobile ? 260 : 72 }}
-                transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                className="z-40 flex flex-col flex-shrink-0 border-r shadow-xl"
+            {/* Sidebar */}
+            <aside
+                className="fixed left-0 top-0 z-40 flex flex-col h-screen transition-all duration-300 border-r md:relative md:z-0"
                 style={{
                     backgroundColor: colors.card,
                     borderColor: colors.border,
-                    position: isMobile ? "fixed" : "relative",
-                    top: isMobile ? 0 : undefined,
-                    left: isMobile ? 0 : undefined,
-                    bottom: isMobile ? 0 : undefined,
-                    height: isMobile ? "100dvh" : "100%",
+                    width: sidebarOpen ? (isMobile ? "280px" : "260px") : (isMobile ? "0" : "72px"),
+                    transform: sidebarOpen || !isMobile ? "translateX(0)" : isMobile ? "translateX(-100%)" : "translateX(0)",
                 }}
             >
-                {/* Desktop collapse toggle */}
+                {/* Desktop collapse button */}
                 {!isMobile && (
-                    <motion.button
+                    <button
                         onClick={() => setSidebarOpen(!sidebarOpen)}
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.95 }}
-                        className="rounded-full absolute -right-3 top-8 text-white p-1.5 shadow-lg z-50"
+                        className="absolute -right-3 top-8 z-50 p-1.5 text-white transition-transform hover:scale-110 active:scale-95"
                         style={{ backgroundColor: colors.primary }}
                     >
-                        <motion.div animate={{ rotate: sidebarOpen ? 0 : 180 }} transition={{ duration: 0.3 }}>
-                            <ChevronLeft size={14} />
-                        </motion.div>
-                    </motion.button>
+                        <ChevronLeft size={14} style={{ transform: sidebarOpen ? "rotate(0)" : "rotate(180deg)", transition: "transform 0.3s" }} />
+                    </button>
                 )}
 
-                {/* Logo / Company */}
+                {/* Logo section */}
                 <div
-                    className="flex items-center flex-shrink-0 h-16 gap-3 px-4 overflow-hidden border-b"
+                    className="flex items-center gap-3 h-16 px-4 border-b flex-shrink-0"
                     style={{ borderColor: colors.border }}
                 >
                     {empresaLogo ? (
@@ -417,60 +391,42 @@ export default function MainEmpresa({
                         />
                     ) : (
                         <div
-                            className="flex items-center justify-center flex-shrink-0 w-8 h-8 font-bold text-white shadow-md"
+                            className="flex items-center justify-center flex-shrink-0 w-8 h-8 text-sm font-bold text-white"
                             style={{ backgroundColor: colors.primary }}
                         >
                             {nomeEmpresa.charAt(0).toUpperCase()}
                         </div>
                     )}
 
-                    <AnimatePresence>
-                        {sidebarOpen && (
-                            <motion.span
-                                initial={{ opacity: 0, x: -8 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: -8 }}
-                                className="text-sm font-semibold truncate whitespace-nowrap"
-                                style={{ color: colors.text }}
-                            >
-                                {nomeEmpresa}
-                            </motion.span>
-                        )}
-                    </AnimatePresence>
+                    {sidebarOpen && (
+                        <span className="text-sm font-semibold truncate" style={{ color: colors.text }}>
+                            {nomeEmpresa}
+                        </span>
+                    )}
 
-                    {/* Mobile close button */}
                     {isMobile && sidebarOpen && (
                         <button
-                            type="button"
                             onClick={closeSidebar}
-                            className="p-1 ml-auto text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                            aria-label="Fechar menu lateral"
-                            title="Fechar menu lateral"
+                            className="p-1 ml-auto transition-transform hover:scale-110 active:scale-95"
+                            style={{ color: colors.text }}
                         >
-                            <X size={20} aria-hidden="true" />
-                            <span className="sr-only">Fechar menu lateral</span>
+                            <X size={20} />
                         </button>
                     )}
                 </div>
 
                 {/* Navigation */}
-                <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto overflow-x-hidden">
+                <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto overflow-x-hidden">
                     {isLoaded &&
-                        menuItemsFiltrados.map((item, index) => {
+                        menuItemsFiltrados.map((item) => {
                             const active = isParentActive(item);
                             const isOpen = dropdownOpen[item.label];
                             const hasLinks = item.links.length > 0;
 
                             return (
-                                <motion.div
-                                    key={item.label}
-                                    initial={{ opacity: 0, x: -16 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: index * 0.04 }}
-                                >
-                                    {/* Main item */}
+                                <div key={item.label}>
                                     <div
-                                        className="flex items-center justify-between px-3 py-2.5 cursor-pointer transition-all duration-200 select-none"
+                                        className="flex items-center justify-between px-3 py-2.5 transition-all duration-200 cursor-pointer select-none hover:translate-x-1 active:scale-98"
                                         style={{
                                             backgroundColor: active ? colors.secondary : "transparent",
                                             color: active ? "white" : colors.text,
@@ -478,256 +434,318 @@ export default function MainEmpresa({
                                         onClick={(e) => handleMainItemClick(item, e)}
                                     >
                                         {hasLinks ? (
-                                            <div className="flex items-center flex-1 min-w-0 gap-3">
-                                                <item.icon
-                                                    size={19}
-                                                    style={{ color: active ? "white" : colors.secondary, flexShrink: 0 }}
-                                                />
-                                                <AnimatePresence>
-                                                    {sidebarOpen && (
-                                                        <motion.span
-                                                            initial={{ opacity: 0 }}
-                                                            animate={{ opacity: 1 }}
-                                                            exit={{ opacity: 0 }}
-                                                            className="text-sm font-medium truncate whitespace-nowrap"
-                                                            style={{ color: active ? "white" : colors.text }}
-                                                        >
-                                                            {item.label}
-                                                        </motion.span>
-                                                    )}
-                                                </AnimatePresence>
+                                            <div className="flex items-center flex-1 gap-3 min-w-0">
+                                                <item.icon size={19} style={{ color: active ? "white" : colors.secondary, flexShrink: 0 }} />
+                                                {sidebarOpen && (
+                                                    <span className="text-sm font-medium truncate" style={{ color: active ? "white" : colors.text }}>
+                                                        {item.label}
+                                                    </span>
+                                                )}
                                             </div>
                                         ) : (
                                             <Link
                                                 href={item.path}
-                                                className="flex items-center flex-1 min-w-0 gap-3"
+                                                className="flex items-center flex-1 gap-3 min-w-0"
                                                 onClick={handleLinkClick}
                                             >
-                                                <item.icon
-                                                    size={19}
-                                                    style={{ color: active ? "white" : colors.secondary, flexShrink: 0 }}
-                                                />
-                                                <AnimatePresence>
-                                                    {sidebarOpen && (
-                                                        <motion.span
-                                                            initial={{ opacity: 0 }}
-                                                            animate={{ opacity: 1 }}
-                                                            exit={{ opacity: 0 }}
-                                                            className="text-sm font-medium truncate whitespace-nowrap"
-                                                            style={{ color: active ? "white" : colors.text }}
-                                                        >
-                                                            {item.label}
-                                                        </motion.span>
-                                                    )}
-                                                </AnimatePresence>
+                                                <item.icon size={19} style={{ color: active ? "white" : colors.secondary, flexShrink: 0 }} />
+                                                {sidebarOpen && (
+                                                    <span className="text-sm font-medium truncate" style={{ color: active ? "white" : colors.text }}>
+                                                        {item.label}
+                                                    </span>
+                                                )}
                                             </Link>
                                         )}
 
                                         {hasLinks && sidebarOpen && (
-                                            <motion.div
-                                                animate={{ rotate: isOpen ? 180 : 0 }}
-                                                transition={{ duration: 0.25 }}
-                                                className="flex-shrink-0 ml-1"
+                                            <div
+                                                className="flex-shrink-0 ml-1 transition-transform duration-250"
+                                                style={{
+                                                    transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
+                                                }}
                                             >
                                                 <ChevronDown size={15} style={{ color: active ? "white" : colors.textSecondary }} />
-                                            </motion.div>
+                                            </div>
                                         )}
                                     </div>
 
-                                    {/* Dropdown */}
-                                    <AnimatePresence>
-                                        {isOpen && sidebarOpen && (
-                                            <motion.div
-                                                variants={dropdownVariants}
-                                                initial="hidden"
-                                                animate="visible"
-                                                exit="hidden"
-                                                className="ml-3 mt-0.5 space-y-0.5 overflow-hidden"
-                                            >
-                                                {item.links.map((link) => {
-                                                    const linkActive = isActive(link.path);
-                                                    return (
-                                                        <motion.div key={link.path} variants={dropdownItemVariants}>
-                                                            <Link href={link.path} onClick={handleLinkClick}>
-                                                                <div
-                                                                    className={`flex items-center gap-3 px-3 py-2 transition-all duration-150 border-l-2 ${linkActive
-                                                                            ? "border-sky-500 bg-sky-500/10"
-                                                                            : "border-transparent bg-transparent"
-                                                                        }`}
-                                                                >
-                                                                    {link.icon && (
-                                                                        <link.icon
-                                                                            size={15}
-                                                                            className={`flex-shrink-0 ${linkActive ? "text-sky-500" : "text-gray-400 dark:text-gray-500"}`}
-                                                                        />
-                                                                    )}
-                                                                    <span
-                                                                        className={`text-xs truncate ${linkActive ? "font-semibold text-gray-900 dark:text-gray-100" : "font-normal text-gray-500 dark:text-gray-400"}`}
-                                                                    >
-                                                                        {link.label}
-                                                                    </span>
-                                                                </div>
-                                                            </Link>
-                                                        </motion.div>
-                                                    );
-                                                })}
-                                            </motion.div>
-                                        )}
-                                    </AnimatePresence>
-                                </motion.div>
+                                    {/* Dropdown com slide animation */}
+                                    {isOpen && sidebarOpen && (
+                                        <div className="ml-3 mt-1 space-y-1 overflow-hidden animate-slide-down">
+                                            {item.links.map((link) => {
+                                                const linkActive = isActive(link.path);
+                                                return (
+                                                    <Link key={link.path} href={link.path} onClick={handleLinkClick}>
+                                                        <div
+                                                            className="flex items-center gap-3 px-3 py-2 border-l-2 transition-all hover:translate-x-1"
+                                                            style={{
+                                                                borderColor: linkActive ? colors.primary : "transparent",
+                                                                backgroundColor: linkActive ? `${colors.primary}15` : "transparent",
+                                                            }}
+                                                        >
+                                                            {link.icon && (
+                                                                <link.icon
+                                                                    size={15}
+                                                                    style={{
+                                                                        color: linkActive ? colors.text : colors.text,
+                                                                        flexShrink: 0
+                                                                    }}
+                                                                />
+                                                            )}
+                                                            <span
+                                                                className="text-xs truncate"
+                                                                style={{
+                                                                    color: linkActive ? colors.text : colors.textSecondary,
+                                                                    fontWeight: linkActive ? "600" : "400",
+                                                                }}
+                                                            >
+                                                                {link.label}
+                                                            </span>
+                                                        </div>
+                                                    </Link>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
                             );
                         })}
                 </nav>
 
-                {/* Logout */}
-                <div className="flex-shrink-0 p-2 border-t" style={{ borderColor: colors.border }}>
+                {/* Logout button */}
+                <div className="p-2 border-t flex-shrink-0" style={{ borderColor: colors.border }}>
                     <div
                         onClick={abrirModalLogout}
-                        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all duration-200 hover:bg-red-50 dark:hover:bg-red-950/20"
+                        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all hover:translate-x-1 active:scale-98"
+                        style={{
+                            backgroundColor: "transparent",
+                        }}
                     >
                         <LogOut size={19} className="flex-shrink-0 text-red-500" />
-                        <AnimatePresence>
-                            {sidebarOpen && (
-                                <motion.span
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    className="text-sm font-medium whitespace-nowrap"
-                                    style={{ color: colors.text }}
-                                >
-                                    Sair do Sistema
-                                </motion.span>
-                            )}
-                        </AnimatePresence>
+                        {sidebarOpen && (
+                            <span className="text-sm font-medium" style={{ color: colors.text }}>
+                                Sair
+                            </span>
+                        )}
                     </div>
                 </div>
-            </motion.aside>
+            </aside>
 
-            {/* ====== MAIN CONTENT ====== */}
-            <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-
+            {/* Main content */}
+            <div className="flex flex-col flex-1 w-full overflow-hidden">
                 {/* Header */}
                 <header
-                    className="relative z-20 flex items-center justify-between flex-shrink-0 px-3 border-b shadow-sm h-14 md:h-16 md:px-6"
+                    className="flex items-center justify-between gap-3 px-3 h-14 border-b shadow-sm md:h-16 md:px-6 flex-shrink-0"
                     style={{ backgroundColor: colors.card, borderColor: colors.border }}
                 >
-                    {/* Left: hamburger + page title */}
-                    <div className="flex items-center min-w-0 gap-2 md:gap-4">
-                        {/* Mobile hamburger */}
+                    <div className="flex items-center gap-2 min-w-0">
                         {isMobile && (
                             <button
                                 onClick={() => setSidebarOpen(true)}
-                                className="flex-shrink-0 p-2 "
+                                className="p-2 transition-transform hover:scale-110 active:scale-95 flex-shrink-0"
                                 style={{ color: colors.primary }}
-                                aria-label="Abrir menu"
                             >
                                 <Menu size={20} />
                             </button>
                         )}
-
-                        <h1 className="text-base font-bold truncate md:text-lg" style={{ color: colors.text }}>
+                        <h1 className="text-sm font-bold truncate md:text-base" style={{ color: colors.text }}>
                             {currentPageLabel}
                         </h1>
-
                     </div>
 
-                    {/* Right: actions */}
-                    <div className="flex items-center flex-shrink-0 gap-1 md:gap-3">
-
+                    {/* Header actions */}
+                    <div className="flex items-center gap-1 flex-shrink-0 md:gap-2">
                         {/* Theme toggle */}
                         <button
                             onClick={toggleTheme}
-                            className="p-2 transition-colors rounded-full"
+                            className="p-2 transition-all hover:scale-110 active:scale-95"
                             style={{ backgroundColor: colors.hover, color: colors.text }}
-                            aria-label="Alternar tema"
                         >
-                            <AnimatePresence mode="wait">
-                                <motion.div
-                                    key={theme}
-                                    initial={{ y: -12, opacity: 0 }}
-                                    animate={{ y: 0, opacity: 1 }}
-                                    exit={{ y: 12, opacity: 0 }}
-                                    transition={{ duration: 0.15 }}
-                                >
-                                    {theme === "dark" ? (
-                                        <Sun size={18} style={{ color: colors.secondary }} />
-                                    ) : (
-                                        <Moon size={18} style={{ color: colors.primary }} />
-                                    )}
-                                </motion.div>
-                            </AnimatePresence>
+                            {theme === "dark" ? (
+                                <Sun size={16} className="md:w-[18px] md:h-[18px]" style={{ color: colors.secondary }} />
+                            ) : (
+                                <Moon size={16} className="md:w-[18px] md:h-[18px]" style={{ color: colors.primary }} />
+                            )}
                         </button>
 
-                        {/* Stock notifications */}
+                        {/* Notifications */}
                         {(userRole === "admin" || userRole === "operador") && (
                             <div className="relative">
                                 <button
                                     onClick={toggleNotificacoes}
-                                    className="relative p-2 transition-colors"
+                                    className="relative p-2 transition-all hover:scale-110 active:scale-95"
                                     style={{ backgroundColor: notificacoesAberto ? colors.hover : "transparent" }}
-                                    aria-label="Notificações de estoque"
                                 >
-                                    <Bell size={18} style={{ color: colors.primary }} />
+                                    <Bell size={16} className="md:w-[18px] md:h-[18px]" style={{ color: colors.primary }} />
                                     {totalNotificacoes > 0 && (
-                                        <motion.span
-                                            initial={{ scale: 0 }}
-                                            animate={{ scale: 1 }}
-                                            className="rounded-full absolute -top-0.5 -right-0.5 min-w-[16px] h-4 text-white text-[9px] font-bold flex items-center justify-center px-1"
+                                        <span
+                                            className="absolute -top-1 -right-1 min-w-[18px] h-[18px] text-[10px] font-bold flex items-center justify-center px-1 text-white animate-pulse"
                                             style={{ backgroundColor: produtosSemEstoque.length > 0 ? colors.danger : "#f59e0b" }}
                                         >
                                             {totalNotificacoes > 9 ? "9+" : totalNotificacoes}
-                                        </motion.span>
+                                        </span>
                                     )}
                                 </button>
 
-                                <AnimatePresence>
-                                    {notificacoesAberto && (
-                                        <motion.div
-                                            variants={notificacaoVariants}
-                                            initial="hidden"
-                                            animate="visible"
-                                            exit="exit"
-                                            className="absolute right-0 z-50 mt-2 overflow-hidden border shadow-2xl top-full"
+                                {/* Notification panel com slide animation */}
+                                {notificacoesAberto && (
+                                    <>
+                                        <div
+                                            className={`absolute right-0 z-50 mt-2 overflow-hidden border shadow-lg transition-all duration-200 ${panelAnimating ? 'opacity-0 scale-95' : 'opacity-100 scale-100'
+                                                }`}
                                             style={{
                                                 backgroundColor: colors.card,
                                                 borderColor: colors.border,
-                                                width: "min(384px, calc(100vw - 16px))",
+                                                width: "min(380px, calc(100vw - 20px))",
+                                                transformOrigin: "top right",
                                             }}
                                         >
-                                            {/* Rest of notification component remains the same */}
-                                            {/* ... (keep the same notification content) ... */}
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
+                                            {/* Header */}
+                                            <div className="p-3 border-b" style={{ borderColor: colors.border }}>
+                                                <div className="flex items-center justify-between">
+                                                    <h3 className="text-sm font-semibold" style={{ color: colors.text }}>
+                                                        Alertas
+                                                    </h3>
+                                                    <button
+                                                        onClick={() => setNotificacoesAberto(false)}
+                                                        className="p-1 transition-transform hover:scale-110 active:scale-95"
+                                                    >
+                                                        <X size={16} style={{ color: colors.textSecondary }} />
+                                                    </button>
+                                                </div>
+                                                {ultimaAtualizacao && (
+                                                    <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+                                                        {ultimaAtualizacao.toLocaleTimeString("pt-PT")}
+                                                    </p>
+                                                )}
+                                            </div>
+
+                                            {/* Tabs */}
+                                            <div className="flex border-b" style={{ borderColor: colors.border }}>
+                                                <button
+                                                    onClick={() => setAbaAtiva("baixo")}
+                                                    className="flex-1 py-2 px-3 text-xs font-medium transition-all hover:scale-105"
+                                                    style={{
+                                                        color: abaAtiva === "baixo" ? colors.text : colors.textSecondary,
+                                                        borderBottom: abaAtiva === "baixo" ? `2px solid ${colors.secondary}` : "none",
+                                                    }}
+                                                >
+                                                    Baixo ({produtosEstoqueBaixo.length})
+                                                </button>
+                                                <button
+                                                    onClick={() => setAbaAtiva("zero")}
+                                                    className="flex-1 py-2 px-3 text-xs font-medium transition-all hover:scale-105"
+                                                    style={{
+                                                        color: abaAtiva === "zero" ? colors.text : colors.textSecondary,
+                                                        borderBottom: abaAtiva === "zero" ? `2px solid ${colors.secondary}` : "none",
+                                                    }}
+                                                >
+                                                    Zero ({produtosSemEstoque.length})
+                                                </button>
+                                            </div>
+
+                                            {/* Content */}
+                                            <div className="max-h-80 overflow-y-auto">
+                                                {loadingNotificacoes ? (
+                                                    <div className="flex items-center justify-center py-6">
+                                                        <Loader2 className="w-4 h-4 animate-spin" style={{ color: colors.primary }} />
+                                                    </div>
+                                                ) : abaAtiva === "baixo" && produtosEstoqueBaixo.length > 0 ? (
+                                                    <div style={{ borderColor: colors.border }} className="divide-y">
+                                                        {produtosEstoqueBaixo.map((produto, idx) => (
+                                                            <div
+                                                                key={produto.id}
+                                                                className="p-3 transition-all hover:translate-x-1"
+                                                                style={{ animation: `fadeIn 0.2s ease-out ${idx * 0.03}s forwards` }}
+                                                            >
+                                                                <div className="flex gap-2">
+                                                                    <div className="p-1.5 flex-shrink-0" style={{ backgroundColor: colors.warning }}>
+                                                                        <TrendingDown size={14} className="text-white" />
+                                                                    </div>
+                                                                    <div className="min-w-0 flex-1">
+                                                                        <p className="text-xs font-medium truncate" style={{ color: colors.text }}>
+                                                                            {produto.nome}
+                                                                        </p>
+                                                                        <p className="text-xs mt-0.5" style={{ color: colors.textSecondary }}>
+                                                                            {produto.estoque_atual} / {produto.estoque_minimo}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : abaAtiva === "zero" && produtosSemEstoque.length > 0 ? (
+                                                    <div style={{ borderColor: colors.border }} className="divide-y">
+                                                        {produtosSemEstoque.map((produto, idx) => (
+                                                            <div
+                                                                key={produto.id}
+                                                                className="p-3 transition-all hover:translate-x-1"
+                                                                style={{ animation: `fadeIn 0.2s ease-out ${idx * 0.03}s forwards` }}
+                                                            >
+                                                                <div className="flex gap-2">
+                                                                    <div className="p-1.5 flex-shrink-0" style={{ backgroundColor: colors.danger }}>
+                                                                        <AlertCircle size={14} className="text-white" />
+                                                                    </div>
+                                                                    <p className="text-xs font-medium truncate" style={{ color: colors.text }}>
+                                                                        {produto.nome}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <div className="py-8 text-center">
+                                                        <p className="text-xs" style={{ color: colors.textSecondary }}>
+                                                            Sem alertas
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Footer */}
+                                            <div className="p-2 border-t text-center" style={{ borderColor: colors.border }}>
+                                                <button
+                                                    onClick={buscarNotificacoesEstoque}
+                                                    disabled={loadingNotificacoes}
+                                                    className="text-xs font-medium transition-all hover:scale-105 disabled:opacity-50"
+                                                    style={{ color: colors.text }}
+                                                >
+                                                    {loadingNotificacoes ? "Atualizando..." : "Atualizar"}
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div
+                                            onClick={() => setNotificacoesAberto(false)}
+                                            className="fixed inset-0 z-40"
+                                        />
+                                    </>
+                                )}
                             </div>
                         )}
 
-                        {/* Notification overlay closer */}
-                        <AnimatePresence>
-                            {notificacoesAberto && (
-                                <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    onClick={() => setNotificacoesAberto(false)}
-                                    className="fixed inset-0 z-40"
-                                />
-                            )}
-                        </AnimatePresence>
+                        {/* Close notifications overlay */}
+                        {notificacoesAberto && (
+                            <div
+                                onClick={() => setNotificacoesAberto(false)}
+                                className="fixed inset-0 z-40"
+                            />
+                        )}
 
                         {/* User avatar */}
                         <div
-                            className="flex items-center gap-2 pl-2 border-l rounded-full md:pl-4"
+                            className="flex items-center gap-2 pl-2 border-l md:pl-3 flex-shrink-0"
                             style={{ borderColor: colors.border }}
                         >
                             <div className="hidden text-right md:block">
-                                <p className="text-sm font-semibold leading-tight" style={{ color: colors.text }}>{userName}</p>
-                                <p className="text-xs capitalize" style={{ color: colors.textSecondary }}>
-                                    {userRole === "admin" ? "Administrador" : userRole === "contabilista" ? "Contabilista" : "Operador"}
+                                <p className="text-xs font-semibold leading-tight" style={{ color: colors.text }}>
+                                    {userName.split(" ")[0]}
+                                </p>
+                                <p className="text-[10px]" style={{ color: colors.textSecondary }}>
+                                    {userRole === "admin" ? "Admin" : userRole === "contabilista" ? "Contab." : "Op."}
                                 </p>
                             </div>
                             <div
-                                className="flex items-center justify-center flex-shrink-0 w-8 h-8 text-sm font-bold text-white rounded-full shadow-md md:w-9 md:h-9"
+                                className="flex items-center justify-center w-7 h-7 text-xs font-bold text-white md:w-8 md:h-8 flex-shrink-0 transition-transform hover:scale-105"
                                 style={{ background: `linear-gradient(135deg, ${colors.secondary} 0%, ${colors.primary} 100%)` }}
                             >
                                 {userInitial}
@@ -737,95 +755,168 @@ export default function MainEmpresa({
                 </header>
 
                 {/* Page content */}
-                <main className="flex-1 p-3 overflow-auto md:p-6">
-                    <motion.div
-                        key={pathname}
-                        initial={{ opacity: 0, y: 12 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.3, ease: "easeOut" }}
-                        className="h-full"
-                    >
+                <main className="flex-1 overflow-auto p-3 md:p-6">
+                    <div className="animate-fade-in">
                         {children}
-                    </motion.div>
+                    </div>
                 </main>
             </div>
 
-            {/* ====== LOGOUT MODAL ====== */}
-            <AnimatePresence>
-                {logoutModalOpen && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-                        onClick={fecharModalLogout}
+            {/* Logout modal com animação */}
+            {logoutModalOpen && (
+                <div
+                    className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-all duration-200 ${modalAnimating ? 'opacity-0' : 'opacity-100'
+                        }`}
+                    style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }}
+                    onClick={fecharModalLogout}
+                >
+                    <div
+                        className={`w-full max-w-sm overflow-hidden shadow-lg transition-all duration-200 ${modalAnimating ? 'scale-95 opacity-0' : 'scale-100 opacity-100'
+                            }`}
+                        style={{ backgroundColor: colors.card }}
+                        onClick={(e) => e.stopPropagation()}
                     >
-                        <motion.div
-                            variants={modalVariants}
-                            initial="hidden"
-                            animate="visible"
-                            exit="exit"
-                            className="w-full max-w-sm overflow-hidden shadow-2xl"
-                            style={{ backgroundColor: colors.card }}
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <div className="p-6 pb-4 text-center">
-                                <h2 className="mb-2 text-xl font-bold" style={{ color: colors.text }}>Confirmar Logout</h2>
-                                <p className="text-sm" style={{ color: colors.textSecondary }}>
-                                    Tem certeza que deseja sair? Você precisará fazer login novamente para acessar sua conta.
-                                </p>
-                            </div>
-
-                            {logoutError && (
-                                <div className="p-3 mx-5 mb-4 text-xs text-center"
-                                    style={{ backgroundColor: theme === "dark" ? "#442200" : "#fef3c7", border: `1px solid ${theme === "dark" ? "#854d0e" : "#fbbf24"}`, color: theme === "dark" ? "#fbbf24" : "#92400e" }}>
-                                    {logoutError}
-                                </div>
-                            )}
-
-                            <div className="px-5 py-3 border-y" style={{ backgroundColor: theme === "dark" ? "#1a1a1a" : "#f9fafb", borderColor: colors.border }}>
-                                <div className="flex items-center gap-3">
-                                    <div className="flex items-center justify-center flex-shrink-0 text-sm font-bold text-white rounded-full w-9 h-9"
-                                        style={{ background: `linear-gradient(135deg, ${colors.secondary} 0%, ${colors.primary} 100%)` }}>
-                                        {userInitial}
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-medium truncate" style={{ color: colors.text }}>{userName}</p>
-                                        <p className="text-xs truncate" style={{ color: colors.textSecondary }}>{userEmail}</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="flex gap-3 p-5">
-                                <button
-                                    onClick={fecharModalLogout}
-                                    disabled={logoutLoading}
-                                    className="rounded-xl flex-1 py-2.5 px-4 font-medium text-sm disabled:opacity-50 transition-opacity hover:opacity-80"
-                                    style={{ backgroundColor: theme === "dark" ? "#333" : "#e5e7eb", color: colors.text }}
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    onClick={handleLogout}
-                                    disabled={logoutLoading}
-                                    className="rounded-xl flex-1 py-2.5 px-4 text-white font-medium text-sm disabled:opacity-50 flex items-center justify-center gap-2 transition-opacity hover:opacity-90"
-                                    style={{ backgroundColor: colors.danger }}
-                                >
-                                    {logoutLoading ? (
-                                        <><Loader2 className="w-4 h-4 animate-spin" /><span>Saindo...</span></>
-                                    ) : (
-                                        <><LogOut size={16} /><span>Sair</span></>
-                                    )}
-                                </button>
-                            </div>
-
-                            <p className="px-5 pb-5 text-xs text-center" style={{ color: colors.textSecondary }}>
-                                Ao sair, sua sessão será encerrada e dados não salvos serão perdidos.
+                        <div className="p-4 border-b text-center md:p-6 md:pb-4" style={{ borderColor: colors.border }}>
+                            <h2 className="text-lg font-bold md:text-xl" style={{ color: colors.text }}>
+                                Confirmar
+                            </h2>
+                            <p className="text-xs mt-1 md:text-sm" style={{ color: colors.textSecondary }}>
+                                Deseja sair da sua conta?
                             </p>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                        </div>
+
+                        {logoutError && (
+                            <div
+                                className="p-2 mx-4 mb-3 text-xs text-center animate-shake"
+                                style={{
+                                    backgroundColor: theme === "dark" ? "#442200" : "#fef3c7",
+                                    border: `1px solid ${theme === "dark" ? "#854d0e" : "#fbbf24"}`,
+                                    color: theme === "dark" ? "#fbbf24" : "#92400e"
+                                }}
+                            >
+                                {logoutError}
+                            </div>
+                        )}
+
+                        <div className="p-3 border-b md:p-4" style={{ backgroundColor: theme === "dark" ? "#1a1a1a" : "#f9fafb", borderColor: colors.border }}>
+                            <div className="flex items-center gap-2">
+                                <div
+                                    className="flex items-center justify-center w-7 h-7 text-xs font-bold text-white flex-shrink-0"
+                                    style={{ background: `linear-gradient(135deg, ${colors.secondary} 0%, ${colors.primary} 100%)` }}
+                                >
+                                    {userInitial}
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-xs font-medium truncate md:text-sm" style={{ color: colors.text }}>
+                                        {userName}
+                                    </p>
+                                    <p className="text-[10px] truncate md:text-xs" style={{ color: colors.textSecondary }}>
+                                        {userEmail}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-2 p-3 md:gap-3 md:p-4">
+                            <button
+                                onClick={fecharModalLogout}
+                                disabled={logoutLoading}
+                                className="flex-1 py-2 px-3 text-xs font-medium transition-all hover:scale-105 active:scale-95 md:text-sm"
+                                style={{ backgroundColor: theme === "dark" ? "#333" : "#e5e7eb", color: colors.text }}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleLogout}
+                                disabled={logoutLoading}
+                                className="flex-1 py-2 px-3 text-xs font-medium text-white transition-all flex items-center justify-center gap-1 hover:scale-105 active:scale-95 md:text-sm"
+                                style={{ backgroundColor: colors.danger }}
+                            >
+                                {logoutLoading ? (
+                                    <><Loader2 className="w-3 h-3 md:w-4 md:h-4 animate-spin" /></>
+                                ) : (
+                                    <><LogOut size={14} className="md:w-[16px] md:h-[16px]" /><span className="hidden sm:inline">Sair</span></>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <style jsx>{`
+                @keyframes fadeIn {
+                    from {
+                        opacity: 0;
+                        transform: translateY(10px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
+                }
+                
+                @keyframes slideDown {
+                    from {
+                        opacity: 0;
+                        transform: scale(0.95) translateY(-10px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: scale(1) translateY(0);
+                    }
+                }
+                
+                @keyframes shake {
+                    0%, 100% { transform: translateX(0); }
+                    25% { transform: translateX(-5px); }
+                    75% { transform: translateX(5px); }
+                }
+                
+                .animate-fade-in {
+                    animation: fadeIn 0.3s ease-out forwards;
+                }
+                
+                .animate-slide-down {
+                    animation: slideDown 0.2s ease-out forwards;
+                }
+                
+                .animate-shake {
+                    animation: shake 0.3s ease-in-out;
+                }
+                
+                .hover\\:scale-105:hover {
+                    transform: scale(1.05);
+                }
+                
+                .active\\:scale-95:active {
+                    transform: scale(0.95);
+                }
+                
+                .active\\:scale-98:active {
+                    transform: scale(0.98);
+                }
+                
+                .hover\\:translate-x-1:hover {
+                    transform: translateX(4px);
+                }
+                
+                .transition-all {
+                    transition-property: all;
+                    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+                }
+                
+                .duration-200 {
+                    transition-duration: 200ms;
+                }
+                
+                .duration-250 {
+                    transition-duration: 250ms;
+                }
+                
+                .duration-300 {
+                    transition-duration: 300ms;
+                }
+            `}</style>
         </div>
     );
 }

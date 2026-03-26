@@ -51,7 +51,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useThemeColors, useTheme } from "@/context/ThemeContext";
 
 interface FormFornecedorData {
   nome: string;
@@ -74,6 +75,9 @@ const INITIAL_FORM_DATA: FormFornecedorData = {
 };
 
 export default function FornecedoresPage() {
+  const colors = useThemeColors();
+  const { theme } = useTheme();
+  
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [fornecedoresDeletados, setFornecedoresDeletados] = useState<Fornecedor[]>([]);
   const [fornecedoresFiltrados, setFornecedoresFiltrados] = useState<Fornecedor[]>([]);
@@ -263,14 +267,19 @@ export default function FornecedoresPage() {
 
   return (
     <MainEmpresa>
-      <div className="p-3 space-y-3">
+      <div className="p-3 space-y-3 transition-colors duration-300" style={{ backgroundColor: colors.background }}>
         {/* Header super compacto */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold">Fornecedores</h1>
-            <p className="text-xs text-gray-500">Gerencie fornecedores nacionais e internacionais</p>
+            <h1 className="text-lg font-semibold" style={{ color: colors.text }}>Fornecedores</h1>
+            <p className="text-xs" style={{ color: colors.textSecondary }}>Gerencie fornecedores nacionais e internacionais</p>
           </div>
-          <Button onClick={handleNovo} size="sm" className="h-7 px-2 gap-1 text-xs">
+          <Button 
+            onClick={handleNovo} 
+            size="sm" 
+            className="h-7 px-2 gap-1 text-xs"
+            style={{ backgroundColor: colors.primary, color: 'white' }}
+          >
             <Plus className="h-3 w-3" />
             Novo
           </Button>
@@ -279,12 +288,26 @@ export default function FornecedoresPage() {
         {/* Barra de ferramentas compacta */}
         <div className="flex items-center gap-2">
           <Tabs value={abaAtiva} onValueChange={setAbaAtiva} className="flex-none">
-            <TabsList className="h-7 p-0.5">
-              <TabsTrigger value="ativos" className="text-xs px-2 py-0.5 gap-1">
+            <TabsList className="h-7 p-0.5" style={{ backgroundColor: colors.hover }}>
+              <TabsTrigger 
+                value="ativos" 
+                className="text-xs px-2 py-0.5 gap-1"
+                style={{ 
+                  color: abaAtiva === "ativos" ? colors.secondary : colors.textSecondary,
+                  backgroundColor: abaAtiva === "ativos" ? colors.card : 'transparent'
+                }}
+              >
                 <CheckCircle2 className="h-3 w-3" />
                 Ativos ({fornecedores.length})
               </TabsTrigger>
-              <TabsTrigger value="lixeira" className="text-xs px-2 py-0.5 gap-1">
+              <TabsTrigger 
+                value="lixeira" 
+                className="text-xs px-2 py-0.5 gap-1"
+                style={{ 
+                  color: abaAtiva === "lixeira" ? colors.secondary : colors.textSecondary,
+                  backgroundColor: abaAtiva === "lixeira" ? colors.card : 'transparent'
+                }}
+              >
                 <Archive className="h-3 w-3" />
                 Lixeira ({fornecedoresDeletados.length})
               </TabsTrigger>
@@ -292,101 +315,163 @@ export default function FornecedoresPage() {
           </Tabs>
 
           <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3" style={{ color: colors.textSecondary }} />
             <Input
               placeholder="Nome, NIF ou email..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-6 h-7 text-xs"
+              className="pl-6 h-9 text-xs"
+              style={{ 
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                color: colors.text
+              }}
             />
           </div>
 
           <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-            <SelectTrigger className="w-24 h-7 text-xs">
+            <SelectTrigger 
+              className="w-24 h-9 text-xs"
+              style={{ 
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                color: colors.text
+              }}
+            >
               <SelectValue placeholder="Status" />
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos</SelectItem>
-              <SelectItem value="ativo">Ativo</SelectItem>
-              <SelectItem value="inativo">Inativo</SelectItem>
+            <SelectContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+              <SelectItem value="todos" style={{ color: colors.text }}>Todos</SelectItem>
+              <SelectItem value="ativo" style={{ color: colors.text }}>Ativo</SelectItem>
+              <SelectItem value="inativo" style={{ color: colors.text }}>Inativo</SelectItem>
             </SelectContent>
           </Select>
 
           <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-            <SelectTrigger className="w-24 h-7 text-xs">
+            <SelectTrigger 
+              className="w-24 h-7 text-xs"
+              style={{ 
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                color: colors.text
+              }}
+            >
               <SelectValue placeholder="Tipo" />
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos</SelectItem>
-              <SelectItem value="Nacional">Nacional</SelectItem>
-              <SelectItem value="Internacional">Internacional</SelectItem>
+            <SelectContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+              <SelectItem value="todos" style={{ color: colors.text }}>Todos</SelectItem>
+              <SelectItem value="Nacional" style={{ color: colors.text }}>Nacional</SelectItem>
+              <SelectItem value="Internacional" style={{ color: colors.text }}>Internacional</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
         {/* Cards de estatísticas ultra compactos */}
         <div className="grid grid-cols-3 gap-2">
-          <div className="bg-gray-50 dark:bg-gray-800 p-2 flex items-center justify-between border border-gray-200 dark:border-gray-700">
+          <div 
+            className="p-2 flex items-center justify-between border"
+            style={{ 
+              backgroundColor: colors.hover, 
+              borderColor: colors.border 
+            }}
+          >
             <div>
-              <p className="text-xs text-gray-500">Ativos</p>
-              <p className="text-lg font-bold text-emerald-600">{stats.ativos}</p>
+              <p className="text-xs" style={{ color: colors.textSecondary }}>Ativos</p>
+              <p className="text-lg font-bold" style={{ color: colors.success }}>{stats.ativos}</p>
             </div>
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+            <CheckCircle2 className="h-4 w-4" style={{ color: colors.success }} />
           </div>
-          <div className="bg-gray-50 dark:bg-gray-800 p-2 flex items-center justify-between border border-gray-200 dark:border-gray-700">
+          <div 
+            className="p-2 flex items-center justify-between border"
+            style={{ 
+              backgroundColor: colors.hover, 
+              borderColor: colors.border 
+            }}
+          >
             <div>
-              <p className="text-xs text-gray-500">Inativos</p>
-              <p className="text-lg font-bold text-amber-600">{stats.inativos}</p>
+              <p className="text-xs" style={{ color: colors.textSecondary }}>Inativos</p>
+              <p className="text-lg font-bold" style={{ color: colors.warning }}>{stats.inativos}</p>
             </div>
-            <XCircle className="h-4 w-4 text-amber-500" />
+            <XCircle className="h-4 w-4" style={{ color: colors.warning }} />
           </div>
-          <div className="bg-gray-50 dark:bg-gray-800 p-2 flex items-center justify-between border border-gray-200 dark:border-gray-700">
+          <div 
+            className="p-2 flex items-center justify-between border"
+            style={{ 
+              backgroundColor: colors.hover, 
+              borderColor: colors.border 
+            }}
+          >
             <div>
-              <p className="text-xs text-gray-500">Lixeira</p>
-              <p className="text-lg font-bold text-red-600">{stats.deletados}</p>
+              <p className="text-xs" style={{ color: colors.textSecondary }}>Lixeira</p>
+              <p className="text-lg font-bold" style={{ color: colors.danger }}>{stats.deletados}</p>
             </div>
-            <Archive className="h-4 w-4 text-red-500" />
+            <Archive className="h-4 w-4" style={{ color: colors.danger }} />
           </div>
         </div>
 
-        {/* Tabela de fornecedores - sem bordas arredondadas */}
-        <div className="border border-gray-200 dark:border-gray-700 overflow-hidden">
+        {/* Tabela de fornecedores */}
+        <div 
+          className="border overflow-hidden"
+          style={{ borderColor: colors.border }}
+        >
           {isLoading ? (
             <div className="flex justify-center py-6">
-              <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-blue-600" />
+              <div className="h-5 w-5 animate-spin border-b-2 " style={{ borderColor: colors.primary }} />
             </div>
           ) : fornecedoresFiltrados.length === 0 ? (
             <div className="flex flex-col items-center py-8 text-center">
-              <Truck className="h-8 w-8 text-gray-300 mb-2" />
-              <p className="text-sm text-gray-500">Nenhum fornecedor encontrado</p>
+              <Truck className="h-8 w-8 mb-2" style={{ color: colors.textSecondary }} />
+              <p className="text-sm" style={{ color: colors.textSecondary }}>Nenhum fornecedor encontrado</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                <thead 
+                  className="border-b"
+                  style={{ 
+                    backgroundColor: colors.hover, 
+                    borderColor: colors.border 
+                  }}
+                >
                   <tr>
-                    <th className="text-left py-2 px-3 font-medium text-xs">Fornecedor / NIF</th>
-                    <th className="text-left py-2 px-3 font-medium text-xs">Tipo</th>
-                    <th className="text-left py-2 px-3 font-medium text-xs">Status</th>
-                    <th className="text-left py-2 px-3 font-medium text-xs hidden md:table-cell">Contato</th>
-                    <th className="text-right py-2 px-3 font-medium text-xs">Ações</th>
+                    <th className="text-left py-2 px-3 font-medium text-xs" style={{ color: colors.textSecondary }}>Nome do fornecedor</th>
+                    <th className="text-left py-2 px-3 font-medium text-xs" style={{ color: colors.textSecondary }}>Tipo</th>
+                    <th className="text-left py-2 px-3 font-medium text-xs" style={{ color: colors.textSecondary }}>Status</th>
+                    <th className="text-left py-2 px-3 font-medium text-xs hidden md:table-cell" style={{ color: colors.textSecondary }}>Contato</th>
+                    <th className="text-right py-2 px-3 font-medium text-xs" style={{ color: colors.textSecondary }}>Ações</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                <tbody className="divide-y" style={{ borderColor: colors.border }}>
                   {fornecedoresFiltrados.map((fornecedor) => (
-                    <tr key={fornecedor.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                    <tr 
+                      key={fornecedor.id} 
+                      className="transition-colors"
+                      style={{ backgroundColor: 'transparent' }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = colors.hover;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
                       <td className="py-2 px-3">
-                        <div className="font-medium text-sm">{fornecedor.nome}</div>
-                        <div className="text-xs text-gray-500 font-mono">{formatarNIF(fornecedor.nif)}</div>
+                        <div className="font-medium text-sm" style={{ color: colors.text }}>{fornecedor.nome}</div>
+                        <div className="text-xs font-mono" style={{ color: colors.textSecondary }}>{formatarNIF(fornecedor.nif)}</div>
                         {fornecedor.deleted_at && (
-                          <div className="text-xs text-red-500 flex items-center gap-1 mt-0.5">
+                          <div className="text-xs flex items-center gap-1 mt-0.5" style={{ color: colors.danger }}>
                             <History className="h-3 w-3" />
                             {new Date(fornecedor.deleted_at).toLocaleDateString('pt-BR')}
                           </div>
                         )}
                       </td>
                       <td className="py-2 px-3">
-                        <Badge className={`${getTipoColor(fornecedor.tipo)} border-0 text-xs px-1.5 py-0`}>
+                        <Badge 
+                          className={`border-0 text-xs px-1.5 py-0`}
+                          style={{ 
+                            backgroundColor: fornecedor.tipo === "Nacional" ? `${colors.primary}20` : `${colors.secondary}20`,
+                            color: fornecedor.tipo === "Nacional" ? colors.primary : colors.secondary
+                          }}
+                        >
                           {fornecedor.tipo === "Nacional" ? (
                             <Building2 className="mr-1 h-3 w-3" />
                           ) : (
@@ -396,7 +481,13 @@ export default function FornecedoresPage() {
                         </Badge>
                       </td>
                       <td className="py-2 px-3">
-                        <Badge className={`${getStatusColor(fornecedor.status)} border-0 text-xs px-1.5 py-0`}>
+                        <Badge 
+                          className={`border-0 text-xs px-1.5 py-0`}
+                          style={{ 
+                            backgroundColor: fornecedor.status === "ativo" ? `${colors.success}20` : `${colors.warning}20`,
+                            color: fornecedor.status === "ativo" ? colors.success : colors.warning
+                          }}
+                        >
                           {fornecedor.status === "ativo" ? (
                             <CheckCircle2 className="mr-1 h-3 w-3" />
                           ) : (
@@ -408,13 +499,13 @@ export default function FornecedoresPage() {
                       <td className="py-2 px-3 hidden md:table-cell">
                         <div className="space-y-0.5 text-xs">
                           {fornecedor.telefone && (
-                            <div className="flex items-center gap-1 text-gray-600 dark:text-gray-400">
+                            <div className="flex items-center gap-1" style={{ color: colors.textSecondary }}>
                               <Phone className="h-3 w-3" />
                               {fornecedor.telefone}
                             </div>
                           )}
                           {fornecedor.email && (
-                            <div className="flex items-center gap-1 text-gray-600 dark:text-gray-400">
+                            <div className="flex items-center gap-1" style={{ color: colors.textSecondary }}>
                               <Mail className="h-3 w-3" />
                               <span className="truncate max-w-[150px]">{fornecedor.email}</span>
                             </div>
@@ -427,20 +518,34 @@ export default function FornecedoresPage() {
                             <>
                               <button
                                 onClick={() => handleEditar(fornecedor)}
-                                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                                className="p-1 transition-colors"
+                                style={{ color: colors.primary }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = colors.hover;
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = 'transparent';
+                                }}
                                 title="Editar"
                               >
-                                <Edit2 className="h-4 w-4 text-blue-500" />
+                                <Edit2 className="h-4 w-4" />
                               </button>
                               <button
                                 onClick={() => {
                                   setFornecedorSelecionado(fornecedor);
                                   setIsDeleteModalOpen(true);
                                 }}
-                                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                                className="p-1 transition-colors"
+                                style={{ color: colors.warning }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = colors.hover;
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = 'transparent';
+                                }}
                                 title="Mover para lixeira"
                               >
-                                <Archive className="h-4 w-4 text-amber-500" />
+                                <Archive className="h-4 w-4" />
                               </button>
                             </>
                           ) : (
@@ -450,20 +555,34 @@ export default function FornecedoresPage() {
                                   setFornecedorSelecionado(fornecedor);
                                   setIsRestoreModalOpen(true);
                                 }}
-                                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                                className="p-1 transition-colors"
+                                style={{ color: colors.success }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = colors.hover;
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = 'transparent';
+                                }}
                                 title="Restaurar"
                               >
-                                <RotateCcw className="h-4 w-4 text-emerald-500" />
+                                <RotateCcw className="h-4 w-4" />
                               </button>
                               <button
                                 onClick={() => {
                                   setFornecedorSelecionado(fornecedor);
                                   setIsForceDeleteModalOpen(true);
                                 }}
-                                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                                className="p-1  transition-colors"
+                                style={{ color: colors.danger }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = colors.hover;
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = 'transparent';
+                                }}
                                 title="Excluir permanentemente"
                               >
-                                <Trash className="h-4 w-4 text-red-500" />
+                                <Trash className="h-4 w-4" />
                               </button>
                             </>
                           )}
@@ -480,45 +599,68 @@ export default function FornecedoresPage() {
 
       {/* Modal de Formulário */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-[450px] max-h-[85vh] overflow-y-auto">
+        <DialogContent 
+          className="sm:max-w-[450px] max-h-[85vh] overflow-y-auto"
+          style={{ 
+            backgroundColor: colors.card,
+            borderColor: colors.border
+          }}
+        >
           <DialogHeader>
-            <DialogTitle className="text-base">
+            <DialogTitle className="text-base" style={{ color: colors.text }}>
               {fornecedorSelecionado ? "Editar Fornecedor" : "Novo Fornecedor"}
             </DialogTitle>
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-2">
             <div>
-              <Label className="text-xs font-medium">Nome *</Label>
+              <Label className="text-xs font-medium" style={{ color: colors.text }}>Nome *</Label>
               <Input
                 name="nome"
                 value={formData.nome}
                 onChange={handleInputChange}
                 className="h-7 text-xs mt-0.5"
+                style={{ 
+                  backgroundColor: colors.background,
+                  borderColor: colors.border,
+                  color: colors.text
+                }}
               />
               {errors.nome && <p className="text-xs text-red-500 mt-0.5">{errors.nome}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs font-medium">NIF *</Label>
+                <Label className="text-xs font-medium" style={{ color: colors.text }}>NIF *</Label>
                 <Input
                   name="nif"
                   value={formData.nif}
                   onChange={handleInputChange}
                   className="h-7 text-xs mt-0.5 font-mono"
+                  style={{ 
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                    color: colors.text
+                  }}
                 />
                 {errors.nif && <p className="text-xs text-red-500 mt-0.5">{errors.nif}</p>}
               </div>
               <div>
-                <Label className="text-xs font-medium">Tipo</Label>
+                <Label className="text-xs font-medium" style={{ color: colors.text }}>Tipo</Label>
                 <Select value={formData.tipo} onValueChange={(v) => handleSelectChange("tipo", v)}>
-                  <SelectTrigger className="h-7 text-xs mt-0.5">
+                  <SelectTrigger 
+                    className="h-7 text-xs mt-0.5"
+                    style={{ 
+                      backgroundColor: colors.background,
+                      borderColor: colors.border,
+                      color: colors.text
+                    }}
+                  >
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Nacional">Nacional</SelectItem>
-                    <SelectItem value="Internacional">Internacional</SelectItem>
+                  <SelectContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                    <SelectItem value="Nacional" style={{ color: colors.text }}>Nacional</SelectItem>
+                    <SelectItem value="Internacional" style={{ color: colors.text }}>Internacional</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -526,56 +668,95 @@ export default function FornecedoresPage() {
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs font-medium">Telefone</Label>
+                <Label className="text-xs font-medium" style={{ color: colors.text }}>Telefone</Label>
                 <Input
                   name="telefone"
                   value={formData.telefone}
                   onChange={handleInputChange}
                   className="h-7 text-xs mt-0.5"
+                  style={{ 
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                    color: colors.text
+                  }}
                 />
               </div>
               <div>
-                <Label className="text-xs font-medium">Email</Label>
+                <Label className="text-xs font-medium" style={{ color: colors.text }}>Email</Label>
                 <Input
                   name="email"
                   type="email"
                   value={formData.email}
                   onChange={handleInputChange}
                   className="h-7 text-xs mt-0.5"
+                  style={{ 
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                    color: colors.text
+                  }}
                 />
                 {errors.email && <p className="text-xs text-red-500 mt-0.5">{errors.email}</p>}
               </div>
             </div>
 
             <div>
-              <Label className="text-xs font-medium">Endereço</Label>
+              <Label className="text-xs font-medium" style={{ color: colors.text }}>Endereço</Label>
               <Textarea
                 name="endereco"
                 value={formData.endereco}
                 onChange={handleInputChange}
                 rows={2}
                 className="text-xs mt-0.5"
+                style={{ 
+                  backgroundColor: colors.background,
+                  borderColor: colors.border,
+                  color: colors.text
+                }}
               />
             </div>
 
             <div>
-              <Label className="text-xs font-medium">Status</Label>
+              <Label className="text-xs font-medium" style={{ color: colors.text }}>Status</Label>
               <Select value={formData.status} onValueChange={(v) => handleSelectChange("status", v)}>
-                <SelectTrigger className="h-7 text-xs mt-0.5">
+                <SelectTrigger 
+                  className="h-7 text-xs mt-0.5"
+                  style={{ 
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                    color: colors.text
+                  }}
+                >
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ativo">Ativo</SelectItem>
-                  <SelectItem value="inativo">Inativo</SelectItem>
+                <SelectContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                  <SelectItem value="ativo" style={{ color: colors.text }}>Ativo</SelectItem>
+                  <SelectItem value="inativo" style={{ color: colors.text }}>Inativo</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <DialogFooter className="pt-2 gap-2">
-              <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)} size="sm" className="h-7 text-xs">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setIsModalOpen(false)} 
+                size="sm" 
+                className="h-7 text-xs"
+                style={{ 
+                  backgroundColor: 'transparent',
+                  borderColor: colors.border,
+                  color: colors.text
+                }}
+              >
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isSubmitting} size="sm" className="h-7 text-xs gap-1">
+              <Button 
+                type="submit" 
+                disabled={isSubmitting} 
+                size="sm" 
+                className="h-7 text-xs gap-1"
+                style={{ backgroundColor: colors.primary, color: 'white' }}
+              >
                 {isSubmitting ? "Salvando..." : (fornecedorSelecionado ? "Atualizar" : "Criar")}
               </Button>
             </DialogFooter>
@@ -585,21 +766,42 @@ export default function FornecedoresPage() {
 
       {/* Modal de Soft Delete */}
       <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
-        <DialogContent className="sm:max-w-[320px]">
+        <DialogContent 
+          className="sm:max-w-[320px]"
+          style={{ 
+            backgroundColor: colors.card,
+            borderColor: colors.border
+          }}
+        >
           <DialogHeader>
-            <DialogTitle className="text-base flex items-center gap-2 text-amber-600">
+            <DialogTitle className="text-base flex items-center gap-2" style={{ color: colors.warning }}>
               <Archive className="h-4 w-4" />
               Mover para Lixeira
             </DialogTitle>
-            <DialogDescription className="text-sm">
+            <DialogDescription className="text-sm" style={{ color: colors.textSecondary }}>
               Mover "{fornecedorSelecionado?.nome}" para a lixeira?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)} size="sm" className="h-7 text-xs">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsDeleteModalOpen(false)} 
+              size="sm" 
+              className="h-7 text-xs"
+              style={{ 
+                backgroundColor: 'transparent',
+                borderColor: colors.border,
+                color: colors.text
+              }}
+            >
               Cancelar
             </Button>
-            <Button onClick={handleDeletar} size="sm" className="h-7 text-xs bg-amber-600 hover:bg-amber-700">
+            <Button 
+              onClick={handleDeletar} 
+              size="sm" 
+              className="h-7 text-xs"
+              style={{ backgroundColor: colors.warning, color: 'white' }}
+            >
               Mover
             </Button>
           </DialogFooter>
@@ -608,21 +810,42 @@ export default function FornecedoresPage() {
 
       {/* Modal de Restauração */}
       <Dialog open={isRestoreModalOpen} onOpenChange={setIsRestoreModalOpen}>
-        <DialogContent className="sm:max-w-[320px]">
+        <DialogContent 
+          className="sm:max-w-[320px]"
+          style={{ 
+            backgroundColor: colors.card,
+            borderColor: colors.border
+          }}
+        >
           <DialogHeader>
-            <DialogTitle className="text-base flex items-center gap-2 text-emerald-600">
+            <DialogTitle className="text-base flex items-center gap-2" style={{ color: colors.success }}>
               <RotateCcw className="h-4 w-4" />
               Restaurar
             </DialogTitle>
-            <DialogDescription className="text-sm">
+            <DialogDescription className="text-sm" style={{ color: colors.textSecondary }}>
               Restaurar "{fornecedorSelecionado?.nome}"?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setIsRestoreModalOpen(false)} size="sm" className="h-7 text-xs">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsRestoreModalOpen(false)} 
+              size="sm" 
+              className="h-7 text-xs"
+              style={{ 
+                backgroundColor: 'transparent',
+                borderColor: colors.border,
+                color: colors.text
+              }}
+            >
               Cancelar
             </Button>
-            <Button onClick={handleRestaurar} size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700">
+            <Button 
+              onClick={handleRestaurar} 
+              size="sm" 
+              className="h-7 text-xs"
+              style={{ backgroundColor: colors.success, color: 'white' }}
+            >
               Restaurar
             </Button>
           </DialogFooter>
@@ -631,22 +854,43 @@ export default function FornecedoresPage() {
 
       {/* Modal de Exclusão Permanente */}
       <Dialog open={isForceDeleteModalOpen} onOpenChange={setIsForceDeleteModalOpen}>
-        <DialogContent className="sm:max-w-[320px]">
+        <DialogContent 
+          className="sm:max-w-[320px]"
+          style={{ 
+            backgroundColor: colors.card,
+            borderColor: colors.border
+          }}
+        >
           <DialogHeader>
-            <DialogTitle className="text-base flex items-center gap-2 text-red-600">
+            <DialogTitle className="text-base flex items-center gap-2" style={{ color: colors.danger }}>
               <AlertTriangle className="h-4 w-4" />
               Excluir Permanentemente
             </DialogTitle>
-            <DialogDescription className="text-sm">
+            <DialogDescription className="text-sm" style={{ color: colors.textSecondary }}>
               Excluir permanentemente "{fornecedorSelecionado?.nome}"?
-              <span className="block text-red-500 text-xs mt-1">Esta ação não pode ser desfeita!</span>
+              <span className="block text-xs mt-1" style={{ color: colors.danger }}>Esta ação não pode ser desfeita!</span>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setIsForceDeleteModalOpen(false)} size="sm" className="h-7 text-xs">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsForceDeleteModalOpen(false)} 
+              size="sm" 
+              className="h-7 text-xs"
+              style={{ 
+                backgroundColor: 'transparent',
+                borderColor: colors.border,
+                color: colors.text
+              }}
+            >
               Cancelar
             </Button>
-            <Button onClick={handleForceDelete} size="sm" className="h-7 text-xs bg-red-600 hover:bg-red-700">
+            <Button 
+              onClick={handleForceDelete} 
+              size="sm" 
+              className="h-7 text-xs"
+              style={{ backgroundColor: colors.danger, color: 'white' }}
+            >
               Excluir
             </Button>
           </DialogFooter>

@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import React, { useState, useRef, useEffect } from 'react';
 import { Facebook, Instagram, Linkedin, Sun, Moon } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+
 import EmpresasSection from "./components/EmpresasSection";
 import {
   HelpCircle,
@@ -58,7 +58,6 @@ interface PricingCardProps {
 
 interface ContactFormState {
   name: string;
-  type: string;
   message: string;
 }
 
@@ -72,52 +71,35 @@ const ThemeToggleButton = () => {
   const { theme, toggleTheme } = useTheme();
 
   return (
-    <motion.button
-      whileHover={{ scale: 1.1 }}
-      whileTap={{ scale: 0.95 }}
+    <button
+      type="button"
       onClick={toggleTheme}
-      className="p-2 rounded-full transition-colors relative group"
-      style={{ 
+      className="p-2 rounded-full transition-colors transition-transform hover:scale-110 active:scale-95 relative group"
+      style={{
         backgroundColor: 'transparent',
         color: theme === 'dark' ? '#D9961A' : '#123859'
       }}
       aria-label="Alternar tema"
+      title={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
     >
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={theme}
-          initial={{ y: -20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 20, opacity: 0 }}
-          transition={{ duration: 0.2 }}
-        >
-          {theme === 'dark' ? (
-            <Sun size={20} />
-          ) : (
-            <Moon size={20} />
-          )}
-        </motion.div>
-      </AnimatePresence>
-
-      {/* Tooltip */}
-      <motion.div
-        initial={{ opacity: 0, x: 10, scale: 0.8 }}
-        whileHover={{ opacity: 1, x: 0, scale: 1 }}
-        className="absolute right-full mr-2 px-2 py-1 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none"
-        style={{ backgroundColor: theme === 'dark' ? '#D9961A' : '#123859' }}
-      >
-        {theme === 'dark' ? 'Modo Claro' : 'Modo Escuro'}
-      </motion.div>
-    </motion.button>
+      <div key={theme} className="transition-all duration-200">
+        {theme === 'dark' ? (
+          <Sun size={20} />
+        ) : (
+          <Moon size={20} />
+        )}
+      </div>
+    </button>
   );
+  
 };
 
 // 1. COMPONENTE DE ANIMAÇÃO (Animation Observer)
-const AnimatedSection: React.FC<AnimatedSectionProps> = ({ 
-  children, 
-  animation = 'fade-up', 
-  delay = 0, 
-  threshold = 0.1 
+const AnimatedSection: React.FC<AnimatedSectionProps> = ({
+  children,
+  animation = 'fade-up',
+  delay = 0,
+  threshold = 0.1
 }) => {
   const [isVisible, setIsVisible] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -203,20 +185,20 @@ const MenuIcon: React.FC = () => (
 );
 
 // Componente Cartão de Funcionalidade
-const FeatureCard: React.FC<FeatureCardProps> = ({ 
-  Icon = () => <CheckIcon color="#F9941F" />, 
-  title, 
-  description, 
-  delay = 0, 
-  colors 
+const FeatureCard: React.FC<FeatureCardProps> = ({
+  Icon = () => <CheckIcon color="#F9941F" />,
+  title,
+  description,
+  delay = 0,
+  colors
 }) => (
   <AnimatedSection animation="fade-up" delay={delay}>
-    <div className="p-6 rounded-xl shadow-lg hover:shadow-xl transition duration-300 transform hover:scale-[1.02] border h-full" style={{ 
-      backgroundColor: colors.card, 
-      borderColor: colors.border 
+    <div className="p-6 rounded-xl shadow-lg hover:shadow-xl transition duration-300 transform hover:scale-[1.02] border h-full" style={{
+      backgroundColor: colors.card,
+      borderColor: colors.border
     }}>
       <div className="flex items-center mb-3">
-        <Icon />
+        <Icon color={colors.primary} />
         <h3 className="text-xl font-bold" style={{ color: colors.text }}>{title}</h3>
       </div>
       <p className="text-sm" style={{ color: colors.textSecondary }}>{description}</p>
@@ -227,9 +209,9 @@ const FeatureCard: React.FC<FeatureCardProps> = ({
 // Componente Cartão de Passo do Processo
 const StepCard: React.FC<StepCardProps> = ({ number, title, description, delay = 0, colors }) => (
   <AnimatedSection animation="fade-up" delay={delay}>
-    <div className="p-6 rounded-xl shadow-lg border-t-4 h-full" style={{ 
-      backgroundColor: colors.card, 
-      borderColor: colors.secondary 
+    <div className="p-6 rounded-xl shadow-lg border-t-4 h-full" style={{
+      backgroundColor: colors.card,
+      borderColor: colors.secondary
     }}>
       <span className="text-4xl font-extrabold mb-3 block" style={{ color: colors.secondary }}>{number}</span>
       <h3 className="text-xl font-bold mb-2" style={{ color: colors.text }}>{title}</h3>
@@ -326,9 +308,9 @@ const PricingCard: React.FC<PricingCardProps> = ({ plan, index, colors }) => {
 
   return (
     <AnimatedSection animation="fade-up" delay={index * 100} threshold={0.2}>
-      <div className="flex flex-col p-6 mx-auto max-w-lg text-center rounded-xl border-2 h-full transition duration-300 ease-in-out hover:shadow-2xl hover:scale-[1.03]" style={{ 
-        backgroundColor: colors.card, 
-        borderColor: colors.border 
+      <div className="flex flex-col p-6 mx-auto max-w-lg text-center rounded-xl border-2 h-full transition duration-300 ease-in-out hover:shadow-2xl hover:scale-[1.03]" style={{
+        backgroundColor: colors.card,
+        borderColor: colors.border
       }}>
         <h3 className="mb-4 text-2xl font-semibold" style={{ color: colors.text }}>
           {plan.name}
@@ -478,21 +460,19 @@ const navLinks = [
 
 export default function App() {
   const colors = useThemeColors();
-  const { theme } = useTheme();
 
   // Estado para controlar o menu mobile (hamburger)
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   // Simulação do Contact Form
-  const [contactForm, setContactForm] = useState<ContactFormState>({ 
-    name: '', 
-    type: 'Cliente', 
-    message: '' 
+  const [contactForm, setContactForm] = useState<ContactFormState>({
+    name: '',
+    message: ''
   });
   const [isContactLoading, setIsContactLoading] = useState(false);
-  const [contactMessage, setContactMessage] = useState<ContactMessageState>({ 
-    type: '', 
-    text: '' 
+  const [contactMessage, setContactMessage] = useState<ContactMessageState>({
+    type: '',
+    text: ''
   });
 
   const handleContactChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -509,7 +489,7 @@ export default function App() {
 
     if (contactForm.message.length > 10) {
       setContactMessage({ type: 'success', text: 'Mensagem enviada com sucesso! Responderemos brevemente.' });
-      setContactForm({ name: '', type: 'Cliente', message: '' });
+      setContactForm({ name: '', message: '' });
     } else {
       setContactMessage({ type: 'error', text: 'Ocorreu um erro. Por favor, preencha a mensagem com mais detalhes.' });
     }
@@ -571,14 +551,15 @@ export default function App() {
           {/* Links de Navegação (Desktop) */}
           <nav className="hidden lg:flex items-center space-x-4">
             {navLinks.map(link => (
-              <a
+              <button
                 key={link.id}
+                type="button"
                 onClick={() => scrollToSection(link.id)}
                 className="cursor-pointer text-sm font-medium transition duration-150 hover:opacity-80"
                 style={{ color: colors.textSecondary }}
               >
                 {link.name}
-              </a>
+              </button>
             ))}
 
             {/* Botão de Tema */}
@@ -625,13 +606,14 @@ export default function App() {
                 {link.name}
               </a>
             ))}
-            <a
-              onClick={() => { window.location.href = '/login'; setIsMenuOpen(false); }}
+            <Link
+              href="/login"
+              onClick={() => setIsMenuOpen(false)}
               className="w-full text-center py-2 px-4 text-sm cursor-pointer mt-2 block rounded-full font-semibold"
               style={{ backgroundColor: colors.primary, color: 'white' }}
             >
               Começar Grátis
-            </a>
+            </Link>
           </div>
         </div>
       </header>
@@ -788,14 +770,13 @@ export default function App() {
             </AnimatedSection>
 
             <AnimatedSection animation="fade-up" delay={200} threshold={0.1}>
-              <div className="p-8 rounded-2xl shadow-xl border" style={{ 
-                backgroundColor: colors.background, 
-                borderColor: colors.border 
+              <div className="p-8 rounded-2xl shadow-xl border" style={{
+                backgroundColor: colors.background,
+                borderColor: colors.border
               }}>
                 {contactMessage.text && (
-                  <div className={`p-4 mb-4 rounded-lg text-sm font-medium ${
-                    contactMessage.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                  }`}>
+                  <div className={`p-4 mb-4 rounded-lg text-sm font-medium ${contactMessage.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}>
                     {contactMessage.text}
                   </div>
                 )}
@@ -813,8 +794,8 @@ export default function App() {
                       onChange={handleContactChange}
                       required
                       className="w-full border rounded-lg p-3 outline-none transition duration-150 focus:ring-2"
-                      style={{ 
-                        backgroundColor: colors.card, 
+                      style={{
+                        backgroundColor: colors.card,
                         borderColor: colors.border,
                         color: colors.text
                       }}
@@ -834,8 +815,8 @@ export default function App() {
                       onChange={handleContactChange}
                       required
                       className="w-full border rounded-lg p-3 outline-none transition duration-150 focus:ring-2"
-                      style={{ 
-                        backgroundColor: colors.card, 
+                      style={{
+                        backgroundColor: colors.card,
                         borderColor: colors.border,
                         color: colors.text
                       }}
@@ -889,12 +870,13 @@ export default function App() {
                 <ul className="space-y-2 text-sm">
                   {navLinks.map(link => (
                     <li key={link.id}>
-                      <a
+                      <button
+                        type="button"
                         onClick={() => scrollToSection(link.id)}
                         className="cursor-pointer transition hover:text-white text-white"
                       >
                         {link.name}
-                      </a>
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -905,34 +887,34 @@ export default function App() {
                 <h4 className="text-lg font-semibold mb-4" style={{ color: colors.secondary }}>Apoio e Legal</h4>
                 <ul className="space-y-2 text-sm">
                   <li>
-                    <a onClick={() => scrollToSection("faq")} className="flex items-center gap-2 cursor-pointer transition hover:text-white text-white">
+                    <button type="button" onClick={() => scrollToSection("faq")} className="flex items-center gap-2 cursor-pointer transition hover:text-white text-white">
                       <HelpCircle size={18} />
                       FAQ
-                    </a>
+                    </button>
                   </li>
                   <li>
-                    <a onClick={() => console.log("Link para Suporte Técnico")} className="flex items-center gap-2 cursor-pointer transition hover:text-white text-white">
+                    <button type="button" onClick={() => console.log("Link para Suporte Técnico")} className="flex items-center gap-2 cursor-pointer transition hover:text-white text-white">
                       <Headset size={18} />
                       Suporte Técnico
-                    </a>
+                    </button>
                   </li>
                   <li>
-                    <a onClick={() => console.log("Link para Termos")} className="flex items-center gap-2 cursor-pointer transition hover:text-white text-white">
+                    <button type="button" onClick={() => console.log("Link para Termos")} className="flex items-center gap-2 cursor-pointer transition hover:text-white text-white">
                       <FileText size={18} />
                       Termos de Serviço
-                    </a>
+                    </button>
                   </li>
                   <li>
-                    <a onClick={() => console.log("Link para Política")} className="flex items-center gap-2 cursor-pointer transition hover:text-white text-white">
+                    <button type="button" onClick={() => console.log("Link para Política")} className="flex items-center gap-2 cursor-pointer transition hover:text-white text-white">
                       <ShieldCheck size={18} />
                       Política de Privacidade
-                    </a>
+                    </button>
                   </li>
                   <li>
-                    <a onClick={() => console.log("Link para Livro de Reclamações")} className="flex items-center gap-2 cursor-pointer transition hover:text-white text-white">
+                    <button type="button" onClick={() => console.log("Link para Livro de Reclamações")} className="flex items-center gap-2 cursor-pointer transition hover:text-white text-white">
                       <BookOpenCheck size={18} />
                       Livro de Reclamações
-                    </a>
+                    </button>
                   </li>
                 </ul>
               </div>

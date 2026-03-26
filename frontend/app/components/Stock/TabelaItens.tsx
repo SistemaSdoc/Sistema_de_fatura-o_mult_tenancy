@@ -1,6 +1,6 @@
 // src/app/(empresa)/estoque/components/TabelaItens.tsx
 import React from "react";
-import { Package, Wrench, ArrowUpCircle, Trash2, Layers } from "lucide-react";
+import { Package, Wrench, ArrowUpCircle, Trash2, Layers, Plus } from "lucide-react";
 import { Produto, formatarPreco, getTipoBadge, isServico, } from "@/services/produtos";
 import { StatusEstoqueBadge } from "./StatusEstoqueBadge";
 import { useThemeColors } from "@/context/ThemeContext";
@@ -71,7 +71,7 @@ export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira, col
                                 </td>
                                 <td className="py-3 px-4">
                                     <span
-                                        className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs"
+                                        className="inline-flex items-center gap-1 px-2 py-1 text-xs"
                                         style={{ backgroundColor: badgeStyle.bg, color: badgeStyle.text }}
                                     >
                                         {tipoBadge.texto}
@@ -96,17 +96,17 @@ export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira, col
                                         {!isServicoItem && (
                                             <button
                                                 onClick={() => onRegistrarEntrada(item)}
-                                                className="p-1.5 rounded-lg transition-colors"
-                                                style={{ color: colors.success }}
+                                                className="p-1.5 transition-colors"
+                                                style={{ color: colors.texts }}
                                                 title="Registrar Entrada"
                                             >
-                                                <ArrowUpCircle className="w-4 h-4" />
+                                                <Plus className="w-4 h-4" />
                                             </button>
                                         )}
                                         <button
                                             onClick={() => onMoverParaLixeira(item)}
-                                            className="p-1.5 rounded-lg transition-colors"
-                                            style={{ color: colors.warning }}
+                                            className="p-1.5 transition-colors"
+                                            style={{ color: colors.secondary }}
                                             title="Mover para Lixeira"
                                         >
                                             <Trash2 className="w-4 h-4" />

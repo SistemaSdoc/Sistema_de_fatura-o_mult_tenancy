@@ -236,21 +236,21 @@ export default function NovaNotaPage() {
             setError(null);
             setValidationErrors(null);
 
-            // Preparar payload
+            // Preparar payload com tipos CORRETOS
             const dados = {
                 itens: itensValidos.map(item => ({
-                    produto_id: item.produto_id || null,
+                    produto_id: item.produto_id,
                     descricao: item.descricao,
-                    quantidade: Number(item.quantidade) || 0,
-                    preco_unitario: Number(item.preco_unitario) || 0,
-                    desconto: Number(item.desconto) || 0,
-                    taxa_iva: Number(item.taxa_iva) || 0,
-                    taxa_retencao: Number(item.taxa_retencao) || 0,
-                    eh_servico: item.eh_servico || false,
-                    codigo_produto: item.codigo_produto || null
+                    quantidade: Number(item.quantidade),
+                    preco_unitario: Number(item.preco_unitario),
+                    desconto: Number(item.desconto),
+                    taxa_iva: Number(item.taxa_iva),
+                    taxa_retencao: Number(item.taxa_retencao),
+                    eh_servico: Boolean(item.eh_servico),
+                    codigo_produto: item.codigo_produto, // undefined é aceito
                 })),
                 motivo: motivo.trim(),
-                observacoes: observacoes.trim() || null
+                observacoes: observacoes.trim() || undefined, // ← undefined, não null
             };
 
             console.log('📤 Enviando payload:', JSON.stringify(dados, null, 2));
@@ -294,7 +294,6 @@ export default function NovaNotaPage() {
             setLoadingSubmit(false);
         }
     };
-
     // ==================== RENDER ====================
     if (loadingOrigem) {
         return (

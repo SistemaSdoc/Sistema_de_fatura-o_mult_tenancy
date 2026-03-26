@@ -34,7 +34,7 @@ export function StatCard({ icon, label, value, trend = "neutral", colors }: Stat
 
     return (
         <div 
-            className="rounded-xl border p-4 hover:shadow-md transition-shadow"
+            className=" border p-4 hover:shadow-md transition-shadow"
             style={{ 
                 backgroundColor: colors.card, 
                 borderColor: colors.border 
@@ -42,7 +42,7 @@ export function StatCard({ icon, label, value, trend = "neutral", colors }: Stat
         >
             <div className="flex items-center justify-between">
                 <div 
-                    className="p-2 rounded-lg"
+                    className="p-2"
                     style={{ backgroundColor: colors.hover }}
                 >
                     <div style={{ color: trendColor }}>{icon}</div>

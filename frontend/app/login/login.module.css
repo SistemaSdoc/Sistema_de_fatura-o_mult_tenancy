@@ -1,0 +1,7 @@
+.inputIcon {
+  color: var(--login-input-icon-color, currentColor);
+}
+
+.inputIcon[data-focused="true"] {
+  color: var(--login-input-icon-color-focused, currentColor);
+}

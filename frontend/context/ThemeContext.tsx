@@ -25,7 +25,9 @@ export const LIGHT_COLORS = {
     danger: '#dc3545',
     success: '#28a745',
     warning: '#ffc107',
-    hover: '#F3F4F6'
+    error: '#dc3545',
+    hover: '#F3F4F6',
+    fp: '#f05000ff',
 };
 
 // Cores do Modo Escuro
@@ -40,7 +42,9 @@ export const DARK_COLORS = {
     danger: '#dc3545',
     success: '#28a745',
     warning: '#ffc107',
-    hover: '#333333'
+    error: '#dc3545',
+    hover: '#333333',
+    fp: '#f05000ff',
 };
 
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {

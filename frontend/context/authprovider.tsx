@@ -58,6 +58,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // 🔹 Busca usuário autenticado com dados da empresa
   const fetchUser = useCallback(async () => {
+    // Se estiver em rota pública, não tenta buscar usuário
+    if (isPublicRoute(pathname)) {
+      console.log('Rota pública, não buscando usuário');
+      setUser(null);
+      setIsAdmin(false);
+      setIsOperador(false);
+      setIsContablista(false);
+      return;
+    }
+
     try {
       const response = await api.get<{ user: User }>("/me");
       const userData = response.data.user ?? null;
@@ -68,18 +78,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsAdmin(userData.role === "admin");
         setIsOperador(userData.role === "operador");
         setIsContablista(userData.role === "contablista");
-        
-        // Se está logado e está na página de login/register, redireciona para dashboard
-        if (pathname === '/login' || pathname === '/register') {
-          router.replace('/dashboard');
-        }
       } else {
         setIsAdmin(false);
         setIsOperador(false);
         setIsContablista(false);
         
         // Se não está logado e não está em rota pública, redireciona para login
-        if (!isPublicRoute(pathname) && pathname !== '/login' && pathname !== '/register') {
+        if (!isPublicRoute(pathname)) {
           console.log('Usuário não autenticado, redirecionando para login...');
           router.replace('/login');
         }
@@ -92,7 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsContablista(false);
       
       // Se não está logado e não está em rota pública, redireciona para login
-      if (!isPublicRoute(pathname) && pathname !== '/login' && pathname !== '/register') {
+      if (!isPublicRoute(pathname)) {
         console.log('Erro na autenticação, redirecionando para login...');
         router.replace('/login');
       }
@@ -103,14 +108,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const checkUser = async () => {
       try {
-        // Tentar obter CSRF cookie (opcional, pode falhar se já existir)
-        try {
-          await api.get("/sanctum/csrf-cookie");
-        } catch (csrfError) {
-          console.log("CSRF cookie já existe ou erro ao obter:", csrfError);
+        // Só tenta obter CSRF cookie e buscar usuário se NÃO for rota pública
+        if (!isPublicRoute(pathname)) {
+          // Tentar obter CSRF cookie (opcional, pode falhar se já existir)
+          try {
+            await api.get("/sanctum/csrf-cookie");
+          } catch (csrfError) {
+            console.log("CSRF cookie já existe ou erro ao obter:", csrfError);
+          }
+          
+          await fetchUser();
+        } else {
+          // Em rotas públicas, apenas define loading como false
+          console.log('Rota pública, pulando autenticação');
+          setUser(null);
+          setIsAdmin(false);
+          setIsOperador(false);
+          setIsContablista(false);
+          setLoading(false);
         }
-        
-        await fetchUser();
       } catch (error) {
         console.error("Erro na inicialização:", error);
         setUser(null);
@@ -119,7 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsContablista(false);
         
         // Se não está em rota pública, redireciona
-        if (!isPublicRoute(pathname) && pathname !== '/login' && pathname !== '/register') {
+        if (!isPublicRoute(pathname)) {
           router.replace('/login');
         }
       } finally {

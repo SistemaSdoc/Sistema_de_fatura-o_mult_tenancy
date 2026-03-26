@@ -3,7 +3,7 @@
 "use client";
 
 import React from "react";
-import { motion, AnimatePresence } from "framer-motion";
+
 import {
     FileText,
     X,
@@ -140,6 +140,8 @@ const ModalHeader: React.FC<ModalHeaderProps> = ({ documento, onClose, onPrint }
                 <button
                     onClick={onClose}
                     className="p-1.5 sm:p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                    title="Fechar"
+                    aria-label="Fechar modal"
                 >
                     <X size={18} className="sm:w-5 sm:h-5" />
                 </button>
@@ -459,59 +461,49 @@ export const ModalVisualizacao: React.FC<ModalVisualizacaoProps> = ({
         };
     }, [isOpen]);
 
+    if (!isOpen) {
+        return null;
+    }
+
     return (
-        <AnimatePresence>
-            {isOpen && (
-                <>
-                    {/* Overlay */}
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100]"
-                        onClick={onClose}
-                    />
+        <>
+            {/* Overlay */}
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100]" onClick={onClose} />
 
-                    {/* Modal Container */}
+            {/* Modal Container */}
+            <div
+                className="fixed inset-0 z-[101] overflow-y-auto"
+                onClick={onClose}
+            >
+                <div className="flex items-center justify-center min-h-full p-2 text-center sm:p-4">
                     <div
-                        className="fixed inset-0 z-[101] overflow-y-auto"
-                        onClick={onClose}
+                        className="relative w-full max-w-3xl overflow-hidden text-left align-middle transition-all transform shadow-xl rounded-xl sm:rounded-2xl"
+                        style={{ backgroundColor: colors.card }}
+                        onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="flex items-center justify-center min-h-full p-2 text-center sm:p-4">
-                            <motion.div
-                                initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                                animate={{ opacity: 1, scale: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                                transition={{ duration: 0.2 }}
-                                className="relative w-full max-w-3xl overflow-hidden text-left align-middle transition-all transform shadow-xl rounded-xl sm:rounded-2xl"
-                                style={{ backgroundColor: colors.card }}
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                <ModalHeader
-                                    documento={documento}
-                                    onClose={onClose}
-                                    onPrint={handlePrint}
-                                />
+                        <ModalHeader
+                            documento={documento}
+                            onClose={onClose}
+                            onPrint={handlePrint}
+                        />
 
-                                <div className="max-h-[calc(100vh-180px)] sm:max-h-[calc(100vh-200px)] overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4">
-                                    <StatusHeader documento={documento} />
-                                    <InfoGrid documento={documento} />
-                                    <ItensTable itens={documento.itens} />
-                                    <TotaisSection documento={documento} />
-                                    <ObservacoesSection observacoes={documento.observacoes} />
-                                    <HashFiscalSection hashFiscal={documento.hash_fiscal} />
-                                </div>
-
-                                <ModalFooter
-                                    onClose={onClose}
-                                    onDownload={handleDownload}
-                                />
-                            </motion.div>
+                        <div className="max-h-[calc(100vh-180px)] sm:max-h-[calc(100vh-200px)] overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4">
+                            <StatusHeader documento={documento} />
+                            <InfoGrid documento={documento} />
+                            <ItensTable itens={documento.itens} />
+                            <TotaisSection documento={documento} />
+                            <ObservacoesSection observacoes={documento.observacoes} />
+                            <HashFiscalSection hashFiscal={documento.hash_fiscal} />
                         </div>
+
+                        <ModalFooter
+                            onClose={onClose}
+                            onDownload={handleDownload}
+                        />
                     </div>
-                </>
-            )}
-        </AnimatePresence>
+                </div>
+            </div>
+        </>
     );
 };
 

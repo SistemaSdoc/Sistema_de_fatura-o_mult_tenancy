@@ -97,7 +97,7 @@ export default function EstoquePage() {
             <MainEmpresa>
                 <div className="flex items-center justify-center min-h-[400px]" style={{ backgroundColor: colors.background }}>
                     <div 
-                        className="animate-spin w-10 h-10 border-3 rounded-full"
+                        className="animate-spin w-10 h-10 border-3 "
                         style={{ 
                             borderColor: `${colors.primary}30`, 
                             borderTopColor: colors.primary 
@@ -114,7 +114,7 @@ export default function EstoquePage() {
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
-                        <button className="flex items-center gap-2 p-1.5 rounded-lg transition-colors hover:opacity-70"
+                        <button className="flex items-center gap-2 p-1.5 transition-colors hover:opacity-70"
                             style={{ color: colors.primary }} onClick={() => router.back()}> <ArrowLeft className="w-4 h-4" />
                         <h1 className="text-2xl md:text-3xl font-bold" style={{ color: colors.secondary }}>Seu Stock</h1>
                         </button>
@@ -123,7 +123,7 @@ export default function EstoquePage() {
                     </div>
                     <button
                         onClick={abrirModalNovoProduto}
-                        className="flex items-center gap-2 px-4 py-2 text-white rounded-lg transition-colors text-sm font-medium hover:opacity-90"
+                        className="flex items-center gap-2 px-4 py-2 text-white transition-colors text-sm font-medium hover:opacity-90"
                         style={{ backgroundColor: colors.secondary }}
                     >
                         <Plus className="w-4 h-4" />
@@ -162,7 +162,7 @@ export default function EstoquePage() {
                 )}
 
                 {/* Tabs e Conteúdo */}
-                <div className="rounded-xl shadow-sm border overflow-hidden" style={{
+                <div className="shadow-sm border overflow-hidden" style={{
                     backgroundColor: colors.card,
                     borderColor: colors.border
                 }}>
@@ -225,7 +225,7 @@ export default function EstoquePage() {
             {modalNovoProdutoAberto && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
                     <div 
-                        className="rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden"
+                        className="shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden"
                         style={{ backgroundColor: colors.card }}
                     >
                         <div className="p-6 overflow-y-auto max-h-[90vh]">

@@ -68,7 +68,7 @@ export function TabelaLixeira({ itens, onRestaurar, onDeletarPermanentemente, co
                                 </td>
                                 <td className="py-3 px-4">
                                     <span
-                                        className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs"
+                                        className="inline-flex items-center gap-1 px-2 py-1  text-xs"
                                         style={{
                                             backgroundColor: style.bg,
                                             color: style.text,
@@ -86,7 +86,7 @@ export function TabelaLixeira({ itens, onRestaurar, onDeletarPermanentemente, co
                                     <div className="flex items-center justify-center gap-2">
                                         <button
                                             onClick={() => onRestaurar(item)}
-                                            className="p-1.5 rounded-lg transition-colors"
+                                            className="p-1.5  transition-colors"
                                             style={{ color: colors.success }}
                                             title="Restaurar"
                                         >
@@ -94,7 +94,7 @@ export function TabelaLixeira({ itens, onRestaurar, onDeletarPermanentemente, co
                                         </button>
                                         <button
                                             onClick={() => onDeletarPermanentemente(item)}
-                                            className="p-1.5 rounded-lg transition-colors"
+                                            className="p-1.5 transition-colors"
                                             style={{ color: colors.danger }}
                                             title="Deletar permanentemente"
                                         >

@@ -1,6 +1,6 @@
 // src/app/(empresa)/estoque/components/ModalEntrada.tsx
 import React, { useState } from "react";
-import { ArrowUpCircle, AlertCircle, RefreshCcw } from "lucide-react";
+import { ArrowUpCircle, AlertCircle, RefreshCcw, Plus } from "lucide-react";
 import { Produto } from "@/services/produtos";
 import { useThemeColors } from "@/context/ThemeContext";
 
@@ -57,16 +57,16 @@ export function ModalEntrada({
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="rounded-xl shadow-xl max-w-md w-full" style={{ backgroundColor: colors.card }}>
+            <div className="shadow-xl max-w-md w-full" style={{ backgroundColor: colors.card }}>
                 <div className="p-6 border-b" style={{ borderColor: colors.border }}>
                     <h3 className="text-lg font-semibold flex items-center gap-2" style={{ color: colors.text }}>
-                        <ArrowUpCircle className="w-5 h-5" style={{ color: colors.secondary }} />
+                        <Plus className="w-5 h-5" style={{ color: colors.secondary }} />
                         Registrar Entrada
                     </h3>
                 </div>
 
                 <div className="p-6">
-                    <div className="mb-4 p-3 rounded-lg" style={{ backgroundColor: colors.hover }}>
+                    <div className="mb-4 p-3 " style={{ backgroundColor: colors.hover }}>
                         <p className="font-medium" style={{ color: colors.text }}>{produto.nome}</p>
                         <p className="text-sm" style={{ color: colors.textSecondary }}>
                             Stock atual: <span className="font-semibold" style={{ color: colors.text }}>{produto.estoque_atual}</span> unidades
@@ -74,7 +74,7 @@ export function ModalEntrada({
                     </div>
 
                     {erro && (
-                        <div className="mb-4 p-3 rounded-lg text-sm flex items-center gap-2" style={{ 
+                        <div className="mb-4 p-3 text-sm flex items-center gap-2" style={{ 
                             backgroundColor: `${colors.danger}20`, 
                             color: colors.danger 
                         }}>
@@ -94,7 +94,7 @@ export function ModalEntrada({
                                 onChange={(e) => setQuantidade(e.target.value)}
                                 min="1"
                                 disabled={loading}
-                                className="w-full px-4 py-2 rounded-lg border outline-none disabled:opacity-50"
+                                className="w-full px-4 py-2 border outline-none disabled:opacity-50"
                                 style={{
                                     backgroundColor: colors.card,
                                     borderColor: colors.border,
@@ -114,7 +114,7 @@ export function ModalEntrada({
                                 onChange={(e) => setMotivo(e.target.value)}
                                 rows={3}
                                 disabled={loading}
-                                className="w-full px-4 py-2 rounded-lg border outline-none resize-none disabled:opacity-50"
+                                className="w-full px-4 py-2 border outline-none resize-none disabled:opacity-50"
                                 style={{
                                     backgroundColor: colors.card,
                                     borderColor: colors.border,
@@ -130,7 +130,7 @@ export function ModalEntrada({
                     <button
                         onClick={onClose}
                         disabled={loading}
-                        className="flex-1 px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+                        className="flex-1 px-4 py-2 transition-colors disabled:opacity-50"
                         style={{ color: colors.textSecondary }}
                     >
                         Cancelar
@@ -138,7 +138,7 @@ export function ModalEntrada({
                     <button
                         onClick={handleConfirm}
                         disabled={loading}
-                        className="flex-1 px-4 py-2 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                        className="flex-1 px-4 py-2 text-white transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                         style={{ backgroundColor: colors.primary }}
                     >
                         {loading ? (

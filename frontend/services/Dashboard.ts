@@ -437,7 +437,10 @@ export const dashboardService = {
     }> {
         const m = this.calcularMetricas(d);
 
-        const cards = [
+        const cards: Array<{
+            titulo: string; valor: string; icone: string; cor: string;
+            variacao: number | null; variacaoTexto?: string;
+        }> = [
             { titulo: 'Total Faturado', valor: this._formatarMoeda(m.totalFaturado), icone: '💰', cor: 'bg-green-500', variacao: m.crescimento, variacaoTexto: `${m.crescimento > 0 ? '+' : ''}${m.crescimento}%` },
             { titulo: 'Pendente', valor: this._formatarMoeda(m.totalPendente), icone: '⏳', cor: 'bg-yellow-500', variacao: null },
             { titulo: 'Clientes Ativos', valor: String(m.totalClientes), icone: '👥', cor: 'bg-blue-500', variacao: d?.clientes?.novos_mes || 0, variacaoTexto: `+${d?.clientes?.novos_mes || 0} este mês` },

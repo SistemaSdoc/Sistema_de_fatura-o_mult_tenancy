@@ -2,7 +2,18 @@
 import api from "./axios";
 
 /* ==================== TIPOS COMPARTILHADOS ==================== */
+export type PeriodoTipo =
+    | "hoje"
+    | "ontem"
+    | "este_mes"
+    | "mes_passado"
+    | "este_ano";
 
+export interface PeriodoConfig {
+    tipo: PeriodoTipo;
+    data_inicio: string;
+    data_fim: string;
+}
 export interface PeriodoFiltro {
     data_inicio?: string;
     data_fim?: string;
@@ -621,8 +632,8 @@ export function getInicioAno(): string {
  * Obter período pré-definido
  */
 export function getPeriodoPredefinido(
-    tipo: "hoje" | "ontem" | "este_mes" | "mes_passado" | "este_ano"
-): { data_inicio: string; data_fim: string; tipo: string } {
+    tipo: PeriodoTipo
+): PeriodoConfig {
     const hoje = new Date();
 
     switch (tipo) {

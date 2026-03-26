@@ -4,9 +4,9 @@ import api from "./axios";
 
 // ===== TIPOS =====
 
-export type TipoProduto    = "produto" | "servico";
-export type StatusProduto  = "ativo" | "inativo";
-export type UnidadeMedida  = "hora" | "dia" | "semana" | "mes";
+export type TipoProduto = "produto" | "servico";
+export type StatusProduto = "ativo" | "inativo";
+export type UnidadeMedida = "hora" | "dia" | "semana" | "mes";
 
 // ===== INTERFACES =====
 
@@ -104,6 +104,7 @@ export interface CriarProdutoInput {
     taxa_retencao?: number;
     duracao_estimada?: string;
     unidade_medida?: UnidadeMedida;
+
 }
 
 export type AtualizarProdutoInput = Partial<CriarProdutoInput>;
@@ -178,19 +179,19 @@ const API_PREFIX = "/api";
 export const produtoService = {
     async listarProdutos(params: ListarProdutosParams = {}): Promise<ListarProdutosResponse> {
         const q = new URLSearchParams();
-        if (params.tipo)            q.append("tipo", params.tipo);
-        if (params.status)          q.append("status", params.status);
-        if (params.categoria_id)    q.append("categoria_id", params.categoria_id);
-        if (params.busca)           q.append("busca", params.busca);
-        if (params.estoque_baixo)   q.append("estoque_baixo", "true");
-        if (params.sem_estoque)     q.append("sem_estoque", "true");
-        if (params.ordenar)         q.append("ordenar", params.ordenar);
-        if (params.direcao)         q.append("direcao", params.direcao);
-        if (params.paginar)         q.append("paginar", "true");
-        if (params.per_page)        q.append("per_page", params.per_page.toString());
+        if (params.tipo) q.append("tipo", params.tipo);
+        if (params.status) q.append("status", params.status);
+        if (params.categoria_id) q.append("categoria_id", params.categoria_id);
+        if (params.busca) q.append("busca", params.busca);
+        if (params.estoque_baixo) q.append("estoque_baixo", "true");
+        if (params.sem_estoque) q.append("sem_estoque", "true");
+        if (params.ordenar) q.append("ordenar", params.ordenar);
+        if (params.direcao) q.append("direcao", params.direcao);
+        if (params.paginar) q.append("paginar", "true");
+        if (params.per_page) q.append("per_page", params.per_page.toString());
         if (params.apenas_servicos) q.append("apenas_servicos", "true");
         if (params.apenas_produtos) q.append("apenas_produtos", "true");
-        if (params.com_retencao)    q.append("com_retencao", "true");
+        if (params.com_retencao) q.append("com_retencao", "true");
 
         const response = await api.get(`${API_PREFIX}/produtos${q.toString() ? `?${q}` : ""}`);
         return response.data;
@@ -200,8 +201,8 @@ export const produtoService = {
         params: Omit<ListarProdutosParams, "status" | "estoque_baixo" | "sem_estoque"> = {}
     ): Promise<ListarCompletosResponse> {
         const q = new URLSearchParams();
-        if (params.tipo)            q.append("tipo", params.tipo);
-        if (params.busca)           q.append("busca", params.busca);
+        if (params.tipo) q.append("tipo", params.tipo);
+        if (params.busca) q.append("busca", params.busca);
         if (params.apenas_servicos) q.append("apenas_servicos", "true");
         if (params.apenas_produtos) q.append("apenas_produtos", "true");
 
@@ -213,9 +214,9 @@ export const produtoService = {
         params: Omit<ListarProdutosParams, "status" | "estoque_baixo" | "sem_estoque" | "categoria_id"> = {}
     ): Promise<ListarDeletadosResponse> {
         const q = new URLSearchParams();
-        if (params.busca)     q.append("busca", params.busca);
-        if (params.paginar)   q.append("paginar", "true");
-        if (params.per_page)  q.append("per_page", params.per_page.toString());
+        if (params.busca) q.append("busca", params.busca);
+        if (params.paginar) q.append("paginar", "true");
+        if (params.per_page) q.append("per_page", params.per_page.toString());
 
         const response = await api.get(`${API_PREFIX}/produtos/trashed${q.toString() ? `?${q}` : ""}`);
         return response.data;
@@ -357,13 +358,13 @@ export const movimentoStockService = {
         per_page?: number;
     } = {}): Promise<{ message: string; movimentos: MovimentoStock[] | PaginatedResponse<MovimentoStock> }> {
         const q = new URLSearchParams();
-        if (params.produto_id)    q.append("produto_id", params.produto_id);
-        if (params.tipo)          q.append("tipo", params.tipo);
+        if (params.produto_id) q.append("produto_id", params.produto_id);
+        if (params.tipo) q.append("tipo", params.tipo);
         if (params.tipo_movimento) q.append("tipo_movimento", params.tipo_movimento);
-        if (params.data_inicio)   q.append("data_inicio", params.data_inicio);
-        if (params.data_fim)      q.append("data_fim", params.data_fim);
-        if (params.paginar)       q.append("paginar", "true");
-        if (params.per_page)      q.append("per_page", params.per_page.toString());
+        if (params.data_inicio) q.append("data_inicio", params.data_inicio);
+        if (params.data_fim) q.append("data_fim", params.data_fim);
+        if (params.paginar) q.append("paginar", "true");
+        if (params.per_page) q.append("per_page", params.per_page.toString());
 
         const response = await api.get(`${API_PREFIX}/movimentos-stock${q.toString() ? `?${q}` : ""}`);
         return response.data;
@@ -410,8 +411,8 @@ export const movimentoStockService = {
     } = {}): Promise<{ message: string; estatisticas: EstatisticasMovimento }> {
         const q = new URLSearchParams();
         if (params.data_inicio) q.append("data_inicio", params.data_inicio);
-        if (params.data_fim)    q.append("data_fim", params.data_fim);
-        if (params.produto_id)  q.append("produto_id", params.produto_id);
+        if (params.data_fim) q.append("data_fim", params.data_fim);
+        if (params.produto_id) q.append("produto_id", params.produto_id);
 
         const response = await api.get(`${API_PREFIX}/movimentos-stock/estatisticas${q.toString() ? `?${q}` : ""}`);
         return response.data;
@@ -472,24 +473,24 @@ export function calcularPrecoLiquido(produto: Produto, quantidade = 1): number {
 export function contarStatusEstoque(produtos: Produto[]) {
     const fisicos = produtos.filter(isProduto);
     return {
-        total:        fisicos.length,
+        total: fisicos.length,
         estoqueBaixo: fisicos.filter(estaEstoqueBaixo).length,
-        semEstoque:   fisicos.filter(estaSemEstoque).length,
-        normal:       fisicos.filter(p => !estaEstoqueBaixo(p) && !estaSemEstoque(p)).length,
+        semEstoque: fisicos.filter(estaSemEstoque).length,
+        normal: fisicos.filter(p => !estaEstoqueBaixo(p) && !estaSemEstoque(p)).length,
     };
 }
 
 export function estatisticasServicos(servicos: Produto[]) {
     const ativos = servicos.filter(s => s.status === "ativo");
-    const total  = servicos.length || 1;
+    const total = servicos.length || 1;
     return {
-        total:         servicos.length,
-        ativos:        ativos.length,
-        inativos:      servicos.length - ativos.length,
-        precoMedio:    servicos.reduce((acc, s) => acc + s.preco_venda, 0) / total,
+        total: servicos.length,
+        ativos: ativos.length,
+        inativos: servicos.length - ativos.length,
+        precoMedio: servicos.reduce((acc, s) => acc + s.preco_venda, 0) / total,
         retencaoMedia: servicos.reduce((acc, s) => acc + (s.taxa_retencao || 0), 0) / total,
-        comRetencao:   servicos.filter(s => s.taxa_retencao && s.taxa_retencao > 0).length,
-        semRetencao:   servicos.filter(s => !s.taxa_retencao || s.taxa_retencao === 0).length,
+        comRetencao: servicos.filter(s => s.taxa_retencao && s.taxa_retencao > 0).length,
+        semRetencao: servicos.filter(s => !s.taxa_retencao || s.taxa_retencao === 0).length,
     };
 }
 
@@ -517,8 +518,8 @@ export function formatarUnidadeMedida(unidade: UnidadeMedida | undefined): strin
 }
 
 export function getStatusBadge(produto: Produto): { texto: string; cor: string } {
-    if (produto.deleted_at)       return { texto: "Na Lixeira", cor: "bg-red-100 text-red-800" };
-    if (produto.status === "inativo") return { texto: "Inativo",   cor: "bg-gray-100 text-gray-800" };
+    if (produto.deleted_at) return { texto: "Na Lixeira", cor: "bg-red-100 text-red-800" };
+    if (produto.status === "inativo") return { texto: "Inativo", cor: "bg-gray-100 text-gray-800" };
     return { texto: "Ativo", cor: "bg-green-100 text-green-800" };
 }
 

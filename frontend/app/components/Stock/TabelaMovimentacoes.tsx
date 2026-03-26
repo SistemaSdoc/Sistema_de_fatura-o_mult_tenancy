@@ -72,7 +72,7 @@ export function TabelaMovimentacoes({ movimentacoes, colors: propColors }: Tabel
                                 </td>
                                 <td className="py-3 px-4 text-center">
                                     <span 
-                                        className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs"
+                                        className="inline-flex items-center gap-1 px-2 py-1 text-xs"
                                         style={{ backgroundColor: movimentoStyle.bg, color: movimentoStyle.text }}
                                     >
                                         {mov.tipo === "entrada" ? 

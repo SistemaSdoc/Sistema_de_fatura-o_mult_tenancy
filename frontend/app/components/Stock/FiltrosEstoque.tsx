@@ -60,7 +60,7 @@ export function FiltrosEstoque({
                     value={busca}
                     onChange={(e) => onBuscaChange(e.target.value)}
                     placeholder="Buscar por nome ou código..."
-                    className="w-full pl-10 pr-8 py-2 text-sm rounded-lg border outline-none transition-all"
+                    className="w-full pl-10 pr-8 py-2 text-sm border outline-none transition-all"
                     style={{
                         backgroundColor: colors.card,
                         borderColor: colors.border,
@@ -82,7 +82,7 @@ export function FiltrosEstoque({
             <select
                 value={tipoFiltro}
                 onChange={(e) => onTipoFiltroChange(e.target.value as unknown as "todos" | "produto" | "servico")}
-                className="px-3 py-2 text-sm rounded-lg border outline-none min-w-[130px]"
+                className="px-3 py-2 text-sm border outline-none min-w-[130px]"
                 style={{
                     backgroundColor: colors.card,
                     borderColor: colors.border,
@@ -98,7 +98,7 @@ export function FiltrosEstoque({
             <select
                 value={categoriaFiltro}
                 onChange={(e) => onCategoriaFiltroChange(e.target.value)}
-                className="px-3 py-2 text-sm rounded-lg border outline-none min-w-[140px]"
+                className="px-3 py-2 text-sm border outline-none min-w-[140px]"
                 style={{
                     backgroundColor: colors.card,
                     borderColor: colors.border,
@@ -116,7 +116,7 @@ export function FiltrosEstoque({
                 <select
                     value={filtroEstoque}
                     onChange={(e) => onFiltroEstoqueChange(e.target.value as unknown as "todos" | "baixo" | "zerado")}
-                    className="px-3 py-2 text-sm rounded-lg border outline-none min-w-[130px]"
+                    className="px-3 py-2 text-sm border outline-none min-w-[130px]"
                     style={{
                         backgroundColor: colors.card,
                         borderColor: colors.border,
