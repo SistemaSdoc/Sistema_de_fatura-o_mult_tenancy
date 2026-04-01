@@ -504,45 +504,45 @@ class DocumentoFiscalController extends Controller
      | IMPRESSÃO TÉRMICA - DIRETO NA IMPRESSORA SEM PDF
      | ================================================================== */
 
-public function imprimirTermica(string $id, ImpressoraTermicaService $impressoraService): JsonResponse
-{
-    try {
-        $documento = $this->documentoService->buscarDocumento($id);
-        $dados = $this->documentoService->dadosParaPdf($documento);
-        
-        // Buscar itens
-        $docInfo = $documento;
-        if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
-            $docInfo = DocumentoFiscal::with(['itens.produto', 'cliente'])
-                ->find($documento->fatura_id);
+    public function imprimirTermica(string $id, ImpressoraTermicaService $impressoraService): JsonResponse
+    {
+        try {
+            $documento = $this->documentoService->buscarDocumento($id);
+            $dados = $this->documentoService->dadosParaPdf($documento);
+            
+            // Buscar itens
+            $docInfo = $documento;
+            if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
+                $docInfo = DocumentoFiscal::with(['itens.produto', 'cliente'])
+                    ->find($documento->fatura_id);
+            }
+            
+            $dados['itens'] = $docInfo->itens ?? [];
+            $dados['docInfo'] = $docInfo;
+            
+            // Imprimir na térmica
+            $impressoraService->imprimirDocumento($documento, $dados);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Documento impresso com sucesso'
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Erro na impressão térmica', [
+                'id' => $id,
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao imprimir: ' . $e->getMessage()
+            ], 500);
         }
-        
-        $dados['itens'] = $docInfo->itens ?? [];
-        $dados['docInfo'] = $docInfo;
-        
-        // Imprimir na térmica
-        $impressoraService->imprimirDocumento($documento, $dados);
-        
-        return response()->json([
-            'success' => true,
-            'message' => 'Documento impresso com sucesso'
-        ]);
-        
-    } catch (\Exception $e) {
-        Log::error('Erro na impressão térmica', [
-            'id' => $id,
-            'error' => $e->getMessage()
-        ]);
-        
-        return response()->json([
-            'success' => false,
-            'message' => 'Erro ao imprimir: ' . $e->getMessage()
-        ], 500);
     }
-}
 
     /* =====================================================================
-     | IMPRESSÃO — HTML com window.print()
+     | IMPRESSÃO — HTML com window.print() (A4)
      | ================================================================== */
 
     public function printView(string $id): \Illuminate\Contracts\View\View
@@ -559,7 +559,6 @@ public function imprimirTermica(string $id, ImpressoraTermicaService $impressora
             }
 
             $docInfo = $documentoOrigem ?? $documento;
-
             // ── AGT: QR Code (DP 71/25) ─────────────────────────────────
             $qrCodeTexto = $dados['qr_code'];
             $qrCodeImg   = null;
@@ -582,7 +581,7 @@ public function imprimirTermica(string $id, ImpressoraTermicaService $impressora
                 }
             }
 
-            return view('documentos.print', [
+            return view('documentos.print-view', [
                 'empresa'         => $dados['empresa'],
                 'documento'       => $documento,
                 'documentoOrigem' => $documentoOrigem,
@@ -604,32 +603,6 @@ public function imprimirTermica(string $id, ImpressoraTermicaService $impressora
     /* =====================================================================
      | PDF (DomPDF)
      | ================================================================== */
-
-    public function imprimirPdf(string $id): Response
-    {
-        try {
-            $documento = $this->documentoService->buscarDocumento($id);
-            $dados     = $this->documentoService->dadosParaPdf($documento);
-            $dados['qr_html'] = $this->gerarQrHtml($dados['qr_code'] ?? null);
-
-            $pdf = Pdf::loadView('documentos.pdf', $dados)
-                ->setPaper('a4', 'portrait')
-                ->setOptions([
-                    'defaultFont'          => 'DejaVu Sans',
-                    'isRemoteEnabled'      => true,
-                    'isHtml5ParserEnabled' => true,
-                    'dpi'                  => 150,
-                ]);
-
-            return $pdf->stream($documento->numero_documento . '.pdf');
-
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
-            abort(404, 'Documento não encontrado');
-        } catch (\Exception $e) {
-            Log::error('Erro ao gerar PDF', ['id' => $id, 'error' => $e->getMessage()]);
-            abort(500, 'Erro ao gerar PDF: ' . $e->getMessage());
-        }
-    }
 
     public function downloadPdf(string $id): Response
     {

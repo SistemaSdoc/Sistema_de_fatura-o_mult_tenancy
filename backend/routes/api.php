@@ -145,15 +145,15 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
 
             // --- Rotas com {id} — DEPOIS das rotas estáticas ---
             Route::get('/{documento}', [DocumentoFiscalController::class, 'show'])->where('documento', $uuidPattern)->name('documentos.show');
-            Route::get('/{documento}/estado-at', [DocumentoFiscalController::class, 'consultarEstado'])->where('documento', $uuidPattern)->name('documentos.estado');
-            Route::get('/{id}/pdf', [DocumentoFiscalController::class, 'imprimirPdf'])->where('id', $uuidPattern)->name('documentos.pdf');
-            Route::get('/{id}/pdf/download', [DocumentoFiscalController::class, 'downloadPdf'])->where('id', $uuidPattern)->name('documentos.pdf-download');
-            Route::get('/{id}/imprimir-termica', [DocumentoFiscalController::class, 'imprimirTermica'])
-                ->where('id', $uuidPattern)
-                ->name('documentos.imprimir-termica');
-            Route::get('/{id}/print', [DocumentoFiscalController::class, 'printView'])->where('id', $uuidPattern)->name('documentos.print');
 
-            Route::get('/{documento}/recibos', [DocumentoFiscalController::class, 'recibos'])->where('documento', $uuidPattern)->name('documentos.recibos');
+            // CORRIGIDAS:
+            Route::get('/{id}/pdf/download', [DocumentoFiscalController::class, 'downloadPdf'])->where('id', $uuidPattern)->name('documentos.pdf-download');
+            Route::get('/{id}/imprimir-termica', [DocumentoFiscalController::class, 'imprimirTermica'])->where('id', $uuidPattern)->name('documentos.imprimir-termica');
+            Route::get('/{id}/print-view', [DocumentoFiscalController::class, 'printView'])->where('id', $uuidPattern)->name('documentos.print');
+
+            // Recibos - método correto é listarRecibos
+            Route::get('/{documento}/recibos', [DocumentoFiscalController::class, 'listarRecibos'])->where('documento', $uuidPattern)->name('documentos.recibos');
+
             Route::post('/{id}/recibo', [DocumentoFiscalController::class, 'gerarRecibo'])->where('id', $uuidPattern)->name('documentos.gerar-recibo');
             Route::post('/{documento}/cancelar', [DocumentoFiscalController::class, 'cancelar'])->where('documento', $uuidPattern)->name('documentos.cancelar');
             Route::post('/{id}/nota-credito', [DocumentoFiscalController::class, 'criarNotaCredito'])->where('id', $uuidPattern)->name('documentos.nota-credito');

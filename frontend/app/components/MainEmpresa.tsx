@@ -576,7 +576,7 @@ export default function MainEmpresa({
                                     className="relative p-2 transition-all hover:scale-110 active:scale-95"
                                     style={{ backgroundColor: notificacoesAberto ? colors.hover : "transparent" }}
                                 >
-                                    <Bell size={16} className="md:w-[18px] md:h-[18px]" style={{ color: colors.primary }} />
+                                    <Bell size={16} className="md:w-[18px] md:h-[18px]" style={{ color: colors.secondary }} />
                                     {totalNotificacoes > 0 && (
                                         <span
                                             className="absolute -top-1 -right-1 min-w-[18px] h-[18px] text-[10px] font-bold flex items-center justify-center px-1 text-white animate-pulse"

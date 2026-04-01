@@ -21,7 +21,7 @@ const EmpresasSection = () => {
     <section
       id="empresas"
       className="py-16 md:py-24"
-      style={{ backgroundColor: colors.background }} // ✅ style separado
+      style={{ backgroundColor: colors.background }}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <h2

@@ -44,10 +44,12 @@ export default function FaturasPage() {
   }, []);
 
   useEffect(() => { carregarDocumentos(); }, [carregarDocumentos]);
+
+  /* ── Imprimir na térmica ─────────────────────────────────── */
   const imprimirDocumento = useCallback(async (documento: DocumentoFiscal) => {
     if (!documento.id) return;
 
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.1.199';
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.1.170';
     const url = `${baseUrl}/api/documentos-fiscais/${documento.id}/imprimir-termica`;
 
     try {
@@ -62,9 +64,7 @@ export default function FaturasPage() {
       const result = await response.json();
 
       if (result.success) {
-        // Sucesso! Não precisa abrir nada
-        console.log('👌Documento impresso na térmica com sucesso');
-        // Opcional: mostrar toast de sucesso
+        console.log('👌 Documento impresso na térmica com sucesso');
       } else {
         console.error('Erro:', result.message);
         alert('Erro ao imprimir: ' + result.message);
@@ -74,6 +74,18 @@ export default function FaturasPage() {
       alert('Erro ao conectar com a impressora');
     }
   }, []);
+
+  /* ── Imprimir em A4 (window.print) ──────────────────────── */
+  const imprimirA4 = useCallback((documento: DocumentoFiscal) => {
+    if (!documento.id) return;
+
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.1.170';
+    const url = `${baseUrl}/api/documentos-fiscais/${documento.id}/print-view`;
+
+    // Abre em nova aba
+    window.open(url, '_blank');
+  }, []);
+
   /* ── Download PDF via Laravel (DomPDF) ─────────────────── */
   const baixarPdf = useCallback(async (documento: DocumentoFiscal) => {
     if (!documento.id) return;
@@ -146,8 +158,29 @@ export default function FaturasPage() {
       await carregarDocumentos();
       // Imprimir recibo gerado automaticamente (mesma lógica silenciosa)
       if (recibo?.id) {
-        const backend = `${window.location.protocol}//${window.location.hostname}:8000`;
-        window.open(`${backend}/api/documentos-fiscais/${recibo.id}/print`, "_blank");
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.1.170';
+        const url = `${baseUrl}/api/documentos-fiscais/${recibo.id}/imprimir-termica`;
+        try {
+          const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+            },
+            credentials: 'include',
+          });
+
+          const result = await response.json();
+
+          if (result.success) {
+            console.log('👌 Documento impresso na térmica com sucesso');
+          } else {
+            console.error('Erro:', result.message);
+            alert('Erro ao imprimir: ' + result.message);
+          }
+        } catch (error) {
+          console.error('Erro na requisição:', error);
+          alert('Erro ao conectar com a impressora');
+        }
       }
       return recibo;
     } catch (err: unknown) {
@@ -244,6 +277,7 @@ export default function FaturasPage() {
             onVerDetalhes={verDetalhes}
             onGerarRecibo={gerarRecibo}
             onImprimir={imprimirDocumento}
+            onImprimirA4={imprimirA4}
             onBaixarPdf={baixarPdf}
             formatKz={formatKz}
             formatQuantidade={formatQuantidade}

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { DocumentoFiscal, TipoDocumento } from "@/services/DocumentoFiscal";
-import { Eye, FileText, Printer, Download, ChevronLeft, ChevronRight, Receipt } from "lucide-react";
+import { Eye, FileText, Printer, Download, ChevronLeft, ChevronRight, Receipt, MoreVertical } from "lucide-react";
 
 const TIPO_LABEL: Record<TipoDocumento, string> = {
   FT:  "Fatura",
@@ -28,8 +28,10 @@ interface InvoiceTableProps {
   baixandoPdf: string | null;
   onVerDetalhes:   (doc: DocumentoFiscal) => void;
   onGerarRecibo:   (doc: DocumentoFiscal) => Promise<DocumentoFiscal | void> | void;
-  /** Impressão via Laravel — abre nova tab com ?auto=1 */
+  /** Impressão térmica — abre nova tab com ?auto=1 */
   onImprimir:      (doc: DocumentoFiscal) => void;
+  /** Impressão A4 via Laravel */
+  onImprimirA4:    (doc: DocumentoFiscal) => void;
   onBaixarPdf:     (doc: DocumentoFiscal) => Promise<void>;
   formatKz:        (v: number | string | undefined) => string;
   formatQuantidade:(v: number | string | undefined) => string;
@@ -97,6 +99,157 @@ function Spinner({ color }: { color: string }) {
   );
 }
 
+/* ── Menu Dropdown de Ações ────────────────────────────────── */
+interface ActionMenuProps {
+  doc: DocumentoFiscal;
+  onVerDetalhes: (doc: DocumentoFiscal) => void;
+  onGerarRecibo: (doc: DocumentoFiscal) => Promise<DocumentoFiscal | void> | void;
+  onImprimir: (doc: DocumentoFiscal) => void;
+  onImprimirA4: (doc: DocumentoFiscal) => void;
+  onBaixarPdf: (doc: DocumentoFiscal) => Promise<void>;
+  gerandoRecibo: string | null;
+  baixandoPdf: string | null;
+  colors: ColorsTheme;
+  podeGerarRecibo: (doc: DocumentoFiscal) => boolean;
+}
+
+function ActionMenu({
+  doc,
+  onVerDetalhes,
+  onGerarRecibo,
+  onImprimir,
+  onImprimirA4,
+  onBaixarPdf,
+  gerandoRecibo,
+  baixandoPdf,
+  colors,
+  podeGerarRecibo,
+}: ActionMenuProps) {
+  const [aberto, setAberto] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function fecharAoClicarFora(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setAberto(false);
+      }
+    }
+    if (aberto) {
+      document.addEventListener("mousedown", fecharAoClicarFora);
+      return () => document.removeEventListener("mousedown", fecharAoClicarFora);
+    }
+  }, [aberto]);
+
+  const handleGerarRecibo = async () => {
+    try {
+      await onGerarRecibo(doc);
+      setAberto(false);
+    } catch {
+      /* erro já tratado no pai */
+    }
+  };
+
+  const handleBaixarPdf = async () => {
+    try {
+      await onBaixarPdf(doc);
+      setAberto(false);
+    } catch {
+      /* erro já tratado */
+    }
+  };
+
+  return (
+    <div ref={menuRef} className="relative">
+      <button
+        onClick={() => setAberto(!aberto)}
+        title="Mais ações"
+        className="p-1.5 transition-all hover:opacity-70 touch-manipulation"
+        style={{ color: colors.text }}
+      >
+        <MoreVertical size={16} />
+      </button>
+
+      {aberto && (
+        <div
+          className="absolute right-0 top-full mt-1 rounded-lg shadow-lg z-50 py-1 min-w-max"
+          style={{ backgroundColor: colors.card, borderColor: colors.border, border: `1px solid ${colors.border}` }}
+        >
+          {/* Ver Detalhes */}
+          <button
+            onClick={() => {
+              onVerDetalhes(doc);
+              setAberto(false);
+            }}
+            className="w-full px-3 py-2 text-sm text-left flex items-center gap-2 transition-colors hover:opacity-80"
+            style={{ color: colors.text }}
+          >
+            <Eye size={16} />
+            <span>Ver detalhes</span>
+          </button>
+
+          {/* Gerar Recibo */}
+          {podeGerarRecibo(doc) && (
+            <button
+              onClick={handleGerarRecibo}
+              disabled={gerandoRecibo === doc.id}
+              className="w-full px-3 py-2 text-sm text-left flex items-center gap-2 transition-colors hover:opacity-80 disabled:opacity-50"
+              style={{ color: colors.success }}
+            >
+              {gerandoRecibo === doc.id ? (
+                <Spinner color={colors.success} />
+              ) : (
+                <FileText size={16} />
+              )}
+              <span>{gerandoRecibo === doc.id ? "Gerando..." : "Gerar Recibo"}</span>
+            </button>
+          )}
+
+          {/* Imprimir Térmica */}
+          <button
+            onClick={() => {
+              onImprimir(doc);
+              setAberto(false);
+            }}
+            className="w-full px-3 py-2 text-sm text-left flex items-center gap-2 transition-colors hover:opacity-80"
+            style={{ color: colors.secondary }}
+          >
+            <Printer size={16} />
+            <span>Imprimir (Térmica)</span>
+          </button>
+
+          {/* Imprimir A4 */}
+          <button
+            onClick={() => {
+              onImprimirA4(doc);
+              setAberto(false);
+            }}
+            className="w-full px-3 py-2 text-sm text-left flex items-center gap-2 transition-colors hover:opacity-80"
+            style={{ color: colors.secondary }}
+          >
+            <Printer size={16} />
+            <span>Imprimir (A4)</span>
+          </button>
+
+          {/* Baixar PDF */}
+          <button
+            onClick={handleBaixarPdf}
+            disabled={baixandoPdf === doc.id}
+            className="w-full px-3 py-2 text-sm text-left flex items-center gap-2 transition-colors hover:opacity-80 disabled:opacity-50"
+            style={{ color: colors.text }}
+          >
+            {baixandoPdf === doc.id ? (
+              <Spinner color={colors.text} />
+            ) : (
+              <Download size={16} />
+            )}
+            <span>{baixandoPdf === doc.id ? "Baixando..." : "Baixar PDF"}</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ══════════════════════════════════════════════════════════ */
 export default function InvoiceTable({
   documentos,
@@ -106,6 +259,7 @@ export default function InvoiceTable({
   onVerDetalhes,
   onGerarRecibo,
   onImprimir,
+  onImprimirA4,
   onBaixarPdf,
   formatKz,
   documentoFiscalService,
@@ -121,11 +275,6 @@ export default function InvoiceTable({
   /* Apenas FT não cancelado/pago pode gerar recibo */
   const podeGerarRecibo = (d: DocumentoFiscal) =>
     d.tipo_documento === "FT" && !["cancelado", "paga"].includes(d.estado);
-
-  const handleGerarRecibo = async (doc: DocumentoFiscal) => {
-    try { await onGerarRecibo(doc); }
-    catch { /* erro já tratado no pai */ }
-  };
 
 
   /* ── Empty ────────────────────────────────────────────── */
@@ -166,7 +315,7 @@ export default function InvoiceTable({
               <th className="px-3 py-2.5 text-right text-white font-semibold text-xs tracking-wide whitespace-nowrap">
                 Total
               </th>
-              <th className="px-3 py-2.5 text-center text-white font-semibold text-xs tracking-wide whitespace-nowrap min-w-[140px]">
+              <th className="px-3 py-2.5 text-center text-white font-semibold text-xs tracking-wide whitespace-nowrap min-w-[60px]">
                 Ações
               </th>
             </tr>
@@ -222,52 +371,19 @@ export default function InvoiceTable({
 
                 {/* Ações */}
                 <td className="px-3 py-2.5">
-                  <div className="flex items-center justify-center gap-0.5">
-
-                    {/* Ver detalhes */}
-                    <IconBtn
-                      onClick={() => onVerDetalhes(doc)}
-                      title="Ver detalhes"
-                      color={colors.text}
-                    >
-                      <Eye size={16} />
-                    </IconBtn>
-
-                    {/* Gerar Recibo (apenas FT pendente) */}
-                    {podeGerarRecibo(doc) && (
-                      <IconBtn
-                        onClick={() => handleGerarRecibo(doc)}
-                        disabled={gerandoRecibo === doc.id}
-                        title="Gerar Recibo"
-                        color={colors.success}
-                      >
-                        {gerandoRecibo === doc.id
-                          ? <Spinner color={colors.success} />
-                          : <FileText size={16} />}
-                      </IconBtn>
-                    )}
-
-                    {/* Imprimir — chama printView do Laravel com ?auto=1 */}
-                    <IconBtn
-                      onClick={() => onImprimir(doc)}
-                      title="Imprimir"
-                      color={colors.secondary}
-                    >
-                      <Printer size={16} />
-                    </IconBtn>
-
-                    {/* Download PDF (DomPDF) */}
-                    <IconBtn
-                      onClick={() => onBaixarPdf(doc)}
-                      disabled={baixandoPdf === doc.id}
-                      title="Baixar PDF"
-                      color={colors.text}
-                    >
-                      {baixandoPdf === doc.id
-                        ? <Spinner color={colors.text} />
-                        : <Download size={16} />}
-                    </IconBtn>
-
+                  <div className="flex items-center justify-center">
+                    <ActionMenu
+                      doc={doc}
+                      onVerDetalhes={onVerDetalhes}
+                      onGerarRecibo={onGerarRecibo}
+                      onImprimir={onImprimir}
+                      onImprimirA4={onImprimirA4}
+                      onBaixarPdf={onBaixarPdf}
+                      gerandoRecibo={gerandoRecibo}
+                      baixandoPdf={baixandoPdf}
+                      colors={colors}
+                      podeGerarRecibo={podeGerarRecibo}
+                    />
                   </div>
                 </td>
               </tr>
