@@ -38,7 +38,7 @@ class ImpressoraTermicaService
 
     public function __construct()
     {
-        $this->nomeImpressora = env('IMPRESSORA_TERMICA', 'POS-80');
+        $this->nomeImpressora = env('IMPRESSORA_TERMICA', 'AUTO-THERMAL');
     }
 
     /* ── Público: imprimir ─────────────────────────────────────────── */
@@ -296,26 +296,25 @@ class ImpressoraTermicaService
        HELPERS
     ══════════════════════════════════════════════════════════════════ */
 
-    private function conectar(): void
-    {
-        $so = strtoupper(substr(PHP_OS, 0, 3));
+private function conectar(): void
+{
+    $so = strtoupper(substr(PHP_OS, 0, 3));
 
-        if ($so === 'WIN') {
-            // WINDOWS — use o nome exato da impressora local USB
-            // Abra "Dispositivos e Impressoras" e copie o nome que aparece
-            $nomeWindows = 'TM-T88IV'; // substitua pelo nome correto da sua impressora
-            $connector = new WindowsPrintConnector("POS-80");
-        } elseif ($so === 'LIN') {
-            // LINUX (CUPS)
-            $connector = new CupsPrintConnector("POS-80");
-        } else {
-            // FALLBACK (rede TCP/IP)
-            $connector = new NetworkPrintConnector($this->nomeImpressora, 9100);
-        }
-
-        $profile       = CapabilityProfile::load('default');
-        $this->printer = new Printer($connector, $profile);
+    if ($so === 'WIN') {
+        // Windows — usar nome da impressora compartilhada/local correto
+        $nomeWindows = 'AUTHO-THERMAL';
+        $connector = new WindowsPrintConnector($nomeWindows);
+    } elseif ($so === 'LIN') {
+        // Linux (CUPS)
+        $connector = new CupsPrintConnector("AUTO-THERMAL");
+    } else {
+        // Rede TCP/IP fallback
+        $connector = new NetworkPrintConnector($this->nomeImpressora, 9100);
     }
+
+    $profile       = CapabilityProfile::load('default');
+    $this->printer = new Printer($connector, $profile);
+}
 
     private function fechar(): void
     {
