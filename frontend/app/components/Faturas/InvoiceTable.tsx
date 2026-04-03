@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import { DocumentoFiscal, TipoDocumento } from "@/services/DocumentoFiscal";
 import { Eye, FileText, Printer, Download, ChevronLeft, ChevronRight, Receipt } from "lucide-react";
 
+
 const TIPO_LABEL: Record<TipoDocumento, string> = {
   FT: "Fatura",
   FR: "Fatura-Recibo",
@@ -41,6 +42,15 @@ interface InvoiceTableProps {
   onBaixarPdf: (doc: DocumentoFiscal) => Promise<void>;
   formatKz: (v: number | string | undefined) => string;
   formatQuantidade?: (v: number | string | undefined) => string;
+  onVerDetalhes:   (doc: DocumentoFiscal) => void;
+  onGerarRecibo:   (doc: DocumentoFiscal) => Promise<DocumentoFiscal | void> | void;
+  onImprimir:      (doc: DocumentoFiscal) => void;
+
+  onImprimirA4:    (doc: DocumentoFiscal) => void;
+  onImprimirPdf:   (doc: DocumentoFiscal) => void;
+  onBaixarPdf:     (doc: DocumentoFiscal) => Promise<void>;
+  formatKz:        (v: number | string | undefined) => string;
+  formatQuantidade:(v: number | string | undefined) => string;
   documentoFiscalService: {
     getNomeCliente: (doc: DocumentoFiscal) => string;
     getNifCliente: (doc: DocumentoFiscal) => string | null;
@@ -121,6 +131,7 @@ export default function InvoiceTable({
   onGerarRecibo,
   onImprimir,
   onImprimirA4,
+  onImprimirPdf,
   onBaixarPdf,
   formatKz,
   documentoFiscalService,

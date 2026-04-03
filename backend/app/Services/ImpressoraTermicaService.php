@@ -5,6 +5,9 @@ namespace App\Services;
 use App\Models\DocumentoFiscal;
 use Mike42\Escpos\PrintConnectors\DummyPrintConnector;
 use Mike42\Escpos\Printer;
+use Mike42\Escpos\PrintConnectors\WindowsPrintConnector;
+use Mike42\Escpos\PrintConnectors\CupsPrintConnector;
+use Mike42\Escpos\PrintConnectors\NetworkPrintConnector;
 use Mike42\Escpos\CapabilityProfile;
 use Mike42\Escpos\EscposImage;
 use Illuminate\Support\Facades\Log;
@@ -41,6 +44,10 @@ Provincia de Luanda';
 
     /** Texto de agradecimento personalizado */
     protected string $mensagemFinal = 'Obrigado pela sua preferência!';
+    public function __construct()
+    {
+        $this->nomeImpressora = env('IMPRESSORA_TERMICA', 'AUTO-THERMAL');
+    }
 
     /** Texto legal obrigatório */
     protected string $textoProcessamento = 'Processado por computador';
@@ -217,7 +224,36 @@ private function bloco1Cabecalho(Printer $p, array $empresa = []): void
 
         // — Série à esquerda, data+hora à direita (dado original) —
         $p->text($this->linhaLR('Serie: ' . ($d->serie ?? ''), $data . ' ' . $hora));
+
         $p->text(str_repeat('-', $this->L) . "\n");
+    }
+
+private function conectar(): void
+{
+    $so = strtoupper(substr(PHP_OS, 0, 3));
+
+    if ($so === 'WIN') {
+        // Windows — usar nome da impressora compartilhada/local correto
+        $nomeWindows = 'AUTHO-THERMAL';
+        $connector = new WindowsPrintConnector($nomeWindows);
+    } elseif ($so === 'LIN') {
+        // Linux (CUPS)
+        $connector = new CupsPrintConnector("AUTO-THERMAL");
+    } else {
+        // Rede TCP/IP fallback
+        $connector = new NetworkPrintConnector($this->nomeImpressora, 9100);
+    }
+
+    $profile       = CapabilityProfile::load('default');
+    $this->printer = new Printer($connector, $profile);
+}
+
+    private function fechar(): void
+    {
+        try {
+            $this->printer?->close();
+        } catch (\Throwable) {
+        }
     }
 
     private function bloco3OrigemRc(Printer $p, DocumentoFiscal $origem): void

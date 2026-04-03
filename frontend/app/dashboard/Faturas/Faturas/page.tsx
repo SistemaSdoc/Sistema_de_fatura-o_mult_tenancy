@@ -82,6 +82,14 @@ export default function FaturasPage() {
   useEffect(() => {
     carregarDocumentos();
   }, [carregarDocumentos]);
+  useEffect(() => { carregarDocumentos(); }, [carregarDocumentos]);
+
+  /* ── Imprimir na térmica (Servidor) ─────────────────────────────────── */
+  const imprimirDocumento = useCallback(async (documento: DocumentoFiscal) => {
+    if (!documento.id) return;
+
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.1.170';
+    const url = `${baseUrl}/api/documentos-fiscais/${documento.id}/imprimir-termica`;
 
   /* ── Impressão com QZ Tray ───────────────────── */
   const printWithQZ = useCallback(async (base64Data: string, documento: DocumentoFiscal) => {
@@ -128,6 +136,8 @@ if (!printers || printers.length === 0) {
 
   /* ── Chamar impressão térmica ───────────────────── */
   const imprimirDocumento = useCallback(async (documento: DocumentoFiscal) => {
+  /* ── Imprimir em A4 (HTML print) ──────────────────────── */
+  const imprimirA4 = useCallback((documento: DocumentoFiscal) => {
     if (!documento.id) return;
     setImprimindo(documento.id);
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.1.193:8000';
@@ -153,6 +163,18 @@ if (!printers || printers.length === 0) {
     window.open(`${baseUrl}/api/documentos-fiscais/${documento.id}/print-view`, '_blank');
   }, []);
 
+  /* ── Imprimir PDF via Navegador ──────────────────────── */
+  const imprimirPdfNavegador = useCallback((documento: DocumentoFiscal) => {
+    if (!documento.id) return;
+
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.1.170';
+    const url = `${baseUrl}/api/documentos-fiscais/${documento.id}/pdf-viewer`;
+
+    // Abre em nova aba com visualizador de PDF e opção de impressão
+    window.open(url, '_blank');
+  }, []);
+
+  /* ── Download PDF via Laravel (DomPDF) ─────────────────── */
   const baixarPdf = useCallback(async (documento: DocumentoFiscal) => {
     if (!documento.id) return;
     try {
@@ -321,6 +343,7 @@ if (!printers || printers.length === 0) {
             onGerarRecibo={gerarRecibo}
             onImprimir={imprimirDocumento}
             onImprimirA4={imprimirA4}
+            onImprimirPdf={imprimirPdfNavegador}
             onBaixarPdf={baixarPdf}
             formatKz={formatKz}
             formatQuantidade={formatQuantidade}

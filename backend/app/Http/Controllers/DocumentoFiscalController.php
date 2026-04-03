@@ -17,9 +17,7 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class DocumentoFiscalController extends Controller
 {
-    public function __construct(
-        protected DocumentoFiscalService $documentoService
-    ) {}
+    protected DocumentoFiscalService $documentoService;
 
     /**
      * DocumentoFiscalController
@@ -101,8 +99,6 @@ class DocumentoFiscalController extends Controller
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             return response()->json(['success' => false, 'message' => 'Documento não encontrado'], 404);
-        } catch (\InvalidArgumentException $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 400);
         } catch (\Exception $e) {
             return $this->erroInterno('Erro ao carregar documento', $e);
         }
@@ -609,6 +605,70 @@ class DocumentoFiscalController extends Controller
             abort(500, 'Erro ao carregar documento: ' . $e->getMessage());
         }
     }
+
+    /* =====================================================================
+     | PDF VIEWER — TALÃO TÉRMICO HTML (style receipt)
+     | ================================================================== */
+
+    public function pdfViewer(string $id): \Illuminate\Contracts\View\View
+    {
+        try {
+            $documento = $this->documentoService->buscarDocumento($id);
+            $dados     = $this->documentoService->dadosParaPdf($documento);
+
+            // RC: itens e totais vêm do documento de origem (FT/FA)
+            $documentoOrigem = null;
+            if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
+                $documentoOrigem = DocumentoFiscal::with(['itens.produto', 'cliente'])
+                    ->find($documento->fatura_id);
+            }
+
+            $docInfo = $documentoOrigem ?? $documento;
+
+            // Gerar QR Code
+            $qrCodeTexto = $dados['qr_code'] ?? null;
+            $qrCodeImg   = null;
+
+            if ($qrCodeTexto && class_exists(\Endroid\QrCode\QrCode::class)) {
+                try {
+                    $qrCode = \Endroid\QrCode\QrCode::create($qrCodeTexto)
+                        ->setEncoding(new \Endroid\QrCode\Encoding\Encoding('UTF-8'))
+                        ->setErrorCorrectionLevel(\Endroid\QrCode\ErrorCorrectionLevel::Medium)
+                        ->setSize(200)
+                        ->setMargin(6);
+
+                    $writer   = new \Endroid\QrCode\Writer\PngWriter();
+                    $result   = $writer->write($qrCode);
+                    $qrCodeImg = base64_encode($result->getString());
+                } catch (\Exception $qrEx) {
+                    Log::warning('QR Code generation failed', ['error' => $qrEx->getMessage()]);
+                }
+            }
+
+            // Retornar view do talão térmico com os dados diretos (não PDF base64)
+            return view('documentos.pdf-viewer', [
+                'empresa'         => $dados['empresa'],
+                'documento'       => $documento,
+                'documentoOrigem' => $documentoOrigem,
+                'docInfo'         => $docInfo,
+                'itens'           => collect($docInfo->itens ?? []),
+                'cliente'         => $dados['cliente'],
+                'qr_code'         => $qrCodeTexto,
+                'qr_code_img'     => $qrCodeImg,
+                'qr_html'         => $this->gerarQrHtml($qrCodeTexto),
+            ]);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
+            abort(404, 'Documento não encontrado');
+        } catch (\Exception $e) {
+            Log::error('Erro ao gerar visualização PDF', ['id' => $id, 'error' => $e->getMessage()]);
+            abort(500, 'Erro ao carregar documento: ' . $e->getMessage());
+        }
+    }
+
+    /* =====================================================================
+     | PDF (DomPDF) - Download
+     | ================================================================== */
 
     public function downloadPdf(string $id): Response
     {
