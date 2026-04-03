@@ -45,7 +45,7 @@ export default function FaturasPage() {
 
   useEffect(() => { carregarDocumentos(); }, [carregarDocumentos]);
 
-  /* ── Imprimir na térmica ─────────────────────────────────── */
+  /* ── Imprimir na térmica (Servidor) ─────────────────────────────────── */
   const imprimirDocumento = useCallback(async (documento: DocumentoFiscal) => {
     if (!documento.id) return;
 
@@ -75,7 +75,7 @@ export default function FaturasPage() {
     }
   }, []);
 
-  /* ── Imprimir em A4 (window.print) ──────────────────────── */
+  /* ── Imprimir em A4 (HTML print) ──────────────────────── */
   const imprimirA4 = useCallback((documento: DocumentoFiscal) => {
     if (!documento.id) return;
 
@@ -83,6 +83,17 @@ export default function FaturasPage() {
     const url = `${baseUrl}/api/documentos-fiscais/${documento.id}/print-view`;
 
     // Abre em nova aba
+    window.open(url, '_blank');
+  }, []);
+
+  /* ── Imprimir PDF via Navegador ──────────────────────── */
+  const imprimirPdfNavegador = useCallback((documento: DocumentoFiscal) => {
+    if (!documento.id) return;
+
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.1.170';
+    const url = `${baseUrl}/api/documentos-fiscais/${documento.id}/pdf-viewer`;
+
+    // Abre em nova aba com visualizador de PDF e opção de impressão
     window.open(url, '_blank');
   }, []);
 
@@ -278,6 +289,7 @@ export default function FaturasPage() {
             onGerarRecibo={gerarRecibo}
             onImprimir={imprimirDocumento}
             onImprimirA4={imprimirA4}
+            onImprimirPdf={imprimirPdfNavegador}
             onBaixarPdf={baixarPdf}
             formatKz={formatKz}
             formatQuantidade={formatQuantidade}

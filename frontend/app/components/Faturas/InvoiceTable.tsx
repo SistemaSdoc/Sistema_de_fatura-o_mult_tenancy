@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { DocumentoFiscal, TipoDocumento } from "@/services/DocumentoFiscal";
-import { Eye, FileText, Printer, Download, ChevronLeft, ChevronRight, Receipt, MoreVertical } from "lucide-react";
+import { Eye, FileText, Printer, Download, ChevronLeft, ChevronRight, Receipt, MoreVertical, FileJson } from "lucide-react";
 
 const TIPO_LABEL: Record<TipoDocumento, string> = {
   FT:  "Fatura",
@@ -32,6 +32,8 @@ interface InvoiceTableProps {
   onImprimir:      (doc: DocumentoFiscal) => void;
   /** Impressão A4 via Laravel */
   onImprimirA4:    (doc: DocumentoFiscal) => void;
+  /** Impressão PDF via navegador */
+  onImprimirPdf:   (doc: DocumentoFiscal) => void;
   onBaixarPdf:     (doc: DocumentoFiscal) => Promise<void>;
   formatKz:        (v: number | string | undefined) => string;
   formatQuantidade:(v: number | string | undefined) => string;
@@ -106,6 +108,7 @@ interface ActionMenuProps {
   onGerarRecibo: (doc: DocumentoFiscal) => Promise<DocumentoFiscal | void> | void;
   onImprimir: (doc: DocumentoFiscal) => void;
   onImprimirA4: (doc: DocumentoFiscal) => void;
+  onImprimirPdf: (doc: DocumentoFiscal) => void;
   onBaixarPdf: (doc: DocumentoFiscal) => Promise<void>;
   gerandoRecibo: string | null;
   baixandoPdf: string | null;
@@ -119,6 +122,7 @@ function ActionMenu({
   onGerarRecibo,
   onImprimir,
   onImprimirA4,
+  onImprimirPdf,
   onBaixarPdf,
   gerandoRecibo,
   baixandoPdf,
@@ -204,7 +208,7 @@ function ActionMenu({
             </button>
           )}
 
-          {/* Imprimir Térmica */}
+          {/* Imprimir Térmica (Servidor) */}
           <button
             onClick={() => {
               onImprimir(doc);
@@ -214,10 +218,10 @@ function ActionMenu({
             style={{ color: colors.secondary }}
           >
             <Printer size={16} />
-            <span>Imprimir (Térmica)</span>
+            <span>Imprimir (Servidor)</span>
           </button>
 
-          {/* Imprimir A4 */}
+          {/* Imprimir A4 (HTML print) */}
           <button
             onClick={() => {
               onImprimirA4(doc);
@@ -227,7 +231,20 @@ function ActionMenu({
             style={{ color: colors.secondary }}
           >
             <Printer size={16} />
-            <span>Imprimir (A4)</span>
+            <span>Imprimir (HTML A4)</span>
+          </button>
+
+          {/* Imprimir PDF (Navegador) - NOVO */}
+          <button
+            onClick={() => {
+              onImprimirPdf(doc);
+              setAberto(false);
+            }}
+            className="w-full px-3 py-2 text-sm text-left flex items-center gap-2 transition-colors hover:opacity-80"
+            style={{ color: colors.primary }}
+          >
+            <FileJson size={16} />
+            <span>Imprimir (PDF Browser)</span>
           </button>
 
           {/* Baixar PDF */}
@@ -260,6 +277,7 @@ export default function InvoiceTable({
   onGerarRecibo,
   onImprimir,
   onImprimirA4,
+  onImprimirPdf,
   onBaixarPdf,
   formatKz,
   documentoFiscalService,
@@ -378,6 +396,7 @@ export default function InvoiceTable({
                       onGerarRecibo={onGerarRecibo}
                       onImprimir={onImprimir}
                       onImprimirA4={onImprimirA4}
+                      onImprimirPdf={onImprimirPdf}
                       onBaixarPdf={onBaixarPdf}
                       gerandoRecibo={gerandoRecibo}
                       baixandoPdf={baixandoPdf}
