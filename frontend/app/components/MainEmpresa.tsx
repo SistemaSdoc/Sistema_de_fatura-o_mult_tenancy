@@ -87,8 +87,8 @@ export default function MainEmpresa({
     const userRole = user?.role || "";
     const userEmail = user?.email || "";
     const userInitial = userName.charAt(0).toUpperCase();
-    const empresaLogo = companyLogo || user?.empresa?.logo || "/images/3.png";
-    const nomeEmpresa = companyName || user?.empresa?.nome || "SDOCA";
+    const empresaLogo = companyLogo || user?.empresa?.logo || "/images/mwamba.jpeg";
+    const nomeEmpresa = companyName || user?.empresa?.nome || "MWAMBA";
 
     // Responsive detection
     useEffect(() => {
@@ -262,14 +262,13 @@ export default function MainEmpresa({
                         { label: "Venda a pronto", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart },
                         { label: "Kilape", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
                         { label: "Proforma", path: "/dashboard/Faturas/Faturas_Proforma", icon: FileText },
-                        { label: "Cancelamentos", path: "/dashboard/Vendas/Cancelamentos", icon: X }
                     ]
                     : userRole === "operador"
                         ? [{ label: "Venda a pronto", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart },
                         { label: "Venda a prazo", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
                         { label: "Proforma", path: "/dashboard/Faturas/Faturas_Proforma", icon: FileText },]
                         : [
-                            { label: "Cancelamentos", path: "/dashboard/Vendas/Cancelamentos", icon: ShoppingCart }
+                            
                         ],
             isGroup: true,
             roles: ["admin", "operador"],

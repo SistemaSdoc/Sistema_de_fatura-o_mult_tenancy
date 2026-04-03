@@ -3,406 +3,328 @@
 namespace App\Services;
 
 use App\Models\DocumentoFiscal;
-use Mike42\Escpos\PrintConnectors\CupsPrintConnector;
-use Mike42\Escpos\PrintConnectors\WindowsPrintConnector;
-use Mike42\Escpos\PrintConnectors\NetworkPrintConnector;
+use Mike42\Escpos\PrintConnectors\DummyPrintConnector;
 use Mike42\Escpos\Printer;
 use Mike42\Escpos\CapabilityProfile;
 use Mike42\Escpos\EscposImage;
 use Illuminate\Support\Facades\Log;
 
-/**
- * ImpressoraTermicaService — Talão térmico 80mm compacto
- *
- * Estrutura:
- *  1. Logo (pequeno, centrado) + Empresa + NIF + Morada + Tel
- *  2. Tipo | Nº   /   Série | Data Hora
- *  3. Referência de origem (só RC)
- *  4. Cliente
- *  5. Itens  (desc 20 | qtd 4 | total)  +  IVA / Ret
- *  6. Totais (base, IVA, retenção, TOTAL)
- *  7. QR Code AGT (DP 71/25)
- *  8. Hash Fiscal
- *  9. Rodapé + Dados Bancários
- */
 class ImpressoraTermicaService
 {
-    protected string   $nomeImpressora;
-    protected ?Printer $printer = null;
-
-    /**
-     * Largura da linha em caracteres (Font A, papel 80mm).
-     * POS-80 típica = 48. Ajusta se necessário.
-     */
     protected int $L = 42;
 
-    public function __construct()
-    {
-        $this->nomeImpressora = env('IMPRESSORA_TERMICA', 'POS-80');
-    }
+    // =====================================================
+    // CONFIGURAÇÕES ESTÁTICAS — altere à vontade
+    // =====================================================
 
-    /* ── Público: imprimir ─────────────────────────────────────────── */
+    /** Caminho relativo a public/ para o logo (PNG recomendado; deixe vazio para não exibir) */
+    protected string $logo = 'images/mwamba.png';
 
-    public function imprimirDocumento(DocumentoFiscal $documento, array $dados): bool
+    /** Slogan exibido abaixo do nome da empresa */
+    protected string $slogan = 'A sua solução em tecnologia';
+
+    /** Endereço completo da empresa */
+    protected string $endereco = 'Rua do Paiol, Bairro Gameke,
+(Proximo da Farmacia Pedrito),
+Provincia de Luanda';
+    /** Telefone principal */
+    protected string $telefone = '+244 938 747 267';
+
+    /** Telefone alternativo (deixe vazio para ocultar) */
+    protected string $telefone2 = '+244 941 177 948';
+
+    /** E-mail de contacto */
+    protected string $email = 'mwambacomercial@gmail.com';
+
+    /** Texto da política de devolução (deixe vazio para ocultar) */
+    protected string $politicaDevolucao = 'Trocas e devoluções em até 7 dias com recibo.';
+
+    /** Texto de agradecimento personalizado */
+    protected string $mensagemFinal = 'Obrigado pela sua preferência!';
+
+    /** Texto legal obrigatório */
+    protected string $textoProcessamento = 'Processado por computador';
+
+    /** Rótulo do QR Code (conforme regulamento AGT) */
+    protected string $rotuloQrCode = 'QR AGT DP71/25';
+
+    /** Número máximo de caracteres do hash exibido */
+    protected int $hashMaxChars = 26;
+
+    // =====================================================
+    // FIM DAS CONFIGURAÇÕES ESTÁTICAS
+    // =====================================================
+
+
+    public function gerarEscposBytes(DocumentoFiscal $documento, array $dados): string
     {
+        $printer = null;
+
         try {
-            $this->conectar();
+            $connector = new DummyPrintConnector();
+            $profile   = CapabilityProfile::load('default');
+            $printer   = new Printer($connector, $profile);
 
-            $docInfo = $documento;
-            if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
-                $origem = DocumentoFiscal::find($documento->fatura_id);
-                if ($origem) $docInfo = $origem;
-            }
+            $docInfo = $this->resolverDocInfo($documento);
 
             $empresa = $dados['empresa'] ?? [];
             $cliente = $dados['cliente'] ?? [];
-            $itens   = $dados['itens']   ?? [];
+            $itens   = $dados['itens'] ?? [];
             $qrCode  = $dados['qr_code'] ?? null;
 
-            $this->bloco1Cabecalho($empresa);
-            $this->bloco2TipoNumero($documento);
+            $this->bloco1Cabecalho($printer, $empresa);
+            $this->bloco2TipoNumero($printer, $documento);
+
             if ($documento->tipo_documento === 'RC' && $docInfo !== $documento) {
-                $this->bloco3OrigemRc($docInfo);
+                $this->bloco3OrigemRc($printer, $docInfo);
             }
-            $this->bloco4Cliente($cliente);
-            $this->bloco5Itens($itens);
-            $this->bloco6Totais($documento, $docInfo);
-            if (!empty($qrCode)) $this->bloco7QrCode($qrCode);
-            if (!empty($documento->hash_fiscal)) $this->bloco8Hash($documento->hash_fiscal);
-            $this->bloco9Rodape();
 
-            $this->printer->cut();
-            $this->printer->close();
-            return true;
+            $this->bloco4Cliente($printer, $cliente);
+            $this->bloco5Itens($printer, $itens);
+            $this->bloco6Totais($printer, $documento, $docInfo);
+
+            if (!empty($qrCode))                  $this->bloco7QrCode($printer, $qrCode);
+            if (!empty($documento->hash_fiscal))  $this->bloco8Hash($printer, $documento->hash_fiscal);
+
+            $this->bloco9Rodape($printer);
+
+            $printer->cut();
+
+            $bytes = $connector->getData();
+
+            return $bytes;
         } catch (\Exception $e) {
-            Log::error('Erro térmica', ['error' => $e->getMessage(), 'doc' => $documento->id ?? null]);
-            $this->fechar();
-            throw $e;
-        }
-    }
+            Log::error('Erro ao gerar ESC/POS', [
+                'documento_id' => $documento->id ?? null,
+                'mensagem'     => $e->getMessage(),
+                'linha'        => $e->getLine()
+            ]);
 
-
-    /* ══════════════════════════════════════════════════════════════════
-       BLOCOS
-    ══════════════════════════════════════════════════════════════════ */
-
-    /**
-     * 1. Logo pequeno + dados da empresa — sem linhas em branco extra
-     */
-    private function bloco1Cabecalho(array $empresa): void
-    {
-        $this->printer->setJustification(Printer::JUSTIFY_CENTER);
-
-        // Logo — escala para 100×100 px antes de enviar à impressora
-        // Isso resulta em ~25mm no papel, adequado para talão
-        foreach ([public_path('images/4.png'), public_path('images/logo.png')] as $path) {
-            if (file_exists($path)) {
+            throw new \Exception('Falha ao gerar o arquivo de impressão térmica.');
+        } finally {
+            if ($printer) {
                 try {
-                    // Redimensionar logo para 100px via GD (se disponível)
-                    $imgResized = $this->redimensionarImagem($path, 100);
-                    if ($imgResized) {
-                        $escImg = EscposImage::load($imgResized, false);
-                        $this->printer->graphics($escImg, Printer::IMG_DEFAULT);
-                        // Apagar ficheiro temporário se foi criado
-                        if ($imgResized !== $path) @unlink($imgResized);
-                    } else {
-                        // GD não disponível — tentar carregar directamente
-                        $escImg = EscposImage::load($path, false);
-                        $this->printer->graphics($escImg, Printer::IMG_DEFAULT);
-                    }
-                    break;
+                    $printer->close();
                 } catch (\Throwable $e) {
-                    Log::warning('Logo térmica falhou', ['path' => $path, 'error' => $e->getMessage()]);
                 }
             }
         }
-
-        // Nome empresa — negrito, sem feed extra
-        $this->printer->setEmphasis(true);
-        $this->printer->text(mb_strtoupper($empresa['nome'] ?? '') . "\n");
-        $this->printer->setEmphasis(false);
-        $this->printer->text('NIF: ' . ($empresa['nif'] ?? '') . "\n");
-        $this->printer->text($this->fit('Rua Fictícia, nº 123 - Luanda, Angola') . "\n");
-        $this->printer->text('Tel: 923 000 000' . "\n");
-        $this->printer->text($this->fit("Email: [EMAIL_ADDRESS]") . "\n");
-        $this->printer->text($this->sep() . "\n");
-        $this->printer->setJustification(Printer::JUSTIFY_LEFT);
     }
 
-    /**
-     * 2. Tipo e Número / Série e Data — 2 linhas, sem espaço extra
-     */
-    private function bloco2TipoNumero(DocumentoFiscal $documento): void
+    // ─────────────────────────────────────────────────────
+    // HELPERS INTERNOS
+    // ─────────────────────────────────────────────────────
+
+    private function resolverDocInfo(DocumentoFiscal $documento): DocumentoFiscal
     {
-        $this->printer->setEmphasis(true);
-        $this->printer->text(
-            $this->cols($documento->tipo_documento_nome, 'N ' . $documento->numero_documento) . "\n"
+        if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
+            $origem = DocumentoFiscal::find($documento->fatura_id);
+            return $origem ?? $documento;
+        }
+        return $documento;
+    }
+
+    /** Centraliza texto dentro da largura $this->L */
+    private function centrar(string $texto): string
+    {
+        $len = mb_strlen($texto);
+        if ($len >= $this->L) return $texto;
+        $pad = (int)(($this->L - $len) / 2);
+        return str_repeat(' ', $pad) . $texto;
+    }
+
+    /** Linha com dois campos alinhados (esquerda | direita) */
+    private function linhaLR(string $esquerda, string $direita): string
+    {
+        $tamanho = $this->L - mb_strlen($direita);
+        return str_pad($esquerda, $tamanho) . $direita . "\n";
+    }
+
+    // ====================== BLOCOS ======================
+
+private function bloco1Cabecalho(Printer $p, array $empresa = []): void
+{
+    $empresa = is_array($empresa) ? $empresa : [];
+    $L = $this->L ?? 48;
+
+    $p->setJustification(Printer::JUSTIFY_CENTER);
+
+    // — Logo (opcional) —
+    if (!empty($this->logo) && file_exists(public_path($this->logo))) {
+        try {
+            $img = EscposImage::load(public_path($this->logo), false);
+            $p->bitImage($img);
+        } catch (\Throwable $e) {
+            error_log("Erro ao carregar logo: " . $e->getMessage());
+        }
+    }
+
+    // — Nome da empresa —
+    $p->setEmphasis(true);
+    $p->setTextSize(2, 1);
+    $p->text(mb_strtoupper($empresa['nome'] ?? 'EMPRESA', 'UTF-8') . "\n");
+    $p->setTextSize(1, 1);
+    $p->setEmphasis(false);
+
+    // — Slogan —
+    if (!empty($this->slogan)) {
+        $p->text($this->slogan . "\n");
+    }
+
+    $p->text(str_repeat('-', $L) . "\n");
+
+    // — Endereço —
+    if (!empty($this->endereco)) {
+        $p->text($this->endereco . "\n");
+    }
+
+    // — NIF —
+    $p->text('NIF: ' . ($empresa['nif'] ?? '') . "\n");
+    $p->text(str_repeat('-', $L) . "\n");
+
+    // — Contactos —
+    $linhas = [];
+    if (!empty($this->telefone)) {
+        $linha = 'Tel: ' . $this->telefone;
+        if (!empty($this->telefone2)) $linha .= ' / ' . $this->telefone2;
+        $linhas[] = $linha;
+    }
+    if (!empty($this->email)) $linhas[] = 'Email: ' . $this->email;
+
+    foreach ($linhas as $linha) {
+        $p->text($linha . "\n");
+    }
+
+    $p->text(str_repeat('=', $L) . "\n");
+    $p->setJustification(Printer::JUSTIFY_LEFT);
+}
+
+    private function bloco2TipoNumero(Printer $p, DocumentoFiscal $d): void
+    {
+        $p->setJustification(Printer::JUSTIFY_CENTER);
+        $p->setEmphasis(true);
+        $p->text(
+            ($d->tipo_documento_nome ?? $d->tipo_documento)
+                . ' N '
+                . ($d->numero_documento ?? '')
+                . "\n"
         );
-        $this->printer->setEmphasis(false);
+        $p->setEmphasis(false);
+        $p->setJustification(Printer::JUSTIFY_LEFT);
 
-        $data = \Carbon\Carbon::parse($documento->data_emissao)->format('d/m/Y');
-        $hora = $documento->hora_emissao ? substr($documento->hora_emissao, 0, 5) : '';
-        $this->printer->text(
-            $this->cols('Serie: ' . ($documento->serie ?? ''), $data . ' ' . $hora) . "\n"
+        $data = date('d/m/Y', strtotime($d->data_emissao ?? now()));
+        $hora = $d->hora_emissao ? substr($d->hora_emissao, 0, 5) : '';
+
+        // — Série à esquerda, data+hora à direita (dado original) —
+        $p->text($this->linhaLR('Serie: ' . ($d->serie ?? ''), $data . ' ' . $hora));
+        $p->text(str_repeat('-', $this->L) . "\n");
+    }
+
+    private function bloco3OrigemRc(Printer $p, DocumentoFiscal $origem): void
+    {
+        $p->text(
+            'Ref.: '
+                . ($origem->tipo_documento_nome ?? $origem->tipo_documento)
+                . ' N '
+                . $origem->numero_documento
+                . "\n"
         );
-        $this->printer->text("Operador: " . $documento->user->name . "\n");
-        $this->printer->text($this->sep() . "\n");
+        $p->text(str_repeat('-', $this->L) . "\n");
     }
 
-    /**
-     * 3. Referência de origem (RC)
-     */
-    private function bloco3OrigemRc(DocumentoFiscal $origem): void
+    private function bloco4Cliente(Printer $p, array $cliente): void
     {
-        $this->printer->text('Ref.: ' . $origem->tipo_documento_nome . ' N ' . $origem->numero_documento . "\n");
-        $this->printer->text($this->sep() . "\n");
+        $p->setEmphasis(true);
+        $p->text('Cliente: ' . ($cliente['nome'] ?? 'Consumidor Final') . "\n");
+        $p->setEmphasis(false);
+        if (!empty($cliente['nif'])) $p->text('NIF: ' . $cliente['nif'] . "\n");
+        $p->text(str_repeat('-', $this->L) . "\n");
     }
 
-    /**
-     * 4. Cliente — compacto, sem linha em branco
-     */
-    private function bloco4Cliente(array $cliente): void
+    private function bloco5Itens(Printer $p, iterable $itens): void
     {
-        $this->printer->setEmphasis(true);
-        $this->printer->text('Cliente: ' . $this->fit($cliente['nome'] ?? 'Consumidor Final', $this->L - 9) . "\n");
-        $this->printer->setEmphasis(false);
-        if (!empty($cliente['nif'])) $this->printer->text('NIF: ' . $cliente['nif'] . "\n");
-        $this->printer->text($this->sep() . "\n");
-    }
-
-    /**
-     * 5. Itens — colunas compactas sem espaços desnecessários
-     *    Layout: DESC(20) QTD(4) TOTAL(resto)
-     */
-    private function bloco5Itens(iterable $itens): void
-    {
-        $wD = 20;                       // descrição
-        $wQ = 4;                        // qtd
-        $wT = $this->L - $wD - $wQ - 2; // total (2 separadores)
-
-        // Cabeçalho compacto
-        $this->printer->setEmphasis(true);
-        $this->printer->text(
-            str_pad('Desc', $wD) . ' ' .
-                str_pad('Qtd', $wQ, ' ', STR_PAD_LEFT) . ' ' .
-                str_pad('Total', $wT, ' ', STR_PAD_LEFT) . "\n"
-        );
-        $this->printer->setEmphasis(false);
-        $this->printer->text($this->sep('-') . "\n");
+        $p->setEmphasis(true);
+        $p->text("Desc                  Qtd     Total\n");
+        $p->setEmphasis(false);
+        $p->text(str_repeat('-', $this->L) . "\n");
 
         foreach ($itens as $item) {
-            $desc  = str_pad($this->fit($item->descricao ?? '', $wD), $wD);
-            $qtd   = str_pad(number_format((float)($item->quantidade ?? 1), 0), $wQ, ' ', STR_PAD_LEFT);
-            $total = str_pad(number_format((float)($item->total_linha ?? 0), 2, ',', '.') . 'Kz', $wT, ' ', STR_PAD_LEFT);
+            $desc  = substr($item->descricao ?? 'Item', 0, 20);
+            $qtd   = number_format((float)($item->quantidade ?? 1), 0);
+            $total = number_format((float)($item->total_linha ?? 0), 2, ',', '.') . ' Kz';
 
-            $this->printer->text($desc . ' ' . $qtd . ' ' . $total . "\n");
-
-            // Taxas numa linha só — compacto
-            $iva = (float)($item->taxa_iva ?? 0) > 0 ? 'IVA:' . $item->taxa_iva . '%' : 'IVA:-';
-            $ret = (float)($item->valor_retencao ?? 0) > 0
-                ? 'Ret:' . number_format((float)($item->taxa_retencao ?? 0), 1) . '%'
-                : '';
-
-            $linha = ' ' . $iva . ($ret ? '  ' . $ret : '');
-            $this->printer->setFont(Printer::FONT_B);
-            $this->printer->text($linha . "\n");
-            $this->printer->setFont(Printer::FONT_A);
+            $p->text(
+                str_pad($desc, 20) .
+                    str_pad($qtd,  8, ' ', STR_PAD_LEFT) .
+                    str_pad($total, 15, ' ', STR_PAD_LEFT) . "\n"
+            );
         }
 
-        $this->printer->text($this->sep('=') . "\n");
+        $p->text(str_repeat('=', $this->L) . "\n");
     }
 
-    /**
-     * 6. Totais — label esq, valor dir, sem espaços extras
-     */
-    private function bloco6Totais(DocumentoFiscal $documento, DocumentoFiscal $docInfo): void
+    private function bloco6Totais(Printer $p, DocumentoFiscal $d, DocumentoFiscal $docInfo): void
     {
-        $this->printer->text($this->cols('Base Tributavel:', $this->kz($docInfo->base_tributavel ?? 0)) . "\n");
-        $this->printer->text($this->cols('Total IVA:', $this->kz($docInfo->total_iva ?? 0)) . "\n");
+        $p->text("Base Tributavel: " . number_format((float)($docInfo->base_tributavel ?? 0), 2, ',', '.') . " Kz\n");
+        $p->text("Total IVA:       " . number_format((float)($docInfo->total_iva       ?? 0), 2, ',', '.') . " Kz\n");
 
         if ((float)($docInfo->total_retencao ?? 0) > 0) {
-            $this->printer->text($this->cols('Total Retencao:', '-' . $this->kz($docInfo->total_retencao)) . "\n");
+            $p->text("Retencao:       -" . number_format((float)$docInfo->total_retencao, 2, ',', '.') . " Kz\n");
         }
 
-        $this->printer->text($this->sep('-') . "\n");
+        $p->text(str_repeat('-', $this->L) . "\n");
 
-        $this->printer->setEmphasis(true);
-        $this->printer->text($this->cols('TOTAL:', $this->kz($documento->total_liquido)) . "\n");
-        $this->printer->setEmphasis(false);
-        $this->printer->text($this->sep('=') . "\n");
+        $p->setEmphasis(true);
+        $p->text("TOTAL:           " . number_format((float)$d->total_liquido, 2, ',', '.') . " Kz\n");
+        $p->setEmphasis(false);
+
+        $p->text(str_repeat('=', $this->L) . "\n");
     }
 
-    /**
-     * 7. QR Code — gráfico ESC/POS ou texto fallback
-     */
-    private function bloco7QrCode(string $qrCode): void
-    {
-        $this->printer->setJustification(Printer::JUSTIFY_CENTER);
-        $this->printer->setFont(Printer::FONT_B);
-        $this->printer->text("QR AGT DP71/25\n");
-        $this->printer->setFont(Printer::FONT_A);
+private function bloco7QrCode(Printer $p, string $qrCode): void
+{
+    $L = $this->L ?? 48; // largura da linha, padrão 48 se não definido
 
-        try {
-            // Tamanho 3 = módulos de 3px — mais pequeno, cabe melhor no talão
-            $this->printer->qrCode($qrCode, Printer::QR_ECLEVEL_M, 3);
-        } catch (\Throwable $e) {
-            // Fallback: texto em font B (menor)
-            $this->printer->setJustification(Printer::JUSTIFY_LEFT);
-            $this->printer->setFont(Printer::FONT_B);
-            foreach (str_split($qrCode, 58) as $linha) {
-                $this->printer->text($linha . "\n");
-            }
-            $this->printer->setFont(Printer::FONT_A);
+    $p->setJustification(Printer::JUSTIFY_CENTER);
+
+    if (!empty($this->rotuloQrCode)) {
+        $p->text($this->rotuloQrCode . "\n");
+    }
+
+    try {
+        $p->qrCode($qrCode, Printer::QR_ECLEVEL_M, 3);
+    } catch (\Throwable $e) {
+        error_log("Erro ao imprimir QR Code: " . $e->getMessage());
+        $p->text("[QR Code]\n");
+    }
+
+    $p->setJustification(Printer::JUSTIFY_LEFT);
+    $p->text(str_repeat('-', $L) . "\n");
+}
+
+    private function bloco8Hash(Printer $p, string $hash): void
+    {
+        $p->text("Hash: " . substr($hash, 0, $this->hashMaxChars) . "\n");
+        $p->text(str_repeat('-', $this->L) . "\n");
+    }
+
+    private function bloco9Rodape(Printer $p): void
+    {
+        $p->setJustification(Printer::JUSTIFY_CENTER);
+
+        // — Política de devolução (estático, opcional) —
+        if (!empty($this->politicaDevolucao)) {
+            $p->text(str_repeat('-', $this->L) . "\n");
+            // Quebra o texto em linhas para caber na largura do talão
+            $linhas = wordwrap($this->politicaDevolucao, $this->L, "\n", true);
+            $p->text($linhas . "\n");
         }
 
-        $this->printer->setJustification(Printer::JUSTIFY_LEFT);
-        $this->printer->text($this->sep() . "\n");
-    }
-
-    /**
-     * 8. Hash Fiscal — font B para caber na linha
-     */
-    private function bloco8Hash(string $hash): void
-    {
-        $this->printer->setFont(Printer::FONT_B);
-        $this->printer->text('Hash: ');
-        foreach (str_split($hash, 58) as $linha) {
-            $this->printer->text($linha . "\n");
-        }
-        $this->printer->setFont(Printer::FONT_A);
-        $this->printer->text($this->sep() . "\n");
-    }
-
-    /**
-     * 9. Rodapé compacto
-     */
-    private function bloco9Rodape(): void
-    {
-        $this->printer->setJustification(Printer::JUSTIFY_CENTER);
-        $this->printer->setFont(Printer::FONT_B);
-        $this->printer->text("Processado por computador\n");
-        $this->printer->setFont(Printer::FONT_A);
-        $this->printer->text($this->sep('-') . "\n");
-        $this->printer->setEmphasis(true);
-        $this->printer->text("Obrigado pela preferência!\n");
-        $this->printer->text("Volte sempre!\n");
-        $this->printer->setEmphasis(false);
-        $this->printer->text("*** Fim do Documento ***\n");
-        $this->printer->setJustification(Printer::JUSTIFY_LEFT);
-        $this->printer->feed(3);
-    }
-
-    /* ══════════════════════════════════════════════════════════════════
-       HELPERS
-    ══════════════════════════════════════════════════════════════════ */
-
-    private function conectar(): void
-    {
-        $so = strtoupper(substr(PHP_OS, 0, 3));
-
-        if ($so === 'WIN') {
-            // WINDOWS — use o nome exato da impressora local USB
-            // Abra "Dispositivos e Impressoras" e copie o nome que aparece
-            $nomeWindows = 'TM-T88IV'; // substitua pelo nome correto da sua impressora
-            $connector = new WindowsPrintConnector("POS-80");
-        } elseif ($so === 'LIN') {
-            // LINUX (CUPS)
-            $connector = new CupsPrintConnector("POS-80");
-        } else {
-            // FALLBACK (rede TCP/IP)
-            $connector = new NetworkPrintConnector($this->nomeImpressora, 9100);
-        }
-
-        $profile       = CapabilityProfile::load('default');
-        $this->printer = new Printer($connector, $profile);
-    }
-
-    private function fechar(): void
-    {
-        try {
-            $this->printer?->close();
-        } catch (\Throwable) {
-        }
-    }
-
-    /** Separador exato da largura do papel */
-    private function sep(string $c = '-'): string
-    {
-        return str_repeat($c, $this->L);
-    }
-
-    /**
-     * Duas colunas: esq à esquerda, dir à direita, total = $this->L
-     */
-    private function cols(string $esq, string $dir, ?int $w = null): string
-    {
-        $w   = $w ?? $this->L;
-        $dL  = mb_strlen($dir);
-        $max = $w - $dL - 1;
-        if (mb_strlen($esq) > $max) $esq = mb_substr($esq, 0, max(0, $max));
-        $sp  = $w - mb_strlen($esq) - $dL;
-        return $esq . str_repeat(' ', max(1, $sp)) . $dir;
-    }
-
-    /**
-     * Trunca texto para caber em $max caracteres
-     */
-    private function fit(string $s, int $max = 0): string
-    {
-        $max = $max ?: $this->L;
-        return mb_strlen($s) <= $max ? $s : mb_substr($s, 0, $max - 1) . '.';
-    }
-
-    /** Formata valor em Kz */
-    private function kz(float|int|null $v): string
-    {
-        return number_format((float)($v ?? 0), 2, ',', '.') . ' Kz';
-    }
-
-    /**
-     * Redimensiona imagem para $maxPx pixels de largura usando GD.
-     * Devolve caminho do ficheiro temporário redimensionado,
-     * ou null se GD não estiver disponível.
-     */
-    private function redimensionarImagem(string $path, int $maxPx): ?string
-    {
-        if (!extension_loaded('gd')) return null;
-
-        $info = @getimagesize($path);
-        if (!$info) return null;
-
-        [$w, $h, $type] = [$info[0], $info[1], $info[2]];
-
-        // Só redimensiona se for maior que $maxPx
-        if ($w <= $maxPx) return $path;
-
-        $ratio  = $maxPx / $w;
-        $newW   = $maxPx;
-        $newH   = (int) round($h * $ratio);
-
-        $src = match ($type) {
-            IMAGETYPE_PNG  => imagecreatefrompng($path),
-            IMAGETYPE_JPEG => imagecreatefromjpeg($path),
-            IMAGETYPE_GIF  => imagecreatefromgif($path),
-            default        => null,
-        };
-        if (!$src) return null;
-
-        $dst = imagecreatetruecolor($newW, $newH);
-
-        // Preservar transparência PNG
-        if ($type === IMAGETYPE_PNG) {
-            imagealphablending($dst, false);
-            imagesavealpha($dst, true);
-            $transparent = imagecolorallocatealpha($dst, 255, 255, 255, 127);
-            imagefilledrectangle($dst, 0, 0, $newW, $newH, $transparent);
-        }
-
-        imagecopyresampled($dst, $src, 0, 0, 0, 0, $newW, $newH, $w, $h);
-
-        $tmp = sys_get_temp_dir() . '/logo_termica_' . uniqid() . '.png';
-        imagepng($dst, $tmp);
-
-        return $tmp;
+        $p->text(str_repeat('=', $this->L) . "\n");
+        $p->text($this->textoProcessamento . "\n");   // dado original
+        $p->text($this->mensagemFinal . "\n");          // estático configurável
+        $p->text("*** Fim do Documento ***\n");          // dado original
+        $p->setJustification(Printer::JUSTIFY_LEFT);
+        $p->feed(3);
     }
 }

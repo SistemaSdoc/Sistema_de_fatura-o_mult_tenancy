@@ -4,11 +4,8 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
 
   experimental: {
-    optimizePackageImports: [
-      "lucide-react",
-      "date-fns",
-      "recharts",
-    ],
+    optimizePackageImports: ["lucide-react", "date-fns", "recharts"],
+    // Remova turbopack: {} se não estiver usando Turbopack explicitamente
   },
 
   compiler: {
@@ -24,45 +21,17 @@ const nextConfig: NextConfig = {
     formats: ["image/avif", "image/webp"],
   },
 
-  // ✅ Turbopack config (Next.js 16)
-  turbopack: {},
-
-  // ✅ Permitir WebSocket HMR de qualquer IP
+  // ✅ Configuração correta para permitir acesso via IP da rede (importante para o seu caso 192.168.1.193)
   allowedDevOrigins: [
     "localhost",
     "127.0.0.1",
-    "192.168.1.199",
+    "192.168.1.193",     // seu IP atual
+    "192.168.1.199",     // você tinha esse também
+    "192.168.1.*",       // curinga para toda a sua rede 192.168.1.x
     "192.168.0.*",
     "10.*",
   ],
 
-  // ✅ Headers para CORS
-  async headers() {
-    return [
-      {
-        source: "/:path*",
-        headers: [
-          {
-            key: "Access-Control-Allow-Credentials",
-            value: "true",
-          },
-          {
-            key: "Access-Control-Allow-Origin",
-            value: "*",
-          },
-          {
-            key: "Access-Control-Allow-Methods",
-            value: "GET,OPTIONS,PATCH,DELETE,POST,PUT",
-          },
-          {
-            key: "Access-Control-Allow-Headers",
-            value:
-              "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version",
-          },
-        ],
-      },
-    ];
-  },
 };
 
 export default nextConfig;

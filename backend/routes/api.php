@@ -14,12 +14,22 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\RelatoriosController;
+use App\Http\Controllers\QzSignController;
 
 $uuidPattern = '[0-9a-fA-F-]{36}';
 
 // ==================== ROTAS PÚBLICAS ====================
 Route::post('/users', [UserController::class, 'store']);
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+
+// ============================================================
+// ROTAS QZ TRAY — FORA DO AUTH (obrigatório!)
+// O QZ Tray chama estas rotas ANTES de qualquer autenticação.
+// Se ficarem dentro do middleware auth:sanctum, recebem 401
+// e o QZ Tray continua a mostrar os pop-ups de permissão.
+// ============================================================
+Route::get('/qz/certificate', [QzSignController::class, 'certificate'])->name('qz.certificate');
+Route::get('/qz/sign',        [QzSignController::class, 'sign'])->name('qz.sign');
 
 // ==================== ROTAS PROTEGIDAS ====================
 Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
@@ -34,8 +44,6 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
         Route::get('/estatisticas-pagamentos', [DashboardController::class, 'estatisticasPagamentos'])->name('dashboard.estatisticas-pagamentos');
         Route::get('/alertas', [DashboardController::class, 'alertasPendentes'])->name('dashboard.alertas');
         Route::get('/evolucao-mensal', [DashboardController::class, 'evolucaoMensal'])->name('dashboard.evolucao');
-        Route::get('/estatisticas-servicos', [DashboardController::class, 'estatisticasServicos'])->name('dashboard.estatisticas-servicos');
-        Route::get('/ranking-servicos', [DashboardController::class, 'rankingServicos'])->name('dashboard.ranking-servicos');
     });
 
     // ==================== ADMIN ====================
@@ -119,19 +127,15 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
         Route::prefix('vendas')->group(function () use ($uuidPattern) {
             Route::get('/', [VendaController::class, 'index'])->name('vendas.index');
             Route::post('/', [VendaController::class, 'store'])->name('vendas.store');
-            Route::get('/create', [VendaController::class, 'create'])->name('vendas.create');
-            Route::get('/estatisticas', [VendaController::class, 'estatisticas'])->name('vendas.estatisticas');
-            Route::get('/relatorio', [VendaController::class, 'relatorio'])->name('vendas.relatorio');
             Route::get('/{venda}', [VendaController::class, 'show'])->where('venda', $uuidPattern)->name('vendas.show');
             Route::post('/{venda}/cancelar', [VendaController::class, 'cancelar'])->where('venda', $uuidPattern)->name('vendas.cancelar');
             Route::post('/{venda}/recibo', [VendaController::class, 'gerarRecibo'])->where('venda', $uuidPattern)->name('vendas.recibo');
-            Route::post('/{venda}/converter', [VendaController::class, 'converterProformaParaFatura'])->where('venda', $uuidPattern)->name('vendas.converter');
         });
 
         // ===== DOCUMENTOS FISCAIS =====
         Route::prefix('documentos-fiscais')->group(function () use ($uuidPattern) {
 
-            // --- Rotas estáticas — ANTES das rotas com {id} ---
+            // Rotas estáticas (primeiro)
             Route::get('/exportar-excel', [DocumentoFiscalController::class, 'exportarExcel'])->name('documentos.exportar-excel');
             Route::get('/adiantamentos-pendentes', [DocumentoFiscalController::class, 'adiantamentosPendentes'])->name('documentos.adiantamentos-pendentes');
             Route::get('/proformas-pendentes', [DocumentoFiscalController::class, 'proformasPendentes'])->name('documentos.proformas-pendentes');
@@ -140,25 +144,50 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
             Route::post('/processar-expirados', [DocumentoFiscalController::class, 'processarExpirados'])->name('documentos.processar-expirados');
             Route::post('/emitir', [DocumentoFiscalController::class, 'emitir'])->name('documentos.emitir');
 
+            // Rota QZ Tray (impressão térmica)
+            Route::get('/{id}/imprimir-termica-qz', [DocumentoFiscalController::class, 'imprimirTermicaQZ'])
+                ->where('id', $uuidPattern)
+                ->name('documentos.imprimir-termica-qz');
+
             // Listagem geral
             Route::get('/', [DocumentoFiscalController::class, 'index'])->name('documentos.index');
 
-            // --- Rotas com {id} — DEPOIS das rotas estáticas ---
-            Route::get('/{documento}', [DocumentoFiscalController::class, 'show'])->where('documento', $uuidPattern)->name('documentos.show');
+            // Rotas com {id} (depois das estáticas)
+            Route::get('/{documento}', [DocumentoFiscalController::class, 'show'])
+                ->where('documento', $uuidPattern)
+                ->name('documentos.show');
 
-            // CORRIGIDAS:
-            Route::get('/{id}/pdf/download', [DocumentoFiscalController::class, 'downloadPdf'])->where('id', $uuidPattern)->name('documentos.pdf-download');
-            Route::get('/{id}/imprimir-termica', [DocumentoFiscalController::class, 'imprimirTermica'])->where('id', $uuidPattern)->name('documentos.imprimir-termica');
-            Route::get('/{id}/print-view', [DocumentoFiscalController::class, 'printView'])->where('id', $uuidPattern)->name('documentos.print');
+            Route::get('/{id}/pdf/download', [DocumentoFiscalController::class, 'downloadPdf'])
+                ->where('id', $uuidPattern)
+                ->name('documentos.pdf-download');
 
-            // Recibos - método correto é listarRecibos
-            Route::get('/{documento}/recibos', [DocumentoFiscalController::class, 'listarRecibos'])->where('documento', $uuidPattern)->name('documentos.recibos');
+            Route::get('/{id}/print-view', [DocumentoFiscalController::class, 'printView'])
+                ->where('id', $uuidPattern)
+                ->name('documentos.print-view');
 
-            Route::post('/{id}/recibo', [DocumentoFiscalController::class, 'gerarRecibo'])->where('id', $uuidPattern)->name('documentos.gerar-recibo');
-            Route::post('/{documento}/cancelar', [DocumentoFiscalController::class, 'cancelar'])->where('documento', $uuidPattern)->name('documentos.cancelar');
-            Route::post('/{id}/nota-credito', [DocumentoFiscalController::class, 'criarNotaCredito'])->where('id', $uuidPattern)->name('documentos.nota-credito');
-            Route::post('/{id}/nota-debito', [DocumentoFiscalController::class, 'criarNotaDebito'])->where('id', $uuidPattern)->name('documentos.nota-debito');
-            Route::post('/{id}/vincular-adiantamento', [DocumentoFiscalController::class, 'vincularAdiantamento'])->where('id', $uuidPattern)->name('documentos.vincular');
+            Route::get('/{documento}/recibos', [DocumentoFiscalController::class, 'listarRecibos'])
+                ->where('documento', $uuidPattern)
+                ->name('documentos.recibos');
+
+            Route::post('/{id}/recibo', [DocumentoFiscalController::class, 'gerarRecibo'])
+                ->where('id', $uuidPattern)
+                ->name('documentos.gerar-recibo');
+
+            Route::post('/{documento}/cancelar', [DocumentoFiscalController::class, 'cancelar'])
+                ->where('documento', $uuidPattern)
+                ->name('documentos.cancelar');
+
+            Route::post('/{id}/nota-credito', [DocumentoFiscalController::class, 'criarNotaCredito'])
+                ->where('id', $uuidPattern)
+                ->name('documentos.nota-credito');
+
+            Route::post('/{id}/nota-debito', [DocumentoFiscalController::class, 'criarNotaDebito'])
+                ->where('id', $uuidPattern)
+                ->name('documentos.nota-debito');
+
+            Route::post('/{id}/vincular-adiantamento', [DocumentoFiscalController::class, 'vincularAdiantamento'])
+                ->where('id', $uuidPattern)
+                ->name('documentos.vincular');
         });
 
         // PAGAMENTOS

@@ -1,24 +1,31 @@
 "use client";
-
 import { useState, useRef, useEffect } from "react";
 import { DocumentoFiscal, TipoDocumento } from "@/services/DocumentoFiscal";
-import { Eye, FileText, Printer, Download, ChevronLeft, ChevronRight, Receipt, MoreVertical } from "lucide-react";
+import { Eye, FileText, Printer, Download, ChevronLeft, ChevronRight, Receipt } from "lucide-react";
 
 const TIPO_LABEL: Record<TipoDocumento, string> = {
-  FT:  "Fatura",
-  FR:  "Fatura-Recibo",
-  FP:  "Fatura Proforma",
-  FA:  "Fatura de Adiantamento",
-  NC:  "Nota de Crédito",
-  ND:  "Nota de Débito",
-  RC:  "Recibo",
+  FT: "Fatura",
+  FR: "Fatura-Recibo",
+  FP: "Fatura Proforma",
+  FA: "Fatura de Adiantamento",
+  NC: "Nota de Crédito",
+  ND: "Nota de Débito",
+  RC: "Recibo",
   FRt: "Fatura de Retificação",
 };
 
 interface ColorsTheme {
-  border: string; primary: string; success: string; teal?: string;
-  warning: string; danger: string; secondary: string; hover: string;
-  text: string; textSecondary: string; card: string;
+  border: string; 
+  primary: string; 
+  success: string; 
+  teal?: string;
+  warning: string; 
+  danger: string; 
+  secondary: string; 
+  hover: string;
+  text: string; 
+  textSecondary: string; 
+  card: string;
 }
 
 interface InvoiceTableProps {
@@ -26,36 +33,36 @@ interface InvoiceTableProps {
   loading: boolean;
   gerandoRecibo: string | null;
   baixandoPdf: string | null;
-  onVerDetalhes:   (doc: DocumentoFiscal) => void;
-  onGerarRecibo:   (doc: DocumentoFiscal) => Promise<DocumentoFiscal | void> | void;
-  /** Impressão térmica — abre nova tab com ?auto=1 */
-  onImprimir:      (doc: DocumentoFiscal) => void;
-  /** Impressão A4 via Laravel */
-  onImprimirA4:    (doc: DocumentoFiscal) => void;
-  onBaixarPdf:     (doc: DocumentoFiscal) => Promise<void>;
-  formatKz:        (v: number | string | undefined) => string;
-  formatQuantidade:(v: number | string | undefined) => string;
+  imprimindo: string | null;
+  onVerDetalhes: (doc: DocumentoFiscal) => void;
+  onGerarRecibo: (doc: DocumentoFiscal) => Promise<DocumentoFiscal | void> | void;
+  onImprimir: (doc: DocumentoFiscal) => void;
+  onImprimirA4: (doc: DocumentoFiscal) => void;
+  onBaixarPdf: (doc: DocumentoFiscal) => Promise<void>;
+  formatKz: (v: number | string | undefined) => string;
+  formatQuantidade?: (v: number | string | undefined) => string;
   documentoFiscalService: {
     getNomeCliente: (doc: DocumentoFiscal) => string;
-    getNifCliente:  (doc: DocumentoFiscal) => string | null;
+    getNifCliente: (doc: DocumentoFiscal) => string | null;
   };
   colors: ColorsTheme;
 }
 
 const POR_PAGINA = 10;
 
-
 /* ── Tipo badge ────────────────────────────────────────────── */
 function TipoBadge({ tipo, colors }: { tipo: TipoDocumento; colors: ColorsTheme }) {
   const palette: Partial<Record<TipoDocumento, { bg: string; text: string }>> = {
-    FT:  { bg: `${colors.textSecondary}1a`,           text: colors.secondary },
-    FR:  { bg: `${colors.success}1a`,            text: colors.success },
-    RC:  { bg: `${(colors.teal ?? colors.success)}1a`, text: colors.teal ?? colors.success },
-    FP:  { bg: `${colors.warning}1a`,            text: colors.warning },
-    NC:  { bg: `${colors.danger}1a`,             text: colors.danger },
-    ND:  { bg: `${colors.secondary}1a`,          text: colors.secondary },
+    FT: { bg: `${colors.textSecondary}1a`, text: colors.secondary },
+    FR: { bg: `${colors.success}1a`, text: colors.success },
+    RC: { bg: `${(colors.teal ?? colors.success)}1a`, text: colors.teal ?? colors.success },
+    FP: { bg: `${colors.warning}1a`, text: colors.warning },
+    NC: { bg: `${colors.danger}1a`, text: colors.danger },
+    ND: { bg: `${colors.secondary}1a`, text: colors.secondary },
   };
+
   const s = palette[tipo] ?? { bg: colors.hover, text: colors.textSecondary };
+
   return (
     <span
       className="inline-flex items-center px-2 py-0.5 text-xs font-semibold whitespace-nowrap"
@@ -68,7 +75,11 @@ function TipoBadge({ tipo, colors }: { tipo: TipoDocumento; colors: ColorsTheme 
 
 /* ── Botão de ícone ────────────────────────────────────────── */
 function IconBtn({
-  onClick, disabled = false, title, color, children,
+  onClick,
+  disabled = false,
+  title,
+  color,
+  children,
 }: {
   onClick: () => void;
   disabled?: boolean;
@@ -99,163 +110,13 @@ function Spinner({ color }: { color: string }) {
   );
 }
 
-/* ── Menu Dropdown de Ações ────────────────────────────────── */
-interface ActionMenuProps {
-  doc: DocumentoFiscal;
-  onVerDetalhes: (doc: DocumentoFiscal) => void;
-  onGerarRecibo: (doc: DocumentoFiscal) => Promise<DocumentoFiscal | void> | void;
-  onImprimir: (doc: DocumentoFiscal) => void;
-  onImprimirA4: (doc: DocumentoFiscal) => void;
-  onBaixarPdf: (doc: DocumentoFiscal) => Promise<void>;
-  gerandoRecibo: string | null;
-  baixandoPdf: string | null;
-  colors: ColorsTheme;
-  podeGerarRecibo: (doc: DocumentoFiscal) => boolean;
-}
-
-function ActionMenu({
-  doc,
-  onVerDetalhes,
-  onGerarRecibo,
-  onImprimir,
-  onImprimirA4,
-  onBaixarPdf,
-  gerandoRecibo,
-  baixandoPdf,
-  colors,
-  podeGerarRecibo,
-}: ActionMenuProps) {
-  const [aberto, setAberto] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function fecharAoClicarFora(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setAberto(false);
-      }
-    }
-    if (aberto) {
-      document.addEventListener("mousedown", fecharAoClicarFora);
-      return () => document.removeEventListener("mousedown", fecharAoClicarFora);
-    }
-  }, [aberto]);
-
-  const handleGerarRecibo = async () => {
-    try {
-      await onGerarRecibo(doc);
-      setAberto(false);
-    } catch {
-      /* erro já tratado no pai */
-    }
-  };
-
-  const handleBaixarPdf = async () => {
-    try {
-      await onBaixarPdf(doc);
-      setAberto(false);
-    } catch {
-      /* erro já tratado */
-    }
-  };
-
-  return (
-    <div ref={menuRef} className="relative">
-      <button
-        onClick={() => setAberto(!aberto)}
-        title="Mais ações"
-        className="p-1.5 transition-all hover:opacity-70 touch-manipulation"
-        style={{ color: colors.text }}
-      >
-        <MoreVertical size={16} />
-      </button>
-
-      {aberto && (
-        <div
-          className="absolute right-0 top-full mt-1 rounded-lg shadow-lg z-50 py-1 min-w-max"
-          style={{ backgroundColor: colors.card, borderColor: colors.border, border: `1px solid ${colors.border}` }}
-        >
-          {/* Ver Detalhes */}
-          <button
-            onClick={() => {
-              onVerDetalhes(doc);
-              setAberto(false);
-            }}
-            className="w-full px-3 py-2 text-sm text-left flex items-center gap-2 transition-colors hover:opacity-80"
-            style={{ color: colors.text }}
-          >
-            <Eye size={16} />
-            <span>Ver detalhes</span>
-          </button>
-
-          {/* Gerar Recibo */}
-          {podeGerarRecibo(doc) && (
-            <button
-              onClick={handleGerarRecibo}
-              disabled={gerandoRecibo === doc.id}
-              className="w-full px-3 py-2 text-sm text-left flex items-center gap-2 transition-colors hover:opacity-80 disabled:opacity-50"
-              style={{ color: colors.success }}
-            >
-              {gerandoRecibo === doc.id ? (
-                <Spinner color={colors.success} />
-              ) : (
-                <FileText size={16} />
-              )}
-              <span>{gerandoRecibo === doc.id ? "Gerando..." : "Gerar Recibo"}</span>
-            </button>
-          )}
-
-          {/* Imprimir Térmica */}
-          <button
-            onClick={() => {
-              onImprimir(doc);
-              setAberto(false);
-            }}
-            className="w-full px-3 py-2 text-sm text-left flex items-center gap-2 transition-colors hover:opacity-80"
-            style={{ color: colors.secondary }}
-          >
-            <Printer size={16} />
-            <span>Imprimir (Térmica)</span>
-          </button>
-
-          {/* Imprimir A4 */}
-          <button
-            onClick={() => {
-              onImprimirA4(doc);
-              setAberto(false);
-            }}
-            className="w-full px-3 py-2 text-sm text-left flex items-center gap-2 transition-colors hover:opacity-80"
-            style={{ color: colors.secondary }}
-          >
-            <Printer size={16} />
-            <span>Imprimir (A4)</span>
-          </button>
-
-          {/* Baixar PDF */}
-          <button
-            onClick={handleBaixarPdf}
-            disabled={baixandoPdf === doc.id}
-            className="w-full px-3 py-2 text-sm text-left flex items-center gap-2 transition-colors hover:opacity-80 disabled:opacity-50"
-            style={{ color: colors.text }}
-          >
-            {baixandoPdf === doc.id ? (
-              <Spinner color={colors.text} />
-            ) : (
-              <Download size={16} />
-            )}
-            <span>{baixandoPdf === doc.id ? "Baixando..." : "Baixar PDF"}</span>
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* ══════════════════════════════════════════════════════════ */
 export default function InvoiceTable({
   documentos,
   loading,
   gerandoRecibo,
   baixandoPdf,
+  imprimindo,
   onVerDetalhes,
   onGerarRecibo,
   onImprimir,
@@ -267,17 +128,15 @@ export default function InvoiceTable({
 }: InvoiceTableProps) {
 
   const [pagina, setPagina] = useState(1);
-
   const totalPag = Math.ceil(documentos.length / POR_PAGINA);
-  const pag      = Math.min(Math.max(pagina, 1), Math.max(totalPag, 1));
-  const slice    = documentos.slice((pag - 1) * POR_PAGINA, pag * POR_PAGINA);
+  const pag = Math.min(Math.max(pagina, 1), Math.max(totalPag, 1));
+  const slice = documentos.slice((pag - 1) * POR_PAGINA, pag * POR_PAGINA);
 
   /* Apenas FT não cancelado/pago pode gerar recibo */
   const podeGerarRecibo = (d: DocumentoFiscal) =>
-    d.tipo_documento === "FT" && !["cancelado", "paga"].includes(d.estado);
+    d.tipo_documento === "FT" && !["cancelado", "paga"].includes(d.estado || "");
 
-
-  /* ── Empty ────────────────────────────────────────────── */
+  /* ── Empty State ────────────────────────────────────────────── */
   if (documentos.length === 0) {
     return (
       <div className="p-10 text-center" style={{ color: colors.textSecondary }}>
@@ -287,7 +146,9 @@ export default function InvoiceTable({
         >
           <Receipt size={28} style={{ color: colors.border }} />
         </div>
-        <p className="font-medium text-sm" style={{ color: colors.text }}>Nenhum documento encontrado</p>
+        <p className="font-medium text-sm" style={{ color: colors.text }}>
+          Nenhum documento encontrado
+        </p>
         <p className="text-xs mt-1">Tente ajustar os filtros ou a pesquisa</p>
       </div>
     );
@@ -315,12 +176,11 @@ export default function InvoiceTable({
               <th className="px-3 py-2.5 text-right text-white font-semibold text-xs tracking-wide whitespace-nowrap">
                 Total
               </th>
-              <th className="px-3 py-2.5 text-center text-white font-semibold text-xs tracking-wide whitespace-nowrap min-w-[60px]">
+              <th className="px-3 py-2.5 text-center text-white font-semibold text-xs tracking-wide whitespace-nowrap min-w-[200px]">
                 Ações
               </th>
             </tr>
           </thead>
-
           <tbody>
             {slice.map((doc) => (
               <tr
@@ -330,7 +190,7 @@ export default function InvoiceTable({
                 onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = colors.hover)}
                 onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
               >
-                {/* Nº */}
+                {/* Nº Documento */}
                 <td className="px-3 py-2.5 font-mono text-xs font-medium whitespace-nowrap" style={{ color: colors.text }}>
                   {doc.numero_documento ?? `${doc.serie}-${String(doc.numero).padStart(5, "0")}`}
                 </td>
@@ -369,21 +229,61 @@ export default function InvoiceTable({
                   {formatKz(doc.total_liquido)}
                 </td>
 
-                {/* Ações */}
+                {/* Ações - Diretamente visíveis */}
                 <td className="px-3 py-2.5">
-                  <div className="flex items-center justify-center">
-                    <ActionMenu
-                      doc={doc}
-                      onVerDetalhes={onVerDetalhes}
-                      onGerarRecibo={onGerarRecibo}
-                      onImprimir={onImprimir}
-                      onImprimirA4={onImprimirA4}
-                      onBaixarPdf={onBaixarPdf}
-                      gerandoRecibo={gerandoRecibo}
-                      baixandoPdf={baixandoPdf}
-                      colors={colors}
-                      podeGerarRecibo={podeGerarRecibo}
-                    />
+                  <div className="flex items-center justify-center gap-1">
+                    {/* Ver Detalhes */}
+                    <IconBtn
+                      onClick={() => onVerDetalhes(doc)}
+                      title="Ver detalhes"
+                      color={colors.text}
+                    >
+                      <Eye size={16} />
+                    </IconBtn>
+
+                    {/* Gerar Recibo */}
+                    {podeGerarRecibo(doc) && (
+                      <IconBtn
+                        onClick={() => onGerarRecibo(doc)}
+                        disabled={gerandoRecibo === doc.id}
+                        title="Gerar Recibo"
+                        color={colors.success}
+                      >
+                        {gerandoRecibo === doc.id ? (
+                          <Spinner color={colors.success} />
+                        ) : (
+                          <FileText size={16} />
+                        )}
+                      </IconBtn>
+                    )}
+
+                    {/* Imprimir Térmica */}
+                    <IconBtn
+                      onClick={() => onImprimir(doc)}
+                      disabled={imprimindo === doc.id}
+                      title="Imprimir (Térmica 80mm)"
+                      color={colors.secondary}
+                    >
+                      {imprimindo === doc.id ? (
+                        <Spinner color={colors.secondary} />
+                      ) : (
+                        <Printer size={16} />
+                      )}
+                    </IconBtn>
+
+                    {/* Baixar PDF */}
+                    <IconBtn
+                      onClick={() => onBaixarPdf(doc)}
+                      disabled={baixandoPdf === doc.id}
+                      title="Baixar PDF"
+                      color={colors.text}
+                    >
+                      {baixandoPdf === doc.id ? (
+                        <Spinner color={colors.text} />
+                      ) : (
+                        <Download size={16} />
+                      )}
+                    </IconBtn>
                   </div>
                 </td>
               </tr>
@@ -401,12 +301,11 @@ export default function InvoiceTable({
           <span style={{ color: colors.textSecondary }}>
             {(pag - 1) * POR_PAGINA + 1}–{Math.min(pag * POR_PAGINA, documentos.length)} de {documentos.length}
           </span>
-
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => setPagina(pag - 1)}
               disabled={pag === 1}
-              className="flex items-center gap-1 px-2.5 py-1.5  font-medium disabled:opacity-40 transition-colors"
+              className="flex items-center gap-1 px-2.5 py-1.5 font-medium disabled:opacity-40 transition-colors"
               style={{
                 backgroundColor: pag === 1 ? colors.hover : colors.primary,
                 color: pag === 1 ? colors.textSecondary : "white",
@@ -414,11 +313,9 @@ export default function InvoiceTable({
             >
               <ChevronLeft size={13} /> Anterior
             </button>
-
             <span className="px-2" style={{ color: colors.text }}>
               {pag} / {totalPag}
             </span>
-
             <button
               onClick={() => setPagina(pag + 1)}
               disabled={pag === totalPag}

@@ -15,19 +15,20 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
-/**
- * DocumentoFiscalController
- *
- * Responsável apenas por: validação de request, autorização, chamar o service
- * e devolver resposta JSON/PDF/Excel.
- * Toda a lógica de negócio (assinatura RSA, QR Code, IVA, SAF-T) está no
- * DocumentoFiscalService.
- */
 class DocumentoFiscalController extends Controller
 {
     public function __construct(
         protected DocumentoFiscalService $documentoService
     ) {}
+
+    /**
+     * DocumentoFiscalController
+     *
+     * Responsável apenas por: validação de request, autorização, chamar o service
+     * e devolver resposta JSON/PDF/Excel.
+     * Toda a lógica de negócio (assinatura RSA, QR Code, IVA, SAF-T) está no
+     * DocumentoFiscalService.
+     */
 
     /* =====================================================================
      | LISTAGEM
@@ -56,8 +57,14 @@ class DocumentoFiscalController extends Controller
             ]);
 
             // Normaliza strings booleanas enviadas pelo frontend ("true"/"false" → true/false)
-            $booleans = ['apenas_vendas', 'apenas_nao_vendas', 'pendentes',
-                         'adiantamentos_pendentes', 'proformas_pendentes', 'com_retencao'];
+            $booleans = [
+                'apenas_vendas',
+                'apenas_nao_vendas',
+                'pendentes',
+                'adiantamentos_pendentes',
+                'proformas_pendentes',
+                'com_retencao'
+            ];
             foreach ($booleans as $campo) {
                 if (isset($filtros[$campo])) {
                     $filtros[$campo] = filter_var($filtros[$campo], FILTER_VALIDATE_BOOLEAN);
@@ -155,7 +162,6 @@ class DocumentoFiscalController extends Controller
                 'message' => 'Documento emitido com sucesso',
                 'data'    => $documento,
             ], 201);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json(['success' => false, 'message' => 'Erro de validação', 'errors' => $e->errors()], 422);
         } catch (\InvalidArgumentException $e) {
@@ -189,7 +195,6 @@ class DocumentoFiscalController extends Controller
                 'message' => 'Recibo gerado com sucesso',
                 'data'    => $recibo,
             ], 201);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             return response()->json(['success' => false, 'message' => 'Documento não encontrado'], 404);
         } catch (\InvalidArgumentException $e) {
@@ -226,7 +231,6 @@ class DocumentoFiscalController extends Controller
                 'message' => 'Nota de Crédito emitida com sucesso',
                 'data'    => $nc,
             ], 201);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             return response()->json(['success' => false, 'message' => 'Documento de origem não encontrado'], 404);
         } catch (\InvalidArgumentException $e) {
@@ -263,7 +267,6 @@ class DocumentoFiscalController extends Controller
                 'message' => 'Nota de Débito emitida com sucesso',
                 'data'    => $nd,
             ], 201);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             return response()->json(['success' => false, 'message' => 'Documento de origem não encontrado'], 404);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -297,7 +300,6 @@ class DocumentoFiscalController extends Controller
                 'message' => 'Adiantamento vinculado com sucesso',
                 'data'    => $resultado,
             ]);
-
         } catch (\InvalidArgumentException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
@@ -323,7 +325,6 @@ class DocumentoFiscalController extends Controller
                 'message' => 'Documento cancelado com sucesso',
                 'data'    => $resultado,
             ]);
-
         } catch (\InvalidArgumentException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
@@ -501,50 +502,60 @@ class DocumentoFiscalController extends Controller
     }
 
     /* =====================================================================
-     | IMPRESSÃO TÉRMICA - DIRETO NA IMPRESSORA SEM PDF
-     | ================================================================== */
-
-    public function imprimirTermica(string $id, ImpressoraTermicaService $impressoraService): JsonResponse
+       | IMPRESSÃO TÉRMICA PARA QZ TRAY (Base64) - CORRIGIDO
+       | ================================================================== */
+    public function imprimirTermicaQZ(string $id, ImpressoraTermicaService $impressoraService): JsonResponse
     {
         try {
             $documento = $this->documentoService->buscarDocumento($id);
             $dados = $this->documentoService->dadosParaPdf($documento);
-            
-            // Buscar itens
+
+            // Para Recibo (RC) — usa dados da fatura original
             $docInfo = $documento;
             if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
                 $docInfo = DocumentoFiscal::with(['itens.produto', 'cliente'])
-                    ->find($documento->fatura_id);
+                    ->findOrFail($documento->fatura_id);
             }
-            
+
             $dados['itens'] = $docInfo->itens ?? [];
             $dados['docInfo'] = $docInfo;
-            
-            // Imprimir na térmica
-            $impressoraService->imprimirDocumento($documento, $dados);
-            
+
+            // Gera os bytes ESC/POS
+            $bytes = $impressoraService->gerarEscposBytes($documento, $dados);
+
             return response()->json([
                 'success' => true,
-                'message' => 'Documento impresso com sucesso'
+                'message' => 'Arquivo preparado para impressão via QZ Tray',
+                'data' => [
+                    'base64' => base64_encode($bytes),
+                    'tipo'   => $documento->tipo_documento,
+                    'numero' => $documento->numero_documento ?? $documento->id,
+                ]
             ]);
-            
-        } catch (\Exception $e) {
-            Log::error('Erro na impressão térmica', [
-                'id' => $id,
-                'error' => $e->getMessage()
-            ]);
-            
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao imprimir: ' . $e->getMessage()
+                'message' => 'Documento não encontrado'
+            ], 404);
+        } catch (\Exception $e) {
+            Log::error('Erro ao preparar impressão QZ Tray', [
+                'id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao preparar impressão: ' . $e->getMessage()
             ], 500);
         }
     }
 
-    /* =====================================================================
-     | IMPRESSÃO — HTML com window.print() (A4)
-     | ================================================================== */
 
+
+    /* =====================================================================
+       | IMPRESSÃO HTML (A4) e PDF permanecem iguais
+       | ================================================================== */
     public function printView(string $id): \Illuminate\Contracts\View\View
     {
         try {
@@ -591,7 +602,6 @@ class DocumentoFiscalController extends Controller
                 'qr_code'         => $qrCodeTexto,
                 'qr_code_img'     => $qrCodeImg,
             ]);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             abort(404, 'Documento não encontrado');
         } catch (\Exception $e) {
@@ -599,10 +609,6 @@ class DocumentoFiscalController extends Controller
             abort(500, 'Erro ao carregar documento: ' . $e->getMessage());
         }
     }
-
-    /* =====================================================================
-     | PDF (DomPDF)
-     | ================================================================== */
 
     public function downloadPdf(string $id): Response
     {
@@ -621,7 +627,6 @@ class DocumentoFiscalController extends Controller
                 ]);
 
             return $pdf->download($documento->numero_documento . '.pdf');
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             abort(404, 'Documento não encontrado');
         } catch (\Exception $e) {
@@ -630,12 +635,9 @@ class DocumentoFiscalController extends Controller
         }
     }
 
-    /* =====================================================================
-     | EXCEL
-     | ================================================================== */
-
     public function exportarExcel(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
     {
+
         try {
             $filtros = $request->validate([
                 'tipo'              => 'nullable|in:FT,FR,FP,FA,NC,ND,RC,FRt',
@@ -684,22 +686,12 @@ class DocumentoFiscalController extends Controller
                 'Content-Disposition' => "attachment; filename=\"{$nomeArquivo}\"",
                 'Cache-Control'       => 'max-age=0',
             ]);
-
         } catch (\Exception $e) {
             Log::error('Erro ao exportar Excel', ['error' => $e->getMessage()]);
             abort(500, 'Erro ao exportar Excel: ' . $e->getMessage());
         }
     }
 
-    /* =====================================================================
-     | HELPER PRIVADO
-     | ================================================================== */
-
-    /**
-     * Gera HTML do QR Code para passar à view PDF.
-     * Tenta endroid/qr-code (PNG base64), caso contrário SVG determinístico simples.
-     * O DomPDF suporta ambos nativamente.
-     */
     private function gerarQrHtml(?string $qrCodeTexto): string
     {
         if (empty($qrCodeTexto)) return '';
@@ -712,7 +704,7 @@ class DocumentoFiscalController extends Controller
                     ->setErrorCorrectionLevel(\Endroid\QrCode\ErrorCorrectionLevel::Medium);
                 $writer = new \Endroid\QrCode\Writer\PngWriter();
                 $b64    = base64_encode($writer->write($qr)->getString());
-                return '<img src="data:image/png;base64,'.$b64.'" width="106" height="106" style="display:block;margin:0 auto;" />';
+                return '<img src="data:image/png;base64,' . $b64 . '" width="106" height="106" style="display:block;margin:0 auto;" />';
             } catch (\Exception $e) {
                 Log::warning('QR PNG failed', ['error' => $e->getMessage()]);
             }
@@ -726,15 +718,17 @@ class DocumentoFiscalController extends Controller
             $bits .= str_pad(decbin($byte), 8, '0', STR_PAD_LEFT);
         }
         $bits = str_repeat($bits, 4);
-        $mods = 21; $sz = 106; $cell = (int)floor($sz / $mods);
-        $svg  = '<svg xmlns="http://www.w3.org/2000/svg" width="'.$sz.'" height="'.$sz.'" viewBox="0 0 '.$sz.' '.$sz.'">';
-        $svg .= '<rect width="'.$sz.'" height="'.$sz.'" fill="white"/>';
+        $mods = 21;
+        $sz = 106;
+        $cell = (int)floor($sz / $mods);
+        $svg  = '<svg xmlns="http://www.w3.org/2000/svg" width="' . $sz . '" height="' . $sz . '" viewBox="0 0 ' . $sz . ' ' . $sz . '">';
+        $svg .= '<rect width="' . $sz . '" height="' . $sz . '" fill="white"/>';
 
-        foreach ([[0,0], [($mods-7)*$cell, 0], [0, ($mods-7)*$cell]] as [$ox, $oy]) {
+        foreach ([[0, 0], [($mods - 7) * $cell, 0], [0, ($mods - 7) * $cell]] as [$ox, $oy]) {
             for ($r = 0; $r < 7; $r++) {
                 for ($c = 0; $c < 7; $c++) {
-                    if ($r===0||$r===6||$c===0||$c===6||($r>=2&&$r<=4&&$c>=2&&$c<=4)) {
-                        $svg .= '<rect x="'.($ox+$c*$cell).'" y="'.($oy+$r*$cell).'" width="'.$cell.'" height="'.$cell.'" fill="#000"/>';
+                    if ($r === 0 || $r === 6 || $c === 0 || $c === 6 || ($r >= 2 && $r <= 4 && $c >= 2 && $c <= 4)) {
+                        $svg .= '<rect x="' . ($ox + $c * $cell) . '" y="' . ($oy + $r * $cell) . '" width="' . $cell . '" height="' . $cell . '" fill="#000"/>';
                     }
                 }
             }
@@ -742,9 +736,9 @@ class DocumentoFiscalController extends Controller
 
         for ($r = 0; $r < $mods; $r++) {
             for ($c = 0; $c < $mods; $c++) {
-                if (($r<9&&$c<9)||($r<9&&$c>=$mods-8)||($r>=$mods-8&&$c<9)) continue;
-                if ($bits[($r*$mods+$c) % strlen($bits)] === '1') {
-                    $svg .= '<rect x="'.($c*$cell).'" y="'.($r*$cell).'" width="'.$cell.'" height="'.$cell.'" fill="#000"/>';
+                if (($r < 9 && $c < 9) || ($r < 9 && $c >= $mods - 8) || ($r >= $mods - 8 && $c < 9)) continue;
+                if ($bits[($r * $mods + $c) % strlen($bits)] === '1') {
+                    $svg .= '<rect x="' . ($c * $cell) . '" y="' . ($r * $cell) . '" width="' . $cell . '" height="' . $cell . '" fill="#000"/>';
                 }
             }
         }
@@ -755,11 +749,10 @@ class DocumentoFiscalController extends Controller
     private function erroInterno(string $mensagem, \Exception $e): JsonResponse
     {
         Log::error($mensagem . ':', ['error' => $e->getMessage()]);
-
         return response()->json([
             'success' => false,
             'message' => $mensagem,
-            'error'   => $e->getMessage(),
+            'error' => $e->getMessage(),
         ], 500);
     }
 }
