@@ -16,6 +16,9 @@ class ImpressoraTermicaService
 {
     protected int $L = 42;
 
+    protected ?Printer $printer = null;
+
+    protected string $nomeImpressora = 'AUTO-THERMAL';
     // =====================================================
     // CONFIGURAÇÕES ESTÁTICAS — altere à vontade
     // =====================================================
@@ -27,8 +30,7 @@ class ImpressoraTermicaService
     protected string $slogan = 'A sua solução em tecnologia';
 
     /** Endereço completo da empresa */
-    protected string $endereco = 'Rua do Paiol, Bairro Gameke,
-(Proximo da Farmacia Pedrito),
+    protected string $endereco = 'Rua do Paiol, Bairro Gameke,(Proximo da Farmacia Pedrito),
 Provincia de Luanda';
     /** Telefone principal */
     protected string $telefone = '+244 938 747 267';

@@ -260,7 +260,7 @@ export default function MainEmpresa({
                 userRole === "admin"
                     ? [
                         { label: "Venda a pronto", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart },
-                        { label: "Kilape", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
+                        { label: "Venda a prazo", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
                         { label: "Proforma", path: "/dashboard/Faturas/Faturas_Proforma", icon: FileText },
                     ]
                     : userRole === "operador"
@@ -313,15 +313,7 @@ export default function MainEmpresa({
             links: [],
             roles: ["admin", "contabilista"],
         },
-        ...(userRole === "admin"
-            ? [{
-                label: "Configurações",
-                icon: Settings,
-                path: "/dashboard/configuracoes",
-                links: [],
-                roles: ["admin"],
-            }]
-            : []),
+
     ];
 
     const menuItemsFiltrados = menuItems.filter(temPermissao);

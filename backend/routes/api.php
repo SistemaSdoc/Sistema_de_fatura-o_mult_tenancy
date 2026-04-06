@@ -22,12 +22,6 @@ $uuidPattern = '[0-9a-fA-F-]{36}';
 Route::post('/users', [UserController::class, 'store']);
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
-// ============================================================
-// ROTAS QZ TRAY — FORA DO AUTH (obrigatório!)
-// O QZ Tray chama estas rotas ANTES de qualquer autenticação.
-// Se ficarem dentro do middleware auth:sanctum, recebem 401
-// e o QZ Tray continua a mostrar os pop-ups de permissão.
-// ============================================================
 Route::get('/qz/certificate', [QzSignController::class, 'certificate'])->name('qz.certificate');
 Route::get('/qz/sign',        [QzSignController::class, 'sign'])->name('qz.sign');
 
@@ -36,6 +30,8 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
 
     // ===== AUTENTICAÇÃO =====
     Route::get('/me', [UserController::class, 'me']);
+
+
 
     // ===== DASHBOARD =====
     Route::prefix('dashboard')->group(function () {

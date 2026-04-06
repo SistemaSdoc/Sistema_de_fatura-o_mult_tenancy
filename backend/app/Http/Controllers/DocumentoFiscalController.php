@@ -28,6 +28,14 @@ class DocumentoFiscalController extends Controller
      * DocumentoFiscalService.
      */
 
+    /**
+     * Construtor - INJETAR DEPENDÊNCIA
+     */
+    public function __construct(DocumentoFiscalService $documentoService)
+    {
+        $this->documentoService = $documentoService;
+    }
+
     /* =====================================================================
      | LISTAGEM
      | ================================================================== */
@@ -81,6 +89,13 @@ class DocumentoFiscalController extends Controller
         } catch (\Exception $e) {
             return $this->erroInterno('Erro ao listar documentos', $e);
         }
+        Log::info('Iniciando impressão térmica', [
+    'id' => $id,
+    'documento_tipo' => $documento->tipo_documento ?? 'unknown',
+    'has_fatura_id' => !empty($documento->fatura_id),
+    'itens_count' => count($docInfo->itens ?? []),
+]);
+
     }
 
     /* =====================================================================
@@ -566,7 +581,9 @@ class DocumentoFiscalController extends Controller
             }
 
             $docInfo = $documentoOrigem ?? $documento;
+
             // ── AGT: QR Code (DP 71/25) ─────────────────────────────────
+            // QR Code é gerado para TODOS os documentos, incluindo recibos (RC)
             $qrCodeTexto = $dados['qr_code'];
             $qrCodeImg   = null;
 
@@ -625,7 +642,7 @@ class DocumentoFiscalController extends Controller
 
             $docInfo = $documentoOrigem ?? $documento;
 
-            // Gerar QR Code
+            // Gerar QR Code para TODOS os documentos, incluindo recibos (RC)
             $qrCodeTexto = $dados['qr_code'] ?? null;
             $qrCodeImg   = null;
 

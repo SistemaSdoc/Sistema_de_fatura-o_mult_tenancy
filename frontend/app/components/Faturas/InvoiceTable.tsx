@@ -1,8 +1,16 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
-import { DocumentoFiscal, TipoDocumento } from "@/services/DocumentoFiscal";
-import { Eye, FileText, Printer, Download, ChevronLeft, ChevronRight, Receipt } from "lucide-react";
 
+import { useState } from "react";
+import { DocumentoFiscal, TipoDocumento } from "@/services/DocumentoFiscal";
+import {
+  Eye,
+  FileText,
+  Printer,
+  Download,
+  ChevronLeft,
+  ChevronRight,
+  Receipt,
+} from "lucide-react";
 
 const TIPO_LABEL: Record<TipoDocumento, string> = {
   FT: "Fatura",
@@ -15,17 +23,25 @@ const TIPO_LABEL: Record<TipoDocumento, string> = {
   FRt: "Fatura de Retificação",
 };
 
+const ESTADO_LABEL: Record<string, string> = {
+  paga: "Pago",
+  parcialmente_paga: "Pag. Parcial",
+  emitido: "Pendente",
+  cancelado: "Cancelado",
+  expirado: "Expirado",
+};
+
 interface ColorsTheme {
-  border: string; 
-  primary: string; 
-  success: string; 
+  border: string;
+  primary: string;
+  success: string;
   teal?: string;
-  warning: string; 
-  danger: string; 
-  secondary: string; 
+  warning: string;
+  danger: string;
+  secondary: string;
   hover: string;
-  text: string; 
-  textSecondary: string; 
+  text: string;
+  textSecondary: string;
   card: string;
 }
 
@@ -37,45 +53,34 @@ interface InvoiceTableProps {
   imprimindo: string | null;
   onVerDetalhes: (doc: DocumentoFiscal) => void;
   onGerarRecibo: (doc: DocumentoFiscal) => Promise<DocumentoFiscal | void> | void;
-  onImprimir: (doc: DocumentoFiscal) => void;
   onImprimirA4: (doc: DocumentoFiscal) => void;
+  onImprimirPdf: (doc: DocumentoFiscal) => void;
   onBaixarPdf: (doc: DocumentoFiscal) => Promise<void>;
   formatKz: (v: number | string | undefined) => string;
-  formatQuantidade?: (v: number | string | undefined) => string;
-  onVerDetalhes:   (doc: DocumentoFiscal) => void;
-  onGerarRecibo:   (doc: DocumentoFiscal) => Promise<DocumentoFiscal | void> | void;
-  onImprimir:      (doc: DocumentoFiscal) => void;
-
-  onImprimirA4:    (doc: DocumentoFiscal) => void;
-  onImprimirPdf:   (doc: DocumentoFiscal) => void;
-  onBaixarPdf:     (doc: DocumentoFiscal) => Promise<void>;
-  formatKz:        (v: number | string | undefined) => string;
-  formatQuantidade:(v: number | string | undefined) => string;
   documentoFiscalService: {
     getNomeCliente: (doc: DocumentoFiscal) => string;
-    getNifCliente: (doc: DocumentoFiscal) => string | null;
+    getNifCliente?: (doc: DocumentoFiscal) => string | null;
   };
   colors: ColorsTheme;
 }
 
 const POR_PAGINA = 10;
+type TabAtiva = "fr" | "ft";
 
-/* ── Tipo badge ────────────────────────────────────────────── */
+/* ── Badge Tipo ── */
 function TipoBadge({ tipo, colors }: { tipo: TipoDocumento; colors: ColorsTheme }) {
   const palette: Partial<Record<TipoDocumento, { bg: string; text: string }>> = {
     FT: { bg: `${colors.textSecondary}1a`, text: colors.secondary },
     FR: { bg: `${colors.success}1a`, text: colors.success },
-    RC: { bg: `${(colors.teal ?? colors.success)}1a`, text: colors.teal ?? colors.success },
+    RC: { bg: `${colors.teal ?? colors.success}1a`, text: colors.teal ?? colors.success },
     FP: { bg: `${colors.warning}1a`, text: colors.warning },
     NC: { bg: `${colors.danger}1a`, text: colors.danger },
     ND: { bg: `${colors.secondary}1a`, text: colors.secondary },
   };
-
   const s = palette[tipo] ?? { bg: colors.hover, text: colors.textSecondary };
-
   return (
     <span
-      className="inline-flex items-center px-2 py-0.5 text-xs font-semibold whitespace-nowrap"
+      className="inline-flex items-center px-2 py-0.5 text-xs font-semibold"
       style={{ backgroundColor: s.bg, color: s.text }}
     >
       {TIPO_LABEL[tipo] ?? tipo}
@@ -83,7 +88,27 @@ function TipoBadge({ tipo, colors }: { tipo: TipoDocumento; colors: ColorsTheme 
   );
 }
 
-/* ── Botão de ícone ────────────────────────────────────────── */
+/* ── Badge Estado ── */
+function EstadoBadge({ estado, colors }: { estado: string; colors: ColorsTheme }) {
+  const map: Record<string, { bg: string; text: string }> = {
+    paga: { bg: `${colors.success}1a`, text: colors.success },
+    parcialmente_paga: { bg: `${colors.warning}1a`, text: colors.warning },
+    emitido: { bg: `${colors.warning}1a`, text: colors.warning },
+    cancelado: { bg: `${colors.danger}1a`, text: colors.danger },
+    expirado: { bg: `${colors.textSecondary}1a`, text: colors.textSecondary },
+  };
+  const s = map[estado] ?? { bg: colors.hover, text: colors.textSecondary };
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 text-xs font-semibold"
+      style={{ backgroundColor: s.bg, color: s.text }}
+    >
+      {ESTADO_LABEL[estado] ?? estado}
+    </span>
+  );
+}
+
+/* ── Botão ícone ── */
 function IconBtn({
   onClick,
   disabled = false,
@@ -102,7 +127,7 @@ function IconBtn({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="p-1.5 transition-all hover:opacity-70 disabled:opacity-40 touch-manipulation"
+      className="p-1.5 hover:opacity-70 disabled:opacity-40"
       style={{ color }}
     >
       {children}
@@ -110,7 +135,7 @@ function IconBtn({
   );
 }
 
-/* ── Spinner ───────────────────────────────────────────────── */
+/* ── Spinner ── */
 function Spinner({ color }: { color: string }) {
   return (
     <div
@@ -120,7 +145,111 @@ function Spinner({ color }: { color: string }) {
   );
 }
 
-/* ══════════════════════════════════════════════════════════ */
+/* ── Paginação ── */
+function Paginacao({
+  pagina,
+  total,
+  quantidade,
+  onAnterior,
+  onProxima,
+  colors,
+}: {
+  pagina: number;
+  total: number;
+  quantidade: number;
+  onAnterior: () => void;
+  onProxima: () => void;
+  colors: ColorsTheme;
+}) {
+  if (total <= 1) return null;
+  return (
+    <div
+      className="flex justify-between items-center px-3 py-2 text-xs"
+      style={{ borderTop: `0.5px solid ${colors.border}`, color: colors.textSecondary }}
+    >
+      <span>
+        {pagina} / {total} — {quantidade} documentos
+      </span>
+      <div className="flex gap-2">
+        <button
+          onClick={onAnterior}
+          disabled={pagina === 1}
+          className="disabled:opacity-30"
+          style={{ color: colors.text }}
+        >
+          <ChevronLeft size={14} />
+        </button>
+        <button
+          onClick={onProxima}
+          disabled={pagina === total}
+          className="disabled:opacity-30"
+          style={{ color: colors.text }}
+        >
+          <ChevronRight size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── Card mobile para um documento ── */
+function DocCard({
+  doc,
+  colors,
+  formatKz,
+  getNomeCliente,
+  mostrarTipo,
+  mostrarEstado,
+  acoes,
+}: {
+  doc: DocumentoFiscal;
+  colors: ColorsTheme;
+  formatKz: (v: number | string | undefined) => string;
+  getNomeCliente: (d: DocumentoFiscal) => string;
+  mostrarTipo: boolean;
+  mostrarEstado: boolean;
+  acoes: React.ReactNode;
+}) {
+  return (
+    <div
+      className="flex flex-col gap-2 p-3"
+      style={{ borderBottom: `0.5px solid ${colors.border}` }}
+    >
+      {/* Linha 1: número + badges */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <span className="text-sm font-medium" style={{ color: colors.text }}>
+          {doc.numero_documento ?? doc.id}
+        </span>
+        <div className="flex gap-1 flex-wrap">
+          {mostrarTipo && <TipoBadge tipo={doc.tipo_documento} colors={colors} />}
+          {mostrarEstado && doc.estado && (
+            <EstadoBadge estado={doc.estado} colors={colors} />
+          )}
+        </div>
+      </div>
+
+      {/* Linha 2: cliente */}
+      <span className="text-xs truncate" style={{ color: colors.textSecondary }}>
+        {getNomeCliente(doc)}
+      </span>
+
+      {/* Linha 3: data + total */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs" style={{ color: colors.textSecondary }}>
+          {new Date(doc.data_emissao).toLocaleDateString()}
+        </span>
+        <span className="text-sm font-medium" style={{ color: colors.text }}>
+          {formatKz(doc.total_liquido)}
+        </span>
+      </div>
+
+      {/* Linha 4: ações */}
+      <div className="flex gap-1">{acoes}</div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════ */
 export default function InvoiceTable({
   documentos,
   loading,
@@ -129,7 +258,6 @@ export default function InvoiceTable({
   imprimindo,
   onVerDetalhes,
   onGerarRecibo,
-  onImprimir,
   onImprimirA4,
   onImprimirPdf,
   onBaixarPdf,
@@ -137,210 +265,374 @@ export default function InvoiceTable({
   documentoFiscalService,
   colors,
 }: InvoiceTableProps) {
+  const [tabAtiva, setTabAtiva] = useState<TabAtiva>("fr");
+  const [paginaFR, setPaginaFR] = useState(1);
+  const [paginaFT, setPaginaFT] = useState(1);
 
-  const [pagina, setPagina] = useState(1);
-  const totalPag = Math.ceil(documentos.length / POR_PAGINA);
-  const pag = Math.min(Math.max(pagina, 1), Math.max(totalPag, 1));
-  const slice = documentos.slice((pag - 1) * POR_PAGINA, pag * POR_PAGINA);
+  /* ── Separação por aba ── */
+  const docsFR = documentos.filter((d) => ["FR", "RC"].includes(d.tipo_documento));
+  const docsFT = documentos.filter((d) => d.tipo_documento === "FT");
 
-  /* Apenas FT não cancelado/pago pode gerar recibo */
+  const totalPagesFR = Math.max(Math.ceil(docsFR.length / POR_PAGINA), 1);
+  const totalPagesFT = Math.max(Math.ceil(docsFT.length / POR_PAGINA), 1);
+
+  const pgFR = Math.min(Math.max(paginaFR, 1), totalPagesFR);
+  const pgFT = Math.min(Math.max(paginaFT, 1), totalPagesFT);
+
+  const sliceFR = docsFR.slice((pgFR - 1) * POR_PAGINA, pgFR * POR_PAGINA);
+  const sliceFT = docsFT.slice((pgFT - 1) * POR_PAGINA, pgFT * POR_PAGINA);
+
   const podeGerarRecibo = (d: DocumentoFiscal) =>
     d.tipo_documento === "FT" && !["cancelado", "paga"].includes(d.estado || "");
 
-  /* ── Empty State ────────────────────────────────────────────── */
-  if (documentos.length === 0) {
+  /* ── Vazio ── */
+  if (!loading && documentos.length === 0) {
     return (
       <div className="p-10 text-center" style={{ color: colors.textSecondary }}>
-        <div
-          className="w-14 h-14 flex items-center justify-center mx-auto mb-3"
-          style={{ backgroundColor: colors.hover }}
-        >
-          <Receipt size={28} style={{ color: colors.border }} />
-        </div>
-        <p className="font-medium text-sm" style={{ color: colors.text }}>
-          Nenhum documento encontrado
-        </p>
-        <p className="text-xs mt-1">Tente ajustar os filtros ou a pesquisa</p>
+        <Receipt size={28} />
+        <p>Nenhum documento encontrado</p>
       </div>
     );
   }
 
-  return (
+  /* ── Ações FR/RC ── */
+  const acoesFR = (doc: DocumentoFiscal) => (
     <>
-      {/* ── Tabela ──────────────────────────────────────── */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr style={{ backgroundColor: colors.primary }}>
-              <th className="px-3 py-2.5 text-left text-white font-semibold text-xs tracking-wide whitespace-nowrap">
-                Nº Documento
-              </th>
-              <th className="px-3 py-2.5 text-left text-white font-semibold text-xs tracking-wide whitespace-nowrap">
-                Cliente
-              </th>
-              <th className="px-3 py-2.5 text-left text-white font-semibold text-xs tracking-wide whitespace-nowrap">
-                Tipo
-              </th>
-              <th className="px-3 py-2.5 text-left text-white font-semibold text-xs tracking-wide whitespace-nowrap">
-                Data
-              </th>
-              <th className="px-3 py-2.5 text-right text-white font-semibold text-xs tracking-wide whitespace-nowrap">
-                Total
-              </th>
-              <th className="px-3 py-2.5 text-center text-white font-semibold text-xs tracking-wide whitespace-nowrap min-w-[200px]">
-                Ações
-              </th>
+      <IconBtn onClick={() => onVerDetalhes(doc)} title="Ver" color={colors.text}>
+        <Eye size={16} />
+      </IconBtn>
+      <IconBtn
+        onClick={() => onImprimirPdf(doc)}
+        disabled={imprimindo === doc.id}
+        title="Imprimir"
+        color={colors.secondary}
+      >
+        {imprimindo === doc.id ? <Spinner color={colors.secondary} /> : <Printer size={16} />}
+      </IconBtn>
+      <IconBtn
+        onClick={() => onBaixarPdf(doc)}
+        disabled={baixandoPdf === doc.id}
+        title="PDF"
+        color={colors.text}
+      >
+        {baixandoPdf === doc.id ? <Spinner color={colors.text} /> : <Download size={16} />}
+      </IconBtn>
+    </>
+  );
+
+  /* ── Ações FT ── */
+  const acoesFT = (doc: DocumentoFiscal) => (
+    <>
+      <IconBtn onClick={() => onVerDetalhes(doc)} title="Ver" color={colors.text}>
+        <Eye size={16} />
+      </IconBtn>
+      {podeGerarRecibo(doc) && (
+        <IconBtn
+          onClick={() => onGerarRecibo(doc)}
+          disabled={gerandoRecibo === doc.id}
+          title="Recibo"
+          color={colors.success}
+        >
+          {gerandoRecibo === doc.id ? <Spinner color={colors.success} /> : <FileText size={16} />}
+        </IconBtn>
+      )}
+      <IconBtn
+        onClick={() => onImprimirPdf(doc)}
+        disabled={imprimindo === doc.id}
+        title="Imprimir"
+        color={colors.secondary}
+      >
+        {imprimindo === doc.id ? <Spinner color={colors.secondary} /> : <Printer size={16} />}
+      </IconBtn>
+      <IconBtn
+        onClick={() => onBaixarPdf(doc)}
+        disabled={baixandoPdf === doc.id}
+        title="PDF"
+        color={colors.text}
+      >
+        {baixandoPdf === doc.id ? <Spinner color={colors.text} /> : <Download size={16} />}
+      </IconBtn>
+    </>
+  );
+
+  /* ── Tabela FR/RC ── */
+  const tabelaFR = (
+    <>
+      <div className="hidden sm:block overflow-x-auto w-full">
+        <table
+          className="w-full text-sm"
+          style={{ borderCollapse: "collapse", tableLayout: "fixed", minWidth: 480 }}
+        >
+          <colgroup>
+            <col style={{ width: "16%" }} />
+            <col style={{ width: "30%" }} />
+            <col style={{ width: "13%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "18%" }} />
+            <col style={{ width: "11%" }} />
+          </colgroup>
+          <thead style={{ backgroundColor: colors.primary }}>
+            <tr className="text-white text-xs">
+              <th className="px-3 py-2 text-left">Documento</th>
+              <th className="px-3 py-2 text-left">Cliente</th>
+              <th className="px-3 py-2 text-left">Tipo</th>
+              <th className="px-3 py-2 text-left">Data</th>
+              <th className="px-3 py-2 text-right">Total</th>
+              <th className="px-3 py-2 text-center">Ações</th>
             </tr>
           </thead>
           <tbody>
-            {slice.map((doc) => (
-              <tr
-                key={doc.id}
-                className="border-b transition-colors"
-                style={{ borderColor: colors.border }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = colors.hover)}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-              >
-                {/* Nº Documento */}
-                <td className="px-3 py-2.5 font-mono text-xs font-medium whitespace-nowrap" style={{ color: colors.text }}>
-                  {doc.numero_documento ?? `${doc.serie}-${String(doc.numero).padStart(5, "0")}`}
-                </td>
-
-                {/* Cliente */}
-                <td className="px-3 py-2.5 max-w-[140px]">
-                  <div className="font-medium text-xs truncate" style={{ color: colors.text }}>
-                    {documentoFiscalService.getNomeCliente(doc)}
-                  </div>
-                  {documentoFiscalService.getNifCliente(doc) && (
-                    <div className="text-[10px] mt-0.5" style={{ color: colors.textSecondary }}>
-                      NIF {documentoFiscalService.getNifCliente(doc)}
-                    </div>
-                  )}
-                </td>
-
-                {/* Tipo */}
-                <td className="px-3 py-2.5">
-                  <TipoBadge tipo={doc.tipo_documento} colors={colors} />
-                </td>
-
-                {/* Data */}
-                <td className="px-3 py-2.5 whitespace-nowrap">
-                  <div className="text-xs" style={{ color: colors.text }}>
-                    {new Date(doc.data_emissao).toLocaleDateString("pt-AO")}
-                  </div>
-                  {doc.hora_emissao && (
-                    <div className="text-[10px] mt-0.5" style={{ color: colors.textSecondary }}>
-                      {doc.hora_emissao.substring(0, 5)}
-                    </div>
-                  )}
-                </td>
-
-                {/* Total */}
-                <td className="px-3 py-2.5 text-right font-semibold text-xs whitespace-nowrap" style={{ color: colors.text }}>
-                  {formatKz(doc.total_liquido)}
-                </td>
-
-                {/* Ações - Diretamente visíveis */}
-                <td className="px-3 py-2.5">
-                  <div className="flex items-center justify-center gap-1">
-                    {/* Ver Detalhes */}
-                    <IconBtn
-                      onClick={() => onVerDetalhes(doc)}
-                      title="Ver detalhes"
-                      color={colors.text}
-                    >
-                      <Eye size={16} />
-                    </IconBtn>
-
-                    {/* Gerar Recibo */}
-                    {podeGerarRecibo(doc) && (
-                      <IconBtn
-                        onClick={() => onGerarRecibo(doc)}
-                        disabled={gerandoRecibo === doc.id}
-                        title="Gerar Recibo"
-                        color={colors.success}
-                      >
-                        {gerandoRecibo === doc.id ? (
-                          <Spinner color={colors.success} />
-                        ) : (
-                          <FileText size={16} />
-                        )}
-                      </IconBtn>
-                    )}
-
-                    {/* Imprimir Térmica */}
-                    <IconBtn
-                      onClick={() => onImprimir(doc)}
-                      disabled={imprimindo === doc.id}
-                      title="Imprimir (Térmica 80mm)"
-                      color={colors.secondary}
-                    >
-                      {imprimindo === doc.id ? (
-                        <Spinner color={colors.secondary} />
-                      ) : (
-                        <Printer size={16} />
-                      )}
-                    </IconBtn>
-
-                    {/* Baixar PDF */}
-                    <IconBtn
-                      onClick={() => onBaixarPdf(doc)}
-                      disabled={baixandoPdf === doc.id}
-                      title="Baixar PDF"
-                      color={colors.text}
-                    >
-                      {baixandoPdf === doc.id ? (
-                        <Spinner color={colors.text} />
-                      ) : (
-                        <Download size={16} />
-                      )}
-                    </IconBtn>
-                  </div>
+            {sliceFR.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={6}
+                  className="px-3 py-8 text-center text-xs"
+                  style={{ color: colors.textSecondary, borderBottom: `0.5px solid ${colors.border}` }}
+                >
+                  Nenhum documento nesta aba
                 </td>
               </tr>
-            ))}
+            ) : (
+              sliceFR.map((doc) => (
+                <tr key={doc.id} className="border-b" style={{ borderColor: colors.border }}>
+                  <td
+                    className="px-3 py-2"
+                    style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  >
+                    {doc.numero_documento ?? doc.id}
+                  </td>
+                  <td
+                    className="px-3 py-2"
+                    style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  >
+                    {documentoFiscalService.getNomeCliente(doc)}
+                  </td>
+                  <td className="px-3 py-2">
+                    <TipoBadge tipo={doc.tipo_documento} colors={colors} />
+                  </td>
+                  <td className="px-3 py-2" style={{ whiteSpace: "nowrap" }}>
+                    {new Date(doc.data_emissao).toLocaleDateString()}
+                  </td>
+                  <td className="px-3 py-2 text-right" style={{ whiteSpace: "nowrap" }}>
+                    {formatKz(doc.total_liquido)}
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <div className="flex justify-center gap-1">{acoesFR(doc)}</div>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
 
-      {/* ── Paginação ───────────────────────────────────── */}
-      {totalPag > 1 && (
-        <div
-          className="flex items-center justify-between px-4 py-2.5 border-t text-xs"
-          style={{ borderColor: colors.border }}
-        >
-          <span style={{ color: colors.textSecondary }}>
-            {(pag - 1) * POR_PAGINA + 1}–{Math.min(pag * POR_PAGINA, documentos.length)} de {documentos.length}
-          </span>
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setPagina(pag - 1)}
-              disabled={pag === 1}
-              className="flex items-center gap-1 px-2.5 py-1.5 font-medium disabled:opacity-40 transition-colors"
-              style={{
-                backgroundColor: pag === 1 ? colors.hover : colors.primary,
-                color: pag === 1 ? colors.textSecondary : "white",
-              }}
-            >
-              <ChevronLeft size={13} /> Anterior
-            </button>
-            <span className="px-2" style={{ color: colors.text }}>
-              {pag} / {totalPag}
-            </span>
-            <button
-              onClick={() => setPagina(pag + 1)}
-              disabled={pag === totalPag}
-              className="flex items-center gap-1 px-2.5 py-1.5 font-medium disabled:opacity-40 transition-colors"
-              style={{
-                backgroundColor: pag === totalPag ? colors.hover : colors.primary,
-                color: pag === totalPag ? colors.textSecondary : "white",
-              }}
-            >
-              Próxima <ChevronRight size={13} />
-            </button>
+      <div className="sm:hidden">
+        {sliceFR.length === 0 ? (
+          <div className="px-3 py-8 text-center text-xs" style={{ color: colors.textSecondary }}>
+            Nenhum documento nesta aba
           </div>
-        </div>
-      )}
+        ) : (
+          sliceFR.map((doc) => (
+            <DocCard
+              key={doc.id}
+              doc={doc}
+              colors={colors}
+              formatKz={formatKz}
+              getNomeCliente={documentoFiscalService.getNomeCliente}
+              mostrarTipo
+              mostrarEstado={false}
+              acoes={acoesFR(doc)}
+            />
+          ))
+        )}
+      </div>
+
+      <Paginacao
+        pagina={pgFR}
+        total={totalPagesFR}
+        quantidade={docsFR.length}
+        onAnterior={() => setPaginaFR((p) => p - 1)}
+        onProxima={() => setPaginaFR((p) => p + 1)}
+        colors={colors}
+      />
     </>
+  );
+
+  /* ── Tabela FT ── */
+  const tabelaFT = (
+    <>
+      <div className="hidden sm:block overflow-x-auto w-full">
+        <table
+          className="w-full text-sm"
+          style={{ borderCollapse: "collapse", tableLayout: "fixed", minWidth: 480 }}
+        >
+          <colgroup>
+            <col style={{ width: "16%" }} />
+            <col style={{ width: "28%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "17%" }} />
+            <col style={{ width: "14%" }} />
+            <col style={{ width: "13%" }} />
+          </colgroup>
+          <thead style={{ backgroundColor: colors.primary }}>
+            <tr className="text-white text-xs">
+              <th className="px-3 py-2 text-left">Documento</th>
+              <th className="px-3 py-2 text-left">Cliente</th>
+              <th className="px-3 py-2 text-left">Data</th>
+              <th className="px-3 py-2 text-right">Total</th>
+              <th className="px-3 py-2 text-left">Estado</th>
+              <th className="px-3 py-2 text-center">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sliceFT.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={6}
+                  className="px-3 py-8 text-center text-xs"
+                  style={{ color: colors.textSecondary, borderBottom: `0.5px solid ${colors.border}` }}
+                >
+                  Nenhuma fatura encontrada
+                </td>
+              </tr>
+            ) : (
+              sliceFT.map((doc) => (
+                <tr key={doc.id} className="border-b" style={{ borderColor: colors.border }}>
+                  <td
+                    className="px-3 py-2"
+                    style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  >
+                    {doc.numero_documento ?? doc.id}
+                  </td>
+                  <td
+                    className="px-3 py-2"
+                    style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  >
+                    {documentoFiscalService.getNomeCliente(doc)}
+                  </td>
+                  <td className="px-3 py-2" style={{ whiteSpace: "nowrap" }}>
+                    {new Date(doc.data_emissao).toLocaleDateString()}
+                  </td>
+                  <td className="px-3 py-2 text-right" style={{ whiteSpace: "nowrap" }}>
+                    {formatKz(doc.total_liquido)}
+                  </td>
+                  <td className="px-3 py-2">
+                    {doc.estado ? (
+                      <EstadoBadge estado={doc.estado} colors={colors} />
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <div className="flex justify-center gap-1">{acoesFT(doc)}</div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="sm:hidden">
+        {sliceFT.length === 0 ? (
+          <div className="px-3 py-8 text-center text-xs" style={{ color: colors.textSecondary }}>
+            Nenhuma fatura encontrada
+          </div>
+        ) : (
+          sliceFT.map((doc) => (
+            <DocCard
+              key={doc.id}
+              doc={doc}
+              colors={colors}
+              formatKz={formatKz}
+              getNomeCliente={documentoFiscalService.getNomeCliente}
+              mostrarTipo={false}
+              mostrarEstado
+              acoes={acoesFT(doc)}
+            />
+          ))
+        )}
+      </div>
+
+      <Paginacao
+        pagina={pgFT}
+        total={totalPagesFT}
+        quantidade={docsFT.length}
+        onAnterior={() => setPaginaFT((p) => p - 1)}
+        onProxima={() => setPaginaFT((p) => p + 1)}
+        colors={colors}
+      />
+    </>
+  );
+
+  /* ── Render principal ── */
+  return (
+    <div className="w-full flex flex-col">
+      {/* Abas */}
+      <div
+        className="flex overflow-x-auto"
+        style={{ borderBottom: `1px solid ${colors.border}` }}
+      >
+        <button
+          onClick={() => setTabAtiva("fr")}
+          className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium shrink-0"
+          style={{
+            color: tabAtiva === "fr" ? colors.text : colors.textSecondary,
+            background: "none",
+            border: "none",
+            borderBottom: tabAtiva === "fr" ? `2px solid ${colors.primary}` : "2px solid transparent",
+            cursor: "pointer",
+            marginBottom: -1,
+          }}
+        >
+          Faturas-Recibo &amp; Recibos
+          {docsFR.length > 0 && (
+            <span
+              className="px-1.5 py-0.5 text-xs font-semibold"
+              style={{ backgroundColor: `${colors.primary}20`, color: colors.secondary }}
+            >
+              {docsFR.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setTabAtiva("ft")}
+          className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium shrink-0"
+          style={{
+            color: tabAtiva === "ft" ? colors.text : colors.textSecondary,
+            background: "none",
+            border: "none",
+            borderBottom: tabAtiva === "ft" ? `2px solid ${colors.primary}` : "2px solid transparent",
+            cursor: "pointer",
+            marginBottom: -1,
+          }}
+        >
+          Faturas
+          {docsFT.length > 0 && (
+            <span
+              className="px-1.5 py-0.5 text-xs font-semibold"
+              style={{ backgroundColor: `${colors.primary}20`, color: colors.secondary }}
+            >
+              {docsFT.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Conteúdo */}
+      {loading ? (
+        <div className="p-10 text-center" style={{ color: colors.textSecondary }}>
+          <div
+            className="w-5 h-5 border-2 animate-spin rounded-full mx-auto"
+            style={{ borderColor: `${colors.primary}30`, borderTopColor: colors.primary }}
+          />
+        </div>
+      ) : tabAtiva === "fr" ? (
+        tabelaFR
+      ) : (
+        tabelaFT
+      )}
+    </div>
   );
 }
