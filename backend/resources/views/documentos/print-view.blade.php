@@ -4,7 +4,7 @@ die('Documento não encontrado');
 }
 
 
-$empresaMoradaEstatica = 'Luanda, Urbanização Nova Vida, Rua nº 63, Edifício MF3, 2º';
+$empresaMoradaEstatica = 'Luanda, Urbanização Nova Vida, Rua nº 63, Edifício MF3, 3º';
 $empresaTelefoneEstatico = '+244 923678529';
 $empresaEmailEstatico = 'sistema.sdoc167@gmail.com';
 $empresaLogo = asset('images/3.png');
