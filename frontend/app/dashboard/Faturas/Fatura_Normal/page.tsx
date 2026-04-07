@@ -245,7 +245,7 @@ export default function NovaFaturaNormalPage() {
             <ArrowLeft size={18} />
           </button>
           <div>
-            <h1 className="text-lg font-bold" style={{ color: colors.secondary }}>Kilape/ Venda a prazo</h1>
+            <h1 className="text-lg font-bold" style={{ color: colors.secondary }}>Venda a prazo</h1>
           </div>
         </div>
 
@@ -291,7 +291,7 @@ export default function NovaFaturaNormalPage() {
           <div className="divide-y" style={{ borderColor: colors.border }}>
 
             {/* ── Cliente — numa única linha ── */}
-            <div className="flex min-h-[44px]">
+            <div className="flex min-h-44px">
               <div className="flex items-center gap-1.5 px-3 py-2.5 w-24 sm:w-28 shrink-0"
                 style={{ backgroundColor: colors.hover }}>
                 <User size={13} style={{ color: colors.text }} />
