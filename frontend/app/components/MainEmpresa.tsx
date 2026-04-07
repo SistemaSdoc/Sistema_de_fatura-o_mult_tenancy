@@ -28,7 +28,7 @@ import { LucideIcon } from "lucide-react";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/context/authprovider";
-import { estoqueService, ResumoEstoque } from "@/services/estoque";
+import { estoqueService } from "@/services/estoque";
 import { produtoService, Produto } from "@/services/produtos";
 import { useTheme, useThemeColors } from "@/context/ThemeContext";
 
@@ -87,8 +87,8 @@ export default function MainEmpresa({
     const userRole = user?.role || "";
     const userEmail = user?.email || "";
     const userInitial = userName.charAt(0).toUpperCase();
-    const empresaLogo = companyLogo || user?.empresa?.logo || "/images/mwamba.jpeg";
-    const nomeEmpresa = companyName || user?.empresa?.nome || "MWAMBA";
+    const empresaLogo = companyLogo || user?.empresa?.logo || "/images/3.png";
+    const nomeEmpresa = companyName || user?.empresa?.nome || "SDOCA-Comercio e Serviços, Lda";
 
     // Responsive detection
     useEffect(() => {
@@ -250,7 +250,7 @@ export default function MainEmpresa({
             icon: Home,
             path: "/dashboard",
             links: [],
-            roles: ["admin", "contabilista", "operador"],
+            roles: ["admin", "contabilista"],
         },
         {
             label: "Vendas",
@@ -313,6 +313,13 @@ export default function MainEmpresa({
             links: [],
             roles: ["admin", "contabilista"],
         },
+        {
+            label: "Configurações",
+            icon: Settings,
+            path: "/dashboard/configuracoes",
+            links: [],
+            roles: ["admin"],
+        }
 
     ];
 
@@ -368,7 +375,7 @@ export default function MainEmpresa({
 
                 {/* Logo section */}
                 <div
-                    className="flex items-center gap-3 h-16 px-4 border-b flex-shrink-0"
+                    className="flex items-center gap-3 h-16 px-4 border-b "
                     style={{ borderColor: colors.border }}
                 >
                     {empresaLogo ? (
@@ -377,12 +384,12 @@ export default function MainEmpresa({
                             alt="Logo"
                             width={32}
                             height={32}
-                            className="flex-shrink-0 object-contain"
+                            className=" object-contain"
                             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                         />
                     ) : (
                         <div
-                            className="flex items-center justify-center flex-shrink-0 w-8 h-8 text-sm font-bold text-white"
+                            className="flex items-center justify-center  w-8 h-8 text-sm font-bold text-white"
                             style={{ backgroundColor: colors.primary }}
                         >
                             {nomeEmpresa.charAt(0).toUpperCase()}
@@ -450,7 +457,7 @@ export default function MainEmpresa({
 
                                         {hasLinks && sidebarOpen && (
                                             <div
-                                                className="flex-shrink-0 ml-1 transition-transform duration-250"
+                                                className=" ml-1 transition-transform duration-250"
                                                 style={{
                                                     transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
                                                 }}
@@ -504,7 +511,7 @@ export default function MainEmpresa({
                 </nav>
 
                 {/* Logout button */}
-                <div className="p-2 border-t flex-shrink-0" style={{ borderColor: colors.border }}>
+                <div className="p-2 border-t " style={{ borderColor: colors.border }}>
                     <div
                         onClick={abrirModalLogout}
                         className="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all hover:translate-x-1 active:scale-98"
@@ -512,7 +519,7 @@ export default function MainEmpresa({
                             backgroundColor: "transparent",
                         }}
                     >
-                        <LogOut size={19} className="flex-shrink-0 text-red-500" />
+                        <LogOut size={19} className=" text-red-500" />
                         {sidebarOpen && (
                             <span className="text-sm font-medium" style={{ color: colors.text }}>
                                 Sair
@@ -526,14 +533,14 @@ export default function MainEmpresa({
             <div className="flex flex-col flex-1 w-full overflow-hidden">
                 {/* Header */}
                 <header
-                    className="flex items-center justify-between gap-3 px-3 h-14 border-b shadow-sm md:h-16 md:px-6 flex-shrink-0"
+                    className="flex items-center justify-between gap-3 px-3 h-14 border-b shadow-sm md:h-16 md:px-6 "
                     style={{ backgroundColor: colors.card, borderColor: colors.border }}
                 >
                     <div className="flex items-center gap-2 min-w-0">
                         {isMobile && (
                             <button
                                 onClick={() => setSidebarOpen(true)}
-                                className="p-2 transition-transform hover:scale-110 active:scale-95 flex-shrink-0"
+                                className="p-2 transition-transform hover:scale-110 active:scale-95 "
                                 style={{ color: colors.primary }}
                             >
                                 <Menu size={20} />
@@ -545,7 +552,7 @@ export default function MainEmpresa({
                     </div>
 
                     {/* Header actions */}
-                    <div className="flex items-center gap-1 flex-shrink-0 md:gap-2">
+                    <div className="flex items-center gap-1 md:gap-2">
                         {/* Theme toggle */}
                         <button
                             onClick={toggleTheme}
@@ -553,9 +560,9 @@ export default function MainEmpresa({
                             style={{ backgroundColor: colors.hover, color: colors.text }}
                         >
                             {theme === "dark" ? (
-                                <Sun size={16} className="md:w-[18px] md:h-[18px]" style={{ color: colors.secondary }} />
+                                <Sun size={16} className="" style={{ color: colors.secondary }} />
                             ) : (
-                                <Moon size={16} className="md:w-[18px] md:h-[18px]" style={{ color: colors.primary }} />
+                                <Moon size={16} className="" style={{ color: colors.primary }} />
                             )}
                         </button>
 
@@ -567,10 +574,10 @@ export default function MainEmpresa({
                                     className="relative p-2 transition-all hover:scale-110 active:scale-95"
                                     style={{ backgroundColor: notificacoesAberto ? colors.hover : "transparent" }}
                                 >
-                                    <Bell size={16} className="md:w-[18px] md:h-[18px]" style={{ color: colors.secondary }} />
+                                    <Bell size={16} className="" style={{ color: colors.secondary }} />
                                     {totalNotificacoes > 0 && (
                                         <span
-                                            className="absolute -top-1 -right-1 min-w-[18px] h-[18px] text-[10px] font-bold flex items-center justify-center px-1 text-white animate-pulse"
+                                            className="absolute -top-1 -right-1 m text-[10px] font-bold flex items-center justify-center px-1 text-white animate-pulse"
                                             style={{ backgroundColor: produtosSemEstoque.length > 0 ? colors.danger : "#f59e0b" }}
                                         >
                                             {totalNotificacoes > 9 ? "9+" : totalNotificacoes}
@@ -650,7 +657,7 @@ export default function MainEmpresa({
                                                                 style={{ animation: `fadeIn 0.2s ease-out ${idx * 0.03}s forwards` }}
                                                             >
                                                                 <div className="flex gap-2">
-                                                                    <div className="p-1.5 flex-shrink-0" style={{ backgroundColor: colors.warning }}>
+                                                                    <div className="p-1.5 " style={{ backgroundColor: colors.warning }}>
                                                                         <TrendingDown size={14} className="text-white" />
                                                                     </div>
                                                                     <div className="min-w-0 flex-1">
@@ -674,7 +681,7 @@ export default function MainEmpresa({
                                                                 style={{ animation: `fadeIn 0.2s ease-out ${idx * 0.03}s forwards` }}
                                                             >
                                                                 <div className="flex gap-2">
-                                                                    <div className="p-1.5 flex-shrink-0" style={{ backgroundColor: colors.danger }}>
+                                                                    <div className="p-1.5 " style={{ backgroundColor: colors.danger }}>
                                                                         <AlertCircle size={14} className="text-white" />
                                                                     </div>
                                                                     <p className="text-xs font-medium truncate" style={{ color: colors.text }}>
@@ -724,7 +731,7 @@ export default function MainEmpresa({
 
                         {/* User avatar */}
                         <div
-                            className="flex items-center gap-2 pl-2 border-l md:pl-3 flex-shrink-0"
+                            className="flex items-center gap-2 pl-2 border-l md:pl-3 "
                             style={{ borderColor: colors.border }}
                         >
                             <div className="hidden text-right md:block">
@@ -736,7 +743,7 @@ export default function MainEmpresa({
                                 </p>
                             </div>
                             <div
-                                className="flex items-center justify-center w-7 h-7 text-xs font-bold text-white md:w-8 md:h-8 flex-shrink-0 transition-transform hover:scale-105"
+                                className="flex items-center justify-center w-7 h-7 text-xs font-bold text-white md:w-8 md:h-8 transition-transform hover:scale-105"
                                 style={{ background: `linear-gradient(135deg, ${colors.secondary} 0%, ${colors.primary} 100%)` }}
                             >
                                 {userInitial}
@@ -792,7 +799,7 @@ export default function MainEmpresa({
                         <div className="p-3 border-b md:p-4" style={{ backgroundColor: theme === "dark" ? "#1a1a1a" : "#f9fafb", borderColor: colors.border }}>
                             <div className="flex items-center gap-2">
                                 <div
-                                    className="flex items-center justify-center w-7 h-7 text-xs font-bold text-white flex-shrink-0"
+                                    className="flex items-center justify-center w-7 h-7 text-xs font-bold text-white "
                                     style={{ background: `linear-gradient(135deg, ${colors.secondary} 0%, ${colors.primary} 100%)` }}
                                 >
                                     {userInitial}
@@ -826,7 +833,7 @@ export default function MainEmpresa({
                                 {logoutLoading ? (
                                     <><Loader2 className="w-3 h-3 md:w-4 md:h-4 animate-spin" /></>
                                 ) : (
-                                    <><LogOut size={14} className="md:w-[16px] md:h-[16px]" /><span className="hidden sm:inline">Sair</span></>
+                                    <><LogOut size={14} className="" /><span className="hidden sm:inline">Sair</span></>
                                 )}
                             </button>
                         </div>

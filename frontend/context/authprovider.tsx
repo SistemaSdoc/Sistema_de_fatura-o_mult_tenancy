@@ -167,7 +167,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       await fetchUser();
       toast.success("Login realizado com sucesso!");
-      router.replace("/dashboard");
+      router.replace("/dashboard/Faturas/Faturas");
       
       return { success: true };
     } catch (error: unknown) {
