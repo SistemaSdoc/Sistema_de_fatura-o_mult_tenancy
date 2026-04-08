@@ -258,7 +258,6 @@ export default function InvoiceTable({
   imprimindo,
   onVerDetalhes,
   onGerarRecibo,
-  onImprimirA4,
   onImprimirPdf,
   onBaixarPdf,
   formatKz,

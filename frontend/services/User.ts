@@ -1,32 +1,42 @@
-// @/services/userService.ts - COMPLETO COM DADOS DA EMPRESA
-import axios from 'axios';
-import Cookies from 'js-cookie';
+// @/services/User.ts
+import axios, { AxiosInstance } from "axios";
+import Cookies from "js-cookie";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://192.168.1.31:8000';
+const BACKEND_URL =
+    process.env.NEXT_PUBLIC_BACKEND_URL || "http://192.168.1.192:8000   ";
 
-// Instância pública simples (sem auth, apenas CSRF)
+// ─── AXIOS BASE (rotas públicas) ──────────────────────────────────────────────
+
 const publicApi = axios.create({
     baseURL: BACKEND_URL,
     headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
+        "Content-Type": "application/json",
+        Accept: "application/json",
     },
-    withCredentials: true, // ESSENCIAL para CSRF cookie
     timeout: 10000,
 });
 
-// Configuração CSRF
-publicApi.defaults.xsrfCookieName = 'XSRF-TOKEN';
-publicApi.defaults.xsrfHeaderName = 'X-XSRF-TOKEN';
+// ─── AXIOS COM AUTH (Bearer Token) ────────────────────────────────────────────
 
-export interface RegisterData {
-    name: string;
-    email: string;
-    password: string;
-    role: 'admin' | 'operador' | 'contablista';
-    empresa_id?: string;
-    ativo?: boolean;
-}
+const createAuthApi = (): AxiosInstance => {
+    const token = Cookies.get("auth_token");
+
+    if (!token) {
+        throw new Error("Utilizador não autenticado");
+    }
+
+    return axios.create({
+        baseURL: BACKEND_URL,
+        headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+        },
+        timeout: 10000,
+    });
+};
+
+// ─── TYPES ────────────────────────────────────────────────────────────────────
 
 export interface Empresa {
     id: string;
@@ -46,14 +56,47 @@ export interface Empresa {
 
 export interface User {
     id: string;
+    empresa_id?: string | null;
+    empresa?: Empresa;
     name: string;
     email: string;
-    role: string;
-    empresa_id?: string;
-    empresa?: Empresa; // ✅ Dados completos da empresa
+    role: "admin" | "operador" | "contablista";
     ativo: boolean;
+    ultimo_login?: string | null;
+    email_verified_at?: string | null;
     created_at: string;
     updated_at: string;
+}
+
+export interface RegisterData {
+    name: string;
+    email: string;
+    password: string;
+    role: "admin" | "operador" | "contablista";
+    empresa_id?: string;
+    ativo?: boolean;
+}
+
+export interface UpdateUserData {
+    name?: string;
+    email?: string;
+    password?: string;
+    role?: "admin" | "operador" | "contablista";
+    ativo?: boolean;
+    empresa_id?: string;
+}
+
+export interface UsersFilterParams {
+    ativo?: boolean;
+    role?: User["role"];
+}
+
+// ─── RESPONSE TYPES ───────────────────────────────────────────────────────────
+
+export interface LoginResponse {
+    message: string;
+    user: User;
+    token: string;
 }
 
 export interface RegisterResponse {
@@ -61,127 +104,112 @@ export interface RegisterResponse {
     user: User;
 }
 
-export interface LoginResponse {
+export interface UserResponse {
     message: string;
     user: User;
-    token?: string;
 }
 
-export interface UserResponse {
-    user: User;
+export interface UsersListResponse {
+    message: string;
+    users: User[];
 }
 
-/**
- * Registra um novo usuário (PÚBLICO - qualquer um pode cadastrar)
- */
-export const registerUser = async (data: RegisterData): Promise<RegisterResponse> => {
-    // 1. Obtém CSRF cookie
-    await publicApi.get('/sanctum/csrf-cookie');
+// ─── AUTH ─────────────────────────────────────────────────────────────────────
 
-    // 2. Pega token XSRF
-    const xsrfToken = Cookies.get('XSRF-TOKEN');
-
-    if (!xsrfToken) {
-        throw new Error('Token de segurança não disponível. Verifique se cookies estão habilitados.');
-    }
-
-    // 3. Faz POST para /api/users
-    const response = await publicApi.post<RegisterResponse>(
-        '/api/users',
-        data,
-        {
-            headers: {
-                'X-XSRF-TOKEN': xsrfToken,
-            },
-        }
-    );
-
-    return response.data;
-};
-
-/**
- * Login do usuário (obtém dados com empresa)
- */
-export const loginUser = async (email: string, password: string): Promise<LoginResponse> => {
-    // 1. Obtém CSRF cookie
-    await publicApi.get('/sanctum/csrf-cookie');
-
-    // 2. Pega token XSRF
-    const xsrfToken = Cookies.get('XSRF-TOKEN');
-
-    if (!xsrfToken) {
-        throw new Error('Token de segurança não disponível. Verifique se cookies estão habilitados.');
-    }
-
-    // 3. Faz login
-    const response = await publicApi.post<LoginResponse>(
-        '/api/login',
-        { email, password },
-        {
-            headers: {
-                'X-XSRF-TOKEN': xsrfToken,
-            },
-        }
-    );
-
-    // 4. Se tiver token, salva no cookie
-    if (response.data.token) {
-        Cookies.set('auth_token', response.data.token, { expires: 7 });
-    }
-
-    return response.data;
-};
-
-/**
- * Busca dados do usuário logado com a empresa
- */
-export const fetchUser = async (): Promise<User> => {
-    const token = Cookies.get('auth_token');
-
-    if (!token) {
-        throw new Error('Não autenticado');
-    }
-
-    // Instância autenticada
-    const authApi = axios.create({
-        baseURL: BACKEND_URL,
-        headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${token}`,
-        },
-        withCredentials: true,
-        timeout: 10000,
+export const loginUser = async (
+    email: string,
+    password: string
+): Promise<LoginResponse> => {
+    const response = await publicApi.post<LoginResponse>("/api/login", {
+        email,
+        password,
     });
+    Cookies.set("auth_token", response.data.token, { expires: 7 });
+    return response.data;
+};
 
-    const response = await authApi.get<UserResponse>('/api/user');
+export const logoutUser = async (): Promise<void> => {
+    const token = Cookies.get("auth_token");
+    if (token) {
+        try {
+            const authApi = createAuthApi();
+            await authApi.post("/api/logout");
+        } catch (error) {
+            console.error("Erro ao fazer logout:", error);
+        }
+    }
+    Cookies.remove("auth_token");
+};
+
+// ─── UTILIZADOR LOGADO ────────────────────────────────────────────────────────
+
+export const fetchUser = async (): Promise<User> => {
+    const authApi = createAuthApi();
+    const response = await authApi.get<UserResponse>("/api/user");
     return response.data.user;
 };
 
-/**
- * Logout do usuário
- */
-export const logoutUser = async (): Promise<void> => {
-    const token = Cookies.get('auth_token');
-
-    if (token) {
-        const authApi = axios.create({
-            baseURL: BACKEND_URL,
-            headers: {
-                'Authorization': `Bearer ${token}`,
-            },
-            withCredentials: true,
-        });
-
-        try {
-            await authApi.post('/api/logout');
-        } catch (error) {
-            console.error('Erro no logout:', error);
-        }
-    }
-
-    // Remove token mesmo se a requisição falhar
-    Cookies.remove('auth_token');
+export const fetchMe = async (): Promise<User> => {
+    const authApi = createAuthApi();
+    const response = await authApi.get<UserResponse>("/api/me");
+    return response.data.user;
 };
+
+// ─── CRUD USUÁRIOS ────────────────────────────────────────────────────────────
+
+export const registerUser = async (
+    data: RegisterData
+): Promise<RegisterResponse> => {
+    const authApi = createAuthApi();
+    const response = await authApi.post<RegisterResponse>("/api/users", data);
+    return response.data;
+};
+
+export const fetchUsers = async (
+    filters?: UsersFilterParams
+): Promise<User[]> => {
+    const authApi = createAuthApi();
+    const params: Record<string, string | boolean> = {};
+    if (filters?.ativo !== undefined) params.ativo = filters.ativo;
+    if (filters?.role)                params.role  = filters.role;
+    const response = await authApi.get<UsersListResponse>("/api/users", { params });
+    return response.data.users;
+};
+
+export const fetchUserById = async (id: string): Promise<User> => {
+    const authApi = createAuthApi();
+    const response = await authApi.get<UserResponse>(`/api/users/${id}`);
+    return response.data.user;
+};
+
+export const updateUser = async (
+    id: string,
+    data: UpdateUserData
+): Promise<User> => {
+    const authApi = createAuthApi();
+    const response = await authApi.put<UserResponse>(`/api/users/${id}`, data);
+    return response.data.user;
+};
+
+export const deleteUser = async (id: string): Promise<void> => {
+    const authApi = createAuthApi();
+    await authApi.delete(`/api/users/${id}`);
+};
+
+export const updateUltimoLogin = async (id: string): Promise<User> => {
+    const authApi = createAuthApi();
+    const response = await authApi.patch<UserResponse>(
+        `/api/users/${id}/ultimo-login`
+    );
+    return response.data.user;
+};
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+
+export const hasRole = (user: User | null, role: User["role"]): boolean =>
+    user?.role === role;
+
+export const isAdmin = (user: User | null): boolean =>
+    hasRole(user, "admin");
 
 export default publicApi;

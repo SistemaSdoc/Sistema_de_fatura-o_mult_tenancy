@@ -512,57 +512,6 @@ class DocumentoFiscalController extends Controller
         }
     }
 
-    /* =====================================================================
-       | IMPRESSÃO TÉRMICA PARA QZ TRAY (Base64) - CORRIGIDO
-       | ================================================================== */
-    public function imprimirTermicaQZ(string $id, ImpressoraTermicaService $impressoraService): JsonResponse
-    {
-        try {
-            $documento = $this->documentoService->buscarDocumento($id);
-            $dados = $this->documentoService->dadosParaPdf($documento);
-
-            // Para Recibo (RC) — usa dados da fatura original
-            $docInfo = $documento;
-            if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
-                $docInfo = DocumentoFiscal::with(['itens.produto', 'cliente'])
-                    ->findOrFail($documento->fatura_id);
-            }
-
-            $dados['itens'] = $docInfo->itens ?? [];
-            $dados['docInfo'] = $docInfo;
-
-            // Gera os bytes ESC/POS
-            $bytes = $impressoraService->gerarEscposBytes($documento, $dados);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Arquivo preparado para impressão via QZ Tray',
-                'data' => [
-                    'base64' => base64_encode($bytes),
-                    'tipo'   => $documento->tipo_documento,
-                    'numero' => $documento->numero_documento ?? $documento->id,
-                ]
-            ]);
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Documento não encontrado'
-            ], 404);
-        } catch (\Exception $e) {
-            Log::error('Erro ao preparar impressão QZ Tray', [
-                'id' => $id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Erro ao preparar impressão: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-
 
     /* =====================================================================
        | IMPRESSÃO HTML (A4) e PDF permanecem iguais

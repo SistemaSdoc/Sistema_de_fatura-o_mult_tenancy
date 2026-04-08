@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { useRouter } from "next/navigation";
 import {
   Plus, Trash2, ShoppingCart, CheckCircle2, ArrowLeft,
   AlertTriangle, User, Package, FileText, Minus, Calculator,
+  Search, X,
 } from "lucide-react";
 import { AxiosError } from "axios";
 import MainEmpresa from "../../../components/MainEmpresa";
@@ -31,6 +32,7 @@ interface ItemVendaUI {
 }
 interface FormItemState { produto_id: string; quantidade: number; desconto: number; }
 type ModoCliente = 'cadastrado' | 'avulso';
+type TipoItem = 'produto' | 'servico';
 
 interface ThemeColors {
   background: string; card: string; border: string; text: string;
@@ -97,6 +99,14 @@ export default function NovaFaturaReciboPage() {
     data_pagamento: new Date().toISOString().split('T')[0],
   });
   const [observacoes, setObservacoes] = useState('');
+  
+  // Estados para o novo componente de busca
+  const [tipoItemSelecionado, setTipoItemSelecionado] = useState<TipoItem>('produto');
+  const [buscaItem, setBuscaItem] = useState('');
+  const [dropdownAberto, setDropdownAberto] = useState(false);
+  
+  const buscaInputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!authLoading && !user) router.push("/login");
@@ -120,6 +130,17 @@ export default function NovaFaturaReciboPage() {
     })();
   }, [user]);
 
+  // Fechar dropdown ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownAberto(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const nums = e.target.value.replace(/\D/g, '');
     if (nums.length <= 9) {
@@ -132,6 +153,27 @@ export default function NovaFaturaReciboPage() {
     }
   };
 
+  // Filtrar itens baseado no tipo selecionado e na busca
+  const itensFiltrados = produtos.filter(p => {
+    if (p.status !== 'ativo') return false;
+    if (tipoItemSelecionado === 'produto' && p.tipo !== 'produto') return false;
+    if (tipoItemSelecionado === 'servico' && p.tipo !== 'servico') return false;
+    if (buscaItem.trim() === '') return true;
+    const buscaLower = buscaItem.toLowerCase();
+    return p.nome.toLowerCase().includes(buscaLower) || 
+           (p.codigo && p.codigo.toLowerCase().includes(buscaLower));
+  });
+
+  const handleSelectItem = (produto: Produto) => {
+    setFormItem({
+      produto_id: produto.id,
+      quantidade: produto.tipo === 'produto' ? Math.min(1, produto.estoque_atual) : 1,
+      desconto: 0
+    });
+    setBuscaItem(produto.nome);
+    setDropdownAberto(false);
+  };
+
   useEffect(() => {
     if (!formItem.produto_id) { setPreviewItem(null); return; }
     const p = produtos.find(x => x.id === formItem.produto_id);
@@ -141,7 +183,7 @@ export default function NovaFaturaReciboPage() {
   }, [formItem, produtos]);
 
   const adicionarItem = () => {
-    if (!formItem.produto_id || !previewItem) { setError("Selecione um produto"); return; }
+    if (!formItem.produto_id || !previewItem) { setError("Selecione um produto/serviço"); return; }
     const p = produtos.find(x => x.id === formItem.produto_id);
     if (!p) return;
     if (!isServico(p) && formItem.quantidade > p.estoque_atual) { setError(`Estoque insuficiente. Disponível: ${p.estoque_atual}`); return; }
@@ -154,6 +196,7 @@ export default function NovaFaturaReciboPage() {
       setItens(prev => [...prev, calcularItem(p, formItem.quantidade, formItem.desconto)]);
     }
     setFormItem({ produto_id: "", quantidade: 1, desconto: 0 });
+    setBuscaItem('');
     setPreviewItem(null);
     setError(null);
   };
@@ -189,7 +232,6 @@ export default function NovaFaturaReciboPage() {
   const podeFinalizar = () => {
     if (itens.length === 0) return false;
     if (modoCliente === 'cadastrado' && !clienteSelecionado) return false;
-    // Modo avulso: sempre válido, pois será "Consumidor Final" se não preenchido
     return pagamentoSuficiente;
   };
 
@@ -215,18 +257,16 @@ export default function NovaFaturaReciboPage() {
       if (modoCliente === 'cadastrado' && clienteSelecionado) {
         payload.cliente_id = clienteSelecionado.id;
       } else if (modoCliente === 'avulso') {
-        // Se o nome não foi informado, usa "Consumidor Final"
         if (clienteAvulso.trim()) {
           payload.cliente_nome = clienteAvulso.trim();
         } else {
           payload.cliente_nome = "Consumidor Final";
         }
 
-        // Se o NIF não foi informado ou é inválido, usa "999999999"
         if (clienteAvulsoNif.trim() && clienteAvulsoNif.length === 9) {
           payload.cliente_nif = clienteAvulsoNif.trim();
         } else {
-          payload.cliente_nif = "999999999";
+          payload.cliente_nif = "Consumidor Final";
         }
       }
 
@@ -341,7 +381,7 @@ export default function NovaFaturaReciboPage() {
               </div>
             </div>
 
-            {/* ── Produto e Serviços ── */}
+            {/* ── Produto e Serviços - SUBSTITUÍDO ── */}
             <div className="flex min-h-[44px]">
               <div className="flex items-center gap-1.5 px-3 py-2.5 w-24 sm:w-28 shrink-0"
                 style={{ backgroundColor: colors.hover }}>
@@ -350,52 +390,113 @@ export default function NovaFaturaReciboPage() {
               </div>
               <div className="flex-1 px-3 py-2.5 min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  {/* Select de Produtos Físicos */}
-                  <select className="flex-1 min-w-[140px] px-3 py-1.5 text-sm outline-none" style={inp}
-                    value={formItem.produto_id}
-                    onChange={e => {
-                      const p = produtos.find(x => x.id === e.target.value);
-                      if (p && p.tipo === 'produto') {
-                        setFormItem({
-                          produto_id: e.target.value,
-                          quantidade: Math.min(1, p.estoque_atual),
-                          desconto: 0
-                        });
-                      }
-                    }}>
-                    <option value="">Selecione um produto...</option>
-                    {produtos
-                      .filter(p => p.status === 'ativo' && p.tipo === 'produto')
-                      .map(p => (
-                        <option key={p.id} value={p.id}>
-                          {p.nome} — {formatarPreco(p.preco_venda)} ({p.estoque_atual} em stock)
-                        </option>
-                      ))}
-                  </select>
+                  
+                  {/* Seletor de tipo (Produto/Serviço) */}
+                  <div className="inline-flex border overflow-hidden shrink-0" style={{ borderColor: colors.border }}>
+                    {(['produto', 'servico'] as TipoItem[]).map(tipo => (
+                      <button key={tipo} type="button"
+                        onClick={() => {
+                          setTipoItemSelecionado(tipo);
+                          setBuscaItem('');
+                          setFormItem({ produto_id: "", quantidade: 1, desconto: 0 });
+                          setPreviewItem(null);
+                          setDropdownAberto(false);
+                        }}
+                        className="px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap"
+                        style={{ 
+                          backgroundColor: tipoItemSelecionado === tipo ? colors.primary : 'transparent', 
+                          color: tipoItemSelecionado === tipo ? 'white' : colors.textSecondary 
+                        }}>
+                        {tipo === 'produto' ? 'Produto' : 'Serviço'}
+                      </button>
+                    ))}
+                  </div>
 
-                  {/* Select de Serviços */}
-                  <select className="flex-1 min-w-[140px] px-3 py-1.5 text-sm outline-none" style={inp}
-                    value={formItem.produto_id}
-                    onChange={e => {
-                      const p = produtos.find(x => x.id === e.target.value);
-                      if (p && p.tipo === 'servico') {
-                        setFormItem({
-                          produto_id: e.target.value,
-                          quantidade: 1,
-                          desconto: 0
-                        });
-                      }
-                    }}>
-                    <option value="">Selecione um serviço...</option>
-                    {produtos
-                      .filter(p => p.status === 'ativo' && p.tipo === 'servico')
-                      .map(p => (
-                        <option key={p.id} value={p.id}>
-                          {p.nome} — {formatarPreco(p.preco_venda)}
-                          {p.taxa_retencao ? ` (Retenção: ${p.taxa_retencao}%)` : ''}
-                        </option>
-                      ))}
-                  </select>
+                  {/* Campo de busca com dropdown */}
+                  <div className="relative flex-1 min-w-[200px]" ref={dropdownRef}>
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: colors.textSecondary }} />
+                      <input
+                        ref={buscaInputRef}
+                        type="text"
+                        placeholder={tipoItemSelecionado === 'produto' ? "Pesquisar produto..." : "Pesquisar serviço..."}
+                        className="w-full pl-9 pr-8 py-1.5 text-sm outline-none"
+                        style={inp}
+                        value={buscaItem}
+                        onChange={(e) => {
+                          setBuscaItem(e.target.value);
+                          setDropdownAberto(true);
+                          if (e.target.value === '') {
+                            setFormItem({ produto_id: "", quantidade: 1, desconto: 0 });
+                            setPreviewItem(null);
+                          }
+                        }}
+                        onFocus={() => setDropdownAberto(true)}
+                      />
+                      {buscaItem && (
+                        <button
+                          onClick={() => {
+                            setBuscaItem('');
+                            setFormItem({ produto_id: "", quantidade: 1, desconto: 0 });
+                            setPreviewItem(null);
+                            setDropdownAberto(false);
+                          }}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 hover:opacity-70"
+                        >
+                          <X size={14} style={{ color: colors.textSecondary }} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Dropdown de resultados */}
+                    {dropdownAberto && (
+                      <div className="absolute z-50 left-0 right-0 mt-1 border shadow-lg max-h-60 overflow-y-auto"
+                        style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                        {itensFiltrados.length > 0 ? (
+                          itensFiltrados.map(item => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => handleSelectItem(item)}
+                              className="w-full px-3 py-2 text-left text-sm hover:transition-colors flex justify-between items-center border-b last:border-0"
+                              style={{ 
+                                backgroundColor: formItem.produto_id === item.id ? `${colors.primary}10` : 'transparent',
+                                borderColor: colors.border
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = `${colors.hover}`}
+                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = formItem.produto_id === item.id ? `${colors.primary}10` : 'transparent'}
+                            >
+                              <div className="flex-1">
+                                <span className="font-medium" style={{ color: colors.text }}>{item.nome}</span>
+                                {item.codigo && (
+                                  <span className="text-xs ml-2" style={{ color: colors.textSecondary }}>({item.codigo})</span>
+                                )}
+                              </div>
+                              <div className="text-right shrink-0 ml-3">
+                                <span className="text-sm font-semibold" style={{ color: colors.secondary }}>
+                                  {formatarPreco(item.preco_venda)}
+                                </span>
+                                {item.tipo === 'produto' && (
+                                  <span className="text-xs ml-2" style={{ color: colors.textSecondary }}>
+                                    Stock: {item.estoque_atual}
+                                  </span>
+                                )}
+                                {item.tipo === 'servico' && item.taxa_retencao && (
+                                  <span className="text-xs ml-2" style={{ color: colors.warning }}>
+                                    Ret: {item.taxa_retencao}%
+                                  </span>
+                                )}
+                              </div>
+                            </button>
+                          ))
+                        ) : (
+                          <div className="p-3 text-center text-sm" style={{ color: colors.textSecondary }}>
+                            Nenhum {tipoItemSelecionado === 'produto' ? 'produto' : 'serviço'} encontrado
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
                   {/* Controles de quantidade */}
                   <div className="flex items-center border overflow-hidden shrink-0" style={{ borderColor: colors.border }}>
@@ -492,7 +593,7 @@ export default function NovaFaturaReciboPage() {
               <table className="w-full text-sm">
                 <thead style={{ backgroundColor: colors.hover }}>
                   <tr className="border-b" style={{ borderColor: colors.border }}>
-                    <th className="py-2.5 px-3 text-left font-semibold text-xs" style={{ color: colors.textSecondary }}>Produto</th>
+                    <th className="py-2.5 px-3 text-left font-semibold text-xs" style={{ color: colors.textSecondary }}>Produto/Serviço</th>
                     <th className="py-2.5 px-3 text-center font-semibold text-xs" style={{ color: colors.textSecondary }}>Qtd.</th>
                     <th className="py-2.5 px-3 text-right font-semibold text-xs hidden sm:table-cell" style={{ color: colors.textSecondary }}>Preço unit.</th>
                     <th className="py-2.5 px-3 text-right font-semibold text-xs hidden md:table-cell" style={{ color: colors.textSecondary }}>IVA</th>
@@ -549,16 +650,17 @@ export default function NovaFaturaReciboPage() {
             {/* ── Resumo Fiscal — 2 colunas com divisor vertical ── */}
             <div className="border-t" style={{ borderColor: colors.border }}>
               <div className="flex flex-col sm:flex-row">
-                <div className="flex-1 px-4 py-3 border-b sm:border-b-0 border-r" style={{ borderColor: colors.border }}>
+                <div className="flex-1 px-4 py-3 border-b sm:border-b-0 sm:border-r" style={{ borderColor: colors.border }}>
                   <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: colors.textSecondary }}>Base</p>
                   <LinhaFiscal label="Subtotal bruto" valor={formatarPreco(totalBase + totalDesconto)} colors={colors} />
-                  {totalDesconto > 0 && <LinhaFiscal label="Descontos" valor={`−${formatarPreco(totalDesconto)}`} cor={colors.danger} colors={colors} />}
                   <LinhaFiscal label="Base tributável" valor={formatarPreco(totalBase)} colors={colors} />
+                  <LinhaFiscal label="Desconto" valor={formatarPreco(totalDesconto)} colors={colors} />
                 </div>
                 <div className="flex-1 px-4 py-3">
                   <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: colors.textSecondary }}>Impostos</p>
-                  <LinhaFiscal label={`IVA (${Number(itens[0]?.taxa_iva ?? 14).toFixed(2)}%)`} valor={formatarPreco(totalIva)} colors={colors} />
-                  {totalRetencao > 0 && <LinhaFiscal label="Retenção (6.5%)" valor={`−${formatarPreco(totalRetencao)}`} cor={colors.danger} colors={colors} />}
+                  <LinhaFiscal label="IVA" valor={formatarPreco(totalIva)} colors={colors} />
+                  <LinhaFiscal label="Retenção" valor={formatarPreco(totalRetencao)} colors={colors} />
+                  <LinhaFiscal label="Troco" valor={formatarPreco(troco)} colors={colors} />
                   <div className="mt-2 pt-2 border-t" style={{ borderColor: colors.border }}>
                     <LinhaFiscal label="Total" valor={formatarPreco(totalLiquido)} cor={colors.secondary} negrito colors={colors} />
                   </div>
@@ -613,7 +715,7 @@ export default function NovaFaturaReciboPage() {
                       ? <><div className="w-4 rounded-full h-4 border-2 border-white border-t-transparent animate-spin" />A processar…</>
                       : !pagamentoSuficiente
                         ? <><AlertTriangle size={15} />Pagar</>
-                        : <><CheckCircle2 size={15} />Finalizar{troco > 0 ? ` · Troco ${formatarPreco(troco)}` : ""}</>
+                        : <><CheckCircle2 size={15} />Finalizar</>
                     }
                   </button>
                 </div>
@@ -624,7 +726,7 @@ export default function NovaFaturaReciboPage() {
         ) : (
           <div className="text-center py-10 border-2 border-dashed" style={{ borderColor: colors.border }}>
             <ShoppingCart size={28} className="mx-auto mb-2" style={{ color: colors.border }} />
-            <p className="text-sm" style={{ color: colors.textSecondary }}>Adicione produtos para ver o resumo e finalizar</p>
+            <p className="text-sm" style={{ color: colors.textSecondary }}>Adicione produtos ou serviços para ver o resumo e finalizar</p>
           </div>
         )}
 

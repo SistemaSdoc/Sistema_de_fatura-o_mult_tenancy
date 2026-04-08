@@ -57,7 +57,7 @@ const InputField: React.FC<InputFieldProps> = ({
       }
     >
       <div
-        className={`absolute left-3 top-1/2 -translate-y-1/2 z-10 transition-transform transition-colors duration-300 ${styles.inputIcon}`}
+        className={`absolute left-3 top-1/2 -translate-y-1/2 z-10 transition-transform duration-300 ${styles.inputIcon}`}
         data-focused={isFocused}
       >
         <Icon size={20} />
@@ -93,10 +93,6 @@ const InputField: React.FC<InputFieldProps> = ({
     </div>
   );
 };
-
-const FloatingShape: React.FC<{ className: string; style?: React.CSSProperties }> = ({ className, style }) => (
-  <div className={`absolute rounded-full opacity-10 pointer-events-none ${className}`} style={style} />
-);
 
 /* ---------------- MAIN PAGE ---------------- */
 export default function LoginPage(): React.ReactElement {

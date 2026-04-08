@@ -14,16 +14,11 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\RelatoriosController;
-use App\Http\Controllers\QzSignController;
 
 $uuidPattern = '[0-9a-fA-F-]{36}';
 
 // ==================== ROTAS PÚBLICAS ====================
-Route::post('/users', [UserController::class, 'store']);
-Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
-Route::get('/qz/certificate', [QzSignController::class, 'certificate'])->name('qz.certificate');
-Route::get('/qz/sign',        [QzSignController::class, 'sign'])->name('qz.sign');
 
 // ==================== ROTAS PROTEGIDAS ====================
 Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
@@ -32,6 +27,7 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
     Route::get('/me', [UserController::class, 'me']);
 
 
+    Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
     // ===== DASHBOARD =====
     Route::prefix('dashboard')->group(function () {
@@ -44,6 +40,7 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
 
     // ==================== ADMIN ====================
     Route::middleware('role:admin')->group(function () use ($uuidPattern) {
+        Route::post('/users', [UserController::class, 'store']);
         Route::get('/users/create', [UserController::class, 'create']);
         Route::apiResource('/users', UserController::class)->except(['store']);
 
@@ -139,12 +136,6 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
             Route::get('/dashboard', [DocumentoFiscalController::class, 'dashboard'])->name('documentos.dashboard');
             Route::post('/processar-expirados', [DocumentoFiscalController::class, 'processarExpirados'])->name('documentos.processar-expirados');
             Route::post('/emitir', [DocumentoFiscalController::class, 'emitir'])->name('documentos.emitir');
-
-            // Rota QZ Tray (impressão térmica)
-            Route::get('/{id}/imprimir-termica-qz', [DocumentoFiscalController::class, 'imprimirTermicaQZ'])
-                ->where('id', $uuidPattern)
-                ->name('documentos.imprimir-termica-qz');
-
             // Listagem geral
             Route::get('/', [DocumentoFiscalController::class, 'index'])->name('documentos.index');
 
@@ -213,4 +204,4 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
             Route::get('/proformas', [RelatoriosController::class, 'proformas'])->name('relatorios.proformas');
         });
     });
-});
+}); 

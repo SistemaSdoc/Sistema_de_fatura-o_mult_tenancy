@@ -14,6 +14,17 @@ import {
 import { useThemeColors, useTheme } from "@/context/ThemeContext";
 
 // Tipos para os componentes
+interface ThemeColors {
+  background: string;
+  card: string;
+  border: string;
+  primary: string;
+  secondary: string;
+  text: string;
+  textSecondary: string;
+  hover: string;
+}
+
 interface AnimatedSectionProps {
   children: React.ReactNode;
   animation?: 'fade-up' | 'fade-in' | 'slide-right' | 'slide-left';
@@ -26,7 +37,7 @@ interface FeatureCardProps {
   title: string;
   description: string;
   delay?: number;
-  colors: any;
+  colors: ThemeColors;
 }
 
 interface StepCardProps {
@@ -34,14 +45,14 @@ interface StepCardProps {
   title: string;
   description: string;
   delay?: number;
-  colors: any;
+  colors: ThemeColors;
 }
 
 interface FAQItemProps {
   question: string;
   answer: string;
   index: number;
-  colors: any;
+  colors: ThemeColors;
 }
 
 interface PricingCardProps {
@@ -53,7 +64,7 @@ interface PricingCardProps {
     features: string[];
   };
   index: number;
-  colors: any;
+  colors: ThemeColors;
 }
 
 interface ContactFormState {
@@ -74,7 +85,7 @@ const ThemeToggleButton = () => {
     <button
       type="button"
       onClick={toggleTheme}
-      className="p-2 rounded-full transition-colors transition-transform hover:scale-110 active:scale-95 relative group"
+      className="p-2 rounded-full transition-transform hover:scale-110 active:scale-95 relative group"
       style={{
         backgroundColor: 'transparent',
         color: theme === 'dark' ? '#D9961A' : '#123859'
@@ -161,7 +172,7 @@ const AnimatedSection: React.FC<AnimatedSectionProps> = ({
 const CheckIcon: React.FC<{ color: string }> = ({ color }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
-    className="w-5 h-5 mr-2 flex-shrink-0"
+    className="w-5 h-5 mr-2 shrink-0"
     style={{ color }}
     fill="none"
     viewBox="0 0 24 24"
@@ -221,7 +232,7 @@ const StepCard: React.FC<StepCardProps> = ({ number, title, description, delay =
 );
 
 // Componente Visual Grande para a Secção Hero
-const HeroVisual: React.FC<{ colors: any }> = ({ colors }) => (
+const HeroVisual: React.FC<{ colors: ThemeColors }> = ({ colors }) => (
   <AnimatedSection animation="slide-left" delay={500} threshold={0.1}>
     <div
       className="hidden lg:flex justify-center items-center p-12 rounded-3xl h-full shadow-2xl"
@@ -233,7 +244,7 @@ const HeroVisual: React.FC<{ colors: any }> = ({ colors }) => (
 );
 
 // Componente Simulação de Vídeo
-const VideoSection: React.FC<{ colors: any }> = ({ colors }) => (
+const VideoSection: React.FC<{ colors: ThemeColors }> = ({ colors }) => (
   <section className="py-16 md:py-24 text-white" style={{ backgroundColor: colors.primary }}>
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
       <AnimatedSection animation="fade-up" threshold={0.1}>
@@ -321,7 +332,7 @@ const PricingCard: React.FC<PricingCardProps> = ({ plan, index, colors }) => {
           <span className="text-xl font-medium" style={{ color: colors.textSecondary }}>{plan.interval}</span>
         </div>
 
-        <ul className="space-y-3 text-left mb-8 flex-grow">
+        <ul className="space-y-3 text-left mb-8 grow">
           {plan.features.map((feature, idx) => (
             <li key={idx} className="flex items-start">
               <CheckIcon color={colors.secondary} />
