@@ -22,6 +22,7 @@ use Carbon\Carbon;
  *    O tipo fica em 'tipo_documento_fiscal'.
  *  - Numeração fiscal gerida pelo DocumentoFiscalService.
  *  - IVA 0%, 5%, 14% suportados; retenção lida do produto.
+ *  - Adicionado suporte a desconto global e troco.
  */
 class VendaService
 {
@@ -47,6 +48,8 @@ class VendaService
                 'tipo_documento' => $tipoDocumento,
                 'faturar'        => $faturar,
                 'cliente_tipo'   => isset($dados['cliente_id']) ? 'cadastrado' : 'avulso',
+                'desconto_global' => $dados['desconto_global'] ?? 0,
+                'troco'          => $dados['troco'] ?? 0,
             ]);
 
             $this->validarTipoDocumento($tipoDocumento);
@@ -67,8 +70,6 @@ class VendaService
                 'cliente_nif'         => $dados['cliente_nif'] ?? null,
                 'user_id'             => Auth::id(),
                 'documento_fiscal_id' => null,
-                // CORRIGIDO: 'tipo_documento' removido — não existe na tabela.
-                // O tipo do documento fiscal fica em 'tipo_documento_fiscal'.
                 'numero'              => $numeroVenda,
                 'numero_documento'    => $numeroVendaFormatado,
                 'base_tributavel'     => 0,
@@ -82,10 +83,24 @@ class VendaService
                 'estado_pagamento'    => $this->determinarEstadoPagamentoInicial($tipoDocumento, $faturar),
                 'tipo_documento_fiscal' => $tipoDocumento,
                 'observacoes'         => $dados['observacoes'] ?? null,
+                // NOVOS CAMPOS: desconto global e troco
+                'desconto_global'     => (float) ($dados['desconto_global'] ?? 0),
+                'troco'               => (float) ($dados['troco'] ?? 0),
             ]);
 
             // Processar itens e calcular totais
             $totais = $this->processarItens($venda, $dados['itens'], $aplicaIva, $regime);
+            
+            // Aplicar desconto global se existir
+            $descontoGlobal = (float) ($dados['desconto_global'] ?? 0);
+            if ($descontoGlobal > 0) {
+                $totais = $this->aplicarDescontoGlobal($totais, $descontoGlobal);
+                Log::info('Desconto global aplicado', [
+                    'desconto_global' => $descontoGlobal,
+                    'novo_total' => $totais['total']
+                ]);
+            }
+            
             $venda->update($totais);
 
             // Emitir documento fiscal se pedido
@@ -110,6 +125,37 @@ class VendaService
 
             return $venda->load('itens.produto', 'cliente', 'user', 'documentoFiscal');
         });
+    }
+
+    /**
+     * Aplicar desconto global proporcionalmente aos itens
+     */
+    private function aplicarDescontoGlobal(array $totais, float $descontoGlobal): array
+    {
+        $totalOriginal = $totais['total_pagar'];
+        
+        if ($totalOriginal <= 0 || $descontoGlobal <= 0) {
+            return $totais;
+        }
+        
+        // Calcular novo total após desconto
+        $novoTotal = max(0, $totalOriginal - $descontoGlobal);
+        
+        // Ajustar base tributável proporcionalmente
+        $proporcao = $novoTotal / $totalOriginal;
+        $novaBase = round($totais['base_tributavel'] * $proporcao, 2);
+        $novoIva = round($totais['total_iva'] * $proporcao, 2);
+        
+        // Retenção permanece a mesma (não é afetada por desconto)
+        $novaRetencao = $totais['total_retencao'];
+        
+        return [
+            'base_tributavel' => $novaBase,
+            'total_iva'       => $novoIva,
+            'total_retencao'  => $novaRetencao,
+            'total_pagar'     => $novoTotal,
+            'total'           => $novoTotal,
+        ];
     }
 
     /* =====================================================================
@@ -334,6 +380,7 @@ class VendaService
             'produto'       => $produto->nome,
             'tipo'          => $produto->tipo,
             'subtotal'      => $subtotal,
+            'desconto_item' => $desconto,
             'taxa_iva'      => $taxaIva,
             'iva'           => $valorIva,
             'taxa_retencao' => $taxaRetencao,
@@ -401,23 +448,34 @@ class VendaService
         return $this->documentoFiscalService->emitirDocumento($payload);
     }
 
-    private function validarFR(array $dados, float $totalVenda): void
-    {
-        if (empty($dados['dados_pagamento'])) {
-            throw new \Exception('Campo dados_pagamento é obrigatório para Fatura-Recibo (FR).');
-        }
-
-        $valorPagamento = (float) $dados['dados_pagamento']['valor'];
-        $diferenca      = abs(round($valorPagamento, 2) - round($totalVenda, 2));
-
-        if ($diferenca > 0.01) {
-            throw new \Exception(
-                'Valor do pagamento (' . number_format($valorPagamento, 2, ',', '.') .
-                ') deve ser igual ao total da venda (' .
-                number_format($totalVenda, 2, ',', '.') . ') para FR.'
-            );
-        }
+private function validarFR(array $dados, float $totalVenda): void
+{
+    if (empty($dados['dados_pagamento'])) {
+        throw new \Exception('Campo dados_pagamento é obrigatório para Fatura-Recibo (FR).');
     }
+
+    $valorPagamento = (float) $dados['dados_pagamento']['valor'];
+    
+    // O valor do pagamento pode ser maior ou igual ao total da venda
+    // Se for menor, erro. Se for maior, gera troco (ok)
+    if ($valorPagamento < $totalVenda - 0.01) {
+        throw new \Exception(
+            'Valor do pagamento (' . number_format($valorPagamento, 2, ',', '.') .
+            ') é insuficiente. Total da venda: ' .
+            number_format($totalVenda, 2, ',', '.') . ' para FR.'
+        );
+    }
+    
+    // Log para registrar o troco
+    if ($valorPagamento > $totalVenda + 0.01) {
+        $troco = $valorPagamento - $totalVenda;
+        Log::info('Troco gerado para FR', [
+            'venda_total' => $totalVenda,
+            'pago' => $valorPagamento,
+            'troco' => $troco
+        ]);
+    }
+}
 
     private function determinarEstadoPagamentoInicial(string $tipoDocumento, bool $faturar): string
     {

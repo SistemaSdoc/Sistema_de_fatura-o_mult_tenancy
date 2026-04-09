@@ -214,11 +214,16 @@ export default function NovaFaturaReciboPage() {
 
   const removerItem = (id: string) => setItens(p => p.filter(i => i.id !== id));
 
+  // Cálculo dos totais
+  const subtotalBruto = arredondar(itens.reduce((a, i) => a + (i.preco_venda * i.quantidade), 0));
+  const totalDesconto = arredondar(itens.reduce((a, i) => a + i.desconto, 0));
   const totalBase = arredondar(itens.reduce((a, i) => a + i.base_tributavel, 0));
   const totalIva = arredondar(itens.reduce((a, i) => a + i.valor_iva, 0));
   const totalRetencao = arredondar(itens.reduce((a, i) => a + i.valor_retencao, 0));
   const totalLiquido = arredondar(itens.reduce((a, i) => a + i.subtotal, 0));
-  const totalDesconto = arredondar(itens.reduce((a, i) => a + i.desconto, 0));
+
+  // Calcular percentual de desconto
+  const percentualDesconto = subtotalBruto > 0 ? (totalDesconto / subtotalBruto) * 100 : 0;
 
   useEffect(() => {
     setFormPagamento(p => ({ ...p, valor_pago: itens.length > 0 ? totalLiquido.toString() : "" }));
@@ -252,6 +257,8 @@ export default function NovaFaturaReciboPage() {
           referencia: formPagamento.referencia || undefined,
           data: formPagamento.data_pagamento,
         },
+        desconto_global: totalDesconto,
+        troco: troco,
       };
 
       if (modoCliente === 'cadastrado' && clienteSelecionado) {
@@ -611,7 +618,7 @@ export default function NovaFaturaReciboPage() {
                         style={{ borderColor: colors.border, backgroundColor: idx % 2 !== 0 ? `${colors.hover}60` : 'transparent' }}>
                         <td className="px-3 py-2.5">
                           <span className="font-medium truncate max-w-[120px] sm:max-w-[180px] block" style={{ color: colors.text }}>{item.descricao}</span>
-                          {item.desconto > 0 && <span className="text-[10px]" style={{ color: colors.danger }}>desc. −{formatarPreco(item.desconto)}</span>}
+
                         </td>
                         <td className="px-3 py-2.5">
                           <div className="flex items-center justify-center gap-0.5">
@@ -652,15 +659,17 @@ export default function NovaFaturaReciboPage() {
               <div className="flex flex-col sm:flex-row">
                 <div className="flex-1 px-4 py-3 border-b sm:border-b-0 sm:border-r" style={{ borderColor: colors.border }}>
                   <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: colors.textSecondary }}>Base</p>
-                  <LinhaFiscal label="Subtotal bruto" valor={formatarPreco(totalBase + totalDesconto)} colors={colors} />
+                  <LinhaFiscal label="Subtotal bruto" valor={formatarPreco(subtotalBruto)} colors={colors} />
+                    <LinhaFiscal label="Desconto" valor={`${percentualDesconto.toFixed(2)}%`} cor={colors.textSecondary} colors={colors} />
                   <LinhaFiscal label="Base tributável" valor={formatarPreco(totalBase)} colors={colors} />
-                  <LinhaFiscal label="Desconto" valor={formatarPreco(totalDesconto)} colors={colors} />
                 </div>
                 <div className="flex-1 px-4 py-3">
                   <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: colors.textSecondary }}>Impostos</p>
                   <LinhaFiscal label="IVA" valor={formatarPreco(totalIva)} colors={colors} />
-                  <LinhaFiscal label="Retenção" valor={formatarPreco(totalRetencao)} colors={colors} />
-                  <LinhaFiscal label="Troco" valor={formatarPreco(troco)} colors={colors} />
+                  {totalRetencao > 0 && (
+                    <LinhaFiscal label="Retenção" valor={`−${formatarPreco(totalRetencao)}`} cor={colors.danger} colors={colors} />
+                  )}
+                    <LinhaFiscal label="Troco" valor={formatarPreco(troco)} cor={colors.success} colors={colors} />
                   <div className="mt-2 pt-2 border-t" style={{ borderColor: colors.border }}>
                     <LinhaFiscal label="Total" valor={formatarPreco(totalLiquido)} cor={colors.secondary} negrito colors={colors} />
                   </div>
@@ -688,7 +697,6 @@ export default function NovaFaturaReciboPage() {
                 <div className="flex-1 min-w-[140px]">
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-xs font-medium" style={{ color: colors.textSecondary }}>Valor a pagar</label>
-                    {troco > 0 && <span className="text-xs font-semibold" style={{ color: colors.success }}>Troco: {formatarPreco(troco)}</span>}
                     {falta > 0 && (
                       <span className="text-xs font-semibold flex items-center gap-1" style={{ color: colors.danger }}>
                         <AlertTriangle size={12} />Faltam {formatarPreco(falta)}

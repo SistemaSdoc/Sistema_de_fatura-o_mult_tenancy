@@ -322,7 +322,11 @@ export default function MainEmpresa({
       links:
         userRole === "operador" || userRole === "admin"
           ? [
-              { label: "Documentos gerados", path: "/dashboard/Faturas/DC", icon: FileText },
+              {
+                label: "Documentos gerados",
+                path: "/dashboard/Faturas/DC",
+                icon: FileText,
+              },
             ]
           : [],
       isGroup: true,

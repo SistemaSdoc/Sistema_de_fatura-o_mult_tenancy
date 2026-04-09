@@ -3,7 +3,6 @@ if (!isset($documento) || !$documento) {
 die('Documento não encontrado');
 }
 
-
 $empresaMoradaEstatica = 'Rua do Paiol, Bairro Gameke, (Proximo da Farmacia Pedrito), Provincia de Luanda';
 $empresaTelefoneEstatico = '938747267 / 941177948';
 $empresaEmailEstatico = '';
@@ -50,6 +49,24 @@ $metodosPagamento = [
 $docParaTotais = $documento;
 if ($documento->tipo_documento === 'RC' && isset($documentoOrigem) && $documentoOrigem) {
 $docParaTotais = $documentoOrigem;
+}
+
+// Calcular desconto percentual (se existir)
+$percentualDesconto = 0;
+$temDesconto = false;
+$descontoGlobal = $docParaTotais->desconto_global ?? 0;
+
+if (($docParaTotais->base_tributavel ?? 0) > 0 && $descontoGlobal > 0) {
+    $temDesconto = true;
+    $subtotalBruto = $docParaTotais->base_tributavel + $descontoGlobal;
+    $percentualDesconto = ($descontoGlobal / $subtotalBruto) * 100;
+}
+
+// Verificar se tem troco
+$temTroco = false;
+$troco = $documento->troco ?? 0;
+if ($troco > 0) {
+    $temTroco = true;
 }
 @endphp
 
@@ -243,6 +260,13 @@ $docParaTotais = $documentoOrigem;
             margin-top: 4px;
         }
 
+        .total-line.desconto {
+            color: #d9534f;
+        }
+
+        .total-line.troco {
+            color: #5cb85c;
+        }
 
         /* Tax Summary */
         .tax-summary {
@@ -543,6 +567,16 @@ $docParaTotais = $documentoOrigem;
 
         <!-- Totais - Usa docParaTotais para recibos mostrarem dados do documento de origem -->
         <div class="totals-section">
+            <!-- Subtotal bruto e Desconto (só mostra se tiver desconto) -->
+            <div class="total-line">
+                <span>Subtotal bruto:</span>
+                <span>{{ number_format(($docParaTotais->base_tributavel ?? 0) + $descontoGlobal, 2, ',', '.') }} Kz</span>
+            </div>
+            <div class="total-line desconto">
+                <span>Desconto ({{ number_format($percentualDesconto, 2, ',', '.') }}%):</span>
+                <span>- {{ number_format($descontoGlobal, 2, ',', '.') }} Kz</span>
+            </div>
+
             <div class="total-line">
                 <span>Base Tributável:</span>
                 <span>{{ number_format($docParaTotais->base_tributavel ?? 0, 2, ',', '.') }} Kz</span>
@@ -555,27 +589,41 @@ $docParaTotais = $documentoOrigem;
 
             <div class="total-line">
                 <span>Retenção:</span>
-                <span>-{{ number_format($docParaTotais->total_retencao ?? 0, 2, ',', '.') }} Kz</span>
-            </div>
-            <div class="total-line">
-                <span>Forma de Pagamento</span><br>
-                {{ $metodosPagamento[$documento->metodo_pagamento] ?? ucfirst($documento->metodo_pagamento) }}
-            </div>
-            @if($documento->tipo_documento === 'FT')
-            <div class="total-line grand-total">
-                <strong>TOTAL A PAGAR</strong><br>
-                {{ number_format($documento->total_liquido, 2, ',', '.') }} Kz
+                <span>- {{ number_format($docParaTotais->total_retencao ?? 0, 2, ',', '.') }} Kz</span>
             </div>
 
+            <!-- Método de Pagamento (apenas para FR e RC) -->
+            @if(in_array($documento->tipo_documento, ['FR', 'RC']) && !empty($documento->metodo_pagamento))
+            <div class="total-line">
+                <span>Forma de Pagamento:</span>
+                <span>{{ $metodosPagamento[$documento->metodo_pagamento] ?? ucfirst($documento->metodo_pagamento) }}</span>
+            </div>
             @endif
-            @if($documento->tipo_documento === 'RC' || $documento->tipo_documento === 'FR' )
+
+            <!-- Troco (só mostra se tiver troco) -->
+            @if($temTroco)
+            <div class="total-line troco">
+                <span>Troco:</span>
+                <span>{{ number_format($troco, 2, ',', '.') }} Kz</span>
+            </div>
+            @endif
+
+            <!-- TOTAL A PAGAR (para FT) -->
+            @if($documento->tipo_documento === 'FT')
             <div class="total-line grand-total">
-                <span>TOTAL PAGO:</span>
-                <span>{{ number_format($documento->total_liquido, 2, ',', '.') }} Kz</span>
+                <strong>TOTAL A PAGAR</strong>
+                <strong>{{ number_format($documento->total_liquido, 2, ',', '.') }} Kz</strong>
+            </div>
+            @endif
+
+            <!-- TOTAL PAGO (para FR e RC) -->
+            @if(in_array($documento->tipo_documento, ['FR', 'RC']))
+            <div class="total-line grand-total">
+                <span><strong>TOTAL PAGO:</strong></span>
+                <span><strong>{{ number_format($documento->total_liquido, 2, ',', '.') }} Kz</strong></span>
             </div>
             @endif
         </div>
-
 
         <!-- QR Code e Hash Fiscal -->
         @if(!empty($qr_code_img))

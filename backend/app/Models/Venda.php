@@ -14,6 +14,7 @@ use Illuminate\Support\Str;
  *    O tipo de documento fiscal está em 'tipo_documento_fiscal'.
  *  - 'serie' REMOVIDO do $fillable — a coluna não existe na tabela.
  *  - SoftDeletes adicionado (a migration tem softDeletes()).
+ *  - Adicionados campos desconto_global e troco.
  */
 class Venda extends Model
 {
@@ -31,8 +32,6 @@ class Venda extends Model
         'cliente_nif',
         'user_id',
         'documento_fiscal_id',
-        // REMOVIDO: 'tipo_documento' — coluna não existe na tabela vendas
-        // REMOVIDO: 'serie'          — coluna não existe na tabela vendas
         'numero',
         'numero_documento',
         'base_tributavel',
@@ -44,8 +43,11 @@ class Venda extends Model
         'hora_venda',
         'status',
         'estado_pagamento',
-        'tipo_documento_fiscal',   // único campo que regista o tipo (FT, FR, FP...)
+        'tipo_documento_fiscal',
         'observacoes',
+        // NOVOS CAMPOS
+        'desconto_global',
+        'troco',
     ];
 
     protected $casts = [
@@ -56,6 +58,8 @@ class Venda extends Model
         'total_retencao'  => 'decimal:2',
         'total_pagar'     => 'decimal:2',
         'base_tributavel' => 'decimal:2',
+        'desconto_global' => 'decimal:2',
+        'troco'           => 'decimal:2',
     ];
 
     protected static function boot(): void
@@ -357,6 +361,8 @@ class Venda extends Model
             'pendente'               => $this->valor_pendente,
             'eh_venda'               => $this->eh_venda,
             'pode_receber_pagamento' => $this->pode_receber_pagamento,
+            'desconto_global'        => (float) ($this->desconto_global ?? 0),
+            'troco'                  => (float) ($this->troco ?? 0),
         ];
     }
 }

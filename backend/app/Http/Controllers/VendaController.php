@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use App\Models\Venda;
+
 use App\Models\Cliente;
 use App\Models\Produto;
 use App\Services\VendaService;
@@ -171,6 +172,9 @@ class VendaController extends Controller
             'dados_pagamento.valor'       => 'required_with:dados_pagamento|numeric|min:0',
             'dados_pagamento.referencia'  => 'nullable|string|max:255',
             'observacoes'                 => 'nullable|string|max:1000',
+            // NOVOS CAMPOS: desconto e troco
+            'desconto_global'             => 'nullable|numeric|min:0',  // Desconto aplicado ao total da venda
+            'troco'                       => 'nullable|numeric|min:0',  // Troco calculado no frontend
         ]);
 
         if (empty($dados['cliente_id']) && empty($dados['cliente_nome'])) {
@@ -384,6 +388,9 @@ class VendaController extends Controller
             'pode_receber_pagamento'     => $venda->pode_receber_pagamento,
             'pode_ser_cancelada'         => $venda->pode_ser_cancelada,
             'observacoes'                => $venda->observacoes,
+            // NOVOS CAMPOS: desconto e troco
+            'desconto_global'            => (float) ($venda->desconto_global ?? 0),
+            'troco'                      => (float) ($venda->troco ?? 0),
         ];
 
         // Documento fiscal resumido
@@ -399,7 +406,6 @@ class VendaController extends Controller
                 'data_vencimento'     => $df->data_vencimento,
                 'estado'              => $df->estado,
                 'hash_fiscal'         => $df->hash_fiscal,
-                // AGT: QR Code para exibição no frontend
                 'qr_code'             => $df->qr_code,
                 'retencao_total'      => (float) ($df->total_retencao ?? 0),
                 'recibos'             => $df->recibos->map(fn ($r) => [

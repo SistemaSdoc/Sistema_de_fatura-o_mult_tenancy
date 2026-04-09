@@ -117,7 +117,6 @@ export interface CriarClienteInput {
 
 export type AtualizarClienteInput = Partial<CriarClienteInput>;
 
-// venda_cancelada adicionado — alinhado com VendaService::cancelarVenda() PHP
 export interface MovimentoStock {
     id: string;
     produto_id: string;
@@ -170,8 +169,6 @@ export interface Produto {
     estoque_minimo: number;
     status: StatusProduto;
     tipo: TipoProduto;
-    // Campos exclusivos de SERVIÇOS
-    // Renomeado de 'retencao' para 'taxa_retencao' — alinhado com Model e ProdutoService PHP
     taxa_retencao?: number | null;
     duracao_estimada?: string;
     unidade_medida?: UnidadeMedida;
@@ -195,7 +192,6 @@ export interface CriarProdutoInput {
     estoque_atual?: number;
     estoque_minimo?: number;
     status?: StatusProduto;
-    // Serviços — taxa_retencao (renomeado de retencao)
     taxa_retencao?: number;
     duracao_estimada?: string;
     unidade_medida?: UnidadeMedida;
@@ -319,7 +315,6 @@ export interface TotaisPorTipo {
 
 export interface Venda {
     id: string;
-    // Número interno VD-XXXXXX — NÃO é o número fiscal
     numero: string;
     numero_documento?: string;
     tipo_documento: TipoDocumentoFiscal | 'venda';
@@ -354,6 +349,9 @@ export interface Venda {
     pode_ser_cancelada?: boolean;
     valor_pendente?: number;
     valor_pago?: number;
+    // NOVOS CAMPOS: desconto global e troco (apenas para registo)
+    desconto_global?: number;
+    troco?: number;
     deleted_at?: string;
 }
 
@@ -410,6 +408,9 @@ export interface CriarVendaPayload {
     itens: CriarItemVendaPayload[];
     dados_pagamento?: DadosPagamento;
     observacoes?: string;
+    // NOVOS CAMPOS: desconto global e troco
+    desconto_global?: number;
+    troco?: number;
 }
 
 export interface CriarDocumentoFiscalPayload {
@@ -543,6 +544,14 @@ function criarPayloadVenda(payload: CriarVendaPayload): Record<string, unknown> 
     }
 
     if (payload.observacoes) out.observacoes = payload.observacoes;
+    
+    // NOVOS CAMPOS: desconto global e troco
+    if (payload.desconto_global !== undefined && payload.desconto_global > 0) {
+        out.desconto_global = payload.desconto_global;
+    }
+    if (payload.troco !== undefined && payload.troco > 0) {
+        out.troco = payload.troco;
+    }
 
     return out;
 }
@@ -697,6 +706,11 @@ export const vendaService = {
             venda.quantidade_servicos ??= venda.itens.filter(i => i.eh_servico).length;
         }
         venda.paga ??= venda.estado_pagamento === 'paga';
+        
+        // Normalizar novos campos
+        venda.desconto_global ??= 0;
+        venda.troco ??= 0;
+        
         return venda;
     },
 };
@@ -1197,7 +1211,6 @@ export function isServico(produto: Produto): boolean  { return produto.tipo === 
 export function isProduto(produto: Produto): boolean  { return produto.tipo === "produto"; }
 export function estaNaLixeira(produto: Produto): boolean { return !!produto.deleted_at; }
 
-/** Usa taxa_retencao (renomeado de retencao) */
 export function calcularRetencao(produto: Produto, quantidade = 1): number {
     if (!isServico(produto) || !produto.taxa_retencao) return 0;
     return (produto.preco_venda * quantidade * produto.taxa_retencao) / 100;
@@ -1285,7 +1298,6 @@ export function getTipoBadge(tipo: TipoProduto): { texto: string; cor: string } 
     return tipo === "servico" ? { texto: "Serviço", cor: "bg-blue-100 text-blue-800" } : { texto: "Produto", cor: "bg-purple-100 text-purple-800" };
 }
 
-/** Badge de retenção — usa taxa_retencao */
 export function getRetencaoBadge(taxaRetencao?: number | null): { texto: string; cor: string } | null {
     if (!taxaRetencao) return null;
     return { texto: `Retenção ${taxaRetencao}%`, cor: "bg-orange-100 text-orange-800" };
