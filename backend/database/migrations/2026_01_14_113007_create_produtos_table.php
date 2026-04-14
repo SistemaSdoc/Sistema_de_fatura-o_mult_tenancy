@@ -35,7 +35,7 @@ return new class extends Migration
             $table->decimal('custo_medio', 15, 2)->default(0);
 
             $table->boolean('sujeito_iva')->default(true);
-            $table->decimal('taxa_iva', 5, 2)->default(14.00);
+            $table->decimal('taxa_iva', 5, 2);
 
             $table->decimal('taxa_retencao', 5, 2)->nullable();
             $table->string('codigo_isencao', 3)->nullable();
@@ -44,6 +44,26 @@ return new class extends Migration
 
             $table->integer('estoque_atual')->default(0);
             $table->integer('estoque_minimo')->default(5);
+
+            // Custos adicionais
+            $table->decimal('despesas_adicionais', 15, 2)->default(0);
+
+            // Estratégia de preço
+            $table->enum('tipo_preco', ['margem', 'markup', 'fixo'])->default('margem');
+
+// Percentuais
+$table->decimal('margem_lucro', 5, 2)->nullable();
+$table->decimal('markup', 5, 2)->nullable();
+
+// Controlo de limites
+$table->decimal('preco_minimo', 15, 2)->nullable();
+$table->decimal('preco_maximo', 15, 2)->nullable();
+
+// Produto com preço regulado
+$table->boolean('preco_controlado')->default(false);
+
+// Permitir venda abaixo do mínimo?
+$table->boolean('permite_preco_livre')->default(false);
 
             $table->timestamps();
             $table->softDeletes();

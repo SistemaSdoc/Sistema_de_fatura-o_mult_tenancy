@@ -162,7 +162,7 @@ class VendaController extends Controller
             'itens.*.quantidade'          => 'required|integer|min:1',
             'itens.*.preco_venda'         => 'required|numeric|min:0',
             'itens.*.desconto'            => 'nullable|numeric|min:0',
-            'itens.*.taxa_iva'            => 'nullable|numeric|in:0,5,14',
+            'itens.*.taxa_iva'            => 'nullable|numeric',   // apenas taxas legais angola
             'itens.*.taxa_retencao'       => 'nullable|numeric|in:0,2,5,6.5,10,15',
             'itens.*.codigo_isencao'      => 'nullable|string|in:M00,M01,M02,M03,M04,M05,M06,M99',
             'faturar'                     => 'nullable|boolean',

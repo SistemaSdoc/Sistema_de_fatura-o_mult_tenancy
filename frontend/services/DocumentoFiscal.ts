@@ -48,6 +48,9 @@ export interface DocumentoFiscal {
     hora_emissao: string;
     data_vencimento?: string | null;
     data_cancelamento?: string | null;
+    desconto_global?:number;
+    venda?:number;
+    troco?:number;
     base_tributavel: number;
     total_iva: number;
     total_retencao: number;

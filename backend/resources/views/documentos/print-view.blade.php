@@ -4,10 +4,10 @@ die('Documento não encontrado');
 }
 
 
-$empresaMoradaEstatica = 'Rua do Paiol, Bairro Gameke, (Proximo da Farmacia Pedrito), Provincia de Luanda';
-$empresaTelefoneEstatico = '938747267 / 941177948';
+$empresaMoradaEstatica = 'Avenida 21 de Janeiro, Gamek';
+$empresaTelefoneEstatico = '+244 943 489 186';
 $empresaEmailEstatico = '';
-$empresaLogo = asset('images/mwamba.jpeg');
+$empresaLogo = asset('images/1000041800.jpg');
 
 $tiposDocumento = [
 'FT' => 'Fatura',

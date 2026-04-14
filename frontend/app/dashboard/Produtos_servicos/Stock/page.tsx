@@ -16,6 +16,7 @@ import { TabelaMovimentacoes } from "@/app/components/Stock/TabelaMovimentacoes"
 import { TabelaLixeira } from "@/app/components/Stock/TabelaLixeira";
 import { TabsEstoque } from "@/app/components/Stock/TabsEstoque";
 import { NovoProdutoForm } from "@/app/components/Stock/NovoProdutoForm";
+import { ModalEdicao } from "@/app/components/Stock/ModalEdicao";
 
 // Hooks
 import { useEstoque } from "@/hooks/useEstoque";
@@ -41,6 +42,7 @@ export default function EstoquePage() {
         filtroEstoque,
         abaAtiva,
         modalEntradaAberto,
+        modalEdicaoAberto,
         itemSelecionado,
         modalConfirmacao,
         produtos,
@@ -58,11 +60,13 @@ export default function EstoquePage() {
         carregarDeletados,
         aplicarFiltros,
         abrirModalEntrada,
+        abrirModalEditar,
         abrirModalDeletar,
         abrirModalRestaurar,
         abrirModalForceDelete,
         fecharModais,
         handleEntrada,
+        handleEditarItem,
         handleDeletarItem,
         handleRestaurarItem,
         handleForceDelete,
@@ -114,16 +118,20 @@ export default function EstoquePage() {
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
-                        <button className="flex items-center gap-2 p-1.5 transition-colors hover:opacity-70"
-                            style={{ color: colors.primary }} onClick={() => router.back()}> <ArrowLeft className="w-4 h-4" />
-                        <h1 className="text-2xl md:text-3xl font-bold" style={{ color: colors.secondary }}>Seu Stock</h1>
+                        <button 
+                            className="flex items-center gap-2 p-1.5 transition-colors hover:opacity-70"
+                            style={{ color: colors.primary }} 
+                            onClick={() => router.back()}
+                        > 
+                            <ArrowLeft className="w-4 h-4" />
+                            <h1 className="text-2xl md:text-3xl font-bold" style={{ color: colors.secondary }}>Seu Stock</h1>
                         </button>
                         
                         <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>Gerencie seu catálogo e controle de estoque</p>
                     </div>
                     <button
                         onClick={abrirModalNovoProduto}
-                        className="flex items-center gap-2 px-4 py-2 text-white transition-colors text-sm font-medium hover:opacity-90"
+                        className="flex items-center gap-2 px-4 py-2 text-white transition-colors text-sm font-medium hover:opacity-90 rounded-lg"
                         style={{ backgroundColor: colors.secondary }}
                     >
                         <Plus className="w-4 h-4" />
@@ -162,7 +170,7 @@ export default function EstoquePage() {
                 )}
 
                 {/* Tabs e Conteúdo */}
-                <div className="shadow-sm border overflow-hidden" style={{
+                <div className="shadow-sm border overflow-hidden rounded-lg" style={{
                     backgroundColor: colors.card,
                     borderColor: colors.border
                 }}>
@@ -195,6 +203,7 @@ export default function EstoquePage() {
 
                                 <TabelaItens
                                     itens={itens}
+                                    onEditar={abrirModalEditar}
                                     onRegistrarEntrada={abrirModalEntrada}
                                     onMoverParaLixeira={abrirModalDeletar}
                                     colors={colors}
@@ -225,7 +234,7 @@ export default function EstoquePage() {
             {modalNovoProdutoAberto && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
                     <div 
-                        className="shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden"
+                        className="shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden rounded-lg"
                         style={{ backgroundColor: colors.card }}
                     >
                         <div className="p-6 overflow-y-auto max-h-[90vh]">
@@ -238,7 +247,16 @@ export default function EstoquePage() {
                 </div>
             )}
 
-            {/* Outros Modais */}
+            {/* Modal de Edição */}
+            <ModalEdicao
+                isOpen={modalEdicaoAberto}
+                item={itemSelecionado}
+                onSave={handleEditarItem}
+                onClose={fecharModais}
+                categorias={categorias}
+            />
+
+            {/* Modal de Entrada de Estoque */}
             <ModalEntrada
                 isOpen={modalEntradaAberto}
                 onClose={fecharModais}
@@ -247,6 +265,7 @@ export default function EstoquePage() {
                 colors={colors}
             />
 
+            {/* Modal de Confirmação - Delete (Mover para Lixeira) */}
             <ModalConfirmacao
                 isOpen={modalConfirmacao.isOpen && modalConfirmacao.tipo === "delete"}
                 onClose={fecharModais}
@@ -257,6 +276,7 @@ export default function EstoquePage() {
                 colors={colors}
             />
 
+            {/* Modal de Confirmação - Restaurar */}
             <ModalConfirmacao
                 isOpen={modalConfirmacao.isOpen && modalConfirmacao.tipo === "restore"}
                 onClose={fecharModais}
@@ -267,6 +287,7 @@ export default function EstoquePage() {
                 colors={colors}
             />
 
+            {/* Modal de Confirmação - Delete Permanente */}
             <ModalConfirmacao
                 isOpen={modalConfirmacao.isOpen && modalConfirmacao.tipo === "warning"}
                 onClose={fecharModais}

@@ -7,8 +7,7 @@ export interface ApiErrorResponse {
   status?: number;
 }
 
-// Detecta automaticamente o host do browser e usa a porta 8000 do Laravel.
-// Funciona com qualquer IP — não precisa de alterar quando o IP muda.
+// BaseURL dinâmica (melhor que está)
 const getBaseURL = (): string => {
   if (typeof window === "undefined") return "http://localhost:8000";
   return `${window.location.protocol}//${window.location.hostname}:8000`;
@@ -16,25 +15,41 @@ const getBaseURL = (): string => {
 
 const api = axios.create({
   baseURL: getBaseURL(),
-  withCredentials: true,
+  withCredentials: true,           // Essencial para cookies
   headers: {
     Accept: "application/json",
     "Content-Type": "application/json",
+    "X-Requested-With": "XMLHttpRequest",   // ← Adicionado
   },
 });
 
-// Configuração CSRF Sanctum
+// Configuração Sanctum
 api.defaults.xsrfCookieName = "XSRF-TOKEN";
 api.defaults.xsrfHeaderName = "X-XSRF-TOKEN";
 
-// Interceptor REQUEST
+// ==================== INTERCEPTOR REQUEST ====================
 api.interceptors.request.use(
-  (config) => {
-    const xsrfToken = Cookies.get("XSRF-TOKEN");
+  async (config) => {
     const method = config.method?.toLowerCase();
 
-    if (xsrfToken && method && ["post", "put", "patch", "delete"].includes(method)) {
-      config.headers["X-XSRF-TOKEN"] = xsrfToken;
+    // Para requisições que modificam dados → garante CSRF
+    if (["post", "put", "patch", "delete"].includes(method || "")) {
+      // Se não tiver o token ainda, busca primeiro
+      const xsrfToken = Cookies.get("XSRF-TOKEN");
+      if (!xsrfToken) {
+        try {
+          await api.get("/sanctum/csrf-cookie", { 
+            baseURL: getBaseURL() 
+          });
+        } catch (err) {
+          console.error("Falha ao obter CSRF Cookie");
+        }
+      }
+
+      const freshToken = Cookies.get("XSRF-TOKEN");
+      if (freshToken) {
+        config.headers["X-XSRF-TOKEN"] = freshToken;
+      }
     }
 
     return config;
@@ -42,22 +57,25 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Interceptor RESPONSE
+// ==================== INTERCEPTOR RESPONSE ====================
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError<ApiErrorResponse>) => {
     const status = error.response?.status;
     const url = error.config?.url;
 
+    if (status === 419) {
+      console.error("[419] CSRF Token inválido ou expirado");
+      // Tenta recuperar automaticamente
+      Cookies.remove("XSRF-TOKEN");
+    }
+
     if (status === 401 && !url?.includes("/login")) {
-      console.warn("[401] Sessão expirada ou inválida");
-      if (window.location.pathname !== "/login") {
+      console.warn("[401] Sessão expirada");
+      if (typeof window !== "undefined" && window.location.pathname !== "/login") {
         window.location.href = "/login";
       }
     }
-
-    if (status === 419) console.error("[419] CSRF inválido");
-    if (status === 403) console.error(`[403] Acesso negado em ${url}`);
 
     return Promise.reject(error);
   }

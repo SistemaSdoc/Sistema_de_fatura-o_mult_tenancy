@@ -89,9 +89,9 @@ export default function MainEmpresa({
   const userRole = user?.role || "";
   const userEmail = user?.email || "";
   const userInitial = userName.charAt(0).toUpperCase();
-  const empresaLogo = companyLogo || user?.empresa?.logo || "/images/3.png";
+  const empresaLogo = companyLogo || user?.empresa?.logo || "/images/1000041800.jpg";
   const nomeEmpresa =
-    companyName || user?.empresa?.nome || "SDOCA-Comercio e Serviços, Lda";
+    companyName || user?.empresa?.nome || "CONTAI-CONTABILIDADE & COMERCIO, (SU) LDA";
 
   // Responsive detection
   useEffect(() => {
@@ -514,7 +514,7 @@ export default function MainEmpresa({
               return (
                 <div key={item.label}>
                   <div
-                    className="flex items-center justify-between px-3 py-2.5 transition-all duration-200 cursor-pointer select-none hover:translate-x-1 active:scale-98"
+                    className="flex items-center justify-between px-3 py-2.5 transition-all duration-200 cursor-pointer select-none "
                     style={{
                       backgroundColor: active
                         ? colors.secondary
@@ -594,7 +594,7 @@ export default function MainEmpresa({
                             onClick={handleLinkClick}
                           >
                             <div
-                              className="flex items-center gap-3 px-3 py-2 border-l-2 transition-all hover:translate-x-1"
+                              className="flex items-center gap-3 px-3 py-2 border-l-2 transition-all"
                               style={{
                                 borderColor: linkActive
                                   ? colors.primary
@@ -670,7 +670,7 @@ export default function MainEmpresa({
             {isMobile && (
               <button
                 onClick={() => setSidebarOpen(true)}
-                className="p-2 transition-transform hover:scale-110 active:scale-95 "
+                className="p-2 transition-transform  "
                 style={{ color: colors.primary }}
               >
                 <Menu size={20} />
@@ -980,7 +980,7 @@ export default function MainEmpresa({
                 </p>
               </div>
               <div
-                className="flex items-center justify-center w-7 h-7 text-xs font-bold text-white md:w-8 md:h-8 transition-transform hover:scale-105"
+                className="flex items-center justify-center w-7 h-7 text-xs font-bold text-white md:w-8 md:h-8 transition-transform"
                 style={{
                   background: `linear-gradient(135deg, ${colors.secondary} 0%, ${colors.primary} 100%)`,
                 }}

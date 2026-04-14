@@ -48,6 +48,7 @@ class Produto extends Model
         'codigo_isencao',  // SAF-T: TaxExemptionCode (M00–M99)
         'duracao_estimada',
         'unidade_medida',
+        
     ];
 
     protected $casts = [
@@ -67,8 +68,8 @@ class Produto extends Model
         'status'         => 'ativo',
         'estoque_atual'  => 0,
         'estoque_minimo' => 5,
-        'taxa_iva'       => 14.00,
-        'sujeito_iva'    => true,
+        'taxa_iva'       => 0,
+        'sujeito_iva'    => false,
         'custo_medio'    => 0.00,
     ];
 

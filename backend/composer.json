@@ -47,10 +47,9 @@
             "npm install",
             "npm run build"
         ],
-        "dev": [
-            "Composer\\Config::disableProcessTimeout",
-            "npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74\" \"php artisan serve\" \"php artisan queue:listen --tries=1\" \"php artisan pail --timeout=0\" \"npm run dev\" --names=server,queue,logs,vite --kill-others"
-        ],
+  "dev": [
+        "php artisan serve --host=0.0.0.0 --port=8000"
+],
         "test": [
             "@php artisan config:clear --ansi",
             "@php artisan test"
@@ -86,8 +85,10 @@
         "allow-plugins": {
             "pestphp/pest-plugin": true,
             "php-http/discovery": true
-        }
+        },
+        "process-timeout": 0
     },
+
     "minimum-stability": "stable",
     "prefer-stable": true
 }

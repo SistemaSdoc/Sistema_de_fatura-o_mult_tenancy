@@ -4,10 +4,11 @@ import api from "./axios";
 
 // ===== TIPOS =====
 
-export type TipoProduto = "produto" | "servico";
 export type StatusProduto = "ativo" | "inativo";
+export type TipoProduto = "produto" | "servico";
 export type UnidadeMedida = "hora" | "dia" | "semana" | "mes";
-
+export type TipoPreco = "fixo" | "margem" | "markup";
+export type CodigoIsencao = "M00" | "M01" | "M02" | "M03" | "M04" | "M05" | "M06" | "M99";
 // ===== INTERFACES =====
 
 export interface Categoria {
@@ -72,11 +73,16 @@ export interface Produto {
     status: StatusProduto;
     tipo: TipoProduto;
 
+    tipo_preco?: TipoPreco;
+    despesas_adicionais?: number;
+    margem_lucro?: number;
+    markup?: number;
+        // NOVOS: Campos de cálculo de preço
     // Campos exclusivos de SERVIÇOS
-    // Renomeado de 'retencao' para 'taxa_retencao' — alinhado com Model e ProdutoService PHP
     taxa_retencao?: number | null;
     duracao_estimada?: string;
     unidade_medida?: UnidadeMedida;
+    codigo_isencao?: CodigoIsencao | null;  // NOVO
 
     // Soft delete
     deleted_at?: string | null;
@@ -100,10 +106,15 @@ export interface CriarProdutoInput {
     estoque_atual?: number;
     estoque_minimo?: number;
     status?: StatusProduto;
+    markup?:number;
+    tipo_preco?:string;
+    despesas_adicionais?:number;
+    margem_lucro?:number;
     // Serviços
     taxa_retencao?: number;
     duracao_estimada?: string;
     unidade_medida?: UnidadeMedida;
+ codigo_isencao?: CodigoIsencao;
 
 }
 
@@ -326,6 +337,48 @@ export interface MovimentoResponse {
         quantidade: number;
     };
 }
+
+export function calcularPrecoVenda(
+    precoCompra: number,
+    despesasAdicionais: number = 0,
+    tipoPreco: TipoPreco = "fixo",
+    margemOuMarkup: number = 0,
+    precoFixo?: number
+): number {
+    const base = precoCompra + despesasAdicionais;
+
+    switch (tipoPreco) {
+        case "margem":
+            if (margemOuMarkup <= 0 || margemOuMarkup >= 100) return base;
+            return base / (1 - (margemOuMarkup / 100));
+        
+        case "markup":
+            return base * (1 + (margemOuMarkup / 100));
+        
+        case "fixo":
+        default:
+            return precoFixo || base;
+    }
+}
+
+/** Retorna label formatado para tipo de preço */
+export function getTipoPrecoLabel(tipo: TipoPreco): string {
+    return {
+        fixo: "Preço Fixo",
+        margem: "Margem de Lucro",
+        markup: "Markup",
+    }[tipo];
+}
+
+/** Retorna descrição da fórmula usada */
+export function getFormulaDescricao(tipo: TipoPreco): string {
+    return {
+        fixo: "Preço definido manualmente",
+        margem: "(Custo + Despesas) ÷ (1 - Margem%)",
+        markup: "(Custo + Despesas) × (1 + Markup%)",
+    }[tipo];
+}
+
 
 export interface ResumoStockResponse {
     totalProdutos: number;

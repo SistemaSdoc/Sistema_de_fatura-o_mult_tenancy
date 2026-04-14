@@ -107,7 +107,7 @@ return new class extends Migration
             // ── Fiscal ───────────────────────────────────────────────────
             $table->decimal('base_tributavel', 15, 2)->default(0);
             // Taxas válidas Angola: 0%, 5%, 14%
-            $table->decimal('taxa_iva', 5, 2)->default(14.00);
+            $table->decimal('taxa_iva', 5, 2);
             $table->decimal('valor_iva', 15, 2)->default(0);
             // Código de isenção — SAF-T TaxExemptionCode (M00–M99)
             $table->string('codigo_isencao', 3)->nullable();

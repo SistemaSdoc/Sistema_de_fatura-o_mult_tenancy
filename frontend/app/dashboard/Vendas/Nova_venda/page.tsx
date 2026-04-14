@@ -43,7 +43,7 @@ interface ThemeColors {
 function calcularItem(produto: Produto, qtd: number, desc: number, id = uuidv4()): ItemVendaUI {
   const ehServico = isServico(produto);
   const base = arredondar(arredondar(produto.preco_venda * qtd) - desc);
-  const taxaIva = produto.taxa_iva ?? 14;
+  const taxaIva = produto.taxa_iva ;
   const iva = arredondar(base * taxaIva / 100);
   const taxaRet = ehServico ? 6.5 : 0;
   const ret = ehServico ? arredondar(base * taxaRet / 100) : 0;

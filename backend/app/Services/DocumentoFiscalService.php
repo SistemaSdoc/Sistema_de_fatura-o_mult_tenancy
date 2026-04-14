@@ -88,7 +88,7 @@ class DocumentoFiscalService
             'nome'                  => 'Fatura Proforma',
             'afeta_stock'           => false,
             'eh_venda'              => false,
-            'gera_recibo'           => false,
+            'gera_recibo'           => true,
             'estado_inicial'        => 'emitido',
             'exige_cliente'         => false,
             'aceita_pagamento'      => false,
@@ -293,14 +293,14 @@ class DocumentoFiscalService
      | ================================================================== */
 
     /**
-     * Gera um recibo (RC) para uma FT ou FA.
+     * Gera um recibo (RC) para FT, FA ou FP.
      * Recibos são isentos de assinatura RSA pela AGT.
      */
     public function gerarRecibo(DocumentoFiscal $documentoOrigem, array $dados): DocumentoFiscal
     {
-        if (! in_array($documentoOrigem->tipo_documento, ['FT', 'FA'])) {
+        if (! in_array($documentoOrigem->tipo_documento, ['FT', 'FA', 'FP'])) {
             throw new \InvalidArgumentException(
-                "Apenas FT e FA podem receber recibo. Tipo: {$documentoOrigem->tipo_documento}"
+                "Apenas FT, FA e FP podem receber recibo. Tipo atual: {$documentoOrigem->tipo_documento}"
             );
         }
 
@@ -314,70 +314,79 @@ class DocumentoFiscalService
         }
 
         return DB::transaction(function () use ($documentoOrigem, $dados) {
+            $valorPago = (float) ($dados['valor'] ?? 0);
 
-            $valorPago     = (float) $dados['valor'];
-            $valorPendente = $this->calcularValorPendente($documentoOrigem);
+            // === Cálculo correto do valor pendente ===
+            if ($documentoOrigem->tipo_documento === 'FP') {
+                $valorPendente = (float) $documentoOrigem->total_liquido;
+            } else {
+                $valorPendente = $this->calcularValorPendente($documentoOrigem);
+            }
+
+            if ($valorPago <= 0) {
+                throw new \InvalidArgumentException("O valor do pagamento deve ser maior que zero.");
+            }
 
             if ($valorPago > $valorPendente + 0.01) {
                 throw new \InvalidArgumentException(
-                    "Valor do pagamento ({$valorPago}) excede o pendente ({$valorPendente})."
+                    "Valor do pagamento ({$valorPago}) excede o valor pendente ({$valorPendente})."
                 );
             }
 
             [$numero, $numeroDocumento, $serieFiscal] = $this->gerarNumeroDocumento('RC');
 
-            // CORREÇÃO: Usar fuso horário de Angola
             $agoraAngola = Carbon::now('Africa/Luanda');
 
             $reciboData = [
-                'id'                   => Str::uuid(),
-                'user_id'              => Auth::id(),
-                'fatura_id'            => $documentoOrigem->id,
-                'serie'                => $serieFiscal->serie,
-                'numero'               => $numero,
-                'numero_documento'     => $numeroDocumento,
-                'tipo_documento'       => 'RC',
-                'data_emissao'         => $dados['data_pagamento'] ?? $agoraAngola->toDateString(),
-                'hora_emissao'         => $agoraAngola->toTimeString(),
-                'data_vencimento'      => null,
-                'base_tributavel'      => 0,
-                'total_iva'            => 0,
-                'total_retencao'       => 0,
-                'total_liquido'        => $valorPago,
-                'estado'               => DocumentoFiscal::ESTADO_PAGA,
-                'metodo_pagamento'     => $dados['metodo_pagamento'],
-                'referencia_pagamento' => $dados['referencia'] ?? null,
-                'hash_fiscal'          => null,
-                'rsa_assinatura'       => null,
-                'rsa_versao_chave'     => null,
-                'qr_code'              => null,
-                'hash_anterior'        => null,
+                'id'                    => Str::uuid(),
+                'user_id'               => Auth::id(),
+                'fatura_id'             => $documentoOrigem->id,
+                'serie'                 => $serieFiscal->serie,
+                'numero'                => $numero,
+                'numero_documento'      => $numeroDocumento,
+                'tipo_documento'        => 'RC',
+                'data_emissao'          => $dados['data_pagamento'] ?? $agoraAngola->toDateString(),
+                'hora_emissao'          => $agoraAngola->toTimeString(),
+                'data_vencimento'       => null,
+                'base_tributavel'       => 0,
+                'total_iva'             => 0,
+                'total_retencao'        => 0,
+                'total_liquido'         => $valorPago,
+                'estado'                => DocumentoFiscal::ESTADO_PAGA,
+                'metodo_pagamento'      => $dados['metodo_pagamento'] ?? 'dinheiro',
+                'referencia_pagamento'  => $dados['referencia'] ?? null,
+                'hash_fiscal'           => null,
+                'rsa_assinatura'        => null,
+                'rsa_versao_chave'      => null,
+                'qr_code'               => null,
+                'hash_anterior'         => null,
             ];
 
-            // Herdar dados do cliente do documento origem
+            // Herdar dados do cliente
             if ($documentoOrigem->cliente_id) {
                 $reciboData['cliente_id'] = $documentoOrigem->cliente_id;
             } elseif ($documentoOrigem->cliente_nome) {
                 $reciboData['cliente_nome'] = $documentoOrigem->cliente_nome;
-                $reciboData['cliente_nif']  = $documentoOrigem->cliente_nif;
+                $reciboData['cliente_nif']  = $documentoOrigem->cliente_nif ?? null;
             }
 
             $recibo = DocumentoFiscal::create($reciboData);
 
-            // Actualizar estado do documento origem
+            // Atualizar estado do documento de origem
             $this->actualizarEstadoAposPagamento($documentoOrigem, $valorPago);
 
-            // RC: hash simples (sem RSA — isenção AGT para recibos)
+            // Gerar hash simples (recibos não precisam de RSA)
             $recibo->update(['hash_fiscal' => $this->gerarHashSimples($recibo)]);
 
-            Log::info('Recibo gerado', [
-                'recibo_id'           => $recibo->id,
-                'numero'              => $recibo->numero_documento,
-                'documento_origem_id' => $documentoOrigem->id,
-                'valor'               => $valorPago,
+            Log::info('Recibo gerado com sucesso', [
+                'recibo_id'    => $recibo->id,
+                'numero'       => $recibo->numero_documento,
+                'origem_tipo'  => $documentoOrigem->tipo_documento,
+                'origem_id'    => $documentoOrigem->id,
+                'valor'        => $valorPago,
             ]);
 
-            return $recibo->load('documentoOrigem');
+            return $recibo->load('documentoOrigem', 'cliente');
         });
     }
 
@@ -1601,21 +1610,25 @@ class DocumentoFiscalService
     {
         $totalPagoActualizado = $this->calcularTotalPago($documentoOrigem) + $valorPago;
 
-        if ($documentoOrigem->tipo_documento === 'FA') {
-            $pago = $totalPagoActualizado >= (float) $documentoOrigem->total_liquido;
+        if ($documentoOrigem->tipo_documento === 'FP') {
+            // FP vira "paga" ao receber o primeiro recibo (converte em venda)
+            $estadoFinal = DocumentoFiscal::ESTADO_PAGA;
+        } elseif ($documentoOrigem->tipo_documento === 'FA') {
+            $estadoFinal = $totalPagoActualizado >= (float) $documentoOrigem->total_liquido
+                ? DocumentoFiscal::ESTADO_PAGA
+                : DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA;
         } else {
+            // FT
             $totalAdiantamentos = (float) DB::table('adiantamento_fatura')
                 ->where('fatura_id', $documentoOrigem->id)
                 ->sum('valor_utilizado');
 
-            $pago = ($totalPagoActualizado + $totalAdiantamentos) >= (float) $documentoOrigem->total_liquido;
+            $estadoFinal = ($totalPagoActualizado + $totalAdiantamentos) >= (float) $documentoOrigem->total_liquido
+                ? DocumentoFiscal::ESTADO_PAGA
+                : DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA;
         }
 
-        $documentoOrigem->update([
-            'estado' => $pago
-                ? DocumentoFiscal::ESTADO_PAGA
-                : DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA,
-        ]);
+        $documentoOrigem->update(['estado' => $estadoFinal]);
     }
 
     private function resolverCliente(array $dados, string $tipo): ?string

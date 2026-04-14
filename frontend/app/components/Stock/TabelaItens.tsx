@@ -1,6 +1,6 @@
 // src/app/(empresa)/estoque/components/TabelaItens.tsx
 import React from "react";
-import { Package, Wrench, ArrowUpCircle, Trash2, Layers, Plus } from "lucide-react";
+import { Package, Wrench, ArrowUpCircle, Trash2, Layers, Plus, Edit2 } from "lucide-react";
 import { Produto, formatarPreco, getTipoBadge, isServico, } from "@/services/produtos";
 import { StatusEstoqueBadge } from "./StatusEstoqueBadge";
 import { useThemeColors } from "@/context/ThemeContext";
@@ -9,10 +9,11 @@ interface TabelaItensProps {
     itens: Produto[];
     onRegistrarEntrada: (item: Produto) => void;
     onMoverParaLixeira: (item: Produto) => void;
+    onEditar: (item: Produto) => void;  // Nova prop
     colors?: any;
 }
 
-export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira, colors: propColors }: TabelaItensProps) {
+export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira, onEditar, colors: propColors }: TabelaItensProps) {
     const contextColors = useThemeColors();
     const colors = propColors || contextColors;
 
@@ -71,7 +72,7 @@ export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira, col
                                 </td>
                                 <td className="py-3 px-4">
                                     <span
-                                        className="inline-flex items-center gap-1 px-2 py-1 text-xs"
+                                        className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded"
                                         style={{ backgroundColor: badgeStyle.bg, color: badgeStyle.text }}
                                     >
                                         {tipoBadge.texto}
@@ -93,19 +94,30 @@ export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira, col
                                 </td>
                                 <td className="py-3 px-4">
                                     <div className="flex items-center justify-center gap-2">
+                                        {/* Botão Editar - aparece para produtos e serviços */}
+                                        <button
+                                            onClick={() => onEditar(item)}
+                                            className="p-1.5 transition-colors rounded hover:bg-opacity-10 hover:bg-gray-500"
+                                            style={{ color: colors.textSecondary }}
+                                            title="Editar"
+                                        >
+                                            <Edit2 className="w-4 h-4" />
+                                        </button>
+
                                         {!isServicoItem && (
                                             <button
                                                 onClick={() => onRegistrarEntrada(item)}
-                                                className="p-1.5 transition-colors"
-                                                style={{ color: colors.texts }}
+                                                className="p-1.5 transition-colors rounded hover:bg-opacity-10 hover:bg-gray-500"
+                                                style={{ color: colors.textSecondary }}
                                                 title="Registrar Entrada"
                                             >
                                                 <Plus className="w-4 h-4" />
                                             </button>
                                         )}
+                                        
                                         <button
                                             onClick={() => onMoverParaLixeira(item)}
-                                            className="p-1.5 transition-colors"
+                                            className="p-1.5 transition-colors rounded hover:bg-opacity-10 hover:bg-orange-500"
                                             style={{ color: colors.secondary }}
                                             title="Mover para Lixeira"
                                         >

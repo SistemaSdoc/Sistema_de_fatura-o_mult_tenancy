@@ -61,40 +61,82 @@ class MovimentoStockController extends Controller
      | RESUMO (DASHBOARD)
      | ================================================================== */
 
-    public function resumo()
-    {
-        $produtos      = Produto::apenasProdutos()->get();
-        $produtosAtivos = $produtos->where('status', 'ativo');
+public function resumo()
+{
+    $hoje = now()->toDateString();
 
-        $estoqueBaixo = $produtosAtivos->filter(fn ($p) => $p->estoqueBaixo());
-        $semEstoque   = $produtosAtivos->filter(fn ($p) => $p->semEstoque());
+    // =========================
+    // PRODUTOS (APENAS SQL)
+    // =========================
+    $totalProdutos = Produto::apenasProdutos()->count();
 
-        $valorTotal = $produtosAtivos->sum(
-            fn ($p) => $p->estoque_atual * ($p->custo_medio > 0 ? $p->custo_medio : ($p->preco_compra ?? 0))
-        );
+    $produtosAtivos = Produto::apenasProdutos()
+        ->where('status', 'ativo')
+        ->count();
 
-        $movimentacoesHoje = MovimentoStock::whereDate('created_at', today())->count();
-        $entradasHoje      = MovimentoStock::whereDate('created_at', today())->where('tipo', 'entrada')->sum('quantidade');
-        $saidasHoje        = MovimentoStock::whereDate('created_at', today())->where('tipo', 'saida')->sum(DB::raw('ABS(quantidade)'));
+    $produtosEstoqueBaixo = Produto::apenasProdutos()
+        ->where('status', 'ativo')
+        ->whereColumn('estoque_atual', '<=', 'estoque_minimo')
+        ->count();
 
-        $saidasPorDocFiscal = MovimentoStock::whereDate('created_at', today())
-            ->where('tipo', 'saida')
-            ->whereIn('tipo_movimento', ['venda', 'nota_credito'])
-            ->count();
+    $produtosSemEstoque = Produto::apenasProdutos()
+        ->where('status', 'ativo')
+        ->where('estoque_atual', 0)
+        ->count();
 
-        return response()->json([
-            'totalProdutos'            => $produtos->count(),
-            'produtosAtivos'           => $produtosAtivos->count(),
-            'produtosEstoqueBaixo'     => $estoqueBaixo->count(),
-            'produtosSemEstoque'       => $semEstoque->count(),
-            'valorTotalEstoque'        => round($valorTotal, 2),
-            'movimentacoesHoje'        => $movimentacoesHoje,
-            'entradasHoje'             => $entradasHoje,
-            'saidasHoje'               => $saidasHoje,
-            'saidasPorDocumentoFiscal' => $saidasPorDocFiscal,
-            'produtos_criticos'        => $estoqueBaixo->values(),
-        ]);
-    }
+    // =========================
+    // VALOR TOTAL (SQL direto)
+    // =========================
+    $valorTotal = Produto::apenasProdutos()
+        ->where('status', 'ativo')
+        ->selectRaw('SUM(estoque_atual * COALESCE(custo_medio, preco_compra, 0)) as total')
+        ->value('total');
+
+    // =========================
+    // MOVIMENTOS HOJE (1 QUERY BASE)
+    // =========================
+    $movimentosBase = MovimentoStock::whereDate('created_at', $hoje);
+
+    $movimentacoesHoje = (clone $movimentosBase)->count();
+
+    $entradasHoje = (clone $movimentosBase)
+        ->where('tipo', 'entrada')
+        ->sum('quantidade');
+
+    $saidasHoje = (clone $movimentosBase)
+        ->where('tipo', 'saida')
+        ->sum(DB::raw('ABS(quantidade)'));
+
+    $saidasPorDocFiscal = (clone $movimentosBase)
+        ->where('tipo', 'saida')
+        ->whereIn('tipo_movimento', ['venda', 'nota_credito'])
+        ->count();
+
+    // =========================
+    // PRODUTOS CRÍTICOS (LIMITADO)
+    // =========================
+    $produtosCriticos = Produto::apenasProdutos()
+        ->where('status', 'ativo')
+        ->whereColumn('estoque_atual', '<=', 'estoque_minimo')
+        ->select('id', 'nome', 'estoque_atual', 'estoque_minimo')
+        ->limit(20)
+        ->get();
+
+    return response()->json([
+        'totalProdutos'            => $totalProdutos,
+        'produtosAtivos'           => $produtosAtivos,
+        'produtosEstoqueBaixo'     => $produtosEstoqueBaixo,
+        'produtosSemEstoque'       => $produtosSemEstoque,
+        'valorTotalEstoque'        => round($valorTotal ?? 0, 2),
+
+        'movimentacoesHoje'        => $movimentacoesHoje,
+        'entradasHoje'             => $entradasHoje,
+        'saidasHoje'               => $saidasHoje,
+        'saidasPorDocumentoFiscal' => $saidasPorDocFiscal,
+
+        'produtos_criticos'        => $produtosCriticos,
+    ]);
+}
 
     /* =====================================================================
      | HISTÓRICO DE UM PRODUTO

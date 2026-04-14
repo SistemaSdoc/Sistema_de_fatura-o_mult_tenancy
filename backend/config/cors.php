@@ -7,27 +7,41 @@ return [
     | Paths
     |--------------------------------------------------------------------------
     */
-    'paths' => ['api/*', 'sanctum/csrf-cookie', 'login', 'logout', 'me'],
+    'paths' => [
+        'api/*',
+        'sanctum/csrf-cookie',
+        'login',
+        'logout',
+        'me'
+    ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Allowed Methods
+    |--------------------------------------------------------------------------
+    */
     'allowed_methods' => ['*'],
 
     /*
     |--------------------------------------------------------------------------
-    | Allowed Origins
+    | Allowed Origins (IMPORTANTE PARA SANCTUM)
     |--------------------------------------------------------------------------
-    | Aceita qualquer IP local (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
-    | em qualquer porta — funciona automaticamente quando o IP muda.
     */
-    'allowed_origins' => [],
+    'allowed_origins' => [
+        'http://127.0.0.1:3000',
+        'http://localhost:3000',
+        'http://192.168.1.105:3000'
+    ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Allowed Origins Patterns (REDES)
+    |--------------------------------------------------------------------------
+    */
     'allowed_origins_patterns' => [
-        // 192.168.x.x — redes domésticas / escritório
         '#^http://192\.168\.\d+\.\d+(:\d+)?$#',
-        // 10.x.x.x — redes corporativas
         '#^http://10\.\d+\.\d+\.\d+(:\d+)?$#',
-        // 172.16.x.x – 172.31.x.x — redes privadas
         '#^http://172\.(1[6-9]|2\d|3[01])\.\d+\.\d+(:\d+)?$#',
-        // localhost e 127.0.0.1
         '#^http://localhost(:\d+)?$#',
         '#^http://127\.0\.0\.1(:\d+)?$#',
     ],
@@ -44,22 +58,31 @@ return [
         'Accept',
         'Origin',
         'X-XSRF-TOKEN',
-        'X-Print-Preview',
+        'X-CSRF-TOKEN',
         'X-Tenant',
         'Cache-Control',
         'Pragma',
         'Expires',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Exposed Headers
+    |--------------------------------------------------------------------------
+    */
     'exposed_headers' => [],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Max Age
+    |--------------------------------------------------------------------------
+    */
     'max_age' => 0,
 
     /*
     |--------------------------------------------------------------------------
-    | Supports Credentials
+    | Supports Credentials (OBRIGATÓRIO)
     |--------------------------------------------------------------------------
-    | Obrigatório true para Sanctum SPA (cookies de sessão).
     */
     'supports_credentials' => true,
 

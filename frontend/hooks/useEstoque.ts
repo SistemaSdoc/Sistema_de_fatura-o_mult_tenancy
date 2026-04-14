@@ -16,6 +16,11 @@ interface ModalConfirmacaoState {
     produto: Produto | null;
 }
 
+interface ModalEdicaoState {
+    isOpen: boolean;
+    item: Produto | null;
+}
+
 export function useEstoque() {
     const [loading, setLoading] = useState(true);
     const [resumo, setResumo] = useState<any>(null);
@@ -32,6 +37,7 @@ export function useEstoque() {
 
     // Modais
     const [modalEntradaAberto, setModalEntradaAberto] = useState(false);
+    const [modalEdicaoAberto, setModalEdicaoAberto] = useState(false);
     const [itemSelecionado, setItemSelecionado] = useState<Produto | null>(null);
     const [modalConfirmacao, setModalConfirmacao] = useState<ModalConfirmacaoState>({
         isOpen: false,
@@ -117,6 +123,46 @@ export function useEstoque() {
         setModalEntradaAberto(false);
     }, [itemSelecionado, carregarDados]);
 
+    const handleEditarItem = useCallback(async (dados: any): Promise<{ success: boolean; error?: any }> => {
+        if (!itemSelecionado) {
+            return { success: false, error: "Nenhum item selecionado" };
+        }
+        
+        try {
+            // Prepara os dados para atualização
+            const dadosAtualizacao = {
+                nome: dados.nome,
+                descricao: dados.descricao,
+                categoria_id: dados.categoria_id || null,
+                preco_venda: dados.preco_venda,
+                status: dados.status,
+                ...(itemSelecionado.tipo === "produto" && {
+                    codigo: dados.codigo,
+                    preco_compra: dados.preco_compra,
+                    taxa_iva: dados.taxa_iva,
+                    sujeito_iva: dados.sujeito_iva,
+                    estoque_minimo: dados.estoque_minimo,
+                    fornecedor_id: dados.fornecedor_id || null,
+                }),
+                ...(itemSelecionado.tipo === "servico" && {
+                    taxa_retencao: dados.taxa_retencao,
+                    duracao_estimada: dados.duracao_estimada,
+                    unidade_medida: dados.unidade_medida,
+                }),
+            };
+
+            await produtoService.atualizarProduto(itemSelecionado.id, dadosAtualizacao);
+            await carregarDados(); // Recarrega os dados após atualização
+            setModalEdicaoAberto(false);
+            setItemSelecionado(null);
+            
+            return { success: true };
+        } catch (error: any) {
+            console.error("Erro ao editar item:", error);
+            return { success: false, error: error.response?.data?.message || error.message || "Erro ao salvar alterações" };
+        }
+    }, [itemSelecionado, carregarDados]);
+
     const handleDeletarItem = useCallback(async () => {
         if (!modalConfirmacao.produto) return;
         await produtoService.moverParaLixeira(modalConfirmacao.produto.id);
@@ -148,6 +194,11 @@ export function useEstoque() {
         setModalEntradaAberto(true);
     }, []);
 
+    const abrirModalEditar = useCallback((item: Produto) => {
+        setItemSelecionado(item);
+        setModalEdicaoAberto(true);
+    }, []);
+
     const abrirModalDeletar = useCallback((item: Produto) => {
         setModalConfirmacao({ isOpen: true, tipo: "delete", produto: item });
     }, []);
@@ -162,7 +213,9 @@ export function useEstoque() {
 
     const fecharModais = useCallback(() => {
         setModalEntradaAberto(false);
+        setModalEdicaoAberto(false);
         setModalConfirmacao({ isOpen: false, tipo: "delete", produto: null });
+        setItemSelecionado(null);
     }, []);
 
     const produtos = itens.filter(isProduto);
@@ -182,6 +235,7 @@ export function useEstoque() {
         filtroEstoque,
         abaAtiva,
         modalEntradaAberto,
+        modalEdicaoAberto,
         itemSelecionado,
         modalConfirmacao,
         produtos,
@@ -199,11 +253,13 @@ export function useEstoque() {
         carregarDeletados,
         aplicarFiltros,
         abrirModalEntrada,
+        abrirModalEditar,
         abrirModalDeletar,
         abrirModalRestaurar,
         abrirModalForceDelete,
         fecharModais,
         handleEntrada,
+        handleEditarItem,
         handleDeletarItem,
         handleRestaurarItem,
         handleForceDelete,

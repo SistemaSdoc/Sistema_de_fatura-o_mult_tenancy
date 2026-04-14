@@ -17,8 +17,10 @@ use App\Http\Controllers\RelatoriosController;
 
 $uuidPattern = '[0-9a-fA-F-]{36}';
 
+
 // ==================== ROTAS PÚBLICAS ====================
 
+Route::post('/login', [AuthController::class, 'login'])->name('login');
 
 // ==================== ROTAS PROTEGIDAS ====================
 Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {

@@ -366,26 +366,21 @@ const PerfilTab = ({
     };
     const strength = getStrength(passForm.nova_senha);
 
-    const handleSavePerfil = async () => {
-        if (!user) return;
-        if (!form.name.trim() || !form.email.trim())
-            return toast.error("Nome e e-mail são obrigatórios");
-        setLoading(true);
-        try {
-            const updated = await updateUser(user.id, {
-                name:  form.name,
-                email: form.email,
-            });
-            onUserUpdated(updated);
-            toast.success("Perfil atualizado!");
-        } catch (err: unknown) {
-            const msg = (err as { response?: { data?: { message?: string } } })
-                ?.response?.data?.message;
-            toast.error(msg ?? "Erro ao atualizar perfil");
-        } finally {
-            setLoading(false);
-        }
-    };
+const handleSavePerfil = async (): Promise<void> => {
+    if (!user) return;
+
+    try {
+        const updated = await updateUser(user.id, {
+            name: form.name,
+            email: form.email,
+        });
+
+        onUserUpdated(updated);
+        toast.success("Perfil atualizado!");
+    } catch (err) {
+        toast.error("Erro ao atualizar perfil");
+    }
+};
 
     const handleSaveSenha = async () => {
         if (!user) return;
@@ -517,7 +512,7 @@ const PerfilTab = ({
 
                 <CardFooter className="flex justify-end border-t pt-6"
                     style={{ borderColor: colors.border }}>
-                    <SaveButton onClick={handleSavePerfil} loading={loading} colors={colors} />
+                    <SaveButton onClick={() => void handleSavePerfil()} loading={loading} colors={colors} />
                 </CardFooter>
             </Card>
 
@@ -574,7 +569,8 @@ const PerfilTab = ({
                 <CardFooter className="flex justify-end border-t pt-6"
                     style={{ borderColor: colors.border }}>
                     <SaveButton
-                        onClick={handleSaveSenha} loading={passLoading} colors={colors}
+                        onClick={() => void handleSaveSenha()}
+                        loading={passLoading} colors={colors}
                         disabled={!passForm.nova_senha || !passForm.confirmar_senha}>
                         Alterar senha
                     </SaveButton>

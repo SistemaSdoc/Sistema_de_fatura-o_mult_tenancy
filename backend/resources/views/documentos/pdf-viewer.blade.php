@@ -3,10 +3,10 @@ if (!isset($documento) || !$documento) {
 die('Documento não encontrado');
 }
 
-$empresaMoradaEstatica = 'Rua do Paiol, Bairro Gameke, (Proximo da Farmacia Pedrito), Provincia de Luanda';
-$empresaTelefoneEstatico = '938747267 / 941177948';
-$empresaEmailEstatico = '';
-$empresaLogo = asset('images/mwamba.jpeg');
+$empresaMoradaEstatica = 'Avenida 21 de Janeiro, Gamek';
+$empresaTelefoneEstatico = '+244 943 489 186 ';
+$empresaEmailEstatico = 'geral@sdoca.it.ao';
+$empresaLogo = asset('images/pingodagua.png');
 
 $tiposDocumento = [
 'FT' => 'Fatura',
@@ -51,23 +51,33 @@ if ($documento->tipo_documento === 'RC' && isset($documentoOrigem) && $documento
 $docParaTotais = $documentoOrigem;
 }
 
-// Calcular desconto percentual (se existir)
+// Tentar obter o desconto global da venda associada
+$descontoGlobal = 0;
+$troco = 0;
+
+// Se o documento fiscal tem uma venda associada, buscar os dados da venda
+if ($docParaTotais->venda_id && isset($docParaTotais->venda)) {
+$venda = $docParaTotais->venda;
+$descontoGlobal = (float) ($venda->desconto_global ?? 0);
+$troco = (float) ($venda->troco ?? 0);
+} else {
+// Fallback: usar os campos do próprio documento fiscal
+$descontoGlobal = (float) ($docParaTotais->desconto_global ?? 0);
+$troco = (float) ($documento->troco ?? 0);
+}
+
+// Calcular percentual de desconto
 $percentualDesconto = 0;
 $temDesconto = false;
-$descontoGlobal = $docParaTotais->desconto_global ?? 0;
 
-if (($docParaTotais->base_tributavel ?? 0) > 0 && $descontoGlobal > 0) {
-    $temDesconto = true;
-    $subtotalBruto = $docParaTotais->base_tributavel + $descontoGlobal;
-    $percentualDesconto = ($descontoGlobal / $subtotalBruto) * 100;
+if ($descontoGlobal > 0 && ($docParaTotais->base_tributavel ?? 0) > 0) {
+$temDesconto = true;
+$subtotalBruto = $docParaTotais->base_tributavel + $descontoGlobal;
+$percentualDesconto = ($descontoGlobal / $subtotalBruto) * 100;
 }
 
 // Verificar se tem troco
-$temTroco = false;
-$troco = $documento->troco ?? 0;
-if ($troco > 0) {
-    $temTroco = true;
-}
+$temTroco = $troco > 0;
 @endphp
 
 <!DOCTYPE html>
@@ -91,16 +101,16 @@ if ($troco > 0) {
             justify-content: center;
             padding: 20px;
             min-height: 100vh;
-            font-size: 12px;
-            line-height: 1.4;
+            font-size: 11.5px;
+            line-height: 1.35;
         }
 
-        /* Container do Talão - 80mm padrão térmica */
+        /* Container do Talão - 70mm */
         .receipt {
             background: white;
-            width: 80mm;
-            min-height: auto;
-            padding: 8px;
+            width: 70mm;
+            min-height: 70vh;
+            padding: 5px 4px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
             color: #000;
         }
@@ -108,13 +118,21 @@ if ($troco > 0) {
         /* Cabeçalho Empresa */
         .header {
             text-align: center;
-            margin-bottom: 8px;
-            padding-bottom: 8px;
+            margin-bottom: 7px;
+            padding-bottom: 7px;
             border-bottom: 2px dashed #000;
         }
 
+        .company-logo {
+            width: 200px;
+            height: 200px;
+            object-fit: contain;
+            margin-bottom: 4px;
+            display: inline-block;
+        }
+
         .company-name {
-            font-size: 14px;
+            font-size: 13px;
             font-weight: bold;
             text-transform: uppercase;
             margin-bottom: 4px;
@@ -122,31 +140,34 @@ if ($troco > 0) {
         }
 
         .company-info {
-            font-size: 10px;
+            font-size: 9.5px;
             margin-bottom: 2px;
+            word-wrap: break-word;
         }
 
         /* Tipo de Documento */
         .doc-type-box {
             text-align: center;
-            margin: 8px 0;
+            margin: 7px 0;
             padding: 4px;
             border: 2px solid #000;
             font-weight: bold;
-            font-size: 14px;
+            font-size: 13px;
             text-transform: uppercase;
         }
 
         /* Info Documento */
         .doc-info {
-            margin-bottom: 8px;
-            font-size: 11px;
+            margin-bottom: 7px;
+            font-size: 10.5px;
         }
 
         .doc-row {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 2px;
+            margin-bottom: 3px;
+            flex-wrap: wrap;
+            gap: 5px;
         }
 
         .doc-row.full {
@@ -155,46 +176,49 @@ if ($troco > 0) {
 
         /* Referência (para RC) */
         .reference {
-            margin: 8px 0;
+            margin: 7px 0;
             padding: 4px;
             background: #f5f5f5;
             border: 1px dashed #999;
-            font-size: 10px;
+            font-size: 9.5px;
             text-align: center;
+            word-wrap: break-word;
         }
 
         /* Cliente */
         .client-section {
             border-top: 1px dashed #000;
             border-bottom: 1px dashed #000;
-            padding: 6px 0;
-            margin-bottom: 8px;
+            padding: 5px 0;
+            margin-bottom: 7px;
         }
 
         .section-title {
             font-weight: bold;
-            font-size: 11px;
-            margin-bottom: 2px;
+            font-size: 10.5px;
+            margin-bottom: 3px;
             text-transform: uppercase;
         }
 
         .client-name {
             font-weight: bold;
-            font-size: 12px;
+            font-size: 11.5px;
             margin-bottom: 2px;
+            word-wrap: break-word;
         }
 
         .client-details {
-            font-size: 10px;
+            font-size: 9.5px;
+            word-wrap: break-word;
         }
 
         /* Itens */
         .items-section {
-            margin-bottom: 8px;
+            margin-bottom: 7px;
         }
 
         .item {
-            margin-bottom: 6px;
+            margin-bottom: 5px;
             padding-bottom: 4px;
             border-bottom: 1px dotted #ccc;
         }
@@ -206,13 +230,16 @@ if ($troco > 0) {
         .item-desc {
             font-weight: bold;
             word-wrap: break-word;
-            margin-bottom: 2px;
+            margin-bottom: 3px;
+            font-size: 10.5px;
         }
 
         .item-line {
             display: flex;
             justify-content: space-between;
-            font-size: 11px;
+            font-size: 10.5px;
+            flex-wrap: wrap;
+            gap: 5px;
         }
 
         .item-qty {
@@ -224,84 +251,78 @@ if ($troco > 0) {
         }
 
         .item-tax {
-            font-size: 9px;
+            font-size: 8.5px;
             color: #666;
-            margin-top: 1px;
+            margin-top: 2px;
         }
 
         /* Separador */
         .separator {
             border-top: 1px dashed #000;
-            margin: 8px 0;
+            margin: 7px 0;
         }
 
         .separator-bold {
             border-top: 2px solid #000;
-            margin: 8px 0;
+            margin: 7px 0;
         }
 
         /* Totais */
         .totals-section {
-            margin-top: 8px;
+            margin-top: 7px;
         }
 
         .total-line {
             display: flex;
             justify-content: space-between;
             margin-bottom: 3px;
-            font-size: 11px;
+            font-size: 10.5px;
+            flex-wrap: wrap;
+            gap: 5px;
         }
 
         .total-line.grand-total {
-            font-size: 14px;
+            font-size: 13px;
             font-weight: bold;
             border-top: 2px solid #000;
             padding-top: 4px;
             margin-top: 4px;
         }
 
-        .total-line.desconto {
-            color: #d9534f;
-        }
-
-        .total-line.troco {
-            color: #5cb85c;
-        }
-
         /* Tax Summary */
         .tax-summary {
-            font-size: 9px;
-            margin-top: 8px;
-            padding-top: 8px;
+            font-size: 8.5px;
+            margin-top: 7px;
+            padding-top: 7px;
             border-top: 1px dashed #000;
         }
 
         /* QR Section */
         .qr-section {
             text-align: center;
-            margin: 12px 0;
-            padding: 10px 0;
+            margin: 10px 0;
+            padding: 8px 0;
             border-top: 2px dashed #000;
             border-bottom: 2px dashed #000;
         }
 
         .qr-title {
-            font-size: 10px;
+            font-size: 9.5px;
             font-weight: bold;
-            margin-bottom: 6px;
+            margin-bottom: 5px;
             text-transform: uppercase;
         }
 
         .qr-image {
-            width: 90px;
-            height: 90px;
+            width: 80px;
+            height: 80px;
             margin: 0 auto;
             display: block;
         }
 
         .hash-section {
-            margin-top: 8px;
-            font-size: 9px;
+            margin-top: 7px;
+            font-size: 8.5px;
             word-break: break-all;
             font-family: monospace;
             text-align: left;
@@ -309,21 +330,21 @@ if ($troco > 0) {
 
         .hash-label {
             font-weight: bold;
-            margin-bottom: 2px;
+            margin-bottom: 3px;
             text-align: center;
         }
 
         /* Footer */
         .footer {
             text-align: center;
-            margin-top: 12px;
-            padding-top: 8px;
-            font-size: 10px;
+            margin-top: 10px;
+            padding-top: 7px;
+            font-size: 9.5px;
         }
 
         .footer-title {
             font-weight: bold;
-            font-size: 12px;
+            font-size: 11px;
             margin-bottom: 4px;
             text-transform: uppercase;
         }
@@ -333,14 +354,14 @@ if ($troco > 0) {
         }
 
         .software-info {
-            font-size: 9px;
+            font-size: 8.5px;
             color: #666;
-            margin-top: 8px;
+            margin-top: 7px;
         }
 
         .timestamp {
-            font-size: 9px;
-            margin-top: 6px;
+            font-size: 8.5px;
+            margin-top: 5px;
             color: #666;
         }
 
@@ -355,10 +376,10 @@ if ($troco > 0) {
         }
 
         .btn {
-            padding: 10px 20px;
+            padding: 8px 16px;
             border: none;
             border-radius: 6px;
-            font-size: 14px;
+            font-size: 12px;
             cursor: pointer;
             font-weight: bold;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
@@ -405,13 +426,13 @@ if ($troco > 0) {
         }
 
         .spinner {
-            width: 50px;
-            height: 50px;
-            border: 4px solid rgba(255, 255, 255, 0.3);
-            border-top: 4px solid #4CAF50;
+            width: 45px;
+            height: 45px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid #4CAF50;
             border-radius: 50%;
             animation: spin 1s linear infinite;
-            margin-bottom: 16px;
+            margin-bottom: 14px;
         }
 
         @keyframes spin {
@@ -440,7 +461,7 @@ if ($troco > 0) {
             .receipt {
                 box-shadow: none;
                 width: 100%;
-                max-width: 80mm;
+                max-width: 70mm;
                 padding: 0;
                 margin: 0 auto;
             }
@@ -451,17 +472,9 @@ if ($troco > 0) {
             }
         }
 
-        .company-logo {
-            width: 50px;
-            height: auto;
-            object-fit: contain;
-            margin-bottom: 4px;
-            text-align: center;
-        }
-
         @page {
             margin: 0;
-            size: 80mm auto;
+            size: 70mm auto;
         }
     </style>
 </head>
@@ -508,7 +521,7 @@ if ($troco > 0) {
                 <span><strong>Hora:</strong> {{ substr($documento->hora_emissao ?? now()->format('H:i:s'), 0, 5) }}</span>
             </div>
             <div class="doc-row full">
-                <span><strong>{{ $documento->user->role ?? 'Sistema' }}:</strong>  {{ $documento->user->name ?? 'Sistema' }}</span>
+                <span><strong>{{ 'Operador' }}:</strong> {{ $documento->user->name ?? 'Sistema' }}</span>
             </div>
         </div>
 
@@ -534,14 +547,14 @@ if ($troco > 0) {
 
         <!-- Itens -->
         <div class="items-section">
-            <div class="section-title" style="margin-bottom: 6px;">ITENS</div>
+            <div class="section-title" style="margin-bottom: 5px;">ITENS</div>
 
             @forelse($itens as $item)
             <div class="item">
                 <div class="item-desc">{{ $item->descricao }}</div>
                 <div class="item-line">
                     <span class="item-qty">
-                        {{ number_format($item->quantidade, 0, ',', '.') }} x {{ number_format($item->preco_unitario, 2, ',', '.') }} Kz
+                        {{ number_format($item->quantidade, 0, ',', '.') }} x {{ number_format($item->preco_unitario, 2, ',', '.') }}
                     </span>
                     <span class="item-total">
                         {{ number_format($item->total_linha ?? ($item->quantidade * $item->preco_unitario), 2, ',', '.') }} Kz
@@ -570,9 +583,9 @@ if ($troco > 0) {
             <!-- Subtotal bruto e Desconto (só mostra se tiver desconto) -->
             <div class="total-line">
                 <span>Subtotal bruto:</span>
-                <span>{{ number_format(($docParaTotais->base_tributavel ?? 0) + $descontoGlobal, 2, ',', '.') }} Kz</span>
+                <span>{{ number_format($docParaTotais->base_tributavel + $descontoGlobal, 2, ',', '.') }} Kz</span>
             </div>
-            <div class="total-line desconto">
+            <div class="total-line ">
                 <span>Desconto ({{ number_format($percentualDesconto, 2, ',', '.') }}%):</span>
                 <span>- {{ number_format($descontoGlobal, 2, ',', '.') }} Kz</span>
             </div>
@@ -587,10 +600,12 @@ if ($troco > 0) {
                 <span>{{ number_format($docParaTotais->total_iva ?? 0, 2, ',', '.') }} Kz</span>
             </div>
 
+            @if(($docParaTotais->total_retencao ?? 0) > 0)
             <div class="total-line">
                 <span>Retenção:</span>
                 <span>- {{ number_format($docParaTotais->total_retencao ?? 0, 2, ',', '.') }} Kz</span>
             </div>
+            @endif
 
             <!-- Método de Pagamento (apenas para FR e RC) -->
             @if(in_array($documento->tipo_documento, ['FR', 'RC']) && !empty($documento->metodo_pagamento))
@@ -601,12 +616,10 @@ if ($troco > 0) {
             @endif
 
             <!-- Troco (só mostra se tiver troco) -->
-            @if($temTroco)
-            <div class="total-line troco">
+            <div class="total-line">
                 <span>Troco:</span>
                 <span>{{ number_format($troco, 2, ',', '.') }} Kz</span>
             </div>
-            @endif
 
             <!-- TOTAL A PAGAR (para FT) -->
             @if($documento->tipo_documento === 'FT')

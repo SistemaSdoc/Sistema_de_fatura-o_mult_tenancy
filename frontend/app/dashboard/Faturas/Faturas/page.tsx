@@ -12,6 +12,61 @@ import {
 } from "@/services/DocumentoFiscal";
 import { useThemeColors } from "@/context/ThemeContext";
 import { ShoppingCart, FileText } from "lucide-react";
+import Cookies from "js-cookie";
+
+// ── Helper: lê o XSRF-TOKEN do cookie (já descodificado) ───────────────────
+function getXsrfToken(): string {
+  return decodeURIComponent(Cookies.get("XSRF-TOKEN") ?? "");
+}
+
+// ── Helper: garante que temos o cookie CSRF antes de qualquer pedido ────────
+async function garantirCsrf(baseUrl: string) {
+  if (!Cookies.get("XSRF-TOKEN")) {
+    await fetch(`${baseUrl}/sanctum/csrf-cookie`, {
+      credentials: "include",
+    });
+  }
+}
+
+// ── Helper principal: abre PDF ou HTML autenticado via Blob URL ─────────────
+async function abrirUrlAutenticada(url: string, tipo: "pdf" | "html" = "pdf") {
+  // Extrai baseUrl a partir do url completo
+  const baseUrl = url.split("/api/")[0];
+
+  // 1. Garante o cookie de sessão + CSRF
+  await garantirCsrf(baseUrl);
+
+  const xsrf = getXsrfToken();
+
+  // 2. Faz fetch autenticado — os cookies de sessão Laravel vão no credentials
+  const res = await fetch(url, {
+    method: "GET",
+    credentials: "include",           // envia session cookie + XSRF-TOKEN cookie
+    headers: {
+      Accept: tipo === "pdf" ? "application/pdf,*/*" : "text/html,*/*",
+      "X-XSRF-TOKEN": xsrf,           // header CSRF obrigatório no Laravel
+      "X-Requested-With": "XMLHttpRequest",
+    },
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Erro ${res.status}: ${body || res.statusText}`);
+  }
+
+  // 3. Converte para Blob e abre numa nova aba
+  const blob = await res.blob();
+  const blobUrl = URL.createObjectURL(blob);
+  const win = window.open(blobUrl, "_blank");
+
+  if (win) {
+    win.addEventListener("load", () => URL.revokeObjectURL(blobUrl), { once: true });
+  } else {
+    // Popup bloqueado — fallback com link
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+  }
+}
+// ───────────────────────────────────────────────────────────────────────────
 
 export default function FaturasPage() {
   const router = useRouter();
@@ -23,6 +78,12 @@ export default function FaturasPage() {
   const [gerandoRecibo, setGerandoRecibo] = useState<string | null>(null);
   const [baixandoPdf, setBaixandoPdf] = useState<string | null>(null);
   const [imprimindo] = useState<string | null>(null);
+
+  // BaseURL dinâmica — igual ao teu axios.ts
+  const baseUrl =
+    typeof window !== "undefined"
+      ? `${window.location.protocol}//${window.location.hostname}:8000`
+      : "http://localhost:8000";
 
   /* ── Carregar documentos ── */
   const carregarDocumentos = useCallback(async () => {
@@ -45,32 +106,51 @@ export default function FaturasPage() {
   }, [carregarDocumentos]);
 
   /* ── Imprimir A4 ── */
-  const imprimirA4 = useCallback((documento: DocumentoFiscal) => {
-    if (!documento.id) return;
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.193:8000";
-    window.open(`${baseUrl}/api/documentos-fiscais/${documento.id}/print-view`, "_blank");
-  }, []);
+  const imprimirA4 = useCallback(
+    async (documento: DocumentoFiscal) => {
+      if (!documento.id) return;
+      try {
+        await abrirUrlAutenticada(
+          `${baseUrl}/api/documentos-fiscais/${documento.id}/print-view`,
+          "html"
+        );
+      } catch (err: unknown) {
+        alert(err instanceof Error ? err.message : "Erro ao abrir visualização de impressão");
+      }
+    },
+    [baseUrl]
+  );
 
-  /* ── PDF Viewer (cross-platform) ── */
-  const imprimirPdfNavegador = useCallback((documento: DocumentoFiscal) => {
-    if (!documento.id) return;
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.193:8000";
-    window.open(`${baseUrl}/api/documentos-fiscais/${documento.id}/pdf-viewer`, "_blank");
-  }, []);
+  /* ── PDF Viewer autenticado ── */
+  const imprimirPdfNavegador = useCallback(
+    async (documento: DocumentoFiscal) => {
+      if (!documento.id) return;
+      try {
+        await abrirUrlAutenticada(
+          `${baseUrl}/api/documentos-fiscais/${documento.id}/pdf-viewer`,
+          "pdf"
+        );
+      } catch (err: unknown) {
+        alert(err instanceof Error ? err.message : "Erro ao abrir PDF");
+      }
+    },
+    [baseUrl]
+  );
 
   /* ── Download PDF ── */
   const baixarPdf = useCallback(async (documento: DocumentoFiscal) => {
     if (!documento.id) return;
     try {
       setBaixandoPdf(documento.id);
-      const nome = `${documento.tipo_documento}_${documento.numero_documento ?? documento.id}.pdf`;
+      const nome = `${documento.tipo_documento}_${
+        documento.numero_documento ?? documento.id}.pdf`;
       await documentoFiscalService.downloadPdf(documento.id, nome);
     } catch {
       alert("Erro ao baixar PDF");
     } finally {
       setBaixandoPdf(null);
     }
-  }, []);
+  }, []);                                                    
 
   /* ── Ver detalhes ── */
   const verDetalhes = (doc: DocumentoFiscal) => {
@@ -100,7 +180,10 @@ export default function FaturasPage() {
   /* ── Formatar moeda ── */
   const formatKz = (valor: number | string | undefined) => {
     if (!valor) return "0,00 Kz";
-    return Number(valor).toLocaleString("pt-AO", { style: "currency", currency: "AOA" });
+    return Number(valor).toLocaleString("pt-AO", {
+      style: "currency",
+      currency: "AOA",
+    });
   };
 
   return (

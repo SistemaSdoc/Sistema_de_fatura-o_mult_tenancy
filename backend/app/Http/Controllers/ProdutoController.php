@@ -120,7 +120,22 @@ class ProdutoController extends Controller
     {
         $this->authorize('create', Produto::class);
 
-        $dados = $request->validate($this->regrasValidacao($request->tipo));
+        Log::info('[ProdutoController] Dados recebidos para validação:', $request->all());
+
+        try {
+            $dados = $request->validate($this->regrasValidacao($request->tipo));
+            Log::info('[ProdutoController] Dados validados com sucesso:', $dados);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('[ProdutoController] ERRO DE VALIDAÇÃO:', [
+                'errors' => $e->errors(),
+                'data' => $request->all()
+            ]);
+            
+            return response()->json([
+                'message' => 'Erro de validação',
+                'errors' => $e->errors()
+            ], 422);
+        }
 
         try {
             $produto = $this->produtoService->criarProduto($dados);
@@ -137,18 +152,56 @@ class ProdutoController extends Controller
     }
 
     /* =====================================================================
-     | ACTUALIZAR
+     | ACTUALIZAR - CORRIGIDO PARA EVITAR ERRO 422
      | ================================================================== */
 
     public function update(Request $request, string $id)
     {
-        $produto = Produto::findOrFail($id);
-        $this->authorize('update', $produto);
-
-        $tipo  = $request->get('tipo', $produto->tipo);
-        $dados = $request->validate($this->regrasValidacao($tipo, $id));
+        Log::info('[ProdutoController] UPDATE - Dados recebidos:', [
+            'id' => $id,
+            'all_data' => $request->all(),
+            'method' => $request->method(),
+            'content_type' => $request->header('Content-Type')
+        ]);
 
         try {
+            $produto = Produto::findOrFail($id);
+            $this->authorize('update', $produto);
+
+            // ✅ CORREÇÃO: Determinar tipo corretamente
+            $tipo = $request->input('tipo', $produto->tipo);
+            
+            // Validar se tipo é válido, senão usar o do produto
+            if (!in_array($tipo, ['produto', 'servico'])) {
+                $tipo = $produto->tipo;
+            }
+
+            Log::info('[ProdutoController] UPDATE - Tipo determinado:', [
+                'tipo' => $tipo,
+                'produto_tipo_original' => $produto->tipo
+            ]);
+
+            // ✅ CORREÇÃO: Usar regras de validação apropriadas
+            $regras = $this->regrasValidacaoUpdate($tipo, $id);
+            
+            Log::info('[ProdutoController] UPDATE - Regras de validação:', $regras);
+
+            try {
+                $dados = $request->validate($regras);
+                Log::info('[ProdutoController] UPDATE - Dados validados:', $dados);
+            } catch (\Illuminate\Validation\ValidationException $e) {
+                Log::error('[ProdutoController] UPDATE - Erro de validação:', [
+                    'errors' => $e->errors(),
+                    'data' => $request->all(),
+                    'regras_usadas' => $regras
+                ]);
+                
+                return response()->json([
+                    'message' => 'Erro de validação',
+                    'errors' => $e->errors()
+                ], 422);
+            }
+
             $produto = $this->produtoService->editarProduto($id, $dados);
 
             return response()->json([
@@ -156,9 +209,19 @@ class ProdutoController extends Controller
                 'produto' => $produto,
             ]);
 
+        } catch (ModelNotFoundException $e) {
+            Log::error('[ProdutoController] UPDATE - Produto não encontrado:', ['id' => $id]);
+            return response()->json(['message' => 'Produto não encontrado'], 404);
         } catch (\Exception $e) {
-            Log::error('[PRODUTO UPDATE ERROR]', ['error' => $e->getMessage()]);
-            return response()->json(['message' => $e->getMessage()], 422);
+            Log::error('[PRODUTO UPDATE ERROR]', [
+                'produto_id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json([
+                'message' => 'Erro ao actualizar produto',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 
@@ -388,8 +451,7 @@ class ProdutoController extends Controller
      | ================================================================== */
 
     /**
-     * Regras de validação por tipo (produto / serviço).
-     * Centralizado aqui para evitar duplicação entre store() e update().
+     * Regras de validação para CRIAR (store).
      */
     private function regrasValidacao(string $tipo, ?string $id = null): array
     {
@@ -398,18 +460,22 @@ class ProdutoController extends Controller
             'nome'        => 'required|string|max:255',
             'descricao'   => 'nullable|string',
             'preco_venda' => 'required|numeric|min:0',
-            'taxa_iva'    => 'nullable|numeric|in:0,5,14',   // apenas taxas legais angola
+            'taxa_iva'    => 'nullable|numeric',
             'sujeito_iva' => 'nullable|boolean',
             'status'      => 'nullable|in:ativo,inativo',
+            
+            // NOVOS: Campos de cálculo de preço (opcionais)
+            'tipo_preco'           => 'nullable|in:fixo,margem,markup',
+            'despesas_adicionais'  => 'nullable|numeric|min:0',
+            'margem_lucro'         => 'nullable|numeric|min:0|max:99.99',
+            'markup'               => 'nullable|numeric|min:0',
         ];
 
         if ($tipo === 'produto') {
             return array_merge($base, [
                 'categoria_id'   => 'required|uuid|exists:categorias,id',
                 'fornecedor_id'  => 'nullable|uuid|exists:fornecedores,id',
-                'codigo'         => $id
-                    ? 'nullable|string|max:50|unique:produtos,codigo,' . $id
-                    : 'nullable|string|max:50|unique:produtos,codigo',
+                'codigo'         => 'nullable|string|max:50|unique:produtos,codigo',
                 'preco_compra'   => 'required|numeric|min:0',
                 'custo_medio'    => 'nullable|numeric|min:0',
                 'estoque_atual'  => 'nullable|integer|min:0',
@@ -419,11 +485,56 @@ class ProdutoController extends Controller
 
         // Serviço
         return array_merge($base, [
-            // Taxas de retenção válidas em Angola: 2%, 5%, 6.5%, 10%, 15%
             'taxa_retencao'    => 'nullable|numeric|in:0,2,5,6.5,10,15',
             'codigo_isencao'   => 'nullable|string|in:M00,M01,M02,M03,M04,M05,M06,M99',
             'duracao_estimada' => 'required|string|max:50',
             'unidade_medida'   => 'required|in:hora,dia,semana,mes',
+        ]);
+    }
+
+    /**
+     * ✅ NOVO: Regras de validação específicas para UPDATE.
+     * Diferença: campos opcionais e regras de unique ignorando o próprio registo.
+     */
+    private function regrasValidacaoUpdate(string $tipo, string $id): array
+    {
+        // ✅ CORREÇÃO: Na atualização, a maioria dos campos é opcional (sometimes)
+        // pois o frontend pode enviar apenas os campos que foram modificados
+        $base = [
+            'tipo'        => 'sometimes|in:produto,servico',
+            'nome'        => 'sometimes|string|max:255',
+            'descricao'   => 'nullable|string',
+            'preco_venda' => 'sometimes|numeric|min:0',
+            'taxa_iva'    => 'nullable|numeric',
+            'sujeito_iva' => 'nullable|boolean',
+            'status'      => 'nullable|in:ativo,inativo',
+            
+            // NOVOS: Campos de cálculo de preço (opcionais)
+            'tipo_preco'           => 'nullable|in:fixo,margem,markup',
+            'despesas_adicionais'  => 'nullable|numeric|min:0',
+            'margem_lucro'         => 'nullable|numeric|min:0|max:99.99',
+            'markup'               => 'nullable|numeric|min:0',
+        ];
+
+        if ($tipo === 'produto') {
+            return array_merge($base, [
+                'categoria_id'   => 'sometimes|uuid|exists:categorias,id',
+                'fornecedor_id'  => 'nullable|uuid|exists:fornecedores,id',
+                // ✅ CORREÇÃO: Ignorar o próprio ID na validação de unique
+                'codigo'         => 'nullable|string|max:50|unique:produtos,codigo,' . $id,
+                'preco_compra'   => 'sometimes|numeric|min:0',
+                'custo_medio'    => 'nullable|numeric|min:0',
+                'estoque_atual'  => 'nullable|integer|min:0',
+                'estoque_minimo' => 'nullable|integer|min:0',
+            ]);
+        }
+
+        // Serviço
+        return array_merge($base, [
+            'taxa_retencao'    => 'nullable|numeric|in:0,2,5,6.5,10,15',
+            'codigo_isencao'   => 'nullable|string|in:M00,M01,M02,M03,M04,M05,M06,M99',
+            'duracao_estimada' => 'sometimes|string|max:50',
+            'unidade_medida'   => 'sometimes|in:hora,dia,semana,mes',
         ]);
     }
 

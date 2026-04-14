@@ -1,0 +1,25 @@
+{
+  "name": "faturaja",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+
+  "dev": "concurrently \"cd backend && composer run dev\" \"cd frontend && npm run dev\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SistemaSdoc/Sistema_de_fatura-o_mult_tenancy.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/SistemaSdoc/Sistema_de_fatura-o_mult_tenancy/issues"
+  },
+  "homepage": "https://github.com/SistemaSdoc/Sistema_de_fatura-o_mult_tenancy#readme",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

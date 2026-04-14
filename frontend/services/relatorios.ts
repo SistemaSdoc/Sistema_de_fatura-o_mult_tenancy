@@ -7,7 +7,8 @@ export type PeriodoTipo =
     | "ontem"
     | "este_mes"
     | "mes_passado"
-    | "este_ano";
+    | "este_ano"
+    | "personalizado";
 
 export interface PeriodoConfig {
     tipo: PeriodoTipo;
@@ -18,6 +19,7 @@ export interface PeriodoFiltro {
     data_inicio?: string;
     data_fim?: string;
 }
+
 
 export interface ClienteInfo {
     id?: string;
@@ -681,6 +683,13 @@ export function getPeriodoPredefinido(
                 data_fim: getHoje(),
             };
 
+        case "personalizado":
+            return {
+                tipo: "personalizado",
+                data_inicio: getInicioMes(),
+                data_fim: getHoje(),
+            };
+
         default:
             return {
                 tipo: "este_mes",
@@ -708,15 +717,23 @@ export function getPeriodoLabel(
 }
 
 /**
- * Formatar data para exibição
+ * Formatar data para exibição (DD/MM/YYYY)
  */
 export function formatarData(data: string | null): string {
     if (!data) return "-";
     try {
-        return new Date(data).toLocaleDateString("pt-PT");
+        const [ano, mes, dia] = data.split("-");
+        return `${dia}/${mes}/${ano}`;
     } catch {
         return data;
     }
+}
+
+/**
+ * Formatar data para input type="date" (YYYY-MM-DD)
+ */
+export function formatarDataInput(data: Date): string {
+    return data.toISOString().split("T")[0];
 }
 
 /**

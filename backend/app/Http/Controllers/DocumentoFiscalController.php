@@ -189,8 +189,14 @@ class DocumentoFiscalController extends Controller
     public function gerarRecibo(Request $request, string $documentoId): JsonResponse
     {
         try {
-            $documento     = $this->documentoService->buscarDocumento($documentoId);
-            $valorPendente = $this->documentoService->calcularValorPendente($documento);
+            $documento = $this->documentoService->buscarDocumento($documentoId);
+
+            // === CORREÇÃO PRINCIPAL ===
+            if ($documento->tipo_documento === 'FP') {
+                $valorPendente = (float) $documento->total_liquido;
+            } else {
+                $valorPendente = $this->documentoService->calcularValorPendente($documento);
+            }
 
             $dados = $request->validate([
                 'valor'            => "required|numeric|min:0.01|max:{$valorPendente}",

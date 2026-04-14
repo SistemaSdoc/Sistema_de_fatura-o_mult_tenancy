@@ -28,10 +28,8 @@ export function FiltrosEstoque({
     categoriaFiltro,
     onCategoriaFiltroChange,
     filtroEstoque,
-    onFiltroEstoqueChange,
     categorias,
     onAplicarFiltros,
-    showEstoqueFilter,
     colors: propColors
 }: FiltrosEstoqueProps) {
     const contextColors = useThemeColors();
@@ -111,23 +109,6 @@ export function FiltrosEstoque({
                 ))}
             </select>
 
-            {/* Estoque */}
-            {showEstoqueFilter && (
-                <select
-                    value={filtroEstoque}
-                    onChange={(e) => onFiltroEstoqueChange(e.target.value as unknown as "todos" | "baixo" | "zerado")}
-                    className="px-3 py-2 text-sm border outline-none min-w-[130px]"
-                    style={{
-                        backgroundColor: colors.card,
-                        borderColor: colors.border,
-                        color: colors.text
-                    }}
-                >
-                    <option value="todos">Todos níveis</option>
-                    <option value="baixo">Estoque baixo</option>
-                    <option value="zerado">Sem estoque</option>
-                </select>
-            )}
 
         </div>
     );

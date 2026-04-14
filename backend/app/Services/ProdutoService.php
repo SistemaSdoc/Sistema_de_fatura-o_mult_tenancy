@@ -57,105 +57,106 @@ class ProdutoService
      * pelo DocumentoFiscalService no cálculo de IVA e retenção na fonte,
      * e exportados no SAF-T (AO).
      */
-    public function criarProduto(array $dados): Produto
-    {
-        return DB::transaction(function () use ($dados) {
-            $tipo = $dados['tipo'] ?? 'produto';
+public function criarProduto(array $dados): Produto
+{
+    return DB::transaction(function () use ($dados) {
+        $tipo = $dados['tipo'] ?? 'produto';
 
-            Log::info('[ProdutoService] Criando item', [
-                'tipo' => $tipo,
-                'nome' => $dados['nome'],
+        Log::info('[ProdutoService] Criando item', [
+            'tipo' => $tipo,
+            'nome' => $dados['nome'],
+            'estoque_atual_recebido' => $dados['estoque_atual'] ?? 0,
+        ]);
+
+        $dadosProduto = [
+            'id'          => Str::uuid(),
+            'user_id'     => Auth::id(),
+            'nome'        => $dados['nome'],
+            'descricao'   => $dados['descricao'] ?? null,
+            'preco_venda' => $tipo === 'produto'
+    ? $this->calcularPrecoVenda($dados)
+    : ($dados['preco_venda'] ?? 0),
+            'taxa_iva'    => $dados['taxa_iva'], // O IVA pode variar por produto/serviço
+            'sujeito_iva' => $dados['sujeito_iva'] ?? true,
+            'tipo'        => $tipo,
+            'status'      => $dados['status'] ?? 'ativo',
+        ];
+
+        if ($tipo === 'produto') {
+            // ✅ IMPORTANTE: Guardar o estoque solicitado para usar depois
+            $estoqueSolicitado = (int) ($dados['estoque_atual'] ?? 0);
+            $precoCompra = (float) ($dados['preco_compra'] ?? 0);
+            
+            $dadosProduto = array_merge($dadosProduto, [
+                'categoria_id'     => $dados['categoria_id'] ?? null,
+                'fornecedor_id'    => $dados['fornecedor_id'] ?? null,
+                'codigo'           => $dados['codigo'] ?? null,
+                'preco_compra'     => $precoCompra,
+                'custo_medio'      => $precoCompra, // Custo médio inicial = preço de compra
+                'estoque_atual'    => 0, // ✅ SEMPRE ZERO para evitar duplicação
+                'estoque_minimo'   => $dados['estoque_minimo'] ?? 5,
+                'taxa_retencao'    => null,
+                'codigo_isencao'   => null,
+                'duracao_estimada' => null,
+                'unidade_medida'   => null,
             ]);
 
-            $dadosProduto = [
-                'id'          => Str::uuid(),
-                'user_id'     => Auth::id(),
-                'nome'        => $dados['nome'],
-                'descricao'   => $dados['descricao'] ?? null,
-                'preco_venda' => $dados['preco_venda'],
-                'taxa_iva'    => $dados['taxa_iva'] ?? 14,
-                'sujeito_iva' => $dados['sujeito_iva'] ?? true,
-                'tipo'        => $tipo,
-                'status'      => $dados['status'] ?? 'ativo',
-            ];
+            Log::info('[ProdutoService] Criando PRODUTO', [
+                'nome' => $dados['nome'],
+                'estoque_solicitado' => $estoqueSolicitado,
+                'preco_compra' => $precoCompra,
+                'estoque_inicial_produto' => 0, // Produto criado com estoque zero
+            ]);
 
-            if ($tipo === 'produto') {
-                $dadosProduto = array_merge($dadosProduto, [
-                    'categoria_id'     => $dados['categoria_id'] ?? null,
-                    'fornecedor_id'    => $dados['fornecedor_id'] ?? null,
-                    'codigo'           => $dados['codigo'] ?? null,
-                    'preco_compra'     => $dados['preco_compra'] ?? 0,
-                    'custo_medio'      => $dados['custo_medio'] ?? ($dados['preco_compra'] ?? 0),
-                    'estoque_atual'    => $dados['estoque_atual'] ?? 0,
-                    'estoque_minimo'   => $dados['estoque_minimo'] ?? 5,
-                    // Limpar campos de serviço
-                    'taxa_retencao'    => null,
-                    'codigo_isencao'   => null,
-                    'duracao_estimada' => null,
-                    'unidade_medida'   => null,
-                ]);
+        } else {
+            $dadosProduto = array_merge($dadosProduto, [
+                'taxa_retencao'    => $dados['taxa_retencao'] ?? null,
+                'codigo_isencao'   => $dados['codigo_isencao'] ?? null,
+                'duracao_estimada' => $dados['duracao_estimada'] ?? null,
+                'unidade_medida'   => $dados['unidade_medida'] ?? null,
+                'categoria_id'     => null,
+                'fornecedor_id'    => null,
+                'codigo'           => null,
+                'preco_compra'     => 0,
+                'custo_medio'      => 0,
+                'estoque_atual'    => 0,
+                'estoque_minimo'   => 0,
+            ]);
+        }
 
-                Log::info('[ProdutoService] Criando PRODUTO físico', [
-                    'estoque_inicial' => $dadosProduto['estoque_atual'],
-                    'custo_medio'     => $dadosProduto['custo_medio'],
-                ]);
+        $produto = Produto::create($dadosProduto);
 
-            } else {
-                // ── Serviço ───────────────────────────────────────────
-                // Taxa de retenção: configurável, validada contra as taxas legais
-                $taxaRetencao = (float) ($dados['taxa_retencao'] ?? self::TAXA_RETENCAO_DEFAULT);
-                $taxaRetencao = $this->validarTaxaRetencao($taxaRetencao, $dados['nome']);
+        $this->validarPreco($produto, $produto->preco_venda);
+        // ✅ Só registrar a compra se tiver estoque solicitado > 0
+        if ($tipo === 'produto' && isset($dados['estoque_atual']) && (int) $dados['estoque_atual'] > 0) {
+            Log::info('[ProdutoService] Registrando compra inicial', [
+                'produto_id' => $produto->id,
+                'quantidade' => (int) $dados['estoque_atual'],
+                'preco_compra' => (float) $dados['preco_compra'],
+            ]);
 
-                // Código de isenção: se o serviço for isento de IVA
-                $codigoIsencao = $dados['codigo_isencao'] ?? null;
-                if ($codigoIsencao && ! array_key_exists($codigoIsencao, \App\Services\DocumentoFiscalService::MOTIVOS_ISENCAO)) {
-                    Log::warning('[ProdutoService] Código de isenção inválido, usando M99', [
-                        'codigo' => $codigoIsencao,
-                    ]);
-                    $codigoIsencao = 'M99';
-                }
+            // Isso vai adicionar o estoque corretamente (0 + quantidade)
+            $this->stockService->entradaCompra(
+                $produto->id,
+                (int) $dados['estoque_atual'],
+                (float) $dados['preco_compra']
+            );
+        }
 
-                $dadosProduto = array_merge($dadosProduto, [
-                    'taxa_retencao'    => $taxaRetencao,
-                    'codigo_isencao'   => $codigoIsencao,
-                    'duracao_estimada' => $dados['duracao_estimada'] ?? '1 hora',
-                    'unidade_medida'   => $dados['unidade_medida'] ?? 'hora',
-                    // Limpar campos de produto
-                    'categoria_id'     => null,
-                    'fornecedor_id'    => null,
-                    'codigo'           => null,
-                    'preco_compra'     => 0,
-                    'custo_medio'      => 0,
-                    'estoque_atual'    => 0,
-                    'estoque_minimo'   => 0,
-                ]);
+        return $produto;
+    });
+}
 
-                Log::info('[ProdutoService] Criando SERVIÇO', [
-                    'taxa_retencao'  => $dadosProduto['taxa_retencao'],
-                    'codigo_isencao' => $dadosProduto['codigo_isencao'],
-                    'unidade_medida' => $dadosProduto['unidade_medida'],
-                ]);
-            }
-
-            $produto = Produto::create($dadosProduto);
-
-            // Apenas produtos físicos têm movimentação de stock
-            if ($tipo === 'produto' && ($dados['estoque_atual'] ?? 0) > 0) {
-                Log::info('[ProdutoService] Registando estoque inicial', [
-                    'produto'    => $produto->nome,
-                    'quantidade' => $dados['estoque_atual'],
-                ]);
-
-                $this->stockService->entradaCompra(
-                    $produto->id,
-                    (int) $produto->estoque_atual,
-                    (float) $produto->custo_medio
-                );
-            }
-
-            return $produto;
-        });
+private function validarPreco(Produto $produto, float $preco): void
+{
+    if ($produto->preco_controlado && $produto->preco_maximo && $preco > $produto->preco_maximo) {
+        throw new \Exception("Preço acima do permitido");
     }
+
+    if ($produto->preco_minimo && $preco < $produto->preco_minimo) {
+        throw new \Exception("Preço abaixo do mínimo");
+    }
+}
 
     /* =====================================================================
      | EDITAR PRODUTO / SERVIÇO
@@ -187,13 +188,26 @@ class ProdutoService
             $dadosUpdate = [
                 'nome'        => $dados['nome'] ?? $produto->nome,
                 'descricao'   => $dados['descricao'] ?? $produto->descricao,
-                'preco_venda' => $dados['preco_venda'] ?? $produto->preco_venda,
+                'preco_venda' => $tipoNovo === 'produto'
+    ? $this->calcularPrecoVenda(array_merge($produto->toArray(), $dados))
+    : ($dados['preco_venda'] ?? $produto->preco_venda),
                 'taxa_iva'    => $dados['taxa_iva'] ?? $produto->taxa_iva,
                 'sujeito_iva' => $dados['sujeito_iva'] ?? $produto->sujeito_iva,
                 'tipo'        => $tipoNovo,
                 'status'      => $dados['status'] ?? $produto->status,
             ];
 
+            if ($produto->preco_venda != $dadosUpdate['preco_venda']) {
+    DB::table('historico_precos')->insert([
+        'id' => Str::uuid(),
+        'produto_id' => $produto->id,
+        'preco_antigo' => $produto->preco_venda,
+        'preco_novo' => $dadosUpdate['preco_venda'],
+        'user_id' => Auth::id(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+}
             if ($tipoNovo === 'servico') {
                 // Taxa de retenção: configurável por serviço
                 $taxaRetencao = isset($dados['taxa_retencao'])
@@ -347,6 +361,32 @@ class ProdutoService
         return $produto;
     }
 
+    private function calcularPrecoVenda(array $dados): float
+{
+    $precoCompra = (float) ($dados['preco_compra'] ?? 0);
+    $despesas    = (float) ($dados['despesas_adicionais'] ?? 0);
+    $tipoPreco   = $dados['tipo_preco'] ?? 'margem';
+
+    $base = $precoCompra + $despesas;
+
+    if ($tipoPreco === 'margem') {
+        $margem = (float) ($dados['margem_lucro'] ?? 0);
+
+        if ($margem <= 0 || $margem >= 100) {
+            throw new \Exception("Margem inválida");
+        }
+
+        return $base / (1 - ($margem / 100));
+    }
+
+    if ($tipoPreco === 'markup') {
+        $markup = (float) ($dados['markup'] ?? 0);
+        return $base + ($base * $markup / 100);
+    }
+
+    // FIXO
+    return (float) ($dados['preco_venda'] ?? 0);
+}
     /* =====================================================================
      | MÉTODOS PRIVADOS
      | ================================================================== */
@@ -357,7 +397,7 @@ class ProdutoService
             return 0.0;
         }
 
-        return (($produto->preco_venda - $produto->preco_compra) / $produto->preco_compra) * 100;
+        return  (($produto->preco_venda - $produto->preco_compra) / $produto->preco_venda) * 100;
     }
 
     /**
