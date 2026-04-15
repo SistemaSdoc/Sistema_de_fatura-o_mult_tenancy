@@ -1,7 +1,8 @@
 // src/app/(empresa)/estoque/components/TabelaItens.tsx
 import React from "react";
-import { Package, Wrench, ArrowUpCircle, Trash2, Layers, Plus, Edit2 } from "lucide-react";
+import { Package, Wrench, ArrowUpCircle, Trash2, Layers, Plus, Edit2, Percent } from "lucide-react";
 import { Produto, formatarPreco, getTipoBadge, isServico, } from "@/services/produtos";
+import { getTaxaIVALabel } from "@/services/categorias";
 import { StatusEstoqueBadge } from "./StatusEstoqueBadge";
 import { useThemeColors } from "@/context/ThemeContext";
 
@@ -9,7 +10,7 @@ interface TabelaItensProps {
     itens: Produto[];
     onRegistrarEntrada: (item: Produto) => void;
     onMoverParaLixeira: (item: Produto) => void;
-    onEditar: (item: Produto) => void;  // Nova prop
+    onEditar: (item: Produto) => void;
     colors?: any;
 }
 
@@ -33,6 +34,8 @@ export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira, onE
                     <tr className="border-b" style={{ borderColor: colors.border, backgroundColor: colors.hover }}>
                         <th className="py-3 px-4 text-left font-medium" style={{ color: colors.text }}>Item</th>
                         <th className="py-3 px-4 text-left font-medium" style={{ color: colors.text }}>Tipo</th>
+                        {/* ✅ NOVA COLUNA: IVA */}
+                        <th className="py-3 px-4 text-center font-medium" style={{ color: colors.text }}>IVA</th>
                         <th className="py-3 px-4 text-center font-medium" style={{ color: colors.text }}>Stock</th>
                         <th className="py-3 px-4 text-right font-medium" style={{ color: colors.text }}>Preço</th>
                         <th className="py-3 px-4 text-center font-medium" style={{ color: colors.text }}>Status</th>
@@ -58,6 +61,35 @@ export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira, onE
 
                         const badgeStyle = item.tipo === "produto" ? tipoBadgeStyle.produto : tipoBadgeStyle.servico;
 
+                        // ✅ NOVO: Determinar IVA a mostrar
+                        const getIVADisplay = () => {
+                            if (isServicoItem) {
+                                // Serviço: usa próprio IVA
+                                return {
+                                    label: getTaxaIVALabel(item.taxa_iva || 0, item.sujeito_iva ?? true),
+                                    cor: item.sujeito_iva ? colors.primary : colors.textSecondary,
+                                    isento: !item.sujeito_iva
+                                };
+                            } else {
+                                // Produto: IVA vem da categoria
+                                const categoria = item.categoria;
+                                if (categoria) {
+                                    return {
+                                        label: getTaxaIVALabel(categoria.taxa_iva || 0, categoria.sujeito_iva ?? true),
+                                        cor: categoria.sujeito_iva ? colors.primary : colors.textSecondary,
+                                        isento: !categoria.sujeito_iva
+                                    };
+                                }
+                                return {
+                                    label: "—",
+                                    cor: colors.textSecondary,
+                                    isento: false
+                                };
+                            }
+                        };
+
+                        const ivaDisplay = getIVADisplay();
+
                         return (
                             <tr
                                 key={item.id}
@@ -76,6 +108,21 @@ export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira, onE
                                         style={{ backgroundColor: badgeStyle.bg, color: badgeStyle.text }}
                                     >
                                         {tipoBadge.texto}
+                                    </span>
+                                </td>
+
+                                {/* ✅ NOVA CÉLULA: IVA */}
+                                <td className="py-3 px-4 text-center">
+                                    <span
+                                        className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded"
+                                        style={{ 
+                                            backgroundColor: ivaDisplay.isento ? `${colors.textSecondary}15` : `${colors.primary}15`,
+                                            color: ivaDisplay.cor
+                                        }}
+                                        title={isServicoItem ? "IVA do serviço" : `IVA da categoria: ${item.categoria?.nome || "N/A"}`}
+                                    >
+                                        <Percent className="w-3 h-3" />
+                                        {ivaDisplay.label}
                                     </span>
                                 </td>
 

@@ -8,28 +8,59 @@ return [
     |--------------------------------------------------------------------------
     | Stateful Domains
     |--------------------------------------------------------------------------
-    | Aceita qualquer IP local nas portas 3000 e 8000.
-    | O request()->getHost() foi removido do config pois não funciona
-    | durante artisan commands — o CORS já trata dos IPs dinamicamente.
+    | Domínios que o Sanctum deve tratar como "stateful" (usam cookies de sessão).
+    | Isso resolve o erro 419 (CSRF) quando o frontend (Next.js) está em porta diferente.
     */
+
     'stateful' => array_filter(array_unique(array_merge(
         explode(',', env('SANCTUM_STATEFUL_DOMAINS', '')),
         [
             'localhost',
-            'localhost:3000',
-            'localhost:8000',
             '127.0.0.1',
+            '0.0.0.0',
+
+            // Frontend (Next.js)
+            'localhost:3000',
             '127.0.0.1:3000',
+            '0.0.0.0:3000',
+
+            // Backend (Laravel) - por segurança
+            'localhost:8000',
             '127.0.0.1:8000',
+            '0.0.0.0:8000',
+
+            // Adiciona o teu IP atual da rede (podes adicionar mais IPs se precisares)
             '192.168.1.105:3000',
-            '192.168.1.105:8000',
         ]
     ))),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Sanctum Guards
+    |--------------------------------------------------------------------------
+    */
     'guard' => ['web'],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Expiration Minutes
+    |--------------------------------------------------------------------------
+    | Quanto tempo os tokens devem durar (null = nunca expira)
+    */
     'expiration' => null,
 
+    /*
+    |--------------------------------------------------------------------------
+    | Token Prefix
+    |--------------------------------------------------------------------------
+    */
     'token_prefix' => env('SANCTUM_TOKEN_PREFIX', ''),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Middleware
+    |--------------------------------------------------------------------------
+    | Middleware usado para proteger rotas stateful
+    */
 
 ];

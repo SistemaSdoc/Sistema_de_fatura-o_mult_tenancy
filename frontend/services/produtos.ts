@@ -9,14 +9,24 @@ export type TipoProduto = "produto" | "servico";
 export type UnidadeMedida = "hora" | "dia" | "semana" | "mes";
 export type TipoPreco = "fixo" | "margem" | "markup";
 export type CodigoIsencao = "M00" | "M01" | "M02" | "M03" | "M04" | "M05" | "M06" | "M99";
+
+// ✅ NOVO: Taxas de IVA válidas em Angola
+export type TaxaIVA = 0 | 5 | 14;
+
 // ===== INTERFACES =====
 
+// ✅ ATUALIZADO: Categoria com campos de IVA
 export interface Categoria {
     id: string;
     nome: string;
     descricao?: string;
     tipo?: "produto" | "servico";
     status?: "ativo" | "inativo";
+    // ✅ NOVOS: Campos de IVA da categoria
+    taxa_iva: number;
+    sujeito_iva: boolean;
+    codigo_isencao?: CodigoIsencao | null;
+    label_iva?: string; // ex: "14%" ou "Isento (0%)"
     created_at?: string;
     updated_at?: string;
     deleted_at?: string | null;
@@ -53,10 +63,11 @@ export interface MovimentoStock {
     updated_at?: string;
 }
 
+// ✅ ATUALIZADO: Produto com IVA efectivo da categoria
 export interface Produto {
     id: string;
     categoria_id: string | null;
-    categoria?: Categoria;
+    categoria?: Categoria; // ✅ Agora inclui os campos de IVA da categoria
     fornecedor_id?: string | null;
     fornecedor?: Fornecedor;
     user_id?: string;
@@ -66,8 +77,25 @@ export interface Produto {
     preco_compra: number;
     preco_venda: number;
     custo_medio?: number;
-    taxa_iva: number;
-    sujeito_iva?: boolean;
+    
+    // ✅ ATUALIZADO: Para produtos, estes vêm da categoria (podem ser null)
+    taxa_iva: number | null;
+    sujeito_iva?: boolean | null;
+    
+    // ✅ NOVOS: Campos computados do backend
+    taxa_iva_efectiva?: number; // Valor real do IVA (da categoria para produtos)
+    sujeito_iva_efetivo?: boolean;
+    codigo_isencao_efetivo?: CodigoIsencao | null;
+    iva_origem?: 'categoria' | 'servico';
+    iva_categoria?: {
+        id: string;
+        nome: string;
+        taxa_iva: number;
+        sujeito_iva: boolean;
+        codigo_isencao?: CodigoIsencao | null;
+    };
+    valor_iva?: number;
+    
     estoque_atual: number;
     estoque_minimo: number;
     status: StatusProduto;
@@ -77,12 +105,12 @@ export interface Produto {
     despesas_adicionais?: number;
     margem_lucro?: number;
     markup?: number;
-        // NOVOS: Campos de cálculo de preço
+    
     // Campos exclusivos de SERVIÇOS
     taxa_retencao?: number | null;
     duracao_estimada?: string;
     unidade_medida?: UnidadeMedida;
-    codigo_isencao?: CodigoIsencao | null;  // NOVO
+    codigo_isencao?: CodigoIsencao | null;
 
     // Soft delete
     deleted_at?: string | null;
@@ -92,30 +120,34 @@ export interface Produto {
     movimentosStock?: MovimentoStock[];
 }
 
+// ✅ ATUALIZADO: Input de criação - IVA opcional para produtos (vem da categoria)
 export interface CriarProdutoInput {
     tipo: TipoProduto;
-    categoria_id?: string | null;
+    categoria_id?: string | null; // ✅ REQUIRED para produtos no backend
     fornecedor_id?: string | null;
     codigo?: string | null;
     nome: string;
     descricao?: string;
     preco_venda: number;
     preco_compra?: number;
+    
+    // ✅ ATUALIZADO: Opcional - se não enviar, vem da categoria
     taxa_iva?: number;
     sujeito_iva?: boolean;
+    
     estoque_atual?: number;
     estoque_minimo?: number;
     status?: StatusProduto;
-    markup?:number;
-    tipo_preco?:string;
-    despesas_adicionais?:number;
-    margem_lucro?:number;
+    markup?: number;
+    tipo_preco?: string;
+    despesas_adicionais?: number;
+    margem_lucro?: number;
+    
     // Serviços
     taxa_retencao?: number;
     duracao_estimada?: string;
     unidade_medida?: UnidadeMedida;
- codigo_isencao?: CodigoIsencao;
-
+    codigo_isencao?: CodigoIsencao;
 }
 
 export type AtualizarProdutoInput = Partial<CriarProdutoInput>;
@@ -136,6 +168,9 @@ export interface ListarProdutosParams {
     apenas_servicos?: boolean;
     apenas_produtos?: boolean;
     com_retencao?: boolean;
+    // ✅ NOVO: Filtro por IVA da categoria
+    taxa_iva?: TaxaIVA;
+    apenas_isentos?: boolean;
 }
 
 export interface PaginatedResponse<T> {
@@ -203,6 +238,9 @@ export const produtoService = {
         if (params.apenas_servicos) q.append("apenas_servicos", "true");
         if (params.apenas_produtos) q.append("apenas_produtos", "true");
         if (params.com_retencao) q.append("com_retencao", "true");
+        // ✅ NOVOS: Filtros de IVA
+        if (params.taxa_iva !== undefined) q.append("taxa_iva", String(params.taxa_iva));
+        if (params.apenas_isentos) q.append("apenas_isentos", "true");
 
         const response = await api.get(`${API_PREFIX}/produtos${q.toString() ? `?${q}` : ""}`);
         return response.data;
@@ -268,10 +306,10 @@ export const produtoService = {
         return response.data;
     },
 
+    // ✅ ATUALIZADO: Usar o endpoint paraSelectProdutos que inclui IVA
     async listarCategorias(params?: { tipo?: "produto" | "servico" }): Promise<Categoria[]> {
-        const url = params?.tipo
-            ? `${API_PREFIX}/categorias?tipo=${params.tipo}`
-            : `${API_PREFIX}/categorias`;
+        // Usar o endpoint específico que retorna categorias com IVA
+        const url = `${API_PREFIX}/categorias/select`;
         const response = await api.get(url);
         return response.data.categorias || [];
     },
@@ -379,6 +417,51 @@ export function getFormulaDescricao(tipo: TipoPreco): string {
     }[tipo];
 }
 
+// ✅ NOVOS: Helpers de IVA
+/**
+ * Retorna a cor do badge baseada na taxa de IVA.
+ */
+export function getTaxaIVAColor(taxa: number): string {
+    switch (taxa) {
+        case 0:
+            return "bg-gray-100 text-gray-700 border-gray-200";
+        case 5:
+            return "bg-yellow-100 text-yellow-700 border-yellow-200";
+        case 14:
+            return "bg-blue-100 text-blue-700 border-blue-200";
+        default:
+            return "bg-gray-100 text-gray-700 border-gray-200";
+    }
+}
+
+/**
+ * Retorna o label formatado da taxa de IVA.
+ */
+export function getTaxaIVALabel(taxa: number, sujeitoIVA: boolean = true): string {
+    if (!sujeitoIVA || taxa === 0) {
+        return "Isento (0%)";
+    }
+    if (taxa === 5) {
+        return "5% (Cesta Básica)";
+    }
+    return `${taxa}%`;
+}
+
+/**
+ * Calcula o valor do IVA sobre um preço.
+ */
+export function calcularValorIVA(preco: number, taxaIVA: number, sujeitoIVA: boolean = true): number {
+    if (!sujeitoIVA || taxaIVA === 0) return 0;
+    return Math.round(preco * (taxaIVA / 100) * 100) / 100;
+}
+
+/**
+ * Calcula preço com IVA incluído.
+ */
+export function calcularPrecoComIVA(preco: number, taxaIVA: number, sujeitoIVA: boolean = true): number {
+    if (!sujeitoIVA || taxaIVA === 0) return preco;
+    return Math.round(preco * (1 + taxaIVA / 100) * 100) / 100;
+}
 
 export interface ResumoStockResponse {
     totalProdutos: number;
@@ -586,6 +669,32 @@ export function getTipoBadge(tipo: TipoProduto): { texto: string; cor: string } 
 export function getRetencaoBadge(taxaRetencao?: number | null): { texto: string; cor: string } | null {
     if (!taxaRetencao) return null;
     return { texto: `Retenção ${taxaRetencao}%`, cor: "bg-orange-100 text-orange-800" };
+}
+
+// ✅ NOVO: Badge de IVA para produtos (da categoria)
+export function getIVABadge(produto: Produto): { texto: string; cor: string; titulo?: string } | null {
+    if (isServico(produto)) {
+        // Serviço: mostra próprio IVA
+        const taxa = produto.taxa_iva || 0;
+        const sujeito = produto.sujeito_iva ?? true;
+        return {
+            texto: getTaxaIVALabel(taxa, sujeito),
+            cor: getTaxaIVAColor(taxa),
+            titulo: produto.codigo_isencao ? `Isenção: ${produto.codigo_isencao}` : undefined,
+        };
+    }
+    
+    // Produto: IVA da categoria
+    if (!produto.categoria) return null;
+    
+    const taxa = produto.categoria.taxa_iva;
+    const sujeito = produto.categoria.sujeito_iva;
+    
+    return {
+        texto: produto.categoria.label_iva || getTaxaIVALabel(taxa, sujeito),
+        cor: getTaxaIVAColor(taxa),
+        titulo: produto.categoria.codigo_isencao ? `Isenção: ${produto.categoria.codigo_isencao}` : undefined,
+    };
 }
 
 export default produtoService;

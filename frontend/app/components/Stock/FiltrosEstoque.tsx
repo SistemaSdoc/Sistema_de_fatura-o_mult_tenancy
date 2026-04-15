@@ -1,7 +1,7 @@
 // src/app/(empresa)/estoque/components/FiltrosEstoque.tsx
 import React, { useEffect } from "react";
 import { Search, X } from "lucide-react";
-import { Categoria } from "@/services/produtos";
+import { Categoria } from "@/services/produtos"; // ✅ Importado do service de produtos
 import { useThemeColors } from "@/context/ThemeContext";
 
 interface FiltrosEstoqueProps {
@@ -108,8 +108,6 @@ export function FiltrosEstoque({
                     <option key={cat.id} value={cat.id}>{cat.nome}</option>
                 ))}
             </select>
-
-
         </div>
     );
 }

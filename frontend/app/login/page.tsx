@@ -213,11 +213,11 @@ export default function LoginPage(): React.ReactElement {
               colors={colors}
             />
 
-            <div className="flex justify-end">
+           {/* <div className="flex justify-end">
               <Link href="/forgot-password" className="text-xs font-medium transition-colors" style={{ color: colors.secondary }}>
                 Esqueceu a senha?
               </Link>
-            </div>
+            </div>*/}
 
             <button
               type="submit"
@@ -239,7 +239,7 @@ export default function LoginPage(): React.ReactElement {
             </button>
           </form>
 
-          {/* Divider */}
+          {/* Divider 
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t" style={{ borderColor: colors.border }}></div>
@@ -247,16 +247,16 @@ export default function LoginPage(): React.ReactElement {
             <div className="relative flex justify-center text-sm">
               <span className="px-4" style={{ backgroundColor: colors.card, color: colors.textSecondary }}>ou</span>
             </div>
-          </div>
+          </div>*/}
 
-          {/* Link Cadastro */}
+          {/* Link Cadastro 
           <div className="text-center">
             <Link href="/cadastro" className="group inline-flex items-center gap-2 transition-colors font-medium" style={{ color: colors.secondary }}>
               <UserPlus size={18} />
               Não tem conta? Cadastre-se
               <ArrowRight size={16} className="opacity-0 group-hover:opacity-100 transition-opacity" />
             </Link>
-          </div>
+          </div>*/}
         </div>
 
         {/* Footer */}

@@ -17,12 +17,12 @@ class EmpresaSeeder extends Seeder
         $empresaId = (string) Str::uuid();
         DB::table('empresas')->insert([
             'id'            => $empresaId,
-            'nome'          => 'CONTAI-CONTABILIDADE & COMERCIO, (SU) LDA',
-            'nif'           => '5001672339',
-            'email'         => 'contaicontabilidade@gmail.com',
-            'logo'          => '/public/images/1000041800.jpg',
+            'nome'          => 'SDOCA-Comercio e Serviços, Lda',
+            'nif'           => '5001160419',
+            'email'         => 'gera@sdoca.it.ao',
+            'logo'          => '/public/images/3.png',
             'status'        => 'ativo',
-            'regime_fiscal' => 'simplificado',
+            'regime_fiscal' => 'geral',
             'sujeito_iva'   => true,
             'created_at'    => $now,
             'updated_at'    => $now,
@@ -30,9 +30,8 @@ class EmpresaSeeder extends Seeder
 
         /* ══════════════ UTILIZADORES ══════════════ */
         $users = [
-            ['name' => 'Francisco', 'email' => 'francisco@gmail.com', 'role' => 'admin'],
-            ['name' => 'Adilson Ginga', 'email' => 'adilson@gmail.com', 'role' => 'operador'],
-            ['name' => 'Rebeca Caculo', 'email' => 'rebeca@gmail.com', 'role' => 'operador'],
+            ['name' => 'sdoca', 'email' => 'sdoca@gmail.com', 'role' => 'admin'],
+            ['name' => 'diniz', 'email' => 'dinizcabenda@gmail.com', 'role' => 'operador'],
         ];
 
         foreach ($users as $user) {

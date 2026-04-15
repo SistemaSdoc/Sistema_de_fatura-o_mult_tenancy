@@ -43,24 +43,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
   const [isAdmin, setIsAdmin] = useState(false);
   const [isOperador, setIsOperador] = useState(false);
   const [isContablista, setIsContablista] = useState(false);
 
-  // Rotas públicas que não requerem autenticação
   const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/reset-password'];
 
-  // Função para verificar se a rota atual é pública
   const isPublicRoute = useCallback((path: string | null) => {
     if (!path) return false;
     return publicRoutes.some(route => path === route || path.startsWith(route + '/'));
   }, []);
 
-  // 🔹 Busca usuário autenticado com dados da empresa
+  // Buscar dados do usuário
   const fetchUser = useCallback(async () => {
-    // Se estiver em rota pública, não tenta buscar usuário
     if (isPublicRoute(pathname)) {
-      console.log('Rota pública, não buscando usuário');
       setUser(null);
       setIsAdmin(false);
       setIsOperador(false);
@@ -71,9 +68,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const response = await api.get<{ user: User }>("/me");
       const userData = response.data.user ?? null;
+
       setUser(userData);
 
-      // Atualiza roles
       if (userData) {
         setIsAdmin(userData.role === "admin");
         setIsOperador(userData.role === "operador");
@@ -82,12 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsAdmin(false);
         setIsOperador(false);
         setIsContablista(false);
-        
-        // Se não está logado e não está em rota pública, redireciona para login
-        if (!isPublicRoute(pathname)) {
-          console.log('Usuário não autenticado, redirecionando para login...');
-          router.replace('/login');
-        }
+        router.replace('/login');
       }
     } catch (error) {
       console.error("Erro ao buscar usuário:", error);
@@ -95,154 +87,91 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsAdmin(false);
       setIsOperador(false);
       setIsContablista(false);
-      
-      // Se não está logado e não está em rota pública, redireciona para login
+
       if (!isPublicRoute(pathname)) {
-        console.log('Erro na autenticação, redirecionando para login...');
         router.replace('/login');
       }
     }
   }, [pathname, router, isPublicRoute]);
 
-  // 🔎 Verifica se já existe sessão
+  // Verifica sessão ao mudar de rota
   useEffect(() => {
-    const checkUser = async () => {
+    const initAuth = async () => {
+      if (isPublicRoute(pathname)) {
+        setLoading(false);
+        return;
+      }
+
       try {
-        // Só tenta obter CSRF cookie e buscar usuário se NÃO for rota pública
-        if (!isPublicRoute(pathname)) {
-          // Tentar obter CSRF cookie (opcional, pode falhar se já existir)
-          try {
-            await api.get("/sanctum/csrf-cookie");
-          } catch (csrfError) {
-            console.log("CSRF cookie já existe ou erro ao obter:", csrfError);
-          }
-          
-          await fetchUser();
-        } else {
-          // Em rotas públicas, apenas define loading como false
-          console.log('Rota pública, pulando autenticação');
-          setUser(null);
-          setIsAdmin(false);
-          setIsOperador(false);
-          setIsContablista(false);
-          setLoading(false);
-        }
+        await fetchUser();
       } catch (error) {
-        console.error("Erro na inicialização:", error);
-        setUser(null);
-        setIsAdmin(false);
-        setIsOperador(false);
-        setIsContablista(false);
-        
-        // Se não está em rota pública, redireciona
-        if (!isPublicRoute(pathname)) {
-          router.replace('/login');
-        }
+        console.error("Erro na inicialização da autenticação:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    checkUser();
-  }, [fetchUser, pathname, router, isPublicRoute]);
+    initAuth();
+  }, [fetchUser, pathname, isPublicRoute]);
 
-  // 🔑 Login
+  // ==================== LOGIN ====================
   const login = useCallback(async (email: string, password: string) => {
     setLoading(true);
+
     try {
-      // Obter CSRF token
+      // 1. Obter CSRF Cookie (o interceptor do axios já trata disso)
       await api.get("/sanctum/csrf-cookie");
 
-      const xsrfToken = Cookies.get("XSRF-TOKEN");
+      // 2. Fazer login (o axios já envia o XSRF-TOKEN automaticamente)
+      await api.post("/login", { email, password });
 
-      await api.post(
-        "/login",
-        { email, password },
-        {
-          headers: xsrfToken ? {
-            "X-XSRF-TOKEN": xsrfToken,
-          } : {},
-        }
-      );
-
+      // 3. Buscar dados do usuário
       await fetchUser();
+
       toast.success("Login realizado com sucesso!");
       router.replace("/dashboard/Faturas/Faturas");
-      
+
       return { success: true };
     } catch (error: unknown) {
       console.error("Erro no login:", error);
-      
-      let errorMessage = "Erro ao fazer login";
+
+      let errorMessage = "Credenciais inválidas ou erro no servidor";
+
       if (error && typeof error === 'object' && 'response' in error) {
         const axiosError = error as { response?: { data?: { message?: string } } };
-        errorMessage = axiosError.response?.data?.message || "Erro ao fazer login";
+        errorMessage = axiosError.response?.data?.message || errorMessage;
       }
 
-      // Limpa estado em caso de erro
-      setUser(null);
-      setIsAdmin(false);
-      setIsOperador(false);
-      setIsContablista(false);
-
-      return {
-        success: false,
-        message: errorMessage
-      };
+      toast.error(errorMessage);
+      return { success: false, message: errorMessage };
     } finally {
       setLoading(false);
     }
   }, [fetchUser, router]);
 
-  // 🔒 Logout
+  // ==================== LOGOUT ====================
   const logout = useCallback(async () => {
     setLoading(true);
+
     try {
-      // Tentar fazer logout no servidor
-      try {
-        await api.get("/sanctum/csrf-cookie");
-        await api.post("/logout");
-      } catch (serverError) {
-        console.log("Erro no logout do servidor, continuando com limpeza local:", serverError);
-      }
-
-      // Limpar estado
-      setUser(null);
-      setIsAdmin(false);
-      setIsOperador(false);
-      setIsContablista(false);
-      
-      // Limpar cookies manualmente
-      Cookies.remove('XSRF-TOKEN', { path: '/' });
-      Cookies.remove('laravel_session', { path: '/' });
-      
-      toast.success("Logout realizado com sucesso");
-      router.replace("/login");
-
-      return { success: true };
-    } catch (error: unknown) {
-      console.error("Erro no logout:", error);
-      
-      // Mesmo com erro, limpa o estado local
-      setUser(null);
-      setIsAdmin(false);
-      setIsOperador(false);
-      setIsContablista(false);
-      
-      // Limpar cookies manualmente
-      Cookies.remove('XSRF-TOKEN', { path: '/' });
-      Cookies.remove('laravel_session', { path: '/' });
-
-      toast.success("Logout realizado");
-      router.replace("/login");
-
-      return {
-        success: true,
-        message: "Logout realizado"
-      };
-    } finally {
-      setLoading(false);
+      await api.post("/logout");
+    } catch (error) {
+      console.log("Erro no logout do servidor (pode ser ignorado):", error);
     }
+
+    // Limpeza local
+    setUser(null);
+    setIsAdmin(false);
+    setIsOperador(false);
+    setIsContablista(false);
+
+    Cookies.remove('XSRF-TOKEN', { path: '/' });
+    Cookies.remove('laravel_session', { path: '/' });
+
+    toast.success("Sessão terminada com sucesso");
+    router.replace("/login");
+
+    return { success: true };
   }, [router]);
 
   return (
@@ -261,11 +190,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-// 🔗 Hook para usar o AuthContext
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error("useAuth deve ser usado dentro do AuthProvider");
+    throw new Error("useAuth deve ser usado dentro de um AuthProvider");
   }
   return context;
 }

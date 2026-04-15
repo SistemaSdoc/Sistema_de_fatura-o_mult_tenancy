@@ -13,14 +13,21 @@ import {
     CheckCircle2,
     XCircle,
     AlertTriangle,
-    LayoutGrid
+    LayoutGrid,
+    Percent,
+    Receipt
 } from "lucide-react";
 import MainEmpresa from "../../../components/MainEmpresa";
 import {
     categoriaService,
     Categoria,
     getStatusLabel,
-    getTipoLabel
+    getTipoLabel,
+    getTaxaIVALabel,
+    getTaxaIVAColor,
+    getCodigoIsencaoLabel,
+    CodigoIsencao,
+    TaxaIVA
 } from "@/services/categorias";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,15 +55,20 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { useThemeColors } from "@/context/ThemeContext";
 
-// Interface para o formulário
+// Interface para o formulário - ATUALIZADA com campos de IVA
 interface FormCategoriaData {
     nome: string;
     descricao: string;
     status: "ativo" | "inativo";
     tipo: "produto" | "servico";
+    // ✅ NOVOS: Campos de IVA
+    taxa_iva: TaxaIVA;
+    sujeito_iva: boolean;
+    codigo_isencao: CodigoIsencao | "";
 }
 
 const INITIAL_FORM_DATA: FormCategoriaData = {
@@ -64,6 +76,10 @@ const INITIAL_FORM_DATA: FormCategoriaData = {
     descricao: "",
     status: "ativo",
     tipo: "produto",
+    // ✅ NOVOS: Valores padrão de IVA
+    taxa_iva: 14,
+    sujeito_iva: true,
+    codigo_isencao: "",
 };
 
 export default function CategoriasPage() {
@@ -76,6 +92,7 @@ export default function CategoriasPage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [filtroStatus, setFiltroStatus] = useState<string>("todos");
     const [filtroTipo, setFiltroTipo] = useState<string>("todos");
+    const [filtroIVA, setFiltroIVA] = useState<string>("todos");
 
     // Estados do modal/formulário
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -89,9 +106,9 @@ export default function CategoriasPage() {
     const carregarCategorias = async () => {
         try {
             setIsLoading(true);
-            const data = await categoriaService.listarCategorias();
-            setCategorias(data);
-            setCategoriasFiltradas(data);
+            const response = await categoriaService.listarCategorias();
+            setCategorias(response.categorias);
+            setCategoriasFiltradas(response.categorias);
         } catch (error: any) {
             toast.error("Erro ao carregar categorias", {
                 description: error.response?.data?.message || "Tente novamente mais tarde",
@@ -124,8 +141,17 @@ export default function CategoriasPage() {
             filtradas = filtradas.filter((cat) => cat.tipo === filtroTipo);
         }
 
+        // ✅ NOVO: Filtro por IVA
+        if (filtroIVA !== "todos") {
+            if (filtroIVA === "isento") {
+                filtradas = filtradas.filter((cat) => !cat.sujeito_iva || cat.taxa_iva === 0);
+            } else {
+                filtradas = filtradas.filter((cat) => cat.taxa_iva === Number(filtroIVA));
+            }
+        }
+
         setCategoriasFiltradas(filtradas);
-    }, [searchTerm, filtroStatus, filtroTipo, categorias]);
+    }, [searchTerm, filtroStatus, filtroTipo, filtroIVA, categorias]);
 
     // Handlers do formulário
     const handleInputChange = (
@@ -145,6 +171,28 @@ export default function CategoriasPage() {
         }
     };
 
+    // ✅ NOVO: Handler para switch de sujeito_iva
+    const handleSujeitoIVAChange = (checked: boolean) => {
+        setFormData((prev) => ({
+            ...prev,
+            sujeito_iva: checked,
+            // Se não sujeito a IVA, zerar taxa e habilitar código de isenção
+            taxa_iva: checked ? prev.taxa_iva : 0,
+            codigo_isencao: checked ? "" : prev.codigo_isencao,
+        }));
+    };
+
+    // ✅ NOVO: Handler para taxa_iva
+    const handleTaxaIVAChange = (value: string) => {
+        const taxa = Number(value) as TaxaIVA;
+        setFormData((prev) => ({
+            ...prev,
+            taxa_iva: taxa,
+            // Se taxa for 0, automaticamente não sujeito a IVA
+            sujeito_iva: taxa === 0 ? false : true,
+        }));
+    };
+
     const validarForm = (): boolean => {
         const novosErrors: Partial<Record<keyof FormCategoriaData, string>> = {};
 
@@ -152,6 +200,11 @@ export default function CategoriasPage() {
             novosErrors.nome = "Nome é obrigatório";
         } else if (formData.nome.length > 255) {
             novosErrors.nome = "Nome deve ter no máximo 255 caracteres";
+        }
+
+        // ✅ NOVO: Validação de IVA
+        if (!formData.sujeito_iva && !formData.codigo_isencao) {
+            novosErrors.codigo_isencao = "Código de isenção é obrigatório para categorias isentas";
         }
 
         setErrors(novosErrors);
@@ -172,6 +225,10 @@ export default function CategoriasPage() {
             descricao: categoria.descricao || "",
             status: categoria.status,
             tipo: categoria.tipo,
+            // ✅ NOVOS: Campos de IVA
+            taxa_iva: categoria.taxa_iva as TaxaIVA,
+            sujeito_iva: categoria.sujeito_iva,
+            codigo_isencao: categoria.codigo_isencao || "",
         });
         setErrors({});
         setIsModalOpen(true);
@@ -190,14 +247,25 @@ export default function CategoriasPage() {
         setIsSubmitting(true);
 
         try {
+            // Preparar dados para envio (remover campos vazios)
+            const dadosParaEnviar = {
+                ...formData,
+                codigo_isencao: formData.codigo_isencao || undefined,
+            };
+
             if (categoriaSelecionada) {
-                await categoriaService.atualizarCategoria(
+                const response = await categoriaService.atualizarCategoria(
                     categoriaSelecionada.id,
-                    formData
+                    dadosParaEnviar
                 );
                 toast.success("Categoria atualizada com sucesso!");
+                
+                // Mostrar aviso se houver produtos afetados pela mudança de IVA
+                if (response.aviso) {
+                    toast.warning(response.aviso, { duration: 6000 });
+                }
             } else {
-                await categoriaService.criarCategoria(formData);
+                await categoriaService.criarCategoria(dadosParaEnviar);
                 toast.success("Categoria criada com sucesso!");
             }
 
@@ -230,9 +298,17 @@ export default function CategoriasPage() {
             setIsDeleteModalOpen(false);
             carregarCategorias();
         } catch (error: any) {
-            toast.error("Erro ao deletar", {
-                description: error.response?.data?.message || "Não foi possível deletar",
-            });
+            const message = error.response?.data?.message || "Não foi possível deletar";
+            
+            // ✅ NOVO: Tratamento específico para erro de produtos ativos
+            if (error.response?.data?.error === "produtos_activos") {
+                toast.error("Não é possível eliminar", {
+                    description: message,
+                    duration: 6000,
+                });
+            } else {
+                toast.error("Erro ao deletar", { description: message });
+            }
         }
     };
 
@@ -338,6 +414,9 @@ export default function CategoriasPage() {
                             </SelectContent>
                         </Select>
 
+
+
+
                         {/* Botão Nova Categoria */}
                         <Button
                             onClick={handleNovo}
@@ -387,7 +466,7 @@ export default function CategoriasPage() {
                                 Nenhuma categoria encontrada
                             </h3>
                             <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
-                                {searchTerm || filtroStatus !== "todos" || filtroTipo !== "todos"
+                                {searchTerm || filtroStatus !== "todos" || filtroTipo !== "todos" || filtroIVA !== "todos"
                                     ? "Ajuste os filtros de busca"
                                     : "Clique em 'Nova' para começar"}
                             </p>
@@ -400,6 +479,8 @@ export default function CategoriasPage() {
                                         <th className="text-left py-2 px-3 font-medium" style={{ color: colors.text }}>Nome</th>
                                         <th className="text-left py-2 px-3 font-medium" style={{ color: colors.text }}>Tipo</th>
                                         <th className="text-left py-2 px-3 font-medium" style={{ color: colors.text }}>Status</th>
+                                        {/* ✅ NOVA COLUNA: IVA */}
+                                        <th className="text-left py-2 px-3 font-medium" style={{ color: colors.text }}>IVA</th>
                                         <th className="text-left py-2 px-3 font-medium hidden md:table-cell" style={{ color: colors.text }}>Descrição</th>
                                         <th className="text-right py-2 px-3 font-medium" style={{ color: colors.text }}>Ações</th>
                                     </tr>
@@ -436,6 +517,21 @@ export default function CategoriasPage() {
                                                         <XCircle className="mr-1 h-2.5 w-2.5" />
                                                     )}
                                                     {getStatusLabel(categoria.status)}
+                                                </Badge>
+                                            </td>
+                                            {/* ✅ NOVA CÉLULA: Badge de IVA */}
+                                            <td className="py-2 px-3">
+                                                <Badge
+                                                    variant="secondary"
+                                                    className="border-0 font-medium text-[10px] px-1.5 py-0.5"
+                                                    style={{
+                                                        backgroundColor: getTaxaIVAColor(categoria.taxa_iva).replace('text-', '').replace('700', '100').replace('border-', ''),
+                                                        color: categoria.sujeito_iva ? colors.text : colors.textSecondary
+                                                    }}
+                                                    title={categoria.codigo_isencao ? getCodigoIsencaoLabel(categoria.codigo_isencao) || "" : ""}
+                                                >
+                                                    <Percent className="mr-1 h-2.5 w-2.5" />
+                                                    {getTaxaIVALabel(categoria.taxa_iva, categoria.sujeito_iva)}
                                                 </Badge>
                                             </td>
                                             <td className="py-2 px-3 text-xs hidden md:table-cell max-w-[200px]" style={{ color: colors.textSecondary }}>
@@ -489,10 +585,10 @@ export default function CategoriasPage() {
                 </div>
             </div>
 
-            {/* Modal de Formulário - SEM ROUNDED */}
+            {/* Modal de Formulário - ATUALIZADO com campos de IVA */}
             <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
                 <DialogContent
-                    className="sm:max-w-[450px] p-0"
+                    className="sm:max-w-[500px] p-0"
                     style={{
                         backgroundColor: colors.card,
                         borderColor: colors.border
@@ -555,6 +651,90 @@ export default function CategoriasPage() {
                             </div>
                         </div>
 
+                        {/* ✅ NOVA SEÇÃO: Configuração de IVA */}
+                        <div className="space-y-3 pt-2 border-t" style={{ borderColor: colors.border }}>
+                            <div className="flex items-center justify-between">
+                                <Label className="text-xs font-medium flex items-center gap-1" style={{ color: colors.text }}>
+                                    <Receipt className="h-3.5 w-3.5" style={{ color: colors.primary }} />
+                                    Configuração de IVA
+                                </Label>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs" style={{ color: colors.textSecondary }}>
+                                        {formData.sujeito_iva ? "Sujeito a IVA" : "Isento de IVA"}
+                                    </span>
+                                    <Switch
+                                        checked={formData.sujeito_iva}
+                                        onCheckedChange={handleSujeitoIVAChange}
+                                        style={{ 
+                                            backgroundColor: formData.sujeito_iva ? colors.primary : colors.border 
+                                        }}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Taxa de IVA - desabilitado quando isento */}
+                            <div className="space-y-1">
+                                <Label className="text-xs" style={{ color: colors.text }}>Taxa de IVA</Label>
+                                <Select 
+                                    value={String(formData.taxa_iva)} 
+                                    onValueChange={handleTaxaIVAChange}
+                                    disabled={!formData.sujeito_iva}
+                                >
+                                    <SelectTrigger 
+                                        className="h-8 text-xs" 
+                                        style={{ 
+                                            backgroundColor: colors.card, 
+                                            borderColor: colors.border,
+                                            opacity: !formData.sujeito_iva ? 0.5 : 1
+                                        }}
+                                    >
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                                        <SelectItem value="14" className="text-xs">14% - Taxa Geral</SelectItem>
+                                        <SelectItem value="5" className="text-xs">5% - Cesta Básica</SelectItem>
+                                        <SelectItem value="0" className="text-xs">0% - Isento</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            {/* Código de Isenção - apenas quando isento */}
+                            {!formData.sujeito_iva && (
+                                <div className="space-y-1">
+                                    <Label className="text-xs" style={{ color: colors.text }}>
+                                        Código de Isenção <span style={{ color: colors.danger }}>*</span>
+                                    </Label>
+                                    <Select 
+                                        value={formData.codigo_isencao} 
+                                        onValueChange={(v) => handleSelectChange("codigo_isencao", v)}
+                                    >
+                                        <SelectTrigger 
+                                            className="h-8 text-xs" 
+                                            style={{ 
+                                                backgroundColor: colors.card, 
+                                                borderColor: errors.codigo_isencao ? colors.danger : colors.border 
+                                            }}
+                                        >
+                                            <SelectValue placeholder="Selecione..." />
+                                        </SelectTrigger>
+                                        <SelectContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                                            <SelectItem value="M00" className="text-xs">M00 - Não sujeito a IVA</SelectItem>
+                                            <SelectItem value="M01" className="text-xs">M01 - Isento artigo 6.º do CIVA</SelectItem>
+                                            <SelectItem value="M02" className="text-xs">M02 - Isento artigo 7.º do CIVA</SelectItem>
+                                            <SelectItem value="M03" className="text-xs">M03 - Isento artigo 8.º do CIVA</SelectItem>
+                                            <SelectItem value="M04" className="text-xs">M04 - Isento artigo 9.º do CIVA</SelectItem>
+                                            <SelectItem value="M05" className="text-xs">M05 - Isento artigo 10.º do CIVA</SelectItem>
+                                            <SelectItem value="M06" className="text-xs">M06 - Isento artigo 11.º do CIVA</SelectItem>
+                                            <SelectItem value="M99" className="text-xs">M99 - Outras isenções</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    {errors.codigo_isencao && (
+                                        <p className="text-xs" style={{ color: colors.danger }}>{errors.codigo_isencao}</p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
                         <div className="space-y-1">
                             <Label className="text-xs" style={{ color: colors.text }}>Descrição</Label>
                             <Textarea
@@ -596,7 +776,7 @@ export default function CategoriasPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Modal de Confirmação de Delete - SEM ROUNDED */}
+            {/* Modal de Confirmação de Delete */}
             <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
                 <DialogContent
                     className="sm:max-w-[350px] p-0"
@@ -615,7 +795,7 @@ export default function CategoriasPage() {
                     <div className="p-4">
                         <p className="text-xs mb-4" style={{ color: colors.textSecondary }}>
                             Tem certeza que deseja excluir a categoria{" "}
-                            <strong style={{ color: colors.text }}>"{categoriaSelecionada?.nome}"</strong>?
+                            <strong style={{ color: colors.text }}> {categoriaSelecionada?.nome} </strong>?
                             <br />Esta ação não pode ser desfeita.
                         </p>
 

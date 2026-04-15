@@ -89,9 +89,9 @@ export default function MainEmpresa({
   const userRole = user?.role || "";
   const userEmail = user?.email || "";
   const userInitial = userName.charAt(0).toUpperCase();
-  const empresaLogo = companyLogo || user?.empresa?.logo || "/images/1000041800.jpg";
+  const empresaLogo = companyLogo || user?.empresa?.logo || "/images/3.png";
   const nomeEmpresa =
-    companyName || user?.empresa?.nome || "CONTAI-CONTABILIDADE & COMERCIO, (SU) LDA";
+    companyName || user?.empresa?.nome || "SDOCA-Comercio e Serviços, Lda";
 
   // Responsive detection
   useEffect(() => {

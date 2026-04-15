@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Produto;
+use App\Models\Categoria;
 use App\Models\MovimentoStock;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
@@ -12,32 +13,20 @@ use Illuminate\Support\Facades\Log;
 /**
  * ProdutoService
  *
- * Gestão de produtos e serviços.
+ * Alterações:
+ *  - Para PRODUTOS FÍSICOS: taxa_iva e sujeito_iva são puxados da Categoria e salvos no produto.
+ *    O IVA é herdado da categoria no momento da criação/atualização.
+ *  - Para SERVIÇOS: taxa_iva e sujeito_iva mantêm-se no serviço (sem categoria).
+ *  - Método obterTaxaIvaCategoria() adicionado para buscar o IVA da categoria.
+ *  - Cálculos fiscais (DocumentoFiscalService, VendaService) devem usar
+ *    $produto->taxa_iva_efectiva em vez de $produto->taxa_iva directamente.
  *
- * Correcções AGT:
- *  - Classe StockService removida deste ficheiro (estava duplicada)
- *  - Taxa de retenção configurável por serviço (não hardcoded a 6,5%)
- *  - Taxas de retenção válidas em Angola: 2%, 5%, 6,5%, 10%, 15%
- *  - Campo codigo_isencao adicionado para serviços isentos de IVA
- *  - Compatível com os campos taxa_retencao e codigo_isencao do SAF-T (AO)
- *
- * ATENÇÃO: StockService deve ser injectado via IoC — não instanciado directamente.
+ * Taxas de retenção válidas em Angola: 2%, 5%, 6,5%, 10%, 15%
  */
 class ProdutoService
 {
-    /**
-     * Taxas de retenção válidas em Angola (IRPS / IRPC sobre serviços).
-     *
-     *  2%   — serviços de construção civil (Art. 67.º IRPC)
-     *  5%   — rendimentos de trabalho independente (prestações pontuais)
-     *  6,5% — serviços técnicos e de gestão (taxa geral — Art. 67.º IRPC)
-     * 10%   — royalties e direitos de autor
-     * 15%   — dividendos e juros (entidades não residentes)
-     */
     public const TAXAS_RETENCAO_VALIDAS = [2.0, 5.0, 6.5, 10.0, 15.0];
-
-    /** Taxa de retenção default para serviços gerais */
-    public const TAXA_RETENCAO_DEFAULT = 6.5;
+    public const TAXA_RETENCAO_DEFAULT  = 6.5;
 
     protected StockService $stockService;
 
@@ -50,113 +39,103 @@ class ProdutoService
      | CRIAR PRODUTO / SERVIÇO
      | ================================================================== */
 
-    /**
-     * Cria um novo produto ou serviço.
-     *
-     * Para serviços, os campos taxa_retencao e codigo_isencao são usados
-     * pelo DocumentoFiscalService no cálculo de IVA e retenção na fonte,
-     * e exportados no SAF-T (AO).
-     */
-public function criarProduto(array $dados): Produto
-{
-    return DB::transaction(function () use ($dados) {
-        $tipo = $dados['tipo'] ?? 'produto';
+    public function criarProduto(array $dados): Produto
+    {
+        return DB::transaction(function () use ($dados) {
+            $tipo = $dados['tipo'] ?? 'produto';
 
-        Log::info('[ProdutoService] Criando item', [
-            'tipo' => $tipo,
-            'nome' => $dados['nome'],
-            'estoque_atual_recebido' => $dados['estoque_atual'] ?? 0,
-        ]);
-
-        $dadosProduto = [
-            'id'          => Str::uuid(),
-            'user_id'     => Auth::id(),
-            'nome'        => $dados['nome'],
-            'descricao'   => $dados['descricao'] ?? null,
-            'preco_venda' => $tipo === 'produto'
-    ? $this->calcularPrecoVenda($dados)
-    : ($dados['preco_venda'] ?? 0),
-            'taxa_iva'    => $dados['taxa_iva'], // O IVA pode variar por produto/serviço
-            'sujeito_iva' => $dados['sujeito_iva'] ?? true,
-            'tipo'        => $tipo,
-            'status'      => $dados['status'] ?? 'ativo',
-        ];
-
-        if ($tipo === 'produto') {
-            // ✅ IMPORTANTE: Guardar o estoque solicitado para usar depois
-            $estoqueSolicitado = (int) ($dados['estoque_atual'] ?? 0);
-            $precoCompra = (float) ($dados['preco_compra'] ?? 0);
-            
-            $dadosProduto = array_merge($dadosProduto, [
-                'categoria_id'     => $dados['categoria_id'] ?? null,
-                'fornecedor_id'    => $dados['fornecedor_id'] ?? null,
-                'codigo'           => $dados['codigo'] ?? null,
-                'preco_compra'     => $precoCompra,
-                'custo_medio'      => $precoCompra, // Custo médio inicial = preço de compra
-                'estoque_atual'    => 0, // ✅ SEMPRE ZERO para evitar duplicação
-                'estoque_minimo'   => $dados['estoque_minimo'] ?? 5,
-                'taxa_retencao'    => null,
-                'codigo_isencao'   => null,
-                'duracao_estimada' => null,
-                'unidade_medida'   => null,
-            ]);
-
-            Log::info('[ProdutoService] Criando PRODUTO', [
+            Log::info('[ProdutoService] Criando item', [
+                'tipo' => $tipo,
                 'nome' => $dados['nome'],
-                'estoque_solicitado' => $estoqueSolicitado,
-                'preco_compra' => $precoCompra,
-                'estoque_inicial_produto' => 0, // Produto criado com estoque zero
             ]);
 
-        } else {
-            $dadosProduto = array_merge($dadosProduto, [
-                'taxa_retencao'    => $dados['taxa_retencao'] ?? null,
-                'codigo_isencao'   => $dados['codigo_isencao'] ?? null,
-                'duracao_estimada' => $dados['duracao_estimada'] ?? null,
-                'unidade_medida'   => $dados['unidade_medida'] ?? null,
-                'categoria_id'     => null,
-                'fornecedor_id'    => null,
-                'codigo'           => null,
-                'preco_compra'     => 0,
-                'custo_medio'      => 0,
-                'estoque_atual'    => 0,
-                'estoque_minimo'   => 0,
-            ]);
-        }
+            $dadosProduto = [
+                'id'      => Str::uuid(),
+                'user_id' => Auth::id(),
+                'nome'    => $dados['nome'],
+                'descricao'   => $dados['descricao'] ?? null,
+                'preco_venda' => $tipo === 'produto'
+                    ? $this->calcularPrecoVenda($dados)
+                    : ($dados['preco_venda'] ?? 0),
+                'tipo'   => $tipo,
+                'status' => $dados['status'] ?? 'ativo',
+            ];
 
-        $produto = Produto::create($dadosProduto);
+            if ($tipo === 'produto') {
+                // ✅ Para produtos: puxar IVA da categoria e salvar no produto
+                $categoria = Categoria::find($dados['categoria_id'] ?? null);
+                
+                if (!$categoria) {
+                    throw new \Exception('Categoria não encontrada para o produto');
+                }
 
-        $this->validarPreco($produto, $produto->preco_venda);
-        // ✅ Só registrar a compra se tiver estoque solicitado > 0
-        if ($tipo === 'produto' && isset($dados['estoque_atual']) && (int) $dados['estoque_atual'] > 0) {
-            Log::info('[ProdutoService] Registrando compra inicial', [
-                'produto_id' => $produto->id,
-                'quantidade' => (int) $dados['estoque_atual'],
-                'preco_compra' => (float) $dados['preco_compra'],
-            ]);
+                $taxaIva = (float) $categoria->taxa_iva;
+                $sujeitoIva = (bool) $categoria->sujeito_iva;
+                $codigoIsencao = $categoria->codigo_isencao;
 
-            // Isso vai adicionar o estoque corretamente (0 + quantidade)
-            $this->stockService->entradaCompra(
-                $produto->id,
-                (int) $dados['estoque_atual'],
-                (float) $dados['preco_compra']
-            );
-        }
+                $estoqueSolicitado = (int) ($dados['estoque_atual'] ?? 0);
+                $precoCompra       = (float) ($dados['preco_compra'] ?? 0);
 
-        return $produto;
-    });
-}
+                $dadosProduto = array_merge($dadosProduto, [
+                    'categoria_id'     => $dados['categoria_id'],
+                    'fornecedor_id'    => $dados['fornecedor_id'] ?? null,
+                    'codigo'           => $dados['codigo'] ?? null,
+                    'preco_compra'     => $precoCompra,
+                    'custo_medio'      => $precoCompra,
+                    'estoque_atual'    => 0, // sempre zero; stock é adicionado via stockService
+                    'estoque_minimo'   => $dados['estoque_minimo'] ?? 5,
+                    // ✅ IVA: puxado da categoria (não null!)
+                    'taxa_iva'         => $taxaIva,
+                    'sujeito_iva'      => $sujeitoIva,
+                    'codigo_isencao'   => $codigoIsencao,
+                    'taxa_retencao'    => null,
+                    'duracao_estimada' => null,
+                    'unidade_medida'   => null,
+                ]);
 
-private function validarPreco(Produto $produto, float $preco): void
-{
-    if ($produto->preco_controlado && $produto->preco_maximo && $preco > $produto->preco_maximo) {
-        throw new \Exception("Preço acima do permitido");
+                Log::info('[ProdutoService] Criando PRODUTO', [
+                    'nome'                => $dados['nome'],
+                    'estoque_solicitado'  => $estoqueSolicitado,
+                    'preco_compra'        => $precoCompra,
+                    'taxa_iva_categoria'  => $taxaIva,
+                    'sujeito_iva'         => $sujeitoIva,
+                ]);
+
+            } else {
+                // SERVIÇO: mantém o seu próprio IVA
+                $dadosProduto = array_merge($dadosProduto, [
+                    'taxa_iva'         => $dados['taxa_iva'] ?? 0,
+                    'sujeito_iva'      => $dados['sujeito_iva'] ?? false,
+                    'taxa_retencao'    => $dados['taxa_retencao'] ?? null,
+                    'codigo_isencao'   => $dados['codigo_isencao'] ?? null,
+                    'duracao_estimada' => $dados['duracao_estimada'] ?? null,
+                    'unidade_medida'   => $dados['unidade_medida'] ?? null,
+                    'categoria_id'     => null,
+                    'fornecedor_id'    => null,
+                    'codigo'           => null,
+                    'preco_compra'     => 0,
+                    'custo_medio'      => 0,
+                    'estoque_atual'    => 0,
+                    'estoque_minimo'   => 0,
+                ]);
+            }
+
+            $produto = Produto::create($dadosProduto);
+
+            $this->validarPreco($produto, $produto->preco_venda);
+
+            // Registar stock inicial se > 0
+            if ($tipo === 'produto' && isset($dados['estoque_atual']) && (int) $dados['estoque_atual'] > 0) {
+                $this->stockService->entradaCompra(
+                    $produto->id,
+                    (int) $dados['estoque_atual'],
+                    (float) $dados['preco_compra']
+                );
+            }
+
+            return $produto;
+        });
     }
-
-    if ($produto->preco_minimo && $preco < $produto->preco_minimo) {
-        throw new \Exception("Preço abaixo do mínimo");
-    }
-}
 
     /* =====================================================================
      | EDITAR PRODUTO / SERVIÇO
@@ -170,12 +149,11 @@ private function validarPreco(Produto $produto, float $preco): void
             $tipoNovo     = $dados['tipo'] ?? $tipoOriginal;
 
             Log::info('[ProdutoService] Editando', [
-                'id'           => $produtoId,
+                'id'            => $produtoId,
                 'tipo_original' => $tipoOriginal,
-                'tipo_novo'    => $tipoNovo,
+                'tipo_novo'     => $tipoNovo,
             ]);
 
-            // Impedir conversão de produto com movimentações para serviço
             if ($tipoOriginal === 'produto' && $tipoNovo === 'servico') {
                 if ($produto->movimentosStock()->exists()) {
                     throw new \Exception(
@@ -189,39 +167,41 @@ private function validarPreco(Produto $produto, float $preco): void
                 'nome'        => $dados['nome'] ?? $produto->nome,
                 'descricao'   => $dados['descricao'] ?? $produto->descricao,
                 'preco_venda' => $tipoNovo === 'produto'
-    ? $this->calcularPrecoVenda(array_merge($produto->toArray(), $dados))
-    : ($dados['preco_venda'] ?? $produto->preco_venda),
-                'taxa_iva'    => $dados['taxa_iva'] ?? $produto->taxa_iva,
-                'sujeito_iva' => $dados['sujeito_iva'] ?? $produto->sujeito_iva,
-                'tipo'        => $tipoNovo,
-                'status'      => $dados['status'] ?? $produto->status,
+                    ? $this->calcularPrecoVenda(array_merge($produto->toArray(), $dados))
+                    : ($dados['preco_venda'] ?? $produto->preco_venda),
+                'tipo'   => $tipoNovo,
+                'status' => $dados['status'] ?? $produto->status,
             ];
 
+            // Registar histórico de preço se alterado
             if ($produto->preco_venda != $dadosUpdate['preco_venda']) {
-    DB::table('historico_precos')->insert([
-        'id' => Str::uuid(),
-        'produto_id' => $produto->id,
-        'preco_antigo' => $produto->preco_venda,
-        'preco_novo' => $dadosUpdate['preco_venda'],
-        'user_id' => Auth::id(),
-        'created_at' => now(),
-        'updated_at' => now(),
-    ]);
-}
+                DB::table('historico_precos')->insert([
+                    'id'          => Str::uuid(),
+                    'produto_id'  => $produto->id,
+                    'preco_antigo' => $produto->preco_venda,
+                    'preco_novo'   => $dadosUpdate['preco_venda'],
+                    'user_id'     => Auth::id(),
+                    'created_at'  => now(),
+                    'updated_at'  => now(),
+                ]);
+            }
+
             if ($tipoNovo === 'servico') {
-                // Taxa de retenção: configurável por serviço
+                // Serviço: mantém o seu próprio IVA
+                $taxaIva    = $dados['taxa_iva'] ?? $produto->taxa_iva ?? 0;
+                $sujeitoIva = $dados['sujeito_iva'] ?? $produto->sujeito_iva ?? false;
+
                 $taxaRetencao = isset($dados['taxa_retencao'])
                     ? (float) $dados['taxa_retencao']
                     : (float) ($produto->taxa_retencao ?? self::TAXA_RETENCAO_DEFAULT);
 
                 $taxaRetencao = $this->validarTaxaRetencao($taxaRetencao, $produto->nome);
 
-                // Código de isenção
-                $codigoIsencao = $dados['codigo_isencao'] ?? $produto->codigo_isencao ?? null;
-
                 $dadosUpdate = array_merge($dadosUpdate, [
+                    'taxa_iva'         => $taxaIva,
+                    'sujeito_iva'      => $sujeitoIva,
                     'taxa_retencao'    => $taxaRetencao,
-                    'codigo_isencao'   => $codigoIsencao,
+                    'codigo_isencao'   => $dados['codigo_isencao'] ?? $produto->codigo_isencao ?? null,
                     'duracao_estimada' => $dados['duracao_estimada'] ?? $produto->duracao_estimada ?? '1 hora',
                     'unidade_medida'   => $dados['unidade_medida'] ?? $produto->unidade_medida ?? 'hora',
                     // Limpar campos de produto
@@ -235,38 +215,51 @@ private function validarPreco(Produto $produto, float $preco): void
                 ]);
 
             } elseif ($tipoNovo === 'produto') {
+                // Produto físico: puxar IVA da categoria
+                $novaCategoriaId = $dados['categoria_id'] ?? $produto->categoria_id;
+                
+                $categoria = Categoria::find($novaCategoriaId);
+                if (!$categoria) {
+                    throw new \Exception('Categoria não encontrada para o produto');
+                }
+
+                // Se mudou de categoria, atualizar IVA
+                if (isset($dados['categoria_id']) && $dados['categoria_id'] !== $produto->categoria_id) {
+                    Log::info('[ProdutoService] Categoria alterada - atualizando IVA', [
+                        'produto'          => $produto->nome,
+                        'categoria_antiga' => $produto->categoria_id,
+                        'categoria_nova'   => $novaCategoriaId,
+                        'taxa_iva_nova'    => $categoria->taxa_iva,
+                    ]);
+                }
+
                 $dadosUpdate = array_merge($dadosUpdate, [
-                    'categoria_id'     => $dados['categoria_id'] ?? $produto->categoria_id,
+                    'categoria_id'     => $novaCategoriaId,
                     'fornecedor_id'    => $dados['fornecedor_id'] ?? $produto->fornecedor_id,
                     'codigo'           => $dados['codigo'] ?? $produto->codigo,
                     'preco_compra'     => $dados['preco_compra'] ?? $produto->preco_compra,
                     'estoque_minimo'   => $dados['estoque_minimo'] ?? $produto->estoque_minimo,
+                    // ✅ IVA: sempre da categoria atual (não null!)
+                    'taxa_iva'         => (float) $categoria->taxa_iva,
+                    'sujeito_iva'      => (bool) $categoria->sujeito_iva,
+                    'codigo_isencao'   => $categoria->codigo_isencao,
                     // Limpar campos de serviço
                     'taxa_retencao'    => null,
-                    'codigo_isencao'   => null,
                     'duracao_estimada' => null,
                     'unidade_medida'   => null,
                 ]);
 
-                // Actualizar estoque se informado
+                // Actualizar stock se informado
                 if (isset($dados['estoque_atual']) && $dados['estoque_atual'] != $produto->estoque_atual) {
                     $diferenca = (int) $dados['estoque_atual'] - (int) $produto->estoque_atual;
 
                     if ($diferenca > 0) {
-                        Log::info('[ProdutoService] Aumentando estoque', [
-                            'produto'   => $produto->nome,
-                            'diferenca' => $diferenca,
-                        ]);
                         $this->stockService->entradaCompra(
                             $produto->id,
                             $diferenca,
                             (float) $produto->preco_compra
                         );
                     } elseif ($diferenca < 0) {
-                        Log::info('[ProdutoService] Reduzindo estoque', [
-                            'produto'   => $produto->nome,
-                            'diferenca' => abs($diferenca),
-                        ]);
                         $this->stockService->saidaVenda(
                             $produto->id,
                             abs($diferenca)
@@ -280,7 +273,7 @@ private function validarPreco(Produto $produto, float $preco): void
             $produto->update($dadosUpdate);
 
             Log::info('[ProdutoService] Editado com sucesso', [
-                'id'        => $produtoId,
+                'id'         => $produtoId,
                 'tipo_final' => $produto->tipo,
             ]);
 
@@ -295,13 +288,6 @@ private function validarPreco(Produto $produto, float $preco): void
     public function alterarStatus(string $produtoId, string $status): Produto
     {
         $produto = Produto::findOrFail($produtoId);
-
-        Log::info('[ProdutoService] Alterando status', [
-            'id'          => $produtoId,
-            'tipo'        => $produto->tipo,
-            'status_novo' => $status,
-        ]);
-
         $produto->status = $status;
         $produto->save();
 
@@ -310,17 +296,13 @@ private function validarPreco(Produto $produto, float $preco): void
 
     public function listarProdutos(array $filtros = [])
     {
-        $query = Produto::query();
+        $query = Produto::with('categoria'); // eager load para taxa_iva_efectiva
 
         if (isset($filtros['tipo'])) {
             $query->where('tipo', $filtros['tipo']);
         }
 
-        if (isset($filtros['status'])) {
-            $query->where('status', $filtros['status']);
-        } else {
-            $query->where('status', 'ativo');
-        }
+        $query->where('status', $filtros['status'] ?? 'ativo');
 
         if (isset($filtros['categoria_id'])) {
             $query->where('categoria_id', $filtros['categoria_id']);
@@ -328,17 +310,22 @@ private function validarPreco(Produto $produto, float $preco): void
 
         if (isset($filtros['busca'])) {
             $busca = $filtros['busca'];
-            $query->where(function ($q) use ($busca) {
-                $q->where('nome', 'like', "%{$busca}%")
-                  ->orWhere('codigo', 'like', "%{$busca}%");
-            });
+            $query->where(fn ($q) => $q
+                ->where('nome', 'like', "%{$busca}%")
+                ->orWhere('codigo', 'like', "%{$busca}%")
+            );
         }
 
         if (isset($filtros['com_deletados']) && $filtros['com_deletados']) {
             $query->withTrashed();
         }
 
-        return $query->get();
+        return $query->get()->map(function ($produto) {
+            $arr = $produto->toArray();
+            // Adicionar taxa_iva_efectiva na listagem
+            $arr['taxa_iva_efectiva'] = $produto->taxa_iva_efectiva;
+            return $arr;
+        });
     }
 
     public function buscarProduto(string $produtoId): Produto
@@ -351,7 +338,8 @@ private function validarPreco(Produto $produto, float $preco): void
             $produto->margem_lucro = null;
         }
 
-        $produto->valor_iva = $produto->preco_venda * ($produto->taxa_iva / 100);
+        // ✅ Usar taxa_iva_efectiva (para produtos: da categoria; para serviços: própria)
+        $produto->valor_iva = $produto->preco_venda * ($produto->taxa_iva_efectiva / 100);
 
         if ($produto->tipo === 'servico' && $produto->taxa_retencao > 0) {
             $produto->valor_retencao = $produto->preco_venda * ($produto->taxa_retencao / 100);
@@ -361,60 +349,87 @@ private function validarPreco(Produto $produto, float $preco): void
         return $produto;
     }
 
-    private function calcularPrecoVenda(array $dados): float
-{
-    $precoCompra = (float) ($dados['preco_compra'] ?? 0);
-    $despesas    = (float) ($dados['despesas_adicionais'] ?? 0);
-    $tipoPreco   = $dados['tipo_preco'] ?? 'margem';
-
-    $base = $precoCompra + $despesas;
-
-    if ($tipoPreco === 'margem') {
-        $margem = (float) ($dados['margem_lucro'] ?? 0);
-
-        if ($margem <= 0 || $margem >= 100) {
-            throw new \Exception("Margem inválida");
-        }
-
-        return $base / (1 - ($margem / 100));
-    }
-
-    if ($tipoPreco === 'markup') {
-        $markup = (float) ($dados['markup'] ?? 0);
-        return $base + ($base * $markup / 100);
-    }
-
-    // FIXO
-    return (float) ($dados['preco_venda'] ?? 0);
-}
     /* =====================================================================
      | MÉTODOS PRIVADOS
      | ================================================================== */
+
+    /**
+     * Obtém a taxa de IVA da categoria associada ao produto.
+     * Retorna 0.0 se a categoria não existir ou não tiver IVA configurado.
+     */
+    private function obterTaxaIvaCategoria(?string $categoriaId): float
+    {
+        if (! $categoriaId) {
+            Log::warning('[ProdutoService] Produto sem categoria — taxa IVA será 0%');
+            return 0.0;
+        }
+
+        $categoria = Categoria::withTrashed()->find($categoriaId);
+
+        if (! $categoria) {
+            Log::warning('[ProdutoService] Categoria não encontrada', ['categoria_id' => $categoriaId]);
+            return 0.0;
+        }
+
+        return (float) $categoria->taxa_iva;
+    }
+
+    private function calcularPrecoVenda(array $dados): float
+    {
+        $precoCompra = (float) ($dados['preco_compra'] ?? 0);
+        $despesas    = (float) ($dados['despesas_adicionais'] ?? 0);
+        $tipoPreco   = $dados['tipo_preco'] ?? 'fixo';
+
+        $base = $precoCompra + $despesas;
+
+        if ($tipoPreco === 'margem') {
+            $margem = (float) ($dados['margem_lucro'] ?? 0);
+            if ($margem <= 0 || $margem >= 100) {
+                throw new \Exception('Margem inválida — deve ser entre 0% e 99,99%');
+            }
+            return $base / (1 - ($margem / 100));
+        }
+
+        if ($tipoPreco === 'markup') {
+            $markup = (float) ($dados['markup'] ?? 0);
+            return $base + ($base * $markup / 100);
+        }
+
+        // FIXO
+        return (float) ($dados['preco_venda'] ?? 0);
+    }
 
     private function calcularMargem(Produto $produto): float
     {
         if ((float) $produto->preco_compra === 0.0) {
             return 0.0;
         }
-
-        return  (($produto->preco_venda - $produto->preco_compra) / $produto->preco_venda) * 100;
+        return (($produto->preco_venda - $produto->preco_compra) / $produto->preco_venda) * 100;
     }
 
-    /**
-     * Valida e retorna a taxa de retenção.
-     * Se a taxa não for uma das taxas legais angolanas, usa o default 6,5%
-     * e regista um aviso no log.
-     */
+    private function validarPreco(Produto $produto, float $preco): void
+    {
+        if (isset($produto->preco_controlado) && $produto->preco_controlado
+            && isset($produto->preco_maximo) && $produto->preco_maximo
+            && $preco > $produto->preco_maximo) {
+            throw new \Exception('Preço acima do permitido');
+        }
+
+        if (isset($produto->preco_minimo) && $produto->preco_minimo && $preco < $produto->preco_minimo) {
+            throw new \Exception('Preço abaixo do mínimo');
+        }
+    }
+
     private function validarTaxaRetencao(float $taxa, string $nomeProduto): float
     {
         if (in_array($taxa, self::TAXAS_RETENCAO_VALIDAS, true)) {
             return $taxa;
         }
 
-        Log::warning('[ProdutoService] Taxa de retenção fora das taxas legais angolanas — usando 6,5%', [
-            'taxa_informada'   => $taxa,
-            'produto'          => $nomeProduto,
-            'taxas_validas'    => self::TAXAS_RETENCAO_VALIDAS,
+        Log::warning('[ProdutoService] Taxa de retenção fora das taxas legais — usando 6,5%', [
+            'taxa_informada' => $taxa,
+            'produto'        => $nomeProduto,
+            'taxas_validas'  => self::TAXAS_RETENCAO_VALIDAS,
         ]);
 
         return self::TAXA_RETENCAO_DEFAULT;

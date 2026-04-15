@@ -1,13 +1,6 @@
 import axios, { AxiosError } from "axios";
 import Cookies from "js-cookie";
 
-export interface ApiErrorResponse {
-  message?: string;
-  errors?: Record<string, string[]>;
-  status?: number;
-}
-
-// BaseURL dinâmica (melhor que está)
 const getBaseURL = (): string => {
   if (typeof window === "undefined") return "http://localhost:8000";
   return `${window.location.protocol}//${window.location.hostname}:8000`;
@@ -15,64 +8,61 @@ const getBaseURL = (): string => {
 
 const api = axios.create({
   baseURL: getBaseURL(),
-  withCredentials: true,           // Essencial para cookies
+  withCredentials: true,
+  withXSRFToken: true,
   headers: {
     Accept: "application/json",
     "Content-Type": "application/json",
-    "X-Requested-With": "XMLHttpRequest",   // ← Adicionado
+    "X-Requested-With": "XMLHttpRequest",
   },
 });
 
-// Configuração Sanctum
-api.defaults.xsrfCookieName = "XSRF-TOKEN";
-api.defaults.xsrfHeaderName = "X-XSRF-TOKEN";
-
-// ==================== INTERCEPTOR REQUEST ====================
+// Request interceptor
 api.interceptors.request.use(
   async (config) => {
     const method = config.method?.toLowerCase();
-
-    // Para requisições que modificam dados → garante CSRF
     if (["post", "put", "patch", "delete"].includes(method || "")) {
-      // Se não tiver o token ainda, busca primeiro
       const xsrfToken = Cookies.get("XSRF-TOKEN");
       if (!xsrfToken) {
         try {
-          await api.get("/sanctum/csrf-cookie", { 
-            baseURL: getBaseURL() 
-          });
+          await api.get("/sanctum/csrf-cookie", { withCredentials: true });
         } catch (err) {
-          console.error("Falha ao obter CSRF Cookie");
+          console.warn("Não foi possível obter CSRF cookie");
         }
       }
-
-      const freshToken = Cookies.get("XSRF-TOKEN");
-      if (freshToken) {
-        config.headers["X-XSRF-TOKEN"] = freshToken;
-      }
     }
-
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// ==================== INTERCEPTOR RESPONSE ====================
+// Response interceptor - evita loop infinito
+let isRefreshing = false;
+
 api.interceptors.response.use(
   (response) => response,
-  (error: AxiosError<ApiErrorResponse>) => {
+  async (error: AxiosError) => {
     const status = error.response?.status;
-    const url = error.config?.url;
+    const originalRequest = error.config as any;
 
-    if (status === 419) {
-      console.error("[419] CSRF Token inválido ou expirado");
-      // Tenta recuperar automaticamente
+    if (status === 419 && !isRefreshing) {
+      isRefreshing = true;
+      console.warn("[419] CSRF inválido - tentando recuperar...");
+
       Cookies.remove("XSRF-TOKEN");
+
+      try {
+        await api.get("/sanctum/csrf-cookie");
+        isRefreshing = false;
+        return api(originalRequest);   // refaz o pedido
+      } catch (refreshError) {
+        isRefreshing = false;
+        console.error("Falha ao recuperar CSRF", refreshError);
+      }
     }
 
-    if (status === 401 && !url?.includes("/login")) {
-      console.warn("[401] Sessão expirada");
-      if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+    if (status === 401) {
+      if (typeof window !== "undefined" && !window.location.pathname.includes("/login")) {
         window.location.href = "/login";
       }
     }

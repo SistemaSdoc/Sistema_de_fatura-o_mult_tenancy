@@ -133,26 +133,29 @@ export function useEstoque() {
             const dadosAtualizacao = {
                 nome: dados.nome,
                 descricao: dados.descricao,
-                categoria_id: dados.categoria_id || null,
                 preco_venda: dados.preco_venda,
                 status: dados.status,
                 ...(itemSelecionado.tipo === "produto" && {
+                    categoria_id: dados.categoria_id || null, // ✅ IVA vem da categoria
                     codigo: dados.codigo,
                     preco_compra: dados.preco_compra,
-                    taxa_iva: dados.taxa_iva,
-                    sujeito_iva: dados.sujeito_iva,
+                    // ✅ REMOVIDO: taxa_iva e sujeito_iva (vem da categoria)
                     estoque_minimo: dados.estoque_minimo,
                     fornecedor_id: dados.fornecedor_id || null,
                 }),
                 ...(itemSelecionado.tipo === "servico" && {
+                    // ✅ Serviços mantêm próprio IVA
+                    taxa_iva: dados.taxa_iva,
+                    sujeito_iva: dados.sujeito_iva,
                     taxa_retencao: dados.taxa_retencao,
                     duracao_estimada: dados.duracao_estimada,
                     unidade_medida: dados.unidade_medida,
+                    codigo_isencao: dados.codigo_isencao,
                 }),
             };
 
             await produtoService.atualizarProduto(itemSelecionado.id, dadosAtualizacao);
-            await carregarDados(); // Recarrega os dados após atualização
+            await carregarDados();
             setModalEdicaoAberto(false);
             setItemSelecionado(null);
             

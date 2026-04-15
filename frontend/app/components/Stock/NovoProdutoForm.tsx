@@ -10,12 +10,15 @@ import {
     TipoPreco,
     CodigoIsencao,
     formatarPreco,
-    calcularMargemLucro,
     calcularPrecoVenda,
     CriarProdutoInput,
     getTipoPrecoLabel,
     getFormulaDescricao,
 } from "@/services/produtos";
+import {
+    categoriaService,
+    getTaxaIVALabel,
+} from "@/services/categorias";
 import {
     Package,
     Wrench,
@@ -29,6 +32,8 @@ import {
     DollarSign,
     Tag,
     HelpCircle,
+    Percent,
+    Receipt,
 } from "lucide-react";
 import { useThemeColors } from "@/context/ThemeContext";
 import { motion, AnimatePresence } from "framer-motion";
@@ -40,7 +45,7 @@ interface FormData {
     nome: string;
     descricao: string;
     
-    // NOVOS: Campos de cálculo de preço
+    // Campos de cálculo de preço
     tipo_preco: TipoPreco;
     preco_compra: string;
     despesas_adicionais: string;
@@ -48,8 +53,11 @@ interface FormData {
     markup: string;
     preco_venda: string;
     
+    // ✅ REMOVIDO: taxa_iva e sujeito_iva para produtos (vem da categoria)
+    // Apenas para serviços
     taxa_iva: string;
     sujeito_iva: boolean;
+    
     estoque_atual: string;
     estoque_minimo: string;
     taxa_retencao: string;
@@ -77,6 +85,7 @@ export function NovoProdutoForm({
     const colors = useThemeColors();
 
     const [categorias, setCategorias] = useState<Categoria[]>([]);
+    const [categoriaSelecionada, setCategoriaSelecionada] = useState<Categoria | null>(null);
     const [loading, setLoading] = useState(false);
     const [loadingCategorias, setLoadingCategorias] = useState(true);
     const [success, setSuccess] = useState(false);
@@ -89,16 +98,18 @@ export function NovoProdutoForm({
         nome: "",
         descricao: "",
         
-        // NOVOS: Valores padrão para cálculo de preço
-        tipo_preco: "margem",        // Default: margem
+        // Campos de cálculo de preço
+        tipo_preco: "margem",
         preco_compra: "",
         despesas_adicionais: "0",
-        margem_lucro: "30",          // 30% default
-        markup: "30",                // 30% default
+        margem_lucro: "30",
+        markup: "30",
         preco_venda: "",
         
-        taxa_iva: "0",
+        // Apenas para serviços
+        taxa_iva: "14",
         sujeito_iva: true,
+        
         estoque_atual: "0",
         estoque_minimo: "5",
         taxa_retencao: "0",
@@ -107,11 +118,12 @@ export function NovoProdutoForm({
         codigo_isencao: "",
     });
 
+    // ✅ NOVO: Carregar categorias com dados de IVA
     useEffect(() => {
         async function carregarCategorias() {
             try {
-                const data = await produtoService.listarCategorias();
-                setCategorias(data.filter((c) => !c.deleted_at));
+                const response = await categoriaService.paraSelectProdutos();
+                setCategorias(response.categorias);
             } catch (error) {
                 console.error("Erro ao carregar categorias:", error);
             } finally {
@@ -121,14 +133,22 @@ export function NovoProdutoForm({
         carregarCategorias();
     }, []);
 
+    // ✅ NOVO: Atualizar categoria selecionada quando mudar
+    useEffect(() => {
+        if (formData.categoria_id) {
+            const cat = categorias.find(c => c.id === formData.categoria_id);
+            setCategoriaSelecionada(cat || null);
+        } else {
+            setCategoriaSelecionada(null);
+        }
+    }, [formData.categoria_id, categorias]);
+
     const isServico = formData.tipo === "servico";
 
     // ===== CÁLCULOS AUTOMÁTICOS =====
     
-    // Calcular preço de venda automaticamente baseado no tipo_preco
     const precoVendaCalculado = useMemo(() => {
         if (isServico) {
-            // Serviços: preço fixo manual
             return parseFloat(formData.preco_venda) || 0;
         }
 
@@ -160,7 +180,6 @@ export function NovoProdutoForm({
         isServico,
     ]);
 
-    // Atualizar preco_venda no form quando calculado (exceto em modo fixo)
     useEffect(() => {
         if (!isServico && formData.tipo_preco !== "fixo") {
             const calculado = Math.round(precoVendaCalculado * 100) / 100;
@@ -171,7 +190,6 @@ export function NovoProdutoForm({
         }
     }, [precoVendaCalculado, formData.tipo_preco, isServico]);
 
-    // Cálculos de preview
     const custoTotal = useMemo(() => {
         if (isServico) return 0;
         return (parseFloat(formData.preco_compra) || 0) + 
@@ -194,12 +212,28 @@ export function NovoProdutoForm({
         return (lucroBruto / custoTotal) * 100;
     }, [lucroBruto, custoTotal]);
 
+    // ✅ NOVO: IVA vem da categoria para produtos
+    const taxaIVA = useMemo(() => {
+        if (isServico) {
+            return parseFloat(formData.taxa_iva) || 0;
+        }
+        // Produto: IVA da categoria
+        return categoriaSelecionada?.taxa_iva || 0;
+    }, [isServico, formData.taxa_iva, categoriaSelecionada]);
+
+    const sujeitoIVA = useMemo(() => {
+        if (isServico) {
+            return formData.sujeito_iva;
+        }
+        // Produto: sujeito_iva da categoria
+        return categoriaSelecionada?.sujeito_iva ?? true;
+    }, [isServico, formData.sujeito_iva, categoriaSelecionada]);
+
     const precoComIva = useMemo(() => {
         const venda = parseFloat(formData.preco_venda) || 0;
-        const iva = parseFloat(formData.taxa_iva) || 0;
-        if (!formData.sujeito_iva) return venda;
-        return venda * (1 + iva / 100);
-    }, [formData.preco_venda, formData.taxa_iva, formData.sujeito_iva]);
+        if (!sujeitoIVA) return venda;
+        return venda * (1 + taxaIVA / 100);
+    }, [formData.preco_venda, taxaIVA, sujeitoIVA]);
 
     const valorRetencao = useMemo(() => {
         if (!isServico) return 0;
@@ -239,6 +273,9 @@ export function NovoProdutoForm({
             estoque_minimo: tipo === "servico" ? "0" : prev.estoque_minimo,
             taxa_retencao: tipo === "produto" ? "0" : prev.taxa_retencao,
             tipo_preco: tipo === "servico" ? "fixo" : prev.tipo_preco,
+            // Reset IVA para padrão de serviço
+            taxa_iva: tipo === "servico" ? "14" : "0",
+            sujeito_iva: tipo === "servico" ? true : false,
         }));
         setErrors({});
     };
@@ -247,8 +284,6 @@ export function NovoProdutoForm({
         setFormData((prev) => ({
             ...prev,
             tipo_preco: tipoPreco,
-            // Resetar valores quando muda o tipo
-            preco_venda: tipoPreco === "fixo" ? prev.preco_venda : prev.preco_venda,
         }));
     };
 
@@ -270,7 +305,6 @@ export function NovoProdutoForm({
                 newErrors.preco_compra = "Preço de compra obrigatório";
             }
 
-            // Validar margem
             if (formData.tipo_preco === "margem") {
                 const margem = parseFloat(formData.margem_lucro);
                 if (!margem || margem <= 0 || margem >= 100) {
@@ -293,13 +327,13 @@ export function NovoProdutoForm({
                 tipo: formData.tipo,
                 nome: formData.nome.trim(),
                 preco_venda: parseFloat(formData.preco_venda),
-                taxa_iva: parseFloat(formData.taxa_iva) || 0,
-                sujeito_iva: formData.sujeito_iva,
                 status: "ativo",
             };
 
             if (isServico) {
-                // SERVIÇO
+                // SERVIÇO: envia próprio IVA
+                dados.taxa_iva = parseFloat(formData.taxa_iva) || 0;
+                dados.sujeito_iva = formData.sujeito_iva;
                 dados.taxa_retencao = parseFloat(formData.taxa_retencao) || 0;
                 dados.duracao_estimada = `${formData.duracao_estimada} ${formData.unidade_medida}`;
                 dados.unidade_medida = formData.unidade_medida;
@@ -310,14 +344,14 @@ export function NovoProdutoForm({
                 dados.estoque_atual = 0;
                 dados.estoque_minimo = 0;
             } else {
-                // PRODUTO - com novo sistema de preço
+                // PRODUTO: NÃO envia taxa_iva e sujeito_iva (vem da categoria)
                 dados.categoria_id = formData.categoria_id || null;
                 dados.codigo = formData.codigo.trim() || null;
                 dados.preco_compra = parseFloat(formData.preco_compra) || 0;
                 dados.estoque_atual = parseInt(formData.estoque_atual) || 0;
                 dados.estoque_minimo = parseInt(formData.estoque_minimo) || 0;
                 
-                // NOVOS: Enviar campos de cálculo para backend
+                // Campos de cálculo
                 dados.tipo_preco = formData.tipo_preco;
                 dados.despesas_adicionais = parseFloat(formData.despesas_adicionais) || 0;
                 
@@ -326,6 +360,9 @@ export function NovoProdutoForm({
                 } else if (formData.tipo_preco === "markup") {
                     dados.markup = parseFloat(formData.markup) || 0;
                 }
+
+                // ✅ NÃO enviar taxa_iva e sujeito_iva para produtos
+                // O backend vai ignorar mesmo se enviar, mas melhor não enviar
             }
 
             await produtoService.criarProduto(dados);
@@ -506,7 +543,7 @@ export function NovoProdutoForm({
                                     </option>
                                     {categorias.map((cat) => (
                                         <option key={cat.id} value={cat.id}>
-                                            {cat.nome}
+                                            {cat.nome} {cat.label_iva ? `(${cat.label_iva})` : ''}
                                         </option>
                                     ))}
                                 </select>
@@ -536,7 +573,48 @@ export function NovoProdutoForm({
                     )}
                 </div>
 
-                {/* ===== SEÇÃO DE PREÇO ATUALIZADA ===== */}
+                {/* ✅ NOVO: Card de IVA da Categoria (apenas para produtos) */}
+                {!isServico && categoriaSelecionada && (
+                    <div className="p-4 shadow-sm border" style={{
+                        backgroundColor: colors.card,
+                        borderColor: colors.border
+                    }}>
+                        <div className="flex items-center gap-2 mb-3 pb-2 border-b" style={{ borderColor: colors.border }}>
+                            <Receipt className="w-5 h-5" style={{ color: colors.primary }} />
+                            <h3 className="font-semibold" style={{ color: colors.text }}>IVA da Categoria</h3>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm font-medium" style={{ color: colors.text }}>
+                                    {categoriaSelecionada.nome}
+                                </p>
+                                <p className="text-xs" style={{ color: colors.textSecondary }}>
+                                    {categoriaSelecionada.sujeito_iva 
+                                        ? `Taxa: ${getTaxaIVALabel(categoriaSelecionada.taxa_iva, true)}`
+                                        : "Isento de IVA"
+                                    }
+                                    {categoriaSelecionada.codigo_isencao && ` • Código: ${categoriaSelecionada.codigo_isencao}`}
+                                </p>
+                            </div>
+                            <div 
+                                className="px-3 py-1.5 rounded-full text-sm font-medium"
+                                style={{
+                                    backgroundColor: categoriaSelecionada.sujeito_iva 
+                                        ? `${colors.primary}20` 
+                                        : `${colors.textSecondary}20`,
+                                    color: categoriaSelecionada.sujeito_iva 
+                                        ? colors.primary 
+                                        : colors.textSecondary
+                                }}
+                            >
+                                {getTaxaIVALabel(categoriaSelecionada.taxa_iva, categoriaSelecionada.sujeito_iva)}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Seção de Preço */}
                 <div className="p-4 shadow-sm border" style={{
                     backgroundColor: colors.card,
                     borderColor: colors.border
@@ -710,7 +788,7 @@ export function NovoProdutoForm({
                         )}
                     </AnimatePresence>
 
-                    {/* Preço de Venda (Read-only exceto em modo fixo) */}
+                    {/* Preço de Venda */}
                     <div className={`${isServico ? "md:col-span-2" : ""}`}>
                         <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
                             Preço de Venda (Kz) {formData.tipo_preco !== "fixo" && !isServico && "(Calculado)"}
@@ -742,44 +820,48 @@ export function NovoProdutoForm({
                         )}
                     </div>
 
-                    {/* IVA e Retenção */}
-                    <div className="mt-4 flex flex-wrap items-center gap-4">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                                type="checkbox"
-                                name="sujeito_iva"
-                                checked={formData.sujeito_iva}
-                                onChange={handleChange}
-                                className="w-4 h-4"
-                                style={{ accentColor: colors.primary }}
-                            />
-                            <span className="text-sm" style={{ color: colors.text }}>IVA</span>
-                        </label>
+                    {/* ✅ IVA - Apenas para Serviços */}
+                    {isServico && (
+                        <div className="mt-4 p-3 rounded-lg" style={{ backgroundColor: colors.hover }}>
+                            <div className="flex items-center gap-4 mb-3">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        name="sujeito_iva"
+                                        checked={formData.sujeito_iva}
+                                        onChange={handleChange}
+                                        className="w-4 h-4"
+                                        style={{ accentColor: colors.primary }}
+                                    />
+                                    <span className="text-sm font-medium" style={{ color: colors.text }}>Sujeito a IVA</span>
+                                </label>
 
-                        {formData.sujeito_iva && (
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="number"
-                                    name="taxa_iva"
-                                    value={formData.taxa_iva}
-                                    onChange={handleChange}
-                                    min="0"
-                                    max="100"
-                                    className="w-20 px-2 py-1 border text-sm"
-                                    style={{
-                                        backgroundColor: colors.card,
-                                        borderColor: colors.border,
-                                        color: colors.text
-                                    }}
-                                />
-                                <span className="text-sm" style={{ color: colors.textSecondary }}>%</span>
+                                {formData.sujeito_iva && (
+                                    <div className="flex items-center gap-2">
+                                        <Percent className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                                        <input
+                                            type="number"
+                                            name="taxa_iva"
+                                            value={formData.taxa_iva}
+                                            onChange={handleChange}
+                                            min="0"
+                                            max="100"
+                                            step="0.01"
+                                            className="w-20 px-2 py-1 border text-sm"
+                                            style={{
+                                                backgroundColor: colors.card,
+                                                borderColor: colors.border,
+                                                color: colors.text
+                                            }}
+                                        />
+                                        <span className="text-sm" style={{ color: colors.textSecondary }}>%</span>
+                                    </div>
+                                )}
                             </div>
-                        )}
 
-                        {isServico && (
-                            <>
-                                <div className="w-px h-4" style={{ backgroundColor: colors.border }} />
-                                <span className="text-sm" style={{ color: colors.textSecondary }}>Retenção:</span>
+                            {/* Retenção para serviços */}
+                            <div className="flex items-center gap-4 pt-3 border-t" style={{ borderColor: colors.border }}>
+                                <span className="text-sm font-medium" style={{ color: colors.text }}>Retenção:</span>
                                 <div className="flex items-center gap-2">
                                     <input
                                         type="number"
@@ -798,9 +880,9 @@ export function NovoProdutoForm({
                                     />
                                     <span className="text-sm" style={{ color: colors.textSecondary }}>%</span>
                                 </div>
-                            </>
-                        )}
-                    </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Preview de Cálculos */}
                     {!isServico && (
@@ -823,11 +905,18 @@ export function NovoProdutoForm({
                             </div>
                             <div className="border-t pt-2 mt-2" style={{ borderColor: colors.border }}>
                                 <div className="flex justify-between items-center">
-                                    <span className="font-semibold" style={{ color: colors.text }}>Preço Final + IVA:</span>
+                                    <span className="font-semibold" style={{ color: colors.text }}>
+                                        Preço Final {sujeitoIVA ? `+ IVA (${taxaIVA}%)` : "(Isento)"}:
+                                    </span>
                                     <span className="text-lg font-bold" style={{ color: colors.primary }}>
                                         {formatarPreco(precoComIva)}
                                     </span>
                                 </div>
+                                {categoriaSelecionada && !categoriaSelecionada.sujeito_iva && (
+                                    <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+                                        Isento segundo código {categoriaSelecionada.codigo_isencao || "M00"}
+                                    </p>
+                                )}
                             </div>
                         </div>
                     )}
@@ -936,7 +1025,7 @@ export function NovoProdutoForm({
                             </div>
                         </div>
 
-                        {/* NOVO: Código de Isenção (SAF-T AO) */}
+                        {/* Código de Isenção para serviços */}
                         <div>
                             <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
                                 Código de Isenção de IVA (opcional)

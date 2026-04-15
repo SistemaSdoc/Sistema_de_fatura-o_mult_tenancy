@@ -17,8 +17,11 @@ use Throwable;
 /**
  * ProdutoController
  *
- * Delega toda a lógica ao ProdutoService.
- * O controller faz apenas: validação de request, autorização e resposta JSON.
+ * Alterações:
+ *  - Para PRODUTOS FÍSICOS: taxa_iva e sujeito_iva removidos da validação.
+ *    O IVA é herdado automaticamente da Categoria.
+ *  - Para SERVIÇOS: taxa_iva e sujeito_iva mantêm-se (serviços não têm categoria).
+ *  - show() retorna agora taxa_iva_efectiva calculada (para produtos, vem da categoria).
  *
  * Taxas de retenção válidas (Angola): 2%, 5%, 6,5%, 10%, 15%
  */
@@ -34,7 +37,7 @@ class ProdutoController extends Controller
     {
         $this->authorize('viewAny', Produto::class);
 
-        $filtros = $this->extrairFiltros($request);
+        $filtros  = $this->extrairFiltros($request);
         $produtos = $this->produtoService->listarProdutos($filtros);
 
         return response()->json([
@@ -47,7 +50,7 @@ class ProdutoController extends Controller
     {
         $this->authorize('viewAny', Produto::class);
 
-        $filtros = array_merge($this->extrairFiltros($request), ['com_deletados' => true]);
+        $filtros  = array_merge($this->extrairFiltros($request), ['com_deletados' => true]);
         $produtos = $this->produtoService->listarProdutos($filtros);
 
         return response()->json([
@@ -106,9 +109,30 @@ class ProdutoController extends Controller
 
         $this->authorize('view', $produto);
 
+        // Adicionar informação de IVA efectivo na resposta
+        $produtoArray = $produto->toArray();
+        $produtoArray['taxa_iva_efectiva']   = $produto->taxa_iva_efectiva;
+        $produtoArray['sujeito_iva_efetivo'] = $produto->sujeito_iva_efetivo;
+        $produtoArray['codigo_isencao_efetivo'] = $produto->codigo_isencao_efetivo;
+        $produtoArray['valor_iva']           = $produto->valor_iva;
+
+        // Para produtos, mostrar de onde vem o IVA
+        if ($produto->tipo === 'produto' && $produto->categoria) {
+            $produtoArray['iva_origem'] = 'categoria';
+            $produtoArray['iva_categoria'] = [
+                'id'             => $produto->categoria->id,
+                'nome'           => $produto->categoria->nome,
+                'taxa_iva'       => $produto->categoria->taxa_iva,
+                'sujeito_iva'    => $produto->categoria->sujeito_iva,
+                'codigo_isencao' => $produto->categoria->codigo_isencao,
+            ];
+        } else {
+            $produtoArray['iva_origem'] = 'servico';
+        }
+
         return response()->json([
             'message' => 'Produto carregado com sucesso',
-            'produto' => $produto,
+            'produto' => $produtoArray,
         ]);
     }
 
@@ -123,26 +147,31 @@ class ProdutoController extends Controller
         Log::info('[ProdutoController] Dados recebidos para validação:', $request->all());
 
         try {
-            $dados = $request->validate($this->regrasValidacao($request->tipo));
+            $dados = $request->validate($this->regrasValidacao($request->tipo ?? 'produto'));
             Log::info('[ProdutoController] Dados validados com sucesso:', $dados);
         } catch (\Illuminate\Validation\ValidationException $e) {
             Log::error('[ProdutoController] ERRO DE VALIDAÇÃO:', [
                 'errors' => $e->errors(),
-                'data' => $request->all()
+                'data'   => $request->all(),
             ]);
-            
             return response()->json([
                 'message' => 'Erro de validação',
-                'errors' => $e->errors()
+                'errors'  => $e->errors(),
             ], 422);
         }
 
         try {
             $produto = $this->produtoService->criarProduto($dados);
 
+            // Carregar categoria para retornar IVA efectivo na resposta
+            $produto->load('categoria');
+
+            $resposta = $produto->fresh(['categoria', 'fornecedor'])->toArray();
+            $resposta['taxa_iva_efectiva'] = $produto->taxa_iva_efectiva;
+
             return response()->json([
                 'message' => $dados['tipo'] === 'servico' ? 'Serviço criado com sucesso' : 'Produto criado com sucesso',
-                'produto' => $produto->fresh(),
+                'produto' => $resposta,
             ], 201);
 
         } catch (\Exception $e) {
@@ -152,75 +181,65 @@ class ProdutoController extends Controller
     }
 
     /* =====================================================================
-     | ACTUALIZAR - CORRIGIDO PARA EVITAR ERRO 422
+     | ACTUALIZAR
      | ================================================================== */
 
     public function update(Request $request, string $id)
     {
         Log::info('[ProdutoController] UPDATE - Dados recebidos:', [
-            'id' => $id,
-            'all_data' => $request->all(),
-            'method' => $request->method(),
-            'content_type' => $request->header('Content-Type')
+            'id'           => $id,
+            'all_data'     => $request->all(),
+            'method'       => $request->method(),
+            'content_type' => $request->header('Content-Type'),
         ]);
 
         try {
             $produto = Produto::findOrFail($id);
             $this->authorize('update', $produto);
 
-            // ✅ CORREÇÃO: Determinar tipo corretamente
             $tipo = $request->input('tipo', $produto->tipo);
-            
-            // Validar se tipo é válido, senão usar o do produto
-            if (!in_array($tipo, ['produto', 'servico'])) {
+            if (! in_array($tipo, ['produto', 'servico'])) {
                 $tipo = $produto->tipo;
             }
 
-            Log::info('[ProdutoController] UPDATE - Tipo determinado:', [
-                'tipo' => $tipo,
-                'produto_tipo_original' => $produto->tipo
-            ]);
-
-            // ✅ CORREÇÃO: Usar regras de validação apropriadas
             $regras = $this->regrasValidacaoUpdate($tipo, $id);
-            
-            Log::info('[ProdutoController] UPDATE - Regras de validação:', $regras);
 
             try {
                 $dados = $request->validate($regras);
-                Log::info('[ProdutoController] UPDATE - Dados validados:', $dados);
             } catch (\Illuminate\Validation\ValidationException $e) {
                 Log::error('[ProdutoController] UPDATE - Erro de validação:', [
-                    'errors' => $e->errors(),
-                    'data' => $request->all(),
-                    'regras_usadas' => $regras
+                    'errors'       => $e->errors(),
+                    'data'         => $request->all(),
+                    'regras_usadas' => $regras,
                 ]);
-                
                 return response()->json([
                     'message' => 'Erro de validação',
-                    'errors' => $e->errors()
+                    'errors'  => $e->errors(),
                 ], 422);
             }
 
             $produto = $this->produtoService->editarProduto($id, $dados);
+            $produto->load('categoria');
+
+            $resposta = $produto->toArray();
+            $resposta['taxa_iva_efectiva'] = $produto->taxa_iva_efectiva;
 
             return response()->json([
                 'message' => 'Produto actualizado com sucesso',
-                'produto' => $produto,
+                'produto' => $resposta,
             ]);
 
         } catch (ModelNotFoundException $e) {
-            Log::error('[ProdutoController] UPDATE - Produto não encontrado:', ['id' => $id]);
             return response()->json(['message' => 'Produto não encontrado'], 404);
         } catch (\Exception $e) {
             Log::error('[PRODUTO UPDATE ERROR]', [
                 'produto_id' => $id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'error'      => $e->getMessage(),
+                'trace'      => $e->getTraceAsString(),
             ]);
             return response()->json([
                 'message' => 'Erro ao actualizar produto',
-                'error' => $e->getMessage()
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }
@@ -234,7 +253,7 @@ class ProdutoController extends Controller
         $produto = Produto::findOrFail($id);
         $this->authorize('update', $produto);
 
-        $status = $request->validate(['status' => 'required|in:ativo,inativo'])['status'];
+        $status  = $request->validate(['status' => 'required|in:ativo,inativo'])['status'];
         $produto = $this->produtoService->alterarStatus($id, $status);
 
         return response()->json([
@@ -387,7 +406,6 @@ class ProdutoController extends Controller
                 ->when($dataInicio, fn ($q) => $q->whereDate('vendas.data_venda', '>=', $dataInicio))
                 ->when($dataFim,    fn ($q) => $q->whereDate('vendas.data_venda', '<=', $dataFim));
 
-            // Top 10 — todos os tipos
             $maisVendidos = DB::table('itens_venda')->tap($queryBase)
                 ->select(
                     'produtos.id', 'produtos.nome', 'produtos.codigo', 'produtos.tipo',
@@ -407,7 +425,6 @@ class ProdutoController extends Controller
                     'valor_total' => round($i->total_vendas, 2),
                 ]);
 
-            // Top 10 serviços (com retenção)
             $servicosMaisVendidos = DB::table('itens_venda')->tap($queryBase)
                 ->where('produtos.tipo', 'servico')
                 ->select(
@@ -432,17 +449,21 @@ class ProdutoController extends Controller
             return response()->json([
                 'success' => true,
                 'data'    => [
-                    'produtos_mais_vendidos'   => $maisVendidos,
-                    'servicos_mais_vendidos'   => $servicosMaisVendidos,
-                    'total_produtos_ativos'    => Produto::where('tipo', 'produto')->where('status', 'ativo')->count(),
-                    'total_servicos_ativos'    => Produto::where('tipo', 'servico')->where('status', 'ativo')->count(),
+                    'produtos_mais_vendidos'      => $maisVendidos,
+                    'servicos_mais_vendidos'      => $servicosMaisVendidos,
+                    'total_produtos_ativos'       => Produto::where('tipo', 'produto')->where('status', 'ativo')->count(),
+                    'total_servicos_ativos'       => Produto::where('tipo', 'servico')->where('status', 'ativo')->count(),
                     'total_servicos_com_retencao' => Produto::where('tipo', 'servico')->where('taxa_retencao', '>', 0)->count(),
                 ],
             ]);
 
         } catch (\Exception $e) {
             Log::error('[PRODUTO ESTATISTICAS ERROR]', ['error' => $e->getMessage()]);
-            return response()->json(['success' => false, 'message' => 'Erro ao carregar estatísticas', 'error' => $e->getMessage()], 500);
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao carregar estatísticas',
+                'error'   => $e->getMessage(),
+            ], 500);
         }
     }
 
@@ -451,29 +472,30 @@ class ProdutoController extends Controller
      | ================================================================== */
 
     /**
-     * Regras de validação para CRIAR (store).
+     * Regras de validação para CRIAR.
+     *
+     * PRODUTO FÍSICO: sem taxa_iva — herdada da categoria.
+     * SERVIÇO: mantém taxa_iva próprio (sem categoria).
      */
-    private function regrasValidacao(string $tipo, ?string $id = null): array
+    private function regrasValidacao(string $tipo): array
     {
         $base = [
-            'tipo'        => 'required|in:produto,servico',
-            'nome'        => 'required|string|max:255',
+            'tipo'   => 'required|in:produto,servico',
+            'nome'   => 'required|string|max:255',
             'descricao'   => 'nullable|string',
             'preco_venda' => 'required|numeric|min:0',
-            'taxa_iva'    => 'nullable|numeric',
-            'sujeito_iva' => 'nullable|boolean',
             'status'      => 'nullable|in:ativo,inativo',
-            
-            // NOVOS: Campos de cálculo de preço (opcionais)
-            'tipo_preco'           => 'nullable|in:fixo,margem,markup',
-            'despesas_adicionais'  => 'nullable|numeric|min:0',
-            'margem_lucro'         => 'nullable|numeric|min:0|max:99.99',
-            'markup'               => 'nullable|numeric|min:0',
+            // Campos de cálculo de preço
+            'tipo_preco'          => 'nullable|in:fixo,margem,markup',
+            'despesas_adicionais' => 'nullable|numeric|min:0',
+            'margem_lucro'        => 'nullable|numeric|min:0|max:99.99',
+            'markup'              => 'nullable|numeric|min:0',
         ];
 
         if ($tipo === 'produto') {
+            // ✅ SEM taxa_iva — vem da categoria
             return array_merge($base, [
-                'categoria_id'   => 'required|uuid|exists:categorias,id',
+                'categoria_id'   => 'required|uuid|exists:categorias,id', // ✅ REQUIRED para produtos
                 'fornecedor_id'  => 'nullable|uuid|exists:fornecedores,id',
                 'codigo'         => 'nullable|string|max:50|unique:produtos,codigo',
                 'preco_compra'   => 'required|numeric|min:0',
@@ -483,8 +505,10 @@ class ProdutoController extends Controller
             ]);
         }
 
-        // Serviço
+        // SERVIÇO: mantém taxa_iva próprio
         return array_merge($base, [
+            'taxa_iva'         => 'nullable|numeric|min:0|max:100',
+            'sujeito_iva'      => 'nullable|boolean',
             'taxa_retencao'    => 'nullable|numeric|in:0,2,5,6.5,10,15',
             'codigo_isencao'   => 'nullable|string|in:M00,M01,M02,M03,M04,M05,M06,M99',
             'duracao_estimada' => 'required|string|max:50',
@@ -493,34 +517,27 @@ class ProdutoController extends Controller
     }
 
     /**
-     * ✅ NOVO: Regras de validação específicas para UPDATE.
-     * Diferença: campos opcionais e regras de unique ignorando o próprio registo.
+     * Regras de validação para ACTUALIZAR.
      */
     private function regrasValidacaoUpdate(string $tipo, string $id): array
     {
-        // ✅ CORREÇÃO: Na atualização, a maioria dos campos é opcional (sometimes)
-        // pois o frontend pode enviar apenas os campos que foram modificados
         $base = [
             'tipo'        => 'sometimes|in:produto,servico',
             'nome'        => 'sometimes|string|max:255',
             'descricao'   => 'nullable|string',
             'preco_venda' => 'sometimes|numeric|min:0',
-            'taxa_iva'    => 'nullable|numeric',
-            'sujeito_iva' => 'nullable|boolean',
             'status'      => 'nullable|in:ativo,inativo',
-            
-            // NOVOS: Campos de cálculo de preço (opcionais)
-            'tipo_preco'           => 'nullable|in:fixo,margem,markup',
-            'despesas_adicionais'  => 'nullable|numeric|min:0',
-            'margem_lucro'         => 'nullable|numeric|min:0|max:99.99',
-            'markup'               => 'nullable|numeric|min:0',
+            'tipo_preco'          => 'nullable|in:fixo,margem,markup',
+            'despesas_adicionais' => 'nullable|numeric|min:0',
+            'margem_lucro'        => 'nullable|numeric|min:0|max:99.99',
+            'markup'              => 'nullable|numeric|min:0',
         ];
 
         if ($tipo === 'produto') {
+            // ✅ SEM taxa_iva — vem da categoria
             return array_merge($base, [
-                'categoria_id'   => 'sometimes|uuid|exists:categorias,id',
+                'categoria_id'   => 'sometimes|uuid|exists:categorias,id', // sometimes na atualização
                 'fornecedor_id'  => 'nullable|uuid|exists:fornecedores,id',
-                // ✅ CORREÇÃO: Ignorar o próprio ID na validação de unique
                 'codigo'         => 'nullable|string|max:50|unique:produtos,codigo,' . $id,
                 'preco_compra'   => 'sometimes|numeric|min:0',
                 'custo_medio'    => 'nullable|numeric|min:0',
@@ -529,8 +546,10 @@ class ProdutoController extends Controller
             ]);
         }
 
-        // Serviço
+        // SERVIÇO: mantém taxa_iva próprio
         return array_merge($base, [
+            'taxa_iva'         => 'nullable|numeric|min:0|max:100',
+            'sujeito_iva'      => 'nullable|boolean',
             'taxa_retencao'    => 'nullable|numeric|in:0,2,5,6.5,10,15',
             'codigo_isencao'   => 'nullable|string|in:M00,M01,M02,M03,M04,M05,M06,M99',
             'duracao_estimada' => 'sometimes|string|max:50',

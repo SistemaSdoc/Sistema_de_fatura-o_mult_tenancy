@@ -12,7 +12,8 @@ return [
         'sanctum/csrf-cookie',
         'login',
         'logout',
-        'me'
+        'me',
+        'register',           // caso uses no futuro
     ],
 
     /*
@@ -24,26 +25,28 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Allowed Origins (IMPORTANTE PARA SANCTUM)
+    | Allowed Origins (Frontend Next.js)
     |--------------------------------------------------------------------------
     */
     'allowed_origins' => [
-        'http://127.0.0.1:3000',
         'http://localhost:3000',
-        'http://192.168.1.105:3000'
+        'http://127.0.0.1:3000',
+        'http://192.168.1.192:3000',   // teu IP atual
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | Allowed Origins Patterns (REDES)
+    | Allowed Origins Patterns (Aceita qualquer IP da rede local)
     |--------------------------------------------------------------------------
+    | Muito útil quando mudas de IP ou acedes de telemóvel
     */
     'allowed_origins_patterns' => [
-        '#^http://192\.168\.\d+\.\d+(:\d+)?$#',
-        '#^http://10\.\d+\.\d+\.\d+(:\d+)?$#',
-        '#^http://172\.(1[6-9]|2\d|3[01])\.\d+\.\d+(:\d+)?$#',
+        '#^http://192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$#',
+        '#^http://10\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$#',
+        '#^http://172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}(:\d+)?$#',
         '#^http://localhost(:\d+)?$#',
         '#^http://127\.0\.0\.1(:\d+)?$#',
+        '#^http://0\.0\.0\.0(:\d+)?$#',
     ],
 
     /*
@@ -52,17 +55,8 @@ return [
     |--------------------------------------------------------------------------
     */
     'allowed_headers' => [
-        'Content-Type',
-        'Authorization',
-        'X-Requested-With',
-        'Accept',
-        'Origin',
-        'X-XSRF-TOKEN',
-        'X-CSRF-TOKEN',
-        'X-Tenant',
-        'Cache-Control',
-        'Pragma',
-        'Expires',
+        '*',   // Simplificado - aceita todos (mais seguro e prático no dev)
+        // Se quiseres ser mais restrito, podes voltar à lista manual
     ],
 
     /*
@@ -70,18 +64,20 @@ return [
     | Exposed Headers
     |--------------------------------------------------------------------------
     */
-    'exposed_headers' => [],
+    'exposed_headers' => [
+        'X-CSRF-TOKEN',
+    ],
 
     /*
     |--------------------------------------------------------------------------
-    | Max Age
+    | Max Age (Cache do preflight)
     |--------------------------------------------------------------------------
     */
-    'max_age' => 0,
+    'max_age' => 7200,   // 2 horas
 
     /*
     |--------------------------------------------------------------------------
-    | Supports Credentials (OBRIGATÓRIO)
+    | Supports Credentials (MUITO IMPORTANTE para Sanctum + Cookies)
     |--------------------------------------------------------------------------
     */
     'supports_credentials' => true,

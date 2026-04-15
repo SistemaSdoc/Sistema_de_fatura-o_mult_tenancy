@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --hostname 0.0.0.0 --port 3000",
+    "dev": "next dev --webpack --hostname 0.0.0.0 --port 3000",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
@@ -29,7 +29,7 @@
     "jspdf": "^4.2.0",
     "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.562.0",
-    "next": "^16.1.7",
+    "next": "^16.2.3",
     "qrcode": "^1.5.4",
     "qz-tray": "^2.2.5",
     "react": "19.2.3",

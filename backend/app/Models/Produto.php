@@ -10,12 +10,11 @@ use Illuminate\Support\Str;
  * Model Produto
  *
  * Alterações:
- *  - Campo 'retencao' renomeado para 'taxa_retencao' (consistência com
- *    ProdutoService, DocumentoFiscalService e VendaService)
- *  - Campo 'codigo_isencao' adicionado ao $fillable e $casts
- *    (necessário para SAF-T e cálculo de IVA nos services)
- *  - Boot: simplificado; lógica de negócio (cálculo de custo médio,
- *    movimentações) permanece no ProdutoService e StockService
+ *  - Para PRODUTOS FÍSICOS: taxa_iva e sujeito_iva são puxados da Categoria 
+ *    pelo ProdutoService e salvos no produto. O Model apenas fornece accessors
+ *    para leitura do IVA da categoria quando necessário.
+ *  - Para SERVIÇOS: taxa_iva e sujeito_iva mantêm-se no modelo do serviço,
+ *    pois serviços não têm categoria.
  */
 class Produto extends Model
 {
@@ -33,22 +32,24 @@ class Produto extends Model
         'fornecedor_id',
         'nome',
         'codigo',
-        'tipo',           // 'produto' | 'servico'
+        'tipo',            // 'produto' | 'servico'
         'status',
         'descricao',
         'custo_medio',
         'preco_compra',
         'preco_venda',
+        // ✅ taxa_iva e sujeito_iva são salvos no banco para ambos os tipos
+        // Para produtos: puxados da categoria pelo Service
+        // Para serviços: definidos diretamente
         'taxa_iva',
         'sujeito_iva',
         'estoque_atual',
         'estoque_minimo',
         // Campos exclusivos de serviços
-        'taxa_retencao',   // renomeado de 'retencao' — AGT: configurável por serviço
-        'codigo_isencao',  // SAF-T: TaxExemptionCode (M00–M99)
+        'taxa_retencao',
+        'codigo_isencao',
         'duracao_estimada',
         'unidade_medida',
-        
     ];
 
     protected $casts = [
@@ -68,8 +69,8 @@ class Produto extends Model
         'status'         => 'ativo',
         'estoque_atual'  => 0,
         'estoque_minimo' => 5,
-        'taxa_iva'       => 0,
-        'sujeito_iva'    => false,
+        'taxa_iva'       => 0,    // default apenas para novos registros
+        'sujeito_iva'    => false, // default apenas para novos registros
         'custo_medio'    => 0.00,
     ];
 
@@ -86,7 +87,6 @@ class Produto extends Model
                 $model->id = (string) Str::uuid();
             }
 
-            // Garantir valores nulos nos campos inapropriados por tipo
             if ($model->tipo === 'servico') {
                 $model->estoque_atual  = 0;
                 $model->estoque_minimo = 0;
@@ -96,10 +96,13 @@ class Produto extends Model
                 $model->fornecedor_id  = null;
                 $model->codigo         = null;
             }
+
+            // ✅ REMOVIDO: Não forçar null no IVA de produtos
+            // O ProdutoService já puxa o IVA da categoria e passa nos dados
+            // Se não vier nada, os defaults ($attributes) serão usados
         });
 
         static::updating(function ($model) {
-            // Se mudar de produto para serviço, limpar campos de stock
             if ($model->isDirty('tipo') && $model->tipo === 'servico') {
                 $model->estoque_atual  = 0;
                 $model->estoque_minimo = 0;
@@ -109,6 +112,9 @@ class Produto extends Model
                 $model->fornecedor_id  = null;
                 $model->codigo         = null;
             }
+
+            // ✅ REMOVIDO: Não forçar null no IVA de produtos
+            // O ProdutoService já puxa o IVA da categoria e passa nos dados
         });
     }
 
@@ -144,6 +150,102 @@ class Produto extends Model
     public function movimentosStock()
     {
         return $this->hasMany(MovimentoStock::class, 'produto_id')->orderBy('created_at', 'desc');
+    }
+
+    /* =====================================================================
+     | ACCESSORS — IVA EFECTIVO (produto herda da categoria, serviço usa o seu)
+     | ================================================================== */
+
+    /**
+     * Retorna a taxa de IVA efectiva:
+     *  - Produto físico → taxa_iva da Categoria associada (se salvo for null)
+     *  - Serviço        → taxa_iva do próprio serviço
+     *
+     * Use sempre este método em vez de $produto->taxa_iva para cálculos fiscais.
+     */
+    public function getTaxaIvaEfectivaAttribute(): float
+    {
+        // Se já tem valor salvo, usa ele
+        if ($this->taxa_iva !== null) {
+            return (float) $this->taxa_iva;
+        }
+
+        // Se não tem, tenta pegar da categoria (fallback)
+        if ($this->tipo === 'produto') {
+            $categoria = $this->relationLoaded('categoria')
+                ? $this->categoria
+                : $this->categoria()->first();
+
+            if ($categoria) {
+                return (float) $categoria->taxa_iva;
+            }
+        }
+
+        return 0.0;
+    }
+
+    /**
+     * Retorna se está sujeito a IVA:
+     *  - Produto físico → sujeito_iva da Categoria (se salvo for null)
+     *  - Serviço        → sujeito_iva do próprio serviço
+     */
+    public function getSujeitoIvaEfetivoAttribute(): bool
+    {
+        // Se já tem valor salvo, usa ele
+        if ($this->sujeito_iva !== null) {
+            return (bool) $this->sujeito_iva;
+        }
+
+        // Se não tem, tenta pegar da categoria (fallback)
+        if ($this->tipo === 'produto') {
+            $categoria = $this->relationLoaded('categoria')
+                ? $this->categoria
+                : $this->categoria()->first();
+
+            return $categoria ? (bool) $categoria->sujeito_iva : false;
+        }
+
+        return (bool) ($this->sujeito_iva ?? false);
+    }
+
+    /**
+     * Retorna o código de isenção efectivo:
+     *  - Produto físico → codigo_isencao da Categoria (se salvo for null)
+     *  - Serviço        → codigo_isencao do próprio serviço
+     */
+    public function getCodigoIsencaoEfetivoAttribute(): ?string
+    {
+        // Se já tem valor salvo, usa ele
+        if ($this->codigo_isencao !== null) {
+            return $this->codigo_isencao;
+        }
+
+        // Se não tem, tenta pegar da categoria (fallback)
+        if ($this->tipo === 'produto') {
+            $categoria = $this->relationLoaded('categoria')
+                ? $this->categoria
+                : $this->categoria()->first();
+
+            return $categoria?->codigo_isencao;
+        }
+
+        return $this->codigo_isencao;
+    }
+
+    /**
+     * Valor do IVA calculado sobre o preço de venda.
+     */
+    public function getValorIvaAttribute(): float
+    {
+        return round($this->preco_venda * ($this->taxa_iva_efectiva / 100), 2);
+    }
+
+    /**
+     * Preço de venda com IVA incluído.
+     */
+    public function getPrecoComIvaAttribute(): float
+    {
+        return round((float) $this->preco_venda + $this->valor_iva, 2);
     }
 
     /* =====================================================================
@@ -192,20 +294,18 @@ class Produto extends Model
         return $query->where('tipo', 'produto')->where('estoque_atual', 0);
     }
 
-    /** Serviços com retenção na fonte configurada */
     public function scopeComRetencao($query)
     {
         return $query->where('tipo', 'servico')->where('taxa_retencao', '>', 0);
     }
 
-    /** Serviços isentos de IVA (com código de isenção) */
     public function scopeIsentosIva($query)
     {
         return $query->where('tipo', 'servico')->whereNotNull('codigo_isencao');
     }
 
     /* =====================================================================
-     | MÉTODOS DE VERIFICAÇÃO — sem queries
+     | MÉTODOS DE VERIFICAÇÃO
      | ================================================================== */
 
     public function isServico(): bool
@@ -220,19 +320,13 @@ class Produto extends Model
 
     public function estoqueBaixo(): bool
     {
-        if ($this->isServico()) {
-            return false;
-        }
-
+        if ($this->isServico()) return false;
         return $this->estoque_atual > 0 && $this->estoque_atual <= $this->estoque_minimo;
     }
 
     public function semEstoque(): bool
     {
-        if ($this->isServico()) {
-            return false;
-        }
-
+        if ($this->isServico()) return false;
         return $this->estoque_atual === 0;
     }
 
@@ -247,8 +341,7 @@ class Produto extends Model
     }
 
     /**
-     * Margem de lucro baseada no custo médio.
-     * Apenas para produtos físicos.
+     * Margem de lucro baseada no custo médio (apenas produtos físicos).
      */
     public function margemLucro(): float
     {

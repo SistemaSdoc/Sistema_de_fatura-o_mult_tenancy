@@ -3,7 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ProdutoController;
-use App\Http\Controllers\CategoriaController;
+use App\Http\Controllers\CategoriaController; // ✅ Certifique-se que está importado
 use App\Http\Controllers\FornecedorController;
 use App\Http\Controllers\CompraController;
 use App\Http\Controllers\VendaController;
@@ -57,18 +57,33 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
     });
 
     // ==================== ADMIN + OPERADOR ====================
-    Route::middleware('role:admin,operador')->group(function () use ($uuidPattern) {
+// ==================== PRODUTOS ====================
+Route::middleware('role:admin,operador')->group(function () {
 
-        // PRODUTOS
-        Route::prefix('produtos')->group(function () use ($uuidPattern) {
-            Route::get('/todos', [ProdutoController::class, 'indexWithTrashed'])->name('produtos.todos');
-            Route::get('/trashed', [ProdutoController::class, 'indexOnlyTrashed'])->name('produtos.trashed');
-            Route::get('/deletados', [ProdutoController::class, 'indexOnlyTrashed'])->name('produtos.deletados');
-            Route::post('/{id}/restore', [ProdutoController::class, 'restore'])->where('id', $uuidPattern)->name('produtos.restore');
-            Route::delete('/{id}/force', [ProdutoController::class, 'forceDelete'])->where('id', $uuidPattern)->name('produtos.force-delete');
-            Route::patch('/{id}/status', [ProdutoController::class, 'alterarStatus'])->where('id', $uuidPattern)->name('produtos.status');
-        });
-        Route::apiResource('/produtos', ProdutoController::class);
+    Route::prefix('produtos')->group(function () {
+
+        Route::get('/todos', [ProdutoController::class, 'indexWithTrashed'])->name('produtos.todos');
+        Route::get('/trashed', [ProdutoController::class, 'indexOnlyTrashed'])->name('produtos.trashed');
+        Route::get('/deletados', [ProdutoController::class, 'indexOnlyTrashed'])->name('produtos.deletados');
+
+        // Rotas com parâmetro UUID - usar whereUuid() (mais seguro)
+        Route::post('/{id}/restore', [ProdutoController::class, 'restore'])
+            ->whereUuid('id')
+            ->name('produtos.restore');
+
+        Route::delete('/{id}/force', [ProdutoController::class, 'forceDelete'])
+            ->whereUuid('id')
+            ->name('produtos.force-delete');
+
+        Route::patch('/{id}/status', [ProdutoController::class, 'alterarStatus'])
+            ->whereUuid('id')
+            ->name('produtos.status');
+    });
+
+    // apiResource principal - aplica whereUuid automaticamente no parâmetro 'produto'
+    Route::apiResource('/produtos', ProdutoController::class)
+         ->whereUuid('produto');   // ← Esta linha resolve a maioria dos casos
+});
 
         // ESTOQUE
         Route::get('/estoque/resumo', [MovimentoStockController::class, 'resumo'])->name('estoque.resumo');
@@ -80,9 +95,11 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
             Route::get('/deletadas', [CategoriaController::class, 'indexOnlyTrashed'])->name('categorias.deletadas');
             Route::post('/{id}/restore', [CategoriaController::class, 'restore'])->where('id', $uuidPattern)->name('categorias.restore');
             Route::delete('/{id}/force', [CategoriaController::class, 'forceDelete'])->where('id', $uuidPattern)->name('categorias.force-delete');
+
+            // ✅ NOVA ROTA: Para dropdown de produtos (IVA incluso)
+            Route::get('/select', [CategoriaController::class, 'paraSelectProdutos'])->name('categorias.select');
         });
         Route::apiResource('/categorias', CategoriaController::class);
-
         // FORNECEDORES
         Route::prefix('fornecedores')->group(function () use ($uuidPattern) {
             Route::get('/todos', [FornecedorController::class, 'indexWithTrashed'])->name('fornecedores.todos');
@@ -206,4 +223,3 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
             Route::get('/proformas', [RelatoriosController::class, 'proformas'])->name('relatorios.proformas');
         });
     });
-}); 
