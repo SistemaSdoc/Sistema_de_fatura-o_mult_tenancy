@@ -13,8 +13,6 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\RelatoriosController;
-use App\Http\Controllers\EmpresaController;
-use App\Http\Controllers\LandlordUserController;
 
 $uuidPattern = '[0-9a-fA-F-]{36}';
 
