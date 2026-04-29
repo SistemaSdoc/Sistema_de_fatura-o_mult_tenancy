@@ -107,7 +107,7 @@ export function ModalEntrada({
 
                         <div>
                             <label className="block text-sm font-medium mb-2" style={{ color: colors.text }}>
-                                Motivo
+                                Descrição
                             </label>
                             <textarea
                                 value={motivo}

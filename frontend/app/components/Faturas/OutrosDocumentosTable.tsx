@@ -294,7 +294,6 @@ export default function OutrosDocumentosTable({
   if (!loading && documentos.length === 0) {
     return (
       <div className="p-10 text-center" style={{ color: colors.textSecondary }}>
-        <Receipt size={28} className="mx-auto mb-2" />
         <p>Nenhum documento encontrado</p>
       </div>
     );

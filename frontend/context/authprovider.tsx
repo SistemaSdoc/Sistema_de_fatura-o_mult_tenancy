@@ -1,4 +1,3 @@
-// src/context/AuthContext.tsx
 "use client";
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
@@ -12,6 +11,8 @@ export interface User {
   name: string;
   email: string;
   role: string;
+  ativo?: boolean;
+  ultimo_login?: string | null;
   empresa_id?: string;
   empresa?: {
     id: string;
@@ -30,6 +31,7 @@ interface AuthContextData {
   isAdmin: boolean;
   isOperador: boolean;
   isContablista: boolean;
+  setUser: (user: User | null) => void;
   login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => Promise<{ success: boolean; message?: string }>;
   fetchUser: () => Promise<void>;
@@ -37,11 +39,23 @@ interface AuthContextData {
 
 export const AuthContext = createContext<AuthContextData | null>(null);
 
+// Retorna a rota inicial com base no role do utilizador
+function getHomeByRole(role: string): string {
+  switch (role) {
+    case "contablista":
+      return "/dashboard/relatorios";
+    case "admin":
+    case "operador":
+    default:
+      return "/dashboard/Faturas/Faturas";
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUserState] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [isAdmin, setIsAdmin] = useState(false);
@@ -55,53 +69,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return publicRoutes.some(route => path === route || path.startsWith(route + '/'));
   }, []);
 
-  // Buscar dados do usuário
-  const fetchUser = useCallback(async () => {
-    if (isPublicRoute(pathname)) {
-      setUser(null);
+  const applyUser = useCallback((userData: User | null) => {
+    setUserState(userData);
+    if (userData) {
+      setIsAdmin(userData.role === "admin");
+      setIsOperador(userData.role === "operador");
+      setIsContablista(userData.role === "contablista");
+    } else {
       setIsAdmin(false);
       setIsOperador(false);
       setIsContablista(false);
+    }
+  }, []);
+
+  // fetchUser apenas valida a sessão — NÃO faz redirect para home,
+  // só redireciona para /login se a sessão expirou
+  const fetchUser = useCallback(async () => {
+    if (isPublicRoute(pathname)) {
+      applyUser(null);
       return;
     }
 
     try {
-      const response = await api.get<{ user: User }>("/me");
+      const response = await api.get<{ user: User }>("/api/me");
       const userData = response.data.user ?? null;
 
-      setUser(userData);
-
       if (userData) {
-        setIsAdmin(userData.role === "admin");
-        setIsOperador(userData.role === "operador");
-        setIsContablista(userData.role === "contablista");
+        applyUser(userData);
       } else {
-        setIsAdmin(false);
-        setIsOperador(false);
-        setIsContablista(false);
+        applyUser(null);
         router.replace('/login');
       }
     } catch (error) {
       console.error("Erro ao buscar usuário:", error);
-      setUser(null);
-      setIsAdmin(false);
-      setIsOperador(false);
-      setIsContablista(false);
-
+      applyUser(null);
       if (!isPublicRoute(pathname)) {
         router.replace('/login');
       }
     }
-  }, [pathname, router, isPublicRoute]);
+  }, [pathname, router, isPublicRoute, applyUser]);
 
-  // Verifica sessão ao mudar de rota
   useEffect(() => {
     const initAuth = async () => {
       if (isPublicRoute(pathname)) {
         setLoading(false);
         return;
       }
-
       try {
         await fetchUser();
       } catch (error) {
@@ -119,24 +132,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
 
     try {
-      // 1. Obter CSRF Cookie (o interceptor do axios já trata disso)
       await api.get("/sanctum/csrf-cookie");
-
-      // 2. Fazer login (o axios já envia o XSRF-TOKEN automaticamente)
       await api.post("/login", { email, password });
 
-      // 3. Buscar dados do usuário
-      await fetchUser();
+      // Buscar utilizador diretamente para ter o role antes de redirecionar
+      const response = await api.get<{ user: User }>("/api/me");
+      const userData = response.data.user ?? null;
+
+      if (!userData) {
+        throw new Error("Não foi possível obter os dados do utilizador.");
+      }
+
+      applyUser(userData);
 
       toast.success("Login realizado com sucesso!");
-      router.replace("/dashboard/Faturas/Faturas");
+
+      // Redirecionar com base no role
+      router.replace(getHomeByRole(userData.role));
 
       return { success: true };
     } catch (error: unknown) {
       console.error("Erro no login:", error);
 
       let errorMessage = "Credenciais inválidas ou erro no servidor";
-
       if (error && typeof error === 'object' && 'response' in error) {
         const axiosError = error as { response?: { data?: { message?: string } } };
         errorMessage = axiosError.response?.data?.message || errorMessage;
@@ -147,7 +165,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [fetchUser, router]);
+  }, [router, applyUser]);
 
   // ==================== LOGOUT ====================
   const logout = useCallback(async () => {
@@ -159,20 +177,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log("Erro no logout do servidor (pode ser ignorado):", error);
     }
 
-    // Limpeza local
-    setUser(null);
-    setIsAdmin(false);
-    setIsOperador(false);
-    setIsContablista(false);
-
+    applyUser(null);
     Cookies.remove('XSRF-TOKEN', { path: '/' });
     Cookies.remove('laravel_session', { path: '/' });
 
     toast.success("Sessão terminada com sucesso");
     router.replace("/login");
 
+    setLoading(false);
     return { success: true };
-  }, [router]);
+  }, [router, applyUser]);
 
   return (
     <AuthContext.Provider value={{
@@ -181,9 +195,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAdmin,
       isOperador,
       isContablista,
+      setUser: applyUser,
       login,
       logout,
-      fetchUser
+      fetchUser,
     }}>
       {children}
     </AuthContext.Provider>

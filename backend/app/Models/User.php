@@ -5,27 +5,23 @@ namespace App\Models;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
-use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Illuminate\Auth\MustVerifyEmail as MustVerifyEmailTrait;
-use Illuminate\Database\Eloquent\Casts\Attribute;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
-class User extends Authenticatable implements MustVerifyEmail
+class User extends Authenticatable
 {
-    use HasApiTokens, Notifiable, MustVerifyEmailTrait;
+    use HasApiTokens, Notifiable;
 
-    protected $table = 'users'; // landlord DB
-    
-    public $incrementing = false;   // importante!
-    protected $keyType = 'string';  // chave primária é UUID
+    protected $table = 'users';
+
+    public $incrementing = false;
+    protected $keyType   = 'string';
 
     protected $fillable = [
         'empresa_id',
         'name',
         'email',
         'password',
-        'role', 
+        'role',
         'ativo',
         'ultimo_login',
     ];
@@ -36,17 +32,14 @@ class User extends Authenticatable implements MustVerifyEmail
 
     protected $casts = [
         'email_verified_at' => 'datetime',
-        'password' => 'hashed',
+        'ultimo_login'      => 'datetime',
+        'ativo'             => 'boolean',
+        'password'          => 'hashed', // hash único — sem Attribute duplicado
     ];
 
-        protected function password(): Attribute
-    {
-        return Attribute::make(
-            set: fn ($value) => Hash::make($value),
-        );
-    }
+    // ── UUID automático ──────────────────────────────────────────────────────
 
-        protected static function boot(): void
+    protected static function boot(): void
     {
         parent::boot();
 
@@ -57,7 +50,12 @@ class User extends Authenticatable implements MustVerifyEmail
         });
     }
 
-        // ================= RELAÇÕES =================
+    // ── Relações ─────────────────────────────────────────────────────────────
+
+    public function empresa()
+    {
+        return $this->belongsTo(Empresa::class, 'empresa_id');
+    }
 
     public function vendas()
     {

@@ -104,7 +104,7 @@ export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira, onE
                                 </td>
                                 <td className="py-3 px-4">
                                     <span
-                                        className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded"
+                                        className="inline-flex items-center gap-1 px-2 py-1 text-xs "
                                         style={{ backgroundColor: badgeStyle.bg, color: badgeStyle.text }}
                                     >
                                         {tipoBadge.texto}
@@ -114,7 +114,7 @@ export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira, onE
                                 {/* ✅ NOVA CÉLULA: IVA */}
                                 <td className="py-3 px-4 text-center">
                                     <span
-                                        className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded"
+                                        className="inline-flex items-center gap-1 px-2 py-1 text-xs "
                                         style={{ 
                                             backgroundColor: ivaDisplay.isento ? `${colors.textSecondary}15` : `${colors.primary}15`,
                                             color: ivaDisplay.cor
@@ -144,7 +144,7 @@ export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira, onE
                                         {/* Botão Editar - aparece para produtos e serviços */}
                                         <button
                                             onClick={() => onEditar(item)}
-                                            className="p-1.5 transition-colors rounded hover:bg-opacity-10 hover:bg-gray-500"
+                                            className="p-1.5 transition-colors  hover:bg-opacity-10 hover:bg-gray-500"
                                             style={{ color: colors.textSecondary }}
                                             title="Editar"
                                         >
@@ -154,7 +154,7 @@ export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira, onE
                                         {!isServicoItem && (
                                             <button
                                                 onClick={() => onRegistrarEntrada(item)}
-                                                className="p-1.5 transition-colors rounded hover:bg-opacity-10 hover:bg-gray-500"
+                                                className="p-1.5 transition-colors  hover:bg-opacity-10 hover:bg-gray-500"
                                                 style={{ color: colors.textSecondary }}
                                                 title="Registrar Entrada"
                                             >
@@ -164,7 +164,7 @@ export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira, onE
                                         
                                         <button
                                             onClick={() => onMoverParaLixeira(item)}
-                                            className="p-1.5 transition-colors rounded hover:bg-opacity-10 hover:bg-orange-500"
+                                            className="p-1.5 transition-colors  hover:bg-opacity-10 hover:bg-orange-500"
                                             style={{ color: colors.secondary }}
                                             title="Mover para Lixeira"
                                         >

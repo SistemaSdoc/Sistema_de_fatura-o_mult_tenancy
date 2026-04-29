@@ -31,27 +31,24 @@ class RelatoriosService
     {
         Log::info('[RELATORIOS SERVICE] Iniciando dashboard');
 
-        $hoje = now()->startOfDay();
+        $hoje      = now()->startOfDay();
         $inicioMes = now()->startOfMonth();
         $inicioAno = now()->startOfYear();
 
-        // Vendas de hoje (faturadas)
         $vendasHoje = Venda::whereDate('created_at', $hoje)
             ->where('status', 'faturada')
             ->sum('total');
 
-        // Vendas do mês (faturadas)
         $vendasMes = Venda::whereDate('created_at', '>=', $inicioMes)
             ->where('status', 'faturada')
             ->sum('total');
 
-        // Vendas do ano (faturadas)
         $vendasAno = Venda::whereDate('created_at', '>=', $inicioAno)
             ->where('status', 'faturada')
             ->sum('total');
 
-        // Documentos fiscais
         $documentosMes = DocumentoFiscal::whereBetween('data_emissao', [$inicioMes, $hoje])->count();
+
         $faturasPendentes = DocumentoFiscal::where('tipo_documento', 'FT')
             ->whereIn('estado', ['emitido', 'parcialmente_paga'])
             ->count();
@@ -60,37 +57,47 @@ class RelatoriosService
             ->whereIn('estado', ['emitido', 'parcialmente_paga'])
             ->sum('total_liquido');
 
-        // Totais
-        $totalClientes = Cliente::count();
-        $totalProdutos = Produto::count();
+        $totalClientes    = Cliente::count();
+        $totalProdutos    = Produto::count();
         $totalFornecedores = Fornecedor::count();
 
-        // Alertas de stock
         $alertasStock = Produto::whereColumn('estoque_atual', '<=', 'estoque_minimo')->count();
 
-        // Adiantamentos pendentes
         $adiantamentosPendentes = DocumentoFiscal::where('tipo_documento', 'FA')
             ->where('estado', 'emitido')
             ->count();
 
-        // Proformas pendentes
         $proformasPendentes = DocumentoFiscal::where('tipo_documento', 'FP')
             ->where('estado', 'emitido')
             ->count();
 
+        // Movimentos de stock hoje
+        $movimentosStockHoje = MovimentoStock::whereDate('created_at', $hoje)->count();
+        $entradasHoje = MovimentoStock::whereDate('created_at', $hoje)
+            ->where('tipo', 'entrada')
+            ->sum('quantidade');
+        $saidasHoje = abs(
+            MovimentoStock::whereDate('created_at', $hoje)
+                ->where('tipo', 'saida')
+                ->sum('quantidade')
+        );
+
         $resultado = [
-            'vendas_hoje' => $vendasHoje,
-            'vendas_mes' => $vendasMes,
-            'vendas_ano' => $vendasAno,
-            'documentos_mes' => $documentosMes,
-            'faturas_pendentes' => $faturasPendentes,
-            'total_pendente_cobranca' => $totalPendenteCobranca,
-            'adiantamentos_pendentes' => $adiantamentosPendentes,
-            'proformas_pendentes' => $proformasPendentes,
-            'total_clientes' => $totalClientes,
-            'total_produtos' => $totalProdutos,
-            'total_fornecedores' => $totalFornecedores,
-            'alertas_stock' => $alertasStock
+            'vendas_hoje'              => $vendasHoje,
+            'vendas_mes'               => $vendasMes,
+            'vendas_ano'               => $vendasAno,
+            'documentos_mes'           => $documentosMes,
+            'faturas_pendentes'        => $faturasPendentes,
+            'total_pendente_cobranca'  => $totalPendenteCobranca,
+            'adiantamentos_pendentes'  => $adiantamentosPendentes,
+            'proformas_pendentes'      => $proformasPendentes,
+            'total_clientes'           => $totalClientes,
+            'total_produtos'           => $totalProdutos,
+            'total_fornecedores'       => $totalFornecedores,
+            'alertas_stock'            => $alertasStock,
+            'movimentos_stock_hoje'    => $movimentosStockHoje,
+            'entradas_stock_hoje'      => $entradasHoje,
+            'saidas_stock_hoje'        => $saidasHoje,
         ];
 
         Log::info('[RELATORIOS SERVICE] Dashboard processado', $resultado);
@@ -105,8 +112,8 @@ class RelatoriosService
     {
         Log::info('[RELATORIOS SERVICE] Iniciando relatório de vendas', [
             'data_inicio' => $dataInicio,
-            'data_fim' => $dataFim,
-            'filtros' => $filtros
+            'data_fim'    => $dataFim,
+            'filtros'     => $filtros,
         ]);
 
         $query = Venda::with(['cliente', 'itens.produto', 'documentoFiscal']);
@@ -114,12 +121,10 @@ class RelatoriosService
         if ($dataInicio) {
             $query->whereDate('data_venda', '>=', $dataInicio);
         }
-
         if ($dataFim) {
             $query->whereDate('data_venda', '<=', $dataFim);
         }
 
-        // Filtros adicionais
         if (!empty($filtros['cliente_id'])) {
             $query->where('cliente_id', $filtros['cliente_id']);
         }
@@ -138,54 +143,48 @@ class RelatoriosService
 
         Log::info('[RELATORIOS SERVICE] Vendas encontradas', ['quantidade' => $vendas->count()]);
 
-        // Calcular KPIs
-        $totalPeriodo = $vendas->sum('total');
+        $totalPeriodo     = $vendas->sum('total');
         $quantidadeVendas = $vendas->count();
-        $ticketMedio = $quantidadeVendas > 0 ? $totalPeriodo / $quantidadeVendas : 0;
-        $clientesUnicos = $vendas->pluck('cliente_id')->filter()->unique()->count();
-        $produtosVendidos = $vendas->flatMap(function ($venda) {
-            return $venda->itens->pluck('produto_id');
-        })->filter()->unique()->count();
+        $ticketMedio      = $quantidadeVendas > 0 ? $totalPeriodo / $quantidadeVendas : 0;
+        $clientesUnicos   = $vendas->pluck('cliente_id')->filter()->unique()->count();
+        $produtosVendidos = $vendas->flatMap(fn($v) => $v->itens->pluck('produto_id'))->filter()->unique()->count();
 
-        // Vendas por status
         $vendasPorStatus = [
-            'pagas' => $vendas->where('estado_pagamento', 'paga')->count(),
-            'pendentes' => $vendas->whereIn('estado_pagamento', ['pendente', 'parcial'])->count(),
+            'pagas'      => $vendas->where('estado_pagamento', 'paga')->count(),
+            'pendentes'  => $vendas->whereIn('estado_pagamento', ['pendente', 'parcial'])->count(),
             'canceladas' => $vendas->where('estado_pagamento', 'cancelada')->count(),
         ];
 
         $resultado = [
-            'vendas' => $vendas->map(function ($venda) {
-                return [
-                    'id' => $venda->id,
-                    'numero_documento' => $venda->numero_documento,
-                    'cliente' => $venda->cliente->nome ?? $venda->cliente_nome ?? 'Cliente não identificado',
-                    'data' => $venda->data_venda,
-                    'hora' => $venda->hora_venda,
-                    'total' => $venda->total,
-                    'base_tributavel' => $venda->base_tributavel,
-                    'total_iva' => $venda->total_iva,
-                    'estado_pagamento' => $venda->estado_pagamento,
-                    'tipo_documento' => $venda->documentoFiscal?->tipo_documento,
-                ];
-            }),
+            'vendas' => $vendas->map(fn($venda) => [
+                'id'               => $venda->id,
+                'numero_documento' => $venda->numero_documento,
+                'cliente'          => $venda->cliente->nome ?? $venda->cliente_nome ?? 'Cliente não identificado',
+                'data'             => $venda->data_venda,
+                'hora'             => $venda->hora_venda,
+                'total'            => $venda->total,
+                'base_tributavel'  => $venda->base_tributavel,
+                'total_iva'        => $venda->total_iva,
+                'estado_pagamento' => $venda->estado_pagamento,
+                'tipo_documento'   => $venda->documentoFiscal?->tipo_documento,
+            ]),
             'kpis' => [
-                'total_vendas' => $totalPeriodo,
+                'total_vendas'     => $totalPeriodo,
                 'quantidade_vendas' => $quantidadeVendas,
-                'ticket_medio' => round($ticketMedio, 2),
+                'ticket_medio'     => round($ticketMedio, 2),
                 'clientes_periodo' => $clientesUnicos,
                 'produtos_vendidos' => $produtosVendidos,
                 'vendas_por_status' => $vendasPorStatus,
             ],
             'periodo' => [
                 'data_inicio' => $dataInicio,
-                'data_fim' => $dataFim,
-            ]
+                'data_fim'    => $dataFim,
+            ],
         ];
 
         Log::info('[RELATORIOS SERVICE] Relatório de vendas processado', [
-            'total_periodo' => $totalPeriodo,
-            'quantidade_vendas' => $quantidadeVendas
+            'total_periodo'    => $totalPeriodo,
+            'quantidade_vendas' => $quantidadeVendas,
         ]);
 
         return $resultado;
@@ -197,9 +196,9 @@ class RelatoriosService
     public function relatorioCompras($dataInicio = null, $dataFim = null, $fornecedorId = null)
     {
         Log::info('[RELATORIOS SERVICE] Iniciando relatório de compras', [
-            'data_inicio' => $dataInicio,
-            'data_fim' => $dataFim,
-            'fornecedor_id' => $fornecedorId
+            'data_inicio'  => $dataInicio,
+            'data_fim'     => $dataFim,
+            'fornecedor_id' => $fornecedorId,
         ]);
 
         $query = Compra::with(['fornecedor', 'itens.produto']);
@@ -207,11 +206,9 @@ class RelatoriosService
         if ($dataInicio) {
             $query->whereDate('data', '>=', $dataInicio);
         }
-
         if ($dataFim) {
             $query->whereDate('data', '<=', $dataFim);
         }
-
         if ($fornecedorId) {
             $query->where('fornecedor_id', $fornecedorId);
         }
@@ -220,46 +217,44 @@ class RelatoriosService
 
         Log::info('[RELATORIOS SERVICE] Compras encontradas', ['quantidade' => $compras->count()]);
 
-        $totalCompras = $compras->sum('total');
+        $totalCompras      = $compras->sum('total');
         $quantidadeCompras = $compras->count();
         $fornecedoresAtivos = $compras->pluck('fornecedor_id')->filter()->unique()->count();
 
-        // Agrupar por fornecedor
         $comprasPorFornecedor = $compras->groupBy('fornecedor_id')->map(function ($grupo) {
             $primeiraCompra = $grupo->first();
             return [
                 'fornecedor' => $primeiraCompra->fornecedor->nome ?? 'Fornecedor não identificado',
-                'total' => $grupo->sum('total'),
-                'quantidade' => $grupo->count()
+                'total'      => $grupo->sum('total'),
+                'quantidade' => $grupo->count(),
             ];
         })->values();
 
-        // Agrupar por mês
         $comprasPorMes = $compras->groupBy(function ($compra) {
             return Carbon::parse($compra->data)->format('Y-m');
         })->map(function ($grupo, $mes) {
             return [
-                'mes' => $mes,
-                'total' => $grupo->sum('total'),
-                'quantidade' => $grupo->count()
+                'mes'        => $mes,
+                'total'      => $grupo->sum('total'),
+                'quantidade' => $grupo->count(),
             ];
         })->values();
 
         $resultado = [
-            'total_compras' => $totalCompras,
-            'quantidade_compras' => $quantidadeCompras,
-            'fornecedores_ativos' => $fornecedoresAtivos,
-            'compras_por_fornecedor' => $comprasPorFornecedor,
-            'compras_por_mes' => $comprasPorMes,
+            'total_compras'           => $totalCompras,
+            'quantidade_compras'      => $quantidadeCompras,
+            'fornecedores_ativos'     => $fornecedoresAtivos,
+            'compras_por_fornecedor'  => $comprasPorFornecedor,
+            'compras_por_mes'         => $comprasPorMes,
             'periodo' => [
                 'data_inicio' => $dataInicio,
-                'data_fim' => $dataFim,
-            ]
+                'data_fim'    => $dataFim,
+            ],
         ];
 
         Log::info('[RELATORIOS SERVICE] Relatório de compras processado', [
-            'total_compras' => $totalCompras,
-            'quantidade_compras' => $quantidadeCompras
+            'total_compras'    => $totalCompras,
+            'quantidade_compras' => $quantidadeCompras,
         ]);
 
         return $resultado;
@@ -272,8 +267,8 @@ class RelatoriosService
     {
         Log::info('[RELATORIOS SERVICE] Iniciando relatório de faturação', [
             'data_inicio' => $dataInicio,
-            'data_fim' => $dataFim,
-            'filtros' => $filtros
+            'data_fim'    => $dataFim,
+            'filtros'     => $filtros,
         ]);
 
         $query = DocumentoFiscal::with(['cliente']);
@@ -281,20 +276,16 @@ class RelatoriosService
         if ($dataInicio) {
             $query->whereDate('data_emissao', '>=', $dataInicio);
         }
-
         if ($dataFim) {
             $query->whereDate('data_emissao', '<=', $dataFim);
         }
 
-        // Filtros adicionais
         if (!empty($filtros['tipo'])) {
             $query->where('tipo_documento', $filtros['tipo']);
         }
-
         if (!empty($filtros['cliente_id'])) {
             $query->where('cliente_id', $filtros['cliente_id']);
         }
-
         if (!empty($filtros['estado'])) {
             $query->where('estado', $filtros['estado']);
         }
@@ -303,79 +294,70 @@ class RelatoriosService
 
         Log::info('[RELATORIOS SERVICE] Documentos encontrados', ['quantidade' => $documentos->count()]);
 
-        // Totais por tipo
-        $porTipo = $documentos->groupBy('tipo_documento')->map(function ($grupo, $tipo) {
+        $porTipo = $documentos->groupBy('tipo_documento')->map(function ($grupo) {
             return [
-                'quantidade' => $grupo->count(),
+                'quantidade'    => $grupo->count(),
                 'total_liquido' => $grupo->sum('total_liquido'),
-                'total_base' => $grupo->sum('base_tributavel'),
-                'total_iva' => $grupo->sum('total_iva'),
+                'total_base'    => $grupo->sum('base_tributavel'),
+                'total_iva'     => $grupo->sum('total_iva'),
             ];
         });
 
-        // Totais por estado
         $porEstado = $documentos->groupBy('estado')->map(fn($g) => $g->count());
 
-        $faturacaoTotal = $documentos->sum('total_liquido');
-        $faturacaoPaga = $documentos->whereIn('estado', ['paga'])->sum('total_liquido');
+        $faturacaoTotal    = $documentos->sum('total_liquido');
+        $faturacaoPaga     = $documentos->whereIn('estado', ['paga'])->sum('total_liquido');
         $faturacaoPendente = $documentos->whereIn('estado', ['emitido', 'parcialmente_paga'])->sum('total_liquido');
 
-        // Agrupar por mês
         $faturacaoPorMes = $documentos->groupBy(function ($doc) {
             return Carbon::parse($doc->data_emissao)->format('Y-m');
         })->map(function ($grupo, $mes) {
             return [
-                'mes' => $mes,
-                'total' => $grupo->sum('total_liquido'),
-                'quantidade' => $grupo->count()
+                'mes'        => $mes,
+                'total'      => $grupo->sum('total_liquido'),
+                'quantidade' => $grupo->count(),
             ];
         })->values();
 
         $resultado = [
-            'faturacao_total' => $faturacaoTotal,
-            'faturacao_paga' => $faturacaoPaga,
+            'faturacao_total'    => $faturacaoTotal,
+            'faturacao_paga'     => $faturacaoPaga,
             'faturacao_pendente' => $faturacaoPendente,
-            'faturacao_por_mes' => $faturacaoPorMes,
-            'por_tipo' => $porTipo,
-            'por_estado' => $porEstado,
+            'faturacao_por_mes'  => $faturacaoPorMes,
+            'por_tipo'           => $porTipo,
+            'por_estado'         => $porEstado,
             'periodo' => [
                 'data_inicio' => $dataInicio,
-                'data_fim' => $dataFim,
-            ]
+                'data_fim'    => $dataFim,
+            ],
         ];
 
         Log::info('[RELATORIOS SERVICE] Relatório de faturação processado', [
-            'faturacao_total' => $faturacaoTotal
+            'faturacao_total' => $faturacaoTotal,
         ]);
 
         return $resultado;
     }
 
     /**
-     * Relatório detalhado de stock - CORRIGIDO
+     * Relatório detalhado de stock
      */
     public function relatorioStock($filtros = [])
     {
         Log::info('[RELATORIOS SERVICE] Iniciando relatório de stock');
 
         try {
-            // Buscar produtos com suas categorias
-            $query = Produto::with('categoria')
-                ->where('tipo', 'produto'); // Apenas produtos físicos
+            $query = Produto::with('categoria')->where('tipo', 'produto');
 
-            // Filtros
             if (!empty($filtros['categoria_id'])) {
                 $query->where('categoria_id', $filtros['categoria_id']);
             }
-
             if (!empty($filtros['apenas_ativos'])) {
                 $query->where('status', 'ativo');
             }
-
             if (!empty($filtros['estoque_baixo'])) {
                 $query->estoqueBaixo();
             }
-
             if (!empty($filtros['sem_estoque'])) {
                 $query->semEstoque();
             }
@@ -384,74 +366,64 @@ class RelatoriosService
 
             Log::info('[RELATORIOS SERVICE] Produtos encontrados', ['quantidade' => $produtos->count()]);
 
-            // Processar dados de cada produto
             $produtosProcessados = $produtos->map(function ($produto) {
                 $custo = $produto->custo_medio ?? $produto->preco_compra ?? 0;
                 return [
-                    'id' => $produto->id,
-                    'nome' => $produto->nome,
-                    'codigo' => $produto->codigo,
-                    'categoria_id' => $produto->categoria_id,
-                    'categoria_nome' => $produto->categoria?->nome ?? 'Sem categoria',
-                    'estoque_atual' => $produto->estoque_atual,
-                    'estoque_minimo' => $produto->estoque_minimo,
-                    'preco_compra' => $produto->preco_compra,
-                    'preco_venda' => $produto->preco_venda,
-                    'custo_medio' => $custo,
-                    'status' => $produto->status,
-                    'margem_lucro' => $custo > 0 ? (($produto->preco_venda - $custo) / $custo) * 100 : 0,
+                    'id'               => $produto->id,
+                    'nome'             => $produto->nome,
+                    'codigo'           => $produto->codigo,
+                    'categoria_id'     => $produto->categoria_id,
+                    'categoria_nome'   => $produto->categoria?->nome ?? 'Sem categoria',
+                    'estoque_atual'    => $produto->estoque_atual,
+                    'estoque_minimo'   => $produto->estoque_minimo,
+                    'preco_compra'     => $produto->preco_compra,
+                    'preco_venda'      => $produto->preco_venda,
+                    'custo_medio'      => $custo,
+                    'status'           => $produto->status,
+                    'margem_lucro'     => $custo > 0 ? (($produto->preco_venda - $custo) / $custo) * 100 : 0,
                     'valor_total_stock' => $produto->estoque_atual * $custo,
-                    'em_risco' => $produto->estoque_atual <= $produto->estoque_minimo,
+                    'em_risco'         => $produto->estoque_atual <= $produto->estoque_minimo,
                 ];
             });
 
-            $totalProdutos = $produtosProcessados->count();
-            $valorStockTotal = $produtosProcessados->sum('valor_total_stock');
-            $produtosBaixoStock = $produtosProcessados->where('em_risco', true)->count();
-            $produtosSemStock = $produtosProcessados->where('estoque_atual', 0)->count();
-
-            // Agrupar por categoria
             $produtosPorCategoria = $produtosProcessados->groupBy('categoria_id')->map(function ($grupo) {
                 $primeiro = $grupo->first();
                 return [
-                    'categoria' => $primeiro['categoria_nome'],
+                    'categoria'  => $primeiro['categoria_nome'],
                     'quantidade' => $grupo->sum('estoque_atual'),
-                    'valor' => $grupo->sum('valor_total_stock'),
-                    'produtos' => $grupo->count()
+                    'valor'      => $grupo->sum('valor_total_stock'),
+                    'produtos'   => $grupo->count(),
                 ];
             })->values();
 
-            // Movimentações recentes (últimos 30 dias)
             $movimentosRecentes = MovimentoStock::with(['produto', 'user'])
                 ->where('created_at', '>=', now()->subDays(30))
                 ->orderBy('created_at', 'desc')
                 ->limit(50)
                 ->get()
-                ->map(function ($mov) {
-                    return [
-                        'id' => $mov->id,
-                        'produto' => $mov->produto?->nome ?? 'N/A',
-                        'tipo' => $mov->tipo,
-                        'quantidade' => $mov->quantidade,
-                        'motivo' => $mov->motivo,
-                        'data' => $mov->created_at->format('Y-m-d H:i'),
-                        'user' => $mov->user?->name ?? 'Sistema',
-                    ];
-                });
+                ->map(fn($mov) => [
+                    'id'         => $mov->id,
+                    'produto'    => $mov->produto?->nome ?? 'N/A',
+                    'tipo'       => $mov->tipo,
+                    'quantidade' => $mov->quantidade,
+                    'motivo'     => $mov->observacao,
+                    'data'       => $mov->created_at->format('Y-m-d H:i'),
+                    'user'       => $mov->user?->name ?? 'Sistema',
+                ]);
 
             $resultado = [
-                'total_produtos' => $totalProdutos,
-                'valor_stock_total' => $valorStockTotal,
-                'produtos_baixo_stock' => $produtosBaixoStock,
-                'produtos_sem_stock' => $produtosSemStock,
+                'total_produtos'      => $produtosProcessados->count(),
+                'valor_stock_total'   => $produtosProcessados->sum('valor_total_stock'),
+                'produtos_baixo_stock' => $produtosProcessados->where('em_risco', true)->count(),
+                'produtos_sem_stock'  => $produtosProcessados->where('estoque_atual', 0)->count(),
                 'produtos_por_categoria' => $produtosPorCategoria,
                 'movimentos_recentes' => $movimentosRecentes,
-                'produtos' => $produtosProcessados // Opcional: lista completa
+                'produtos'            => $produtosProcessados,
             ];
 
             Log::info('[RELATORIOS SERVICE] Relatório de stock processado', [
-                'total_produtos' => $totalProdutos,
-                'valor_stock_total' => $valorStockTotal
+                'total_produtos'   => $resultado['total_produtos'],
+                'valor_stock_total' => $resultado['valor_stock_total'],
             ]);
 
             return $resultado;
@@ -459,18 +431,159 @@ class RelatoriosService
         } catch (\Exception $e) {
             Log::error('[RELATORIOS SERVICE] Erro no relatório de stock:', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
 
-            // Retornar estrutura vazia em caso de erro
             return [
-                'total_produtos' => 0,
-                'valor_stock_total' => 0,
+                'total_produtos'      => 0,
+                'valor_stock_total'   => 0,
                 'produtos_baixo_stock' => 0,
-                'produtos_sem_stock' => 0,
+                'produtos_sem_stock'  => 0,
                 'produtos_por_categoria' => [],
                 'movimentos_recentes' => [],
-                'produtos' => []
+                'produtos'            => [],
+            ];
+        }
+    }
+
+    /**
+     * ✅ NOVO: Relatório de movimentações de stock
+     */
+    public function relatorioMovimentosStock(
+        $dataInicio = null,
+        $dataFim = null,
+        $filtros = []
+    ): array {
+        Log::info('[RELATORIOS SERVICE] Iniciando relatório de movimentos de stock', [
+            'data_inicio' => $dataInicio,
+            'data_fim'    => $dataFim,
+            'filtros'     => $filtros,
+        ]);
+
+        try {
+            $query = MovimentoStock::with([
+                'produto' => fn($q) => $q->withTrashed()->select('id', 'nome', 'codigo', 'tipo'),
+                'user'    => fn($q) => $q->select('id', 'name'),
+            ]);
+
+            if ($dataInicio) {
+                $query->whereDate('created_at', '>=', $dataInicio);
+            }
+            if ($dataFim) {
+                $query->whereDate('created_at', '<=', $dataFim);
+            }
+            if (!empty($filtros['produto_id'])) {
+                $query->where('produto_id', $filtros['produto_id']);
+            }
+            if (!empty($filtros['tipo'])) {
+                $query->where('tipo', $filtros['tipo']);
+            }
+            if (!empty($filtros['tipo_movimento'])) {
+                $query->where('tipo_movimento', $filtros['tipo_movimento']);
+            }
+
+            $movimentos = $query->orderBy('created_at', 'desc')->get();
+
+            Log::info('[RELATORIOS SERVICE] Movimentos encontrados', ['quantidade' => $movimentos->count()]);
+
+            // ── Totais ───────────────────────────────────────────────────
+            $totalEntradas = $movimentos->where('tipo', 'entrada')->sum('quantidade');
+            $totalSaidas   = abs($movimentos->where('tipo', 'saida')->sum('quantidade'));
+
+            $porTipoMovimento = $movimentos->groupBy('tipo_movimento')->map(fn($grupo) => [
+                'total'            => $grupo->count(),
+                'quantidade_total' => $grupo->sum(fn($m) => abs($m->quantidade)),
+                'entradas'         => $grupo->where('tipo', 'entrada')->sum('quantidade'),
+                'saidas'           => abs($grupo->where('tipo', 'saida')->sum('quantidade')),
+            ]);
+
+            // ── Por produto (top 10 por movimento) ──────────────────────
+            $porProduto = $movimentos->groupBy('produto_id')->map(function ($grupo) {
+                $primeiro = $grupo->first();
+                return [
+                    'produto_id'   => $primeiro->produto_id,
+                    'produto_nome' => $primeiro->produto?->nome ?? 'N/A',
+                    'total_movimentos' => $grupo->count(),
+                    'entradas'     => $grupo->where('tipo', 'entrada')->sum('quantidade'),
+                    'saidas'       => abs($grupo->where('tipo', 'saida')->sum('quantidade')),
+                ];
+            })->sortByDesc('total_movimentos')->take(10)->values();
+
+            // ── Por mês ─────────────────────────────────────────────────
+            $porMes = $movimentos->groupBy(fn($m) => $m->created_at->format('Y-m'))
+                ->map(function ($grupo, $mes) {
+                    return [
+                        'mes'      => $mes,
+                        'total'    => $grupo->count(),
+                        'entradas' => $grupo->where('tipo', 'entrada')->sum('quantidade'),
+                        'saidas'   => abs($grupo->where('tipo', 'saida')->sum('quantidade')),
+                    ];
+                })->values();
+
+            // ── Lista formatada ──────────────────────────────────────────
+            $lista = $movimentos->map(fn($m) => [
+                'id'               => $m->id,
+                'produto_id'       => $m->produto_id,
+                'produto_nome'     => $m->produto?->nome ?? 'N/A',
+                'produto_codigo'   => $m->produto?->codigo ?? 'N/A',
+                'tipo'             => $m->tipo,
+                'tipo_movimento'   => $m->tipo_movimento,
+                'quantidade'       => abs($m->quantidade),
+                'estoque_anterior' => $m->estoque_anterior,
+                'estoque_novo'     => $m->estoque_novo,
+                'custo_medio'      => $m->custo_medio,
+                'referencia'       => $m->referencia,
+                'observacao'       => $m->observacao,
+                'user'             => $m->user?->name ?? 'Sistema',
+                'data'             => $m->created_at?->format('Y-m-d H:i:s'),
+            ]);
+
+            $resultado = [
+                'resumo' => [
+                    'total_movimentos'   => $movimentos->count(),
+                    'total_entradas'     => $totalEntradas,
+                    'total_saidas'       => $totalSaidas,
+                    'balanco'            => $totalEntradas - $totalSaidas,
+                    'por_tipo_movimento' => $porTipoMovimento,
+                ],
+                'por_produto' => $porProduto,
+                'por_mes'     => $porMes,
+                'movimentos'  => $lista,
+                'periodo' => [
+                    'data_inicio' => $dataInicio,
+                    'data_fim'    => $dataFim,
+                ],
+            ];
+
+            Log::info('[RELATORIOS SERVICE] Relatório de movimentos processado', [
+                'total'    => $movimentos->count(),
+                'entradas' => $totalEntradas,
+                'saidas'   => $totalSaidas,
+            ]);
+
+            return $resultado;
+
+        } catch (\Exception $e) {
+            Log::error('[RELATORIOS SERVICE] Erro no relatório de movimentos de stock:', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return [
+                'resumo' => [
+                    'total_movimentos'   => 0,
+                    'total_entradas'     => 0,
+                    'total_saidas'       => 0,
+                    'balanco'            => 0,
+                    'por_tipo_movimento' => [],
+                ],
+                'por_produto' => [],
+                'por_mes'     => [],
+                'movimentos'  => [],
+                'periodo' => [
+                    'data_inicio' => $dataInicio,
+                    'data_fim'    => $dataFim,
+                ],
             ];
         }
     }
@@ -485,7 +598,6 @@ class RelatoriosService
         try {
             $hoje = now();
 
-            // Faturas pendentes (FT emitidas ou parcialmente pagas)
             $faturasPendentes = DocumentoFiscal::where('tipo_documento', 'FT')
                 ->whereIn('estado', ['emitido', 'parcialmente_paga'])
                 ->with(['cliente'])
@@ -503,14 +615,14 @@ class RelatoriosService
                     $valorPendente = $fatura->total_liquido - $valorPago - $valorAdiantamentos;
 
                     return [
-                        'id' => $fatura->id,
+                        'id'               => $fatura->id,
                         'numero_documento' => $fatura->numero_documento,
-                        'cliente' => $fatura->cliente?->nome ?? $fatura->cliente_nome ?? 'Consumidor Final',
-                        'data_emissao' => $fatura->data_emissao,
-                        'data_vencimento' => $fatura->data_vencimento,
-                        'valor_total' => $fatura->total_liquido,
-                        'valor_pendente' => max(0, $valorPendente),
-                        'dias_atraso' => $fatura->data_vencimento && $fatura->data_vencimento < $hoje
+                        'cliente'          => $fatura->cliente?->nome ?? $fatura->cliente_nome ?? 'Consumidor Final',
+                        'data_emissao'     => $fatura->data_emissao,
+                        'data_vencimento'  => $fatura->data_vencimento,
+                        'valor_total'      => $fatura->total_liquido,
+                        'valor_pendente'   => max(0, $valorPendente),
+                        'dias_atraso'      => $fatura->data_vencimento && $fatura->data_vencimento < $hoje
                             ? $hoje->diffInDays($fatura->data_vencimento)
                             : 0,
                         'estado' => $fatura->estado,
@@ -519,7 +631,6 @@ class RelatoriosService
                 ->filter(fn($f) => $f['valor_pendente'] > 0)
                 ->values();
 
-            // Adiantamentos pendentes (FA emitidos)
             $adiantamentosPendentes = DocumentoFiscal::where('tipo_documento', 'FA')
                 ->whereIn('estado', ['emitido', 'parcialmente_paga'])
                 ->with(['cliente'])
@@ -533,14 +644,14 @@ class RelatoriosService
                     $valorPendente = $adiantamento->total_liquido - $valorPago;
 
                     return [
-                        'id' => $adiantamento->id,
+                        'id'               => $adiantamento->id,
                         'numero_documento' => $adiantamento->numero_documento,
-                        'cliente' => $adiantamento->cliente?->nome ?? $adiantamento->cliente_nome ?? 'Consumidor Final',
-                        'data_emissao' => $adiantamento->data_emissao,
-                        'data_vencimento' => $adiantamento->data_vencimento,
-                        'valor_total' => $adiantamento->total_liquido,
-                        'valor_pendente' => max(0, $valorPendente),
-                        'dias_atraso' => $adiantamento->data_vencimento && $adiantamento->data_vencimento < $hoje
+                        'cliente'          => $adiantamento->cliente?->nome ?? $adiantamento->cliente_nome ?? 'Consumidor Final',
+                        'data_emissao'     => $adiantamento->data_emissao,
+                        'data_vencimento'  => $adiantamento->data_vencimento,
+                        'valor_total'      => $adiantamento->total_liquido,
+                        'valor_pendente'   => max(0, $valorPendente),
+                        'dias_atraso'      => $adiantamento->data_vencimento && $adiantamento->data_vencimento < $hoje
                             ? $hoje->diffInDays($adiantamento->data_vencimento)
                             : 0,
                         'estado' => $adiantamento->estado,
@@ -549,35 +660,34 @@ class RelatoriosService
                 ->filter(fn($a) => $a['valor_pendente'] > 0)
                 ->values();
 
-            // Estatísticas
             $totalPendente = $faturasPendentes->sum('valor_pendente') + $adiantamentosPendentes->sum('valor_pendente');
             $totalAtrasado = $faturasPendentes->where('dias_atraso', '>', 0)->sum('valor_pendente') +
                             $adiantamentosPendentes->where('dias_atraso', '>', 0)->sum('valor_pendente');
 
             return [
                 'resumo' => [
-                    'total_pendente' => $totalPendente,
-                    'total_atrasado' => $totalAtrasado,
-                    'quantidade_faturas' => $faturasPendentes->count(),
+                    'total_pendente'           => $totalPendente,
+                    'total_atrasado'           => $totalAtrasado,
+                    'quantidade_faturas'       => $faturasPendentes->count(),
                     'quantidade_adiantamentos' => $adiantamentosPendentes->count(),
                 ],
-                'faturas_pendentes' => $faturasPendentes,
+                'faturas_pendentes'       => $faturasPendentes,
                 'adiantamentos_pendentes' => $adiantamentosPendentes,
             ];
 
         } catch (\Exception $e) {
             Log::error('[RELATORIOS SERVICE] Erro no relatório de pagamentos:', [
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
 
             return [
                 'resumo' => [
-                    'total_pendente' => 0,
-                    'total_atrasado' => 0,
-                    'quantidade_faturas' => 0,
+                    'total_pendente'           => 0,
+                    'total_atrasado'           => 0,
+                    'quantidade_faturas'       => 0,
                     'quantidade_adiantamentos' => 0,
                 ],
-                'faturas_pendentes' => [],
+                'faturas_pendentes'       => [],
                 'adiantamentos_pendentes' => [],
             ];
         }
@@ -591,8 +701,7 @@ class RelatoriosService
         Log::info('[RELATORIOS SERVICE] Iniciando relatório de proformas');
 
         try {
-            $query = DocumentoFiscal::where('tipo_documento', 'FP')
-                ->with(['cliente']);
+            $query = DocumentoFiscal::where('tipo_documento', 'FP')->with(['cliente']);
 
             if ($dataInicio && $dataFim) {
                 $query->whereBetween('data_emissao', [$dataInicio, $dataFim]);
@@ -605,7 +714,6 @@ class RelatoriosService
             if ($clienteId) {
                 $query->where('cliente_id', $clienteId);
             }
-
             if ($apenasPendentes) {
                 $query->where('estado', 'emitido');
             }
@@ -613,29 +721,27 @@ class RelatoriosService
             $proformas = $query->orderBy('data_emissao', 'desc')->get();
 
             return [
-                'total' => $proformas->count(),
+                'total'       => $proformas->count(),
                 'valor_total' => $proformas->sum('total_liquido'),
-                'proformas' => $proformas->map(function ($p) {
-                    return [
-                        'id' => $p->id,
-                        'numero_documento' => $p->numero_documento,
-                        'cliente' => $p->cliente?->nome ?? $p->cliente_nome ?? 'Consumidor Final',
-                        'data_emissao' => $p->data_emissao,
-                        'total_liquido' => $p->total_liquido,
-                        'estado' => $p->estado,
-                    ];
-                }),
+                'proformas'   => $proformas->map(fn($p) => [
+                    'id'               => $p->id,
+                    'numero_documento' => $p->numero_documento,
+                    'cliente'          => $p->cliente?->nome ?? $p->cliente_nome ?? 'Consumidor Final',
+                    'data_emissao'     => $p->data_emissao,
+                    'total_liquido'    => $p->total_liquido,
+                    'estado'           => $p->estado,
+                ]),
             ];
 
         } catch (\Exception $e) {
             Log::error('[RELATORIOS SERVICE] Erro no relatório de proformas:', [
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
 
             return [
-                'total' => 0,
+                'total'       => 0,
                 'valor_total' => 0,
-                'proformas' => [],
+                'proformas'   => [],
             ];
         }
     }
@@ -646,9 +752,9 @@ class RelatoriosService
     public function exportarRelatorioExcel(string $tipo, $dataInicio = null, $dataFim = null, $filtros = [])
     {
         Log::info('[RELATORIOS SERVICE] Exportando Excel', [
-            'tipo' => $tipo,
+            'tipo'        => $tipo,
             'data_inicio' => $dataInicio,
-            'data_fim' => $dataFim
+            'data_fim'    => $dataFim,
         ]);
 
         $arquivo = now()->format('Ymd_His') . "_relatorio_{$tipo}.xlsx";
@@ -665,10 +771,10 @@ class RelatoriosService
 
             public function __construct($tipo, $dataInicio, $dataFim, $filtros)
             {
-                $this->tipo = $tipo;
+                $this->tipo       = $tipo;
                 $this->dataInicio = $dataInicio;
-                $this->dataFim = $dataFim;
-                $this->filtros = $filtros;
+                $this->dataFim    = $dataFim;
+                $this->filtros    = $filtros;
             }
 
             public function collection()
@@ -678,20 +784,20 @@ class RelatoriosService
                         case 'vendas':
                             $query = Venda::with('cliente', 'itens.produto', 'documentoFiscal');
                             if ($this->dataInicio) $query->whereDate('data_venda', '>=', $this->dataInicio);
-                            if ($this->dataFim) $query->whereDate('data_venda', '<=', $this->dataFim);
+                            if ($this->dataFim)    $query->whereDate('data_venda', '<=', $this->dataFim);
                             return $query->orderBy('data_venda', 'desc')->get();
 
                         case 'compras':
                             $query = Compra::with('fornecedor', 'itens.produto');
                             if ($this->dataInicio) $query->whereDate('data', '>=', $this->dataInicio);
-                            if ($this->dataFim) $query->whereDate('data', '<=', $this->dataFim);
+                            if ($this->dataFim)    $query->whereDate('data', '<=', $this->dataFim);
                             return $query->orderBy('data', 'desc')->get();
 
                         case 'faturacao':
                         case 'documentos':
                             $query = DocumentoFiscal::with('cliente');
                             if ($this->dataInicio) $query->whereDate('data_emissao', '>=', $this->dataInicio);
-                            if ($this->dataFim) $query->whereDate('data_emissao', '<=', $this->dataFim);
+                            if ($this->dataFim)    $query->whereDate('data_emissao', '<=', $this->dataFim);
                             return $query->orderBy('data_emissao', 'desc')->get();
 
                         case 'stock':
@@ -701,16 +807,34 @@ class RelatoriosService
                                 ->get();
 
                         case 'proformas':
-                            $query = DocumentoFiscal::where('tipo_documento', 'FP')
-                                ->with('cliente');
+                            $query = DocumentoFiscal::where('tipo_documento', 'FP')->with('cliente');
                             if ($this->dataInicio) $query->whereDate('data_emissao', '>=', $this->dataInicio);
-                            if ($this->dataFim) $query->whereDate('data_emissao', '<=', $this->dataFim);
+                            if ($this->dataFim)    $query->whereDate('data_emissao', '<=', $this->dataFim);
                             return $query->orderBy('data_emissao', 'desc')->get();
+
+                        // ✅ NOVO
+                        case 'movimentos_stock':
+                            $query = MovimentoStock::with([
+                                'produto' => fn($q) => $q->withTrashed()->select('id', 'nome', 'codigo'),
+                                'user'    => fn($q) => $q->select('id', 'name'),
+                            ]);
+                            if ($this->dataInicio) $query->whereDate('created_at', '>=', $this->dataInicio);
+                            if ($this->dataFim)    $query->whereDate('created_at', '<=', $this->dataFim);
+                            if (!empty($this->filtros['produto_id'])) {
+                                $query->where('produto_id', $this->filtros['produto_id']);
+                            }
+                            if (!empty($this->filtros['tipo'])) {
+                                $query->where('tipo', $this->filtros['tipo']);
+                            }
+                            if (!empty($this->filtros['tipo_movimento'])) {
+                                $query->where('tipo_movimento', $this->filtros['tipo_movimento']);
+                            }
+                            return $query->orderBy('created_at', 'desc')->get();
                     }
                 } catch (\Exception $e) {
                     Log::error('[RELATORIOS SERVICE] Erro na exportação:', [
-                        'tipo' => $this->tipo,
-                        'error' => $e->getMessage()
+                        'tipo'  => $this->tipo,
+                        'error' => $e->getMessage(),
                     ]);
                     return collect([]);
                 }
@@ -730,6 +854,9 @@ class RelatoriosService
                         return ['ID', 'Nome', 'Categoria', 'Stock Atual', 'Stock Mínimo', 'Preço Compra', 'Preço Venda', 'Custo Médio', 'Valor Total Stock', 'Margem Lucro (%)', 'Em Risco'];
                     case 'proformas':
                         return ['ID', 'Nº Documento', 'Cliente', 'Data Emissão', 'Total', 'Estado'];
+                    // ✅ NOVO
+                    case 'movimentos_stock':
+                        return ['ID', 'Produto', 'Código', 'Tipo', 'Tipo Movimento', 'Quantidade', 'Stock Anterior', 'Stock Novo', 'Custo Médio', 'Referência', 'Observação', 'Utilizador', 'Data/Hora'];
                 }
                 return [];
             }
@@ -773,7 +900,7 @@ class RelatoriosService
                                 $row->estado,
                             ];
                         case 'stock':
-                            $custo = $row->custo_medio ?? $row->preco_compra ?? 0;
+                            $custo  = $row->custo_medio ?? $row->preco_compra ?? 0;
                             $margem = $custo > 0 ? (($row->preco_venda - $custo) / $custo) * 100 : 0;
                             return [
                                 $row->id,
@@ -797,11 +924,28 @@ class RelatoriosService
                                 $row->total_liquido,
                                 $row->estado,
                             ];
+                        // ✅ NOVO
+                        case 'movimentos_stock':
+                            return [
+                                $row->id,
+                                $row->produto?->nome ?? 'N/A',
+                                $row->produto?->codigo ?? 'N/A',
+                                $row->tipo,
+                                $row->tipo_movimento,
+                                abs($row->quantidade),
+                                $row->estoque_anterior,
+                                $row->estoque_novo,
+                                $row->custo_medio,
+                                $row->referencia,
+                                $row->observacao,
+                                $row->user?->name ?? 'Sistema',
+                                $row->created_at?->format('Y-m-d H:i:s'),
+                            ];
                     }
                 } catch (\Exception $e) {
                     Log::error('[RELATORIOS SERVICE] Erro no mapeamento Excel:', [
-                        'tipo' => $this->tipo,
-                        'error' => $e->getMessage()
+                        'tipo'  => $this->tipo,
+                        'error' => $e->getMessage(),
                     ]);
                 }
                 return [];

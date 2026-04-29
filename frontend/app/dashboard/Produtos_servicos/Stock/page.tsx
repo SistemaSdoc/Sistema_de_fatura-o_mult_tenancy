@@ -20,6 +20,8 @@ import { ModalEdicao } from "@/app/components/Stock/ModalEdicao";
 
 // Hooks
 import { useEstoque } from "@/hooks/useEstoque";
+import getBaseWebpackConfig, { babelIncludeRegexes } from "next/dist/build/webpack-config";
+import { backIn } from "framer-motion";
 
 export default function EstoquePage() {
     const router = useRouter();
@@ -99,9 +101,9 @@ export default function EstoquePage() {
     if (loading && !resumo) {
         return (
             <MainEmpresa>
-                <div className="flex items-center justify-center min-h-[400px]" style={{ backgroundColor: colors.background }}>
+                <div className="flex items-center justify-center min-h-[400px] " style={{ backgroundColor: colors.background }}>
                     <div 
-                        className="animate-spin w-10 h-10 border-3 "
+                        className="animate-spin w-10 h-10 border-3 rounded-full"
                         style={{ 
                             borderColor: `${colors.primary}30`, 
                             borderTopColor: colors.primary 
@@ -131,7 +133,7 @@ export default function EstoquePage() {
                     </div>
                     <button
                         onClick={abrirModalNovoProduto}
-                        className="flex items-center gap-2 px-4 py-2 text-white transition-colors text-sm font-medium hover:opacity-90 rounded-lg"
+                        className="flex items-center gap-2 px-4 py-2 text-white transition-colors text-sm font-medium hover:opacity-90"
                         style={{ backgroundColor: colors.secondary }}
                     >
                         <Plus className="w-4 h-4" />
@@ -170,7 +172,7 @@ export default function EstoquePage() {
                 )}
 
                 {/* Tabs e Conteúdo */}
-                <div className="shadow-sm border overflow-hidden rounded-lg" style={{
+                <div className="shadow-sm border overflow-hidden " style={{
                     backgroundColor: colors.card,
                     borderColor: colors.border
                 }}>

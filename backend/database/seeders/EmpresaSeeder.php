@@ -20,7 +20,7 @@ class EmpresaSeeder extends Seeder
             'nome'          => 'SDOCA-Comercio e Serviços, Lda',
             'nif'           => '5001160419',
             'email'         => 'gera@sdoca.it.ao',
-            'logo'          => '/public/images/3.png',
+            'logo'          => '/images/3.png',
             'status'        => 'ativo',
             'regime_fiscal' => 'geral',
             'sujeito_iva'   => true,

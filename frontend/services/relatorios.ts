@@ -20,7 +20,6 @@ export interface PeriodoFiltro {
     data_fim?: string;
 }
 
-
 export interface ClienteInfo {
     id?: string;
     nome?: string;
@@ -60,6 +59,12 @@ export interface DashboardServicos {
     inativos: number;
 }
 
+export interface DashboardStock {
+    movimentos_hoje: number;
+    entradas_hoje: number;
+    saidas_hoje: number;
+}
+
 export interface DashboardAlertas {
     documentos_vencidos: number;
     proformas_antigas: number;
@@ -77,6 +82,7 @@ export interface DashboardGeral {
     clientes: DashboardClientes;
     produtos: DashboardProdutos;
     servicos: DashboardServicos;
+    stock: DashboardStock;
     alertas: DashboardAlertas;
     periodo: DashboardPeriodo;
 }
@@ -268,6 +274,88 @@ export interface StockResponse {
     success: boolean;
     message: string;
     data: RelatorioStock;
+}
+
+/* ==================== TIPOS PARA MOVIMENTOS DE STOCK ==================== */
+
+export type TipoMovimento =
+    | "compra"
+    | "venda"
+    | "ajuste"
+    | "nota_credito"
+    | "venda_cancelada"
+    | "nota_credito_cancelada";
+
+export interface MovimentoStockItem {
+    id: string;
+    produto_id: string;
+    produto_nome: string;
+    produto_codigo: string;
+    tipo: "entrada" | "saida";
+    tipo_movimento: TipoMovimento;
+    quantidade: number;
+    estoque_anterior: number;
+    estoque_novo: number;
+    custo_medio: number | null;
+    referencia: string | null;
+    observacao: string | null;
+    user: string;
+    data: string;
+}
+
+export interface MovimentosPorTipo {
+    [tipo: string]: {
+        total: number;
+        quantidade_total: number;
+    };
+}
+
+export interface MovimentosPorProduto {
+    produto_id: string;
+    produto_nome: string;
+    total_movimentos: number;
+    entradas: number;
+    saidas: number;
+}
+
+export interface MovimentosPorMes {
+    mes: string;
+    total: number;
+    entradas: number;
+    saidas: number;
+}
+
+export interface MovimentosAgrupado {
+    chave: string;
+    label: string;
+    entradas: number;
+    saidas: number;
+    total: number;
+}
+
+export interface ResumoMovimentosStock {
+    total_movimentos: number;
+    total_entradas: number;
+    total_saidas: number;
+    balanco: number;
+    por_tipo_movimento: MovimentosPorTipo;
+}
+
+export interface RelatorioMovimentosStock {
+    periodo: {
+        data_inicio: string;
+        data_fim: string;
+    };
+    filtros: Record<string, any>;
+    resumo: ResumoMovimentosStock;
+    agrupado: MovimentosAgrupado[];
+    movimentos: MovimentoStockItem[];
+}
+
+export interface MovimentosStockResponse {
+    success: boolean;
+    message: string;
+    data: RelatorioMovimentosStock;
 }
 
 /* ==================== TIPOS PARA RELATÓRIO DE SERVIÇOS ==================== */
@@ -469,7 +557,6 @@ const API_PREFIX = "/api/relatorios";
 export const relatoriosService = {
     /**
      * Dashboard geral com indicadores principais
-     * GET /api/relatorios/dashboard
      */
     async getDashboard(): Promise<DashboardGeral> {
         const response = await api.get<DashboardResponse>(`${API_PREFIX}/dashboard`);
@@ -478,7 +565,6 @@ export const relatoriosService = {
 
     /**
      * Relatório detalhado de vendas
-     * GET /api/relatorios/vendas
      */
     async getRelatorioVendas(params?: {
         data_inicio?: string;
@@ -496,7 +582,6 @@ export const relatoriosService = {
 
     /**
      * Relatório detalhado de compras
-     * GET /api/relatorios/compras
      */
     async getRelatorioCompras(params?: {
         data_inicio?: string;
@@ -509,7 +594,6 @@ export const relatoriosService = {
 
     /**
      * Relatório de faturação/documentos fiscais
-     * GET /api/relatorios/faturacao
      */
     async getRelatorioFaturacao(params?: {
         data_inicio?: string;
@@ -523,8 +607,7 @@ export const relatoriosService = {
     },
 
     /**
-     * Relatório de stock
-     * GET /api/relatorios/stock
+     * Relatório de stock (produtos)
      */
     async getRelatorioStock(params?: {
         estoque_baixo?: boolean;
@@ -537,8 +620,28 @@ export const relatoriosService = {
     },
 
     /**
+     * ✅ Relatório de movimentos de stock (entradas, saídas, ajustes)
+     * GET /api/relatorios/movimentos-stock
+     */
+    async getRelatorioMovimentosStock(params?: {
+        data_inicio?: string;
+        data_fim?: string;
+        produto_id?: string;
+        tipo?: "entrada" | "saida";
+        tipo_movimento?: TipoMovimento;
+        agrupar_por?: "dia" | "mes" | "produto" | "tipo_movimento";
+        paginar?: boolean;
+        per_page?: number;
+    }): Promise<RelatorioMovimentosStock> {
+        const response = await api.get<MovimentosStockResponse>(
+            `${API_PREFIX}/movimentos-stock`,
+            { params }
+        );
+        return response.data.data;
+    },
+
+    /**
      * Relatório específico de serviços
-     * GET /api/relatorios/servicos
      */
     async getRelatorioServicos(params?: {
         data_inicio?: string;
@@ -552,7 +655,6 @@ export const relatoriosService = {
 
     /**
      * Relatório de retenções
-     * GET /api/relatorios/retencoes
      */
     async getRelatorioRetencoes(params?: {
         data_inicio?: string;
@@ -565,7 +667,6 @@ export const relatoriosService = {
 
     /**
      * Relatório de documentos fiscais (detalhado)
-     * GET /api/relatorios/documentos-fiscais
      */
     async getRelatorioDocumentosFiscais(params?: {
         data_inicio?: string;
@@ -584,7 +685,6 @@ export const relatoriosService = {
 
     /**
      * Relatório de pagamentos pendentes
-     * GET /api/relatorios/pagamentos-pendentes
      */
     async getRelatorioPagamentosPendentes(): Promise<RelatorioPagamentosPendentes> {
         const response = await api.get<PagamentosPendentesResponse>(`${API_PREFIX}/pagamentos-pendentes`);
@@ -593,7 +693,6 @@ export const relatoriosService = {
 
     /**
      * Relatório de proformas
-     * GET /api/relatorios/proformas
      */
     async getRelatorioProformas(params?: {
         data_inicio?: string;
@@ -608,117 +707,66 @@ export const relatoriosService = {
 
 /* ==================== FUNÇÕES AUXILIARES PARA DATAS ==================== */
 
-/**
- * Obter data de hoje no formato YYYY-MM-DD
- */
 export function getHoje(): string {
     return new Date().toISOString().split("T")[0];
 }
 
-/**
- * Obter primeiro dia do mês atual no formato YYYY-MM-DD
- */
 export function getInicioMes(): string {
     const date = new Date();
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
-/**
- * Obter primeiro dia do ano atual no formato YYYY-MM-DD
- */
 export function getInicioAno(): string {
     return `${new Date().getFullYear()}-01-01`;
 }
 
-/**
- * Obter período pré-definido
- */
-export function getPeriodoPredefinido(
-    tipo: PeriodoTipo
-): PeriodoConfig {
+export function getPeriodoPredefinido(tipo: PeriodoTipo): PeriodoConfig {
     const hoje = new Date();
 
     switch (tipo) {
         case "hoje":
-            return {
-                tipo: "hoje",
-                data_inicio: getHoje(),
-                data_fim: getHoje(),
-            };
+            return { tipo: "hoje", data_inicio: getHoje(), data_fim: getHoje() };
 
         case "ontem": {
             const ontem = new Date(hoje);
             ontem.setDate(ontem.getDate() - 1);
             const dataOntem = ontem.toISOString().split("T")[0];
-            return {
-                tipo: "ontem",
-                data_inicio: dataOntem,
-                data_fim: dataOntem,
-            };
+            return { tipo: "ontem", data_inicio: dataOntem, data_fim: dataOntem };
         }
 
         case "este_mes":
-            return {
-                tipo: "este_mes",
-                data_inicio: getInicioMes(),
-                data_fim: getHoje(),
-            };
+            return { tipo: "este_mes", data_inicio: getInicioMes(), data_fim: getHoje() };
 
         case "mes_passado": {
-            const mesPassado = new Date(hoje);
-            mesPassado.setMonth(mesPassado.getMonth() - 1);
-            const inicioMesPassado = new Date(mesPassado.getFullYear(), mesPassado.getMonth(), 1);
-            const fimMesPassado = new Date(mesPassado.getFullYear(), mesPassado.getMonth() + 1, 0);
+            const mp = new Date(hoje);
+            mp.setMonth(mp.getMonth() - 1);
+            const inicio = new Date(mp.getFullYear(), mp.getMonth(), 1);
+            const fim = new Date(mp.getFullYear(), mp.getMonth() + 1, 0);
             return {
                 tipo: "mes_passado",
-                data_inicio: inicioMesPassado.toISOString().split("T")[0],
-                data_fim: fimMesPassado.toISOString().split("T")[0],
+                data_inicio: inicio.toISOString().split("T")[0],
+                data_fim: fim.toISOString().split("T")[0],
             };
         }
 
         case "este_ano":
-            return {
-                tipo: "este_ano",
-                data_inicio: getInicioAno(),
-                data_fim: getHoje(),
-            };
+            return { tipo: "este_ano", data_inicio: getInicioAno(), data_fim: getHoje() };
 
         case "personalizado":
-            return {
-                tipo: "personalizado",
-                data_inicio: getInicioMes(),
-                data_fim: getHoje(),
-            };
-
         default:
-            return {
-                tipo: "este_mes",
-                data_inicio: getInicioMes(),
-                data_fim: getHoje(),
-            };
+            return { tipo: "este_mes", data_inicio: getInicioMes(), data_fim: getHoje() };
     }
 }
 
-/**
- * Obter label para período selecionado
- */
-export function getPeriodoLabel(
-    tipo: "hoje" | "ontem" | "este_mes" | "mes_passado" | "este_ano" | "personalizado"
-): string {
+export function getPeriodoLabel(tipo: PeriodoTipo): string {
     const labels: Record<string, string> = {
-        hoje: "Hoje",
-        ontem: "Ontem",
-        este_mes: "Este Mês",
-        mes_passado: "Mês Passado",
-        este_ano: "Este Ano",
+        hoje: "Hoje", ontem: "Ontem", este_mes: "Este Mês",
+        mes_passado: "Mês Passado", este_ano: "Este Ano",
         personalizado: "Período Personalizado",
     };
     return labels[tipo] || tipo;
 }
 
-/**
- * Formatar data para exibição (DD/MM/YYYY)
- */
 export function formatarData(data: string | null): string {
     if (!data) return "-";
     try {
@@ -729,16 +777,10 @@ export function formatarData(data: string | null): string {
     }
 }
 
-/**
- * Formatar data para input type="date" (YYYY-MM-DD)
- */
 export function formatarDataInput(data: Date): string {
     return data.toISOString().split("T")[0];
 }
 
-/**
- * Formatar valor em Kwanzas
- */
 export function formatarKwanza(valor: number): string {
     return new Intl.NumberFormat("pt-AO", {
         style: "currency",
@@ -750,24 +792,40 @@ export function formatarKwanza(valor: number): string {
         .replace("AOA", "Kz");
 }
 
+/* ==================== LABELS DE TIPO DE MOVIMENTO ==================== */
+
+export const LABELS_TIPO_MOVIMENTO: Record<string, string> = {
+    compra: "Compra",
+    venda: "Venda",
+    ajuste: "Ajuste Manual",
+    nota_credito: "Nota de Crédito",
+    venda_cancelada: "Venda Cancelada",
+    nota_credito_cancelada: "NC Cancelada",
+};
+
+export const COR_TIPO_MOVIMENTO: Record<string, { bg: string; color: string }> = {
+    compra:                  { bg: "#dcfce7", color: "#15803d" },
+    venda:                   { bg: "#dbeafe", color: "#1d4ed8" },
+    ajuste:                  { bg: "#fef9c3", color: "#854d0e" },
+    nota_credito:            { bg: "#f3e8ff", color: "#7e22ce" },
+    venda_cancelada:         { bg: "#fee2e2", color: "#b91c1c" },
+    nota_credito_cancelada:  { bg: "#fee2e2", color: "#b91c1c" },
+};
+
 /* ==================== HOOK PARA REACT ==================== */
 
-/**
- * Hook personalizado para usar relatórios em componentes React
- */
-export const useRelatorios = () => {
-    return {
-        dashboard: relatoriosService.getDashboard,
-        vendas: relatoriosService.getRelatorioVendas,
-        compras: relatoriosService.getRelatorioCompras,
-        faturacao: relatoriosService.getRelatorioFaturacao,
-        stock: relatoriosService.getRelatorioStock,
-        servicos: relatoriosService.getRelatorioServicos,
-        retencoes: relatoriosService.getRelatorioRetencoes,
-        documentosFiscais: relatoriosService.getRelatorioDocumentosFiscais,
-        pagamentosPendentes: relatoriosService.getRelatorioPagamentosPendentes,
-        proformas: relatoriosService.getRelatorioProformas,
-    };
-};
+export const useRelatorios = () => ({
+    dashboard: relatoriosService.getDashboard,
+    vendas: relatoriosService.getRelatorioVendas,
+    compras: relatoriosService.getRelatorioCompras,
+    faturacao: relatoriosService.getRelatorioFaturacao,
+    stock: relatoriosService.getRelatorioStock,
+    movimentosStock: relatoriosService.getRelatorioMovimentosStock,
+    servicos: relatoriosService.getRelatorioServicos,
+    retencoes: relatoriosService.getRelatorioRetencoes,
+    documentosFiscais: relatoriosService.getRelatorioDocumentosFiscais,
+    pagamentosPendentes: relatoriosService.getRelatorioPagamentosPendentes,
+    proformas: relatoriosService.getRelatorioProformas,
+});
 
 export default relatoriosService;

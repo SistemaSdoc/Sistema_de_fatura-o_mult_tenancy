@@ -70,39 +70,42 @@ export function ModalEdicao({ isOpen, item, onSave, onClose, categorias }: Modal
 
     const isServicoItem = formData.tipo === "servico";
 
-    useEffect(() => {
-        if (item) {
-            let duracaoNum = "1";
-            let unidade: UnidadeMedida = "hora";
+useEffect(() => {
+    if (item) {
+        let duracaoNum = "1";
+        let unidade: UnidadeMedida = "hora";
 
-            if (item.duracao_estimada) {
-                const match = item.duracao_estimada.match(/^(\d+)\s*(\w+)$/);
-                if (match) {
-                    duracaoNum = match[1];
-                    unidade = match[2] as UnidadeMedida;
-                }
+        if (item.duracao_estimada) {
+            const match = item.duracao_estimada.match(/^(\d+)\s*(\w+)$/);
+            if (match) {
+                duracaoNum = match[1];
+                unidade = match[2] as UnidadeMedida;
             }
-
-            setFormData({
-                tipo: item.tipo,
-                categoria_id: item.categoria_id || "",
-                codigo: item.codigo || "",
-                nome: item.nome || "",
-                descricao: item.descricao || "",
-                preco_compra: item.preco_compra?.toString() || "0",
-                preco_venda: item.preco_venda?.toString() || "0",
-                taxa_iva: item.taxa_iva?.toString() || "0",
-                sujeito_iva: item.sujeito_iva !== undefined ? item.sujeito_iva : true,
-                estoque_minimo: item.estoque_minimo?.toString() || "5",
-                status: item.status || "ativo",
-                taxa_retencao: item.taxa_retencao?.toString() || "0",
-                duracao_estimada: duracaoNum,
-                unidade_medida: unidade,
-            });
-            setErrors({});
-            setError(null);
         }
-    }, [item]);
+
+        setFormData({
+            tipo: item.tipo,
+            categoria_id: item.categoria_id || "",
+            codigo: item.codigo || "",
+            nome: item.nome || "",
+            descricao: item.descricao || "",
+            preco_compra: item.preco_compra?.toString() || "0",
+            preco_venda: item.preco_venda?.toString() || "0",
+            taxa_iva: item.taxa_iva?.toString() || "0",
+            
+            // ← LINHA CORRIGIDA
+            sujeito_iva: item.sujeito_iva ?? true,
+
+            estoque_minimo: item.estoque_minimo?.toString() || "5",
+            status: item.status || "ativo",
+            taxa_retencao: item.taxa_retencao?.toString() || "0",
+            duracao_estimada: duracaoNum,
+            unidade_medida: unidade,
+        });
+        setErrors({});
+        setError(null);
+    }
+}, [item]);
 
     const margemLucro = useMemo(() => {
         if (isServicoItem) return 0;

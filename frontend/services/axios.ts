@@ -26,6 +26,7 @@ api.interceptors.request.use(
       if (!xsrfToken) {
         try {
           await api.get("/sanctum/csrf-cookie", { withCredentials: true });
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         } catch (err) {
           console.warn("Não foi possível obter CSRF cookie");
         }
@@ -43,10 +44,11 @@ api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const status = error.response?.status;
-    const originalRequest = error.config as any;
+    const originalRequest = error.config as typeof error.config & { _retry?: boolean };
 
-    if (status === 419 && !isRefreshing) {
+    if (status === 419 && !isRefreshing && !originalRequest?._retry) {
       isRefreshing = true;
+      if (originalRequest) originalRequest._retry = true;
       console.warn("[419] CSRF inválido - tentando recuperar...");
 
       Cookies.remove("XSRF-TOKEN");
@@ -54,7 +56,7 @@ api.interceptors.response.use(
       try {
         await api.get("/sanctum/csrf-cookie");
         isRefreshing = false;
-        return api(originalRequest);   // refaz o pedido
+        return api(originalRequest!);
       } catch (refreshError) {
         isRefreshing = false;
         console.error("Falha ao recuperar CSRF", refreshError);

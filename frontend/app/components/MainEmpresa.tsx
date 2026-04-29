@@ -74,24 +74,31 @@ export default function MainEmpresa({
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const [notificacoesAberto, setNotificacoesAberto] = useState(false);
-  const [produtosEstoqueBaixo, setProdutosEstoqueBaixo] = useState<Produto[]>(
-    [],
-  );
+  const [produtosEstoqueBaixo, setProdutosEstoqueBaixo] = useState<Produto[]>([]);
   const [produtosSemEstoque, setProdutosSemEstoque] = useState<Produto[]>([]);
   const [loadingNotificacoes, setLoadingNotificacoes] = useState(false);
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState<Date | null>(null);
   const [abaAtiva, setAbaAtiva] = useState<"baixo" | "zero">("baixo");
   const [modalAnimating, setModalAnimating] = useState(false);
   const [panelAnimating, setPanelAnimating] = useState(false);
+  // Controla se o logo da empresa falhou a carregar
+  const [logoError, setLogoError] = useState(false);
 
   // User data
   const userName = user?.name || "";
   const userRole = user?.role || "";
   const userEmail = user?.email || "";
   const userInitial = userName.charAt(0).toUpperCase();
-  const empresaLogo = companyLogo || user?.empresa?.logo || "/images/3.png";
-  const nomeEmpresa =
-    companyName || user?.empresa?.nome || "SDOCA-Comercio e Serviços, Lda";
+
+  // Logo: usa prop > logo da empresa (se não falhou) > fallback local
+  const logoFromServer = companyLogo || user?.empresa?.logo || null;
+  const empresaLogo = (!logoError && logoFromServer) ? logoFromServer : "/images/3.png";
+  const nomeEmpresa = companyName || user?.empresa?.nome || "SDOCA-Comercio e Serviços, Lda";
+
+  // Reset logoError quando o user muda (ex: após login)
+  useEffect(() => {
+    setLogoError(false);
+  }, [user?.empresa?.logo, companyLogo]);
 
   // Responsive detection
   useEffect(() => {
@@ -258,59 +265,36 @@ export default function MainEmpresa({
       icon: Home,
       path: "/dashboard",
       links: [],
-      roles: ["admin", "contabilista"],
+      roles: ["admin", "contablista"],
     },
     {
       label: "Vendas",
       icon: ShoppingCart,
       path: "/dashboard/Vendas",
       links:
-        userRole === "admin"
+        userRole === "admin" || userRole === "operador"
           ? [
-              {
-                label: "Vendas",
-                path: "/dashboard/Faturas/Faturas",
-                icon: FileText,
-              },
-              {
-                label: "Venda a pronto",
-                path: "/dashboard/Vendas/Nova_venda",
-                icon: ShoppingCart,
-              },
-              {
-                label: "Venda a prazo",
-                path: "/dashboard/Faturas/Fatura_Normal",
-                icon: FileText,
-              },
-              {
-                label: "Proforma",
-                path: "/dashboard/Faturas/Faturas_Proforma",
-                icon: FileText,
-              },
-            ]
-          : userRole === "operador"
-            ? [
-                {
-                  label: "Vendas",
-                  path: "/dashboard/Faturas/Faturas",
-                  icon: FileText,
-                },
-                {
-                  label: "Venda a pronto",
-                  path: "/dashboard/Vendas/Nova_venda",
-                  icon: ShoppingCart,
-                },
-                {
-                  label: "Venda a prazo",
-                  path: "/dashboard/Faturas/Fatura_Normal",
-                  icon: FileText,
-                },
-                {
-                  label: "Proforma",
-                  path: "/dashboard/Faturas/Faturas_Proforma",
-                  icon: FileText,
-                },
-              ]
+            {
+              label: "Venda a pronto",
+              path: "/dashboard/Vendas/Nova_venda",
+              icon: ShoppingCart,
+            },
+            {
+              label: "Venda a prazo",
+              path: "/dashboard/Faturas/Fatura_Normal",
+              icon: ShoppingCart,
+            },
+            {
+              label: "Gerar proformas",
+              path: "/dashboard/Faturas/Faturas_Proforma",
+              icon: FileText,
+            },
+            {
+              label: "Histórico de Vendas",
+              path: "/dashboard/Faturas/Faturas",
+              icon: FileText,
+            },
+          ]
             : [],
       isGroup: true,
       roles: ["admin", "operador"],
@@ -318,23 +302,14 @@ export default function MainEmpresa({
     {
       label: "Doc. Fiscais",
       icon: FileText,
-      path: "/dashboard/Faturas",
-      links:
-        userRole === "operador" || userRole === "admin"
-          ? [
-              {
-                label: "Documentos gerados",
-                path: "/dashboard/Faturas/DC",
-                icon: FileText,
-              },
-            ]
-          : [],
-      isGroup: true,
+      path: "/dashboard/Faturas/DC",
+      links:[],
+      isGroup: false,
       roles: ["admin", "operador"],
     },
     {
-      label: "Stock",
-      icon: Archive,
+      label: "Gestão de Stock",
+      icon: Package,
       path: "/dashboard/Produtos_servicos",
       links: [
         {
@@ -345,7 +320,7 @@ export default function MainEmpresa({
         {
           label: "Categorias",
           path: "/dashboard/Produtos_servicos/categorias",
-          icon: Package,
+          icon: Archive,
         },
         {
           label: "Fornecedores",
@@ -354,7 +329,7 @@ export default function MainEmpresa({
         },
       ],
       isGroup: true,
-      roles: ["admin", "operador"],
+      roles: ["admin"],
     },
     {
       label: "Clientes",
@@ -368,7 +343,7 @@ export default function MainEmpresa({
       icon: BarChart2,
       path: "/dashboard/relatorios",
       links: [],
-      roles: ["admin", "contabilista"],
+      roles: ["admin", "contablista"],
     },
     {
       label: "Configurações",
@@ -460,23 +435,22 @@ export default function MainEmpresa({
 
         {/* Logo section */}
         <div
-          className="flex items-center gap-3 h-16 px-4 border-b "
+          className="flex items-center gap-3 h-16 px-4 border-b"
           style={{ borderColor: colors.border }}
         >
-          {empresaLogo ? (
+          {/* Logo com fallback correcto */}
+          {empresaLogo && !logoError ? (
             <Image
               src={empresaLogo}
               alt="Logo"
               width={32}
               height={32}
-              className=" object-contain"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = "none";
-              }}
+              className="object-contain"
+              onError={() => setLogoError(true)}
             />
           ) : (
             <div
-              className="flex items-center justify-center  w-8 h-8 text-sm font-bold text-white"
+              className="flex items-center justify-center w-8 h-8 text-sm font-bold text-white"
               style={{ backgroundColor: colors.primary }}
             >
               {nomeEmpresa.charAt(0).toUpperCase()}
@@ -514,7 +488,7 @@ export default function MainEmpresa({
               return (
                 <div key={item.label}>
                   <div
-                    className="flex items-center justify-between px-3 py-2.5 transition-all duration-200 cursor-pointer select-none "
+                    className="flex items-center justify-between px-3 py-2.5 transition-all duration-200 cursor-pointer select-none"
                     style={{
                       backgroundColor: active
                         ? colors.secondary
@@ -567,7 +541,7 @@ export default function MainEmpresa({
 
                     {hasLinks && sidebarOpen && (
                       <div
-                        className=" ml-1 transition-transform duration-250"
+                        className="ml-1 transition-transform duration-250"
                         style={{
                           transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
                         }}
@@ -608,9 +582,7 @@ export default function MainEmpresa({
                                 <link.icon
                                   size={15}
                                   style={{
-                                    color: linkActive
-                                      ? colors.text
-                                      : colors.text,
+                                    color: colors.text,
                                     flexShrink: 0,
                                   }}
                                 />
@@ -638,15 +610,13 @@ export default function MainEmpresa({
         </nav>
 
         {/* Logout button */}
-        <div className="p-2 border-t " style={{ borderColor: colors.border }}>
+        <div className="p-2 border-t" style={{ borderColor: colors.border }}>
           <div
             onClick={abrirModalLogout}
             className="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all hover:translate-x-1 active:scale-98"
-            style={{
-              backgroundColor: "transparent",
-            }}
+            style={{ backgroundColor: "transparent" }}
           >
-            <LogOut size={19} className=" text-red-500" />
+            <LogOut size={19} className="text-red-500" />
             {sidebarOpen && (
               <span
                 className="text-sm font-medium"
@@ -663,14 +633,14 @@ export default function MainEmpresa({
       <div className="flex flex-col flex-1 w-full overflow-hidden">
         {/* Header */}
         <header
-          className="flex items-center justify-between gap-3 px-3 h-14 border-b shadow-sm md:h-16 md:px-6 "
+          className="flex items-center justify-between gap-3 px-3 h-14 border-b shadow-sm md:h-16 md:px-6"
           style={{ backgroundColor: colors.card, borderColor: colors.border }}
         >
           <div className="flex items-center gap-2 min-w-0">
             {isMobile && (
               <button
                 onClick={() => setSidebarOpen(true)}
-                className="p-2 transition-transform  "
+                className="p-2 transition-transform"
                 style={{ color: colors.primary }}
               >
                 <Menu size={20} />
@@ -693,17 +663,9 @@ export default function MainEmpresa({
               style={{ backgroundColor: colors.hover, color: colors.text }}
             >
               {theme === "dark" ? (
-                <Sun
-                  size={16}
-                  className=""
-                  style={{ color: colors.secondary }}
-                />
+                <Sun size={16} style={{ color: colors.secondary }} />
               ) : (
-                <Moon
-                  size={16}
-                  className=""
-                  style={{ color: colors.primary }}
-                />
+                <Moon size={16} style={{ color: colors.primary }} />
               )}
             </button>
 
@@ -719,14 +681,10 @@ export default function MainEmpresa({
                       : "transparent",
                   }}
                 >
-                  <Bell
-                    size={16}
-                    className=""
-                    style={{ color: colors.secondary }}
-                  />
+                  <Bell size={16} style={{ color: colors.secondary }} />
                   {totalNotificacoes > 0 && (
                     <span
-                      className="absolute -top-1 -right-1 m text-[10px] font-bold flex items-center justify-center px-1 text-white animate-pulse"
+                      className="absolute -top-1 -right-1 text-[10px] font-bold flex items-center justify-center px-1 text-white animate-pulse"
                       style={{
                         backgroundColor:
                           produtosSemEstoque.length > 0
@@ -743,11 +701,10 @@ export default function MainEmpresa({
                 {notificacoesAberto && (
                   <>
                     <div
-                      className={`absolute right-0 z-50 mt-2 overflow-hidden border shadow-lg transition-all duration-200 ${
-                        panelAnimating
+                      className={`absolute right-0 z-50 mt-2 overflow-hidden border shadow-lg transition-all duration-200 ${panelAnimating
                           ? "opacity-0 scale-95"
                           : "opacity-100 scale-100"
-                      }`}
+                        }`}
                       style={{
                         backgroundColor: colors.card,
                         borderColor: colors.border,
@@ -771,10 +728,7 @@ export default function MainEmpresa({
                             onClick={() => setNotificacoesAberto(false)}
                             className="p-1 transition-transform hover:scale-110 active:scale-95"
                           >
-                            <X
-                              size={16}
-                              style={{ color: colors.textSecondary }}
-                            />
+                            <X size={16} style={{ color: colors.textSecondary }} />
                           </button>
                         </div>
                         {ultimaAtualizacao && (
@@ -851,13 +805,10 @@ export default function MainEmpresa({
                               >
                                 <div className="flex gap-2">
                                   <div
-                                    className="p-1.5 "
+                                    className="p-1.5"
                                     style={{ backgroundColor: colors.warning }}
                                   >
-                                    <TrendingDown
-                                      size={14}
-                                      className="text-white"
-                                    />
+                                    <TrendingDown size={14} className="text-white" />
                                   </div>
                                   <div className="min-w-0 flex-1">
                                     <p
@@ -894,13 +845,10 @@ export default function MainEmpresa({
                               >
                                 <div className="flex gap-2">
                                   <div
-                                    className="p-1.5 "
+                                    className="p-1.5"
                                     style={{ backgroundColor: colors.danger }}
                                   >
-                                    <AlertCircle
-                                      size={14}
-                                      className="text-white"
-                                    />
+                                    <AlertCircle size={14} className="text-white" />
                                   </div>
                                   <p
                                     className="text-xs font-medium truncate"
@@ -958,7 +906,7 @@ export default function MainEmpresa({
 
             {/* User avatar */}
             <div
-              className="flex items-center gap-2 pl-2 border-l md:pl-3 "
+              className="flex items-center gap-2 pl-2 border-l md:pl-3"
               style={{ borderColor: colors.border }}
             >
               <div className="hidden text-right md:block">
@@ -1000,16 +948,14 @@ export default function MainEmpresa({
       {/* Logout modal com animação */}
       {logoutModalOpen && (
         <div
-          className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-all duration-200 ${
-            modalAnimating ? "opacity-0" : "opacity-100"
-          }`}
+          className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-all duration-200 ${modalAnimating ? "opacity-0" : "opacity-100"
+            }`}
           style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }}
           onClick={fecharModalLogout}
         >
           <div
-            className={`w-full max-w-sm overflow-hidden shadow-lg transition-all duration-200 ${
-              modalAnimating ? "scale-95 opacity-0" : "scale-100 opacity-100"
-            }`}
+            className={`w-full max-w-sm overflow-hidden shadow-lg transition-all duration-200 ${modalAnimating ? "scale-95 opacity-0" : "scale-100 opacity-100"
+              }`}
             style={{ backgroundColor: colors.card }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1053,7 +999,7 @@ export default function MainEmpresa({
             >
               <div className="flex items-center gap-2">
                 <div
-                  className="flex items-center justify-center w-7 h-7 text-xs font-bold text-white "
+                  className="flex items-center justify-center w-7 h-7 text-xs font-bold text-white"
                   style={{
                     background: `linear-gradient(135deg, ${colors.secondary} 0%, ${colors.primary} 100%)`,
                   }}
@@ -1096,12 +1042,10 @@ export default function MainEmpresa({
                 style={{ backgroundColor: colors.danger }}
               >
                 {logoutLoading ? (
-                  <>
-                    <Loader2 className="w-3 h-3 md:w-4 md:h-4 animate-spin" />
-                  </>
+                  <Loader2 className="w-3 h-3 md:w-4 md:h-4 animate-spin" />
                 ) : (
                   <>
-                    <LogOut size={14} className="" />
+                    <LogOut size={14} />
                     <span className="hidden sm:inline">Sair</span>
                   </>
                 )}

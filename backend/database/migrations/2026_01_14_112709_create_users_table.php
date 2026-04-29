@@ -8,23 +8,22 @@ return new class extends Migration
 {
     public function up(): void
     {
-Schema::create('users', function (Blueprint $table) {
-    $table->uuid('id')->primary();
-    $table->uuid('empresa_id');
-    $table->foreign('empresa_id')->references('id')->on('empresas');
+        Schema::create('users', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('empresa_id')->nullable(); // ← nullable: user pode existir sem empresa
+            $table->foreign('empresa_id')->references('id')->on('empresas')->nullOnDelete();
 
+            $table->string('name');
+            $table->string('email')->unique();
+            $table->string('password');
 
-    $table->string('name');
-    $table->string('email')->unique();
-    $table->string('password');
+            $table->enum('role', ['admin', 'operador', 'contablista'])->default('operador');
+            $table->boolean('ativo')->default(true);
+            $table->timestamp('ultimo_login')->nullable();
+            $table->timestamp('email_verified_at')->nullable();
 
-    $table->enum('role', ['admin', 'operador', 'contablista'])->default('operador');
-    $table->boolean('ativo')->default(true);
-    $table->timestamp('ultimo_login')->nullable();
-
-    $table->timestamps();
-});
-
+            $table->timestamps();
+        });
     }
 
     public function down(): void

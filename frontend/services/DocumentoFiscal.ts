@@ -48,14 +48,25 @@ export interface DocumentoFiscal {
     hora_emissao: string;
     data_vencimento?: string | null;
     data_cancelamento?: string | null;
-    desconto_global?:number;
-    venda?:number;
-    troco?:number;
+
+    // Campos de desconto e pagamento
+    desconto_global?: number;
+    troco?: number;
+
+    // Relação com Venda (pode vir como objeto ou apenas o ID/número)
+    venda?: {
+        id?: string | number;
+        desconto_global?: number;
+        troco?: number;
+        // outros campos da tabela vendas se precisares no futuro
+    } | number | null;
+
     base_tributavel: number;
     total_iva: number;
     total_retencao: number;
     total_liquido: number;
     estado: EstadoDocumento;
+
     motivo?: string | null;
     motivo_cancelamento?: string | null;
     user_cancelamento_id?: string | null;

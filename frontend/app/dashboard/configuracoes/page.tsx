@@ -5,7 +5,7 @@ import {
     Eye, EyeOff, Save, Upload, Loader2, Trash2, Sun, Moon,
     Download, RefreshCcw, Globe, LogOut, Settings, Bell, User,
     Building2, Plus, Pencil, Search, Shield, UserCheck, UserX,
-    MoreVertical,
+    MoreVertical, AlertCircle,
 } from "lucide-react";
 import MainEmpresa from "@/app/components/MainEmpresa";
 import { useThemeColors, useTheme } from "@/context/ThemeContext";
@@ -37,7 +37,7 @@ import {
 interface ThemeColors {
     text: string; textSecondary: string; background: string;
     card: string; border: string; primary: string; secondary: string;
-    success: string; warning: string; danger: string; error: string; hover: string;
+    success: string; warning: string; danger: string; error: string; hover: string; fp: string;
 }
 
 type RoleType = "admin" | "operador" | "contablista";
@@ -116,6 +116,7 @@ const SaveButton = ({
     colors: ThemeColors; children?: string; disabled?: boolean;
 }) => (
     <Button
+        type="button"
         onClick={onClick} disabled={loading || disabled}
         className="gap-2 text-white" style={{ backgroundColor: colors.primary }}>
         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -125,8 +126,8 @@ const SaveButton = ({
 
 const RoleBadge = ({ role, colors }: { role: string; colors: ThemeColors }) => {
     const map: Record<string, { label: string; color: string }> = {
-        admin:       { label: "Admin",        color: colors.danger  },
-        operador:    { label: "Operador",     color: colors.primary },
+        admin:       { label: "Admin",        color: colors.secondary  },
+        operador:    { label: "Operador",     color: colors.secondary },
         contablista: { label: "Contabilista", color: colors.success },
     };
     const c = map[role] ?? { label: role, color: colors.textSecondary };
@@ -137,7 +138,7 @@ const RoleBadge = ({ role, colors }: { role: string; colors: ThemeColors }) => {
     );
 };
 
-// ─── MODAL CRIAR / EDITAR USUÁRIO ────────────────────────────────────────────
+// ─── MODAL CRIAR / EDITAR UTILIZADOR ─────────────────────────────────────────
 
 const UserModal = ({
     open, onClose, onSaved, editUser, colors,
@@ -148,6 +149,12 @@ const UserModal = ({
     const isEdit = !!editUser;
     const [loading, setLoading] = useState(false);
     const [showPass, setShowPass] = useState(false);
+
+    // ── Erros de validação inline ──────────────────────────────────────────
+    const [errors, setErrors] = useState<{
+        name?: string; email?: string; password?: string;
+    }>({});
+
     const [form, setForm] = useState({
         name: "", email: "", password: "",
         role: "operador" as RoleType,
@@ -166,19 +173,34 @@ const UserModal = ({
         } else {
             setForm({ name: "", email: "", password: "", role: "operador", ativo: true });
         }
+        setErrors({});
         setShowPass(false);
     }, [editUser, open]);
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const { name, value } = e.target;
-        setForm(p => ({ ...p, [name]: value }));
+    // ── Validação inline ───────────────────────────────────────────────────
+    const validate = (): boolean => {
+        const newErrors: typeof errors = {};
+
+        if (!form.name.trim())
+            newErrors.name = "Nome é obrigatório";
+
+        if (!form.email.trim())
+            newErrors.email = "E-mail é obrigatório";
+        else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
+            newErrors.email = "E-mail inválido";
+
+        if (!isEdit && form.password.length < 6)
+            newErrors.password = "A senha deve ter no mínimo 6 caracteres";
+
+        if (isEdit && form.password && form.password.length < 6)
+            newErrors.password = "A senha deve ter no mínimo 6 caracteres";
+
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
     };
 
     const handleSubmit = async () => {
-        if (!form.name.trim() || !form.email.trim())
-            return toast.error("Nome e e-mail são obrigatórios");
-        if (!isEdit && form.password.length < 6)
-            return toast.error("A senha deve ter no mínimo 6 caracteres");
+        if (!validate()) return;
 
         setLoading(true);
         try {
@@ -189,10 +211,9 @@ const UserModal = ({
                     role:  form.role,
                     ativo: form.ativo,
                 };
-                // Só envia password se foi preenchida
                 if (form.password.trim()) payload.password = form.password;
                 await updateUser(editUser.id, payload);
-                toast.success("Usuário atualizado!");
+                toast.success("Utilizador atualizado!");
             } else {
                 const payload: RegisterData = {
                     name:     form.name,
@@ -202,70 +223,131 @@ const UserModal = ({
                     ativo:    form.ativo,
                 };
                 await registerUser(payload);
-                toast.success("Usuário criado!");
+                toast.success("Utilizador criado!");
             }
             onSaved();
             onClose();
         } catch (err: unknown) {
-            const msg = (err as { response?: { data?: { message?: string } } })
-                ?.response?.data?.message;
-            toast.error(msg ?? "Erro ao salvar usuário");
+            const errObj = err as {
+                response?: { data?: { message?: string; errors?: Record<string, string[]> } };
+            };
+            const serverMsg = errObj?.response?.data?.message;
+            const serverErrors = errObj?.response?.data?.errors;
+
+            // Mapear erros de validação do Laravel para os campos
+            if (serverErrors) {
+                const mapped: typeof errors = {};
+                if (serverErrors.name)     mapped.name     = serverErrors.name[0];
+                if (serverErrors.email)    mapped.email    = serverErrors.email[0];
+                if (serverErrors.password) mapped.password = serverErrors.password[0];
+                setErrors(mapped);
+            } else {
+                toast.error(serverMsg ?? "Erro ao salvar utilizador");
+            }
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
+        <Dialog open={open} onOpenChange={v => { if (!v && !loading) onClose(); }}>
             <DialogContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                 <DialogHeader>
                     <DialogTitle style={{ color: colors.primary }}>
-                        {isEdit ? "Editar Usuário" : "Novo Usuário"}
+                        {isEdit ? "Editar Utilizador" : "Novo Utilizador"}
                     </DialogTitle>
                     <DialogDescription style={{ color: colors.textSecondary }}>
                         {isEdit
-                            ? "Atualize os dados do usuário"
-                            : "Preencha os dados para criar um novo usuário"}
+                            ? "Atualize os dados do utilizador"
+                            : "Preencha os dados para criar um novo utilizador"}
                     </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4 py-2">
-                    <FormInput
-                        label="Nome completo" name="name" value={form.name}
-                        onChange={handleChange} colors={colors}
-                        placeholder="Ex: João Silva"
-                    />
-                    <FormInput
-                        label="E-mail" name="email" type="email" value={form.email}
-                        onChange={handleChange} colors={colors}
-                        placeholder="Ex: joao@empresa.com"
-                    />
+                    {/* Nome */}
+                    <div className="space-y-1">
+                        <Label style={{ color: colors.text }}>Nome completo *</Label>
+                        <Input
+                            type="text"
+                            value={form.name}
+                            onChange={e => {
+                                setForm(p => ({ ...p, name: e.target.value }));
+                                if (errors.name) setErrors(p => ({ ...p, name: undefined }));
+                            }}
+                            placeholder="Ex: João Silva"
+                            style={{
+                                backgroundColor: colors.background,
+                                borderColor: errors.name ? colors.danger : colors.border,
+                                color: colors.text,
+                            }}
+                        />
+                        {errors.name && (
+                            <p className="text-xs flex items-center gap-1" style={{ color: colors.danger }}>
+                                <AlertCircle className="w-3 h-3" /> {errors.name}
+                            </p>
+                        )}
+                    </div>
 
-                    <div className="space-y-2">
+                    {/* E-mail */}
+                    <div className="space-y-1">
+                        <Label style={{ color: colors.text }}>E-mail *</Label>
+                        <Input
+                            type="email"
+                            value={form.email}
+                            onChange={e => {
+                                setForm(p => ({ ...p, email: e.target.value }));
+                                if (errors.email) setErrors(p => ({ ...p, email: undefined }));
+                            }}
+                            placeholder="Ex: joao@empresa.com"
+                            style={{
+                                backgroundColor: colors.background,
+                                borderColor: errors.email ? colors.danger : colors.border,
+                                color: colors.text,
+                            }}
+                        />
+                        {errors.email && (
+                            <p className="text-xs flex items-center gap-1" style={{ color: colors.danger }}>
+                                <AlertCircle className="w-3 h-3" /> {errors.email}
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Password */}
+                    <div className="space-y-1">
                         <Label style={{ color: colors.text }}>
                             {isEdit ? "Nova senha (em branco = não altera)" : "Senha *"}
                         </Label>
                         <div className="relative">
                             <Input
-                                name="password"
                                 type={showPass ? "text" : "password"}
                                 value={form.password}
-                                onChange={handleChange}
+                                onChange={e => {
+                                    setForm(p => ({ ...p, password: e.target.value }));
+                                    if (errors.password) setErrors(p => ({ ...p, password: undefined }));
+                                }}
                                 placeholder={isEdit ? "••••••••" : "Mínimo 6 caracteres"}
                                 style={{
                                     backgroundColor: colors.background,
-                                    borderColor: colors.border,
+                                    borderColor: errors.password ? colors.danger : colors.border,
                                     color: colors.text,
                                 }}
                             />
-                            <button type="button" onClick={() => setShowPass(p => !p)}
+                            <button
+                                type="button"
+                                onClick={() => setShowPass(p => !p)}
                                 className="absolute right-3 top-1/2 -translate-y-1/2"
                                 style={{ color: colors.textSecondary }}>
                                 {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
                             </button>
                         </div>
+                        {errors.password && (
+                            <p className="text-xs flex items-center gap-1" style={{ color: colors.danger }}>
+                                <AlertCircle className="w-3 h-3" /> {errors.password}
+                            </p>
+                        )}
                     </div>
 
+                    {/* Role */}
                     <div className="space-y-2">
                         <Label style={{ color: colors.text }}>Função (Role)</Label>
                         <Select
@@ -289,13 +371,14 @@ const UserModal = ({
                         </Select>
                     </div>
 
+                    {/* Ativo */}
                     <div className="flex items-center justify-between py-1">
                         <div>
                             <p className="text-sm font-medium" style={{ color: colors.text }}>
                                 Conta ativa
                             </p>
                             <p className="text-xs" style={{ color: colors.textSecondary }}>
-                                Usuário pode fazer login
+                                Utilizador pode fazer login
                             </p>
                         </div>
                         <Switch
@@ -306,13 +389,20 @@ const UserModal = ({
                 </div>
 
                 <DialogFooter>
-                    <Button variant="outline" onClick={onClose}
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={onClose}
+                        disabled={loading}
                         style={{ borderColor: colors.border, color: colors.text }}>
                         Cancelar
                     </Button>
                     <Button
-                        onClick={handleSubmit} disabled={loading}
-                        className="gap-2 text-white" style={{ backgroundColor: colors.primary }}>
+                        type="button"
+                        onClick={handleSubmit}
+                        disabled={loading}
+                        className="gap-2 text-white"
+                        style={{ backgroundColor: colors.primary }}>
                         {loading
                             ? <Loader2 className="w-4 h-4 animate-spin" />
                             : <Save className="w-4 h-4" />}
@@ -359,28 +449,31 @@ const PerfilTab = ({
     };
 
     const getStrength = (s: string) => {
-        if (!s)            return { color: colors.border,   text: "",      progress: 0   };
-        if (s.length < 6)  return { color: colors.danger,   text: "Fraca", progress: 33  };
-        if (s.length < 10) return { color: colors.warning,  text: "Média", progress: 66  };
-        return               { color: colors.success,  text: "Forte", progress: 100 };
+        if (!s)            return { color: colors.border,  text: "",      progress: 0   };
+        if (s.length < 6)  return { color: colors.danger,  text: "Fraca", progress: 33  };
+        if (s.length < 10) return { color: colors.warning, text: "Média", progress: 66  };
+        return               { color: colors.success, text: "Forte", progress: 100 };
     };
     const strength = getStrength(passForm.nova_senha);
 
-const handleSavePerfil = async (): Promise<void> => {
-    if (!user) return;
-
-    try {
-        const updated = await updateUser(user.id, {
-            name: form.name,
-            email: form.email,
-        });
-
-        onUserUpdated(updated);
-        toast.success("Perfil atualizado!");
-    } catch (err) {
-        toast.error("Erro ao atualizar perfil");
-    }
-};
+    const handleSavePerfil = async (): Promise<void> => {
+        if (!user) return;
+        setLoading(true);
+        try {
+            const updated = await updateUser(user.id, {
+                name:  form.name,
+                email: form.email,
+            });
+            onUserUpdated(updated);
+            toast.success("Perfil atualizado!");
+        } catch (err: unknown) {
+            const msg = (err as { response?: { data?: { message?: string } } })
+                ?.response?.data?.message;
+            toast.error(msg ?? "Erro ao atualizar perfil");
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleSaveSenha = async () => {
         if (!user) return;
@@ -404,42 +497,19 @@ const handleSavePerfil = async (): Promise<void> => {
 
     return (
         <div className="space-y-6">
-
-            {/* ── Informações da conta ─────────────────────────────────── */}
             <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                 <CardHeader>
-                    <CardTitle style={{ color: colors.primary }}>Informações da Conta</CardTitle>
+                    <CardTitle style={{ color: colors.secondary }} >Informações da Conta</CardTitle>
                     <CardDescription style={{ color: colors.textSecondary }}>
                         Edite o seu nome e e-mail
                     </CardDescription>
                 </CardHeader>
 
-                <CardContent className="space-y-6">
-                    {/* Avatar */}
-                    <div className="flex items-center gap-5">
-                        <Avatar className="w-16 h-16">
-                            <AvatarFallback style={{
-                                backgroundColor: colors.secondary,
-                                color: "white",
-                                fontSize: "1.1rem",
-                            }}>
-                                {initials(form.name || "U")}
-                            </AvatarFallback>
-                        </Avatar>
-                        <div className="space-y-1">
-                            <Button variant="outline" size="sm"
-                                style={{ borderColor: colors.border, color: colors.text }}>
-                                <Upload className="w-4 h-4 mr-2" /> Alterar foto
-                            </Button>
-                            <p className="text-xs" style={{ color: colors.textSecondary }}>
-                                JPG, PNG. Máx. 2MB.
-                            </p>
-                        </div>
-                    </div>
+                <CardContent className="space-y-3">
+
 
                     <Separator style={{ backgroundColor: colors.border }} />
 
-                    {/* Campos editáveis */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <FormInput
                             label="Nome completo" name="name" value={form.name}
@@ -453,15 +523,13 @@ const handleSavePerfil = async (): Promise<void> => {
 
                     <Separator style={{ backgroundColor: colors.border }} />
 
-                    {/* Campos somente leitura — vindos do backend via me() */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
                         <div className="space-y-2">
                             <Label style={{ color: colors.text }}>
                                 <Shield className="w-3.5 h-3.5 inline mr-1.5" />
                                 Função (Role)
                             </Label>
-                            <div className="flex items-center h-10 px-3 rounded-md border"
+                            <div className="flex items-center h-10 px-3 border"
                                 style={{ borderColor: colors.border, backgroundColor: colors.hover }}>
                                 {user && <RoleBadge role={user.role} colors={colors} />}
                             </div>
@@ -469,17 +537,13 @@ const handleSavePerfil = async (): Promise<void> => {
 
                         <div className="space-y-2">
                             <Label style={{ color: colors.text }}>Estado da conta</Label>
-                            <div className="flex items-center h-10 px-3 rounded-md border gap-2"
+                            <div className="flex items-center h-10 px-3 border gap-2"
                                 style={{ borderColor: colors.border, backgroundColor: colors.hover }}>
                                 {user?.ativo
-                                    ? <>
-                                        <UserCheck className="w-4 h-4" style={{ color: colors.success }} />
-                                        <span className="text-sm" style={{ color: colors.success }}>Ativa</span>
-                                      </>
-                                    : <>
-                                        <UserX className="w-4 h-4" style={{ color: colors.danger }} />
-                                        <span className="text-sm" style={{ color: colors.danger }}>Inativa</span>
-                                      </>
+                                    ? <><UserCheck className="w-4 h-4" style={{ color: colors.success }} />
+                                        <span className="text-sm" style={{ color: colors.success }}>Ativa</span></>
+                                    : <><UserX className="w-4 h-4" style={{ color: colors.danger }} />
+                                        <span className="text-sm" style={{ color: colors.danger }}>Inativa</span></>
                                 }
                             </div>
                         </div>
@@ -489,7 +553,7 @@ const handleSavePerfil = async (): Promise<void> => {
                                 <Building2 className="w-3.5 h-3.5 inline mr-1.5" />
                                 Empresa
                             </Label>
-                            <div className="flex items-center h-10 px-3 rounded-md border"
+                            <div className="flex items-center h-10 px-3 border"
                                 style={{ borderColor: colors.border, backgroundColor: colors.hover }}>
                                 <span className="text-sm" style={{ color: colors.textSecondary }}>
                                     {user?.empresa?.nome ?? "—"}
@@ -499,14 +563,13 @@ const handleSavePerfil = async (): Promise<void> => {
 
                         <div className="space-y-2">
                             <Label style={{ color: colors.text }}>Último login</Label>
-                            <div className="flex items-center h-10 px-3 rounded-md border"
+                            <div className="flex items-center h-10 px-3 border"
                                 style={{ borderColor: colors.border, backgroundColor: colors.hover }}>
                                 <span className="text-sm" style={{ color: colors.textSecondary }}>
                                     {formatDate(user?.ultimo_login)}
                                 </span>
                             </div>
                         </div>
-
                     </div>
                 </CardContent>
 
@@ -516,66 +579,94 @@ const handleSavePerfil = async (): Promise<void> => {
                 </CardFooter>
             </Card>
 
-            {/* ── Alterar senha ──────────────────────────────────────────── */}
-            <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-                <CardHeader>
-                    <CardTitle style={{ color: colors.primary }}>Alterar Senha</CardTitle>
-                    <CardDescription style={{ color: colors.textSecondary }}>
-                        Define uma nova senha para a tua conta
-                    </CardDescription>
-                </CardHeader>
+<Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+    
+    <CardHeader>
+        <CardTitle style={{ color: colors.secondary }}>
+            Alterar Senha
+        </CardTitle>
+        <CardDescription style={{ color: colors.textSecondary }}>
+            Define uma nova senha para a tua conta
+        </CardDescription>
+    </CardHeader>
 
-                <CardContent className="space-y-4">
-                    <PasswordInput
-                        label="Nova senha" name="nova_senha" value={passForm.nova_senha}
-                        onChange={handlePassChange} show={showNova} setShow={setShowNova}
-                        colors={colors}
+    <CardContent className="space-y-4">
+
+        {/* Inputs lado a lado */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <PasswordInput
+                label="Nova senha"
+                name="nova_senha"
+                value={passForm.nova_senha}
+                onChange={handlePassChange}
+                show={showNova}
+                setShow={setShowNova}
+                colors={colors}
+            />
+
+            <PasswordInput
+                label="Confirmar nova senha"
+                name="confirmar_senha"
+                value={passForm.confirmar_senha}
+                onChange={handlePassChange}
+                show={showConfirmar}
+                setShow={setShowConfirmar}
+                colors={colors}
+            />
+        </div>
+
+        {/* Força da senha em baixo */}
+        {passForm.nova_senha && (
+            <div className="space-y-1">
+                <div className="flex justify-between text-xs">
+                    <span style={{ color: colors.textSecondary }}>Força:</span>
+                    <span style={{ color: strength.color }}>{strength.text}</span>
+                </div>
+                <div
+                    className="h-1.5 overflow-hidden"
+                    style={{ backgroundColor: colors.border }}
+                >
+                    <div
+                        className="h-full transition-all duration-300"
+                        style={{
+                            width: `${strength.progress}%`,
+                            backgroundColor: strength.color
+                        }}
                     />
+                </div>
+            </div>
+        )}
 
-                    {passForm.nova_senha && (
-                        <div className="space-y-1.5">
-                            <div className="flex justify-between text-xs">
-                                <span style={{ color: colors.textSecondary }}>Força:</span>
-                                <span style={{ color: strength.color }}>{strength.text}</span>
-                            </div>
-                            <div className="h-1.5 rounded-full overflow-hidden"
-                                style={{ backgroundColor: colors.border }}>
-                                <div
-                                    className="h-full transition-all duration-300"
-                                    style={{
-                                        width: `${strength.progress}%`,
-                                        backgroundColor: strength.color,
-                                    }}
-                                />
-                            </div>
-                        </div>
-                    )}
+        {/* Validação */}
+        {passForm.nova_senha &&
+            passForm.confirmar_senha &&
+            passForm.nova_senha !== passForm.confirmar_senha && (
+                <p className="text-sm" style={{ color: colors.danger }}>
+                    As senhas não coincidem
+                </p>
+        )}
 
-                    <PasswordInput
-                        label="Confirmar nova senha" name="confirmar_senha"
-                        value={passForm.confirmar_senha}
-                        onChange={handlePassChange} show={showConfirmar}
-                        setShow={setShowConfirmar} colors={colors}
-                    />
+    </CardContent>
 
-                    {passForm.nova_senha && passForm.confirmar_senha &&
-                        passForm.nova_senha !== passForm.confirmar_senha && (
-                        <p className="text-sm" style={{ color: colors.danger }}>
-                            As senhas não coincidem
-                        </p>
-                    )}
-                </CardContent>
+    <CardFooter
+        className="flex justify-end border-t pt-6"
+        style={{ borderColor: colors.border }}
+    >
+        <SaveButton
+            onClick={() => void handleSaveSenha()}
+            loading={passLoading}
+            colors={colors}
+            disabled={
+                !passForm.nova_senha ||
+                !passForm.confirmar_senha ||
+                passForm.nova_senha !== passForm.confirmar_senha
+            }
+        >
+            Alterar senha
+        </SaveButton>
+    </CardFooter>
 
-                <CardFooter className="flex justify-end border-t pt-6"
-                    style={{ borderColor: colors.border }}>
-                    <SaveButton
-                        onClick={() => void handleSaveSenha()}
-                        loading={passLoading} colors={colors}
-                        disabled={!passForm.nova_senha || !passForm.confirmar_senha}>
-                        Alterar senha
-                    </SaveButton>
-                </CardFooter>
-            </Card>
+</Card>
         </div>
     );
 };
@@ -602,9 +693,7 @@ const EmpresaTab = ({ colors, user }: { colors: ThemeColors; user: UserType | nu
         }
     }, [user]);
 
-    const handleChange = (
-        e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-    ) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         setForm(p => ({ ...p, [name]: value }));
     };
@@ -625,7 +714,7 @@ const EmpresaTab = ({ colors, user }: { colors: ThemeColors; user: UserType | nu
         <div className="space-y-6">
             <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                 <CardHeader>
-                    <CardTitle style={{ color: colors.primary }}>Dados da Empresa</CardTitle>
+                    <CardTitle style={{ color: colors.secondary }}>Dados da Empresa</CardTitle>
                     <CardDescription style={{ color: colors.textSecondary }}>
                         Informações para documentos fiscais
                     </CardDescription>
@@ -674,7 +763,7 @@ const EmpresaTab = ({ colors, user }: { colors: ThemeColors; user: UserType | nu
     );
 };
 
-// ─── TAB: USUÁRIOS ────────────────────────────────────────────────────────────
+// ─── TAB: UTILIZADORES ────────────────────────────────────────────────────────
 
 const UsuariosTab = ({
     colors, currentUser,
@@ -683,6 +772,7 @@ const UsuariosTab = ({
 }) => {
     const [users, setUsers]                 = useState<UserType[]>([]);
     const [loading, setLoading]             = useState(true);
+    const [loadError, setLoadError]         = useState<string | null>(null);
     const [search, setSearch]               = useState("");
     const [roleFilter, setRoleFilter]       = useState("todos");
     const [modalOpen, setModalOpen]         = useState(false);
@@ -692,19 +782,29 @@ const UsuariosTab = ({
 
     const loadUsers = useCallback(async () => {
         setLoading(true);
+        setLoadError(null);
         try {
             const data = await fetchUsers();
             setUsers(data);
         } catch (err: unknown) {
-            const msg = (err as { response?: { data?: { message?: string } } })
-                ?.response?.data?.message;
-            toast.error(msg ?? "Erro ao carregar usuários");
+            const errObj = err as {
+                response?: { data?: { message?: string }; status?: number };
+                message?: string;
+            };
+            const status = errObj?.response?.status;
+            const msg =
+                status === 403 ? "Sem permissão para listar utilizadores" :
+                status === 401 ? "Sessão expirada — faça login novamente" :
+                errObj?.response?.data?.message ?? errObj?.message ?? "Erro ao carregar utilizadores";
+
+            setLoadError(msg);
+            toast.error(msg);
         } finally {
             setLoading(false);
         }
     }, []);
 
-    useEffect(() => { loadUsers(); }, [loadUsers]);
+    useEffect(() => { void loadUsers(); }, [loadUsers]);
 
     const filtered = users.filter(u => {
         const matchSearch =
@@ -723,13 +823,13 @@ const UsuariosTab = ({
         setDeleting(true);
         try {
             await deleteUser(deleteConfirm.id);
-            toast.success("Usuário removido!");
+            toast.success("Utilizador removido!");
             setDeleteConfirm(null);
-            loadUsers();
+            void loadUsers();
         } catch (err: unknown) {
             const msg = (err as { response?: { data?: { message?: string } } })
                 ?.response?.data?.message;
-            toast.error(msg ?? "Erro ao remover usuário");
+            toast.error(msg ?? "Erro ao remover utilizador");
         } finally {
             setDeleting(false);
         }
@@ -741,22 +841,22 @@ const UsuariosTab = ({
                 <CardHeader>
                     <div className="flex items-center justify-between flex-wrap gap-4">
                         <div>
-                            <CardTitle style={{ color: colors.primary }}>Gestão de Usuários</CardTitle>
+                            <CardTitle style={{ color: colors.secondary }}>Gestão de Utilizadores</CardTitle>
                             <CardDescription style={{ color: colors.textSecondary }}>
-                                Crie, edite e gerencie os usuários do sistema
+                                Crie, edite e gerencie os utilizadores do sistema
                             </CardDescription>
                         </div>
                         <Button
+                            type="button"
                             onClick={openCreate}
                             className="gap-2 text-white"
                             style={{ backgroundColor: colors.primary }}>
-                            <Plus className="w-4 h-4" /> Novo Usuário
+                            <Plus className="w-4 h-4" /> Novo Utilizador
                         </Button>
                     </div>
                 </CardHeader>
 
                 <CardContent className="space-y-4">
-                    {/* Filtros */}
                     <div className="flex flex-col sm:flex-row gap-3">
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4"
@@ -767,7 +867,6 @@ const UsuariosTab = ({
                                 onChange={e => setSearch(e.target.value)}
                                 className="pl-9"
                                 style={{
-                                    backgroundColor: colors.background,
                                     borderColor: colors.border,
                                     color: colors.text,
                                 }}
@@ -775,7 +874,6 @@ const UsuariosTab = ({
                         </div>
                         <Select value={roleFilter} onValueChange={setRoleFilter}>
                             <SelectTrigger className="w-full sm:w-44" style={{
-                                backgroundColor: colors.background,
                                 borderColor: colors.border,
                                 color: colors.text,
                             }}>
@@ -793,15 +891,45 @@ const UsuariosTab = ({
                         </Select>
                     </div>
 
-                    {/* Lista */}
+                    {/* Estado de erro ao carregar */}
+                    {loadError && !loading && (
+                        <div
+                            className="flex items-center gap-3 p-4 border"
+                            style={{
+                                backgroundColor: `${colors.danger}10`,
+                                borderColor: `${colors.danger}30`,
+                            }}>
+                            <AlertCircle className="w-5 h-5 shrink-0" style={{ color: colors.danger }} />
+                            <div className="flex-1">
+                                <p className="text-sm font-medium" style={{ color: colors.danger }}>
+                                    Erro ao carregar utilizadores
+                                </p>
+                                <p className="text-xs mt-0.5" style={{ color: colors.textSecondary }}>
+                                    {loadError}
+                                </p>
+                            </div>
+                            <Button
+                                type="button"
+                                variant="outline" size="sm"
+                                onClick={() => void loadUsers()}
+                                style={{ borderColor: colors.danger, color: colors.danger }}>
+                                <RefreshCcw className="w-3.5 h-3.5 mr-1.5" /> Tentar novamente
+                            </Button>
+                        </div>
+                    )}
+
                     {loading ? (
                         <div className="flex justify-center py-12">
                             <Loader2 className="w-8 h-8 animate-spin" style={{ color: colors.primary }} />
                         </div>
-                    ) : filtered.length === 0 ? (
+                    ) : !loadError && filtered.length === 0 ? (
                         <div className="text-center py-12" style={{ color: colors.textSecondary }}>
                             <User className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                            <p>Nenhum usuário encontrado</p>
+                            <p>
+                                {users.length === 0
+                                    ? "Nenhum utilizador registado"
+                                    : "Nenhum utilizador encontrado"}
+                            </p>
                         </div>
                     ) : (
                         <div className="space-y-2">
@@ -813,9 +941,8 @@ const UsuariosTab = ({
                                         animate={{ opacity: 1, y: 0 }}
                                         exit={{ opacity: 0, y: -8 }}
                                         transition={{ delay: i * 0.03 }}
-                                        className="flex items-center justify-between p-4 rounded-lg gap-4"
+                                        className="flex items-center justify-between p-4 gap-4"
                                         style={{
-                                            backgroundColor: colors.background,
                                             border: `1px solid ${colors.border}`,
                                         }}>
 
@@ -837,8 +964,8 @@ const UsuariosTab = ({
                                                     </p>
                                                     {u.id === currentUser?.id && (
                                                         <Badge style={{
-                                                            backgroundColor: `${colors.primary}20`,
-                                                            color: colors.primary,
+                                                            backgroundColor: `${colors.secondary}20`,
+                                                            color: colors.text,
                                                             fontSize: "0.65rem",
                                                         }}>
                                                             Você
@@ -857,20 +984,18 @@ const UsuariosTab = ({
 
                                             <div className="hidden sm:flex items-center gap-1.5">
                                                 {u.ativo
-                                                    ? <>
-                                                        <UserCheck className="w-4 h-4" style={{ color: colors.success }} />
-                                                        <span className="text-xs" style={{ color: colors.success }}>Ativo</span>
-                                                      </>
-                                                    : <>
-                                                        <UserX className="w-4 h-4" style={{ color: colors.danger }} />
-                                                        <span className="text-xs" style={{ color: colors.danger }}>Inativo</span>
-                                                      </>
+                                                    ? <><UserCheck className="w-4 h-4" style={{ color: colors.success }} />
+                                                        <span className="text-xs" style={{ color: colors.success }}>Ativo</span></>
+                                                    : <><UserX className="w-4 h-4" style={{ color: colors.danger }} />
+                                                        <span className="text-xs" style={{ color: colors.danger }}>Inativo</span></>
                                                 }
                                             </div>
 
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8"
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost" size="icon" className="h-8 w-8"
                                                         style={{ color: colors.textSecondary }}>
                                                         <MoreVertical className="w-4 h-4" />
                                                     </Button>
@@ -900,9 +1025,9 @@ const UsuariosTab = ({
                         </div>
                     )}
 
-                    {!loading && (
+                    {!loading && !loadError && (
                         <p className="text-xs text-right" style={{ color: colors.textSecondary }}>
-                            {filtered.length} de {users.length} usuário(s)
+                            {filtered.length} de {users.length} utilizador(es)
                         </p>
                     )}
                 </CardContent>
@@ -911,15 +1036,15 @@ const UsuariosTab = ({
             <UserModal
                 open={modalOpen}
                 onClose={closeModal}
-                onSaved={loadUsers}
+                onSaved={() => void loadUsers()}
                 editUser={editTarget}
                 colors={colors}
             />
 
-            <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+            <Dialog open={!!deleteConfirm} onOpenChange={v => { if (!v) setDeleteConfirm(null); }}>
                 <DialogContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                     <DialogHeader>
-                        <DialogTitle style={{ color: colors.danger }}>Remover usuário</DialogTitle>
+                        <DialogTitle style={{ color: colors.danger }}>Remover utilizador</DialogTitle>
                         <DialogDescription style={{ color: colors.textSecondary }}>
                             Tem certeza que deseja remover{" "}
                             <strong style={{ color: colors.text }}>{deleteConfirm?.name}</strong>?
@@ -927,12 +1052,18 @@ const UsuariosTab = ({
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setDeleteConfirm(null)}
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setDeleteConfirm(null)}
+                            disabled={deleting}
                             style={{ borderColor: colors.border, color: colors.text }}>
                             Cancelar
                         </Button>
                         <Button
-                            onClick={handleDelete} disabled={deleting}
+                            type="button"
+                            onClick={() => void handleDelete()}
+                            disabled={deleting}
                             style={{ backgroundColor: colors.danger, color: "white" }}>
                             {deleting
                                 ? <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -1038,7 +1169,7 @@ const SistemaTab = ({
                             Alterne entre claro e escuro
                         </p>
                     </div>
-                    <Button onClick={toggleTheme} variant="outline" className="gap-2"
+                    <Button type="button" onClick={toggleTheme} variant="outline" className="gap-2"
                         style={{ borderColor: colors.border, color: colors.text }}>
                         {theme === "dark"
                             ? <><Sun className="w-4 h-4" /> Tema Claro</>
@@ -1059,13 +1190,13 @@ const SistemaTab = ({
                         { icon: Upload,     label: "Importar",     fn: () => toast.info("Em desenvolvimento...")   },
                         { icon: RefreshCcw, label: "Limpar cache", fn: () => toast.success("Cache limpo!")         },
                     ].map(btn => (
-                        <Button key={btn.label} onClick={btn.fn} variant="outline" className="gap-2"
+                        <Button key={btn.label} type="button" onClick={btn.fn} variant="outline" className="gap-2"
                             style={{ borderColor: colors.border, color: colors.text }}>
                             <btn.icon className="w-4 h-4" /> {btn.label}
                         </Button>
                     ))}
                 </div>
-                <div className="p-4 rounded-lg text-sm"
+                <div className="p-4 text-sm"
                     style={{ backgroundColor: colors.hover, color: colors.textSecondary }}>
                     Último backup: {new Date().toLocaleDateString("pt-PT")} às 23:00
                 </div>
@@ -1081,10 +1212,10 @@ const SistemaTab = ({
                     { device: "Chrome • Windows", location: "Luanda, Angola • Ativo agora", current: true  },
                     { device: "Safari • iPhone",  location: "Luanda, Angola • há 2 dias",   current: false },
                 ].map((s, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 rounded-lg"
+                    <div key={i} className="flex items-center justify-between p-3 "
                         style={{ backgroundColor: colors.hover }}>
                         <div className="flex items-center gap-3">
-                            <div className="p-2 rounded-full" style={{
+                            <div className="p-2 " style={{
                                 backgroundColor: s.current
                                     ? `${colors.success}20`
                                     : `${colors.textSecondary}20`,
@@ -1099,11 +1230,8 @@ const SistemaTab = ({
                             </div>
                         </div>
                         {s.current
-                            ? <Badge style={{
-                                backgroundColor: `${colors.success}20`,
-                                color: colors.success,
-                              }}>Atual</Badge>
-                            : <Button variant="ghost" size="sm" style={{ color: colors.danger }}>
+                            ? <Badge style={{ backgroundColor: `${colors.success}20`, color: colors.success }}>Atual</Badge>
+                            : <Button type="button" variant="ghost" size="sm" style={{ color: colors.danger }}>
                                 <LogOut className="w-4 h-4" />
                               </Button>
                         }
@@ -1125,6 +1253,7 @@ const SistemaTab = ({
                         </p>
                     </div>
                     <Button
+                        type="button"
                         variant="destructive" className="gap-2"
                         style={{ backgroundColor: colors.danger }}
                         onClick={() => toast.error("Funcionalidade restrita")}>
@@ -1151,7 +1280,7 @@ export default function ConfiguracoesPage() {
     const tabs = [
         { value: "perfil",       icon: User,      label: "Perfil"       },
         { value: "empresa",      icon: Building2, label: "Empresa"      },
-        { value: "usuarios",     icon: User,      label: "Usuários"     },
+        { value: "usuarios",     icon: User,      label: "Utilizadores" },
         { value: "notificacoes", icon: Bell,      label: "Notificações" },
         { value: "sistema",      icon: Settings,  label: "Sistema"      },
     ];
@@ -1163,10 +1292,10 @@ export default function ConfiguracoesPage() {
                 style={{ backgroundColor: colors.background }}>
 
                 <div className="flex items-center gap-3">
-                    <Settings className="w-8 h-8" style={{ color: colors.primary }} />
+                    <Settings className="w-8 h-8" style={{ color: colors.secondary }} />
                     <div>
                         <h1 className="text-2xl md:text-3xl font-bold"
-                            style={{ color: colors.primary }}>
+                            style={{ color: colors.secondary }}>
                             Configurações
                         </h1>
                         <p className="text-sm" style={{ color: colors.textSecondary }}>

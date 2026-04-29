@@ -220,6 +220,7 @@ Route::middleware('role:admin,operador')->group(function () {
             Route::get('/stock', [RelatoriosController::class, 'stock'])->name('relatorios.stock');
             Route::get('/documentos-fiscais', [RelatoriosController::class, 'documentosFiscais'])->name('relatorios.documentos-fiscais');
             Route::get('/pagamentos-pendentes', [RelatoriosController::class, 'pagamentosPendentes'])->name('relatorios.pagamentos-pendentes');
+            Route::get('/movimentos-stock', [RelatoriosController::class, 'movimentosStock']);
             Route::get('/proformas', [RelatoriosController::class, 'proformas'])->name('relatorios.proformas');
         });
     });

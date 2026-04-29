@@ -6,7 +6,7 @@ die('Documento não encontrado');
 $empresaMoradaEstatica = 'Avenida 21 de Janeiro, Gamek';
 $empresaTelefoneEstatico = '+244 943 489 186 ';
 $empresaEmailEstatico = 'geral@sdoca.it.ao';
-$empresaLogo = asset('images/pingodagua.png');
+$empresaLogo = asset('images/3.png');
 
 $tiposDocumento = [
 'FT' => 'Fatura',
