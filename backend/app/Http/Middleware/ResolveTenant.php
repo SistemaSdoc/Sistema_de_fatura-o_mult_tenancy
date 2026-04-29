@@ -106,11 +106,6 @@ class ResolveTenant
         // 8. Reescreve URL internamente
         $this->reescreverUrl($request, $empresa);
 
-        Log::info('ResolveTenant: Iniciando', [
-    'session_tenant_id' => session('tenant_id'),
-    'host' => $request->getHost(),
-    'config_database' => config('database.connections.tenant.database'),
-]);
         return $next($request);
     }
 
@@ -286,37 +281,32 @@ class ResolveTenant
 
     // ================= CONEXÃO E CONTEXTO =================
 
-protected function conectarTenant(Empresa $empresa): void
-{
-    if (empty($empresa->db_name)) {
-        throw new \Exception("A empresa {$empresa->id} não tem nome de base de dados definido.");
+    protected function conectarTenant(Empresa $empresa): void
+    {
+        if (empty($empresa->db_name)) {
+            throw new \Exception("A empresa {$empresa->id} não tem nome de base de dados definido.");
+        }
+        Config::set('database.connections.tenant.database', $empresa->db_name);
+        Config::set('database.connections.tenant.host', env('TENANT_DB_HOST', env('DB_HOST')));
+        Config::set('database.connections.tenant.port', env('TENANT_DB_PORT', env('DB_PORT')));
+        
+        DB::purge('tenant');
+        DB::reconnect('tenant');
+
+
+        try {
+             DB::connection('tenant')->getPdo();
+            Log::info('Conexão tenant estabelecida', ['database' => $empresa->db_name]);
+        } catch (\Exception $e) {
+            throw new \Exception("Erro ao conectar à base {$empresa->db_name}: " . $e->getMessage());
+        }
+
+        Log::info('Conexão tenant configurada', [
+        'database' => Config::get('database.connections.tenant.database'),
+        'real_db' => DB::connection('tenant')->getDatabaseName(),
+    ]);
+        Config::set('database.default', 'tenant');
     }
-
-    $config = [
-        'driver'   => 'mysql',
-        'host'     => env('TENANT_DB_HOST', env('DB_HOST', '127.0.0.1')),
-        'port'     => env('TENANT_DB_PORT', env('DB_PORT', '3306')),
-        'database' => $empresa->db_name,
-        'username' => env('TENANT_DB_USERNAME', env('DB_USERNAME', 'root')),
-        'password' => env('TENANT_DB_PASSWORD', env('DB_PASSWORD', '')),
-        'charset'  => 'utf8mb4',
-        'collation'=> 'utf8mb4_unicode_ci',
-        'prefix'   => '',
-        'strict'   => true,
-        'engine'   => null,
-    ];
-
-    Config::set('database.connections.tenant', $config);
-    DB::purge('tenant');
-    DB::reconnect('tenant');
-    Config::set('database.default', 'tenant');
-
-    Log::info('ResolveTenant: Após conexão', [
-    'db_name_config' => config('database.connections.tenant.database'),
-    'default_connection' => config('database.default'),
-]);
-}
-    
 
     protected function registrarContexto(Request $request, Empresa $empresa): void
     {

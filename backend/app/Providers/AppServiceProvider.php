@@ -15,7 +15,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        
+        //
         
     }
 
@@ -26,6 +26,16 @@ class AppServiceProvider extends ServiceProvider
 public function boot()
 {
     // Se existir tenant na sessão, força a conexão antes de qualquer query
-
+ 
+     if (session()->has('tenant_id')) {
+        $tenantId = session('tenant_id');
+        $empresa = Empresa::on('landlord')->find($tenantId);
+        if ($empresa && $empresa->status === 'ativo') {
+            Config::set('database.connections.tenant.database', $empresa->db_name);
+            DB::purge('tenant');
+            DB::reconnect('tenant');
+            Config::set('database.default', 'tenant');
+        }
+    }
 }
 }
