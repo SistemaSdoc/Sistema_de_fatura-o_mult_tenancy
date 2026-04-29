@@ -1,10 +1,14 @@
 <?php
 
-namespace App\Models;
+namespace App\Models\Tenant;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
+use App\Models\Tenant\Cliente;
+use App\Models\Tenant\DocumentoFiscal;
+use App\Models\Tenant\ItemVenda;
+use App\Models\Tenant\User;
+
 
 /**
  * Model Venda
@@ -16,7 +20,7 @@ use Illuminate\Support\Str;
  *  - SoftDeletes adicionado (a migration tem softDeletes()).
  *  - Adicionados campos desconto_global e troco.
  */
-class Venda extends Model
+class Venda extends TenantModel
 {
     use SoftDeletes;
 

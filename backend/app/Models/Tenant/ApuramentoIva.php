@@ -1,11 +1,10 @@
 <?php
 
-namespace App\Models;
+namespace App\Models\Tenant;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-class ApuramentoIva extends Model
+class ApuramentoIva extends TenantModel
 {
     use HasFactory;
 

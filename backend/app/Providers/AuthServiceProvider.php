@@ -2,14 +2,15 @@
 namespace App\Providers;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 // Models
-use App\Models\Produto;
-use App\Models\Venda;
-use App\Models\Compra;
-use App\Models\Pagamento;
-use App\Models\Fatura;
-use App\Models\Categoria;
-use App\Models\User;
-use App\Models\Cliente;
+use App\Models\Tenant\Produto;
+use App\Models\Tenant\Venda;
+use App\Models\Tenant\Compra;
+use App\Models\Tenant\Pagamento;
+use App\Models\Tenant\Fatura;
+use App\Models\Tenant\Categoria;
+use App\Models\Tenant\User;
+use App\Models\Tenant\Cliente;
+use App\Models\Tenant\DocumentoFiscal;
 // Policies
 use App\Policies\ProdutoPolicy;
 use App\Policies\VendaPolicy;
@@ -32,7 +33,7 @@ class AuthServiceProvider extends ServiceProvider
         Venda::class      => VendaPolicy::class,
         Compra::class     => CompraPolicy::class,
         Pagamento::class  => PagamentoPolicy::class,
-        Fatura::class     => FaturaPolicy::class,
+        DocumentoFiscal::class     => FaturaPolicy::class,
         Categoria::class  => CategoriaPolicy::class,
         User::class       => UserPolicy::class,
         Cliente::class    => ClientePolicy::class, // ← ADICIONAR AQUI!

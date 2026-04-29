@@ -1,11 +1,10 @@
 <?php
 
-namespace App\Models;
+namespace App\Models\Tenant;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
-class LogAuditoria extends Model
+class LogAuditoria extends TenantModel
 {
     protected $table = 'logs_auditoria';
 

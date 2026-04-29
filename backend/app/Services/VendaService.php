@@ -2,9 +2,9 @@
 
 namespace App\Services;
 
-use App\Models\Venda;
-use App\Models\ItemVenda;
-use App\Models\Produto;
+use App\Models\Tenant\Venda;
+use App\Models\Tenant\ItemVenda;
+use App\Models\Tenant\Produto;
 use App\Models\Empresa;
 use App\Services\StockService;
 use App\Services\DocumentoFiscalService;

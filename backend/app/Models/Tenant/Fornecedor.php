@@ -1,12 +1,11 @@
 <?php
 
-namespace App\Models;
+namespace App\Models\Tenant;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
-class Fornecedor extends Model
+class Fornecedor extends TenantModel
 {
     use SoftDeletes;
 

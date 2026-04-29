@@ -2,72 +2,73 @@
 
 return [
 
-    /*
-    |--------------------------------------------------------------------------
-    | Default Authentication Guard
-    |--------------------------------------------------------------------------
-    */
     'defaults' => [
-        'guard' => env('AUTH_GUARD', 'web'),           // Landlord padrão
-        'passwords' => env('AUTH_PASSWORD_BROKER', 'users'),
+        'guard' => 'landlord',           // Landlord padrão para web
+        'passwords' => 'landlord_users', // Corrigido: provider name
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Authentication Guards
-    |--------------------------------------------------------------------------
-    */
     'guards' => [
-        // Landlord (Admin Global) - Web
-        'web' => [
+        // 🏠 LANDLORD - Web
+        'landlord' => [
             'driver' => 'session',
-            'provider' => 'users',
+            'provider' => 'landlord_users', //Corrigido
         ],
 
-        // Landlord - API (opcional)
-        'landlord_sanctum' => [
-            'driver' => 'sanctum',
-            'provider' => 'users',
+        // 🏠 LANDLORD - API
+        'landlord_api' => [
+            'driver' => 'session',
+            'provider' => 'landlord_users', // Corrigido
         ],
 
+        // 🏢 TENANT - Web (raro)
+        'tenant' => [
+            'driver' => 'session',
+            'provider' => 'tenant_users',     // Corrigido
+        ],
 
+        // 🏢 TENANT - API (POS)
+        'tenant_api' => [
+            'driver' => 'session',
+            'provider' => 'tenant_users',     // Corrigido
+        ],
 
+        // 🏢 TENANT - PIN
+        'tenant_pin' => [
+            'driver' => 'session',
+            'provider' => 'tenant_users',     // Corrigido
+        ],
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | User Providers
-    |--------------------------------------------------------------------------
-    */
     'providers' => [
-        // Landlord Admin
-        'users' => [
+        // 🏠 Landlord: Super Admin e Suporte
+        'landlord_users' => [              //  Corrigido: consistente
             'driver' => 'eloquent',
-            'model' => App\Models\User::class,
+            'model' => App\Models\LandlordUser::class,
         ],
 
+        // 🏢 Tenant: Admin, Operador, Contablista da empresa
+        'tenant_users' => [                //  Corrigido: consistente
+            'driver' => 'eloquent',
+            'model' => App\Models\Tenant\User::class,
+        ],
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Password Reset
-    |--------------------------------------------------------------------------
-    */
     'passwords' => [
-        // Landlord
-        'users' => [
-            'provider' => 'users',
-            'table' => env('AUTH_PASSWORD_RESET_TOKEN_TABLE', 'password_reset_tokens'),
+        'landlord_users' => [              // ✅ Corrigido: igual ao provider
+            'provider' => 'landlord_users',
+            'table' => 'password_reset_tokens',
             'expire' => 60,
             'throttle' => 60,
         ],
 
+        'tenant_users' => [               // ✅ Corrigido: igual ao provider
+            'provider' => 'tenant_users',
+            'table' => 'password_reset_tokens',
+            'expire' => 60,
+            'throttle' => 60,
+        ],
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Password Confirmation Timeout
-    |--------------------------------------------------------------------------
-    */
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
+
 ];

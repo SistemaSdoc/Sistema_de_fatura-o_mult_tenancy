@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\DocumentoFiscal;
+use App\Models\Tenant\DocumentoFiscal;
 use App\Services\DocumentoFiscalService;
 use App\Services\ImpressoraTermicaService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -12,9 +12,16 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
-use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+/**
+ * DocumentoFiscalController
+ *
+ * Responsável apenas por: validação de request, autorização, chamar o service
+ * e devolver resposta JSON/PDF/Excel.
+ * Toda a lógica de negócio (assinatura RSA, QR Code, IVA, SAF-T) está no
+ * DocumentoFiscalService.
+ */
 class DocumentoFiscalController extends Controller
 {
     protected DocumentoFiscalService $documentoService;
@@ -518,65 +525,110 @@ class DocumentoFiscalController extends Controller
         }
     }
 
+    /* =====================================================================
+     | IMPRESSÃO TÉRMICA - DIRETO NA IMPRESSORA SEM PDF
+     | ================================================================== */
+
+public function imprimirTermica(string $id, ImpressoraTermicaService $impressoraService): JsonResponse
+{
+    try {
+        $user = request()->user();
+
+        if (!$user || !$user->printer_ip) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Usuário sem impressora configurada'
+            ], 400);
+        }
+
+        $documento = $this->documentoService->buscarDocumento($id);
+        $dados = $this->documentoService->dadosParaPdf($documento);
+
+        $docInfo = $documento;
+
+        if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
+            $docInfo = DocumentoFiscal::with(['itens.produto', 'cliente'])
+                ->find($documento->fatura_id);
+        }
+
+        $dados['itens'] = $docInfo->itens ?? [];
+        $dados['docInfo'] = $docInfo;
+
+        // 🔥 AQUI A DIFERENÇA
+
+        if (!$impressoraService->testarConexao($user->printer_ip)) {
+    return response()->json([
+        'success' => false,
+        'message' => 'Impressora offline ou não acessível'
+    ], 400);
+}
+
+        $impressoraService->imprimirDocumento($documento, $dados, $user);
+        return response()->json([
+            'success' => true,
+            'message' => 'Documento impresso com sucesso'
+        ]);
+
+    } catch (\Exception $e) {
+        Log::error('Erro na impressão térmica', [
+            'id' => $id,
+            'error' => $e->getMessage()
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Erro ao imprimir: ' . $e->getMessage()
+        ], 500);
+    }
+}
 
     /* =====================================================================
        | IMPRESSÃO HTML (A4) e PDF permanecem iguais
        | ================================================================== */
     public function printView(string $id): \Illuminate\Contracts\View\View
-    {
-        try {
-            $documento = $this->documentoService->buscarDocumento($id);
-            $dados     = $this->documentoService->dadosParaPdf($documento);
+{
+    try {
+        $documento = $this->documentoService->buscarDocumento($id);
+        $dados     = $this->documentoService->dadosParaPdf($documento);
 
-            // RC: itens e totais vêm do documento de origem (FT/FA)
-            $documentoOrigem = null;
-            if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
-                $documentoOrigem = DocumentoFiscal::with(['itens.produto', 'cliente'])
-                    ->find($documento->fatura_id);
-            }
-
-            $docInfo = $documentoOrigem ?? $documento;
-
-            // ── AGT: QR Code (DP 71/25) ─────────────────────────────────
-            // QR Code é gerado para TODOS os documentos, incluindo recibos (RC)
-            $qrCodeTexto = $dados['qr_code'];
-            $qrCodeImg   = null;
-
-            if ($qrCodeTexto && class_exists(\Endroid\QrCode\QrCode::class)) {
-                try {
-                    $qrCode = \Endroid\QrCode\QrCode::create($qrCodeTexto)
-                        ->setEncoding(new \Endroid\QrCode\Encoding\Encoding('UTF-8'))
-                        ->setErrorCorrectionLevel(\Endroid\QrCode\ErrorCorrectionLevel::Medium)
-                        ->setSize(200)
-                        ->setMargin(6);
-
-                    $writer   = new \Endroid\QrCode\Writer\PngWriter();
-                    $result   = $writer->write($qrCode);
-                    $qrCodeImg = base64_encode($result->getString());
-                } catch (\Exception $qrEx) {
-                    Log::warning('QR Code generation failed, using fallback', [
-                        'error' => $qrEx->getMessage(),
-                    ]);
-                }
-            }
-
-            return view('documentos.print-view', [
-                'empresa'         => $dados['empresa'],
-                'documento'       => $documento,
-                'documentoOrigem' => $documentoOrigem,
-                'docInfo'         => $docInfo,
-                'itens'           => collect($docInfo->itens ?? []),
-                'cliente'         => $dados['cliente'],
-                'qr_code'         => $qrCodeTexto,
-                'qr_code_img'     => $qrCodeImg,
-            ]);
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
-            abort(404, 'Documento não encontrado');
-        } catch (\Exception $e) {
-            Log::error('Erro ao abrir impressão', ['id' => $id, 'error' => $e->getMessage()]);
-            abort(500, 'Erro ao carregar documento: ' . $e->getMessage());
+        $documentoOrigem = null;
+        if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
+            $documentoOrigem = DocumentoFiscal::with(['itens.produto', 'cliente'])
+                ->find($documento->fatura_id);
         }
+
+        $docInfo = $documentoOrigem ?? $documento;
+
+        $qrCodeTexto = $dados['qr_code'] ?? null;
+        $qrCodeImg = null;
+
+        if ($qrCodeTexto) {
+            $qr = new \Endroid\QrCode\QrCode($qrCodeTexto);
+            $qr->setSize(200);
+
+            $writer = new \Endroid\QrCode\Writer\PngWriter();
+            $result = $writer->write($qr);
+
+            $qrCodeImg = base64_encode($result->getString());
+            
+        }
+
+        return view('documentos.print', [
+            'documento' => $documento,
+            'dados' => $dados,
+            'docInfo' => $docInfo,
+            'qrCodeImg' => $qrCodeImg
+        ]);
+
+    } catch (\Exception $e) {
+        Log::error('Erro no printView', [
+            'id' => $id,
+            'error' => $e->getMessage()
+        ]);
+
+        abort(500, 'Erro ao gerar impressão');
     }
+}
 
     /* =====================================================================
      | PDF VIEWER — TALÃO TÉRMICO HTML (style receipt)
@@ -724,60 +776,36 @@ class DocumentoFiscalController extends Controller
         }
     }
 
-    private function gerarQrHtml(?string $qrCodeTexto): string
-    {
-        if (empty($qrCodeTexto)) return '';
+    /* =====================================================================
+     | HELPER PRIVADO
+     | ================================================================== */
 
-        // Opção 1: endroid/qr-code instalado → PNG base64
-        if (class_exists(\Endroid\QrCode\QrCode::class)) {
-            try {
-                $qr     = \Endroid\QrCode\QrCode::create($qrCodeTexto)
-                    ->setSize(106)->setMargin(4)
-                    ->setErrorCorrectionLevel(\Endroid\QrCode\ErrorCorrectionLevel::Medium);
-                $writer = new \Endroid\QrCode\Writer\PngWriter();
-                $b64    = base64_encode($writer->write($qr)->getString());
-                return '<img src="data:image/png;base64,' . $b64 . '" width="106" height="106" style="display:block;margin:0 auto;" />';
-            } catch (\Exception $e) {
-                Log::warning('QR PNG failed', ['error' => $e->getMessage()]);
-            }
-        }
+    /**
+     * Gera HTML do QR Code para passar à view PDF.
+     * Tenta endroid/qr-code (PNG base64), caso contrário SVG determinístico simples.
+     * O DomPDF suporta ambos nativamente.
+     */
 
-        // Opção 2: SVG determinístico simples
-        $hash  = hash('sha256', $qrCodeTexto);
-        $bits  = '';
-        for ($i = 0; $i < strlen($hash); $i += 2) {
-            $byte  = hexdec(substr($hash, $i, 2));
-            $bits .= str_pad(decbin($byte), 8, '0', STR_PAD_LEFT);
-        }
-        $bits = str_repeat($bits, 4);
-        $mods = 21;
-        $sz = 106;
-        $cell = (int)floor($sz / $mods);
-        $svg  = '<svg xmlns="http://www.w3.org/2000/svg" width="' . $sz . '" height="' . $sz . '" viewBox="0 0 ' . $sz . ' ' . $sz . '">';
-        $svg .= '<rect width="' . $sz . '" height="' . $sz . '" fill="white"/>';
-
-        foreach ([[0, 0], [($mods - 7) * $cell, 0], [0, ($mods - 7) * $cell]] as [$ox, $oy]) {
-            for ($r = 0; $r < 7; $r++) {
-                for ($c = 0; $c < 7; $c++) {
-                    if ($r === 0 || $r === 6 || $c === 0 || $c === 6 || ($r >= 2 && $r <= 4 && $c >= 2 && $c <= 4)) {
-                        $svg .= '<rect x="' . ($ox + $c * $cell) . '" y="' . ($oy + $r * $cell) . '" width="' . $cell . '" height="' . $cell . '" fill="#000"/>';
-                    }
-                }
-            }
-        }
-
-        for ($r = 0; $r < $mods; $r++) {
-            for ($c = 0; $c < $mods; $c++) {
-                if (($r < 9 && $c < 9) || ($r < 9 && $c >= $mods - 8) || ($r >= $mods - 8 && $c < 9)) continue;
-                if ($bits[($r * $mods + $c) % strlen($bits)] === '1') {
-                    $svg .= '<rect x="' . ($c * $cell) . '" y="' . ($r * $cell) . '" width="' . $cell . '" height="' . $cell . '" fill="#000"/>';
-                }
-            }
-        }
-        $svg .= '</svg>';
-        return $svg;
+private function gerarQrHtml(?string $qrCodeTexto): string
+{
+    if (empty($qrCodeTexto)) {
+        return '';
     }
 
+    try {
+        $qr = new \Endroid\QrCode\QrCode($qrCodeTexto);
+        $qr->setSize(200);
+
+        $writer = new \Endroid\QrCode\Writer\PngWriter();
+        $result = $writer->write($qr);
+
+        return '<img src="data:image/png;base64,' . base64_encode($result->getString()) . '" alt="QR Code">';
+    } catch (\Throwable $e) {
+        Log::warning('Falha ao gerar QR Code', ['error' => $e->getMessage()]);
+
+        return '';
+    }
+}
     private function erroInterno(string $mensagem, \Exception $e): JsonResponse
     {
         Log::error($mensagem . ':', ['error' => $e->getMessage()]);

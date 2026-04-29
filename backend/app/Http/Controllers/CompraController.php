@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Compra;
+use App\Models\Tenant\Compra;
 use Illuminate\Http\Request;
 use App\Services\CompraService;
 

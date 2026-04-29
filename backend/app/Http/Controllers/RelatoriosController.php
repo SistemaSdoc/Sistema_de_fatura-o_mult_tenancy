@@ -4,11 +4,10 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Services\RelatoriosService;
-use App\Models\DocumentoFiscal;
-use App\Models\Venda;
-use App\Models\Produto;
-use App\Models\Cliente;
-use App\Models\MovimentoStock;
+use App\Models\Tenant\DocumentoFiscal;
+use App\Models\Tenant\Venda;
+use App\Models\Tenant\Produto;
+use App\Models\Tenant\Cliente;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 

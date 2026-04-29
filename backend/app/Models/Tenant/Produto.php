@@ -1,11 +1,9 @@
 <?php
 
-namespace App\Models;
+namespace App\Models\Tenant;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
-
 /**
  * Model Produto
  *
@@ -16,7 +14,7 @@ use Illuminate\Support\Str;
  *  - Para SERVIÇOS: taxa_iva e sujeito_iva mantêm-se no modelo do serviço,
  *    pois serviços não têm categoria.
  */
-class Produto extends Model
+class Produto extends   TenantModel
 {
     use SoftDeletes;
 
@@ -125,11 +123,6 @@ class Produto extends Model
     public function categoria()
     {
         return $this->belongsTo(Categoria::class)->withTrashed();
-    }
-
-    public function user()
-    {
-        return $this->belongsTo(User::class);
     }
 
     public function fornecedor()

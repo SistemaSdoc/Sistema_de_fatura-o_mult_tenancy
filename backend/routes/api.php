@@ -1,9 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ProdutoController;
-use App\Http\Controllers\CategoriaController; // ✅ Certifique-se que está importado
+use App\Http\Controllers\CategoriaController; 
 use App\Http\Controllers\FornecedorController;
 use App\Http\Controllers\CompraController;
 use App\Http\Controllers\VendaController;
@@ -20,16 +19,13 @@ $uuidPattern = '[0-9a-fA-F-]{36}';
 
 // ==================== ROTAS PÚBLICAS ====================
 
-Route::post('/login', [AuthController::class, 'login'])->name('login');
-
 // ==================== ROTAS PROTEGIDAS ====================
-Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
+Route::middleware(['resolve.tenant', 'auth:tenant'])->group(function () use ($uuidPattern) {
+
+
 
     // ===== AUTENTICAÇÃO =====
     Route::get('/me', [UserController::class, 'me']);
-
-
-    Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
     // ===== DASHBOARD =====
     Route::prefix('dashboard')->group(function () {
@@ -39,7 +35,7 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
         Route::get('/alertas', [DashboardController::class, 'alertasPendentes'])->name('dashboard.alertas');
         Route::get('/evolucao-mensal', [DashboardController::class, 'evolucaoMensal'])->name('dashboard.evolucao');
     });
-
+    
     // ==================== ADMIN ====================
     Route::middleware('role:admin')->group(function () use ($uuidPattern) {
         Route::post('/users', [UserController::class, 'store']);
@@ -58,7 +54,7 @@ Route::middleware(['auth:sanctum'])->group(function () use ($uuidPattern) {
 
     // ==================== ADMIN + OPERADOR ====================
 // ==================== PRODUTOS ====================
-Route::middleware('role:admin,operador')->group(function () {
+Route::middleware('role:admin,operador,gestor')->group(function () {
 
     Route::prefix('produtos')->group(function () {
 
@@ -96,7 +92,7 @@ Route::middleware('role:admin,operador')->group(function () {
             Route::post('/{id}/restore', [CategoriaController::class, 'restore'])->where('id', $uuidPattern)->name('categorias.restore');
             Route::delete('/{id}/force', [CategoriaController::class, 'forceDelete'])->where('id', $uuidPattern)->name('categorias.force-delete');
 
-            // ✅ NOVA ROTA: Para dropdown de produtos (IVA incluso)
+            // NOVA ROTA: Para dropdown de produtos (IVA incluso)
             Route::get('/select', [CategoriaController::class, 'paraSelectProdutos'])->name('categorias.select');
         });
         Route::apiResource('/categorias', CategoriaController::class);
@@ -133,7 +129,7 @@ Route::middleware('role:admin,operador')->group(function () {
     });
 
     // ==================== ADMIN + OPERADOR + CONTABILISTA ====================
-    Route::middleware('role:admin,operador,contabilista')->group(function () use ($uuidPattern) {
+    Route::middleware('role:admin,operador,gestor')->group(function () use ($uuidPattern) {
 
         // VENDAS
         Route::prefix('vendas')->group(function () use ($uuidPattern) {

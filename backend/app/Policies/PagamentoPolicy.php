@@ -2,8 +2,8 @@
 
 namespace App\Policies;
 
-use App\Models\Pagamento;
-use App\Models\User;
+use App\Models\Tenant\Pagamento;
+use App\Models\Tenant\User;
 use Illuminate\Auth\Access\Response;
 
 class PagamentoPolicy

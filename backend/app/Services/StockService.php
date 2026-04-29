@@ -2,9 +2,9 @@
 
 namespace App\Services;
 
-use App\Models\MovimentoStock;
-use App\Models\Produto;
-use App\Models\DocumentoFiscal;
+use App\Models\Tenant\MovimentoStock;
+use App\Models\Tenant\Produto;
+use App\Models\Tenant\DocumentoFiscal;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;

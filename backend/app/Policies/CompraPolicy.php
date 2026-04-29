@@ -2,8 +2,8 @@
 
 namespace App\Policies;
 
-use App\Models\Compra;
-use App\Models\User;
+use App\Models\Tenant\Compra;
+use App\Models\Tenant\User;
 
 
 class CompraPolicy

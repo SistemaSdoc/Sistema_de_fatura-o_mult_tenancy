@@ -2,8 +2,8 @@
 
 namespace App\Policies;
 
-use App\Models\Fornecedor;
-use App\Models\User;
+use App\Models\Tenant\Fornecedor;
+use App\Models\Tenant\User;
 
 class FornecedorPolicy
 {

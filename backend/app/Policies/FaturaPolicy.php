@@ -2,8 +2,8 @@
 
 namespace App\Policies;
 
-use App\Models\Fatura;
-use App\Models\User;
+use App\Models\Tenant\Fatura;
+use App\Models\Tenant\User;
 use Illuminate\Auth\Access\Response;
 
 class FaturaPolicy

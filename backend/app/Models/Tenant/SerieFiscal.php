@@ -1,8 +1,7 @@
 <?php
 
-namespace App\Models;
+namespace App\Models\Tenant;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 /**
@@ -29,7 +28,7 @@ use Illuminate\Support\Str;
  * @property bool     $valida_agt
  * @property string|null $observacoes
  */
-class SerieFiscal extends Model
+class SerieFiscal extends TenantModel
 {
     protected $table = 'series_fiscais';
 

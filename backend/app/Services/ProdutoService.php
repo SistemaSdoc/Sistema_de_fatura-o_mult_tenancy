@@ -2,9 +2,8 @@
 
 namespace App\Services;
 
-use App\Models\Produto;
-use App\Models\Categoria;
-use App\Models\MovimentoStock;
+use App\Models\Tenant\Produto;
+use App\Models\Tenant\Categoria;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -62,7 +61,7 @@ class ProdutoService
             ];
 
             if ($tipo === 'produto') {
-                // ✅ Para produtos: puxar IVA da categoria e salvar no produto
+                // Para produtos: puxar IVA da categoria e salvar no produto
                 $categoria = Categoria::find($dados['categoria_id'] ?? null);
                 
                 if (!$categoria) {
@@ -84,7 +83,7 @@ class ProdutoService
                     'custo_medio'      => $precoCompra,
                     'estoque_atual'    => 0, // sempre zero; stock é adicionado via stockService
                     'estoque_minimo'   => $dados['estoque_minimo'] ?? 5,
-                    // ✅ IVA: puxado da categoria (não null!)
+                    //IVA: puxado da categoria (não null!)
                     'taxa_iva'         => $taxaIva,
                     'sujeito_iva'      => $sujeitoIva,
                     'codigo_isencao'   => $codigoIsencao,

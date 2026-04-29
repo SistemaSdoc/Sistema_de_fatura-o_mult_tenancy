@@ -2,7 +2,7 @@
 
 namespace App\Policies;
 
-use App\Models\User;
+use App\Models\Tenant\User;
 
 class VendaPolicy
 {

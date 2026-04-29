@@ -1,8 +1,7 @@
 <?php
 
-namespace App\Models;
+namespace App\Models\Tenant;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 
@@ -19,7 +18,7 @@ use Illuminate\Support\Facades\DB;
  *  - Métodos de estado: mutações simples, sem lógica de negócio (que está no service)
  *  - retencao renomeada para taxa_retencao nos fillable (consistência com o service)
  */
-class DocumentoFiscal extends Model
+class DocumentoFiscal extends TenantModel
 {
     protected $table = 'documentos_fiscais';
 
