@@ -281,32 +281,26 @@ class ResolveTenant
 
     // ================= CONEXÃO E CONTEXTO =================
 
-    protected function conectarTenant(Empresa $empresa): void
-    {
-        if (empty($empresa->db_name)) {
-            throw new \Exception("A empresa {$empresa->id} não tem nome de base de dados definido.");
-        }
-        Config::set('database.connections.tenant.database', $empresa->db_name);
-        Config::set('database.connections.tenant.host', env('TENANT_DB_HOST', env('DB_HOST')));
-        Config::set('database.connections.tenant.port', env('TENANT_DB_PORT', env('DB_PORT')));
-        
-        DB::purge('tenant');
-        DB::reconnect('tenant');
-
-
-        try {
-             DB::connection('tenant')->getPdo();
-            Log::info('Conexão tenant estabelecida', ['database' => $empresa->db_name]);
-        } catch (\Exception $e) {
-            throw new \Exception("Erro ao conectar à base {$empresa->db_name}: " . $e->getMessage());
-        }
-
-        Log::info('Conexão tenant configurada', [
-        'database' => Config::get('database.connections.tenant.database'),
-        'real_db' => DB::connection('tenant')->getDatabaseName(),
-    ]);
-        Config::set('database.default', 'tenant');
+protected function conectarTenant(Empresa $empresa): void
+{
+    if (empty($empresa->db_name)) {
+        throw new \Exception("A empresa {$empresa->id} não tem nome de base de dados definido.");
     }
+ 
+    Config::set('database.connections.tenant.database', $empresa->db_name);
+    DB::purge('tenant');
+    DB::reconnect('tenant');
+
+    // NOVO: define tenant como conexão padrão para o restante da request
+    Config::set('database.default', 'tenant');
+    DB::setDefaultConnection('tenant');
+
+    // Verificação opcional
+    Log::info('Conexão tenant ativa', [
+        'default_database' => DB::getDefaultConnection(),
+        'tenant_db' => DB::connection('tenant')->getDatabaseName(),
+    ]);
+}
 
     protected function registrarContexto(Request $request, Empresa $empresa): void
     {

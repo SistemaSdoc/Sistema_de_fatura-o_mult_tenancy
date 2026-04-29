@@ -54,7 +54,7 @@ Route::middleware(['resolve.tenant', 'auth:tenant'])->group(function () use ($uu
 
     // ==================== ADMIN + OPERADOR ====================
 // ==================== PRODUTOS ====================
-Route::middleware('role:admin,operador,gestor')->group(function () {
+Route::middleware('role:admin,operador')->group(function () {
 
     Route::prefix('produtos')->group(function () {
 
@@ -129,7 +129,7 @@ Route::middleware('role:admin,operador,gestor')->group(function () {
     });
 
     // ==================== ADMIN + OPERADOR + CONTABILISTA ====================
-    Route::middleware('role:admin,operador,gestor')->group(function () use ($uuidPattern) {
+    Route::middleware('role:admin,operador')->group(function () use ($uuidPattern) {
 
         // VENDAS
         Route::prefix('vendas')->group(function () use ($uuidPattern) {

@@ -36,6 +36,9 @@ class ProdutoController extends Controller
 
     public function index(Request $request)
     {
+
+
+     DB::connection('tenant')->getPdo();
         Log::info('[ProdutoController] user tenant check', [
     'user' => auth()->guard('tenant')->user(),
     'role' => auth()->guard('tenant')->user()?->role,

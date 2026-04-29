@@ -3,9 +3,12 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Cookie\Middleware\EncryptCookies;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Illuminate\Session\Middleware\StartSession;
 use App\Http\Middleware\RoleMiddleware;
-use App\Http\Middleware\ResolveTenant;           //  ADICIONAR
-use App\Http\Middleware\EnsureTenantConnection;    // ADICIONAR
+use App\Http\Middleware\ResolveTenant;
+use App\Http\Middleware\EnsureTenantConnection;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -15,30 +18,29 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        // CORS primeiro
         $middleware->prepend(\Illuminate\Http\Middleware\HandleCors::class);
 
-        
-        // ALIASES DOS MIDDLEWARES TENANCY
         $middleware->alias([
             'role' => RoleMiddleware::class,
             'resolve.tenant' => ResolveTenant::class,
             'tenant.auth' => EnsureTenantConnection::class,
         ]);
 
+        // Web: tenant primeiro, sessão depois
+        $middleware->prependToGroup('web', [
+            'resolve.tenant',
+            EncryptCookies::class,
+            AddQueuedCookiesToResponse::class,
+            StartSession::class,
+        ]);
 
-        //  ORDEM CORRECTA PARA O GRUPO api:
-        // 1º ResolveTenant (define a base de dados do tenant)
-        // 2º EnsureFrontendRequestsAreStateful (inicia a sessão já no tenant correcto)
+        // API: tenant primeiro, depois Sanctum
         $middleware->prependToGroup('api', [
-            \App\Http\Middleware\ResolveTenant::class,
+            'resolve.tenant',
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
-        
-  
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        // ... exceptions iguais ...
+        // suas exceptions
     })
     ->create();
-
