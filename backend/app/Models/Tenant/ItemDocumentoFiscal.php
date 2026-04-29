@@ -1,12 +1,11 @@
 <?php
 
-namespace App\Models;
+namespace App\Models\Tenant;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 use App\Services\StockService;
 
-class ItemDocumentoFiscal extends Model
+class ItemDocumentoFiscal extends TenantModel
 {
     protected $table = 'itens_documento_fiscal';
 

@@ -2,12 +2,12 @@
 
 namespace App\Services;
 
-use App\Models\Compra;
-use App\Models\ItemCompra;
-use App\Models\Produto;
-use App\Models\SerieFiscal;
-use App\Models\LogFiscal;
-use App\Models\ApuramentoIva;
+use App\Models\Tenant\Compra;
+use App\Models\Tenant\ItemCompra;
+use App\Models\Tenant\Produto;
+use App\Models\Tenant\SerieFiscal;
+use App\Models\Tenant\LogFiscal;
+use App\Models\Tenant\ApuramentoIva;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;

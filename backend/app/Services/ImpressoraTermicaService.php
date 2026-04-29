@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\DocumentoFiscal;
+use App\Models\Tenant\DocumentoFiscal;
 use Mike42\Escpos\PrintConnectors\DummyPrintConnector;
 use Mike42\Escpos\Printer;
 use Mike42\Escpos\PrintConnectors\WindowsPrintConnector;

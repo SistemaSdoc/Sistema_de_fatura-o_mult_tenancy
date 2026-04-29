@@ -2,7 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Cliente;
+use App\Models\Tenant\Cliente;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -14,6 +15,25 @@ class ClienteController extends Controller
      */
     public function index(Request $request)
     {
+            Log::info('[CLIENTE] Verificação de autenticação N Vamos analisar se esta autenticado ', [
+        'tenant_check' => Auth::guard('tenant')->check(),
+        'landlord_check' => Auth::guard('landlord')->check(),
+        'tenant_user_id' => Auth::guard('tenant')->id(),
+        'landlord_user_id' => Auth::guard('landlord')->id(),
+        'session_id' => session()->getId(),
+        'session_tenant_id' => session('tenant_id'),
+    ]);
+
+        $user = Auth::guard('tenant')->user();
+    
+    // 🔍 LOG 2: Dados do utilizador do tenant (se existir)
+    Log::info('[CLIENTE] Utilizador autenticado (tenant)', [
+        'user_id' => $user?->id ?? 'null',
+        'user_email' => $user?->email ?? 'null',
+        'user_role' => $user?->role ?? 'indefinido',
+        'user_nome' => $user?->nome ?? $user?->name ?? 'null',
+        'tenant_db' => config('database.connections.tenant.database'),
+    ]);
         $query = Cliente::query();
 
         // Filtrar por status se solicitado

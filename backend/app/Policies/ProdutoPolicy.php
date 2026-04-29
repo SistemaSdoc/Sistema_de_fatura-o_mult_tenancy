@@ -2,8 +2,8 @@
 
 namespace App\Policies;
 
-use App\Models\Produto;
-use App\Models\User;
+use App\Models\Tenant\Produto;
+use App\Models\Tenant\User;
 
 class ProdutoPolicy
 {
@@ -12,7 +12,7 @@ class ProdutoPolicy
      */
     private function canView(User $user): bool
     {
-        return in_array($user->role, ['admin', 'operador', 'contabilista']); // ✅ CORRIGIDO: 'contablista' → 'contabilista'
+        return in_array($user->role, ['admin', 'operador', 'contabilista']); // CORRIGIDO: 'contablista' → 'contabilista'
     }
 
     /**

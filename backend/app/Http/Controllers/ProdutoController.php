@@ -4,12 +4,13 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use App\Models\Produto;
-use App\Models\Categoria;
-use App\Models\Fornecedor;
+use App\Models\Tenant\Produto;
+use App\Models\Tenant\Categoria;
+use App\Models\Tenant\Fornecedor;
 use App\Services\ProdutoService;
 use Carbon\Carbon;
 use Throwable;
@@ -35,7 +36,31 @@ class ProdutoController extends Controller
 
     public function index(Request $request)
     {
-        $this->authorize('viewAny', Produto::class);
+        Log::info('[ProdutoController] user tenant check', [
+    'user' => auth()->guard('tenant')->user(),
+    'role' => auth()->guard('tenant')->user()?->role,
+]);
+
+    Log::info('[ProdutoController] Verificação de autenticação', [
+        'tenant_check' => Auth::guard('tenant')->check(),
+        'landlord_check' => Auth::guard('landlord')->check(),
+        'tenant_user_id' => Auth::guard('tenant')->id(),
+        'landlord_user_id' => Auth::guard('landlord')->id(),
+        'session_id' => session()->getId(),
+        'session_tenant_id' => session('tenant_id'),
+    ]);
+
+        $user = Auth::guard('tenant')->user();
+    
+    // 🔍 LOG 2: Dados do utilizador do tenant (se existir)
+    Log::info('[ProdutoController] Utilizador autenticado (tenant)', [
+        'user_id' => $user?->id ?? 'null',
+        'user_email' => $user?->email ?? 'null',
+        'user_role' => $user?->role ?? 'indefinido',
+        'user_nome' => $user?->nome ?? $user?->name ?? 'null',
+        'tenant_db' => config('database.connections.tenant.database'),
+    ]);
+    
 
         $filtros  = $this->extrairFiltros($request);
         $produtos = $this->produtoService->listarProdutos($filtros);
@@ -48,7 +73,7 @@ class ProdutoController extends Controller
 
     public function indexWithTrashed(Request $request)
     {
-        $this->authorize('viewAny', Produto::class);
+      
 
         $filtros  = array_merge($this->extrairFiltros($request), ['com_deletados' => true]);
         $produtos = $this->produtoService->listarProdutos($filtros);
@@ -66,7 +91,6 @@ class ProdutoController extends Controller
 
     public function indexOnlyTrashed(Request $request)
     {
-        $this->authorize('viewAny', Produto::class);
 
         $query = Produto::onlyTrashed();
 
@@ -107,7 +131,7 @@ class ProdutoController extends Controller
             ->with(['categoria', 'fornecedor', 'movimentosStock' => fn ($q) => $q->limit(10)])
             ->findOrFail($id);
 
-        $this->authorize('view', $produto);
+       
 
         // Adicionar informação de IVA efectivo na resposta
         $produtoArray = $produto->toArray();
@@ -142,7 +166,6 @@ class ProdutoController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorize('create', Produto::class);
 
         Log::info('[ProdutoController] Dados recebidos para validação:', $request->all());
 
@@ -195,7 +218,6 @@ class ProdutoController extends Controller
 
         try {
             $produto = Produto::findOrFail($id);
-            $this->authorize('update', $produto);
 
             $tipo = $request->input('tipo', $produto->tipo);
             if (! in_array($tipo, ['produto', 'servico'])) {
@@ -251,7 +273,6 @@ class ProdutoController extends Controller
     public function alterarStatus(string $id, Request $request)
     {
         $produto = Produto::findOrFail($id);
-        $this->authorize('update', $produto);
 
         $status  = $request->validate(['status' => 'required|in:ativo,inativo'])['status'];
         $produto = $this->produtoService->alterarStatus($id, $status);
@@ -270,7 +291,6 @@ class ProdutoController extends Controller
     {
         try {
             $produto = Produto::withTrashed()->findOrFail($id);
-            $this->authorize('delete', $produto);
 
             if ($produto->trashed()) {
                 return response()->json(['message' => 'Produto já está na lixeira'], 400);
@@ -316,7 +336,6 @@ class ProdutoController extends Controller
     {
         try {
             $produto = Produto::withTrashed()->findOrFail($id);
-            $this->authorize('restore', $produto);
 
             if (! $produto->trashed()) {
                 return response()->json(['message' => 'Produto não está na lixeira'], 400);
@@ -357,7 +376,6 @@ class ProdutoController extends Controller
     {
         try {
             $produto = Produto::withTrashed()->findOrFail($id);
-            $this->authorize('forceDelete', $produto);
 
             if ($produto->itensVenda()->exists() || $produto->itensCompra()->exists()) {
                 return response()->json([
@@ -393,7 +411,6 @@ class ProdutoController extends Controller
 
     public function estatisticas(Request $request)
     {
-        $this->authorize('viewAny', Produto::class);
 
         try {
             $dataInicio = $request->data_inicio;

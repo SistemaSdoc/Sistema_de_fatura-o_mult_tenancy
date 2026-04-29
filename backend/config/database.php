@@ -36,7 +36,7 @@ return [
             'driver' => 'mysql',
             'host' => env('TENANT_DB_HOST', '127.0.0.1'),
             'port' => env('TENANT_DB_PORT', '3306'),
-            'database' => null, // será definido dinamicamente
+            'database' => '',
             'username' => env('TENANT_DB_USERNAME', 'root'),
             'password' => env('TENANT_DB_PASSWORD', ''),
             'charset' => 'utf8mb4',

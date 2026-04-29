@@ -1,11 +1,10 @@
 <?php
 
-namespace App\Models;
+namespace App\Models\Tenant;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
-class ItemCompra extends Model
+class ItemCompra extends TenantModel
 {
     protected $table = 'itens_compra';
 

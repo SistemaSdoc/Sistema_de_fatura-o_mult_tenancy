@@ -2,12 +2,12 @@
 
 namespace App\Services;
 
-use App\Models\DocumentoFiscal;
-use App\Models\ItemDocumentoFiscal;
-use App\Models\Venda;
+use App\Models\Tenant\DocumentoFiscal;
+use App\Models\Tenant\ItemDocumentoFiscal;
+use App\Models\Tenant\Venda;
 use App\Models\Empresa;
-use App\Models\SerieFiscal;
-use App\Models\Produto;
+use App\Models\Tenant\SerieFiscal;
+use App\Models\Tenant\Produto;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;

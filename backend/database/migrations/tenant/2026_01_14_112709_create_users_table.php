@@ -10,17 +10,15 @@ return new class extends Migration
     {
 Schema::create('users', function (Blueprint $table) {
     $table->uuid('id')->primary();
-    $table->uuid('empresa_id');
-    $table->foreign('empresa_id')->references('id')->on('empresas');
-
 
     $table->string('name');
     $table->string('email')->unique();
     $table->string('password');
 
-    $table->enum('role', ['admin', 'operador', 'contablista'])->default('operador');
+    $table->enum('role', ['admin', 'operador', 'contablista','gestor'])->default('operador');
     $table->boolean('ativo')->default(true);
     $table->timestamp('ultimo_login')->nullable();
+    $table->string('printer_ip')->nullable();
 
     $table->timestamps();
 });

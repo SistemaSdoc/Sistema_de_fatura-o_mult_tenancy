@@ -2,10 +2,10 @@
 
 namespace App\Services;
 
-use App\Models\Produto;
-use App\Models\Venda;
-use App\Models\DocumentoFiscal;
-use App\Models\Cliente;
+use App\Models\Tenant\Produto;
+use App\Models\Tenant\Venda;
+use App\Models\Tenant\DocumentoFiscal;
+use App\Models\Tenant\Cliente;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;

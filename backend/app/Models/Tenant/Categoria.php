@@ -1,40 +1,12 @@
 <?php
 
-namespace App\Models;
+namespace App\Models\Tenant;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
-/**
- * Model Categoria
- *
- * Alterações:
- *  - Adicionados: taxa_iva, sujeito_iva, codigo_isencao ao $fillable e $casts
- *  - O IVA é agora definido ao nível da categoria e herdado pelos produtos
- *  - Serviços NÃO usam categorias — mantêm o seu próprio taxa_iva
- *
- * Taxas de IVA válidas em Angola (AGT):
- *  - 0%  → isentos (produtos agrícolas, medicamentos)
- *  - 5%  → cesta básica
- *  - 14% → taxa geral
- *
- * Categorias padrão do sistema (ver CategoriaSeeder):
- *  💻 Informática e Tecnologia   → 14%
- *  👕 Vestuário e Calçados       → 14%
- *  🏠 Casa e Escritório          → 14%
- *  🧱 Construção e Ferramentas   → 14%
- *  🚗 Automóveis e Peças         → 14%
- *  🧴 Higiene e Limpeza          → 14%
- *  🎮 Lazer e Entretenimento     → 14%
- *  🏭 Produtos Industrializados  → 14%
- *  📦 Outros                     → 14%
- *  🛒 Cesta Básica               → 5%
- *  🌾 Produtos Agrícolas         → 0% (isento)
- *  💊 Medicamentos               → 0% (isento)
- */
-class Categoria extends Model
+class Categoria extends TenantModel
 {
     use HasFactory, SoftDeletes;
 

@@ -1,8 +1,7 @@
 <?php
 
-namespace App\Models;
+namespace App\Models\Tenant;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 /**
@@ -20,7 +19,7 @@ use Illuminate\Support\Str;
  *  venda_cancelada — entrada por cancelamento de venda
  *  devolucao     — devolução avulsa
  */
-class MovimentoStock extends Model
+class MovimentoStock extends TenantModel
 {
     protected $table = 'movimentos_stock';
 

@@ -1,13 +1,12 @@
 <?php
 
-namespace App\Models;
+namespace App\Models\Tenant;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
-class Cliente extends Model
+class Cliente extends TenantModel
 {
     use HasFactory, SoftDeletes;
 

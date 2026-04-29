@@ -2,8 +2,8 @@
 
 namespace App\Policies;
 
-use App\Models\Cliente;
-use App\Models\User;
+use App\Models\Tenant\Cliente;
+use App\Models\Tenant\User;
 
 class ClientePolicy
 {

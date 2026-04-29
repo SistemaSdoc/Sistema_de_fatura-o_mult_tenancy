@@ -6,8 +6,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
-use App\Models\MovimentoStock;
-use App\Models\Produto;
+use App\Models\Tenant\MovimentoStock;
+use App\Models\Tenant\Produto;
 use App\Services\StockService;
 
 /**

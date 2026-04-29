@@ -2,28 +2,31 @@
 
 namespace App\Policies;
 
-use App\Models\Categoria;
-use App\Models\User;
-use Illuminate\Auth\Access\Response;
+use Illuminate\Support\Facades\Log;
 
 class CategoriaPolicy
 {
-    public function viewAny(User $user)
+    public function viewAny()
     {
         return true;
     }
 
-    public function create(User $user)
+    public function create($user)
+    {
+        Log::info('Policy Categoria.create', [
+        'user_id' => $user->id ?? 'null',
+        'user_class' => get_class($user),
+        'user_role' => $user->role ?? 'indefinido',
+    ]);
+        return in_array($user->role, ['admin', 'operador','contablista']);
+    }
+
+    public function update($user)
     {
         return in_array($user->role, ['admin', 'operador','contablista']);
     }
 
-    public function update(User $user)
-    {
-        return in_array($user->role, ['admin', 'operador','contablista']);
-    }
-
-    public function delete(User $user)
+    public function delete($user)
     {
         return $user->role === 'admin';
     }
