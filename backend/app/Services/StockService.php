@@ -38,7 +38,9 @@ class StockService
         string $tipo,
         string $tipoMovimento,
         ?string $referencia = null,
-        ?string $observacao = null
+        ?string $observacao = null,
+        
+    ?string $userId = null  
     ): ?MovimentoStock {
         // ✅ Validação 1: Tipo de movimento
         if (!in_array($tipoMovimento, self::TIPOS_MOVIMENTO_VALIDOS)) {
@@ -56,7 +58,7 @@ class StockService
         ]);
 
         return DB::transaction(function () use (
-            $produtoId, $quantidade, $tipo, $tipoMovimento, $referencia, $observacao
+            $produtoId, $quantidade, $tipo, $tipoMovimento, $referencia, $observacao,  $userId
         ) {
             $produto = Produto::lockForUpdate()->findOrFail($produtoId);
 
@@ -96,6 +98,10 @@ class StockService
                     'novo' => $novaQuantidade,
                 ]);
             }
+            
+        $finalUserId = $userId 
+            ?? (auth()->guard('tenant')->check() ? auth()->guard('tenant')->id() : null)
+            ?? (Auth::check() ? Auth::id() : null);
 
             $produto->estoque_atual = $novaQuantidade;
             $produto->save();
@@ -104,7 +110,7 @@ class StockService
             $movimento = MovimentoStock::create([
                 'id' => Str::uuid(),
                 'produto_id' => $produto->id,
-                'user_id' => Auth::check() ? Auth::id() : null,
+                'user_id' => $finalUserId, 
                 'tipo' => $tipo,
                 'tipo_movimento' => $tipoMovimento,
                 'quantidade' => $tipo === 'entrada' ? $quantidade : -$quantidade,
@@ -234,9 +240,10 @@ public function entradaCompra(
     string $produtoId,
     int $quantidade,
     float $precoCompra,
-    ?string $compraId = null
+    ?string $compraId = null,
+    ?string $userId = null 
 ): ?MovimentoStock {
-    return DB::transaction(function () use ($produtoId, $quantidade, $precoCompra, $compraId) {
+    return DB::transaction(function () use ($produtoId, $quantidade, $precoCompra, $compraId, $userId) {
         $produto = Produto::lockForUpdate()->findOrFail($produtoId);
 
         if ($produto->tipo === 'servico') {
@@ -265,7 +272,8 @@ public function entradaCompra(
             'entrada',
             'compra',
             $compraId,
-            'Entrada de compra com custo médio actualizado'
+            'Entrada de compra com custo médio actualizado',
+            $userId
         );
     });
 }
@@ -279,14 +287,16 @@ public function entradaCompra(
      * Regista saída de stock por venda.
      * Apenas para produtos físicos.
      */
- public function saidaVenda(string $produtoId, int $quantidade, ?string $vendaId = null): ?MovimentoStock
+ public function saidaVenda(string $produtoId, int $quantidade, ?string $vendaId = null, ?string $userId = null): ?MovimentoStock
     {
+        
+    $userId = $userId ?? auth()->guard('tenant')->id();
         if (Produto::where('id', $produtoId)->where('tipo', 'servico')->exists()) {
             Log::warning('[StockService] Saída em serviço ignorada');
             return null;
         }
 
-        return $this->movimentar($produtoId, $quantidade, 'saida', 'venda', $vendaId, 'Venda de produto');
+        return $this->movimentar($produtoId, $quantidade, 'saida', 'venda', $vendaId, 'Venda de produto',  $userId );
     }
 
     /* =====================================================================

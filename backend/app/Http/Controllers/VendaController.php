@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use App\Models\Tenant\Venda;
-
+use Illuminate\Support\Facades\Gate;
 use App\Models\Tenant\Cliente;
 use App\Models\Tenant\Produto;
 use App\Services\VendaService;
@@ -22,7 +22,7 @@ class VendaController extends Controller
 {
     public function __construct(protected VendaService $vendaService)
     {
-        $this->authorizeResource(Venda::class, 'venda');
+        
     }
 
     /* =====================================================================
@@ -50,7 +50,7 @@ class VendaController extends Controller
 
     public function index(Request $request)
     {
-        $this->authorize('viewAny', Venda::class);
+        Gate::forUser(auth('tenant')->user())->authorize('viewAny', Venda::class);
 
         $query = Venda::with([
             'cliente',
@@ -150,7 +150,7 @@ class VendaController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorize('create', Venda::class);
+           Gate::forUser(auth('tenant')->user())->authorize('create', Venda::class);
 
         $dados = $request->validate([
             'cliente_id'                  => 'nullable|uuid|exists:clientes,id',
@@ -204,7 +204,7 @@ class VendaController extends Controller
 
     public function cancelar(Venda $venda, Request $request)
     {
-        $this->authorize('cancel', $venda);
+        Gate::forUser(auth('tenant')->user())->authorize('cancel', $venda);
 
         $request->validate(['motivo' => 'required|string|max:500']);
 
@@ -233,7 +233,7 @@ class VendaController extends Controller
 
     public function gerarRecibo(Venda $venda, Request $request)
     {
-        $this->authorize('update', $venda);
+        Gate::forUser(auth('tenant')->user())->authorize('update', $venda);
 
         $dados = $request->validate([
             'valor'             => 'required|numeric|min:0.01',

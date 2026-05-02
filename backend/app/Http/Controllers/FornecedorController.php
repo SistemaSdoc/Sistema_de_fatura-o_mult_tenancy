@@ -4,20 +4,17 @@ namespace App\Http\Controllers;
 
 use App\Models\Tenant\Fornecedor;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 
 class FornecedorController extends Controller
 {
-    // REMOVIDO: $this->authorizeResource do construtor para evitar dupla autorização
-    // A autorização manual em cada método é mais explícita e controlável
-
     /**
      * Listar fornecedores ativos (não deletados)
      */
     public function index()
     {
-        $this->authorize('viewAny', Fornecedor::class);
+        Gate::forUser(auth('tenant')->user())->authorize('viewAny', Fornecedor::class);
 
         $fornecedores = Fornecedor::all();
 
@@ -32,7 +29,7 @@ class FornecedorController extends Controller
      */
     public function indexWithTrashed()
     {
-        $this->authorize('viewAny', Fornecedor::class);
+        Gate::forUser(auth('tenant')->user())->authorize('viewAny', Fornecedor::class);
 
         $fornecedores = Fornecedor::withTrashed()->get();
 
@@ -47,7 +44,7 @@ class FornecedorController extends Controller
      */
     public function indexOnlyTrashed()
     {
-        $this->authorize('viewAny', Fornecedor::class);
+        Gate::forUser(auth('tenant')->user())->authorize('viewAny', Fornecedor::class);
 
         $fornecedores = Fornecedor::onlyTrashed()->get();
 
@@ -62,7 +59,7 @@ class FornecedorController extends Controller
      */
     public function show(Fornecedor $fornecedor)
     {
-        $this->authorize('view', $fornecedor);
+        Gate::forUser(auth('tenant')->user())->authorize('view', $fornecedor);
 
         return response()->json([
             'message' => 'Fornecedor carregado com sucesso',
@@ -75,7 +72,7 @@ class FornecedorController extends Controller
      */
     public function store(Request $request)
     {
-        $this->authorize('create', Fornecedor::class);
+        Gate::forUser(auth('tenant')->user())->authorize('create', Fornecedor::class);
 
         $dados = $request->validate([
             'nome' => 'required|string|max:255',
@@ -87,12 +84,16 @@ class FornecedorController extends Controller
             'status' => 'nullable|in:ativo,inativo',
         ]);
 
-        $dados['user_id'] = Auth::id();
+        $dados['user_id'] = auth('tenant')->id();
         $dados['tipo'] = $dados['tipo'] ?? 'Nacional';
         $dados['status'] = $dados['status'] ?? 'ativo';
 
         $fornecedor = Fornecedor::create($dados);
 
+                Log::info('Criando Fornecedor', [
+            'user_id' => auth('tenant')->id(),
+            'user_role' => auth('tenant')->user()?->role,
+        ]);
         return response()->json([
             'message' => 'Fornecedor criado com sucesso',
             'fornecedor' => $fornecedor
@@ -104,14 +105,13 @@ class FornecedorController extends Controller
      */
     public function update(Request $request, Fornecedor $fornecedor)
     {
-        // Log para debug - remova após resolver
         Log::info('Tentativa de UPDATE fornecedor', [
-            'user_id' => Auth::id(),
-            'user_role' => Auth::user()?->role,
+            'user_id' => auth('tenant')->id(),
+            'user_role' => auth('tenant')->user()?->role,
             'fornecedor_id' => $fornecedor->id
         ]);
 
-        $this->authorize('update', $fornecedor);
+        Gate::forUser(auth('tenant')->user())->authorize('update', $fornecedor);
 
         $dados = $request->validate([
             'nome' => 'sometimes|required|string|max:255',
@@ -136,14 +136,13 @@ class FornecedorController extends Controller
      */
     public function destroy(Fornecedor $fornecedor)
     {
-        // Log para debug - remova após resolver
         Log::info('Tentativa de DELETE fornecedor', [
-            'user_id' => Auth::id(),
-            'user_role' => Auth::user()?->role,
+            'user_id' => auth('tenant')->id(),
+            'user_role' => auth('tenant')->user()?->role,
             'fornecedor_id' => $fornecedor->id
         ]);
 
-        $this->authorize('delete', $fornecedor);
+        Gate::forUser(auth('tenant')->user())->authorize('delete', $fornecedor);
 
         // Verifica se há compras associadas antes de "deletar"
         if ($fornecedor->compras()->count() > 0) {
@@ -166,7 +165,7 @@ class FornecedorController extends Controller
      */
     public function restore($id)
     {
-        $this->authorize('restore', Fornecedor::class);
+        Gate::forUser(auth('tenant')->user())->authorize('restore', Fornecedor::class);
 
         $fornecedor = Fornecedor::onlyTrashed()->findOrFail($id);
         $fornecedor->restore();
@@ -182,7 +181,7 @@ class FornecedorController extends Controller
      */
     public function forceDelete($id)
     {
-        $this->authorize('forceDelete', Fornecedor::class);
+        Gate::forUser(auth('tenant')->user())->authorize('forceDelete', Fornecedor::class);
 
         $fornecedor = Fornecedor::onlyTrashed()->findOrFail($id);
         $fornecedor->forceDelete();

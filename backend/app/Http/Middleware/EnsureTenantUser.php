@@ -59,7 +59,7 @@ class EnsureTenantConnection
 
         // 3. Verifica se usuário pertence ao tenant atual
         // Para LandlordUser em modo atendimento
-        if ($user instanceof \App\Models\Landlord\LandlordUser) {
+        if ($user instanceof \App\Models\LandlordUser) {
             if (!$user->podeAcessarEmpresa($empresa->id)) {
                 Log::warning('EnsureTenantConnection: LandlordUser sem acesso à empresa', [
                     'user_id' => $user->id,
@@ -83,7 +83,6 @@ class EnsureTenantConnection
         
         // Para TenantUser (usuário normal da empresa)
         elseif ($user instanceof \App\Models\Tenant\User) {
-            // ✅ CORREÇÃO: Verifica se o landlord_user_id tem acesso
             $landlordUser = $user->landlordUser(); // método correto: landlordUser()
             
             if (!$landlordUser || !$landlordUser->podeAcessarEmpresa($empresa->id)) {

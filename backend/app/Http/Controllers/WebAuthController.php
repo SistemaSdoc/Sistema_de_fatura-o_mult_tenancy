@@ -579,8 +579,6 @@ private function finalizarLogin(Request $request, $tenantUser, Empresa $empresa,
     ]);
 }
 
-
-
     private function isIP(string $valor): bool
     {
         return filter_var($valor, FILTER_VALIDATE_IP) !== false;

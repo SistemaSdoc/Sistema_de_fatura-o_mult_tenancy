@@ -2,7 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ProdutoController;
-use App\Http\Controllers\CategoriaController; 
+use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\FornecedorController;
 use App\Http\Controllers\CompraController;
 use App\Http\Controllers\VendaController;
@@ -16,18 +16,16 @@ use App\Http\Controllers\RelatoriosController;
 
 $uuidPattern = '[0-9a-fA-F-]{36}';
 
-
 // ==================== ROTAS PÚBLICAS ====================
+// (nenhuma definida por enquanto)
 
-// ==================== ROTAS PROTEGIDAS ====================
-Route::middleware(['resolve.tenant', 'auth:tenant'])->group(function () use ($uuidPattern) {
-
-
+// ==================== ROTAS PROTEGIDAS (autenticação + tenant) ====================
+Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uuidPattern) {
 
     // ===== AUTENTICAÇÃO =====
     Route::get('/me', [UserController::class, 'me']);
 
-    // ===== DASHBOARD =====
+    // ===== DASHBOARD (acessível a todos autenticados) =====
     Route::prefix('dashboard')->group(function () {
         Route::get('/', [DashboardController::class, 'index'])->name('dashboard.index');
         Route::get('/resumo-documentos-fiscais', [DashboardController::class, 'resumoDocumentosFiscais'])->name('dashboard.resumo-documentos');
@@ -35,13 +33,15 @@ Route::middleware(['resolve.tenant', 'auth:tenant'])->group(function () use ($uu
         Route::get('/alertas', [DashboardController::class, 'alertasPendentes'])->name('dashboard.alertas');
         Route::get('/evolucao-mensal', [DashboardController::class, 'evolucaoMensal'])->name('dashboard.evolucao');
     });
-    
-    // ==================== ADMIN ====================
+
+    // ==================== ADMIN apenas ====================
     Route::middleware('role:admin')->group(function () use ($uuidPattern) {
+        // Gestão de utilizadores
         Route::post('/users', [UserController::class, 'store']);
         Route::get('/users/create', [UserController::class, 'create']);
         Route::apiResource('/users', UserController::class)->except(['store']);
 
+        // Gestão completa de clientes (incluindo soft deletes e restores)
         Route::prefix('clientes')->group(function () use ($uuidPattern) {
             Route::get('/todos', [ClienteController::class, 'indexWithTrashed'])->name('clientes.todos');
             Route::post('/{id}/restore', [ClienteController::class, 'restore'])->where('id', $uuidPattern)->name('clientes.restore');
@@ -52,86 +52,92 @@ Route::middleware(['resolve.tenant', 'auth:tenant'])->group(function () use ($uu
         Route::apiResource('/clientes', ClienteController::class);
     });
 
-    // ==================== ADMIN + OPERADOR ====================
-// ==================== PRODUTOS ====================
-Route::middleware('role:admin,operador')->group(function () {
+    // ==================== ADMIN + OPERADOR (e contabilista quando aplicável) ====================
+    Route::middleware('role:admin,operador')->group(function () use ($uuidPattern) {
 
-    Route::prefix('produtos')->group(function () {
+        // ---------- PRODUTOS (CRUD completo + extras) ----------
+        // NOTA: NÃO usar Route::apiResource para evitar duplicação. Segue-se um grupo manual completo.
+        Route::prefix('produtos')->group(function () use ($uuidPattern) {
+            // Listagem com filtros (estoque_baixo, sem_estoque, tipo, categoria, busca, etc.)
+            Route::get('/', [ProdutoController::class, 'index'])->name('produtos.index');
+            // Listagem completa (inclui inativos? método "todos" do controller)
+            Route::get('/todos', [ProdutoController::class, 'todos'])->name('produtos.todos');
+            // Listagem de produtos soft deleted (lixeira)
+            Route::get('/trashed', [ProdutoController::class, 'trashed'])->name('produtos.trashed');
+            // Restaurar da lixeira
+            Route::post('/{id}/restore', [ProdutoController::class, 'restore'])->where('id', $uuidPattern)->name('produtos.restore');
+            // Eliminar permanentemente
+            Route::delete('/{id}/force', [ProdutoController::class, 'forceDelete'])->where('id', $uuidPattern)->name('produtos.force-delete');
+            // Alterar status (ativo/inativo)
+            Route::post('/{id}/status', [ProdutoController::class, 'alterarStatus'])->where('id', $uuidPattern)->name('produtos.status');
+            // Mostrar um produto específico
+            Route::get('/{id}', [ProdutoController::class, 'show'])->where('id', $uuidPattern)->name('produtos.show');
+            // Criar produto
+            Route::post('/', [ProdutoController::class, 'store'])->name('produtos.store');
+            // Actualizar produto
+            Route::put('/{id}', [ProdutoController::class, 'update'])->where('id', $uuidPattern)->name('produtos.update');
+            // Soft delete (mover para lixeira)
+            Route::delete('/{id}', [ProdutoController::class, 'destroy'])->where('id', $uuidPattern)->name('produtos.destroy');
+        });
 
-        Route::get('/todos', [ProdutoController::class, 'indexWithTrashed'])->name('produtos.todos');
-        Route::get('/trashed', [ProdutoController::class, 'indexOnlyTrashed'])->name('produtos.trashed');
-        Route::get('/deletados', [ProdutoController::class, 'indexOnlyTrashed'])->name('produtos.deletados');
-
-        // Rotas com parâmetro UUID - usar whereUuid() (mais seguro)
-        Route::post('/{id}/restore', [ProdutoController::class, 'restore'])
-            ->whereUuid('id')
-            ->name('produtos.restore');
-
-        Route::delete('/{id}/force', [ProdutoController::class, 'forceDelete'])
-            ->whereUuid('id')
-            ->name('produtos.force-delete');
-
-        Route::patch('/{id}/status', [ProdutoController::class, 'alterarStatus'])
-            ->whereUuid('id')
-            ->name('produtos.status');
-    });
-
-    // apiResource principal - aplica whereUuid automaticamente no parâmetro 'produto'
-    Route::apiResource('/produtos', ProdutoController::class)
-         ->whereUuid('produto');   // ← Esta linha resolve a maioria dos casos
-});
-
-        // ESTOQUE
-        Route::get('/estoque/resumo', [MovimentoStockController::class, 'resumo'])->name('estoque.resumo');
-        Route::get('/movimentos-stock/resumo', [MovimentoStockController::class, 'resumo'])->name('movimentos-stock.resumo');
-
-        // CATEGORIAS
+        // ---------- CATEGORIAS ----------
         Route::prefix('categorias')->group(function () use ($uuidPattern) {
+            // Rotas de listagem com trashed
             Route::get('/todas', [CategoriaController::class, 'indexWithTrashed'])->name('categorias.todas');
             Route::get('/deletadas', [CategoriaController::class, 'indexOnlyTrashed'])->name('categorias.deletadas');
             Route::post('/{id}/restore', [CategoriaController::class, 'restore'])->where('id', $uuidPattern)->name('categorias.restore');
             Route::delete('/{id}/force', [CategoriaController::class, 'forceDelete'])->where('id', $uuidPattern)->name('categorias.force-delete');
-
-            // NOVA ROTA: Para dropdown de produtos (IVA incluso)
+            // Dropdown para produtos (com informação de IVA)
             Route::get('/select', [CategoriaController::class, 'paraSelectProdutos'])->name('categorias.select');
+            // CRUD padrão (index, store, show, update, destroy)
+            Route::get('/', [CategoriaController::class, 'index'])->name('categorias.index');
+            Route::post('/', [CategoriaController::class, 'store'])->name('categorias.store');
+            Route::get('/{id}', [CategoriaController::class, 'show'])->where('id', $uuidPattern)->name('categorias.show');
+            Route::put('/{id}', [CategoriaController::class, 'update'])->where('id', $uuidPattern)->name('categorias.update');
+            Route::delete('/{id}', [CategoriaController::class, 'destroy'])->where('id', $uuidPattern)->name('categorias.destroy');
         });
-        Route::apiResource('/categorias', CategoriaController::class);
-        // FORNECEDORES
+
+        // ---------- FORNECEDORES ----------
         Route::prefix('fornecedores')->group(function () use ($uuidPattern) {
             Route::get('/todos', [FornecedorController::class, 'indexWithTrashed'])->name('fornecedores.todos');
             Route::get('/trashed', [FornecedorController::class, 'indexOnlyTrashed'])->name('fornecedores.trashed');
             Route::get('/deletados', [FornecedorController::class, 'indexOnlyTrashed'])->name('fornecedores.deletados');
             Route::post('/{id}/restore', [FornecedorController::class, 'restore'])->where('id', $uuidPattern)->name('fornecedores.restore');
             Route::delete('/{id}/force', [FornecedorController::class, 'forceDelete'])->where('id', $uuidPattern)->name('fornecedores.force-delete');
+            // CRUD padrão
+            Route::get('/', [FornecedorController::class, 'index'])->name('fornecedores.index');
+            Route::post('/', [FornecedorController::class, 'store'])->name('fornecedores.store');
+            Route::get('/{id}', [FornecedorController::class, 'show'])->where('id', $uuidPattern)->name('fornecedores.show');
+            Route::put('/{id}', [FornecedorController::class, 'update'])->where('id', $uuidPattern)->name('fornecedores.update');
+            Route::delete('/{id}', [FornecedorController::class, 'destroy'])->where('id', $uuidPattern)->name('fornecedores.destroy');
         });
-        Route::apiResource('/fornecedores', FornecedorController::class);
 
-        // CLIENTES (Operador)
+        // ---------- CLIENTES (operações comuns para operador) ----------
+        // Nota: as rotas de destroy, restore, force delete já estão no grupo admin; aqui ficam as restantes.
         Route::apiResource('/clientes', ClienteController::class)->except(['destroy']);
         Route::delete('/clientes/{id}', [ClienteController::class, 'destroy'])->where('id', $uuidPattern)->name('clientes.destroy');
         Route::post('/clientes/{id}/ativar', [ClienteController::class, 'ativar'])->where('id', $uuidPattern)->name('clientes.ativar');
         Route::post('/clientes/{id}/inativar', [ClienteController::class, 'inativar'])->where('id', $uuidPattern)->name('clientes.inativar');
 
-        // COMPRAS
+        // ---------- COMPRAS ----------
         Route::prefix('compras')->group(function () use ($uuidPattern) {
             Route::get('/', [CompraController::class, 'index'])->name('compras.index');
             Route::post('/', [CompraController::class, 'store'])->name('compras.store');
             Route::get('/{id}', [CompraController::class, 'show'])->where('id', $uuidPattern)->name('compras.show');
         });
 
-        // MOVIMENTOS DE STOCK
+        // ---------- MOVIMENTOS DE STOCK (inclui resumo) ----------
         Route::prefix('movimentos-stock')->group(function () use ($uuidPattern) {
             Route::get('/', [MovimentoStockController::class, 'index'])->name('movimentos-stock.index');
             Route::post('/', [MovimentoStockController::class, 'store'])->name('movimentos-stock.store');
             Route::post('/ajuste', [MovimentoStockController::class, 'ajuste'])->name('movimentos-stock.ajuste');
             Route::get('/{id}', [MovimentoStockController::class, 'show'])->where('id', $uuidPattern)->name('movimentos-stock.show');
         });
-    });
+        // Rota de resumo de stock (tanto em /estoque/resumo como em /movimentos-stock/resumo)
+        Route::get('/estoque/resumo', [MovimentoStockController::class, 'resumo'])->name('estoque.resumo');
+        Route::get('/movimentos-stock/resumo', [MovimentoStockController::class, 'resumo'])->name('movimentos-stock.resumo');
 
-    // ==================== ADMIN + OPERADOR + CONTABILISTA ====================
-    Route::middleware('role:admin,operador')->group(function () use ($uuidPattern) {
-
-        // VENDAS
+        // ---------- VENDAS ----------
         Route::prefix('vendas')->group(function () use ($uuidPattern) {
             Route::get('/', [VendaController::class, 'index'])->name('vendas.index');
             Route::post('/', [VendaController::class, 'store'])->name('vendas.store');
@@ -140,10 +146,9 @@ Route::middleware('role:admin,operador')->group(function () {
             Route::post('/{venda}/recibo', [VendaController::class, 'gerarRecibo'])->where('venda', $uuidPattern)->name('vendas.recibo');
         });
 
-        // ===== DOCUMENTOS FISCAIS =====
+        // ---------- DOCUMENTOS FISCAIS ----------
         Route::prefix('documentos-fiscais')->group(function () use ($uuidPattern) {
-
-            // Rotas estáticas (primeiro)
+            // Rotas estáticas primeiro
             Route::get('/exportar-excel', [DocumentoFiscalController::class, 'exportarExcel'])->name('documentos.exportar-excel');
             Route::get('/adiantamentos-pendentes', [DocumentoFiscalController::class, 'adiantamentosPendentes'])->name('documentos.adiantamentos-pendentes');
             Route::get('/proformas-pendentes', [DocumentoFiscalController::class, 'proformasPendentes'])->name('documentos.proformas-pendentes');
@@ -153,52 +158,21 @@ Route::middleware('role:admin,operador')->group(function () {
             Route::post('/emitir', [DocumentoFiscalController::class, 'emitir'])->name('documentos.emitir');
             // Listagem geral
             Route::get('/', [DocumentoFiscalController::class, 'index'])->name('documentos.index');
-
-            // Rotas com {id} (depois das estáticas)
-            Route::get('/{documento}', [DocumentoFiscalController::class, 'show'])
-                ->where('documento', $uuidPattern)
-                ->name('documentos.show');
-
-            Route::get('/{id}/pdf/download', [DocumentoFiscalController::class, 'downloadPdf'])
-                ->where('id', $uuidPattern)
-                ->name('documentos.pdf-download');
-
-            Route::get('/{id}/print-view', [DocumentoFiscalController::class, 'printView'])
-                ->where('id', $uuidPattern)
-                ->name('documentos.print-view');
-
-            Route::get('/{documento}/recibos', [DocumentoFiscalController::class, 'listarRecibos'])
-                ->where('documento', $uuidPattern)
-                ->name('documentos.recibos');
-
-            Route::post('/{id}/recibo', [DocumentoFiscalController::class, 'gerarRecibo'])
-                ->where('id', $uuidPattern)
-                ->name('documentos.gerar-recibo');
-
-            Route::post('/{documento}/cancelar', [DocumentoFiscalController::class, 'cancelar'])
-                ->where('documento', $uuidPattern)
-                ->name('documentos.cancelar');
-
-            Route::post('/{id}/nota-credito', [DocumentoFiscalController::class, 'criarNotaCredito'])
-                ->where('id', $uuidPattern)
-                ->name('documentos.nota-credito');
-            // --- Rotas com {id} — DEPOIS das rotas estáticas ---
+            // Rotas com parâmetro {id} (depois das estáticas)
             Route::get('/{documento}', [DocumentoFiscalController::class, 'show'])->where('documento', $uuidPattern)->name('documentos.show');
             Route::get('/{id}/pdf/download', [DocumentoFiscalController::class, 'downloadPdf'])->where('id', $uuidPattern)->name('documentos.pdf-download');
             Route::get('/{id}/pdf-viewer', [DocumentoFiscalController::class, 'pdfViewer'])->where('id', $uuidPattern)->name('documentos.pdf-viewer');
             Route::get('/{id}/imprimir-termica', [DocumentoFiscalController::class, 'imprimirTermica'])->where('id', $uuidPattern)->name('documentos.imprimir-termica');
             Route::get('/{id}/print-view', [DocumentoFiscalController::class, 'printView'])->where('id', $uuidPattern)->name('documentos.print');
-
-            Route::post('/{id}/nota-debito', [DocumentoFiscalController::class, 'criarNotaDebito'])
-                ->where('id', $uuidPattern)
-                ->name('documentos.nota-debito');
-
-            Route::post('/{id}/vincular-adiantamento', [DocumentoFiscalController::class, 'vincularAdiantamento'])
-                ->where('id', $uuidPattern)
-                ->name('documentos.vincular');
+            Route::get('/{documento}/recibos', [DocumentoFiscalController::class, 'listarRecibos'])->where('documento', $uuidPattern)->name('documentos.recibos');
+            Route::post('/{id}/recibo', [DocumentoFiscalController::class, 'gerarRecibo'])->where('id', $uuidPattern)->name('documentos.gerar-recibo');
+            Route::post('/{documento}/cancelar', [DocumentoFiscalController::class, 'cancelar'])->where('documento', $uuidPattern)->name('documentos.cancelar');
+            Route::post('/{id}/nota-credito', [DocumentoFiscalController::class, 'criarNotaCredito'])->where('id', $uuidPattern)->name('documentos.nota-credito');
+            Route::post('/{id}/nota-debito', [DocumentoFiscalController::class, 'criarNotaDebito'])->where('id', $uuidPattern)->name('documentos.nota-debito');
+            Route::post('/{id}/vincular-adiantamento', [DocumentoFiscalController::class, 'vincularAdiantamento'])->where('id', $uuidPattern)->name('documentos.vincular');
         });
 
-        // PAGAMENTOS
+        // ---------- PAGAMENTOS ----------
         Route::prefix('pagamentos')->group(function () use ($uuidPattern) {
             Route::get('/', [PagamentoController::class, 'index'])->name('pagamentos.index');
             Route::post('/', [PagamentoController::class, 'store'])->name('pagamentos.store');
@@ -207,7 +181,7 @@ Route::middleware('role:admin,operador')->group(function () {
             Route::delete('/{id}', [PagamentoController::class, 'destroy'])->where('id', $uuidPattern)->name('pagamentos.destroy');
         });
 
-        // RELATÓRIOS
+        // ---------- RELATÓRIOS ----------
         Route::prefix('relatorios')->group(function () {
             Route::get('/dashboard', [RelatoriosController::class, 'dashboard'])->name('relatorios.dashboard');
             Route::get('/vendas', [RelatoriosController::class, 'vendas'])->name('relatorios.vendas');
@@ -220,3 +194,5 @@ Route::middleware('role:admin,operador')->group(function () {
             Route::get('/proformas', [RelatoriosController::class, 'proformas'])->name('relatorios.proformas');
         });
     });
+
+});

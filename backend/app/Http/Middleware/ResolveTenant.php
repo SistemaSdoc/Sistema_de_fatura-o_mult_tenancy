@@ -39,6 +39,8 @@ class ResolveTenant
      */
     public function handle(Request $request, Closure $next): Response
     {
+
+
         // 1. Verifica se é rota pública (landlord only)
         if ($this->isPublicRoute($request)) {
             Config::set('database.default', 'landlord');
@@ -106,6 +108,12 @@ class ResolveTenant
         // 8. Reescreve URL internamente
         $this->reescreverUrl($request, $empresa);
 
+                    Log::info('[AuthTenant] Verificando tudo sera decidido autenticação', [
+    'guard' => 'tenant',
+    'user' => auth()->guard('tenant')->user(),
+    'path' => $request->path(),
+    'query' => $request->query(),
+]);
         return $next($request);
     }
 

@@ -68,7 +68,7 @@ class VendaService
                 'cliente_id'          => $dados['cliente_id'] ?? null,
                 'cliente_nome'        => $dados['cliente_nome'] ?? null,
                 'cliente_nif'         => $dados['cliente_nif'] ?? null,
-                'user_id'             => Auth::id(),
+                'user_id'             => auth('tenant')->id(),
                 'documento_fiscal_id' => null,
                 'numero'              => $numeroVenda,
                 'numero_documento'    => $numeroVendaFormatado,

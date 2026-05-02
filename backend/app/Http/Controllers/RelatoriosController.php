@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Services\RelatoriosService;
 use App\Models\Tenant\DocumentoFiscal;
+use App\Models\Tenant\MovimentoStock;
 use App\Models\Tenant\Venda;
 use App\Models\Tenant\Produto;
 use App\Models\Tenant\Cliente;

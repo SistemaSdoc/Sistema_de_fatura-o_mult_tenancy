@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Tenant\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 
 class UserController extends Controller
@@ -26,7 +27,11 @@ class UserController extends Controller
      */
     public function index(Request $request)
     {
-        $this->authorize('viewAny', User::class);
+        Log::info('User na política viewAny', [
+        'class' => get_class($user),
+        'role' => $user->role ?? 'null',
+        'email' => $user->email ?? 'null'
+    ]);
 
         $query = User::with('empresa');
 
@@ -56,7 +61,7 @@ class UserController extends Controller
      */
     public function show(User $user)
     {
-        $this->authorize('view', $user);
+      
 
         return response()->json([
             'message' => 'Utilizador carregado com sucesso',
@@ -69,7 +74,6 @@ class UserController extends Controller
      */
     public function store(Request $request)
     {
-        $this->authorize('create', User::class);
 
         $dados = $request->validate([
             'name'       => 'required|string|max:255',
@@ -99,7 +103,6 @@ class UserController extends Controller
      */
     public function update(Request $request, User $user)
     {
-        $this->authorize('update', $user);
 
         $dados = $request->validate([
             'name'       => 'sometimes|required|string|max:255',
@@ -128,7 +131,7 @@ class UserController extends Controller
      */
     public function destroy(User $user)
     {
-        $this->authorize('delete', $user);
+        
 
         $user->delete();
 
@@ -142,7 +145,6 @@ class UserController extends Controller
      */
     public function atualizarUltimoLogin(User $user)
     {
-        $this->authorize('update', $user);
 
         $user->ultimo_login = now();
         $user->save();

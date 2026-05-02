@@ -174,6 +174,7 @@ class ProdutoController extends Controller
 
         try {
             $dados = $request->validate($this->regrasValidacao($request->tipo ?? 'produto'));
+            $dados['user_id'] = Auth::guard('tenant')->id();
             Log::info('[ProdutoController] Dados validados com sucesso:', $dados);
         } catch (\Illuminate\Validation\ValidationException $e) {
             Log::error('[ProdutoController] ERRO DE VALIDAÇÃO:', [
@@ -187,6 +188,7 @@ class ProdutoController extends Controller
         }
 
         try {
+            $dados['user_id'] = Auth::guard('tenant')->id();
             $produto = $this->produtoService->criarProduto($dados);
 
             // Carregar categoria para retornar IVA efectivo na resposta

@@ -21,7 +21,7 @@ Route::middleware(['web', 'resolve.tenant'])->group(function () {
     Route::post('/login', [WebAuthController::class, 'login']);
     
     // Rotas protegidas por autenticação (guard tenant com sessão)
-    Route::middleware('auth:tenant')->group(function () {
+    Route::middleware('auth.tenant')->group(function () {
         Route::post('/logout', [WebAuthController::class, 'logout']);
         Route::get('/me', [WebAuthController::class, 'me']);
     });

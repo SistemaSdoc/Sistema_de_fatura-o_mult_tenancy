@@ -8,6 +8,7 @@ use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Session\Middleware\StartSession;
 use App\Http\Middleware\RoleMiddleware;
 use App\Http\Middleware\ResolveTenant;
+use App\Http\Middleware\AuthTenant;
 use App\Http\Middleware\EnsureTenantConnection;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -24,6 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => RoleMiddleware::class,
             'resolve.tenant' => ResolveTenant::class,
             'tenant.auth' => EnsureTenantConnection::class,
+            'auth.tenant' => AuthTenant::class, 
         ]);
 
         // Web: tenant primeiro, sessão depois

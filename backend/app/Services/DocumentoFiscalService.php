@@ -202,7 +202,7 @@ class DocumentoFiscalService
 
             $documentoData = [
                 'id'                  => Str::uuid(),
-                'user_id'             => Auth::id(),
+                'user_id'             => auth('tenant')->id(),
                 'venda_id'            => $dados['venda_id'] ?? null,
                 'fatura_id'           => $dados['fatura_id'] ?? null,
                 'serie'               => $serieFiscal->serie,
@@ -339,7 +339,7 @@ class DocumentoFiscalService
 
             $reciboData = [
                 'id'                    => Str::uuid(),
-                'user_id'               => Auth::id(),
+                'user_id'               => auth('tenant')->id(),
                 'fatura_id'             => $documentoOrigem->id,
                 'serie'                 => $serieFiscal->serie,
                 'numero'                => $numero,
@@ -621,7 +621,7 @@ class DocumentoFiscalService
                 'estado'               => DocumentoFiscal::ESTADO_CANCELADO,
                 'motivo_cancelamento'  => $motivo,
                 'data_cancelamento'    => $agoraAngola,
-                'user_cancelamento_id' => Auth::id(),
+                'user_cancelamento_id' => auth('tenant')->id(),
                 // hash_fiscal, rsa_assinatura, rsa_versao_chave, qr_code — NÃO TOCAR
             ]);
 

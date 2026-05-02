@@ -10,19 +10,19 @@ export type UnidadeMedida = "hora" | "dia" | "semana" | "mes";
 export type TipoPreco = "fixo" | "margem" | "markup";
 export type CodigoIsencao = "M00" | "M01" | "M02" | "M03" | "M04" | "M05" | "M06" | "M99";
 
-// ✅ NOVO: Taxas de IVA válidas em Angola
+//  NOVO: Taxas de IVA válidas em Angola
 export type TaxaIVA = 0 | 5 | 14;
 
 // ===== INTERFACES =====
 
-// ✅ ATUALIZADO: Categoria com campos de IVA
+//  ATUALIZADO: Categoria com campos de IVA
 export interface Categoria {
     id: string;
     nome: string;
     descricao?: string;
     tipo?: "produto" | "servico";
     status?: "ativo" | "inativo";
-    // ✅ NOVOS: Campos de IVA da categoria
+    //  NOVOS: Campos de IVA da categoria
     taxa_iva: number;
     sujeito_iva: boolean;
     codigo_isencao?: CodigoIsencao | null;
