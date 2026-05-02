@@ -433,14 +433,13 @@ class DocumentoFiscalService {
      * Abre o template de impressão Laravel numa nova tab.
      * Com auto=true (padrão) chama window.print() imediatamente.
      */
-    abrirImpressao(id: string, auto = true): void {
-        const base = typeof window !== 'undefined'
-            ? (process.env.NEXT_PUBLIC_API_URL ?? '')
-            : '';
-        const url = `${base}/api/documentos-fiscais/${id}/print${auto ? '?auto=1' : ''}`;
-        window.open(url, '_blank');
-    }
-
+async abrirImpressao(id: string, auto = true): Promise<void> {
+    const url = `/api/documentos-fiscais/${id}/pdf-viewer${auto ? '?auto=1' : ''}`;
+    const response = await api.get(url, { responseType: 'text' });
+    const blob = new Blob([response.data], { type: 'text/html' });
+    const blobUrl = URL.createObjectURL(blob);
+    window.open(blobUrl, '_blank');
+}
     /**
      * Download do PDF gerado pelo backend (DomPDF).
      */

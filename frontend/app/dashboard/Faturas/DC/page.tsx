@@ -23,11 +23,21 @@ async function garantirCsrf(baseUrl: string) {
   }
 }
 
+
 async function abrirUrlAutenticada(url: string, tipo: "pdf" | "html" = "pdf") {
   const baseUrl = url.split("/api/")[0];
+
+  // 1. Garantir CSRF (opcional, mas mantém)
   await garantirCsrf(baseUrl);
   const xsrf = getXsrfToken();
 
+  // 2. ⭐ Obter o tenant ID (igual ao usado no axios.ts)
+  const tenantId = localStorage.getItem("tenant_id");
+  if (!tenantId) {
+    throw new Error("Empresa não identificada. Faça login novamente.");
+  }
+
+  // 3. Requisição com os headers completos
   const res = await fetch(url, {
     method: "GET",
     credentials: "include",
@@ -35,6 +45,7 @@ async function abrirUrlAutenticada(url: string, tipo: "pdf" | "html" = "pdf") {
       Accept: tipo === "pdf" ? "application/pdf,*/*" : "text/html,*/*",
       "X-XSRF-TOKEN": xsrf,
       "X-Requested-With": "XMLHttpRequest",
+      "X-Empresa-ID": tenantId,      // ← ADICIONADO
     },
   });
 
@@ -50,7 +61,7 @@ async function abrirUrlAutenticada(url: string, tipo: "pdf" | "html" = "pdf") {
   if (win) {
     win.addEventListener("load", () => URL.revokeObjectURL(blobUrl), { once: true });
   } else {
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
   }
 }
 /* ─────────────────────────────────────────────────────────────────────────── */

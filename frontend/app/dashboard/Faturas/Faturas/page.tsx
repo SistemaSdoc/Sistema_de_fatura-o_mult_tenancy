@@ -30,22 +30,27 @@ async function garantirCsrf(baseUrl: string) {
 
 // ── Helper principal: abre PDF ou HTML autenticado via Blob URL ─────────────
 async function abrirUrlAutenticada(url: string, tipo: "pdf" | "html" = "pdf") {
-  // Extrai baseUrl a partir do url completo
   const baseUrl = url.split("/api/")[0];
 
-  // 1. Garante o cookie de sessão + CSRF
+  // 1. Garantir CSRF (opcional, mas mantém)
   await garantirCsrf(baseUrl);
-
   const xsrf = getXsrfToken();
 
-  // 2. Faz fetch autenticado — os cookies de sessão Laravel vão no credentials
+  // 2.  Obter o tenant ID (igual ao usado no axios.ts)
+  const tenantId = localStorage.getItem("tenant_id");
+  if (!tenantId) {
+    throw new Error("Empresa não identificada. Faça login novamente.");
+  }
+
+  // 3. Requisição com os headers completos
   const res = await fetch(url, {
     method: "GET",
-    credentials: "include",           // envia session cookie + XSRF-TOKEN cookie
+    credentials: "include",
     headers: {
       Accept: tipo === "pdf" ? "application/pdf,*/*" : "text/html,*/*",
-      "X-XSRF-TOKEN": xsrf,           // header CSRF obrigatório no Laravel
+      "X-XSRF-TOKEN": xsrf,
       "X-Requested-With": "XMLHttpRequest",
+      "X-Empresa-ID": tenantId,      // ← ADICIONADO
     },
   });
 
@@ -54,7 +59,6 @@ async function abrirUrlAutenticada(url: string, tipo: "pdf" | "html" = "pdf") {
     throw new Error(`Erro ${res.status}: ${body || res.statusText}`);
   }
 
-  // 3. Converte para Blob e abre numa nova aba
   const blob = await res.blob();
   const blobUrl = URL.createObjectURL(blob);
   const win = window.open(blobUrl, "_blank");
@@ -62,8 +66,7 @@ async function abrirUrlAutenticada(url: string, tipo: "pdf" | "html" = "pdf") {
   if (win) {
     win.addEventListener("load", () => URL.revokeObjectURL(blobUrl), { once: true });
   } else {
-    // Popup bloqueado — fallback com link
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
   }
 }
 // ───────────────────────────────────────────────────────────────────────────
