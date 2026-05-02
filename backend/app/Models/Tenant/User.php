@@ -30,7 +30,7 @@ class User extends Authenticatable implements MustVerifyEmail  //  Extends Authe
     protected $fillable = [
         'id',
         'landlord_user_id',     //  Link para LandlordUser
-        'nome',
+        'name',
         'email',
         'pin',                  // Login rápido no caixa
         'password',

@@ -637,6 +637,7 @@ public function imprimirTermica(string $id, ImpressoraTermicaService $impressora
     public function pdfViewer(string $id): \Illuminate\Contracts\View\View
     {
         try {
+            \Log::info('pdfViewer called', ['id' => $id]);
             $documento = $this->documentoService->buscarDocumento($id);
             $dados     = $this->documentoService->dadosParaPdf($documento);
 
@@ -683,6 +684,8 @@ public function imprimirTermica(string $id, ImpressoraTermicaService $impressora
             ]);
 
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
+             \Log::error('InvalidArgumentException', ['message' => $e->getMessage()]);
+        return response()->json(['error' => $e->getMessage()], 400);
             abort(404, 'Documento não encontrado');
         } catch (\Exception $e) {
             Log::error('Erro ao gerar visualização PDF', ['id' => $id, 'error' => $e->getMessage()]);
