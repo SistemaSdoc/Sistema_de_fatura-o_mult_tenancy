@@ -336,10 +336,10 @@ export default function MainEmpresa({
       links:
         userRole === "admin" || userRole === "operador"
           ? [
-              { label: "Venda a pronto", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart },
-              { label: "Venda a prazo", path: "/dashboard/Faturas/Fatura_Normal", icon: ShoppingCart },
+              { label: "Gerar Faturas-recibo", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart },
+              { label: "Gerar Faturas", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
               { label: "Gerar proformas", path: "/dashboard/Faturas/Faturas_Proforma", icon: FileText },
-              { label: "Histórico de Vendas", path: "/dashboard/Faturas/Faturas", icon: FileText },
+              { label: "Vendas", path: "/dashboard/Faturas/Faturas", icon: FileText },
             ]
           : [],
       isGroup: true,

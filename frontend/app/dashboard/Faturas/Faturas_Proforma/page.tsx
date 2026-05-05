@@ -289,13 +289,6 @@ export default function NovaFaturaProformaPage() {
             }
 
             if (observacoes.trim()) payload.motivo = observacoes.trim();
-
-            const resultado = await emitirDocumentoFiscal(payload);
-            const numDoc =
-                (resultado as { documento?: { numero_documento?: string } })?.documento?.numero_documento ||
-                (resultado as { data?: { documento?: { numero_documento?: string } } })?.data?.documento?.numero_documento ||
-                'N/A';
-            setSucesso(` Proforma criada com sucesso! Nº: ${numDoc}`);
             setTimeout(() => router.push("/dashboard/Faturas/DC"), 1500);
         } catch (err: unknown) {
             setError(err instanceof AxiosError ? err.response?.data?.message || "Erro ao salvar proforma" : "Erro ao salvar proforma");
@@ -672,7 +665,7 @@ export default function NovaFaturaProformaPage() {
                             <table className="w-full text-sm">
                                 <thead style={{ backgroundColor: colors.hover }}>
                                     <tr className="border-b" style={{ borderColor: colors.border }}>
-                                        <th className="py-2.5 px-3 text-left font-semibold text-xs" style={{ color: colors.textSecondary }}>Produto</th>
+                                        <th className="py-2.5 px-3 text-left font-semibold text-xs" style={{ color: colors.textSecondary }}>Produto/Serviço</th>
                                         <th className="py-2.5 px-3 text-center font-semibold text-xs" style={{ color: colors.textSecondary }}>Qtd.</th>
                                         <th className="py-2.5 px-3 text-right font-semibold text-xs hidden sm:table-cell" style={{ color: colors.textSecondary }}>Preço unit.</th>
                                         <th className="py-2.5 px-3 text-right font-semibold text-xs hidden md:table-cell" style={{ color: colors.textSecondary }}>IVA</th>

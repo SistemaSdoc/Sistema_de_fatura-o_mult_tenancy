@@ -443,11 +443,6 @@ export default function NovaFaturaReciboPage() {
         return;
       }
 
-      await vendaService.criar(payload);
-      setSucesso(
-        "Fatura-Recibo criada!" +
-          (troco > 0 ? " Troco: " + formatarPreco(troco) : ""),
-      );
       setTimeout(() => router.push("/dashboard/Faturas/Faturas"), 1500);
     } catch (err: unknown) {
       setError(

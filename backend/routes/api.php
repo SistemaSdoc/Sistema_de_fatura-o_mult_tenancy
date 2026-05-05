@@ -98,18 +98,36 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
         });
 
         // ---------- FORNECEDORES ----------
+        // ---------- FORNECEDORES ----------
         Route::prefix('fornecedores')->group(function () use ($uuidPattern) {
+
             Route::get('/todos', [FornecedorController::class, 'indexWithTrashed'])->name('fornecedores.todos');
             Route::get('/trashed', [FornecedorController::class, 'indexOnlyTrashed'])->name('fornecedores.trashed');
             Route::get('/deletados', [FornecedorController::class, 'indexOnlyTrashed'])->name('fornecedores.deletados');
-            Route::post('/{id}/restore', [FornecedorController::class, 'restore'])->where('id', $uuidPattern)->name('fornecedores.restore');
-            Route::delete('/{id}/force', [FornecedorController::class, 'forceDelete'])->where('id', $uuidPattern)->name('fornecedores.force-delete');
+
+            Route::post('/{id}/restore', [FornecedorController::class, 'restore'])
+                ->where('id', $uuidPattern)
+                ->name('fornecedores.restore');
+
+            Route::delete('/{id}/force', [FornecedorController::class, 'forceDelete'])
+                ->where('id', $uuidPattern)
+                ->name('fornecedores.force-delete');
+
             // CRUD padrão
             Route::get('/', [FornecedorController::class, 'index'])->name('fornecedores.index');
             Route::post('/', [FornecedorController::class, 'store'])->name('fornecedores.store');
-            Route::get('/{id}', [FornecedorController::class, 'show'])->where('id', $uuidPattern)->name('fornecedores.show');
-            Route::put('/{id}', [FornecedorController::class, 'update'])->where('id', $uuidPattern)->name('fornecedores.update');
-            Route::delete('/{id}', [FornecedorController::class, 'destroy'])->where('id', $uuidPattern)->name('fornecedores.destroy');
+
+            Route::get('/{id}', [FornecedorController::class, 'show'])
+                ->where('id', $uuidPattern)
+                ->name('fornecedores.show');
+
+            Route::put('/{id}', [FornecedorController::class, 'update'])
+                ->where('id', $uuidPattern)
+                ->name('fornecedores.update');
+
+            Route::delete('/{id}', [FornecedorController::class, 'destroy'])
+                ->where('id', $uuidPattern)
+                ->name('fornecedores.destroy');
         });
 
         // ---------- CLIENTES (operações comuns para operador) ----------
@@ -194,5 +212,4 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::get('/proformas', [RelatoriosController::class, 'proformas'])->name('relatorios.proformas');
         });
     });
-
 });

@@ -75,84 +75,96 @@ class FornecedorController extends Controller
         Gate::forUser(auth('tenant')->user())->authorize('create', Fornecedor::class);
 
         $dados = $request->validate([
-            'nome' => 'required|string|max:255',
-            'nif' => 'required|string|max:50|unique:fornecedores,nif',
+            'nome'     => 'required|string|max:255',
+            'nif'      => 'required|string|max:50|unique:fornecedores,nif',
             'telefone' => 'nullable|string|max:20',
-            'email' => 'nullable|email|max:255|unique:fornecedores,email',
+            'email'    => 'nullable|email|max:255|unique:fornecedores,email',
             'endereco' => 'nullable|string',
-            'tipo' => 'nullable|in:Nacional,Internacional',
-            'status' => 'nullable|in:ativo,inativo',
+            'tipo'     => 'nullable|in:Nacional,Internacional',
+            'status'   => 'nullable|in:ativo,inativo',
         ]);
 
         $dados['user_id'] = auth('tenant')->id();
-        $dados['tipo'] = $dados['tipo'] ?? 'Nacional';
-        $dados['status'] = $dados['status'] ?? 'ativo';
+        $dados['tipo']    = $dados['tipo'] ?? 'Nacional';
+        $dados['status']  = $dados['status'] ?? 'ativo';
 
         $fornecedor = Fornecedor::create($dados);
 
-                Log::info('Criando Fornecedor', [
-            'user_id' => auth('tenant')->id(),
-            'user_role' => auth('tenant')->user()?->role,
+        Log::info('Fornecedor criado com sucesso', [
+            'fornecedor_id' => $fornecedor->id,
+            'nome' => $fornecedor->nome
         ]);
+
         return response()->json([
             'message' => 'Fornecedor criado com sucesso',
             'fornecedor' => $fornecedor
-        ]);
+        ], 201);
     }
 
     /**
-     * Atualizar fornecedor
+     * Atualizar fornecedor (EDITAR)
      */
-    public function update(Request $request, Fornecedor $fornecedor)
+    public function update(Request $request, $id)
     {
-        Log::info('Tentativa de UPDATE fornecedor', [
-            'user_id' => auth('tenant')->id(),
-            'user_role' => auth('tenant')->user()?->role,
-            'fornecedor_id' => $fornecedor->id
-        ]);
+        $fornecedor = Fornecedor::findOrFail($id);
 
         Gate::forUser(auth('tenant')->user())->authorize('update', $fornecedor);
 
-        $dados = $request->validate([
-            'nome' => 'sometimes|required|string|max:255',
-            'nif' => 'sometimes|required|string|max:50|unique:fornecedores,nif,' . $fornecedor->id,
-            'telefone' => 'nullable|string|max:20',
-            'email' => 'nullable|email|max:255|unique:fornecedores,email,' . $fornecedor->id,
-            'endereco' => 'nullable|string',
-            'tipo' => 'nullable|in:Nacional,Internacional',
-            'status' => 'nullable|in:ativo,inativo',
-        ]);
+        try {
+            $dados = $request->validate([
+                'nome'     => 'sometimes|required|string|max:255',
+                'nif'      => 'sometimes|required|string|max:50|unique:fornecedores,nif,' . $fornecedor->id,
+                'telefone' => 'nullable|string|max:30',
+                'email'    => 'nullable|email|max:255|unique:fornecedores,email,' . $fornecedor->id,
+                'endereco' => 'nullable|string',
+                'tipo'     => 'nullable|in:Nacional,Internacional',
+                'status'   => 'nullable|in:ativo,inativo',
+            ]);
 
-        $fornecedor->update($dados);
+            // Normalização extra (segurança)
+            if (isset($dados['tipo'])) {
+                $dados['tipo'] = ucfirst(strtolower($dados['tipo']));
+            }
 
-        return response()->json([
-            'message' => 'Fornecedor atualizado com sucesso',
-            'fornecedor' => $fornecedor
-        ]);
+            $fornecedor->update($dados);
+
+            return response()->json([
+                'message'    => 'Fornecedor atualizado com sucesso',
+                'fornecedor' => $fornecedor->fresh()
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'message' => 'Erro de validação',
+                'errors'  => $e->errors()
+            ], 422);
+        }
     }
-
     /**
-     * Soft Delete - "Deletar" fornecedor (mantém no banco)
+     * Soft Delete - Mover fornecedor para a lixeira
      */
-    public function destroy(Fornecedor $fornecedor)
+    public function destroy($id)
     {
-        Log::info('Tentativa de DELETE fornecedor', [
-            'user_id' => auth('tenant')->id(),
-            'user_role' => auth('tenant')->user()?->role,
-            'fornecedor_id' => $fornecedor->id
+        Log::info('🗑️ Tentativa de SOFT DELETE fornecedor', [
+            'id_recebido' => $id,
+            'user_id'     => auth('tenant')->id(),
+            'user_role'   => auth('tenant')->user()?->role,
         ]);
+
+        $fornecedor = Fornecedor::findOrFail($id);
 
         Gate::forUser(auth('tenant')->user())->authorize('delete', $fornecedor);
 
-        // Verifica se há compras associadas antes de "deletar"
+        // Verifica se tem compras associadas
         if ($fornecedor->compras()->count() > 0) {
             return response()->json([
-                'message' => 'Não é possível deletar fornecedor com compras associadas',
-                'error' => 'fornecedor_has_compras'
+                'message' => 'Não é possível mover para a lixeira: este fornecedor tem compras associadas.',
+                'error'   => 'fornecedor_has_compras'
             ], 422);
         }
 
         $fornecedor->delete(); // Soft delete
+
+        Log::info('✅ Fornecedor movido para lixeira', ['id' => $id, 'nome' => $fornecedor->nome]);
 
         return response()->json([
             'message' => 'Fornecedor movido para a lixeira com sucesso',
@@ -177,7 +189,7 @@ class FornecedorController extends Controller
     }
 
     /**
-     * Deletar permanentemente (force delete)
+     * Deletar permanentemente
      */
     public function forceDelete($id)
     {

@@ -10,56 +10,50 @@ use Illuminate\Support\Facades\Log;
 /**
  * CategoriaController
  *
- * Alterações:
- *  - Adicionada validação de taxa_iva, sujeito_iva e codigo_isencao
- *  - taxa_iva é agora o campo central — herdado por todos os produtos da categoria
- *  - Serviços NÃO usam este controller para IVA (têm o seu próprio)
- *
- * Taxas de IVA válidas em Angola (AGT):
- *  - 0%  → isentos (produtos agrícolas, medicamentos)
- *  - 5%  → cesta básica
- *  - 14% → taxa geral
+ * Alterações realizadas:
+ *  - Melhor tratamento do guard 'tenant' no construtor
+ *  - Logging mais claro para debug de autenticação
+ *  - Uso correto de Auth::guard('tenant') em todo o controller
+ *  - authorizeResource mantido, mas com middleware explícito
  */
 class CategoriaController extends Controller
 {
     public function __construct()
     {
+        // Middleware explícito para garantir autenticação pelo tenant guard
+        $this->middleware('auth:tenant');
+
+        // Autorização via Policy para todas as actions do resource
         $this->authorizeResource(Categoria::class, 'categoria');
-            Log::info('[Categoria nova] Verificação de autenticação', [
-        'tenant_check' => Auth::guard('tenant')->check(),
-        'landlord_check' => Auth::guard('landlord')->check(),
-        'tenant_user_id' => Auth::guard('tenant')->id(),
-        'landlord_user_id' => Auth::guard('landlord')->id(),
-        'session_id' => session()->getId(),
-        'session_tenant_id' => session('tenant_id'),
-    ]);
+
+        Log::info('[CategoriaController] Construtor executado', [
+            'tenant_check'      => Auth::guard('tenant')->check(),
+            'tenant_user_id'    => Auth::guard('tenant')->id(),
+            'landlord_check'    => Auth::guard('landlord')->check(),
+            'default_guard'     => Auth::getDefaultDriver(),
+            'session_id'        => session()->getId(),
+            'session_tenant_id' => session('tenant_id'),
+        ]);
 
         $user = Auth::guard('tenant')->user();
-    
-    // 🔍 LOG 2: Dados do utilizador do tenant (se existir)
-    Log::info('[Categoria] Utilizador autenticado (tenant)', [
-        'user_id' => $user?->id ?? 'null',
-        'user_email' => $user?->email ?? 'null',
-        'user_role' => $user?->role ?? 'indefinido',
-        'user_nome' => $user?->nome ?? $user?->name ?? 'null',
-        'tenant_db' => config('database.connections.tenant.database'),
-    ]);
+
+        Log::info('[CategoriaController] Utilizador autenticado (tenant)', [
+            'user_id'    => $user?->id ?? 'null',
+            'user_email' => $user?->email ?? 'null',
+            'user_role'  => $user?->role ?? 'indefinido',
+            'user_nome'  => $user?->nome ?? $user?->name ?? 'null',
+            'tenant_db'  => config('database.connections.tenant.database') ?? 'null',
+        ]);
     }
 
     /* =====================================================================
      | LISTAGEM
      | ================================================================== */
 
-    /**
-     * Listar todas as categorias activas com informação de IVA.
-     */
     public function index(Request $request)
     {
-
-
         $query = Categoria::query();
 
-        // Filtros opcionais
         if ($request->filled('tipo')) {
             $query->where('tipo', $request->tipo);
         }
@@ -74,7 +68,6 @@ class CategoriaController extends Controller
             $query->where('nome', 'like', '%' . $request->busca . '%');
         }
 
-        // Filtro por IVA
         if ($request->filled('taxa_iva')) {
             $query->where('taxa_iva', $request->taxa_iva);
         }
@@ -97,10 +90,6 @@ class CategoriaController extends Controller
         ]);
     }
 
-    /**
-     * Listar categorias para dropdown/select no formulário de produtos.
-     * Retorna apenas os campos necessários para o frontend.
-     */
     public function paraSelectProdutos()
     {
         $categorias = Categoria::where('status', 'ativo')
@@ -114,7 +103,7 @@ class CategoriaController extends Controller
                 'taxa_iva'       => (float) $c->taxa_iva,
                 'sujeito_iva'    => (bool) $c->sujeito_iva,
                 'codigo_isencao' => $c->codigo_isencao,
-                'label_iva'      => $c->labelTaxaIva(), // ex: "14%" ou "Isento (0%)"
+                'label_iva'      => $c->labelTaxaIva(),
             ]);
 
         return response()->json([
@@ -149,28 +138,30 @@ class CategoriaController extends Controller
     {
         $dados = $request->validate($this->regrasValidacao());
 
-        // Garantir consistência: se não sujeito a IVA, taxa = 0
-        if (isset($dados['sujeito_iva']) && ! $dados['sujeito_iva']) {
+        // Garantir consistência de IVA
+        if (isset($dados['sujeito_iva']) && !$dados['sujeito_iva']) {
             $dados['taxa_iva'] = 0.00;
         }
 
-        // Se taxa = 0 e sujeito_iva não foi enviado, inferir isenção
-        if (isset($dados['taxa_iva']) && (float) $dados['taxa_iva'] === 0.0) {
+        if (isset($dados['taxa_iva']) && (float)$dados['taxa_iva'] === 0.0) {
             $dados['sujeito_iva'] = false;
         }
 
-        $dados['status']  = $dados['status'] ?? 'ativo';
-        $dados['tipo']    = $dados['tipo'] ?? 'produto';
-        $dados['taxa_iva'] = $dados['taxa_iva'] ?? 14.00;
-        $dados['sujeito_iva'] = $dados['sujeito_iva'] ?? true;
-        $dados['user_id'] = Auth::id();
+        $dados['status']       = $dados['status'] ?? 'ativo';
+        $dados['tipo']         = $dados['tipo'] ?? 'produto';
+        $dados['taxa_iva']     = $dados['taxa_iva'] ?? 14.00;
+        $dados['sujeito_iva']  = $dados['sujeito_iva'] ?? true;
+        
+        // Usar o guard correto do tenant
+        $dados['user_id'] = Auth::guard('tenant')->id();
 
         $categoria = Categoria::create($dados);
 
-        Log::info('[CategoriaController] Categoria criada', [
+        Log::info('[CategoriaController] Categoria criada com sucesso', [
             'id'       => $categoria->id,
             'nome'     => $categoria->nome,
             'taxa_iva' => $categoria->taxa_iva,
+            'user_id'  => $dados['user_id'],
         ]);
 
         return response()->json([
@@ -187,12 +178,11 @@ class CategoriaController extends Controller
     {
         $dados = $request->validate($this->regrasValidacaoUpdate());
 
-        // Consistência sujeito_iva / taxa_iva
-        if (isset($dados['sujeito_iva']) && ! $dados['sujeito_iva']) {
+        if (isset($dados['sujeito_iva']) && !$dados['sujeito_iva']) {
             $dados['taxa_iva'] = 0.00;
         }
 
-        if (isset($dados['taxa_iva']) && (float) $dados['taxa_iva'] === 0.0) {
+        if (isset($dados['taxa_iva']) && (float)$dados['taxa_iva'] === 0.0) {
             $dados['sujeito_iva'] = false;
         }
 
@@ -200,20 +190,12 @@ class CategoriaController extends Controller
 
         $categoria->update($dados);
 
-        // Avisar se a taxa de IVA mudou (pode afectar produtos existentes)
         $aviso = null;
         if (isset($dados['taxa_iva']) && $dados['taxa_iva'] != $taxaAnterior) {
             $totalProdutos = $categoria->produtos()->count();
             $aviso = $totalProdutos > 0
                 ? "A taxa de IVA foi alterada. {$totalProdutos} produto(s) associado(s) passarão a usar a nova taxa ({$categoria->taxa_iva}%) automaticamente."
                 : null;
-
-            Log::info('[CategoriaController] Taxa IVA alterada', [
-                'categoria_id'  => $categoria->id,
-                'taxa_anterior' => $taxaAnterior,
-                'taxa_nova'     => $dados['taxa_iva'],
-                'produtos'      => $totalProdutos,
-            ]);
         }
 
         return response()->json([
@@ -229,12 +211,11 @@ class CategoriaController extends Controller
 
     public function destroy(Categoria $categoria)
     {
-        // Verificar se tem produtos activos associados
         $totalProdutosAtivos = $categoria->produtos()->where('status', 'ativo')->count();
 
         if ($totalProdutosAtivos > 0) {
             return response()->json([
-                'message' => "Não é possível eliminar: existem {$totalProdutosAtivos} produto(s) activo(s) nesta categoria. Inactivar os produtos primeiro.",
+                'message' => "Não é possível eliminar: existem {$totalProdutosAtivos} produto(s) activo(s) nesta categoria.",
                 'error'   => 'produtos_activos',
             ], 409);
         }
@@ -250,10 +231,6 @@ class CategoriaController extends Controller
      | HELPERS PRIVADOS
      | ================================================================== */
 
-    /**
-     * Regras de validação para criar categoria.
-     * Taxas válidas Angola: 0% (isento), 5% (cesta básica), 14% (geral).
-     */
     private function regrasValidacao(): array
     {
         return [
@@ -267,7 +244,6 @@ class CategoriaController extends Controller
                 'nullable',
                 'string',
                 'in:M00,M01,M02,M03,M04,M05,M06,M99',
-                // Código de isenção só faz sentido quando não sujeito a IVA
                 function ($attribute, $value, $fail) {
                     if ($value && request()->boolean('sujeito_iva')) {
                         $fail('Código de isenção não pode ser definido quando o produto está sujeito a IVA.');
@@ -277,9 +253,6 @@ class CategoriaController extends Controller
         ];
     }
 
-    /**
-     * Regras de validação para actualizar categoria.
-     */
     private function regrasValidacaoUpdate(): array
     {
         return [

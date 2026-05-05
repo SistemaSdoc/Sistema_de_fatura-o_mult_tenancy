@@ -422,9 +422,6 @@ export default function NovaFaturaNormalPage() {
         setLoading(false);
         return;
       }
-
-      await criarVenda(payload);
-      setSucesso("Fatura criada com sucesso!");
       setTimeout(() => router.push("/dashboard/Faturas/Faturas"), 1500);
     } catch (err: unknown) {
       setError(
@@ -1070,7 +1067,7 @@ export default function NovaFaturaNormalPage() {
                       className="py-2.5 px-3 text-left font-semibold text-xs"
                       style={{ color: colors.textSecondary }}
                     >
-                      Produto
+                      Produto/Serviço
                     </th>
                     <th
                       className="py-2.5 px-3 text-center font-semibold text-xs"
