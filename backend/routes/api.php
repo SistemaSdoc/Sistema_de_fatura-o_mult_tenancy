@@ -18,6 +18,7 @@ use App\Http\Controllers\EmpresaController;
 
 $uuidPattern = '[0-9a-fA-F-]{36}';
 
+        Route::post('/empresas', [EmpresaController::class, 'store']);
 // ==================== ROTAS PROTEGIDAS (autenticação + tenant) ====================
 Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uuidPattern) {
 
@@ -52,7 +53,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
     });
 
     // ==================== ADMIN + OPERADOR (e contabilista quando aplicável) ====================
-    Route::middleware('role:admin,operador')->group(function () use ($uuidPattern) {
+    Route::middleware('role:admin,operador,gestor,contablista')->group(function () use ($uuidPattern) {
 
         // ---------- PRODUTOS (CRUD completo + extras) ----------
         // NOTA: NÃO usar Route::apiResource para evitar duplicação. Segue-se um grupo manual completo.
@@ -96,7 +97,6 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::delete('/{id}', [CategoriaController::class, 'destroy'])->where('id', $uuidPattern)->name('categorias.destroy');
         });
 
-        // ---------- FORNECEDORES ----------
         // ---------- FORNECEDORES ----------
         Route::prefix('fornecedores')->group(function () use ($uuidPattern) {
 

@@ -74,7 +74,7 @@ public function resumo()
 
         $user = Auth::guard('tenant')->user();
     
-    // 🔍 LOG 2: Dados do utilizador do tenant (se existir)
+    // LOG 2: Dados do utilizador do tenant (se existir)
     Log::info('[DASHBOARD] Utilizador autenticado (tenant)', [
         'user_id' => $user?->id ?? 'null',
         'user_email' => $user?->email ?? 'null',

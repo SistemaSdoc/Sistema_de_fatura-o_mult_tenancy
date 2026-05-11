@@ -25,7 +25,7 @@ export interface User {
     empresa?: Empresa;
     name: string;
     email: string;
-    role: "admin" | "operador" | "contablista";
+    role: "admin" | "operador" | "contablista" | "gestor";
     ativo: boolean;
     ultimo_login?: string | null;
     email_verified_at?: string | null;
@@ -37,7 +37,7 @@ export interface RegisterData {
     name: string;
     email: string;
     password: string;
-    role: "admin" | "operador" | "contablista";
+    role: "admin" | "operador" | "contablista" | "gestor";
     empresa_id?: string;
     ativo?: boolean;
 }
@@ -46,7 +46,7 @@ export interface UpdateUserData {
     name?: string;
     email?: string;
     password?: string;
-    role?: "admin" | "operador" | "contablista";
+    role?: "admin" | "operador" | "contablista" | "gestor";
     ativo?: boolean;
     empresa_id?: string;
 }

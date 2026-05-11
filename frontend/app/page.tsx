@@ -650,25 +650,40 @@ export default function App() {
                     A ferramenta ideal para pequenos negócios e freelancers.
                   </p>
                 </AnimatedSection>
-                <AnimatedSection animation="fade-up" delay={400} threshold={0.1}>
-                  <div className="flex flex-col sm:flex-row justify-center lg:justify-start gap-4">
-                    <a
-                      href="/login"
-                      className="px-8 py-3 rounded-full font-semibold transition duration-300 ease-in-out transform hover:scale-[1.05] cursor-pointer"
-                      style={{ backgroundColor: colors.primary, color: 'white' }}
-                    >
-                      Começar Agora (É Grátis)
-                    </a>
+<AnimatedSection animation="fade-up" delay={400} threshold={0.1}>
+  <div className="flex flex-col sm:flex-row justify-center lg:justify-start gap-4">
+    {/* Botão principal - Criar empresa */}
+    <Link
+      href="/register"
+      className="group relative px-8 py-3.5 rounded-full font-bold text-white transition-all duration-300 transform hover:scale-105 hover:shadow-xl overflow-hidden"
+      style={{ backgroundColor: colors.primary }}
+    >
+      <span className="relative z-10 flex items-center gap-2">
+         Cadastrar minha empresa
+        <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
+      </span>
+      <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+    </Link>
 
-                    <a
-                      onClick={() => scrollToSection('planos')}
-                      className="px-8 py-3 rounded-full font-semibold transition duration-300 ease-in-out transform hover:scale-[1.03] cursor-pointer border"
-                      style={{ color: colors.text, borderColor: colors.border }}
-                    >
-                      Ver Planos
-                    </a>
-                  </div>
-                </AnimatedSection>
+    {/* Botão secundário - Ver planos */}
+    <button
+      onClick={() => scrollToSection('planos')}
+      className="px-8 py-3 rounded-full font-semibold transition-all duration-300 transform hover:scale-105 border-2"
+      style={{ color: colors.text, borderColor: colors.border, backgroundColor: 'transparent' }}
+    >
+      Ver Planos
+    </button>
+
+    {/* Botão terciário - Login (já existia no header, mas pode manter aqui) */}
+    <Link
+      href="/login"
+      className="px-8 py-3 rounded-full font-semibold transition-all duration-300 transform hover:scale-105"
+      style={{ color: colors.textSecondary, backgroundColor: `${colors.border}40` }}
+    >
+      Já tenho conta
+    </Link>
+  </div>
+</AnimatedSection>
               </div>
 
               {/* Lado Direito: Visual de Ícone Grande */}
@@ -691,6 +706,7 @@ export default function App() {
                 Tudo o que precisa para começar a faturar de forma simples, segura e eficiente.
               </p>
             </AnimatedSection>
+
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
               {allFeaturesData.map((feature, index) => (

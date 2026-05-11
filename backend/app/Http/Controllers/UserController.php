@@ -102,7 +102,7 @@ class UserController extends Controller
             'name'     => 'required|string|max:255',
             'email'    => 'required|email|unique:users,email',
             'password' => 'required|string|min:6',
-            'role'     => ['required', Rule::in(['admin', 'operador', 'contablista'])],
+            'role'     => ['required', Rule::in(['admin', 'operador', 'contablista', 'gestor'])],
             'ativo'    => 'nullable|boolean',
         ]);
 
@@ -141,7 +141,7 @@ class UserController extends Controller
                 Rule::unique('users')->ignore($user->id),
             ],
             'password' => 'nullable|string|min:6',
-            'role'     => ['sometimes', 'required', Rule::in(['admin', 'operador', 'contablista'])],
+            'role'     => ['sometimes', 'required', Rule::in(['admin', 'operador', 'contablista', 'gestor'])],
             'ativo'    => 'nullable|boolean',
         ]);
 

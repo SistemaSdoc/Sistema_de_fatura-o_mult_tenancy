@@ -10,11 +10,11 @@ class FaturaPolicy
 {
     public function viewAny(User $user)
     {
-        return in_array($user->role, ['admin', 'operador','contablista']);
+        return in_array($user->role, ['admin',  'gestor','operador','contablista']);
     }
 
     public function create(User $user)
     {
-        return in_array($user->role, ['admin', 'operador', 'contablista']);
+        return in_array($user->role, ['admin', 'gestor', 'operador', 'contablista']);
     }
 }

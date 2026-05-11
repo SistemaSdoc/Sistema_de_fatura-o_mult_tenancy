@@ -50,7 +50,7 @@ public function criarProduto(array $dados): Produto
 
         $dadosProduto = [
             'id'      => Str::uuid(),
-            'user_id' => $dados['user_id'] ?? auth()->guard('tenant')->id(),  // ✅ já corrigido
+            'user_id' => $dados['user_id'] ?? auth()->guard('tenant')->id(),  //  já corrigido
             'nome'    => $dados['nome'],
             'descricao'   => $dados['descricao'] ?? null,
             'preco_venda' => $tipo === 'produto'
@@ -118,7 +118,7 @@ public function criarProduto(array $dados): Produto
         $produto = Produto::create($dadosProduto);
         $this->validarPreco($produto, $produto->preco_venda);
 
-        // ✅ CORREÇÃO: passar o user_id correcto para o StockService
+        // CORREÇÃO: passar o user_id correcto para o StockService
         if ($tipo === 'produto' && isset($dados['estoque_atual']) && (int) $dados['estoque_atual'] > 0) {
             $this->stockService->entradaCompra(
                 $produto->id,
@@ -226,7 +226,7 @@ public function editarProduto(string $produtoId, array $dados): Produto
                 'unidade_medida'   => null,
             ]);
 
-            // ✅ CORREÇÃO: passar user_id correcto nas movimentações de stock
+            //  CORREÇÃO: passar user_id correcto nas movimentações de stock
             if (isset($dados['estoque_atual']) && $dados['estoque_atual'] != $produto->estoque_atual) {
                 $diferenca = (int) $dados['estoque_atual'] - (int) $produto->estoque_atual;
                 $userId = $dados['user_id'] ?? auth()->guard('tenant')->id();
@@ -318,7 +318,7 @@ public function editarProduto(string $produtoId, array $dados): Produto
             $produto->margem_lucro = null;
         }
 
-        // ✅ Usar taxa_iva_efectiva (para produtos: da categoria; para serviços: própria)
+        //  Usar taxa_iva_efectiva (para produtos: da categoria; para serviços: própria)
         $produto->valor_iva = $produto->preco_venda * ($produto->taxa_iva_efectiva / 100);
 
         if ($produto->tipo === 'servico' && $produto->taxa_retencao > 0) {
