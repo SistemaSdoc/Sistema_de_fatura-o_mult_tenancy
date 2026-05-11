@@ -219,6 +219,15 @@ export const authApi = {
     me: () => api.get("/me"),
 };
 
+export const landAuthApi = {
+    api, // expõe instância
+    getCsrf: () => api.get("/sanctum/csrf-cookie"),
+    login: (email: string, password: string) =>
+        api.post("/api/landlord/login", { email, password }),
+    logout: () => api.post("/api/landlord/logout"),
+    me: () => api.get("/api/landlord/me"),
+};
+
 // ⭐ INSTÂNCIA ESPECÍFICA PARA API — GARANTE withCredentials
 export const apiService = axios.create({
     baseURL: getBaseURL(),

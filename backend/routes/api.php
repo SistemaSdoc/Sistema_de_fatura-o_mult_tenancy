@@ -13,11 +13,10 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\RelatoriosController;
+use App\Http\Controllers\LandlordAuthController;
+use App\Http\Controllers\EmpresaController;
 
 $uuidPattern = '[0-9a-fA-F-]{36}';
-
-// ==================== ROTAS PÚBLICAS ====================
-// (nenhuma definida por enquanto)
 
 // ==================== ROTAS PROTEGIDAS (autenticação + tenant) ====================
 Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uuidPattern) {
@@ -211,5 +210,30 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::get('/movimentos-stock', [RelatoriosController::class, 'movimentosStock']);
             Route::get('/proformas', [RelatoriosController::class, 'proformas'])->name('relatorios.proformas');
         });
+    });
+
+});
+// Prefixo 'api' já implícito no RouteServiceProvider
+
+// routes/api.php (dentro do grupo auth:landlord_api)
+
+
+// Agrupa todas as rotas do landlord sob o prefixo 'landlord'
+Route::prefix('landlord')->group(function () {
+    Route::post('/login', [LandlordAuthController::class, 'login']);
+    Route::post('/register', [LandlordAuthController::class, 'register']);
+
+    Route::middleware(['auth:landlord_api'])->group(function () {
+        Route::get('/me', function () {
+            return response()->json(['user' => auth('landlord_api')->user()]);
+        });
+        Route::post('/logout', [LandlordAuthController::class, 'logout']);
+
+        // Rotas de gestão de empresas (tenants)
+        Route::get('/empresas', [EmpresaController::class, 'index']);
+        Route::post('/empresas', [EmpresaController::class, 'store']);
+        Route::get('/empresas/{empresa}', [EmpresaController::class, 'show']);
+        Route::put('/empresas/{empresa}', [EmpresaController::class, 'update']);
+        Route::patch('/empresas/{empresa}/toggle-status', [EmpresaController::class, 'toggleStatus']);
     });
 });

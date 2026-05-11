@@ -47,6 +47,11 @@ class ResolveTenant
             return $next($request);
         }
 
+            $path = $request->path();
+    if (str_starts_with($path, 'api/landlord/')) {
+        return $next($request); // pula lógica de tenant
+    }
+
          $tenantId = session('tenant_id');
     if ($tenantId) {
         $empresa = Empresa::on('landlord')->find($tenantId);

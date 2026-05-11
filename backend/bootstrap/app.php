@@ -18,6 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->prepend(\Illuminate\Http\Middleware\HandleCors::class);
 
@@ -41,6 +42,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'resolve.tenant',
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
+
+        
     })
     ->withExceptions(function (Exceptions $exceptions) {
         // suas exceptions
