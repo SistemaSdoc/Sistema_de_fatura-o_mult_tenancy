@@ -442,7 +442,7 @@ export default function NovaFaturaReciboPage() {
         setError(erroVal);
         return;
       }
-
+      await vendaService.criar(payload);
       setTimeout(() => router.push("/dashboard/Faturas/Faturas"), 1500);
     } catch (err: unknown) {
       setError(
@@ -791,10 +791,10 @@ export default function NovaFaturaReciboPage() {
                                 (e.currentTarget.style.backgroundColor = `${colors.hover}`)
                               }
                               onMouseLeave={(e) =>
-                                (e.currentTarget.style.backgroundColor =
-                                  formItem.produto_id === item.id
-                                    ? `${colors.primary}10`
-                                    : "transparent")
+                              (e.currentTarget.style.backgroundColor =
+                                formItem.produto_id === item.id
+                                  ? `${colors.primary}10`
+                                  : "transparent")
                               }
                             >
                               <div className="flex-1">
