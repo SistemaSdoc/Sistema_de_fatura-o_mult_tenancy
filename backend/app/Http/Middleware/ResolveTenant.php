@@ -22,6 +22,7 @@ class ResolveTenant
         'landlord/*',
         'api/landlord/*',
         'admin/*',
+        'api/empresas',      
         'login',
         'register',
         'sanctum/csrf-cookie',
@@ -46,6 +47,11 @@ class ResolveTenant
             Config::set('database.default', 'landlord');
             return $next($request);
         }
+
+            $path = $request->path();
+    if (str_starts_with($path, 'api/landlord/')) {
+        return $next($request); // pula lógica de tenant
+    }
 
          $tenantId = session('tenant_id');
     if ($tenantId) {

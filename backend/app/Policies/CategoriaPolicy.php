@@ -47,13 +47,13 @@ class CategoriaPolicy
             return false;
         }
 
-        return in_array($user->role ?? '', ['admin', 'operador', 'contabilista']);
+        return in_array($user->role ?? '', ['admin', 'operador', 'gestor', 'contabilista']);
     }
 
     public function update($user, Categoria $categoria)
     {
         if (!$user) return false;
-        return in_array($user->role ?? '', ['admin', 'operador', 'contabilista']);
+        return in_array($user->role ?? '', ['admin', 'operador', 'gestor', 'contabilista']);
     }
 
     public function delete($user, Categoria $categoria)

@@ -144,7 +144,7 @@ class FornecedorController extends Controller
      */
     public function destroy($id)
     {
-        Log::info('🗑️ Tentativa de SOFT DELETE fornecedor', [
+        Log::info(' Tentativa de SOFT DELETE fornecedor', [
             'id_recebido' => $id,
             'user_id'     => auth('tenant')->id(),
             'user_role'   => auth('tenant')->user()?->role,
@@ -164,7 +164,7 @@ class FornecedorController extends Controller
 
         $fornecedor->delete(); // Soft delete
 
-        Log::info('✅ Fornecedor movido para lixeira', ['id' => $id, 'nome' => $fornecedor->nome]);
+        Log::info(' Fornecedor movido para lixeira', ['id' => $id, 'nome' => $fornecedor->nome]);
 
         return response()->json([
             'message' => 'Fornecedor movido para a lixeira com sucesso',

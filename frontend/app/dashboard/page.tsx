@@ -13,6 +13,7 @@ import {
   RefreshCw, ShoppingCart, Clock
 } from "lucide-react";
 import Link from "next/link";
+import { useAuth } from "@/context/authprovider";
 
 import MainEmpresa from "@/app/components/MainEmpresa";
 import { dashboardService } from "@/services/Dashboard";
@@ -128,7 +129,8 @@ const StatusBadge = ({ status, theme }: { status: string; theme: string }) => {
 };
 
 /* ==================== MAIN COMPONENT ==================== */
-export default function DashboardPage() {
+
+  export default function DashboardPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -138,6 +140,9 @@ export default function DashboardPage() {
   const router = useRouter();
   const colors = useThemeColors();
   const { theme } = useTheme();
+  const { user } = useAuth();  // usa o contexto
+  const userRole = user?.role || '';
+
 
   const carregarDashboard = async () => {
     setError(null);
@@ -162,7 +167,16 @@ export default function DashboardPage() {
   useEffect(() => {
     carregarDashboard();
   }, []);
+useEffect(() => {
+  const userData = localStorage.getItem('user');
+  if (userData) {
+    const parsed = JSON.parse(userData);
+    setRole(parsed.role);
+  }
+}, []);
 
+  const allowedRoles = ['admin', 'gestor', 'operador'];
+  const canShowButtons = userRole && allowedRoles.includes(userRole);
     if (loading) {
     return (
       <MainEmpresa>
@@ -282,40 +296,45 @@ export default function DashboardPage() {
     { href: "/dashboard/Produtos_servicos/Stock", icon: Package, label: "Stock Baixo", value: formatNumber(metricas.produtosEmStockBaixo), helper: `${formatNumber(data.produtos?.ativos || 0)} produtos e serviços ativos` },
   ];
 
+// Logo após os hooks, antes do return
+
+
   /* ---- Render ---- */
   return (
     <MainEmpresa>
       <div className="space-y-4 sm:space-y-6 pb-8 transition-colors duration-300">
         {/* ---- KPI Cards com animações ---- */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <h1 className="text-xl sm:text-2xl font-bold" style={{ color: colors.secondary } as any}>
-            Dashboard
-          </h1>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => router.push("/dashboard/Vendas/Nova_venda")}
-              className="px-3 py-2 text-sm text-white flex items-center gap-2 transition-opacity cursor-pointer hover:opacity-80"
-              style={{ backgroundColor: colors.secondary  }}
-            >
-              <ShoppingCart size={14} /> Nova Venda
-            </button>
-            <button
-              onClick={() => router.push("/dashboard/Faturas/Fatura_Normal")}
-              className="px-3 py-2 text-sm text-white flex items-center gap-2 transition-opacity cursor-pointer "
-              style={{ backgroundColor: colors.primary }}
-            >
-              <FileText size={14} /> Nova Fatura
-            </button>
-            <button
-              onClick={() => router.push("/dashboard/Faturas/Faturas_Proforma")}
-              className="px-3 py-2 text-sm text-white flex items-center gap-2 transition-opacity cursor-pointer "
-              style={{ backgroundColor: colors.fp }}
-            >
-              <FileText size={14} /> Nova Proforma
-            </button>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+  <h1 className="text-xl sm:text-2xl font-bold" style={{ color: colors.secondary } as any}>
+    Dashboard
+  </h1>
+
+  {canShowButtons && (
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        onClick={() => router.push("/dashboard/Vendas/Nova_venda")}
+        className="px-3 py-2 text-sm text-white flex items-center gap-2 transition-opacity cursor-pointer hover:opacity-80"
+        style={{ backgroundColor: colors.secondary }}
+      >
+        <ShoppingCart size={14} /> Nova Venda
+      </button>
+      <button
+        onClick={() => router.push("/dashboard/Faturas/Fatura_Normal")}
+        className="px-3 py-2 text-sm text-white flex items-center gap-2 transition-opacity cursor-pointer"
+        style={{ backgroundColor: colors.primary }}
+      >
+        <FileText size={14} /> Nova Fatura
+      </button>
+      <button
+        onClick={() => router.push("/dashboard/Faturas/Faturas_Proforma")}
+        className="px-3 py-2 text-sm text-white flex items-center gap-2 transition-opacity cursor-pointer"
+        style={{ backgroundColor: colors.fp }}
+      >
+        <FileText size={14} /> Nova Proforma
+      </button>
+    </div>
+  )}
+</div>        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {kpiCards.map(({ href, icon: Icon, label, value, helper }, i) => (
             <motion.div
               key={label}

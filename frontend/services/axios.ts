@@ -104,7 +104,7 @@ api.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
         const method = config.method?.toLowerCase();
 
-        // ⭐ CSRF Token para TODAS as requisições (não só mutações)
+        //  CSRF Token para TODAS as requisições (não só mutações)
         // Laravel Sanctum exige XSRF-TOKEN em todas as requisições autenticadas
         const xsrfToken = Cookies.get("XSRF-TOKEN");
         if (xsrfToken) {
@@ -117,7 +117,7 @@ api.interceptors.request.use(
             }
         }
 
-        // ⭐ Injeta tenant se disponível (ESSENCIAL para o middleware ResolveTenant)
+        //  Injeta tenant se disponível (ESSENCIAL para o middleware ResolveTenant)
         const tenant = discoverTenant();
         if (tenant) {
             config.headers["X-Empresa-ID"] = tenant;
@@ -129,7 +129,7 @@ api.interceptors.request.use(
             }
         }
 
-        // ⭐ DEBUG: Loga config da requisição para rotas API (ajudar a diagnosticar)
+        //  DEBUG: Loga config da requisição para rotas API (ajudar a diagnosticar)
         if (config.url?.startsWith("/api/")) {
             console.log("[AXIOS][API] Requisição:", {
                 url: config.url,
@@ -192,11 +192,11 @@ api.interceptors.response.use(
             return api(originalRequest);
         }
 
-        // ⭐ 401: Sessão expirada ou não autenticado
+        // 401: Sessão expirada ou não autenticado
         if (status === 401) {
             console.log("[AXIOS] 401 em", originalRequest?.url, "- delegando ao AuthProvider");
 
-            // ⭐ NÃO faz redirect automático aqui — deixa o AuthProvider decidir
+            // NÃO faz redirect automático aqui — deixa o AuthProvider decidir
             // Isso evita loops de redirect quando /me ainda funciona
         }
 
@@ -217,6 +217,15 @@ export const authApi = {
         api.post("/login", { email, password }),
     logout: () => api.post("/logout"),
     me: () => api.get("/me"),
+};
+
+export const landAuthApi = {
+    api, // expõe instância
+    getCsrf: () => api.get("/sanctum/csrf-cookie"),
+    login: (email: string, password: string) =>
+        api.post("/api/landlord/login", { email, password }),
+    logout: () => api.post("/api/landlord/logout"),
+    me: () => api.get("/api/landlord/me"),
 };
 
 // ⭐ INSTÂNCIA ESPECÍFICA PARA API — GARANTE withCredentials

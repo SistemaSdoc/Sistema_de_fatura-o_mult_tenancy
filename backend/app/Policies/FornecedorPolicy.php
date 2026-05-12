@@ -12,7 +12,7 @@ class FornecedorPolicy
      */
     public function viewAny(User $user): bool
     {
-        return in_array($user->role, ['admin', 'operador', 'contablista']);
+        return in_array($user->role, ['admin', 'gestor', 'operador', 'contablista']);
     }
 
     /**
@@ -28,7 +28,7 @@ class FornecedorPolicy
      */
     public function create(User $user): bool
     {
-        return in_array($user->role, ['admin', 'contablista']);
+        return in_array($user->role, ['admin', 'gestor', 'contablista']);
     }
 
     /**
@@ -36,7 +36,7 @@ class FornecedorPolicy
      */
     public function update(User $user, Fornecedor $fornecedor): bool
     {
-        return in_array($user->role, ['admin', 'operador']);
+        return in_array($user->role, ['admin',  'gestor','contablista']);
     }
 
     /**
@@ -45,7 +45,7 @@ class FornecedorPolicy
      */
     public function delete(User $user, Fornecedor $fornecedor): bool
     {
-        return in_array($user->role, ['admin', 'operador']);
+        return in_array($user->role, ['admin',  'gestor','contablista']);
     }
 
     /**
@@ -54,7 +54,7 @@ class FornecedorPolicy
      */
     public function restore(User $user): bool
     {
-        return in_array($user->role, ['admin', 'operador']);
+        return in_array($user->role, ['admin', 'gestor','contablista']);
     }
 
     /**
@@ -63,6 +63,6 @@ class FornecedorPolicy
      */
     public function forceDelete(User $user): bool
     {
-        return in_array($user->role, ['admin', 'operador']);
+        return in_array($user->role, ['admin','gestor', 'contablista']);
     }
 }

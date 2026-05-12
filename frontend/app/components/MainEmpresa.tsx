@@ -125,82 +125,52 @@ export default function MainEmpresa({
   }, []);
 
   // ==================== NOTIFICAÇÕES DE ESTOQUE (COM LOGS) ====================
-  const buscarNotificacoesEstoque = useCallback(async () => {
-    console.log("[MainEmpresa] buscarNotificacoesEstoque INICIADO", {
-      timestamp: new Date().toISOString(),
-      hasUser: !!user,
-      userLoading,
-      userRole,
-      fetchingInProgress: fetchingNotificacoesRef.current,
-    });
+const buscarNotificacoesEstoque = useCallback(async () => {
+  if (!user || userLoading) return;
+  if (fetchingNotificacoesRef.current) return;
+  fetchingNotificacoesRef.current = true;
+  setLoadingNotificacoes(true);
 
-    // ⭐ Proteção principal: só buscar se usuário estiver autenticado e não estiver carregando
-    if (!user || userLoading) {
-      console.warn("[MainEmpresa] buscarNotificacoesEstoque ABORTADO: usuário não pronto", { hasUser: !!user, userLoading });
-      return;
-    }
+  try {
+    // 1ª chamada: resumo (estoque baixo) – permitido para todos
+    const resumo = await estoqueService.obterResumo();
+    const produtosCriticos = resumo.produtos_criticos || [];
+    const baixo = produtosCriticos.filter(
+      (p: Produto) => p.estoque_atual > 0 && p.estoque_atual <= p.estoque_minimo,
+    );
+    setProdutosEstoqueBaixo(baixo);
 
-    // Evita chamadas simultâneas
-    if (fetchingNotificacoesRef.current) {
-      console.warn("[MainEmpresa] buscarNotificacoesEstoque ABORTADO: já em execução");
-      return;
-    }
-    fetchingNotificacoesRef.current = true;
-
-    setLoadingNotificacoes(true);
-    try {
-      // ----- 1ª chamada: resumo de estoque (estoque baixo) -----
-      console.log("[MainEmpresa] Chamando estoqueService.obterResumo()...");
-      const resumo = await estoqueService.obterResumo();
-      console.log("[MainEmpresa] estoqueService.obterResumo() SUCESSO", { resumoRecebido: !!resumo });
-      const produtosCriticos = resumo.produtos_criticos || [];
-      const baixo = produtosCriticos.filter(
-        (p: Produto) =>
-          p.estoque_atual > 0 && p.estoque_atual <= p.estoque_minimo,
-      );
-      setProdutosEstoqueBaixo(baixo);
-      console.log(`[MainEmpresa] Produtos com estoque baixo: ${baixo.length}`);
-
-      // ----- 2ª chamada: produtos sem estoque -----
-      console.log("[MainEmpresa] Chamando produtoService.listarProdutos({ sem_estoque: true, tipo: 'produto', paginar: false })...");
+    // 2ª chamada (produtos sem estoque) – APENAS para admin e operador
+    if (userRole === 'admin' || userRole === 'operador') {
       const responseSemEstoque = await produtoService.listarProdutos({
         sem_estoque: true,
         tipo: "produto",
         paginar: false,
       });
-
       const produtosSemStock = Array.isArray(responseSemEstoque.produtos)
         ? responseSemEstoque.produtos
         : responseSemEstoque.produtos.data || [];
       const zero = produtosSemStock.filter((p: Produto) => p.estoque_atual === 0);
       setProdutosSemEstoque(zero);
-      console.log(`[MainEmpresa] Produtos sem estoque: ${zero.length}`);
-
-      setUltimaAtualizacao(new Date());
-      console.log("[MainEmpresa] buscarNotificacoesEstoque FINALIZADO COM SUCESSO");
-    } catch (error: any) {
-      console.error("[MainEmpresa] ERRO em buscarNotificacoesEstoque:", {
-        message: error?.message,
-        status: error?.response?.status,
-        stack: error?.stack,
-      });
-      if (error?.response?.status === 401) {
-        console.warn("[MainEmpresa] 401 detectado - sessão pode ter expirado. O AuthProvider irá lidar com isso.");
-      }
-      // Não limpa os arrays para não piscar a UI
-    } finally {
-      setLoadingNotificacoes(false);
-      fetchingNotificacoesRef.current = false;
+    } else {
+      setProdutosSemEstoque([]); // limpa para o gestor
     }
-  }, [user, userLoading, userRole]);
 
+    setUltimaAtualizacao(new Date());
+  } catch (error: any) {
+    console.error("[MainEmpresa] Erro ao buscar notificações:", error);
+  } finally {
+    setLoadingNotificacoes(false);
+    fetchingNotificacoesRef.current = false;
+  }
+}, [user, userLoading, userRole]);
   // ========== Effect que configura a busca periódica (com logs) ==========
   useEffect(() => {
     console.log("[MainEmpresa] useEffect [user, userLoading, userRole] DISPARADO", {
       user: user?.email || null,
       userLoading,
       userRole,
-      willSetup: !!(user && !userLoading && (userRole === "admin" || userRole === "operador")),
+      willSetup: !!(user && !userLoading && (userRole === "admin" || userRole === "operador" || userRole === "contablista" )),
     });
 
     // Limpa qualquer intervalo anterior
@@ -211,7 +181,7 @@ export default function MainEmpresa({
     }
 
     // Só configura se usuário existir, loading terminado e role for admin/operador
-    if (user && !userLoading && (userRole === "admin" || userRole === "operador")) {
+    if (user && !userLoading && (userRole === "admin" || userRole === "operador"  || userRole === "contablista" )) {
       console.log("[MainEmpresa] Configurando busca periódica de notificações (delay 100ms, depois a cada 5min)");
       // Busca imediatamente com pequeno delay para garantir cookies
       const timeoutId = setTimeout(() => {
@@ -327,14 +297,14 @@ export default function MainEmpresa({
       icon: Home,
       path: "/dashboard",
       links: [],
-      roles: ["admin", "contablista"],
+      roles: ["admin", "contablista","gestor"],
     },
     {
       label: "Vendas",
       icon: ShoppingCart,
       path: "/dashboard/Vendas",
       links:
-        userRole === "admin" || userRole === "operador"
+        userRole === "admin" || userRole === "operador" || userRole === "gestor"
           ? [
               { label: "Gerar Faturas-recibo", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart },
               { label: "Gerar Faturas", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
@@ -343,7 +313,7 @@ export default function MainEmpresa({
             ]
           : [],
       isGroup: true,
-      roles: ["admin", "operador"],
+      roles: ["admin", "operador","gestor"],
     },
     {
       label: "Doc. Fiscais",
@@ -363,7 +333,7 @@ export default function MainEmpresa({
         { label: "Fornecedores", path: "/dashboard/Fornecedores/Novo_fornecedor", icon: Truck },
       ],
       isGroup: true,
-      roles: ["admin"],
+      roles: ["admin","gestor"],
     },
     {
       label: "Clientes",
@@ -517,7 +487,7 @@ export default function MainEmpresa({
             <button onClick={toggleTheme} className="p-2 transition-all hover:scale-110 active:scale-95" style={{ backgroundColor: colors.hover, color: colors.text }}>
               {theme === "dark" ? <Sun size={16} style={{ color: colors.secondary }} /> : <Moon size={16} style={{ color: colors.primary }} />}
             </button>
-            {(userRole === "admin" || userRole === "operador") && (
+            {(userRole === "admin" || userRole === "operador" || userRole === "gestor") && (
               <div className="relative">
                 <button
                   onClick={toggleNotificacoes}
@@ -581,7 +551,7 @@ export default function MainEmpresa({
               </div>
             )}
             <div className="flex items-center gap-2 pl-2 border-l md:pl-3" style={{ borderColor: colors.border }}>
-              <div className="hidden text-right md:block"><p className="text-xs font-semibold leading-tight" style={{ color: colors.text }}>{userName.split(" ")[0]}</p><p className="text-[10px]" style={{ color: colors.textSecondary }}>{userRole === "admin" ? "Admin" : userRole === "contabilista" ? "Contab." : "Op."}</p></div>
+              <div className="hidden text-right md:block"><p className="text-xs font-semibold leading-tight" style={{ color: colors.text }}>{userName.split(" ")[0]}</p><p className="text-[10px]" style={{ color: colors.textSecondary }}>{userRole === "admin" ? "Admin" : userRole === "contablista" ? "Contab." : userRole === "gestor" ? "Gest." : "Op."}</p></div>
               <div className="flex items-center justify-center w-7 h-7 text-xs font-bold text-white md:w-8 md:h-8 transition-transform" style={{ background: `linear-gradient(135deg, ${colors.secondary} 0%, ${colors.primary} 100%)` }}>{userInitial}</div>
             </div>
           </div>

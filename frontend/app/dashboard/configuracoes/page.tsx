@@ -40,7 +40,7 @@ interface ThemeColors {
     success: string; warning: string; danger: string; error: string; hover: string; fp: string;
 }
 
-type RoleType = "admin" | "operador" | "contablista";
+type RoleType = "admin" | "operador" | "contablista" | "gestor";
 
 interface PassForm {
     nova_senha: string;
@@ -126,9 +126,10 @@ const SaveButton = ({
 
 const RoleBadge = ({ role, colors }: { role: string; colors: ThemeColors }) => {
     const map: Record<string, { label: string; color: string }> = {
-        admin:       { label: "Admin",        color: colors.secondary  },
-        operador:    { label: "Operador",     color: colors.secondary },
-        contablista: { label: "Contabilista", color: colors.success },
+        admin:       { label: "Admin",           color: colors.secondary},
+        operador:    { label: "Operador",        color: colors.secondary},
+        contablista: { label: "Contablista",     color: colors.success },
+        gestor:      { label: "Gestor de Stock", color: colors.success },
     };
     const c = map[role] ?? { label: role, color: colors.textSecondary };
     return (
@@ -366,7 +367,8 @@ const UserModal = ({
                             }}>
                                 <SelectItem value="admin">Admin</SelectItem>
                                 <SelectItem value="operador">Operador</SelectItem>
-                                <SelectItem value="contablista">Contabilista</SelectItem>
+                                <SelectItem value="contabilista">Contabilista</SelectItem>
+                                <SelectItem value="gestor">Gestor de Stock</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -886,6 +888,7 @@ const UsuariosTab = ({
                                 <SelectItem value="todos">Todos</SelectItem>
                                 <SelectItem value="admin">Admin</SelectItem>
                                 <SelectItem value="operador">Operador</SelectItem>
+                                <SelectItem value="gestor">Gestor de Stock</SelectItem>
                                 <SelectItem value="contablista">Contabilista</SelectItem>
                             </SelectContent>
                         </Select>
