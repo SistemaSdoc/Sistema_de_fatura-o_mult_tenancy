@@ -169,7 +169,7 @@ public function store(Request $request)
             'status' => 'sometimes|in:ativo,suspenso',
         ]);
 
-        // ⚠️ NÃO permitir alterar db_name, nif, regime_fiscal facilmente
+        // NÃO permitir alterar db_name, nif, regime_fiscal facilmente
         $empresa->update($request->only([
             'nome', 'email', 'telefone', 'endereco', 'status', 'logo'
         ]));
@@ -181,18 +181,30 @@ public function store(Request $request)
         ], 200);
     }
 
-    /**
-     * Suspender/Ativar empresa
-     */
-    public function toggleStatus(Empresa $empresa)
-    {
-        $empresa->update([
-            'status' => $empresa->status === 'ativo' ? 'suspenso' : 'ativo'
-        ]);
 
-        return response()->json([
-            'success' => true,
-            'message' => $empresa->status === 'ativo' ? 'Empresa ativada' : 'Empresa suspensa'
-        ]);
+    /**
+ * Suspender/Ativar a própria empresa (para tenant logado)
+ */
+public function toggleSelfStatus(Request $request)
+{
+    $user = auth('tenant')->user();
+    if (!$user) {
+        return response()->json(['message' => 'Não autenticado.'], 401);
     }
+    $empresa = $user->empresa;
+    if (!$empresa) {
+        return response()->json(['message' => 'Empresa não encontrada.'], 404);
+    }
+    $novoStatus = $empresa->status === 'ativo' ? 'suspenso' : 'ativo';
+    DB::connection('landlord')
+        ->table('empresas')
+        ->where('id', $empresa->id)
+        ->update(['status' => $novoStatus]);
+    $empresa->status = $novoStatus;
+    return response()->json([
+        'success' => true,
+        'message' => "Empresa {$novoStatus} com sucesso.",
+        'status'  => $novoStatus,
+    ]);
+}
 }

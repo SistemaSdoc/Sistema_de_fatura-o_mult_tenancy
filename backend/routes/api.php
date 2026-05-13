@@ -41,6 +41,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
         Route::get('/users/create', [UserController::class, 'create']);
         Route::apiResource('/users', UserController::class)->except(['store']);
 
+        Route::patch('/empresa/toggleSelf-Status', [EmpresaController::class, 'toggleSelfStatus']);
         // Gestão completa de clientes (incluindo soft deletes e restores)
         Route::prefix('clientes')->group(function () use ($uuidPattern) {
             Route::get('/todos', [ClienteController::class, 'indexWithTrashed'])->name('clientes.todos');
@@ -49,7 +50,6 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::post('/{id}/ativar', [ClienteController::class, 'ativar'])->where('id', $uuidPattern)->name('clientes.ativar');
             Route::post('/{id}/inativar', [ClienteController::class, 'inativar'])->where('id', $uuidPattern)->name('clientes.inativar');
         });
-        Route::apiResource('/clientes', ClienteController::class);
     });
 
     // ==================== ADMIN + OPERADOR (e contabilista quando aplicável) ====================
@@ -234,6 +234,6 @@ Route::prefix('landlord')->group(function () {
         Route::post('/empresas', [EmpresaController::class, 'store']);
         Route::get('/empresas/{empresa}', [EmpresaController::class, 'show']);
         Route::put('/empresas/{empresa}', [EmpresaController::class, 'update']);
-        Route::patch('/empresas/{empresa}/toggle-status', [EmpresaController::class, 'toggleStatus']);
+        Route::patch('/empresas/toggleSelfStatus', [EmpresaController::class, 'toggleSelfStatus']);
     });
 });

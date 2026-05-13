@@ -12,7 +12,7 @@ import { useThemeColors, useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/authprovider";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
-
+import { api } from "@/services/axios";
 import { Button }   from "@/components/ui/button";
 import { Input }    from "@/components/ui/input";
 import { Label }    from "@/components/ui/label";
@@ -672,26 +672,32 @@ const PerfilTab = ({
         </div>
     );
 };
-
 // ─── TAB: EMPRESA ─────────────────────────────────────────────────────────────
-
 const EmpresaTab = ({ colors, user }: { colors: ThemeColors; user: UserType | null }) => {
     const [loading, setLoading] = useState(false);
     const [form, setForm] = useState({
         nome: "", nif: "", email: "", telefone: "",
-        endereco: "", website: "", serie_padrao: "FT", iva_padrao: "14",
+        endereco: "", website: "", serie_padrao: "FT", iva_padrao: "",
     });
+
+    const [togglingStatus, setTogglingStatus] = useState(false);
+    const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+    const [empresaStatus, setEmpresaStatus] = useState<string>("ativo");
 
     useEffect(() => {
         if (user?.empresa) {
-            setForm(p => ({
-                ...p,
-                nome:     user.empresa!.nome      ?? "",
-                nif:      user.empresa!.nif        ?? "",
-                email:    user.empresa!.email      ?? "",
-                telefone: user.empresa!.telefone   ?? "",
-                endereco: user.empresa!.endereco   ?? "",
-            }));
+            const e = user.empresa;
+            setForm({
+                nome:     e.nome      ?? "",
+                nif:      e.nif       ?? "",
+                email:    e.email     ?? "",
+                telefone: e.telefone  ?? "",
+                endereco: e.endereco  ?? "",
+                website:  e.website   ?? "",
+                serie_padrao: e.serie_padrao ?? "FT",
+                iva_padrao: e.iva_padrao ?? "14",
+            });
+            setEmpresaStatus(e.status ?? "ativo");
         }
     }, [user]);
 
@@ -701,9 +707,14 @@ const EmpresaTab = ({ colors, user }: { colors: ThemeColors; user: UserType | nu
     };
 
     const handleSubmit = async () => {
+        if (empresaStatus === "suspenso") {
+            toast.error("Empresa suspensa – não é possível editar os dados.");
+            return;
+        }
         setLoading(true);
         try {
-            await new Promise(r => setTimeout(r, 10));
+            // Chame a API de atualização da empresa
+            await api.put("/api/empresa", form);
             toast.success("Dados da empresa atualizados!");
         } catch {
             toast.error("Erro ao atualizar empresa");
@@ -712,8 +723,64 @@ const EmpresaTab = ({ colors, user }: { colors: ThemeColors; user: UserType | nu
         }
     };
 
+    const handleToggleStatus = async () => {
+        setTogglingStatus(true);
+        try {
+            const response = await api.patch("/api/empresa/toggleSelf-Status");
+            const newStatus = response.data.status;
+            setEmpresaStatus(newStatus);
+            toast.success(response.data.message);
+            setShowConfirmDialog(false);
+            // Recarregar a página para atualizar o contexto e refletir o status
+            window.location.reload();
+        } catch (err: any) {
+            toast.error(err.response?.data?.message || "Erro ao alterar status");
+        } finally {
+            setTogglingStatus(false);
+        }
+    };
+
+    const isSuspended = empresaStatus === "suspenso";
+
     return (
         <div className="space-y-6">
+            {/* Card de situação da empresa com botão toggle */}
+            <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                <CardHeader>
+                    <CardTitle style={{ color: colors.secondary }}>Situação da Empresa</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between flex-wrap gap-4">
+                        <div>
+                            <p className="text-sm font-medium" style={{ color: colors.text }}>
+                                Status atual:
+                            </p>
+                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                                isSuspended ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"
+                            }`}>
+                                {isSuspended ? "🔴 Suspensa" : "🟢 Ativa"}
+                            </span>
+                        </div>
+                        <button
+                            onClick={() => setShowConfirmDialog(true)}
+                            disabled={togglingStatus}
+                            className={`px-4 py-2 rounded-lg font-medium text-white transition-all ${
+                                isSuspended ? "bg-green-600 hover:bg-green-700" : "bg-yellow-600 hover:bg-yellow-700"
+                            } disabled:opacity-50`}
+                        >
+                            {togglingStatus ? <Loader2 className="w-4 h-4 animate-spin" /> : (isSuspended ? "Reativar empresa" : "Desativar empresa")}
+                        </button>
+                    </div>
+                    {isSuspended && (
+                        <div className="text-sm p-3 rounded-md" style={{ backgroundColor: `${colors.danger}10`, color: colors.danger }}>
+                            <AlertCircle className="inline-block w-4 h-4 mr-1" />
+                            A sua empresa está suspensa. Nenhum utilizador pode aceder ao sistema até que a conta seja reativada.
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* Card de dados da empresa (desabilitado se suspensa) */}
             <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                 <CardHeader>
                     <CardTitle style={{ color: colors.secondary }}>Dados da Empresa</CardTitle>
@@ -723,15 +790,15 @@ const EmpresaTab = ({ colors, user }: { colors: ThemeColors; user: UserType | nu
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <FormInput label="Nome" name="nome" value={form.nome} onChange={handleChange} colors={colors} />
-                        <FormInput label="NIF" name="nif" value={form.nif} onChange={handleChange} colors={colors} />
-                        <FormInput label="E-mail" name="email" type="email" value={form.email} onChange={handleChange} colors={colors} />
-                        <FormInput label="Telefone" name="telefone" value={form.telefone} onChange={handleChange} colors={colors} />
+                        <FormInput label="Nome" name="nome" value={form.nome} onChange={handleChange} colors={colors} disabled={isSuspended} />
+                        <FormInput label="NIF" name="nif" value={form.nif} onChange={handleChange} colors={colors} disabled={isSuspended} />
+                        <FormInput label="E-mail" name="email" type="email" value={form.email} onChange={handleChange} colors={colors} disabled={isSuspended} />
+                        <FormInput label="Telefone" name="telefone" value={form.telefone} onChange={handleChange} colors={colors} disabled={isSuspended} />
                         <div className="space-y-2 md:col-span-2">
                             <Label htmlFor="endereco" style={{ color: colors.text }}>Endereço</Label>
                             <Textarea
                                 id="endereco" name="endereco" value={form.endereco}
-                                onChange={handleChange} rows={3}
+                                onChange={handleChange} rows={3} disabled={isSuspended}
                                 style={{
                                     backgroundColor: colors.card,
                                     borderColor: colors.border,
@@ -739,14 +806,15 @@ const EmpresaTab = ({ colors, user }: { colors: ThemeColors; user: UserType | nu
                                 }}
                             />
                         </div>
-                        <FormInput label="Website" name="website" value={form.website} onChange={handleChange} colors={colors} />
+                        <FormInput label="Website" name="website" value={form.website} onChange={handleChange} colors={colors} disabled={isSuspended} />
                     </div>
                 </CardContent>
                 <CardFooter className="flex justify-end border-t pt-6" style={{ borderColor: colors.border }}>
-                    <SaveButton onClick={handleSubmit} loading={loading} colors={colors} />
+                    <SaveButton onClick={handleSubmit} loading={loading} colors={colors} disabled={isSuspended} />
                 </CardFooter>
             </Card>
 
+            {/* Card de configurações fiscais (desabilitado se suspensa) */}
             <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                 <CardHeader>
                     <CardTitle style={{ color: colors.primary }}>Configurações Fiscais</CardTitle>
@@ -756,15 +824,38 @@ const EmpresaTab = ({ colors, user }: { colors: ThemeColors; user: UserType | nu
                 </CardHeader>
                 <CardContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <FormInput label="Série padrão" name="serie_padrao" value={form.serie_padrao} onChange={handleChange} colors={colors} />
-                        <FormInput label="IVA padrão (%)" name="iva_padrao" type="number" value={form.iva_padrao} onChange={handleChange} colors={colors} />
+                        <FormInput label="Série padrão" name="serie_padrao" value={form.serie_padrao} onChange={handleChange} colors={colors} disabled={isSuspended} />
+                        <FormInput label="IVA padrão (%)" name="iva_padrao" type="number" value={form.iva_padrao} onChange={handleChange} colors={colors} disabled={isSuspended} />
                     </div>
                 </CardContent>
             </Card>
+
+            {/* Diálogo de confirmação */}
+            <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+                <DialogContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                    <DialogHeader>
+                        <DialogTitle style={{ color: colors.danger }}>
+                            {isSuspended ? "Reativar empresa" : "Desativar empresa"}
+                        </DialogTitle>
+                        <DialogDescription style={{ color: colors.textSecondary }}>
+                            {isSuspended
+                                ? "A empresa será reativada e todos os utilizadores poderão aceder normalmente."
+                                : "Ao desativar a empresa, nenhum utilizador conseguirá aceder ao sistema até que a conta seja reativada."}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShowConfirmDialog(false)} style={{ borderColor: colors.border, color: colors.text }}>
+                            Cancelar
+                        </Button>
+                        <Button onClick={handleToggleStatus} style={{ backgroundColor: colors.primary, color: "white" }}>
+                            Confirmar
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 };
-
 // ─── TAB: UTILIZADORES ────────────────────────────────────────────────────────
 
 const UsuariosTab = ({
