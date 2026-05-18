@@ -39,6 +39,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
         // Gestão de utilizadores
         Route::post('/users', [UserController::class, 'store']);
         Route::get('/relatorios/exportar-saft', [RelatoriosController::class, 'exportarSaft']);
+        Route::get('/saft/alertas', [RelatoriosController::class, 'alertas']);
         Route::get('/users/create', [UserController::class, 'create']);
         Route::apiResource('/users', UserController::class)->except(['store']);
                 Route::patch('/empresa/toggle-status', [EmpresaController::class, 'toggleSelfStatus'])

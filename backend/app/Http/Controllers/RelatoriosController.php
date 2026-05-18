@@ -12,6 +12,8 @@ use App\Models\Tenant\Cliente;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Services\SaftService;
+use App\Services\SaftAlertService;
+use App\Models\Empresa;
 
 class RelatoriosController extends Controller
 {
@@ -33,6 +35,15 @@ public function exportarSaft(Request $request)
     $service = new SaftService();
     $path = $service->generateFull($request->year, $request->month);
     return response()->download($path)->deleteFileAfterSend(false);
+   
+}
+
+
+public function saftAlertas()
+{
+    $empresa = Empresa::on('landlord')->find(session('tenant_id'));
+    $alertas = (new SaftAlertService())->getAlertas($empresa);
+    return response()->json(['alertas' => $alertas]);
 }
     public function dashboard()
     {
