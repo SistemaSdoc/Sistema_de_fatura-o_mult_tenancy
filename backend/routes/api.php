@@ -38,6 +38,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
     Route::middleware('role:admin')->group(function () use ($uuidPattern) {
         // Gestão de utilizadores
         Route::post('/users', [UserController::class, 'store']);
+        Route::get('/relatorios/exportar-saft', [RelatoriosController::class, 'exportarSaft']);
         Route::get('/users/create', [UserController::class, 'create']);
         Route::apiResource('/users', UserController::class)->except(['store']);
                 Route::patch('/empresa/toggle-status', [EmpresaController::class, 'toggleSelfStatus'])

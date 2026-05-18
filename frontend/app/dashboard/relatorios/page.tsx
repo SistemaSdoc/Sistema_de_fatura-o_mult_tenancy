@@ -20,6 +20,7 @@ import {
 } from "@/services/relatorios";
 import { useThemeColors } from "@/context/ThemeContext";
 import { toast } from "sonner";
+import { api } from "@/services/axios";
 
 /* ═══════════════════════════════════════════════════════════
    TIPOS
@@ -547,6 +548,42 @@ export default function RelatoriosPage() {
   const [dataFim, setDataFim] = useState("");
   const [filtroAberto, setFiltroAberto] = useState(false);
 
+
+// ... dentro do componente RelatoriosPage, após as declarações de estado existentes
+
+// Estados para SAF-T
+const [anoSaft, setAnoSaft] = useState(new Date().getFullYear());
+const [mesSaft, setMesSaft] = useState(new Date().getMonth() + 1);
+const [exportandoSaft, setExportandoSaft] = useState(false);
+
+// Função para exportar SAF-T
+const handleExportarSaft = async () => {
+  setExportandoSaft(true);
+  try {
+    const response = await api.get("/api/relatorios/exportar-saft", {
+      params: { year: anoSaft, month: mesSaft },
+      responseType: "blob",
+    });
+
+    // Criar link para download
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `saft_${anoSaft}_${mesSaft.toString().padStart(2, "0")}.xml`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+
+    toast.success("Ficheiro SAF-T exportado com sucesso");
+  } catch (error) {
+    console.error("Erro ao exportar SAF-T:", error);
+    toast.error("Erro ao gerar o ficheiro SAF-T");
+  } finally {
+    setExportandoSaft(false);
+  }
+};
+
   /* ── Loaders ── */
   const carregarVendas = useCallback(async () => {
     setLoading(p => ({ ...p, vendas: true }));
@@ -735,51 +772,87 @@ export default function RelatoriosPage() {
       <div className="p-3 sm:p-5 space-y-0" style={{ color: colors.text }}>
 
         {/* ══ CABEÇALHO ══ */}
-        <div
-          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-b"
-          style={{ borderColor: colors.border }}
-        >
-          <div>
-            <h1 className="text-base font-bold tracking-tight" style={{ color: colors.text }}>
-              Relatórios e Análises
-            </h1>
-            <p className="text-xs mt-0.5" style={{ color: colors.textSecondary }}>
-              Indicadores e relatórios detalhados do negócio
-            </p>
-          </div>
+<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-b" style={{ borderColor: colors.border }}>
+  <div>
+    <h1 className="text-base font-bold tracking-tight" style={{ color: colors.text }}>
+      Relatórios e Análises
+    </h1>
+    <p className="text-xs mt-0.5" style={{ color: colors.textSecondary }}>
+      Indicadores e relatórios detalhados do negócio
+    </p>
+  </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleAtualizar}
-              disabled={isLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border transition-colors disabled:opacity-40"
-              style={{ backgroundColor: colors.hover, border, color: colors.textSecondary, borderRadius: 4 }}
-            >
-              <RefreshCw size={12} className={isLoading ? "animate-spin" : ""} />
-              Atualizar
-            </button>
-            <button
-              onClick={handleExportExcel}
-              disabled={exportLoading || !getDadosAtivos()}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 transition-all"
-              style={{ backgroundColor: "#16a34a", borderRadius: 4 }}
-            >
-              <FileSpreadsheet size={12} />
-              Excel
-            </button>
-            <button
-              onClick={handleExportPDF}
-              disabled={exportLoading || !getDadosAtivos()}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 transition-all"
-              style={{ backgroundColor: colors.primary, borderRadius: 4 }}
-            >
-              {exportLoading
-                ? <div className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                : <Download size={12} />}
-              PDF
-            </button>
-          </div>
-        </div>
+  <div className="flex flex-wrap items-center gap-2">
+    {/* Seletor de ano/mês para SAF-T */}
+    <div className="flex items-center gap-1 px-2 py-1 border rounded" style={{ borderColor: colors.border }}>
+      <select
+        value={anoSaft}
+        onChange={(e) => setAnoSaft(Number(e.target.value))}
+        className="text-xs bg-transparent outline-none"
+        style={{ color: colors.text }}
+      >
+        {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map((y) => (
+          <option key={y} value={y}>{y}</option>
+        ))}
+      </select>
+      <span className="text-xs" style={{ color: colors.textSecondary }}>/</span>
+      <select
+        value={mesSaft}
+        onChange={(e) => setMesSaft(Number(e.target.value))}
+        className="text-xs bg-transparent outline-none"
+        style={{ color: colors.text }}
+      >
+        {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+          <option key={m} value={m}>{m.toString().padStart(2, "0")}</option>
+        ))}
+      </select>
+    </div>
+
+    <button
+      onClick={handleExportarSaft}
+      disabled={exportandoSaft}
+      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 transition-all"
+      style={{ backgroundColor: "#4f46e5", borderRadius: 4 }}
+    >
+      {exportandoSaft
+        ? <div className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
+        : <Download size={12} />}
+      SAF-T
+    </button>
+
+    <button
+      onClick={handleAtualizar}
+      disabled={isLoading}
+      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border transition-colors disabled:opacity-40"
+      style={{ backgroundColor: colors.hover, border, color: colors.textSecondary, borderRadius: 4 }}
+    >
+      <RefreshCw size={12} className={isLoading ? "animate-spin" : ""} />
+      Atualizar
+    </button>
+
+    <button
+      onClick={handleExportExcel}
+      disabled={exportLoading || !getDadosAtivos()}
+      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 transition-all"
+      style={{ backgroundColor: "#16a34a", borderRadius: 4 }}
+    >
+      <FileSpreadsheet size={12} />
+      Excel
+    </button>
+
+    <button
+      onClick={handleExportPDF}
+      disabled={exportLoading || !getDadosAtivos()}
+      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 transition-all"
+      style={{ backgroundColor: colors.primary, borderRadius: 4 }}
+    >
+      {exportLoading
+        ? <div className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
+        : <Download size={12} />}
+      PDF
+    </button>
+  </div>
+</div>
 
         {/* ══ TABS ══ */}
         <div style={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderTop: "none" }}>
