@@ -11,6 +11,7 @@ use App\Models\Tenant\Produto;
 use App\Models\Tenant\Cliente;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Services\SaftService;
 
 class RelatoriosController extends Controller
 {
@@ -25,6 +26,14 @@ class RelatoriosController extends Controller
      * Dashboard geral com indicadores principais
      * GET /api/relatorios/dashboard
      */
+   
+
+public function exportarSaft(Request $request)
+{
+    $service = new SaftService();
+    $path = $service->generateFull($request->year, $request->month);
+    return response()->download($path)->deleteFileAfterSend(false);
+}
     public function dashboard()
     {
         try {
