@@ -40,10 +40,9 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
         Route::post('/users', [UserController::class, 'store']);
         Route::get('/users/create', [UserController::class, 'create']);
         Route::apiResource('/users', UserController::class)->except(['store']);
-
-        Route::patch('/empresa/toggleSelf-Status', [EmpresaController::class, 'toggleSelfStatus']);
-        // Gestão completa de clientes (incluindo soft deletes e restores)
-        Route::prefix('clientes')->group(function () use ($uuidPattern) {
+                Route::patch('/empresa/toggle-status', [EmpresaController::class, 'toggleSelfStatus'])
+            ->name('empresa.toggle-status');
+                       Route::prefix('clientes')->group(function () use ($uuidPattern) {
             Route::get('/todos', [ClienteController::class, 'indexWithTrashed'])->name('clientes.todos');
             Route::post('/{id}/restore', [ClienteController::class, 'restore'])->where('id', $uuidPattern)->name('clientes.restore');
             Route::delete('/{id}/force', [ClienteController::class, 'forceDelete'])->where('id', $uuidPattern)->name('clientes.force-delete');
@@ -234,6 +233,7 @@ Route::prefix('landlord')->group(function () {
         Route::post('/empresas', [EmpresaController::class, 'store']);
         Route::get('/empresas/{empresa}', [EmpresaController::class, 'show']);
         Route::put('/empresas/{empresa}', [EmpresaController::class, 'update']);
-        Route::patch('/empresas/toggleSelfStatus', [EmpresaController::class, 'toggleSelfStatus']);
+       Route::patch('/empresas/{empresa}/toggle-status', [EmpresaController::class, 'toggleStatusLandlord']);   // Gestão completa de clientes (incluindo soft deletes e restores)
+
     });
 });

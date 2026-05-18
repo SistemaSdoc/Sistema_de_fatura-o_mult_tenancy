@@ -185,26 +185,84 @@ public function store(Request $request)
     /**
  * Suspender/Ativar a própria empresa (para tenant logado)
  */
-public function toggleSelfStatus(Request $request)
+
+    /**
+     * Suspender/Ativar a própria empresa (para tenant logado)
+     */
+ public function toggleSelfStatus(Request $request)
 {
-    $user = auth('tenant')->user();
-    if (!$user) {
-        return response()->json(['message' => 'Não autenticado.'], 401);
+    // ✅ BYPASS COMPLETO — não usa auth('tenant')->user()
+    // Usa apenas o header X-Empresa-ID que o frontend envia
+    
+    $empresaId = $request->header('X-Empresa-ID') ?? $request->header('X-Tenant-ID');
+    
+    if (!$empresaId) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Empresa não identificada. Header X-Empresa-ID ausente.'
+        ], 400);
     }
-    $empresa = $user->empresa;
+
+    // Buscar empresa no landlord (conexão explícita)
+    $empresa = \App\Models\Empresa::on('landlord')->find($empresaId);
+    
     if (!$empresa) {
-        return response()->json(['message' => 'Empresa não encontrada.'], 404);
+        return response()->json([
+            'success' => false,
+            'message' => 'Empresa não encontrada no landlord.'
+        ], 404);
     }
-    $novoStatus = $empresa->status === 'ativo' ? 'suspenso' : 'ativo';
-    DB::connection('landlord')
+
+    $statusAnterior = $empresa->status;
+    $novoStatus = $statusAnterior === 'ativo' ? 'suspenso' : 'ativo';
+
+    // Atualizar no landlord
+    $afetados = DB::connection('landlord')
         ->table('empresas')
         ->where('id', $empresa->id)
-        ->update(['status' => $novoStatus]);
-    $empresa->status = $novoStatus;
+        ->where('status', $statusAnterior)
+        ->update([
+            'status' => $novoStatus,
+            'updated_at' => now(),
+        ]);
+
+    if ($afetados === 0) {
+        return response()->json([
+            'success' => false,
+            'message' => 'O status foi alterado por outro utilizador. Recarregue a página.',
+        ], 409);
+    }
+
+    $acao = $novoStatus === 'ativo' ? 'reativada' : 'suspensa';
+
     return response()->json([
         'success' => true,
-        'message' => "Empresa {$novoStatus} com sucesso.",
-        'status'  => $novoStatus,
+        'message' => "Empresa {$acao} com sucesso.",
+        'status' => $novoStatus,
+        'status_anterior' => $statusAnterior,
     ]);
+}
+    /**
+     * Toggle status de empresa (para landlord)
+     */
+    public function toggleStatusLandlord(Request $request, Empresa $empresa)
+    {
+        $statusAnterior = $empresa->status;
+        $novoStatus = $statusAnterior === 'ativo' ? 'suspenso' : 'ativo';
+
+        $empresa->update(['status' => $novoStatus]);
+
+        Log::info('[LANDLORD] Status de empresa alterado', [
+            'empresa_id' => $empresa->id,
+            'status_anterior' => $statusAnterior,
+            'status_novo' => $novoStatus,
+            'alterado_por' => auth('landlord_api')->id(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Empresa {$novoStatus} com sucesso.",
+            'status' => $novoStatus,
+        ]);
 }
 }

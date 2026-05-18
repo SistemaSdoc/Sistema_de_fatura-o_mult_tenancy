@@ -723,22 +723,21 @@ const EmpresaTab = ({ colors, user }: { colors: ThemeColors; user: UserType | nu
         }
     };
 
-    const handleToggleStatus = async () => {
-        setTogglingStatus(true);
-        try {
-            const response = await api.patch("/api/empresa/toggleSelf-Status");
-            const newStatus = response.data.status;
-            setEmpresaStatus(newStatus);
-            toast.success(response.data.message);
-            setShowConfirmDialog(false);
-            // Recarregar a página para atualizar o contexto e refletir o status
-            window.location.reload();
-        } catch (err: any) {
-            toast.error(err.response?.data?.message || "Erro ao alterar status");
-        } finally {
-            setTogglingStatus(false);
-        }
-    };
+const handleToggleStatus = async () => {
+    setTogglingStatus(true);
+    try {
+        const response = await api.patch("/api/empresa/toggle-status");
+        const newStatus = response.data.status;
+        setEmpresaStatus(newStatus);
+        toast.success(response.data.message);
+        setShowConfirmDialog(false);
+        window.location.reload();
+    } catch (err: any) {
+        toast.error(err.response?.data?.message || "Erro ao alterar status");
+    } finally {
+        setTogglingStatus(false);
+    }
+};
 
     const isSuspended = empresaStatus === "suspenso";
 
