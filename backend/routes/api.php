@@ -40,16 +40,15 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
         Route::post('/users', [UserController::class, 'store']);
         Route::get('/users/create', [UserController::class, 'create']);
         Route::apiResource('/users', UserController::class)->except(['store']);
-
-        // Gestão completa de clientes (incluindo soft deletes e restores)
-        Route::prefix('clientes')->group(function () use ($uuidPattern) {
+                Route::patch('/empresa/toggle-status', [EmpresaController::class, 'toggleSelfStatus'])
+            ->name('empresa.toggle-status');
+                       Route::prefix('clientes')->group(function () use ($uuidPattern) {
             Route::get('/todos', [ClienteController::class, 'indexWithTrashed'])->name('clientes.todos');
             Route::post('/{id}/restore', [ClienteController::class, 'restore'])->where('id', $uuidPattern)->name('clientes.restore');
             Route::delete('/{id}/force', [ClienteController::class, 'forceDelete'])->where('id', $uuidPattern)->name('clientes.force-delete');
             Route::post('/{id}/ativar', [ClienteController::class, 'ativar'])->where('id', $uuidPattern)->name('clientes.ativar');
             Route::post('/{id}/inativar', [ClienteController::class, 'inativar'])->where('id', $uuidPattern)->name('clientes.inativar');
         });
-        Route::apiResource('/clientes', ClienteController::class);
     });
 
     // ==================== ADMIN + OPERADOR (e contabilista quando aplicável) ====================
@@ -234,6 +233,7 @@ Route::prefix('landlord')->group(function () {
         Route::post('/empresas', [EmpresaController::class, 'store']);
         Route::get('/empresas/{empresa}', [EmpresaController::class, 'show']);
         Route::put('/empresas/{empresa}', [EmpresaController::class, 'update']);
-        Route::patch('/empresas/{empresa}/toggle-status', [EmpresaController::class, 'toggleStatus']);
+       Route::patch('/empresas/{empresa}/toggle-status', [EmpresaController::class, 'toggleStatusLandlord']);   // Gestão completa de clientes (incluindo soft deletes e restores)
+
     });
 });
