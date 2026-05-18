@@ -51,10 +51,12 @@ interface InvoiceTableProps {
   gerandoRecibo: string | null;
   baixandoPdf: string | null;
   imprimindo: string | null;
+  imprimindoTermica: string | null;
   onVerDetalhes: (doc: DocumentoFiscal) => void;
   onGerarRecibo: (doc: DocumentoFiscal) => Promise<DocumentoFiscal | void> | void;
   onImprimirA4: (doc: DocumentoFiscal) => void;
   onImprimirPdf: (doc: DocumentoFiscal) => void;
+  onImprimirTermica: (doc: DocumentoFiscal) => Promise<void>;
   onBaixarPdf: (doc: DocumentoFiscal) => Promise<void>;
   formatKz: (v: number | string | undefined) => string;
   documentoFiscalService: {
@@ -256,9 +258,11 @@ export default function InvoiceTable({
   gerandoRecibo,
   baixandoPdf,
   imprimindo,
+  imprimindoTermica,
   onVerDetalhes,
   onGerarRecibo,
   onImprimirPdf,
+  onImprimirTermica,
   onBaixarPdf,
   formatKz,
   documentoFiscalService,
@@ -288,7 +292,6 @@ export default function InvoiceTable({
   if (!loading && documentos.length === 0) {
     return (
       <div className="p-10 text-center" style={{ color: colors.textSecondary }}>
-        
         <p>Nenhum documento encontrado</p>
       </div>
     );
@@ -303,15 +306,23 @@ export default function InvoiceTable({
       <IconBtn
         onClick={() => onImprimirPdf(doc)}
         disabled={imprimindo === doc.id}
-        title="Imprimir"
+        title="Imprimir PDF"
         color={colors.secondary}
       >
         {imprimindo === doc.id ? <Spinner color={colors.secondary} /> : <Printer size={16} />}
       </IconBtn>
       <IconBtn
+        onClick={() => onImprimirTermica(doc)}
+        disabled={imprimindoTermica === doc.id}
+        title="Imprimir Térmica"
+        color={colors.success}
+      >
+        {imprimindoTermica === doc.id ? <Spinner color={colors.success} /> : <Receipt size={16} />}
+      </IconBtn>
+      <IconBtn
         onClick={() => onBaixarPdf(doc)}
         disabled={baixandoPdf === doc.id}
-        title="PDF"
+        title="Download PDF"
         color={colors.text}
       >
         {baixandoPdf === doc.id ? <Spinner color={colors.text} /> : <Download size={16} />}
@@ -329,7 +340,7 @@ export default function InvoiceTable({
         <IconBtn
           onClick={() => onGerarRecibo(doc)}
           disabled={gerandoRecibo === doc.id}
-          title="Recibo"
+          title="Gerar Recibo"
           color={colors.success}
         >
           {gerandoRecibo === doc.id ? <Spinner color={colors.success} /> : <FileText size={16} />}
@@ -338,15 +349,23 @@ export default function InvoiceTable({
       <IconBtn
         onClick={() => onImprimirPdf(doc)}
         disabled={imprimindo === doc.id}
-        title="Imprimir"
+        title="Imprimir PDF"
         color={colors.secondary}
       >
         {imprimindo === doc.id ? <Spinner color={colors.secondary} /> : <Printer size={16} />}
       </IconBtn>
       <IconBtn
+        onClick={() => onImprimirTermica(doc)}
+        disabled={imprimindoTermica === doc.id}
+        title="Imprimir Térmica"
+        color={colors.success}
+      >
+        {imprimindoTermica === doc.id ? <Spinner color={colors.success} /> : <Receipt size={16} />}
+      </IconBtn>
+      <IconBtn
         onClick={() => onBaixarPdf(doc)}
         disabled={baixandoPdf === doc.id}
-        title="PDF"
+        title="Download PDF"
         color={colors.text}
       >
         {baixandoPdf === doc.id ? <Spinner color={colors.text} /> : <Download size={16} />}
@@ -363,12 +382,12 @@ export default function InvoiceTable({
           style={{ borderCollapse: "collapse", tableLayout: "fixed", minWidth: 480 }}
         >
           <colgroup>
-            <col style={{ width: "16%" }} />
-            <col style={{ width: "30%" }} />
-            <col style={{ width: "13%" }} />
+            <col style={{ width: "14%" }} />
+            <col style={{ width: "28%" }} />
             <col style={{ width: "12%" }} />
-            <col style={{ width: "18%" }} />
-            <col style={{ width: "11%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "24%" }} />
           </colgroup>
           <thead style={{ backgroundColor: colors.primary }}>
             <tr className="text-white text-xs">
@@ -466,12 +485,12 @@ export default function InvoiceTable({
           style={{ borderCollapse: "collapse", tableLayout: "fixed", minWidth: 480 }}
         >
           <colgroup>
-            <col style={{ width: "16%" }} />
-            <col style={{ width: "28%" }} />
-            <col style={{ width: "12%" }} />
-            <col style={{ width: "17%" }} />
             <col style={{ width: "14%" }} />
-            <col style={{ width: "13%" }} />
+            <col style={{ width: "26%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "26%" }} />
           </colgroup>
           <thead style={{ backgroundColor: colors.primary }}>
             <tr className="text-white text-xs">
