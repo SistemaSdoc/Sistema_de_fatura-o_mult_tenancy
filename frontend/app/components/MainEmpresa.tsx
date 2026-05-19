@@ -94,10 +94,10 @@ export default function MainEmpresa({
   const userEmail = user?.email || "";
   const userInitial = userName.charAt(0).toUpperCase();
 
-  // Logo
+  // ✅ Logo e nome da empresa vêm do user.empresa
   const logoFromServer = companyLogo || user?.empresa?.logo || null;
-  const empresaLogo = (!logoError && logoFromServer) ? logoFromServer : "/images/3.png";
-  const nomeEmpresa = companyName || user?.empresa?.nome || "SDOCA-Comercio e Serviços, Lda";
+  const empresaLogo = (!logoError && logoFromServer) ? logoFromServer : "";
+  const nomeEmpresa = companyName || user?.empresa?.nome || "";
 
   useEffect(() => {
     setLogoError(false);
@@ -124,84 +124,64 @@ export default function MainEmpresa({
     setIsLoaded(true);
   }, []);
 
-  // ==================== NOTIFICAÇÕES DE ESTOQUE (COM LOGS) ====================
-const buscarNotificacoesEstoque = useCallback(async () => {
-  if (!user || userLoading) return;
-  if (fetchingNotificacoesRef.current) return;
-  fetchingNotificacoesRef.current = true;
-  setLoadingNotificacoes(true);
+  // ==================== NOTIFICAÇÕES DE ESTOQUE ====================
+  const buscarNotificacoesEstoque = useCallback(async () => {
+    if (!user || userLoading) return;
+    if (fetchingNotificacoesRef.current) return;
+    fetchingNotificacoesRef.current = true;
+    setLoadingNotificacoes(true);
 
-  try {
-    // 1ª chamada: resumo (estoque baixo) – permitido para todos
-    const resumo = await estoqueService.obterResumo();
-    const produtosCriticos = resumo.produtos_criticos || [];
-    const baixo = produtosCriticos.filter(
-      (p: Produto) => p.estoque_atual > 0 && p.estoque_atual <= p.estoque_minimo,
-    );
-    setProdutosEstoqueBaixo(baixo);
+    try {
+      const resumo = await estoqueService.obterResumo();
+      const produtosCriticos = resumo.produtos_criticos || [];
+      const baixo = produtosCriticos.filter(
+        (p: Produto) => p.estoque_atual > 0 && p.estoque_atual <= p.estoque_minimo,
+      );
+      setProdutosEstoqueBaixo(baixo);
 
-    // 2ª chamada (produtos sem estoque) – APENAS para admin e operador
-    if (userRole === 'admin' || userRole === 'operador') {
-      const responseSemEstoque = await produtoService.listarProdutos({
-        sem_estoque: true,
-        tipo: "produto",
-        paginar: false,
-      });
-      const produtosSemStock = Array.isArray(responseSemEstoque.produtos)
-        ? responseSemEstoque.produtos
-        : responseSemEstoque.produtos.data || [];
-      const zero = produtosSemStock.filter((p: Produto) => p.estoque_atual === 0);
-      setProdutosSemEstoque(zero);
-    } else {
-      setProdutosSemEstoque([]); // limpa para o gestor
+      if (userRole === 'admin' || userRole === 'operador') {
+        const responseSemEstoque = await produtoService.listarProdutos({
+          sem_estoque: true,
+          tipo: "produto",
+          paginar: false,
+        });
+        const produtosSemStock = Array.isArray(responseSemEstoque.produtos)
+          ? responseSemEstoque.produtos
+          : responseSemEstoque.produtos.data || [];
+        const zero = produtosSemStock.filter((p: Produto) => p.estoque_atual === 0);
+        setProdutosSemEstoque(zero);
+      } else {
+        setProdutosSemEstoque([]);
+      }
+
+      setUltimaAtualizacao(new Date());
+    } catch (error: any) {
+      console.error("[MainEmpresa] Erro ao buscar notificações:", error);
+    } finally {
+      setLoadingNotificacoes(false);
+      fetchingNotificacoesRef.current = false;
     }
+  }, [user, userLoading, userRole]);
 
-    setUltimaAtualizacao(new Date());
-  } catch (error: any) {
-    console.error("[MainEmpresa] Erro ao buscar notificações:", error);
-  } finally {
-    setLoadingNotificacoes(false);
-    fetchingNotificacoesRef.current = false;
-  }
-}, [user, userLoading, userRole]);
-  // ========== Effect que configura a busca periódica (com logs) ==========
   useEffect(() => {
-    console.log("[MainEmpresa] useEffect [user, userLoading, userRole] DISPARADO", {
-      user: user?.email || null,
-      userLoading,
-      userRole,
-      willSetup: !!(user && !userLoading && (userRole === "admin" || userRole === "operador" || userRole === "contablista" )),
-    });
-
-    // Limpa qualquer intervalo anterior
     if (intervalRef.current) {
-      console.log("[MainEmpresa] Limpando intervalo anterior");
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
 
-    // Só configura se usuário existir, loading terminado e role for admin/operador
-    if (user && !userLoading && (userRole === "admin" || userRole === "operador"  || userRole === "contablista" )) {
-      console.log("[MainEmpresa] Configurando busca periódica de notificações (delay 100ms, depois a cada 5min)");
-      // Busca imediatamente com pequeno delay para garantir cookies
+    if (user && !userLoading && (userRole === "admin" || userRole === "operador" || userRole === "contablista")) {
       const timeoutId = setTimeout(() => {
-        console.log("[MainEmpresa] Executando primeira busca de notificações (após delay de 100ms)");
         buscarNotificacoesEstoque();
       }, 100);
 
-      // Configura intervalo a cada 5 minutos
       intervalRef.current = setInterval(() => {
-        console.log("[MainEmpresa] Executando busca periódica de notificações (5min)");
         buscarNotificacoesEstoque();
       }, 300000);
 
       return () => {
-        console.log("[MainEmpresa] Cleanup: removendo timeout e intervalo");
         clearTimeout(timeoutId);
         if (intervalRef.current) clearInterval(intervalRef.current);
       };
-    } else {
-      console.log("[MainEmpresa] Não configurou busca: condições não atendidas");
     }
   }, [user, userLoading, userRole, buscarNotificacoesEstoque]);
 
@@ -223,7 +203,6 @@ const buscarNotificacoesEstoque = useCallback(async () => {
   };
 
   const toggleNotificacoes = () => {
-    console.log("[MainEmpresa] toggleNotificacoes clicado", { notificacoesAberto, hasUser: !!user, userLoading });
     if (!user || userLoading) {
       toast.info("Aguarde, autenticando...");
       return;
@@ -233,7 +212,7 @@ const buscarNotificacoesEstoque = useCallback(async () => {
       setNotificacoesAberto(true);
       setPanelAnimating(true);
       setTimeout(() => setPanelAnimating(false), 10);
-      buscarNotificacoesEstoque(); // atualiza ao abrir
+      buscarNotificacoesEstoque();
     } else {
       setPanelAnimating(true);
       setTimeout(() => {
@@ -243,7 +222,6 @@ const buscarNotificacoesEstoque = useCallback(async () => {
     }
   };
 
-  // Logout handlers (mantidos do original)
   const abrirModalLogout = () => {
     setLogoutError(null);
     setModalAnimating(true);
@@ -290,30 +268,28 @@ const buscarNotificacoesEstoque = useCallback(async () => {
     return item.roles.includes(userRole);
   };
 
-  // Menu items (mesmo do original)
   const menuItems: MenuItem[] = [
     {
       label: "Dashboard",
       icon: Home,
       path: "/dashboard",
       links: [],
-      roles: ["admin", "contablista","gestor"],
+      roles: ["admin", "contablista", "gestor"],
     },
     {
       label: "Vendas",
       icon: ShoppingCart,
       path: "/dashboard/Vendas",
-      links:
-        userRole === "admin" || userRole === "operador" || userRole === "gestor"
-          ? [
-              { label: "Gerar Faturas-recibo", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart },
-              { label: "Gerar Faturas", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
-              { label: "Gerar proformas", path: "/dashboard/Faturas/Faturas_Proforma", icon: FileText },
-              { label: "Vendas", path: "/dashboard/Faturas/Faturas", icon: FileText },
-            ]
-          : [],
+      links: userRole === "admin" || userRole === "operador" || userRole === "gestor"
+        ? [
+            { label: "Gerar Faturas-recibo", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart },
+            { label: "Gerar Faturas", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
+            { label: "Gerar proformas", path: "/dashboard/Faturas/Faturas_Proforma", icon: FileText },
+            { label: "Vendas", path: "/dashboard/Faturas/Faturas", icon: FileText },
+          ]
+        : [],
       isGroup: true,
-      roles: ["admin", "operador","gestor"],
+      roles: ["admin", "operador", "gestor"],
     },
     {
       label: "Doc. Fiscais",
@@ -333,7 +309,7 @@ const buscarNotificacoesEstoque = useCallback(async () => {
         { label: "Fornecedores", path: "/dashboard/Fornecedores/Novo_fornecedor", icon: Truck },
       ],
       isGroup: true,
-      roles: ["admin","gestor"],
+      roles: ["admin", "gestor"],
     },
     {
       label: "Clientes",
@@ -361,7 +337,6 @@ const buscarNotificacoesEstoque = useCallback(async () => {
   const menuItemsFiltrados = menuItems.filter(temPermissao);
   const totalNotificacoes = produtosEstoqueBaixo.length + produtosSemEstoque.length;
 
-  // Loading state
   if (userLoading) {
     return (
       <div className="flex items-center justify-center w-screen h-screen" style={{ backgroundColor: colors.background }}>
@@ -378,7 +353,6 @@ const buscarNotificacoesEstoque = useCallback(async () => {
 
   return (
     <div className="flex w-screen h-screen overflow-hidden" style={{ backgroundColor: colors.background }}>
-      {/* Sidebar (código original, omitido para brevidade, mas deve ser mantido) */}
       <aside
         className="fixed left-0 top-0 z-40 flex flex-col h-screen transition-all duration-300 border-r md:relative md:z-0"
         style={{
@@ -472,7 +446,6 @@ const buscarNotificacoesEstoque = useCallback(async () => {
         </div>
       </aside>
 
-      {/* Main content */}
       <div className="flex flex-col flex-1 w-full overflow-hidden">
         <header className="flex items-center justify-between gap-3 px-3 h-14 border-b shadow-sm md:h-16 md:px-6" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
           <div className="flex items-center gap-2 min-w-0">
@@ -559,7 +532,6 @@ const buscarNotificacoesEstoque = useCallback(async () => {
         <main className="flex-1 overflow-auto p-3 md:p-6"><div className="animate-fade-in">{children}</div></main>
       </div>
 
-      {/* Logout modal */}
       {logoutModalOpen && (
         <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-all duration-200 ${modalAnimating ? "opacity-0" : "opacity-100"}`} style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }} onClick={fecharModalLogout}>
           <div className={`w-full max-w-sm overflow-hidden shadow-lg transition-all duration-200 ${modalAnimating ? "scale-95 opacity-0" : "scale-100 opacity-100"}`} style={{ backgroundColor: colors.card }} onClick={(e) => e.stopPropagation()}>

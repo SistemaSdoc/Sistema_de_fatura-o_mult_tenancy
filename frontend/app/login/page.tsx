@@ -71,7 +71,7 @@ const InputField: React.FC<InputFieldProps> = ({
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
         required
-        className={`w-full pl-10 pr-${showPasswordToggle ? '12' : '4'} py-3 rounded-xl border-2 outline-none transition-all duration-300`}
+        className={`w-full pl-10 pr-${showPasswordToggle ? '12' : '4'} py-3  border-2 outline-none transition-all duration-300`}
         style={{
           backgroundColor: isFocused ? colors.card : `${colors.card}80`,
           borderColor: isFocused ? colors.secondary : colors.border,
@@ -213,7 +213,7 @@ export default function LoginPage(): React.ReactElement {
               colors={colors}
             />
 
-           {/* <div className="flex justify-end">
+            {/* <div className="flex justify-end">
               <Link href="/forgot-password" className="text-xs font-medium transition-colors" style={{ color: colors.secondary }}>
                 Esqueceu a senha?
               </Link>
@@ -222,7 +222,7 @@ export default function LoginPage(): React.ReactElement {
             <button
               type="submit"
               disabled={isLoading}
-              className={`w-full py-3.5 mt-2 rounded-xl font-semibold text-white flex items-center justify-center gap-2 transition-all duration-300`}
+              className={`w-full py-3.5 mt-2  font-semibold text-white flex items-center justify-center gap-2 transition-all duration-300`}
               style={{ backgroundColor: isLoading ? `${colors.primary}B3` : colors.primary }}
             >
               {isLoading ? (
@@ -249,14 +249,14 @@ export default function LoginPage(): React.ReactElement {
             </div>
           </div>*/}
 
-          {/* Link Cadastro 
+          {/* Link Cadastro */}
           <div className="text-center">
-            <Link href="/cadastro" className="group inline-flex items-center gap-2 transition-colors font-medium" style={{ color: colors.secondary }}>
+            <Link href="/register" className="group inline-flex items-center gap-2 transition-colors font-medium" style={{ color: colors.secondary }}>
               <UserPlus size={18} />
               Não tem conta? Cadastre-se
               <ArrowRight size={16} className="opacity-0 group-hover:opacity-100 transition-opacity" />
             </Link>
-          </div>*/}
+          </div>
         </div>
 
         {/* Footer */}

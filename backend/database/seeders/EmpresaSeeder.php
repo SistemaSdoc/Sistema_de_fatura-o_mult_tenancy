@@ -21,7 +21,7 @@ class EmpresaSeeder extends Seeder
             'subdomain'         => 'mwamba',
             'regime_fiscal'     => 'simplificado',
             'sujeito_iva'       => true,
-            'logo'              => '/public/images/mwamba.jpeg',
+            'logo'              => 'images/mwamba.jpeg',
             'users' => [
                 [
                     'name'       => 'Mwamba Admin',
@@ -49,7 +49,7 @@ class EmpresaSeeder extends Seeder
             'subdomain'         => 'contai',
             'regime_fiscal'     => 'geral',
             'sujeito_iva'       => true,
-            'logo'              => '/public/images/contai.png',
+            'logo'              => 'images/contai.png',
             'users' => [
                 [
                     'name'       => 'Contai Admin',

@@ -16,6 +16,7 @@ return [
         'logout',
         'me',
         'register',
+        'upload-temp-logo'
     ],
 
     /*

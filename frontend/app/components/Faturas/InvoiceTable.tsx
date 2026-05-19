@@ -315,9 +315,9 @@ export default function InvoiceTable({
         onClick={() => onImprimirTermica(doc)}
         disabled={imprimindoTermica === doc.id}
         title="Imprimir Térmica"
-        color={colors.success}
+        color={colors.secondary}
       >
-        {imprimindoTermica === doc.id ? <Spinner color={colors.success} /> : <Receipt size={16} />}
+        {imprimindoTermica === doc.id ? <Spinner color={colors.secondary} /> : <Printer size={16} />}
       </IconBtn>
       <IconBtn
         onClick={() => onBaixarPdf(doc)}

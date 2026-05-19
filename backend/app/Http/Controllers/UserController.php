@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Tenant\User;
+use App\Models\Empresa;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -10,7 +11,7 @@ use Illuminate\Validation\Rule;
 class UserController extends Controller
 {
     /**
-     * Retorna o utilizador autenticado (sem relação empresa)
+     * Retorna o utilizador autenticado com os dados da empresa
      */
     public function me(Request $request)
     {
@@ -20,9 +21,38 @@ class UserController extends Controller
             return response()->json(['message' => 'Não autenticado'], 401);
         }
 
+        // Buscar a empresa do tenant atual
+        $empresa = Empresa::on('landlord')
+            ->where('db_name', config('database.connections.tenant.database'))
+            ->first();
+
         return response()->json([
             'message' => 'Utilizador carregado com sucesso',
-            'user'    => $user,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role,
+                'ativo' => $user->ativo,
+                'printer_ip' => $user->printer_ip,
+                'ultimo_login' => $user->ultimo_login,
+                'created_at' => $user->created_at,
+                'updated_at' => $user->updated_at,
+            ],
+            'empresa' => $empresa ? [
+                'id' => $empresa->id,
+                'nome' => $empresa->nome,
+                'nif' => $empresa->nif,
+                'email' => $empresa->email,
+                'telefone' => $empresa->telefone,
+                'endereco' => $empresa->endereco,
+                'subdomain' => $empresa->subdomain,
+                'logo' => $empresa->logo,
+                'regime_fiscal' => $empresa->regime_fiscal,
+                'sujeito_iva' => $empresa->sujeito_iva,
+                'status' => $empresa->status,
+                'data_registro' => $empresa->data_registro,
+            ] : null,
         ]);
     }
 

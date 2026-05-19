@@ -14,6 +14,7 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+
 /**
  * DocumentoFiscalController
  *
@@ -511,8 +512,8 @@ class DocumentoFiscalController extends Controller
 
     /* =====================================================================
      | IMPRESSÃO TÉRMICA DIRETA — APENAS USB (IGNORA printer_ip)
-     | 
-     |  ALTERAÇÃO IMPORTANTE: Não depende mais do printer_ip do usuário 
+     |
+     |  ALTERAÇÃO IMPORTANTE: Não depende mais do printer_ip do usuário
      | ================================================================== */
 
     public function imprimirTermica(string $id, ImpressoraTermicaService $impressoraService): JsonResponse
@@ -551,14 +552,13 @@ class DocumentoFiscalController extends Controller
                 'itens_count'    => count($dados['itens']),
             ]);
 
-            // ⭐ PASSA O user APENAS para contexto (o service já ignora o printer_ip) ⭐
+            // PASSA O user APENAS para contexto (o service já ignora o printer_ip)
             $impressoraService->imprimirDocumento($documento, $dados, $user);
 
             return response()->json([
                 'success' => true,
                 'message' => 'Documento impresso com sucesso',
             ]);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             return response()->json(['success' => false, 'message' => 'Documento não encontrado'], 404);
         } catch (\Exception $e) {
@@ -609,7 +609,6 @@ class DocumentoFiscalController extends Controller
                 'docInfo'    => $docInfo,
                 'qrCodeImg'  => $qrCodeImg,
             ]);
-
         } catch (\Exception $e) {
             Log::error('Erro no printView', ['id' => $id, 'error' => $e->getMessage()]);
             abort(500, 'Erro ao gerar impressão');
@@ -617,7 +616,7 @@ class DocumentoFiscalController extends Controller
     }
 
     /* =====================================================================
-     | PDF VIEWER — TALÃO TÉRMICO HTML (style receipt) — inalterado
+     | PDF VIEWER — TALÃO TÉRMICO HTML (style receipt)
      | ================================================================== */
 
     public function pdfViewer(string $id): \Illuminate\Contracts\View\View
@@ -664,8 +663,19 @@ class DocumentoFiscalController extends Controller
                 }
             }
 
+            // Buscar empresa pelo nome da base de dados atual
+            $empresa = \App\Models\Empresa::on('landlord')
+                ->where('db_name', config('database.connections.tenant.database'))
+                ->first();
+
+            if ($empresa) {
+                $empresa = $empresa->toArray();
+            } else {
+                $empresa = [];
+            }
+
             return view('documentos.pdf-viewer', [
-                'empresa'         => $dados['empresa'],
+                'empresa'         => $empresa,
                 'documento'       => $documento,
                 'documentoOrigem' => $documentoOrigem,
                 'docInfo'         => $docInfo,
@@ -675,7 +685,6 @@ class DocumentoFiscalController extends Controller
                 'qr_code_img'     => $qrCodeImg,
                 'qr_html'         => $this->gerarQrHtml($qrCodeTexto),
             ]);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             abort(404, 'Documento não encontrado');
         } catch (\Exception $e) {
@@ -685,7 +694,7 @@ class DocumentoFiscalController extends Controller
     }
 
     /* =====================================================================
-     | PDF (DomPDF) - Download — inalterado
+| PDF (DomPDF) - Download — inalterado
      | ================================================================== */
 
     public function downloadPdf(string $id): Response

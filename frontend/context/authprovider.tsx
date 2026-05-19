@@ -24,6 +24,9 @@ export interface Empresa {
     logo: string | null;
     telefone: string | null;
     endereco: string | null;
+    regime_fiscal?: string | null;
+    sujeito_iva?: boolean;
+    status?: string;
 }
 
 export interface User {
@@ -31,6 +34,7 @@ export interface User {
     name: string;
     email: string;
     role: string;
+    ativo?: boolean;
     empresa?: Empresa;
 }
 
@@ -68,7 +72,8 @@ interface AuthProviderProps {
     children: ReactNode;
 }
 
-const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password"];
+// Rotas que NÃO precisam de autenticação (não chamam /me)
+const NO_AUTH_ROUTES = ["/", "/login", "/register", "/forgot-password", "/reset-password"];
 
 export function AuthProvider({ children }: AuthProviderProps) {
     const router = useRouter();
@@ -80,19 +85,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Ref para evitar fetch duplicado na montagem (React Strict Mode)
     const hasFetched = useRef(false);
 
-    const isPublicRoute = pathname
-        ? PUBLIC_ROUTES.some((route) => pathname.startsWith(route))
-        : false;
+    // Verifica se a rota atual NÃO precisa de autenticação
+    const isNoAuthRoute = pathname ? NO_AUTH_ROUTES.includes(pathname) : false;
 
     // ========== FETCH USER ==========
     const fetchUser = useCallback(async (): Promise<void> => {
         console.log("[AuthProvider] fetchUser iniciado", {
             hasUser: !!user,
-            isPublicRoute,
+            isNoAuthRoute,
             pathname,
         });
 
-        if (isPublicRoute) {
+        // ✅ NÃO buscar user em rotas sem autenticação (/, /login, /register, etc.)
+        if (isNoAuthRoute) {
+            console.log("[AuthProvider] Rota sem autenticação, não buscar user");
             setLoading(false);
             return;
         }
@@ -114,17 +120,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 };
                 setUser(userData);
 
-                // ✅ CORREÇÃO: Guardar tenant no localStorage ao carregar user
+                // Guardar tenant no localStorage ao carregar user
                 if (response.data.empresa?.id) {
                     setTenant({
                         id: response.data.empresa.id,
                         subdomain: response.data.empresa.subdomain,
                     });
                     console.log("[AuthProvider] Tenant guardado via /me:", response.data.empresa.id);
-                    console.log("tenant_id:", localStorage.getItem("tenant_id"));
-                    console.log("tenant_subdomain:", localStorage.getItem("tenant_subdomain"));
                 }
-
 
                 console.log("[AuthProvider] User carregado via /me:", userData);
             } else {
@@ -136,19 +139,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
         } finally {
             setLoading(false);
         }
-    }, [isPublicRoute, user]);
+    }, [isNoAuthRoute, user, pathname]);
 
     // ========== MOUNT EFFECT ==========
     useEffect(() => {
         if (hasFetched.current) return;
         hasFetched.current = true;
 
-        if (!isPublicRoute) {
+        // ✅ Só executa fetchUser se NÃO for rota sem autenticação
+        if (!isNoAuthRoute) {
             fetchUser();
         } else {
             setLoading(false);
         }
-    }, [fetchUser, isPublicRoute]);
+    }, [fetchUser, isNoAuthRoute]);
 
     // ========== LOGIN ==========
     const login = useCallback(
