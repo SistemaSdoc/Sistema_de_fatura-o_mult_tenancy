@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -617,6 +618,12 @@ class DocumentoFiscalController extends Controller
 
     /* =====================================================================
      | PDF VIEWER — TALÃO TÉRMICO HTML (style receipt)
+     |
+     | ALTERAÇÃO: o logo da empresa é convertido para base64 aqui no
+     | controller e enviado para a view como $empresa['logo_base64'].
+     | Assim a view não precisa de fazer asset() nem Storage::url() —
+     | funciona com QUALQUER caminho gravado na base de dados
+     | (logos/xxx.jpg, images/yyy.png, etc.).
      | ================================================================== */
 
     public function pdfViewer(string $id): \Illuminate\Contracts\View\View
@@ -668,10 +675,50 @@ class DocumentoFiscalController extends Controller
                 ->where('db_name', config('database.connections.tenant.database'))
                 ->first();
 
-            if ($empresa) {
-                $empresa = $empresa->toArray();
-            } else {
-                $empresa = [];
+            $empresa = $empresa ? $empresa->toArray() : [];
+
+            // ---------------------------------------------------------------
+            // LOGO → BASE64
+            // Converte o logo para base64 aqui no controller.
+            // Aceita qualquer caminho gravado na BD (logos/xxx.jpg,
+            // images/yyy.png, etc.) sem qualquer manipulação de string.
+            // A view recebe $empresa['logo_base64'] pronto a usar no <img>.
+            // ---------------------------------------------------------------
+            $empresa['logo_base64'] = null;
+
+            $logoPath = $empresa['logo'] ?? null;
+
+            if (!empty($logoPath)) {
+                try {
+                    // Tenta primeiro no disco 'public' (storage/app/public)
+                    if (Storage::disk('public')->exists($logoPath)) {
+                        $logoConteudo           = Storage::disk('public')->get($logoPath);
+                        $logoMime               = Storage::disk('public')->mimeType($logoPath) ?: 'image/jpeg';
+                        $empresa['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
+
+                    // Fallback: tenta no disco 'local' (storage/app)
+                    } elseif (Storage::disk('local')->exists($logoPath)) {
+                        $logoConteudo           = Storage::disk('local')->get($logoPath);
+                        $logoMime               = Storage::disk('local')->mimeType($logoPath) ?: 'image/jpeg';
+                        $empresa['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
+
+                    // Fallback: tenta como caminho absoluto no sistema de ficheiros
+                    } elseif (file_exists(public_path($logoPath))) {
+                        $logoConteudo           = file_get_contents(public_path($logoPath));
+                        $logoMime               = mime_content_type(public_path($logoPath)) ?: 'image/jpeg';
+                        $empresa['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
+
+                    } else {
+                        Log::warning('pdfViewer: logo não encontrado em nenhum disco', [
+                            'logo_path' => $logoPath,
+                        ]);
+                    }
+                } catch (\Throwable $logoErr) {
+                    Log::warning('pdfViewer: erro ao converter logo para base64', [
+                        'logo_path' => $logoPath,
+                        'error'     => $logoErr->getMessage(),
+                    ]);
+                }
             }
 
             return view('documentos.pdf-viewer', [
@@ -694,7 +741,7 @@ class DocumentoFiscalController extends Controller
     }
 
     /* =====================================================================
-| PDF (DomPDF) - Download — inalterado
+     | PDF (DomPDF) - Download — inalterado
      | ================================================================== */
 
     public function downloadPdf(string $id): Response

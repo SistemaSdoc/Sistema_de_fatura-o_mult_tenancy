@@ -18,19 +18,18 @@ use App\Http\Controllers\EmpresaController;
 
 $uuidPattern = '[0-9a-fA-F-]{36}';
 
-// ==================== ROTAS PÚBLICAS (sem tenant e sem nenhum middleware) ====================
+// ==================== ROTAS PÚBLICAS ====================
 Route::withoutMiddleware(['resolve.tenant', 'auth.tenant'])->group(function () {
-    // Rota de upload temporário de logo
-    Route::post('/upload-temp-logo', [EmpresaController::class, 'uploadTempLogo'])->name('upload.temp.logo');
+    Route::post('/upload-temp-logo', [EmpresaController::class, 'uploadTempLogo'])
+         ->name('upload.temp.logo');
     
-    // Rota de registo de empresa
-    Route::post('/empresas', [EmpresaController::class, 'store'])->name('empresas.store');
+    Route::post('/empresas', [EmpresaController::class, 'store'])
+         ->name('empresas.store');
 });
 
-// ==================== ROTAS PROTEGIDAS (autenticação + tenant) ====================
+// ==================== ROTAS PROTEGIDAS (Tenant) ====================
 Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uuidPattern) {
 
-    // ===== AUTENTICAÇÃO =====
     Route::get('/me', [UserController::class, 'me']);
 
     // ===== DASHBOARD =====
@@ -49,8 +48,21 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
         Route::get('/saft/alertas', [RelatoriosController::class, 'alertas']);
         Route::get('/users/create', [UserController::class, 'create']);
         Route::apiResource('/users', UserController::class)->except(['store']);
-        Route::patch('/empresa/toggle-status', [EmpresaController::class, 'toggleSelfStatus'])->name('empresa.toggle-status');
+
+        // ===== ROTAS DA EMPRESA (Tenant) =====
+        Route::put('/empresa', [EmpresaController::class, 'updateTenant'])
+             ->name('empresa.update-tenant');
         
+        Route::patch('/empresa', [EmpresaController::class, 'updateTenant']);
+
+        Route::patch('/empresa/toggle-status', [EmpresaController::class, 'toggleSelfStatus'])
+             ->name('empresa.toggle-status');
+
+        // ✅ ROTA ADICIONADA - Upload de Logo
+        Route::post('/empresa/logo', [EmpresaController::class, 'uploadLogo'])
+             ->name('empresa.upload-logo');
+
+        // Clientes
         Route::prefix('clientes')->group(function () use ($uuidPattern) {
             Route::get('/todos', [ClienteController::class, 'indexWithTrashed'])->name('clientes.todos');
             Route::post('/{id}/restore', [ClienteController::class, 'restore'])->where('id', $uuidPattern)->name('clientes.restore');

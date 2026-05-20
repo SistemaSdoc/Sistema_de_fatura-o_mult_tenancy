@@ -511,23 +511,17 @@ public function login(Request $request): JsonResponse
      */
 private function finalizarLogin(Request $request, $tenantUser, Empresa $empresa, string $modo): JsonResponse
 {
-      // 1. Login no guard tenant (API e rotas protegidas)
     Auth::guard('tenant')->login($tenantUser);
-    Log::info('[FINAL] Login tenant guard: ' . Auth::guard('tenant')->id());
 
-    // 2. Garantir que existe LandlordUser correspondente
     $name = $tenantUser->name ?? $tenantUser->nome ?? explode('@', $tenantUser->email)[0] ?? 'Usuário';
     $landlordUser = LandlordUser::firstOrCreate(
         ['email' => $tenantUser->email],
         ['name' => $name, 'password' => $tenantUser->password]
     );
-    
-    Auth::guard('landlord')->login($landlordUser);
 
-    // 3. Regenera sessão (segurança)
+    Auth::guard('landlord')->login($landlordUser);
     $request->session()->regenerate();
 
-    // 4. Salva metadados do tenant na sessão
     session([
         'tenant_id'   => $empresa->id,
         'tenant_db'   => $empresa->db_name,
@@ -536,45 +530,59 @@ private function finalizarLogin(Request $request, $tenantUser, Empresa $empresa,
         'login_modo'  => $modo,
         'login_at'    => now()->toIso8601String(),
     ]);
-    // 5. Atualiza último login no banco tenant
+
     try {
         DB::connection('tenant')
             ->table('users')
             ->where('id', $tenantUser->id)
             ->update(['ultimo_login' => now()]);
-        Log::debug('[AUTH][FINAL] Último login atualizado');
     } catch (\Exception $e) {
-        Log::warning('[AUTH][FINAL] Falha ao atualizar último login', [
-            'error' => $e->getMessage(),
-        ]);
+        Log::warning('[AUTH][FINAL] Falha ao atualizar último login', ['error' => $e->getMessage()]);
     }
 
-    // 6. Log de sucesso
     Log::info('[AUTH][FINAL] ========== LOGIN SUCESSO ==========', [
-        'user' => $tenantUser->email,
-        'user_id' => $tenantUser->id,
-        'empresa' => $empresa->nome,
-        'empresa_id' => $empresa->id,
+        'user'      => $tenantUser->email,
+        'user_id'   => $tenantUser->id,
+        'empresa'   => $empresa->nome,
+        'empresa_id'=> $empresa->id,
         'subdomain' => $empresa->subdomain,
-        'modo' => $modo,
-        'ip' => $request->ip(),
+        'modo'      => $modo,
+        'ip'        => $request->ip(),
     ]);
 
-    // 7. Resposta JSON
+    $fmt = fn ($date) => $date ? \Carbon\Carbon::parse($date)->format('Y-m-d H:i:s') : null;
+
+    // ✅ Recarrega o tenantUser do banco para garantir todos os campos
+    $tenantUser = User::on('tenant')->find($tenantUser->id) ?? $tenantUser;
+
     return response()->json([
         'success' => true,
         'message' => 'Login realizado com sucesso',
         'user' => [
-            'id'    => $tenantUser->id,
-            'name'  => $tenantUser->nome ?? $tenantUser->name,
-            'email' => $tenantUser->email,
-            'role'  => $tenantUser->role,
+            'id'                => $tenantUser->id,
+            'name'              => $tenantUser->name ?? $tenantUser->nome,
+            'email'             => $tenantUser->email,
+            'role'              => $tenantUser->role,
+            'ativo'             => (bool) $tenantUser->ativo,
+            'printer_ip'        => $tenantUser->printer_ip,
+            'ultimo_login'      => $fmt($tenantUser->ultimo_login),
+            'created_at'        => $fmt($tenantUser->created_at),
+            'updated_at'        => $fmt($tenantUser->updated_at),
+            'email_verified_at' => $fmt($tenantUser->email_verified_at ?? null),
         ],
         'empresa' => [
-            'id'        => $empresa->id,
-            'nome'      => $empresa->nome,
-            'nif'       => $empresa->nif,
-            'subdomain' => $empresa->subdomain,
+            'id'            => $empresa->id,
+            'nome'          => $empresa->nome,
+            'nif'           => $empresa->nif,
+            'email'         => $empresa->email,
+            'telefone'      => $empresa->telefone,
+            'endereco'      => $empresa->endereco,
+            'subdomain'     => $empresa->subdomain,
+            'logo'          => $empresa->logo,
+            'regime_fiscal' => $empresa->regime_fiscal ?? 'simplificado',
+            'sujeito_iva'   => (bool) $empresa->sujeito_iva,
+            'status'        => $empresa->status ?? 'ativo',
+            'data_registro' => $fmt($empresa->data_registro),
         ],
     ]);
 }
@@ -602,64 +610,72 @@ private function finalizarLogin(Request $request, $tenantUser, Empresa $empresa,
 public function me(Request $request): JsonResponse
 {
     Log::debug('[AUTH][ME] Debug completo', [
-        'session_id' => $request->session()->getId(),
-        'session_all' => session()->all(),
+        'session_id'                => $request->session()->getId(),
+        'session_all'               => session()->all(),
         'auth_guard_landlord_check' => Auth::guard('landlord')->check(),
-        'auth_guard_landlord_id' => Auth::guard('landlord')->id(),
-        'database_default' => Config::get('database.default'),
-        'tenant_db' => Config::get('database.connections.tenant.database'),
+        'auth_guard_landlord_id'    => Auth::guard('landlord')->id(),
+        'database_default'          => Config::get('database.default'),
+        'tenant_db'                 => Config::get('database.connections.tenant.database'),
     ]);
 
-    // 1. Sessão sempre na landlord
     $landlordUser = Auth::guard('landlord')->user();
     if (!$landlordUser) {
         Log::warning('[AUTH][ME] Usuário não autenticado no guard landlord');
-        return response()->json([
-            'success' => false,
-            'message' => 'Não autenticado.',
-        ], 401);
+        return response()->json(['success' => false, 'message' => 'Não autenticado.'], 401);
     }
 
-    // 2. Tenant da sessão
     $tenantId = session('tenant_id');
     if (!$tenantId) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Sessão incompleta — tenant não identificado.',
-        ], 403);
+        return response()->json(['success' => false, 'message' => 'Sessão incompleta — tenant não identificado.'], 403);
     }
 
     $empresa = Empresa::on('landlord')->find($tenantId);
     if (!$empresa) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Empresa não encontrada.',
-        ], 404);
+        return response()->json(['success' => false, 'message' => 'Empresa não encontrada.'], 404);
     }
 
-    // 3. Carregar dados do tenant pelo email do landlord
+    // ✅ Carrega TODOS os campos do tenantUser pelo email
     $tenantUser = User::on('tenant')->where('email', $landlordUser->email)->first();
 
+    if (!$tenantUser) {
+        return response()->json(['success' => false, 'message' => 'Utilizador não encontrado no tenant.'], 404);
+    }
+
     Log::info('[AUTH][ME] Sucesso', [
-        'user_id' => $landlordUser->id,
-        'tenant_id' => $tenantId,
+        'user_id'          => $tenantUser->id,
+        'tenant_id'        => $tenantId,
         'tenant_subdomain' => $empresa->subdomain,
     ]);
 
-    // 4. Resposta JSON
+    $fmt = fn ($date) => $date ? \Carbon\Carbon::parse($date)->format('Y-m-d H:i:s') : null;
+
     return response()->json([
         'success' => true,
         'user' => [
-            'id'    => $tenantUser?->id ?? $landlordUser->id,
-            'name'  => $tenantUser?->nome ?? $landlordUser->name,
-            'email' => $landlordUser->email,
-            'role'  => $tenantUser?->role ?? 'user',
+            'id'                => $tenantUser->id,
+            'name'              => $tenantUser->name ?? $tenantUser->nome,
+            'email'             => $tenantUser->email,
+            'role'              => $tenantUser->role,
+            'ativo'             => (bool) $tenantUser->ativo,
+            'printer_ip'        => $tenantUser->printer_ip,
+            'ultimo_login'      => $fmt($tenantUser->ultimo_login),
+            'created_at'        => $fmt($tenantUser->created_at),
+            'updated_at'        => $fmt($tenantUser->updated_at),
+            'email_verified_at' => $fmt($tenantUser->email_verified_at ?? null),
         ],
         'empresa' => [
-            'id'        => $empresa->id,
-            'nome'      => $empresa->nome,
-            'nif'       => $empresa->nif ?? null,
-            'subdomain' => $empresa->subdomain,
+            'id'            => $empresa->id,
+            'nome'          => $empresa->nome,
+            'nif'           => $empresa->nif,
+            'email'         => $empresa->email,
+            'telefone'      => $empresa->telefone,
+            'endereco'      => $empresa->endereco,
+            'subdomain'     => $empresa->subdomain,
+            'logo'          => $empresa->logo,
+            'regime_fiscal' => $empresa->regime_fiscal ?? 'simplificado',
+            'sujeito_iva'   => (bool) $empresa->sujeito_iva,
+            'status'        => $empresa->status ?? 'ativo',
+            'data_registro' => $fmt($empresa->data_registro),
         ],
     ]);
 }

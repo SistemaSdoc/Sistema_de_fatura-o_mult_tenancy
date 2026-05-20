@@ -96,7 +96,31 @@ export default function MainEmpresa({
 
   // ✅ Logo e nome da empresa vêm do user.empresa
   const logoFromServer = companyLogo || user?.empresa?.logo || null;
-  const empresaLogo = (!logoError && logoFromServer) ? logoFromServer : "";
+  
+  // ✅ FUNÇÃO PARA VALIDAR E FORMATAR URL DA IMAGEM
+  const getValidImageUrl = (logo: string | null | undefined): string | null => {
+    if (!logo || logoError) return null;
+    
+    // Se já for uma URL absoluta (http/https)
+    if (logo.startsWith('http://') || logo.startsWith('https://')) {
+      return logo;
+    }
+    
+    // Se for um caminho relativo, garantir que comece com "/"
+    if (logo.startsWith('/')) {
+      return logo;
+    }
+    
+    // Se não tiver barra, adicionar
+    if (logo.trim() !== '') {
+      return `/${logo}`;
+    }
+    
+    return null;
+  };
+  
+  const validImageUrl = getValidImageUrl(logoFromServer);
+  const empresaLogo = validImageUrl || "";
   const nomeEmpresa = companyName || user?.empresa?.nome || "";
 
   useEffect(() => {
@@ -372,8 +396,17 @@ export default function MainEmpresa({
           </button>
         )}
         <div className="flex items-center gap-3 h-16 px-4 border-b" style={{ borderColor: colors.border }}>
-          {empresaLogo && !logoError ? (
-            <Image src={empresaLogo} alt="Logo" width={32} height={32} className="object-contain" onError={() => setLogoError(true)} />
+          {/* ✅ LOGO CORRIGIDO - Verifica se a URL é válida antes de renderizar */}
+          {empresaLogo && !logoError && validImageUrl ? (
+            <Image 
+              src={validImageUrl} 
+              alt="Logo" 
+              width={32} 
+              height={32} 
+              className="object-contain" 
+              onError={() => setLogoError(true)} 
+              unoptimized={validImageUrl.startsWith('http')}
+            />
           ) : (
             <div className="flex items-center justify-center w-8 h-8 text-sm font-bold text-white" style={{ backgroundColor: colors.primary }}>
               {nomeEmpresa.charAt(0).toUpperCase()}
