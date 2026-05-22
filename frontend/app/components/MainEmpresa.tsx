@@ -95,7 +95,7 @@ export default function MainEmpresa({
   const userInitial = userName.charAt(0).toUpperCase();
 
   // ✅ Logo e nome da empresa vêm do user.empresa
-  const logoFromServer = companyLogo || user?.empresa?.logo || null;
+  const logoFromServer = `http://localhost:8000/storage/${companyLogo || user?.empresa?.logo || null}`;
   
   // ✅ FUNÇÃO PARA VALIDAR E FORMATAR URL DA IMAGEM
   const getValidImageUrl = (logo: string | null | undefined): string | null => {
@@ -179,8 +179,12 @@ export default function MainEmpresa({
       }
 
       setUltimaAtualizacao(new Date());
-    } catch (error: any) {
-      console.error("[MainEmpresa] Erro ao buscar notificações:", error);
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error("[MainEmpresa] Erro ao buscar notificações:", error);
+      } else {
+        console.error("[MainEmpresa] Erro ao buscar notificações:", String(error));
+      }
     } finally {
       setLoadingNotificacoes(false);
       fetchingNotificacoesRef.current = false;
@@ -401,14 +405,14 @@ export default function MainEmpresa({
             <Image 
               src={validImageUrl} 
               alt="Logo" 
-              width={32} 
-              height={32} 
+              width={72} 
+              height={200} 
               className="object-contain" 
               onError={() => setLogoError(true)} 
               unoptimized={validImageUrl.startsWith('http')}
             />
           ) : (
-            <div className="flex items-center justify-center w-8 h-8 text-sm font-bold text-white" style={{ backgroundColor: colors.primary }}>
+            <div className="flex items-center justify-center w-70 h-70 text-sm font-bold text-white" style={{ backgroundColor: colors.primary }}>
               {nomeEmpresa.charAt(0).toUpperCase()}
             </div>
           )}
