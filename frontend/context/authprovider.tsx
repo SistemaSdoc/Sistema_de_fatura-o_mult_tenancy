@@ -24,6 +24,9 @@ export interface Empresa {
     logo: string | null;
     telefone: string | null;
     endereco: string | null;
+    regime_fiscal?: string | null;
+    sujeito_iva?: boolean;
+    status?: string;
 }
 
 export interface User {
@@ -31,6 +34,7 @@ export interface User {
     name: string;
     email: string;
     role: string;
+    ativo?: boolean;
     empresa?: Empresa;
 }
 
@@ -68,7 +72,8 @@ interface AuthProviderProps {
     children: ReactNode;
 }
 
-const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password"];
+// Rotas que NÃO precisam de autenticação (não chamam /me)
+const NO_AUTH_ROUTES = ["/", "/login", "/register", "/forgot-password", "/reset-password"];
 
 export function AuthProvider({ children }: AuthProviderProps) {
     const router = useRouter();
@@ -80,25 +85,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Ref para evitar fetch duplicado na montagem (React Strict Mode)
     const hasFetched = useRef(false);
 
-    const isPublicRoute = pathname
-        ? PUBLIC_ROUTES.some((route) => pathname.startsWith(route))
-        : false;
+    // Verifica se a rota atual NÃO precisa de autenticação
+    const isNoAuthRoute = pathname ? NO_AUTH_ROUTES.includes(pathname) : false;
 
     // ========== FETCH USER ==========
     const fetchUser = useCallback(async (): Promise<void> => {
         console.log("[AuthProvider] fetchUser iniciado", {
             hasUser: !!user,
-            isPublicRoute,
+            isNoAuthRoute,
             pathname,
         });
 
-        if (isPublicRoute) {
+        // ✅ NÃO buscar user em rotas sem autenticação (/, /login, /register, etc.)
+        if (isNoAuthRoute) {
+            console.log("[AuthProvider] Rota sem autenticação, não buscar user");
             setLoading(false);
             return;
         }
 
         // Se já temos user, não precisamos buscar novamente
-        // (a menos que refreshUser seja chamado explicitamente)
         if (user) {
             console.log("[AuthProvider] User já existe, skip fetchUser");
             setLoading(false);
@@ -114,6 +119,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
                     empresa: response.data.empresa,
                 };
                 setUser(userData);
+
+                // Guardar tenant no localStorage ao carregar user
+                if (response.data.empresa?.id) {
+                    setTenant({
+                        id: response.data.empresa.id,
+                        subdomain: response.data.empresa.subdomain,
+                    });
+                    console.log("[AuthProvider] Tenant guardado via /me:", response.data.empresa.id);
+                }
+
                 console.log("[AuthProvider] User carregado via /me:", userData);
             } else {
                 throw new Error("Não autenticado");
@@ -121,23 +136,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
         } catch (error) {
             console.log("[AuthProvider] fetchUser falhou:", (error as Error).message);
             setUser(null);
-            // NÃO redireciona aqui — deixa o componente de página decidir
         } finally {
             setLoading(false);
         }
-    }, [isPublicRoute, user]); // ← user nas deps para skip inteligente
+    }, [isNoAuthRoute, user, pathname]);
 
     // ========== MOUNT EFFECT ==========
     useEffect(() => {
         if (hasFetched.current) return;
         hasFetched.current = true;
 
-        if (!isPublicRoute) {
+        // ✅ Só executa fetchUser se NÃO for rota sem autenticação
+        if (!isNoAuthRoute) {
             fetchUser();
         } else {
             setLoading(false);
         }
-    }, [fetchUser, isPublicRoute]);
+    }, [fetchUser, isNoAuthRoute]);
 
     // ========== LOGIN ==========
     const login = useCallback(
@@ -166,9 +181,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 // 3. Persiste tenant
                 if (data.empresa) {
                     setTenant(data.empresa);
+                    console.log("[AuthProvider] Tenant guardado no login:", data.empresa.id);
+                } else {
+                    console.warn("[AuthProvider] Login sem empresa!");
                 }
 
-                // 4. Persiste user DIRETAMENTE (evita chamar /me imediatamente)
+                // 4. Persiste user DIRETAMENTE
                 const userData: User = {
                     ...data.user,
                     empresa: data.empresa,
@@ -177,8 +195,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
                 toast.success(`Bem-vindo, ${data.user.name}!`);
 
-                // Pequeno delay para garantir que cookies foram processados pelo browser
-                // antes de navegar (não é gambiarra, é necessário para cookie persistence)
+                // Pequeno delay para garantir que cookies foram processados
                 await new Promise((resolve) => setTimeout(resolve, 50));
 
                 router.replace("/dashboard");
@@ -204,8 +221,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     );
 
     // ========== LOGOUT ==========
-    // ⭐ CORREÇÃO: NUNCA remove cookies manualmente (laravel_session, XSRF-TOKEN)
-    // O backend gerencia a sessão. Remover cookies manualmente quebra a sessão Laravel.
     const logout = useCallback(async (): Promise<LogoutResult> => {
         setLoading(true);
         let apiSuccess = false;
@@ -219,20 +234,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
         } catch (error) {
             apiMessage = "Erro no logout do servidor";
             console.warn("[AuthProvider]", apiMessage, error);
-            // Continua para limpar estado local mesmo com erro na API
         }
 
         // Sempre limpa estado local
         setUser(null);
         clearTenant();
-
-        // ⭐ REMOVIDO: NUNCA remova cookies manualmente!
-        // Cookies.remove("XSRF-TOKEN");      // ❌ QUEBRA SESSÃO
-        // Cookies.remove("laravel_session"); // ❌ QUEBRA SESSÃO
-        // 
-        // O backend já gerencia a sessão via logout().
-        // O cookie laravel_session deve permanecer para que o tenant_id
-        // continue na sessão e o middleware ResolveTenant funcione.
 
         toast.success("Logout realizado");
 
@@ -242,7 +248,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         router.replace("/login");
 
         return {
-            success: true, // Sempre true porque estado local foi limpo
+            success: true,
             message: apiSuccess ? "Logout realizado com sucesso" : "Logout local realizado",
         };
     }, [router]);

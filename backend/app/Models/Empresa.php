@@ -52,6 +52,16 @@ class Empresa extends Model
         });
     }
 
+        public function getTaxAccountingBasis(): string
+{
+    return match ($this->regime_fiscal) {
+        'geral' => 'FT',
+        'simplificado' => 'F',
+        'isento' => 'F',
+        default => 'FT',
+    };
+}
+
     // 🔗 Scope: Apenas ativas
     public function scopeAtivas($query)
     {

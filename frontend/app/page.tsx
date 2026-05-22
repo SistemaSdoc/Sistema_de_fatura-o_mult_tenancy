@@ -67,16 +67,6 @@ interface PricingCardProps {
   colors: ThemeColors;
 }
 
-interface ContactFormState {
-  name: string;
-  message: string;
-}
-
-interface ContactMessageState {
-  type: 'success' | 'error' | '';
-  text: string;
-}
-
 // Botão de Toggle do Tema
 const ThemeToggleButton = () => {
   const { theme, toggleTheme } = useTheme();
@@ -105,20 +95,27 @@ const ThemeToggleButton = () => {
   
 };
 
-// 1. COMPONENTE DE ANIMAÇÃO (Animation Observer)
+// Componente de Animação - MODIFICADO para animar apenas UMA VEZ
 const AnimatedSection: React.FC<AnimatedSectionProps> = ({
   children,
   animation = 'fade-up',
   delay = 0,
   threshold = 0.1
 }) => {
+  const [hasAnimated, setHasAnimated] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
-        setIsVisible(entry.isIntersecting);
+        // Se já animou, não faz mais nada
+        if (hasAnimated) return;
+        
+        if (entry.isIntersecting && !hasAnimated) {
+          setIsVisible(true);
+          setHasAnimated(true); // Marca como já animado para nunca mais voltar
+        }
       },
       { threshold: threshold }
     );
@@ -132,7 +129,7 @@ const AnimatedSection: React.FC<AnimatedSectionProps> = ({
         observer.unobserve(ref.current);
       }
     };
-  }, [threshold]);
+  }, [threshold, hasAnimated]);
 
   const baseClasses = 'transition-all duration-700 ease-out';
   let animationClasses = '';
@@ -155,20 +152,24 @@ const AnimatedSection: React.FC<AnimatedSectionProps> = ({
       : 'opacity-0 translate-x-10';
   }
 
+  // Se já animou, força a classe final para manter visível
+  const finalClasses = hasAnimated && !isVisible 
+    ? animation === 'fade-up' ? 'opacity-100 translate-y-0'
+    : animation === 'fade-in' ? 'opacity-100'
+    : animation === 'slide-right' || animation === 'slide-left' ? 'opacity-100 translate-x-0'
+    : ''
+    : animationClasses;
+
   const style = delay > 0 ? { transitionDelay: `${delay}ms` } : {};
 
   return (
-    <div ref={ref} className={`${baseClasses} ${animationClasses}`} style={style}>
+    <div ref={ref} className={`${baseClasses} ${hasAnimated ? 'opacity-100 translate-y-0 translate-x-0' : finalClasses}`} style={style}>
       {children}
     </div>
   );
 };
 
-// =========================================================================
-// 2. COMPONENTES E ÍCONES AUXILIARES
-// =========================================================================
-
-// Ícone de Visto (Usado nas Funcionalidades e Planos)
+// Ícone de Visto
 const CheckIcon: React.FC<{ color: string }> = ({ color }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -183,12 +184,12 @@ const CheckIcon: React.FC<{ color: string }> = ({ color }) => (
   </svg>
 );
 
-// Ícone de Fatura (Usado no Logotipo e Hero)
+// Ícone de Fatura
 const InvoiceIcon: React.FC<{ sizeClass?: string }> = ({ sizeClass = 'w-12 h-12' }) => (
   <img src="/images/3.png" alt="Invoice Icon" className={sizeClass} />
 );
 
-// Ícone de Menu (Três Barras)
+// Ícone de Menu
 const MenuIcon: React.FC = () => (
   <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16m-7 6h7" />
@@ -241,38 +242,6 @@ const HeroVisual: React.FC<{ colors: ThemeColors }> = ({ colors }) => (
       <InvoiceIcon sizeClass="w-48 h-48" />
     </div>
   </AnimatedSection>
-);
-
-// Componente Simulação de Vídeo
-const VideoSection: React.FC<{ colors: ThemeColors }> = ({ colors }) => (
-  <section className="py-16 md:py-24 text-white" style={{ backgroundColor: colors.primary }}>
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <AnimatedSection animation="fade-up" threshold={0.1}>
-        <h2 className="text-3xl font-extrabold mb-4 text-white">
-          Veja o FaturaJá em Ação
-        </h2>
-        <p className="text-lg mb-10 max-w-2xl mx-auto" style={{ color: '#f2f2f2' }}>
-          Uma breve apresentação do sistema e da nossa missão para simplificar a sua faturação.
-        </p>
-      </AnimatedSection>
-
-      <AnimatedSection animation="fade-in" delay={300} threshold={0.1}>
-        <div
-          className="relative w-full max-w-4xl mx-auto rounded-3xl overflow-hidden shadow-2xl aspect-video"
-          style={{ border: `4px solid ${colors.secondary}`, backgroundColor: '#000000' }}
-        >
-          <video
-            width="100%"
-            height="100%"
-            controls
-            preload="metadata"
-            className="w-full h-full object-cover rounded-xl shadow-lg"
-            src="/video/lv_0_20251103165718.mp4"
-          />
-        </div>
-      </AnimatedSection>
-    </div>
-  </section>
 );
 
 // Componente Acordeão FAQ
@@ -342,7 +311,7 @@ const PricingCard: React.FC<PricingCardProps> = ({ plan, index, colors }) => {
         </ul>
 
         <Link
-          href="/cadastro"
+          href="/register"
           className="mt-auto cursor-pointer inline-block text-center px-8 py-3 rounded-full font-semibold transition duration-300 ease-in-out transform hover:scale-[1.05]"
           style={buttonStyle}
           onMouseOver={e => Object.assign(e.currentTarget.style, buttonHoverStyle)}
@@ -355,9 +324,7 @@ const PricingCard: React.FC<PricingCardProps> = ({ plan, index, colors }) => {
   );
 };
 
-// =========================================================================
-// 3. DADOS
-// =========================================================================
+// DADOS
 const allFeaturesData = [
   { title: "Emissão de Faturas", description: "Crie faturas, notas de crédito e recibos rapidamente, associe clientes, produtos e impostos, e envie por email." },
   { title: "Gestão de Clientes", description: "Cadastre e administre os seus clientes, consulte o histórico de faturas e contactos de forma organizada e segura." },
@@ -389,125 +356,49 @@ const pricingPlans = [
     price: "0 KZ",
     interval: "/mês",
     isPopular: false,
-    features: [
-      "Até 5 faturas/mês",
-      "1 utilizador",
-      "Suporte comunitário",
-      "Armazenamento de 100MB",
-      "Design padrão",
-      "Sem relatórios"
-    ]
+    features: ["Até 5 faturas/mês", "1 utilizador", "Suporte comunitário", "Armazenamento de 100MB", "Design padrão", "Sem relatórios"]
   },
   {
     name: "Essencial",
     price: "19.000 KZ",
     interval: "/mês",
     isPopular: true,
-    features: [
-      "Faturação ilimitada",
-      "Até 3 utilizadores",
-      "Suporte prioritário",
-      "Armazenamento ilimitado",
-      "Gestão de clientes avançada",
-      "Relatórios detalhados (trimestrais)"
-    ]
+    features: ["Faturação ilimitada", "Até 3 utilizadores", "Suporte prioritário", "Armazenamento ilimitado", "Gestão de clientes avançada", "Relatórios detalhados (trimestrais)"]
   },
   {
     name: "Pro",
     price: "39.000 KZ",
     interval: "/mês",
     isPopular: false,
-    features: [
-      "Tudo no Essencial",
-      "Até 5 utilizadores",
-      "API de integração",
-      "Automação simples de pagamentos",
-      "Monitorização de pagamentos",
-      "Relatórios avançados (personalizáveis)"
-    ]
+    features: ["Tudo no Essencial", "Até 5 utilizadores", "API de integração", "Automação simples de pagamentos", "Monitorização de pagamentos", "Relatórios avançados (personalizáveis)"]
   },
   {
     name: "Premium",
     price: "79.000 KZ",
     interval: "/mês",
     isPopular: false,
-    features: [
-      "Tudo no Pro",
-      "Até 10 utilizadores",
-      "Gestão multi-moeda",
-      "Gestão de stocks",
-      "Consultor dedicado",
-      "Suporte 24/7"
-    ]
+    features: ["Tudo no Pro", "Até 10 utilizadores", "Gestão multi-moeda", "Gestão de stocks", "Consultor dedicado", "Suporte 24/7"]
   },
   {
     name: "Empresa",
     price: "149.000 KZ",
     interval: "/mês",
     isPopular: false,
-    features: [
-      "Tudo no Premium",
-      "Utilizadores ilimitados",
-      "Servidor dedicado",
-      "Formação personalizada",
-      "Onboarding VIP",
-      "Conformidade internacional"
-    ]
+    features: ["Tudo no Premium", "Utilizadores ilimitados", "Servidor dedicado", "Formação personalizada", "Onboarding VIP", "Conformidade internacional"]
   }
 ];
 
-// Mapeamento de links para a navegação
 const navLinks = [
   { name: 'Funcionalidades', id: 'funcionalidades' },
   { name: 'Processo', id: 'processo' },
   { name: 'Planos', id: 'planos' },
   { name: 'FAQ', id: 'faq' },
-  { name: 'Comentario', id: 'contacto' },
 ];
-
-// =========================================================================
-// 4. COMPONENTE PRINCIPAL APP
-// =========================================================================
 
 export default function App() {
   const colors = useThemeColors();
-
-  // Estado para controlar o menu mobile (hamburger)
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  // Simulação do Contact Form
-  const [contactForm, setContactForm] = useState<ContactFormState>({
-    name: '',
-    message: ''
-  });
-  const [isContactLoading, setIsContactLoading] = useState(false);
-  const [contactMessage, setContactMessage] = useState<ContactMessageState>({
-    type: '',
-    text: ''
-  });
-
-  const handleContactChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setContactForm(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleContactSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setContactMessage({ type: '', text: '' });
-    setIsContactLoading(true);
-
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    if (contactForm.message.length > 10) {
-      setContactMessage({ type: 'success', text: 'Mensagem enviada com sucesso! Responderemos brevemente.' });
-      setContactForm({ name: '', message: '' });
-    } else {
-      setContactMessage({ type: 'error', text: 'Ocorreu um erro. Por favor, preencha a mensagem com mais detalhes.' });
-    }
-    setIsContactLoading(false);
-  };
-
-  // Função para navegação (âncoras)
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
     if (element) {
@@ -516,7 +407,6 @@ export default function App() {
     setIsMenuOpen(false);
   };
 
-  // CORES DO FOOTER (mantidas fixas)
   const FOOTER_GRADIENT_START = "#0F2D44";
   const FOOTER_GRADIENT_END = "#1A476F";
   const FOOTER_GRADIENT_MID = "#0A1F30";
@@ -524,7 +414,6 @@ export default function App() {
   return (
     <div className="min-h-screen font-inter transition-colors duration-300" style={{ backgroundColor: colors.background }}>
 
-      {/* ESTILOS CSS PARA O GRADIENTE ANIMADO (APENAS FOOTER) */}
       <style jsx global>{`
         body {
           font-family: 'Inter', sans-serif;
@@ -550,8 +439,6 @@ export default function App() {
       {/* Header */}
       <header className="sticky top-0 z-50 shadow-lg" style={{ backgroundColor: colors.card }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-
-          {/* Logotipo */}
           <div className="flex items-center space-x-2 cursor-pointer" onClick={() => scrollToSection('topo')}>
             <InvoiceIcon />
             <h1 className="text-2xl font-extrabold" style={{ color: colors.primary }}>
@@ -559,7 +446,6 @@ export default function App() {
             </h1>
           </div>
 
-          {/* Links de Navegação (Desktop) */}
           <nav className="hidden lg:flex items-center space-x-4">
             {navLinks.map(link => (
               <button
@@ -572,10 +458,7 @@ export default function App() {
                 {link.name}
               </button>
             ))}
-
-            {/* Botão de Tema */}
             <ThemeToggleButton />
-
             <Link
               href="/login"
               className="px-4 py-2 rounded-full font-semibold text-sm transition duration-300 ease-in-out transform hover:scale-[1.05]"
@@ -583,9 +466,15 @@ export default function App() {
             >
               Login
             </Link>
+            <Link
+              href="/register"
+              className="px-4 py-2 rounded-full font-semibold text-sm transition duration-300 ease-in-out transform hover:scale-[1.05]"
+              style={{ backgroundColor: colors.secondary, color: 'white' }}
+            >
+              Cadastro
+            </Link>
           </nav>
 
-          {/* Menu Hamburger (Mobile e Tablet) */}
           <div className="lg:hidden flex items-center gap-2">
             <ThemeToggleButton />
             <button
@@ -593,29 +482,26 @@ export default function App() {
               className="p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-opacity-50"
               style={{ color: colors.primary }}
               aria-expanded={isMenuOpen}
-              aria-controls="mobile-menu"
             >
               <MenuIcon />
             </button>
           </div>
-
         </div>
 
-        {/* Dropdown do Menu Mobile */}
         <div id="mobile-menu"
           className={`lg:hidden transition-all duration-300 ease-in-out overflow-hidden ${isMenuOpen ? 'max-h-96 opacity-100 py-2' : 'max-h-0 opacity-0'}`}
           style={{ backgroundColor: colors.card }}
         >
           <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
             {navLinks.map(link => (
-              <a
+              <button
                 key={link.id}
                 onClick={() => scrollToSection(link.id)}
-                className="block px-3 py-2 rounded-md text-base font-medium cursor-pointer transition hover:opacity-80"
+                className="block w-full text-left px-3 py-2 rounded-md text-base font-medium cursor-pointer transition hover:opacity-80"
                 style={{ color: colors.text }}
               >
                 {link.name}
-              </a>
+              </button>
             ))}
             <Link
               href="/login"
@@ -631,59 +517,52 @@ export default function App() {
 
       {/* Conteúdo Principal */}
       <main>
-        {/* 1. Secção Principal (Hero) */}
+        {/* Hero Section */}
         <section id="topo" className="pt-20 pb-16 md:py-32" style={{ backgroundColor: colors.background }}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-
-              {/* Lado Esquerdo: Texto e Botões */}
               <div className="text-center lg:text-left">
-                <AnimatedSection animation="fade-up" delay={0} threshold={0.1}>
+                <AnimatedSection animation="fade-up" delay={0}>
                   <h2 className="text-5xl md:text-6xl font-extrabold tracking-tight mb-4" style={{ color: colors.primary }}>
                     Faturação Simples, <br className="sm:hidden" />
                     <span style={{ color: colors.secondary }}>Poderosa</span> e Rápida.
                   </h2>
                 </AnimatedSection>
-                <AnimatedSection animation="fade-up" delay={200} threshold={0.1}>
+                <AnimatedSection animation="fade-up" delay={200}>
                   <p className="text-xl md:text-2xl mb-8 max-w-lg mx-auto lg:mx-0" style={{ color: colors.textSecondary }}>
                     Gere faturas profissionais em segundos, sem complicações.
                     A ferramenta ideal para pequenos negócios e freelancers.
                   </p>
                 </AnimatedSection>
-                <AnimatedSection animation="fade-up" delay={400} threshold={0.1}>
+                <AnimatedSection animation="fade-up" delay={400}>
                   <div className="flex flex-col sm:flex-row justify-center lg:justify-start gap-4">
-                    <a
-                      href="/login"
-                      className="px-8 py-3 rounded-full font-semibold transition duration-300 ease-in-out transform hover:scale-[1.05] cursor-pointer"
-                      style={{ backgroundColor: colors.primary, color: 'white' }}
+                    <Link
+                      href="/register"
+                      className="group relative px-8 py-3.5 rounded-full font-bold text-white transition-all duration-300 transform hover:scale-105 hover:shadow-xl overflow-hidden"
+                      style={{ backgroundColor: colors.primary }}
                     >
-                      Começar Agora (É Grátis)
-                    </a>
-
-                    <a
+                      <span className="relative z-10 flex items-center gap-2">Comece Grátis</span>
+                      <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                    </Link>
+                    <button
                       onClick={() => scrollToSection('planos')}
-                      className="px-8 py-3 rounded-full font-semibold transition duration-300 ease-in-out transform hover:scale-[1.03] cursor-pointer border"
-                      style={{ color: colors.text, borderColor: colors.border }}
+                      className="px-8 py-3 rounded-full font-semibold transition-all duration-300 transform hover:scale-105 border-2"
+                      style={{ color: colors.text, borderColor: colors.border, backgroundColor: 'transparent' }}
                     >
                       Ver Planos
-                    </a>
+                    </button>
                   </div>
                 </AnimatedSection>
               </div>
-
-              {/* Lado Direito: Visual de Ícone Grande */}
               <HeroVisual colors={colors} />
             </div>
           </div>
         </section>
 
-        {/* 1.5 Secção de Vídeo */}
-        <VideoSection colors={colors} />
-
-        {/* 2. Secção de Funcionalidades */}
+        {/* Funcionalidades */}
         <section id="funcionalidades" className="py-16 md:py-24" style={{ backgroundColor: colors.card }}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <AnimatedSection animation="fade-up" threshold={0.1}>
+            <AnimatedSection animation="fade-up">
               <h1 className="text-4xl font-extrabold text-center mb-12" style={{ color: colors.text }}>
                 Ferramentas Essenciais para o seu Negócio
               </h1>
@@ -691,7 +570,6 @@ export default function App() {
                 Tudo o que precisa para começar a faturar de forma simples, segura e eficiente.
               </p>
             </AnimatedSection>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
               {allFeaturesData.map((feature, index) => (
                 <FeatureCard
@@ -707,15 +585,14 @@ export default function App() {
           </div>
         </section>
 
-        {/* 3. Secção Processo */}
+        {/* Processo */}
         <section id="processo" className="py-16 md:py-24" style={{ backgroundColor: colors.hover }}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <AnimatedSection animation="fade-up" threshold={0.1}>
+            <AnimatedSection animation="fade-up">
               <h2 className="text-3xl font-extrabold text-center mb-12" style={{ color: colors.text }}>
                 Fácil de Usar, Resultados Rápidos
               </h2>
             </AnimatedSection>
-
             <div className="grid grid-cols-1 md:grid-cols-3 gap-9">
               {processSteps.map((step, index) => (
                 <StepCard
@@ -731,32 +608,26 @@ export default function App() {
           </div>
         </section>
 
-        {/* 4. Secção de Planos */}
+        {/* Planos */}
         <section id="planos" className="py-16 md:py-24" style={{ backgroundColor: colors.card }}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <AnimatedSection animation="fade-up" threshold={0.1}>
+            <AnimatedSection animation="fade-up">
               <h2 className="text-3xl font-extrabold text-center mb-12" style={{ color: colors.text }}>
                 Escolha o Plano Certo para Si
               </h2>
             </AnimatedSection>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-8">
               {pricingPlans.map((plan, index) => (
                 <PricingCard key={index} plan={plan} index={index} colors={colors} />
               ))}
             </div>
-            <AnimatedSection animation="fade-in" delay={500}>
-              <p className="text-center mt-12 text-sm" style={{ color: colors.textSecondary }}>
-                Preços apresentados sem IVA. Experimente o plano Grátis sem compromisso.
-              </p>
-            </AnimatedSection>
           </div>
         </section>
 
-        {/* 5. Secção FAQ */}
+        {/* FAQ */}
         <section id="faq" className="py-16 md:py-24" style={{ backgroundColor: colors.background }}>
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-            <AnimatedSection animation="fade-up" threshold={0.1}>
+            <AnimatedSection animation="fade-up">
               <h2 className="text-3xl font-extrabold text-center mb-10" style={{ color: colors.text }}>
                 Perguntas Frequentes
               </h2>
@@ -770,205 +641,54 @@ export default function App() {
         </section>
 
         <EmpresasSection />
-
-        {/* 6. Secção Contacto */}
-        <section id="contacto" className="py-16 md:py-24" style={{ backgroundColor: colors.card }}>
-          <div className="max-w-xl mx-auto px-4 sm:px-6 lg:px-8">
-            <AnimatedSection animation="fade-up" threshold={0.1}>
-              <h2 className="text-3xl font-extrabold text-center mb-10" style={{ color: colors.text }}>
-                Deixe Seu <span style={{ color: colors.secondary }}>Comentário</span>
-              </h2>
-            </AnimatedSection>
-
-            <AnimatedSection animation="fade-up" delay={200} threshold={0.1}>
-              <div className="p-8 rounded-2xl shadow-xl border" style={{
-                backgroundColor: colors.background,
-                borderColor: colors.border
-              }}>
-                {contactMessage.text && (
-                  <div className={`p-4 mb-4 rounded-lg text-sm font-medium ${contactMessage.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}>
-                    {contactMessage.text}
-                  </div>
-                )}
-
-                <form onSubmit={handleContactSubmit} className="space-y-4">
-                  <div>
-                    <label htmlFor="contact-name" className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
-                      Nome
-                    </label>
-                    <input
-                      type="text"
-                      id="contact-name"
-                      name="name"
-                      value={contactForm.name}
-                      onChange={handleContactChange}
-                      required
-                      className="w-full border rounded-lg p-3 outline-none transition duration-150 focus:ring-2"
-                      style={{
-                        backgroundColor: colors.card,
-                        borderColor: colors.border,
-                        color: colors.text
-                      }}
-                      disabled={isContactLoading}
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="contact-message" className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
-                      Mensagem
-                    </label>
-                    <textarea
-                      id="contact-message"
-                      name="message"
-                      rows={4}
-                      value={contactForm.message}
-                      onChange={handleContactChange}
-                      required
-                      className="w-full border rounded-lg p-3 outline-none transition duration-150 focus:ring-2"
-                      style={{
-                        backgroundColor: colors.card,
-                        borderColor: colors.border,
-                        color: colors.text
-                      }}
-                      disabled={isContactLoading}
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full px-8 py-3 rounded-full font-semibold transition duration-300 ease-in-out transform hover:scale-[1.05] disabled:opacity-50"
-                    style={{ backgroundColor: colors.primary, color: 'white' }}
-                    disabled={isContactLoading}
-                  >
-                    {isContactLoading ? 'A Enviar...' : 'Enviar Mensagem'}
-                  </button>
-                </form>
-              </div>
-            </AnimatedSection>
-          </div>
-        </section>
       </main>
 
-      {/* Rodapé (Footer) */}
-      <AnimatedSection animation="fade-in" delay={200} threshold={0.5}>
+      {/* Footer */}
+      <AnimatedSection animation="fade-in" delay={200}>
         <footer className="py-10 shadow-inner transition-colors duration-1000 animated-gradient-section text-white [&_p]:text-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 border-b border-opacity-30 pb-8 mb-8" style={{ borderColor: colors.secondary }}>
-
-              {/* Coluna 1: Info */}
               <div className="col-span-2 md:col-span-1">
                 <h4 className="text-2xl font-extrabold mb-4 text-white">
                   Fatura<span style={{ color: colors.secondary }}>Já</span>
                 </h4>
-                <p className="mb-4 text-white">
-                  A sua solução definitiva para gestão e faturação simplificada. Rápido, seguro e compatível com as normas fiscais.
-                </p>
+                <p className="mb-4 text-white">A sua solução definitiva para gestão e faturação simplificada. Rápido, seguro e compatível com as normas fiscais.</p>
                 <p className="space-y-1">
                   <span className="block text-white">Luanda, Angola</span>
-                  <a href="mailto:geral@sdoca.it.ao" className="block font-semibold hover:underline" style={{ color: colors.secondary }}>
-                    geral@sdoca.it.ao
-                  </a>
-                  <span className="block font-semibold" style={{ color: colors.secondary }}>
-                    +244 923678529 <br /> +244 927800505
-                  </span>
+                  <a href="mailto:geral@sdoca.it.ao" className="block font-semibold hover:underline" style={{ color: colors.secondary }}>geral@sdoca.it.ao</a>
+                  <span className="block font-semibold" style={{ color: colors.secondary }}>+244 923678529 <br /> +244 927800505</span>
                 </p>
               </div>
-
-              {/* Coluna 2: Navegação */}
               <div>
                 <h4 className="text-lg font-semibold mb-4" style={{ color: colors.secondary }}>Navegação</h4>
                 <ul className="space-y-2 text-sm">
                   {navLinks.map(link => (
                     <li key={link.id}>
-                      <button
-                        type="button"
-                        onClick={() => scrollToSection(link.id)}
-                        className="cursor-pointer transition hover:text-white text-white"
-                      >
-                        {link.name}
-                      </button>
+                      <button onClick={() => scrollToSection(link.id)} className="cursor-pointer transition hover:text-white text-white">{link.name}</button>
                     </li>
                   ))}
                 </ul>
               </div>
-
-              {/* Coluna 3: Apoio e Legal */}
               <div>
                 <h4 className="text-lg font-semibold mb-4" style={{ color: colors.secondary }}>Apoio e Legal</h4>
                 <ul className="space-y-2 text-sm">
-                  <li>
-                    <button type="button" onClick={() => scrollToSection("faq")} className="flex items-center gap-2 cursor-pointer transition hover:text-white text-white">
-                      <HelpCircle size={18} />
-                      FAQ
-                    </button>
-                  </li>
-                  <li>
-                    <button type="button" onClick={() => console.log("Link para Suporte Técnico")} className="flex items-center gap-2 cursor-pointer transition hover:text-white text-white">
-                      <Headset size={18} />
-                      Suporte Técnico
-                    </button>
-                  </li>
-                  <li>
-                    <button type="button" onClick={() => console.log("Link para Termos")} className="flex items-center gap-2 cursor-pointer transition hover:text-white text-white">
-                      <FileText size={18} />
-                      Termos de Serviço
-                    </button>
-                  </li>
-                  <li>
-                    <button type="button" onClick={() => console.log("Link para Política")} className="flex items-center gap-2 cursor-pointer transition hover:text-white text-white">
-                      <ShieldCheck size={18} />
-                      Política de Privacidade
-                    </button>
-                  </li>
-                  <li>
-                    <button type="button" onClick={() => console.log("Link para Livro de Reclamações")} className="flex items-center gap-2 cursor-pointer transition hover:text-white text-white">
-                      <BookOpenCheck size={18} />
-                      Livro de Reclamações
-                    </button>
-                  </li>
+                  <li><button onClick={() => scrollToSection("faq")} className="flex items-center gap-2 text-white"><HelpCircle size={18} /> FAQ</button></li>
+                  <li><button className="flex items-center gap-2 text-white"><Headset size={18} /> Suporte Técnico</button></li>
+                  <li><button className="flex items-center gap-2 text-white"><FileText size={18} /> Termos de Serviço</button></li>
+                  <li><button className="flex items-center gap-2 text-white"><ShieldCheck size={18} /> Política de Privacidade</button></li>
+                  <li><button className="flex items-center gap-2 text-white"><BookOpenCheck size={18} /> Livro de Reclamações</button></li>
                 </ul>
               </div>
-
-              {/* Coluna 4: Siga-nos */}
               <div>
                 <h4 className="text-lg font-semibold mb-4" style={{ color: colors.secondary }}>Siga-nos</h4>
                 <div className="flex space-x-2">
-                  <a
-                    href="https://facebook.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-2 rounded-full transition-all duration-300 hover:bg-opacity-10"
-                    style={{ backgroundColor: colors.secondary + '20' }}
-                  >
-                    <Facebook size={22} color="white" className="hover:scale-110 transition-transform" />
-                  </a>
-                  <a
-                    href="https://instagram.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-2 rounded-full transition-all duration-300 hover:bg-opacity-10"
-                    style={{ backgroundColor: colors.secondary + '20' }}
-                  >
-                    <Instagram size={22} color="white" className="hover:scale-110 transition-transform" />
-                  </a>
-                  <a
-                    href="https://linkedin.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-2 rounded-full transition-all duration-300 hover:bg-opacity-10"
-                    style={{ backgroundColor: colors.secondary + '20' }}
-                  >
-                    <Linkedin size={22} color="white" className="hover:scale-110 transition-transform" />
-                  </a>
+                  <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" className="p-2 rounded-full transition-all duration-300 hover:bg-opacity-10" style={{ backgroundColor: colors.secondary + '20' }}><Facebook size={22} color="white" /></a>
+                  <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="p-2 rounded-full transition-all duration-300 hover:bg-opacity-10" style={{ backgroundColor: colors.secondary + '20' }}><Instagram size={22} color="white" /></a>
+                  <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer" className="p-2 rounded-full transition-all duration-300 hover:bg-opacity-10" style={{ backgroundColor: colors.secondary + '20' }}><Linkedin size={22} color="white" /></a>
                 </div>
               </div>
             </div>
-
-            {/* Direitos de Autor */}
-            <div className="text-center text-sm text-white/70">
-              &copy; 2025 FaturaJá. Todos os direitos reservados. | Desenvolvido em Angola por SDOCA.
-            </div>
+            <div className="text-center text-sm text-white/70">&copy; 2025 FaturaJá. Todos os direitos reservados. | Desenvolvido em Angola por SDOCA.</div>
           </div>
         </footer>
       </AnimatedSection>

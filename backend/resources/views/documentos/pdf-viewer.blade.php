@@ -1,54 +1,68 @@
 @php
 if (!isset($documento) || !$documento) {
-die('Documento não encontrado');
+    die('Documento não encontrado');
 }
 
-$empresaMoradaEstatica = 'Avenida 21 de Janeiro, Gamek';
-$empresaTelefoneEstatico = '+244 943 489 186 ';
-$empresaEmailEstatico = 'geral@sdoca.it.ao';
-$empresaLogo = asset('images/3.png');
+// DADOS DINÂMICOS DA EMPRESA (DO TENANT) - Vem do controller
+$empresaMorada = $empresa['endereco'] ?? 'Endereço não registrado';
+$empresaTelefone = $empresa['telefone'] ?? 'Telefone não registrado';
+$empresaEmail = $empresa['email'] ?? 'Email não registrado';
+$empresaNome = $empresa['nome'] ?? 'EMPRESA';
+$empresaNif = $empresa['nif'] ?? '0000000000';
+
+$logoPath = $empresa['logo'] ?? null;
+
+if (!empty($empresa['logo_base64'])) {
+    $empresaLogo = $empresa['logo_base64']; // já vem pronto como data:image/...
+} elseif (!empty($empresa['logo'])) {
+    $logoPath = ltrim($empresa['logo'], '/');
+    $logoPath = str_replace('public/', '', $logoPath);
+    $empresaLogo = asset($logoPath); // fallback
+} else {
+    $empresaLogo = asset('images/default-logo.png');
+}
 
 $tiposDocumento = [
-'FT' => 'Fatura',
-'FR' => 'Fatura-Recibo',
-'FA' => 'Fat. Adiantamento',
-'NC' => 'Nota de Crédito',
-'ND' => 'Nota de Débito',
-'RC' => 'Recibo',
-'FRt' => 'Fat. Retificação'
+    'FT' => 'Fatura',
+    'FR' => 'Fatura-Recibo',
+    'FA' => 'Fat. Adiantamento',
+    'NC' => 'Nota de Crédito',
+    'ND' => 'Nota de Débito',
+    'RC' => 'Recibo',
+    'FRt' => 'Fat. Retificação'
 ];
 
 // Estado e cores
 $estadoClasse = match($documento->estado ?? '') {
-'emitido' => 'estado-emitido',
-'paga' => 'estado-paga',
-'parcialmente_paga' => 'estado-parcial',
-'cancelado' => 'estado-cancelado',
-'expirado' => 'estado-expirado',
-default => 'estado-emitido'
+    'emitido' => 'estado-emitido',
+    'paga' => 'estado-paga',
+    'parcialmente_paga' => 'estado-parcial',
+    'cancelado' => 'estado-cancelado',
+    'expirado' => 'estado-expirado',
+    default => 'estado-emitido'
 };
 
 $estadoLabel = match($documento->estado ?? '') {
-'emitido' => 'Emitido',
-'paga' => 'Pago',
-'parcialmente_paga' => 'Pag. Parcial',
-'cancelado' => 'Cancelado',
-'expirado' => 'Expirado',
-default => ($documento->estado ?? '')
+    'emitido' => 'Emitido',
+    'paga' => 'Pago',
+    'parcialmente_paga' => 'Pag. Parcial',
+    'cancelado' => 'Cancelado',
+    'expirado' => 'Expirado',
+    default => ($documento->estado ?? '')
 };
 
 $metodosPagamento = [
-'transferencia' => 'Transferência Bancária',
-'multibanco' => 'Multibanco',
-'dinheiro' => 'Dinheiro',
-'cheque' => 'Cheque',
-'cartao' => 'Cartão'
+    'transferencia' => 'Transferência Bancária',
+    'multibanco' => 'Multibanco',
+    'dinheiro' => 'Dinheiro',
+    'cheque' => 'Cheque',
+    'cartao' => 'Cartão'
 ];
 
 // Determinar qual documento usar para os totais (para recibos, usa o documento de origem)
 $docParaTotais = $documento;
 if ($documento->tipo_documento === 'RC' && isset($documentoOrigem) && $documentoOrigem) {
-$docParaTotais = $documentoOrigem;
+    $docParaTotais = $documentoOrigem;
 }
 
 // Tentar obter o desconto global da venda associada
@@ -57,13 +71,13 @@ $troco = 0;
 
 // Se o documento fiscal tem uma venda associada, buscar os dados da venda
 if ($docParaTotais->venda_id && isset($docParaTotais->venda)) {
-$venda = $docParaTotais->venda;
-$descontoGlobal = (float) ($venda->desconto_global ?? 0);
-$troco = (float) ($venda->troco ?? 0);
+    $venda = $docParaTotais->venda;
+    $descontoGlobal = (float) ($venda->desconto_global ?? 0);
+    $troco = (float) ($venda->troco ?? 0);
 } else {
-// Fallback: usar os campos do próprio documento fiscal
-$descontoGlobal = (float) ($docParaTotais->desconto_global ?? 0);
-$troco = (float) ($documento->troco ?? 0);
+    // Fallback: usar os campos do próprio documento fiscal
+    $descontoGlobal = (float) ($docParaTotais->desconto_global ?? 0);
+    $troco = (float) ($documento->troco ?? 0);
 }
 
 // Calcular percentual de desconto
@@ -71,9 +85,9 @@ $percentualDesconto = 0;
 $temDesconto = false;
 
 if ($descontoGlobal > 0 && ($docParaTotais->base_tributavel ?? 0) > 0) {
-$temDesconto = true;
-$subtotalBruto = $docParaTotais->base_tributavel + $descontoGlobal;
-$percentualDesconto = ($descontoGlobal / $subtotalBruto) * 100;
+    $temDesconto = true;
+    $subtotalBruto = $docParaTotais->base_tributavel + $descontoGlobal;
+    $percentualDesconto = ($descontoGlobal / $subtotalBruto) * 100;
 }
 
 // Verificar se tem troco
@@ -492,16 +506,16 @@ $temTroco = $troco > 0;
         <!-- Cabeçalho Empresa -->
         <div class="header">
             <img src="{{ $empresaLogo }}" alt="Logo da Empresa" class="company-logo">
-            <div class="company-name">{{ $empresa['nome'] ?? 'EMPRESA' }}</div>
-            <div class="company-info">NIF: {{ $empresa['nif'] ?? '0000000000' }}</div>
-            @if(!empty($empresaMoradaEstatica))
-            <div class="company-info">{{ $empresaMoradaEstatica }}</div>
+            <div class="company-name">{{ $empresaNome }}</div>
+            <div class="company-info">NIF: {{ $empresaNif }}</div>
+            @if(!empty($empresaMorada))
+            <div class="company-info">{{ $empresaMorada }}</div>
             @endif
-            @if(!empty($empresaTelefoneEstatico))
-            <div class="company-info">Tel: {{ $empresaTelefoneEstatico }}</div>
+            @if(!empty($empresaTelefone))
+            <div class="company-info">Tel: {{ $empresaTelefone }}</div>
             @endif
-            @if(!empty($empresaEmailEstatico))
-            <div class="company-info">{{ $empresaEmailEstatico }}</div>
+            @if(!empty($empresaEmail))
+            <div class="company-info">{{ $empresaEmail }}</div>
             @endif
         </div>
 

@@ -38,10 +38,14 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         // API: tenant primeiro, depois Sanctum
-        $middleware->prependToGroup('api', [
-            'resolve.tenant',
-            \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
-        ]);
+    $middleware->prependToGroup('api', [
+        'resolve.tenant',
+        EncryptCookies::class,
+        AddQueuedCookiesToResponse::class,
+        StartSession::class,
+        \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+    ]);
+
 
         
     })

@@ -289,6 +289,7 @@ export default function NovaFaturaProformaPage() {
             }
 
             if (observacoes.trim()) payload.motivo = observacoes.trim();
+            const resultado = await emitirDocumentoFiscal(payload);
             setTimeout(() => router.push("/dashboard/Faturas/DC"), 1500);
         } catch (err: unknown) {
             setError(err instanceof AxiosError ? err.response?.data?.message || "Erro ao salvar proforma" : "Erro ao salvar proforma");

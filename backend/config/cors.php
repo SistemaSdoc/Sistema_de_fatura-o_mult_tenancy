@@ -9,11 +9,14 @@ return [
     */
     'paths' => [
         'api/*',
+        'empresa/*',
+        'landlord/*',
         'sanctum/csrf-cookie',
         'login',
         'logout',
         'me',
-        'register',           // caso uses no futuro
+        'register',
+        'upload-temp-logo'
     ],
 
     /*

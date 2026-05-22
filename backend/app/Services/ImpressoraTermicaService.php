@@ -3,11 +3,9 @@
 namespace App\Services;
 
 use App\Models\Tenant\DocumentoFiscal;
-use Mike42\Escpos\PrintConnectors\DummyPrintConnector;
 use Mike42\Escpos\Printer;
+use Mike42\Escpos\PrintConnectors\FilePrintConnector;
 use Mike42\Escpos\PrintConnectors\WindowsPrintConnector;
-use Mike42\Escpos\PrintConnectors\CupsPrintConnector;
-use Mike42\Escpos\PrintConnectors\NetworkPrintConnector;
 use Mike42\Escpos\CapabilityProfile;
 use Mike42\Escpos\EscposImage;
 use Illuminate\Support\Facades\Log;
@@ -15,114 +13,210 @@ use Illuminate\Support\Facades\Log;
 class ImpressoraTermicaService
 {
     protected int $L = 42;
-
     protected ?Printer $printer = null;
 
-    protected string $nomeImpressora = 'AUTO-THERMAL';
-    // =====================================================
-    // CONFIGURAÇÕES ESTÁTICAS — altere à vontade
-    // =====================================================
-
-    /** Caminho relativo a public/ para o logo (PNG recomendado; deixe vazio para não exibir) */
-    protected string $logo = 'images/mwamba.png';
-
-    /** Slogan exibido abaixo do nome da empresa */
-    protected string $slogan = 'A sua solução em tecnologia';
-
-    /** Endereço completo da empresa */
-    protected string $endereco = 'Rua do Paiol, Bairro Gameke,(Proximo da Farmacia Pedrito),
-Provincia de Luanda';
-    /** Telefone principal */
-    protected string $telefone = '+244 938 747 267';
-
-    /** Telefone alternativo (deixe vazio para ocultar) */
-    protected string $telefone2 = '+244 941 177 948';
-
-    /** E-mail de contacto */
-    protected string $email = 'mwambacomercial@gmail.com';
-
-    /** Texto da política de devolução (deixe vazio para ocultar) */
+    // Configurações da empresa
+    protected string $logo             = 'images/mwamba.png';
+    protected string $slogan           = 'A sua solução em tecnologia';
+    protected string $endereco         = 'Rua do Paiol, Bairro Gameke, (Proximo da Farmacia Pedrito), Provincia de Luanda';
+    protected string $telefone         = '+244 938 747 267';
+    protected string $telefone2        = '+244 941 177 948';
+    protected string $email            = 'mwambacomercial@gmail.com';
     protected string $politicaDevolucao = 'Trocas e devoluções em até 7 dias com recibo.';
+    protected string $mensagemFinal    = 'Obrigado pela sua preferência!';
+    protected string $textoProcessamento = 'Processado por computador';
+    protected string $rotuloQrCode     = 'QR AGT DP71/25';
+    protected int    $hashMaxChars     = 26;
 
-    /** Texto de agradecimento personalizado */
-    protected string $mensagemFinal = 'Obrigado pela sua preferência!';
+    // ⭐ APENAS USB - SEM IP ⭐
+    protected string $caminhoUSB  = '/dev/usb/lp0';
+
     public function __construct()
     {
-        $this->nomeImpressora = env('IMPRESSORA_TERMICA', 'AUTO-THERMAL');
+        $caminhoEnv = env('IMPRESSORA_USB_PATH');
+        if (!empty($caminhoEnv)) {
+            $this->caminhoUSB = $caminhoEnv;
+        }
+
+        $so = strtoupper(substr(PHP_OS, 0, 3));
+        if ($so === 'WIN') {
+            $this->caminhoUSB = env('IMPRESSORA_USB_PATH', 'XPrinter XP-80T');
+        }
     }
 
-    /** Texto legal obrigatório */
-    protected string $textoProcessamento = 'Processado por computador';
+    /* =====================================================================
+     | TESTA CONEXÃO — APENAS USB
+     | ================================================================== */
 
-    /** Rótulo do QR Code (conforme regulamento AGT) */
-    protected string $rotuloQrCode = 'QR AGT DP71/25';
-
-    /** Número máximo de caracteres do hash exibido */
-    protected int $hashMaxChars = 26;
-
-    // =====================================================
-    // FIM DAS CONFIGURAÇÕES ESTÁTICAS
-    // =====================================================
-
-
-    public function gerarEscposBytes(DocumentoFiscal $documento, array $dados): string
+    public function testarConexao(?string $destino = null): bool
     {
-        $printer = null;
+        // IGNORA completamente o parâmetro $destino, usa apenas USB
+        $destino = $this->caminhoUSB;
 
         try {
-            $connector = new DummyPrintConnector();
-            $profile   = CapabilityProfile::load('default');
-            $printer   = new Printer($connector, $profile);
+            $so = strtoupper(substr(PHP_OS, 0, 3));
+            
+            // Windows: nome de impressora
+            if ($so === 'WIN') {
+                $connector = new WindowsPrintConnector($destino);
+                $profile   = CapabilityProfile::load('default');
+                $printer   = new Printer($connector, $profile);
+                $printer->close();
+                return true;
+            }
+
+            // Linux/macOS: dispositivo USB
+            if (file_exists($destino)) {
+                $fh = @fopen($destino, 'w');
+                if ($fh) {
+                    fwrite($fh, "\x1b\x40");
+                    fclose($fh);
+                    return true;
+                }
+            }
+
+            Log::warning("Impressora USB não encontrada ou sem permissão: {$destino}");
+            return false;
+
+        } catch (\Throwable $e) {
+            Log::error('Falha no teste de conexão USB: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /* =====================================================================
+     | MÉTODO PRINCIPAL — APENAS USB (IGNORA COMPLETAMENTE O USER)
+     | ================================================================== */
+
+    public function imprimirDocumento(DocumentoFiscal $documento, array $dados, $user = null): void
+    {
+        // ⭐ FORÇA USO APENAS DO USB - IGNORA COMPLETAMENTE $user->printer_ip ⭐
+        $destino = $this->caminhoUSB;
+
+        try {
+            $this->conectarUSB($destino);
 
             $docInfo = $this->resolverDocInfo($documento);
 
             $empresa = $dados['empresa'] ?? [];
             $cliente = $dados['cliente'] ?? [];
-            $itens   = $dados['itens'] ?? [];
+            $itens   = $dados['itens']   ?? $docInfo->itens ?? [];
             $qrCode  = $dados['qr_code'] ?? null;
 
-            $this->bloco1Cabecalho($printer, $empresa);
-            $this->bloco2TipoNumero($printer, $documento);
+            $this->imprimirCabecalho($empresa);
+            $this->imprimirTipoNumero($documento);
 
             if ($documento->tipo_documento === 'RC' && $docInfo !== $documento) {
-                $this->bloco3OrigemRc($printer, $docInfo);
+                $this->imprimirOrigemRc($docInfo);
             }
 
-            $this->bloco4Cliente($printer, $cliente);
-            $this->bloco5Itens($printer, $itens);
-            $this->bloco6Totais($printer, $documento, $docInfo);
+            $this->imprimirCliente($cliente);
+            $this->imprimirItens($itens);
+            $this->imprimirTotais($documento, $docInfo);
 
-            if (!empty($qrCode))                  $this->bloco7QrCode($printer, $qrCode);
-            if (!empty($documento->hash_fiscal))  $this->bloco8Hash($printer, $documento->hash_fiscal);
+            if (!empty($qrCode)) {
+                $this->imprimirQrCode($qrCode);
+            }
 
-            $this->bloco9Rodape($printer);
+            if (!empty($documento->hash_fiscal)) {
+                $this->imprimirHash($documento->hash_fiscal);
+            }
 
-            $printer->cut();
+            $this->imprimirRodape();
 
-            $bytes = $connector->getData();
+            $this->printer->cut();
+            $this->printer->close();
 
-            return $bytes;
-        } catch (\Exception $e) {
-            Log::error('Erro ao gerar ESC/POS', [
+            Log::info('Impressão térmica concluída via USB', [
                 'documento_id' => $documento->id ?? null,
-                'mensagem'     => $e->getMessage(),
-                'linha'        => $e->getLine()
+                'destino' => $destino,
             ]);
 
-            throw new \Exception('Falha ao gerar o arquivo de impressão térmica.');
+        } catch (\Throwable $e) {
+            Log::error('Erro na impressão térmica USB', [
+                'documento_id' => $documento->id ?? null,
+                'destino'      => $destino,
+                'error'        => $e->getMessage(),
+                'line'         => $e->getLine(),
+            ]);
+            throw new \RuntimeException('Falha ao imprimir via USB: ' . $e->getMessage(), 0, $e);
         } finally {
-            if ($printer) {
-                try {
-                    $printer->close();
-                } catch (\Throwable $e) {
-                }
-            }
+            $this->fechar();
         }
     }
 
-    // ─────────────────────────────────────────────────────
-    // HELPERS INTERNOS
-    // ─────────────────────────────────────────────────────
+    /* =====================================================================
+     | CONEXÃO — APENAS USB (SEM REDE)
+     | ================================================================== */
+
+    private function conectarUSB(string $destino): void
+    {
+        $so = strtoupper(substr(PHP_OS, 0, 3));
+
+        try {
+            // Windows: spooler
+            if ($so === 'WIN') {
+                $connector   = new WindowsPrintConnector($destino);
+                $profile     = CapabilityProfile::load('default');
+                $this->printer = new Printer($connector, $profile);
+                $this->inicializarImpressora();
+                Log::info("Impressora conectada via Windows USB: {$destino}");
+                return;
+            }
+
+            // Linux / macOS: dispositivo USB
+            if (!file_exists($destino)) {
+                throw new \RuntimeException(
+                    "Dispositivo USB não encontrado: {$destino}. Verifique o cabo e execute: ls /dev/usb/"
+                );
+            }
+            if (!is_writable($destino)) {
+                throw new \RuntimeException(
+                    "Sem permissão no dispositivo: {$destino}. Execute: sudo chmod 666 {$destino}"
+                );
+            }
+
+            $connector   = new FilePrintConnector($destino);
+            $profile     = CapabilityProfile::load('default');
+            $this->printer = new Printer($connector, $profile);
+            $this->inicializarImpressora();
+            Log::info("Impressora conectada via Linux USB: {$destino}");
+
+        } catch (\Throwable $e) {
+            Log::error('Erro ao conectar à impressora USB: ' . $e->getMessage());
+            throw new \RuntimeException(
+                'Não foi possível conectar à impressora USB (' . $destino . '): ' . $e->getMessage(), 0, $e
+            );
+        }
+    }
+
+    /**
+     * Inicializa a impressora e força o codepage correto para a XP-80T.
+     */
+    private function inicializarImpressora(): void
+    {
+        // ESC @ — reset completo da impressora
+        $this->printer->initialize();
+
+        // ESC t 0 — seleciona codepage PC437 (padrão XP-80T)
+        $this->printer->getPrintConnector()->write("\x1b\x74\x00");
+
+        // Garante espaçamento de linha padrão
+        $this->printer->setLineSpacing(24);
+    }
+
+    /* =====================================================================
+     | UTILITÁRIOS
+     | ================================================================== */
+
+    private function fechar(): void
+    {
+        try {
+            $this->printer?->close();
+        } catch (\Throwable) {
+            // silencioso
+        }
+    }
 
     private function resolverDocInfo(DocumentoFiscal $documento): DocumentoFiscal
     {
@@ -133,7 +227,6 @@ Provincia de Luanda';
         return $documento;
     }
 
-    /** Centraliza texto dentro da largura $this->L */
     private function centrar(string $texto): string
     {
         $len = mb_strlen($texto);
@@ -142,227 +235,208 @@ Provincia de Luanda';
         return str_repeat(' ', $pad) . $texto;
     }
 
-    /** Linha com dois campos alinhados (esquerda | direita) */
     private function linhaLR(string $esquerda, string $direita): string
     {
         $tamanho = $this->L - mb_strlen($direita);
-        return str_pad($esquerda, $tamanho) . $direita . "\n";
+        return str_pad($esquerda, $tamanho) . $direita;
     }
 
-    // ====================== BLOCOS ======================
+    /* =====================================================================
+     | BLOCOS DE IMPRESSÃO
+     | ================================================================== */
 
-private function bloco1Cabecalho(Printer $p, array $empresa = []): void
-{
-    $empresa = is_array($empresa) ? $empresa : [];
-    $L = $this->L ?? 48;
-
-    $p->setJustification(Printer::JUSTIFY_CENTER);
-
-    // — Logo (opcional) —
-    if (!empty($this->logo) && file_exists(public_path($this->logo))) {
-        try {
-            $img = EscposImage::load(public_path($this->logo), false);
-            $p->bitImage($img);
-        } catch (\Throwable $e) {
-            error_log("Erro ao carregar logo: " . $e->getMessage());
-        }
-    }
-
-    // — Nome da empresa —
-    $p->setEmphasis(true);
-    $p->setTextSize(2, 1);
-    $p->text(mb_strtoupper($empresa['nome'] ?? 'EMPRESA', 'UTF-8') . "\n");
-    $p->setTextSize(1, 1);
-    $p->setEmphasis(false);
-
-    // — Slogan —
-    if (!empty($this->slogan)) {
-        $p->text($this->slogan . "\n");
-    }
-
-    $p->text(str_repeat('-', $L) . "\n");
-
-    // — Endereço —
-    if (!empty($this->endereco)) {
-        $p->text($this->endereco . "\n");
-    }
-
-    // — NIF —
-    $p->text('NIF: ' . ($empresa['nif'] ?? '') . "\n");
-    $p->text(str_repeat('-', $L) . "\n");
-
-    // — Contactos —
-    $linhas = [];
-    if (!empty($this->telefone)) {
-        $linha = 'Tel: ' . $this->telefone;
-        if (!empty($this->telefone2)) $linha .= ' / ' . $this->telefone2;
-        $linhas[] = $linha;
-    }
-    if (!empty($this->email)) $linhas[] = 'Email: ' . $this->email;
-
-    foreach ($linhas as $linha) {
-        $p->text($linha . "\n");
-    }
-
-    $p->text(str_repeat('=', $L) . "\n");
-    $p->setJustification(Printer::JUSTIFY_LEFT);
-}
-
-    private function bloco2TipoNumero(Printer $p, DocumentoFiscal $d): void
+    private function imprimirCabecalho(array $empresa = []): void
     {
-        $p->setJustification(Printer::JUSTIFY_CENTER);
-        $p->setEmphasis(true);
-        $p->text(
+        $this->printer->setJustification(Printer::JUSTIFY_CENTER);
+
+        // Logo (opcional)
+        if (!empty($this->logo) && file_exists(public_path($this->logo))) {
+            try {
+                $img = EscposImage::load(public_path($this->logo));
+                $this->printer->bitImage($img);
+            } catch (\Throwable $e) {
+                Log::warning('Erro ao carregar logo: ' . $e->getMessage());
+            }
+        }
+
+        // Nome da empresa em negrito e tamanho duplo
+        $this->printer->setEmphasis(true);
+        $this->printer->setTextSize(2, 1);
+        $this->printer->text(mb_strtoupper($empresa['nome'] ?? 'MWAMBA COMERCIAL', 'UTF-8') . "\n");
+        $this->printer->setTextSize(1, 1);
+        $this->printer->setEmphasis(false);
+
+        if (!empty($this->slogan)) {
+            $this->printer->text($this->slogan . "\n");
+        }
+
+        $this->printer->text(str_repeat('-', $this->L) . "\n");
+
+        if (!empty($this->endereco)) {
+            foreach (explode("\n", wordwrap($this->endereco, $this->L, "\n", true)) as $linha) {
+                $this->printer->text($linha . "\n");
+            }
+        }
+
+        $this->printer->text('NIF: ' . ($empresa['nif'] ?? '') . "\n");
+        $this->printer->text(str_repeat('-', $this->L) . "\n");
+
+        if (!empty($this->telefone)) {
+            $tel = 'Tel: ' . $this->telefone;
+            if (!empty($this->telefone2)) {
+                $tel .= ' / ' . $this->telefone2;
+            }
+            $this->printer->text($tel . "\n");
+        }
+
+        if (!empty($this->email)) {
+            $this->printer->text('Email: ' . $this->email . "\n");
+        }
+
+        $this->printer->text(str_repeat('=', $this->L) . "\n");
+        $this->printer->setJustification(Printer::JUSTIFY_LEFT);
+    }
+
+    private function imprimirTipoNumero(DocumentoFiscal $d): void
+    {
+        $this->printer->setJustification(Printer::JUSTIFY_CENTER);
+        $this->printer->setEmphasis(true);
+        $this->printer->text(
             ($d->tipo_documento_nome ?? $d->tipo_documento)
-                . ' N '
-                . ($d->numero_documento ?? '')
-                . "\n"
+            . ' N ' . ($d->numero_documento ?? '')
+            . "\n"
         );
-        $p->setEmphasis(false);
-        $p->setJustification(Printer::JUSTIFY_LEFT);
+        $this->printer->setEmphasis(false);
+        $this->printer->setJustification(Printer::JUSTIFY_LEFT);
 
         $data = date('d/m/Y', strtotime($d->data_emissao ?? now()));
         $hora = $d->hora_emissao ? substr($d->hora_emissao, 0, 5) : '';
 
-        // — Série à esquerda, data+hora à direita (dado original) —
-        $p->text($this->linhaLR('Serie: ' . ($d->serie ?? ''), $data . ' ' . $hora));
-
-        $p->text(str_repeat('-', $this->L) . "\n");
+        $this->printer->text($this->linhaLR('Serie: ' . ($d->serie ?? ''), $data . ' ' . $hora) . "\n");
+        $this->printer->text(str_repeat('-', $this->L) . "\n");
     }
 
-private function conectar(): void
-{
-    $so = strtoupper(substr(PHP_OS, 0, 3));
-
-    if ($so === 'WIN') {
-        // Windows — usar nome da impressora compartilhada/local correto
-        $nomeWindows = 'AUTHO-THERMAL';
-        $connector = new WindowsPrintConnector($nomeWindows);
-    } elseif ($so === 'LIN') {
-        // Linux (CUPS)
-        $connector = new CupsPrintConnector("AUTO-THERMAL");
-    } else {
-        // Rede TCP/IP fallback
-        $connector = new NetworkPrintConnector($this->nomeImpressora, 9100);
-    }
-
-    $profile       = CapabilityProfile::load('default');
-    $this->printer = new Printer($connector, $profile);
-}
-
-    private function fechar(): void
+    private function imprimirOrigemRc(DocumentoFiscal $origem): void
     {
-        try {
-            $this->printer?->close();
-        } catch (\Throwable) {
-        }
-    }
-
-    private function bloco3OrigemRc(Printer $p, DocumentoFiscal $origem): void
-    {
-        $p->text(
+        $this->printer->text(
             'Ref.: '
-                . ($origem->tipo_documento_nome ?? $origem->tipo_documento)
-                . ' N '
-                . $origem->numero_documento
-                . "\n"
+            . ($origem->tipo_documento_nome ?? $origem->tipo_documento)
+            . ' N ' . $origem->numero_documento
+            . "\n"
         );
-        $p->text(str_repeat('-', $this->L) . "\n");
+        $this->printer->text(str_repeat('-', $this->L) . "\n");
     }
 
-    private function bloco4Cliente(Printer $p, array $cliente): void
+    private function imprimirCliente(array $cliente): void
     {
-        $p->setEmphasis(true);
-        $p->text('Cliente: ' . ($cliente['nome'] ?? 'Consumidor Final') . "\n");
-        $p->setEmphasis(false);
-        if (!empty($cliente['nif'])) $p->text('NIF: ' . $cliente['nif'] . "\n");
-        $p->text(str_repeat('-', $this->L) . "\n");
+        $this->printer->setEmphasis(true);
+        $this->printer->text('Cliente: ' . ($cliente['nome'] ?? 'Consumidor Final') . "\n");
+        $this->printer->setEmphasis(false);
+
+        if (!empty($cliente['nif'])) {
+            $this->printer->text('NIF: ' . $cliente['nif'] . "\n");
+        }
+
+        $this->printer->text(str_repeat('-', $this->L) . "\n");
     }
 
-    private function bloco5Itens(Printer $p, iterable $itens): void
+    private function imprimirItens(iterable $itens): void
     {
-        $p->setEmphasis(true);
-        $p->text("Desc                  Qtd     Total\n");
-        $p->setEmphasis(false);
-        $p->text(str_repeat('-', $this->L) . "\n");
+        $this->printer->setEmphasis(true);
+        $this->printer->text("ITEM                     QTD     TOTAL\n");
+        $this->printer->setEmphasis(false);
+        $this->printer->text(str_repeat('-', $this->L) . "\n");
 
         foreach ($itens as $item) {
-            $desc  = substr($item->descricao ?? 'Item', 0, 20);
+            $desc  = substr($item->produto->nome ?? $item->descricao ?? 'Item', 0, 22);
             $qtd   = number_format((float)($item->quantidade ?? 1), 0);
-            $total = number_format((float)($item->total_linha ?? 0), 2, ',', '.') . ' Kz';
+            $total = number_format((float)($item->total ?? $item->total_linha ?? 0), 2, ',', '.') . ' Kz';
 
-            $p->text(
-                str_pad($desc, 20) .
-                    str_pad($qtd,  8, ' ', STR_PAD_LEFT) .
-                    str_pad($total, 15, ' ', STR_PAD_LEFT) . "\n"
+            $linha = str_pad($desc, 22)
+                   . str_pad($qtd, 8, ' ', STR_PAD_LEFT)
+                   . str_pad($total, 12, ' ', STR_PAD_LEFT);
+
+            $this->printer->text($linha . "\n");
+        }
+
+        $this->printer->text(str_repeat('=', $this->L) . "\n");
+    }
+
+    private function imprimirTotais(DocumentoFiscal $d, DocumentoFiscal $docInfo): void
+    {
+        $this->printer->text(
+            "Base Tributavel: "
+            . number_format((float)($docInfo->base_tributavel ?? 0), 2, ',', '.')
+            . " Kz\n"
+        );
+        $this->printer->text(
+            "Total IVA:       "
+            . number_format((float)($docInfo->total_iva ?? 0), 2, ',', '.')
+            . " Kz\n"
+        );
+
+        if ((float)($docInfo->total_retencao ?? 0) > 0) {
+            $this->printer->text(
+                "Retencao:        -"
+                . number_format((float)$docInfo->total_retencao, 2, ',', '.')
+                . " Kz\n"
             );
         }
 
-        $p->text(str_repeat('=', $this->L) . "\n");
+        $this->printer->text(str_repeat('-', $this->L) . "\n");
+
+        $this->printer->setEmphasis(true);
+        $this->printer->text(
+            "TOTAL:           "
+            . number_format((float)$d->total_liquido, 2, ',', '.')
+            . " Kz\n"
+        );
+        $this->printer->setEmphasis(false);
+        $this->printer->text(str_repeat('=', $this->L) . "\n");
     }
 
-    private function bloco6Totais(Printer $p, DocumentoFiscal $d, DocumentoFiscal $docInfo): void
+    private function imprimirQrCode(string $qrCode): void
     {
-        $p->text("Base Tributavel: " . number_format((float)($docInfo->base_tributavel ?? 0), 2, ',', '.') . " Kz\n");
-        $p->text("Total IVA:       " . number_format((float)($docInfo->total_iva       ?? 0), 2, ',', '.') . " Kz\n");
+        $this->printer->setJustification(Printer::JUSTIFY_CENTER);
 
-        if ((float)($docInfo->total_retencao ?? 0) > 0) {
-            $p->text("Retencao:       -" . number_format((float)$docInfo->total_retencao, 2, ',', '.') . " Kz\n");
+        if (!empty($this->rotuloQrCode)) {
+            $this->printer->text($this->rotuloQrCode . "\n");
         }
 
-        $p->text(str_repeat('-', $this->L) . "\n");
+        try {
+            $this->printer->qrCode($qrCode, Printer::QR_ECLEVEL_M, 8);
+        } catch (\Throwable $e) {
+            Log::warning('Erro ao imprimir QR Code: ' . $e->getMessage());
+            $this->printer->text('[QR: ' . substr($qrCode, 0, 30) . "...]\n");
+        }
 
-        $p->setEmphasis(true);
-        $p->text("TOTAL:           " . number_format((float)$d->total_liquido, 2, ',', '.') . " Kz\n");
-        $p->setEmphasis(false);
-
-        $p->text(str_repeat('=', $this->L) . "\n");
+        $this->printer->setJustification(Printer::JUSTIFY_LEFT);
+        $this->printer->text(str_repeat('-', $this->L) . "\n");
     }
 
-private function bloco7QrCode(Printer $p, string $qrCode): void
-{
-    $L = $this->L ?? 48; // largura da linha, padrão 48 se não definido
-
-    $p->setJustification(Printer::JUSTIFY_CENTER);
-
-    if (!empty($this->rotuloQrCode)) {
-        $p->text($this->rotuloQrCode . "\n");
-    }
-
-    try {
-        $p->qrCode($qrCode, Printer::QR_ECLEVEL_M, 3);
-    } catch (\Throwable $e) {
-        error_log("Erro ao imprimir QR Code: " . $e->getMessage());
-        $p->text("[QR Code]\n");
-    }
-
-    $p->setJustification(Printer::JUSTIFY_LEFT);
-    $p->text(str_repeat('-', $L) . "\n");
-}
-
-    private function bloco8Hash(Printer $p, string $hash): void
+    private function imprimirHash(string $hash): void
     {
-        $p->text("Hash: " . substr($hash, 0, $this->hashMaxChars) . "\n");
-        $p->text(str_repeat('-', $this->L) . "\n");
+        $this->printer->text('Hash: ' . substr($hash, 0, $this->hashMaxChars) . "\n");
+        $this->printer->text(str_repeat('-', $this->L) . "\n");
     }
 
-    private function bloco9Rodape(Printer $p): void
+    private function imprimirRodape(): void
     {
-        $p->setJustification(Printer::JUSTIFY_CENTER);
+        $this->printer->setJustification(Printer::JUSTIFY_CENTER);
 
-        // — Política de devolução (estático, opcional) —
         if (!empty($this->politicaDevolucao)) {
-            $p->text(str_repeat('-', $this->L) . "\n");
-            // Quebra o texto em linhas para caber na largura do talão
-            $linhas = wordwrap($this->politicaDevolucao, $this->L, "\n", true);
-            $p->text($linhas . "\n");
+            $this->printer->text(str_repeat('-', $this->L) . "\n");
+            foreach (explode("\n", wordwrap($this->politicaDevolucao, $this->L, "\n", true)) as $linha) {
+                $this->printer->text($linha . "\n");
+            }
         }
 
-        $p->text(str_repeat('=', $this->L) . "\n");
-        $p->text($this->textoProcessamento . "\n");   // dado original
-        $p->text($this->mensagemFinal . "\n");          // estático configurável
-        $p->text("*** Fim do Documento ***\n");          // dado original
-        $p->setJustification(Printer::JUSTIFY_LEFT);
-        $p->feed(3);
+        $this->printer->text(str_repeat('=', $this->L) . "\n");
+        $this->printer->text($this->textoProcessamento . "\n");
+        $this->printer->text($this->mensagemFinal . "\n");
+        $this->printer->text("*** Fim do Documento ***\n");
+
+        $this->printer->setJustification(Printer::JUSTIFY_LEFT);
+        $this->printer->feed(3);
     }
 }

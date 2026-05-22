@@ -27,7 +27,7 @@ class ClientePolicy
      */
     public function viewAny(User $user): bool
     {
-        return in_array($user->role, ['admin', 'operador', 'contabilista']);
+        return in_array($user->role, ['admin', 'operador', 'gestor', 'contabilista']);
     }
 
     /**
@@ -43,7 +43,7 @@ class ClientePolicy
      */
     public function create(User $user): bool
     {
-        return in_array($user->role, ['admin', 'operador']);
+        return in_array($user->role, ['admin', 'operador', 'gestor']);
     }
 
     /**
@@ -51,7 +51,7 @@ class ClientePolicy
      */
     public function update(User $user, Cliente $cliente): bool
     {
-        return in_array($user->role, ['admin', 'operador']);
+        return in_array($user->role, ['admin', 'gestor', 'operador']);
     }
 
     /**

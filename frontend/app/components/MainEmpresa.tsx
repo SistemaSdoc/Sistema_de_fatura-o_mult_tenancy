@@ -94,10 +94,34 @@ export default function MainEmpresa({
   const userEmail = user?.email || "";
   const userInitial = userName.charAt(0).toUpperCase();
 
-  // Logo
+  // ✅ Logo e nome da empresa vêm do user.empresa
   const logoFromServer = companyLogo || user?.empresa?.logo || null;
-  const empresaLogo = (!logoError && logoFromServer) ? logoFromServer : "/images/3.png";
-  const nomeEmpresa = companyName || user?.empresa?.nome || "SDOCA-Comercio e Serviços, Lda";
+  
+  // ✅ FUNÇÃO PARA VALIDAR E FORMATAR URL DA IMAGEM
+  const getValidImageUrl = (logo: string | null | undefined): string | null => {
+    if (!logo || logoError) return null;
+    
+    // Se já for uma URL absoluta (http/https)
+    if (logo.startsWith('http://') || logo.startsWith('https://')) {
+      return logo;
+    }
+    
+    // Se for um caminho relativo, garantir que comece com "/"
+    if (logo.startsWith('/')) {
+      return logo;
+    }
+    
+    // Se não tiver barra, adicionar
+    if (logo.trim() !== '') {
+      return `/${logo}`;
+    }
+    
+    return null;
+  };
+  
+  const validImageUrl = getValidImageUrl(logoFromServer);
+  const empresaLogo = validImageUrl || "";
+  const nomeEmpresa = companyName || user?.empresa?.nome || "";
 
   useEffect(() => {
     setLogoError(false);
@@ -124,114 +148,64 @@ export default function MainEmpresa({
     setIsLoaded(true);
   }, []);
 
-  // ==================== NOTIFICAÇÕES DE ESTOQUE (COM LOGS) ====================
+  // ==================== NOTIFICAÇÕES DE ESTOQUE ====================
   const buscarNotificacoesEstoque = useCallback(async () => {
-    console.log("[MainEmpresa] buscarNotificacoesEstoque INICIADO", {
-      timestamp: new Date().toISOString(),
-      hasUser: !!user,
-      userLoading,
-      userRole,
-      fetchingInProgress: fetchingNotificacoesRef.current,
-    });
-
-    // ⭐ Proteção principal: só buscar se usuário estiver autenticado e não estiver carregando
-    if (!user || userLoading) {
-      console.warn("[MainEmpresa] buscarNotificacoesEstoque ABORTADO: usuário não pronto", { hasUser: !!user, userLoading });
-      return;
-    }
-
-    // Evita chamadas simultâneas
-    if (fetchingNotificacoesRef.current) {
-      console.warn("[MainEmpresa] buscarNotificacoesEstoque ABORTADO: já em execução");
-      return;
-    }
+    if (!user || userLoading) return;
+    if (fetchingNotificacoesRef.current) return;
     fetchingNotificacoesRef.current = true;
-
     setLoadingNotificacoes(true);
+
     try {
-      // ----- 1ª chamada: resumo de estoque (estoque baixo) -----
-      console.log("[MainEmpresa] Chamando estoqueService.obterResumo()...");
       const resumo = await estoqueService.obterResumo();
-      console.log("[MainEmpresa] estoqueService.obterResumo() SUCESSO", { resumoRecebido: !!resumo });
       const produtosCriticos = resumo.produtos_criticos || [];
       const baixo = produtosCriticos.filter(
-        (p: Produto) =>
-          p.estoque_atual > 0 && p.estoque_atual <= p.estoque_minimo,
+        (p: Produto) => p.estoque_atual > 0 && p.estoque_atual <= p.estoque_minimo,
       );
       setProdutosEstoqueBaixo(baixo);
-      console.log(`[MainEmpresa] Produtos com estoque baixo: ${baixo.length}`);
 
-      // ----- 2ª chamada: produtos sem estoque -----
-      console.log("[MainEmpresa] Chamando produtoService.listarProdutos({ sem_estoque: true, tipo: 'produto', paginar: false })...");
-      const responseSemEstoque = await produtoService.listarProdutos({
-        sem_estoque: true,
-        tipo: "produto",
-        paginar: false,
-      });
-
-      const produtosSemStock = Array.isArray(responseSemEstoque.produtos)
-        ? responseSemEstoque.produtos
-        : responseSemEstoque.produtos.data || [];
-      const zero = produtosSemStock.filter((p: Produto) => p.estoque_atual === 0);
-      setProdutosSemEstoque(zero);
-      console.log(`[MainEmpresa] Produtos sem estoque: ${zero.length}`);
+      if (userRole === 'admin' || userRole === 'operador') {
+        const responseSemEstoque = await produtoService.listarProdutos({
+          sem_estoque: true,
+          tipo: "produto",
+          paginar: false,
+        });
+        const produtosSemStock = Array.isArray(responseSemEstoque.produtos)
+          ? responseSemEstoque.produtos
+          : responseSemEstoque.produtos.data || [];
+        const zero = produtosSemStock.filter((p: Produto) => p.estoque_atual === 0);
+        setProdutosSemEstoque(zero);
+      } else {
+        setProdutosSemEstoque([]);
+      }
 
       setUltimaAtualizacao(new Date());
-      console.log("[MainEmpresa] buscarNotificacoesEstoque FINALIZADO COM SUCESSO");
     } catch (error: any) {
-      console.error("[MainEmpresa] ERRO em buscarNotificacoesEstoque:", {
-        message: error?.message,
-        status: error?.response?.status,
-        stack: error?.stack,
-      });
-      if (error?.response?.status === 401) {
-        console.warn("[MainEmpresa] 401 detectado - sessão pode ter expirado. O AuthProvider irá lidar com isso.");
-      }
-      // Não limpa os arrays para não piscar a UI
+      console.error("[MainEmpresa] Erro ao buscar notificações:", error);
     } finally {
       setLoadingNotificacoes(false);
       fetchingNotificacoesRef.current = false;
     }
   }, [user, userLoading, userRole]);
 
-  // ========== Effect que configura a busca periódica (com logs) ==========
   useEffect(() => {
-    console.log("[MainEmpresa] useEffect [user, userLoading, userRole] DISPARADO", {
-      user: user?.email || null,
-      userLoading,
-      userRole,
-      willSetup: !!(user && !userLoading && (userRole === "admin" || userRole === "operador")),
-    });
-
-    // Limpa qualquer intervalo anterior
     if (intervalRef.current) {
-      console.log("[MainEmpresa] Limpando intervalo anterior");
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
 
-    // Só configura se usuário existir, loading terminado e role for admin/operador
-    if (user && !userLoading && (userRole === "admin" || userRole === "operador")) {
-      console.log("[MainEmpresa] Configurando busca periódica de notificações (delay 100ms, depois a cada 5min)");
-      // Busca imediatamente com pequeno delay para garantir cookies
+    if (user && !userLoading && (userRole === "admin" || userRole === "operador" || userRole === "contablista")) {
       const timeoutId = setTimeout(() => {
-        console.log("[MainEmpresa] Executando primeira busca de notificações (após delay de 100ms)");
         buscarNotificacoesEstoque();
       }, 100);
 
-      // Configura intervalo a cada 5 minutos
       intervalRef.current = setInterval(() => {
-        console.log("[MainEmpresa] Executando busca periódica de notificações (5min)");
         buscarNotificacoesEstoque();
       }, 300000);
 
       return () => {
-        console.log("[MainEmpresa] Cleanup: removendo timeout e intervalo");
         clearTimeout(timeoutId);
         if (intervalRef.current) clearInterval(intervalRef.current);
       };
-    } else {
-      console.log("[MainEmpresa] Não configurou busca: condições não atendidas");
     }
   }, [user, userLoading, userRole, buscarNotificacoesEstoque]);
 
@@ -253,7 +227,6 @@ export default function MainEmpresa({
   };
 
   const toggleNotificacoes = () => {
-    console.log("[MainEmpresa] toggleNotificacoes clicado", { notificacoesAberto, hasUser: !!user, userLoading });
     if (!user || userLoading) {
       toast.info("Aguarde, autenticando...");
       return;
@@ -263,7 +236,7 @@ export default function MainEmpresa({
       setNotificacoesAberto(true);
       setPanelAnimating(true);
       setTimeout(() => setPanelAnimating(false), 10);
-      buscarNotificacoesEstoque(); // atualiza ao abrir
+      buscarNotificacoesEstoque();
     } else {
       setPanelAnimating(true);
       setTimeout(() => {
@@ -273,7 +246,6 @@ export default function MainEmpresa({
     }
   };
 
-  // Logout handlers (mantidos do original)
   const abrirModalLogout = () => {
     setLogoutError(null);
     setModalAnimating(true);
@@ -320,30 +292,28 @@ export default function MainEmpresa({
     return item.roles.includes(userRole);
   };
 
-  // Menu items (mesmo do original)
   const menuItems: MenuItem[] = [
     {
       label: "Dashboard",
       icon: Home,
       path: "/dashboard",
       links: [],
-      roles: ["admin", "contablista"],
+      roles: ["admin", "contablista", "gestor"],
     },
     {
       label: "Vendas",
       icon: ShoppingCart,
       path: "/dashboard/Vendas",
-      links:
-        userRole === "admin" || userRole === "operador"
-          ? [
-              { label: "Gerar Faturas-recibo", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart },
-              { label: "Gerar Faturas", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
-              { label: "Gerar proformas", path: "/dashboard/Faturas/Faturas_Proforma", icon: FileText },
-              { label: "Vendas", path: "/dashboard/Faturas/Faturas", icon: FileText },
-            ]
-          : [],
+      links: userRole === "admin" || userRole === "operador" || userRole === "gestor"
+        ? [
+            { label: "Gerar Faturas-recibo", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart },
+            { label: "Gerar Faturas", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
+            { label: "Gerar proformas", path: "/dashboard/Faturas/Faturas_Proforma", icon: FileText },
+            { label: "Vendas", path: "/dashboard/Faturas/Faturas", icon: FileText },
+          ]
+        : [],
       isGroup: true,
-      roles: ["admin", "operador"],
+      roles: ["admin", "operador", "gestor"],
     },
     {
       label: "Doc. Fiscais",
@@ -363,7 +333,7 @@ export default function MainEmpresa({
         { label: "Fornecedores", path: "/dashboard/Fornecedores/Novo_fornecedor", icon: Truck },
       ],
       isGroup: true,
-      roles: ["admin"],
+      roles: ["admin", "gestor"],
     },
     {
       label: "Clientes",
@@ -391,7 +361,6 @@ export default function MainEmpresa({
   const menuItemsFiltrados = menuItems.filter(temPermissao);
   const totalNotificacoes = produtosEstoqueBaixo.length + produtosSemEstoque.length;
 
-  // Loading state
   if (userLoading) {
     return (
       <div className="flex items-center justify-center w-screen h-screen" style={{ backgroundColor: colors.background }}>
@@ -408,7 +377,6 @@ export default function MainEmpresa({
 
   return (
     <div className="flex w-screen h-screen overflow-hidden" style={{ backgroundColor: colors.background }}>
-      {/* Sidebar (código original, omitido para brevidade, mas deve ser mantido) */}
       <aside
         className="fixed left-0 top-0 z-40 flex flex-col h-screen transition-all duration-300 border-r md:relative md:z-0"
         style={{
@@ -428,8 +396,17 @@ export default function MainEmpresa({
           </button>
         )}
         <div className="flex items-center gap-3 h-16 px-4 border-b" style={{ borderColor: colors.border }}>
-          {empresaLogo && !logoError ? (
-            <Image src={empresaLogo} alt="Logo" width={32} height={32} className="object-contain" onError={() => setLogoError(true)} />
+          {/* ✅ LOGO CORRIGIDO - Verifica se a URL é válida antes de renderizar */}
+          {empresaLogo && !logoError && validImageUrl ? (
+            <Image 
+              src={validImageUrl} 
+              alt="Logo" 
+              width={32} 
+              height={32} 
+              className="object-contain" 
+              onError={() => setLogoError(true)} 
+              unoptimized={validImageUrl.startsWith('http')}
+            />
           ) : (
             <div className="flex items-center justify-center w-8 h-8 text-sm font-bold text-white" style={{ backgroundColor: colors.primary }}>
               {nomeEmpresa.charAt(0).toUpperCase()}
@@ -502,7 +479,6 @@ export default function MainEmpresa({
         </div>
       </aside>
 
-      {/* Main content */}
       <div className="flex flex-col flex-1 w-full overflow-hidden">
         <header className="flex items-center justify-between gap-3 px-3 h-14 border-b shadow-sm md:h-16 md:px-6" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
           <div className="flex items-center gap-2 min-w-0">
@@ -517,7 +493,7 @@ export default function MainEmpresa({
             <button onClick={toggleTheme} className="p-2 transition-all hover:scale-110 active:scale-95" style={{ backgroundColor: colors.hover, color: colors.text }}>
               {theme === "dark" ? <Sun size={16} style={{ color: colors.secondary }} /> : <Moon size={16} style={{ color: colors.primary }} />}
             </button>
-            {(userRole === "admin" || userRole === "operador") && (
+            {(userRole === "admin" || userRole === "operador" || userRole === "gestor") && (
               <div className="relative">
                 <button
                   onClick={toggleNotificacoes}
@@ -581,7 +557,7 @@ export default function MainEmpresa({
               </div>
             )}
             <div className="flex items-center gap-2 pl-2 border-l md:pl-3" style={{ borderColor: colors.border }}>
-              <div className="hidden text-right md:block"><p className="text-xs font-semibold leading-tight" style={{ color: colors.text }}>{userName.split(" ")[0]}</p><p className="text-[10px]" style={{ color: colors.textSecondary }}>{userRole === "admin" ? "Admin" : userRole === "contabilista" ? "Contab." : "Op."}</p></div>
+              <div className="hidden text-right md:block"><p className="text-xs font-semibold leading-tight" style={{ color: colors.text }}>{userName.split(" ")[0]}</p><p className="text-[10px]" style={{ color: colors.textSecondary }}>{userRole === "admin" ? "Admin" : userRole === "contablista" ? "Contab." : userRole === "gestor" ? "Gest." : "Op."}</p></div>
               <div className="flex items-center justify-center w-7 h-7 text-xs font-bold text-white md:w-8 md:h-8 transition-transform" style={{ background: `linear-gradient(135deg, ${colors.secondary} 0%, ${colors.primary} 100%)` }}>{userInitial}</div>
             </div>
           </div>
@@ -589,7 +565,6 @@ export default function MainEmpresa({
         <main className="flex-1 overflow-auto p-3 md:p-6"><div className="animate-fade-in">{children}</div></main>
       </div>
 
-      {/* Logout modal */}
       {logoutModalOpen && (
         <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-all duration-200 ${modalAnimating ? "opacity-0" : "opacity-100"}`} style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }} onClick={fecharModalLogout}>
           <div className={`w-full max-w-sm overflow-hidden shadow-lg transition-all duration-200 ${modalAnimating ? "scale-95 opacity-0" : "scale-100 opacity-100"}`} style={{ backgroundColor: colors.card }} onClick={(e) => e.stopPropagation()}>

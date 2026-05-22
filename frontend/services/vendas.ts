@@ -35,7 +35,7 @@ export interface User {
  id: string;
  name: string;
  email: string;
- role: 'admin' | 'operador' | 'contabilista';
+ role: 'admin' | 'operador' | 'contabilista' | "gestor";
  ativo: boolean;
  ultimo_login?: string | null;
 }

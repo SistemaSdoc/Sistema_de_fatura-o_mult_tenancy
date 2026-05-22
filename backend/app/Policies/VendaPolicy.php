@@ -22,7 +22,7 @@ class VendaPolicy
             'id'   => $user->id ?? null,
             'role' => $user->role ?? 'null',
         ]);
-        return in_array($user->role, ['admin', 'operador', 'contabilista']);
+        return in_array($user->role, ['admin', 'operador','gestor','contabilista']);
     }
 
     public function create($user)  // ← removeu o tipo
@@ -35,7 +35,7 @@ class VendaPolicy
             'id'   => $user->id ?? null,
             'role' => $user->role ?? 'null',
         ]);
-        return in_array($user->role, ['admin', 'operador']);
+        return in_array($user->role, ['admin','gestor', 'operador']);
     }
 
     public function cancel($user)  // ← removeu o tipo

@@ -12,7 +12,7 @@ class ProdutoPolicy
      */
     private function canView(User $user): bool
     {
-        return in_array($user->role, ['admin', 'operador', 'contabilista']); // CORRIGIDO: 'contablista' → 'contabilista'
+        return in_array($user->role, ['admin', 'operador', 'gestor']); // CORRIGIDO: 'contablista' → 'contabilista'
     }
 
     /**
@@ -20,7 +20,7 @@ class ProdutoPolicy
      */
     private function canManage(User $user): bool
     {
-        return in_array($user->role, ['admin', 'operador']);
+        return in_array($user->role, ['admin','gestor', 'operador']);
     }
 
     /**

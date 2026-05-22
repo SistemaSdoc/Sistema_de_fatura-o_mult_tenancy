@@ -36,7 +36,7 @@ async function abrirUrlAutenticada(url: string, tipo: "pdf" | "html" = "pdf") {
   await garantirCsrf(baseUrl);
   const xsrf = getXsrfToken();
 
-  // 2.  Obter o tenant ID (igual ao usado no axios.ts)
+  // 2. Obter o tenant ID (igual ao usado no axios.ts)
   const tenantId = localStorage.getItem("tenant_id");
   if (!tenantId) {
     throw new Error("Empresa não identificada. Faça login novamente.");
@@ -50,7 +50,7 @@ async function abrirUrlAutenticada(url: string, tipo: "pdf" | "html" = "pdf") {
       Accept: tipo === "pdf" ? "application/pdf,*/*" : "text/html,*/*",
       "X-XSRF-TOKEN": xsrf,
       "X-Requested-With": "XMLHttpRequest",
-      "X-Empresa-ID": tenantId,      // ← ADICIONADO
+      "X-Empresa-ID": tenantId,
     },
   });
 
@@ -69,6 +69,41 @@ async function abrirUrlAutenticada(url: string, tipo: "pdf" | "html" = "pdf") {
     setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
   }
 }
+
+// ── Helper: imprime térmica diretamente (a API já lida com a impressora) ────
+async function imprimirTermica(url: string): Promise<void> {
+  const baseUrl = url.split("/api/")[0];
+
+  await garantirCsrf(baseUrl);
+  const xsrf = getXsrfToken();
+
+  const tenantId = localStorage.getItem("tenant_id");
+  if (!tenantId) {
+    throw new Error("Empresa não identificada. Faça login novamente.");
+  }
+
+  const res = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      Accept: "application/json",
+      "X-XSRF-TOKEN": xsrf,
+      "X-Requested-With": "XMLHttpRequest",
+      "X-Empresa-ID": tenantId,
+    },
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || `Erro ${res.status}`);
+  }
+
+  const data = await res.json();
+  if (!data.success) {
+    throw new Error(data.message || "Erro ao imprimir");
+  }
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 
 export default function FaturasPage() {
@@ -80,7 +115,8 @@ export default function FaturasPage() {
   const [error, setError] = useState<string | null>(null);
   const [gerandoRecibo, setGerandoRecibo] = useState<string | null>(null);
   const [baixandoPdf, setBaixandoPdf] = useState<string | null>(null);
-  const [imprimindo] = useState<string | null>(null);
+  const [imprimindo, setImprimindo] = useState<string | null>(null);
+  const [imprimindoTermica, setImprimindoTermica] = useState<string | null>(null);
 
   // BaseURL dinâmica — igual ao teu axios.ts
   const baseUrl =
@@ -129,12 +165,34 @@ export default function FaturasPage() {
     async (documento: DocumentoFiscal) => {
       if (!documento.id) return;
       try {
+        setImprimindo(documento.id);
         await abrirUrlAutenticada(
           `${baseUrl}/api/documentos-fiscais/${documento.id}/pdf-viewer`,
           "pdf"
         );
       } catch (err: unknown) {
         alert(err instanceof Error ? err.message : "Erro ao abrir PDF");
+      } finally {
+        setImprimindo(null);
+      }
+    },
+    [baseUrl]
+  );
+
+  /* ── Impressão Térmica (direto na USB) ── */
+  const imprimirTermicaDocumento = useCallback(
+    async (documento: DocumentoFiscal) => {
+      if (!documento.id) return;
+      try {
+        setImprimindoTermica(documento.id);
+        await imprimirTermica(`${baseUrl}/api/documentos-fiscais/${documento.id}/imprimir-termica`);
+        // Feedback visual opcional
+        console.log("Documento enviado para impressão térmica");
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : "Erro ao imprimir";
+        alert(errorMessage);
+      } finally {
+        setImprimindoTermica(null);
       }
     },
     [baseUrl]
@@ -238,10 +296,12 @@ export default function FaturasPage() {
         gerandoRecibo={gerandoRecibo}
         baixandoPdf={baixandoPdf}
         imprimindo={imprimindo}
+        imprimindoTermica={imprimindoTermica}
         onVerDetalhes={verDetalhes}
         onGerarRecibo={gerarRecibo}
         onImprimirA4={imprimirA4}
         onImprimirPdf={imprimirPdfNavegador}
+        onImprimirTermica={imprimirTermicaDocumento}
         onBaixarPdf={baixarPdf}
         formatKz={formatKz}
         documentoFiscalService={documentoFiscalService}

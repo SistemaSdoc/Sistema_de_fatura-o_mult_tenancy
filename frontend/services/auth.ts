@@ -17,7 +17,7 @@ export interface User {
     id: string;
     name: string;
     email: string;
-    role: 'admin' | 'operador' | 'contabilista';
+    role: 'admin' | 'operador' | 'contabilista' | 'gestor';
     ultimo_login?: string | null;
     remember_token?: string | null;
     created_at?: string;

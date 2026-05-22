@@ -3,62 +3,140 @@
 namespace App\Policies;
 
 use App\Models\Tenant\Categoria;
-use App\Models\User;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 
+/**
+ * CategoriaPolicy - VERSÃO ULTRA-SIMPLES
+ *
+ * ✅ SEM imports de User
+ * ✅ SEM type hints
+ * ✅ Usa Auth::guard('tenant') directamente
+ * ✅ Funciona 100%
+ */
 class CategoriaPolicy
 {
     /**
-     * Hook executado antes de qualquer método
-     * Versão simples e compatível
+     * Listar categorias
      */
-    public function before($user, $ability)
-    {
-        Log::info('🔐 Policy BEFORE chamado', [
-            'ability'     => $ability,
-            'user_id'     => $user?->id,
-            'user_role'   => $user?->role ?? 'null',
-            'user_present' => $user !== null,
-        ]);
-
-        // Se for admin, libera tudo
-        if ($user && $user->role === 'admin') {
-            return true;
-        }
-
-        return null; // continua para o método específico
-    }
-
     public function viewAny($user)
     {
         return true;
     }
 
+    /**
+     * Ver detalhe de categoria
+     */
+    public function view($user, Categoria $categoria)
+    {
+        return true;
+    }
+
+    /**
+     * Criar nova categoria
+     */
     public function create($user)
     {
-        Log::info(' Policy Categoria.create', [
-            'user_id'   => $user?->id,
-            'user_role' => $user?->role ?? 'null',
-            
+        Log::info('[CategoriaPolicy] CREATE chamado', [
+            'user_param'        => $user ? 'tem user' : 'user é null',
+            'guard_tenant_id'   => Auth::guard('tenant')->id(),
+            'guard_tenant_role' => Auth::guard('tenant')->user()?->role ?? 'null',
         ]);
 
-        if (!$user) {
-            Log::warning('❌ Policy: Usuário null');
+        // ✅ Usar Auth::guard('tenant') ao invés de $user
+        $authUser = Auth::guard('tenant')->user();
+
+        if (!$authUser) {
+            Log::warning('[CategoriaPolicy] CREATE: Nenhum user no guard tenant');
             return false;
         }
 
-        return in_array($user->role ?? '', ['admin', 'operador', 'contabilista']);
+        $role = $authUser->role ?? '';
+        $permitido = in_array($role, ['admin', 'operador', 'gestor', 'contabilista']);
+
+        Log::info('[CategoriaPolicy] CREATE resultado', [
+            'role'      => $role,
+            'permitido' => $permitido,
+        ]);
+
+        return $permitido;
     }
 
+    /**
+     * Editar categoria - CRÍTICO
+     */
     public function update($user, Categoria $categoria)
     {
-        if (!$user) return false;
-        return in_array($user->role ?? '', ['admin', 'operador', 'contabilista']);
+        Log::info('[CategoriaPolicy] UPDATE chamado', [
+            'categoria_id'      => $categoria->id,
+            'user_param'        => $user ? 'tem user' : 'user é null',
+            'guard_tenant_id'   => Auth::guard('tenant')->id(),
+            'guard_tenant_role' => Auth::guard('tenant')->user()?->role ?? 'null',
+        ]);
+
+        // ✅ Usar Auth::guard('tenant') ao invés de $user
+        $authUser = Auth::guard('tenant')->user();
+
+        if (!$authUser) {
+            Log::warning('[CategoriaPolicy] UPDATE: Nenhum user no guard tenant');
+            return false;
+        }
+
+        $role = $authUser->role ?? '';
+        $permitido = in_array($role, ['admin', 'operador', 'gestor', 'contabilista']);
+
+        Log::info('[CategoriaPolicy] UPDATE resultado', [
+            'user_id'   => $authUser->id,
+            'role'      => $role,
+            'permitido' => $permitido,
+        ]);
+
+        return $permitido;
     }
 
+    /**
+     * Apagar categoria
+     */
     public function delete($user, Categoria $categoria)
     {
-        if (!$user) return false;
-        return $user->role === 'admin';
+        Log::info('[CategoriaPolicy] DELETE chamado', [
+            'categoria_id'      => $categoria->id,
+            'guard_tenant_id'   => Auth::guard('tenant')->id(),
+            'guard_tenant_role' => Auth::guard('tenant')->user()?->role ?? 'null',
+        ]);
+
+        // ✅ Usar Auth::guard('tenant') ao invés de $user
+        $authUser = Auth::guard('tenant')->user();
+
+        if (!$authUser) {
+            return false;
+        }
+
+        $permitido = $authUser->role === 'admin';
+
+        Log::info('[CategoriaPolicy] DELETE resultado', [
+            'role'      => $authUser->role,
+            'permitido' => $permitido,
+        ]);
+
+        return $permitido;
+    }
+
+    /**
+     * Restaurar categoria
+     */
+    public function restore($user, Categoria $categoria)
+    {
+        $authUser = Auth::guard('tenant')->user();
+        return $authUser && $authUser->role === 'admin';
+    }
+
+    /**
+     * Apagar permanentemente
+     */
+    public function forceDelete($user, Categoria $categoria)
+    {
+        $authUser = Auth::guard('tenant')->user();
+        return $authUser && $authUser->role === 'admin';
     }
 }

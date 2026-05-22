@@ -422,6 +422,7 @@ export default function NovaFaturaNormalPage() {
         setLoading(false);
         return;
       }
+      await criarVenda(payload);
       setTimeout(() => router.push("/dashboard/Faturas/Faturas"), 1500);
     } catch (err: unknown) {
       setError(
