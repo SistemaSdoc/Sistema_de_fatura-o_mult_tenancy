@@ -187,30 +187,37 @@ export function EmpresaTab({ colors }: { colors: ThemeColors }) {
         setForm(p => ({ ...p, [name]: value }));
     };
 
-    const handleSubmit = async () => {
-        if (empresa?.status === "suspenso") {
-            toast.error("Empresa suspensa — não é possível editar os dados.");
-            return;
+const handleSubmit = async () => {
+    if (empresa?.status === "suspenso") {
+        toast.error("Empresa suspensa — não é possível editar os dados.");
+        return;
+    }
+
+    setLoading(true);
+    try {
+        const response = await api.put("/api/empresa", {
+            nome: form.nome,
+            nif: form.nif,
+            email: form.email,
+            telefone: form.telefone,
+            endereco: form.endereco,
+            regime_fiscal: form.regime_fiscal,
+            sujeito_iva: form.sujeito_iva,
+        });
+
+        if (response.data.success) {
+            await refreshUser();           // Atualiza o contexto global
+            toast.success("Dados da empresa atualizados com sucesso!");
+        } else {
+            toast.error("Resposta inválida do servidor");
         }
-        setLoading(true);
-        try {
-            await api.put("/api/empresa", {
-                nome: form.nome,
-                nif: form.nif,
-                email: form.email,
-                telefone: form.telefone,
-                endereco: form.endereco,
-                regime_fiscal: form.regime_fiscal,
-                sujeito_iva: form.sujeito_iva,
-            });
-            await refreshUser();
-            toast.success("Dados da empresa atualizados!");
-        } catch {
-            toast.error("Erro ao atualizar empresa");
-        } finally {
-            setLoading(false);
-        }
-    };
+    } catch (error: any) {
+        console.error(error);
+        toast.error(error.response?.data?.message || "Erro ao atualizar empresa");
+    } finally {
+        setLoading(false);
+    }
+};
 
     const handleToggleStatus = async () => {
         setTogglingStatus(true);
@@ -218,7 +225,7 @@ export function EmpresaTab({ colors }: { colors: ThemeColors }) {
             const response = await api.patch<{
                 success: boolean; message: string; status: "ativo" | "suspenso";
             }>("/api/empresa/toggle-status");
-            
+
             toast.success(response.data.message);
             setShowConfirmDialog(false);
             await refreshUser();
@@ -247,22 +254,20 @@ export function EmpresaTab({ colors }: { colors: ThemeColors }) {
                             <p className="text-sm font-medium" style={{ color: colors.text }}>
                                 Status actual:
                             </p>
-                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-                                isSuspended
+                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${isSuspended
                                     ? "bg-[#dc3545] text-red-800 dark:bg-red-900 dark:text-red-200"
                                     : "bg-[#28a745] text-green-800 dark:bg-green-900 dark:text-green-200"
-                            }`}>
+                                }`}>
                                 {isSuspended ? "Suspensa" : "Ativa"}
                             </span>
                         </div>
                         <button
                             onClick={() => setShowConfirmDialog(true)}
                             disabled={togglingStatus}
-                            className={`px-4 py-2 rounded-lg font-medium text-white transition-all ${
-                                isSuspended
+                            className={`px-4 py-2 rounded-lg font-medium text-white transition-all ${isSuspended
                                     ? "bg-[#28a745]"
                                     : "bg-[#dc3545]"
-                            } disabled:opacity-50`}>
+                                } disabled:opacity-50`}>
                             {togglingStatus
                                 ? <Loader2 className="w-4 h-4 animate-spin" />
                                 : isSuspended ? "Reativar empresa" : "Desativar empresa"}
@@ -303,15 +308,19 @@ export function EmpresaTab({ colors }: { colors: ThemeColors }) {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <LogoUploader
-                        colors={colors}
-                        currentLogo={form.logo}
-                        disabled={isSuspended}
-                        onUploaded={async url => {
-                            setForm(p => ({ ...p, logo: url }));
-                            await refreshUser();
-                        }}
-                    />
+<LogoUploader
+    colors={colors}
+    currentLogo={form.logo}
+    disabled={isSuspended}
+    onUploaded={async (url) => {
+        setForm(p => ({ ...p, logo: url }));
+        
+        // Força atualização completa do user
+        await refreshUser();
+        
+        toast.success("Logo atualizado com sucesso!");
+    }}
+/>
                 </CardContent>
             </Card>
 

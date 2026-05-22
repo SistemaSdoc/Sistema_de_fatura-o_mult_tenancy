@@ -4,11 +4,11 @@ namespace App\Models\Tenant;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Str;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 
 class Categoria extends TenantModel
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, HasUuids;   // ← Adiciona HasUuids aqui
 
     protected $table = 'categorias';
 
@@ -16,16 +16,15 @@ class Categoria extends TenantModel
     protected $keyType   = 'string';
 
     protected $fillable = [
-        'id',
         'nome',
         'user_id',
         'descricao',
         'status',
-        'data_registro',
         'tipo',
         'taxa_iva',
         'sujeito_iva',
         'codigo_isencao',
+        // NÃO incluas 'id' no fillable (melhor prática com UUID)
     ];
 
     protected $casts = [
@@ -40,9 +39,6 @@ class Categoria extends TenantModel
         'taxa_iva'    => 14.00,
         'sujeito_iva' => true,
     ];
-
-    // ✅ REMOVA COMPLETAMENTE O MÉTODO boot() por enquanto
-    // Vamos testar sem ele
 
     /* =====================================================================
      | RELAÇÕES
@@ -59,7 +55,7 @@ class Categoria extends TenantModel
     }
 
     /* =====================================================================
-     | SCOPES
+     | SCOPES & MÉTODOS (mantidos)
      | ================================================================== */
 
     public function scopeAtivas($query)
@@ -81,10 +77,6 @@ class Categoria extends TenantModel
     {
         return $query->where('tipo', $tipo);
     }
-
-    /* =====================================================================
-     | MÉTODOS
-     | ================================================================== */
 
     public function taxaIvaEfectiva(): float
     {

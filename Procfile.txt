@@ -1,3 +1,0 @@
-FaturaJa Full Dev: autorun cmd /k "cd /d C:\laragon\www\FaturaJa && npm run dev"
-    PWD=C:\laragon\www\FaturaJa
-    autorun=true

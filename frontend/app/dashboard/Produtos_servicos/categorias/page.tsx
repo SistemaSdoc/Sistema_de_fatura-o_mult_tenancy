@@ -3,8 +3,7 @@
 import React, { useState, useEffect } from "react";
 import {
     Plus,
-    Search,
-    Filter,
+    Search,   
     Edit2,
     Trash2,
     MoreVertical,
@@ -435,43 +434,6 @@ export default function CategoriasPage() {
                                     }}
                                 />
                             </div>
-
-                            <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-                                <SelectTrigger className="h-8 text-xs w-[120px]" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-                                    <Filter className="mr-1 h-3 w-3" />
-                                    <SelectValue placeholder="Status" />
-                                </SelectTrigger>
-                                <SelectContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-                                    <SelectItem value="todos" className="text-xs">Todos</SelectItem>
-                                    <SelectItem value="ativo" className="text-xs">Ativo</SelectItem>
-                                    <SelectItem value="inativo" className="text-xs">Inativo</SelectItem>
-                                </SelectContent>
-                            </Select>
-
-                            <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-                                <SelectTrigger className="h-8 text-xs w-[120px]" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-                                    <Filter className="mr-1 h-3 w-3" />
-                                    <SelectValue placeholder="Tipo" />
-                                </SelectTrigger>
-                                <SelectContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-                                    <SelectItem value="todos" className="text-xs">Todos</SelectItem>
-                                    <SelectItem value="produto" className="text-xs">Produto</SelectItem>
-                                    <SelectItem value="servico" className="text-xs">Serviço</SelectItem>
-                                </SelectContent>
-                            </Select>
-
-                            <Select value={filtroIVA} onValueChange={setFiltroIVA}>
-                                <SelectTrigger className="h-8 text-xs w-[120px]" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-                                    <Percent className="mr-1 h-3 w-3" />
-                                    <SelectValue placeholder="IVA" />
-                                </SelectTrigger>
-                                <SelectContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-                                    <SelectItem value="todos" className="text-xs">Todos</SelectItem>
-                                    <SelectItem value="14" className="text-xs">14%</SelectItem>
-                                    <SelectItem value="5" className="text-xs">5%</SelectItem>
-                                    <SelectItem value="isento" className="text-xs">Isento</SelectItem>
-                                </SelectContent>
-                            </Select>
                         </div>
 
                         {/* Cards de Estatísticas */}
@@ -524,7 +486,7 @@ export default function CategoriasPage() {
                                 <div className="flex flex-col items-center justify-center py-8 text-center">
                                     <LayoutGrid className="h-8 w-8 mb-2" style={{ color: colors.border }} />
                                     <h3 className="text-sm font-semibold" style={{ color: colors.text }}>Nenhuma categoria encontrada</h3>
-                                    <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>Clique em "Nova Categoria" para começar</p>
+                                    <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>Clique em Nova Categoria para começar</p>
                                 </div>
                             ) : (
                                 <div className="overflow-x-auto">

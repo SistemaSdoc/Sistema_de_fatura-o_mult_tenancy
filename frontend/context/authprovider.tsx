@@ -89,57 +89,43 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const isNoAuthRoute = pathname ? NO_AUTH_ROUTES.includes(pathname) : false;
 
     // ========== FETCH USER ==========
-    const fetchUser = useCallback(async (): Promise<void> => {
-        console.log("[AuthProvider] fetchUser iniciado", {
-            hasUser: !!user,
-            isNoAuthRoute,
-            pathname,
-        });
+const fetchUser = useCallback(async (): Promise<void> => {
+    console.log("[AuthProvider] fetchUser iniciado");
 
-        // ✅ NÃO buscar user em rotas sem autenticação (/, /login, /register, etc.)
-        if (isNoAuthRoute) {
-            console.log("[AuthProvider] Rota sem autenticação, não buscar user");
-            setLoading(false);
-            return;
-        }
+    if (isNoAuthRoute) {
+        setLoading(false);
+        return;
+    }
 
-        // Se já temos user, não precisamos buscar novamente
-        if (user) {
-            console.log("[AuthProvider] User já existe, skip fetchUser");
-            setLoading(false);
-            return;
-        }
+    try {
+        const response = await authApi.me();
 
-        try {
-            const response = await authApi.me();
+        if (response.data?.success && response.data.user) {
+            const userData: User = {
+                ...response.data.user,
+                empresa: response.data.empresa,
+            };
 
-            if (response.data?.success && response.data.user) {
-                const userData: User = {
-                    ...response.data.user,
-                    empresa: response.data.empresa,
-                };
-                setUser(userData);
+            setUser(userData);
 
-                // Guardar tenant no localStorage ao carregar user
-                if (response.data.empresa?.id) {
-                    setTenant({
-                        id: response.data.empresa.id,
-                        subdomain: response.data.empresa.subdomain,
-                    });
-                    console.log("[AuthProvider] Tenant guardado via /me:", response.data.empresa.id);
-                }
-
-                console.log("[AuthProvider] User carregado via /me:", userData);
-            } else {
-                throw new Error("Não autenticado");
+            if (response.data.empresa?.id) {
+                setTenant({
+                    id: response.data.empresa.id,
+                    subdomain: response.data.empresa.subdomain,
+                });
             }
-        } catch (error) {
-            console.log("[AuthProvider] fetchUser falhou:", (error as Error).message);
+
+            console.log("[AuthProvider] User atualizado com sucesso:", userData.empresa?.nome);
+        } else {
             setUser(null);
-        } finally {
-            setLoading(false);
         }
-    }, [isNoAuthRoute, user, pathname]);
+    } catch (error) {
+        console.error("[AuthProvider] fetchUser falhou:", error);
+        setUser(null);
+    } finally {
+        setLoading(false);
+    }
+}, [isNoAuthRoute]);
 
     // ========== MOUNT EFFECT ==========
     useEffect(() => {
@@ -254,12 +240,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }, [router]);
 
     // ========== REFRESH USER ==========
-    const refreshUser = useCallback(async (): Promise<void> => {
-        console.log("[AuthProvider] refreshUser chamado");
-        // Força re-fetch ignorando cache
-        hasFetched.current = false;
+const refreshUser = useCallback(async (): Promise<void> => {
+    console.log("[AuthProvider] refreshUser chamado - Forçando atualização");
+
+    // Força re-fetch sempre que refreshUser for chamado
+    hasFetched.current = false;
+    setUser(null);        // ← Limpa temporariamente para forçar busca
+    setLoading(true);
+
+    try {
         await fetchUser();
-    }, [fetchUser]);
+    } catch (error) {
+        console.error("[AuthProvider] Erro no refreshUser", error);
+    }
+}, [fetchUser]);
 
     // ========== CONTEXT VALUE ==========
     const value: AuthContextData = {

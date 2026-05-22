@@ -30,6 +30,13 @@ Route::withoutMiddleware(['resolve.tenant', 'auth.tenant'])->group(function () {
 // ==================== ROTAS PROTEGIDAS (Tenant) ====================
 Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uuidPattern) {
 
+Route::prefix('empresa')->group(function () {
+    Route::get('/', [EmpresaController::class, 'showSelf']);           // Opcional: ver dados
+    Route::put('/', [EmpresaController::class, 'updateTenant']);       // ← Correto
+    Route::post('/logo', [EmpresaController::class, 'uploadLogo']);    // Upload separado
+    Route::patch('/toggle-status', [EmpresaController::class, 'toggleSelfStatus']);
+});
+
     Route::get('/me', [UserController::class, 'me']);
 
     // ===== DASHBOARD =====

@@ -93,11 +93,10 @@ export default function MainEmpresa({
   const userRole = user?.role || "";
   const userEmail = user?.email || "";
   const userInitial = userName.charAt(0).toUpperCase();
-
-  // ✅ Logo e nome da empresa vêm do user.empresa
-  const logoFromServer = `http://localhost:8000/storage/${companyLogo || user?.empresa?.logo || null}`;
+  // Logo e nome da empresa vêm do user.empresa
+  const logoFromServer = `http://192.168.1.192:8000/storage/${companyLogo || user?.empresa?.logo || null}`;
   
-  // ✅ FUNÇÃO PARA VALIDAR E FORMATAR URL DA IMAGEM
+  // FUNÇÃO PARA VALIDAR E FORMATAR URL DA IMAGEM
   const getValidImageUrl = (logo: string | null | undefined): string | null => {
     if (!logo || logoError) return null;
     
