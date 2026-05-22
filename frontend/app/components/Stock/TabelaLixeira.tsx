@@ -92,14 +92,14 @@ export function TabelaLixeira({ itens, onRestaurar, onDeletarPermanentemente, co
                                         >
                                             <RotateCcw className="w-4 h-4" />
                                         </button>
-                                        <button
+                                        {/*<button
                                             onClick={() => onDeletarPermanentemente(item)}
                                             className="p-1.5 transition-colors"
                                             style={{ color: colors.danger }}
                                             title="Deletar permanentemente"
                                         >
                                             <Trash2 className="w-4 h-4" />
-                                        </button>
+                                        </button>*/}
                                     </div>
                                 </td>
                             </tr>

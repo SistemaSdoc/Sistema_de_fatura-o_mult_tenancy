@@ -36,34 +36,30 @@ class ProdutoController extends Controller
 
     public function index(Request $request)
     {
-
-
-     DB::connection('tenant')->getPdo();
+        DB::connection('tenant')->getPdo();
         Log::info('[ProdutoController] user tenant check', [
-    'user' => auth()->guard('tenant')->user(),
-    'role' => auth()->guard('tenant')->user()?->role,
-]);
+            'user' => auth()->guard('tenant')->user(),
+            'role' => auth()->guard('tenant')->user()?->role,
+        ]);
 
-    Log::info('[ProdutoController] Verificação de autenticação', [
-        'tenant_check' => Auth::guard('tenant')->check(),
-        'landlord_check' => Auth::guard('landlord')->check(),
-        'tenant_user_id' => Auth::guard('tenant')->id(),
-        'landlord_user_id' => Auth::guard('landlord')->id(),
-        'session_id' => session()->getId(),
-        'session_tenant_id' => session('tenant_id'),
-    ]);
+        Log::info('[ProdutoController] Verificação de autenticação', [
+            'tenant_check' => Auth::guard('tenant')->check(),
+            'landlord_check' => Auth::guard('landlord')->check(),
+            'tenant_user_id' => Auth::guard('tenant')->id(),
+            'landlord_user_id' => Auth::guard('landlord')->id(),
+            'session_id' => session()->getId(),
+            'session_tenant_id' => session('tenant_id'),
+        ]);
 
         $user = Auth::guard('tenant')->user();
-    
-    // 🔍 LOG 2: Dados do utilizador do tenant (se existir)
-    Log::info('[ProdutoController] Utilizador autenticado (tenant)', [
-        'user_id' => $user?->id ?? 'null',
-        'user_email' => $user?->email ?? 'null',
-        'user_role' => $user?->role ?? 'indefinido',
-        'user_nome' => $user?->nome ?? $user?->name ?? 'null',
-        'tenant_db' => config('database.connections.tenant.database'),
-    ]);
-    
+
+        Log::info('[ProdutoController] Utilizador autenticado (tenant)', [
+            'user_id' => $user?->id ?? 'null',
+            'user_email' => $user?->email ?? 'null',
+            'user_role' => $user?->role ?? 'indefinido',
+            'user_nome' => $user?->nome ?? $user?->name ?? 'null',
+            'tenant_db' => config('database.connections.tenant.database'),
+        ]);
 
         $filtros  = $this->extrairFiltros($request);
         $produtos = $this->produtoService->listarProdutos($filtros);
@@ -74,10 +70,110 @@ class ProdutoController extends Controller
         ]);
     }
 
+    /**
+     * GET /api/produtos/todos
+     * Lista TODOS os produtos (incluindo inativos, mas excluindo deletados)
+     */
+    public function todos(Request $request)
+    {
+        try {
+            $user = Auth::guard('tenant')->user();
+            if (!$user || !in_array($user->role, ['admin', 'operador', 'gestor', 'contabilista'])) {
+                return response()->json(['error' => 'Não autorizado'], 403);
+            }
+
+            $query = Produto::query();
+
+            if ($request->filled('busca')) {
+                $busca = $request->busca;
+                $query->where(function($q) use ($busca) {
+                    $q->where('nome', 'like', "%{$busca}%")
+                      ->orWhere('codigo', 'like', "%{$busca}%");
+                });
+            }
+
+            if ($request->filled('categoria_id')) {
+                $query->where('categoria_id', $request->categoria_id);
+            }
+
+            if ($request->filled('tipo')) {
+                $query->where('tipo', $request->tipo);
+            }
+
+            if ($request->filled('status')) {
+                $query->where('status', $request->status);
+            }
+
+            $produtos = $query->with(['categoria', 'fornecedor'])->get();
+
+            return response()->json([
+                'message'   => 'Lista de todos os produtos carregada com sucesso',
+                'produtos'  => $produtos,
+                'total'     => $produtos->count(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[ProdutoController] TODOS ERROR', ['error' => $e->getMessage()]);
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * GET /api/produtos/trashed
+     * Lista produtos na lixeira (soft delete)
+     */
+    public function trashed(Request $request)
+    {
+        try {
+            $user = Auth::guard('tenant')->user();
+            if (!$user || !in_array($user->role, ['admin', 'operador', 'gestor', 'contabilista'])) {
+                return response()->json(['error' => 'Não autorizado'], 403);
+            }
+
+            $query = Produto::onlyTrashed()->with(['categoria', 'fornecedor']);
+
+            if ($request->filled('busca')) {
+                $busca = $request->busca;
+                $query->where(function($q) use ($busca) {
+                    $q->where('nome', 'like', "%{$busca}%")
+                      ->orWhere('codigo', 'like', "%{$busca}%");
+                });
+            }
+
+            if ($request->filled('categoria_id')) {
+                $query->where('categoria_id', $request->categoria_id);
+            }
+
+            if ($request->filled('tipo')) {
+                $query->where('tipo', $request->tipo);
+            }
+
+            if ($request->filled('data_inicio')) {
+                $query->whereDate('deleted_at', '>=', Carbon::parse($request->data_inicio));
+            }
+
+            if ($request->filled('data_fim')) {
+                $query->whereDate('deleted_at', '<=', Carbon::parse($request->data_fim));
+            }
+
+            $produtos = $request->boolean('paginar')
+                ? $query->paginate($request->get('per_page', 15))
+                : $query->get();
+
+            return response()->json([
+                'message'         => 'Produtos na lixeira carregados com sucesso',
+                'produtos'        => $produtos,
+                'total_deletados' => $produtos instanceof \Illuminate\Pagination\LengthAwarePaginator
+                    ? $produtos->total()
+                    : $produtos->count(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[ProdutoController] TRASHED ERROR', ['error' => $e->getMessage()]);
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
     public function indexWithTrashed(Request $request)
     {
-      
-
         $filtros  = array_merge($this->extrairFiltros($request), ['com_deletados' => true]);
         $produtos = $this->produtoService->listarProdutos($filtros);
 
@@ -94,7 +190,6 @@ class ProdutoController extends Controller
 
     public function indexOnlyTrashed(Request $request)
     {
-
         $query = Produto::onlyTrashed();
 
         if ($request->filled('busca')) {
@@ -134,8 +229,6 @@ class ProdutoController extends Controller
             ->with(['categoria', 'fornecedor', 'movimentosStock' => fn ($q) => $q->limit(10)])
             ->findOrFail($id);
 
-       
-
         // Adicionar informação de IVA efectivo na resposta
         $produtoArray = $produto->toArray();
         $produtoArray['taxa_iva_efectiva']   = $produto->taxa_iva_efectiva;
@@ -169,7 +262,6 @@ class ProdutoController extends Controller
 
     public function store(Request $request)
     {
-
         Log::info('[ProdutoController] Dados recebidos para validação:', $request->all());
 
         try {
@@ -243,6 +335,22 @@ class ProdutoController extends Controller
                     'message' => 'Erro de validação',
                     'errors'  => $e->errors(),
                 ], 422);
+            }
+
+            // ✅ CORREÇÃO DA MARGEM: Converter se vier como string com %
+            if (isset($dados['margem_lucro'])) {
+                $margem = $dados['margem_lucro'];
+                if (is_string($margem) && str_ends_with($margem, '%')) {
+                    $margem = (float) str_replace('%', '', $margem);
+                    $dados['margem_lucro'] = $margem;
+                }
+                // Validar margem
+                if ($dados['margem_lucro'] < 0 || $dados['margem_lucro'] > 99.99) {
+                    return response()->json([
+                        'message' => 'Margem inválida — deve ser entre 0% e 99,99%',
+                        'error' => 'margem_invalida'
+                    ], 422);
+                }
             }
 
             $produto = $this->produtoService->editarProduto($id, $dados);
@@ -416,7 +524,6 @@ class ProdutoController extends Controller
 
     public function estatisticas(Request $request)
     {
-
         try {
             $dataInicio = $request->data_inicio;
             $dataFim    = $request->data_fim;
@@ -515,9 +622,8 @@ class ProdutoController extends Controller
         ];
 
         if ($tipo === 'produto') {
-            // ✅ SEM taxa_iva — vem da categoria
             return array_merge($base, [
-                'categoria_id'   => 'required|uuid|exists:categorias,id', // ✅ REQUIRED para produtos
+                'categoria_id'   => 'required|uuid|exists:categorias,id',
                 'fornecedor_id'  => 'nullable|uuid|exists:fornecedores,id',
                 'codigo'         => 'nullable|string|max:50|unique:produtos,codigo',
                 'preco_compra'   => 'required|numeric|min:0',
@@ -556,9 +662,8 @@ class ProdutoController extends Controller
         ];
 
         if ($tipo === 'produto') {
-            // ✅ SEM taxa_iva — vem da categoria
             return array_merge($base, [
-                'categoria_id'   => 'sometimes|uuid|exists:categorias,id', // sometimes na atualização
+                'categoria_id'   => 'sometimes|uuid|exists:categorias,id',
                 'fornecedor_id'  => 'nullable|uuid|exists:fornecedores,id',
                 'codigo'         => 'nullable|string|max:50|unique:produtos,codigo,' . $id,
                 'preco_compra'   => 'sometimes|numeric|min:0',
