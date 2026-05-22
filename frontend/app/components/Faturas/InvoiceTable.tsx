@@ -311,14 +311,14 @@ export default function InvoiceTable({
       >
         {imprimindo === doc.id ? <Spinner color={colors.secondary} /> : <Printer size={16} />}
       </IconBtn>
-      <IconBtn
+      {/*<IconBtn
         onClick={() => onImprimirTermica(doc)}
         disabled={imprimindoTermica === doc.id}
         title="Imprimir Térmica"
         color={colors.secondary}
       >
         {imprimindoTermica === doc.id ? <Spinner color={colors.secondary} /> : <Printer size={16} />}
-      </IconBtn>
+      </IconBtn>*/}
       <IconBtn
         onClick={() => onBaixarPdf(doc)}
         disabled={baixandoPdf === doc.id}
