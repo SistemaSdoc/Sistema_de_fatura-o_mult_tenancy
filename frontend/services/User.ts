@@ -7,37 +7,36 @@ export interface Empresa {
     id: string;
     nome: string;
     nif: string;
-    email: string;
-    logo: string | null;
-    status: string;
-    endereco: string | null;
+    email: string | null;
     telefone: string | null;
-    regime_fiscal: string | null;
+    endereco: string | null;
+    subdomain: string | null;
+    logo: string | null;
+    regime_fiscal: string;
     sujeito_iva: boolean;
-    data_registro: string;
-    created_at?: string;
-    updated_at?: string;
+    status: "ativo" | "suspenso";
+    data_registro: string | null;
 }
 
 export interface User {
     id: string;
-    empresa_id?: string | null;
-    empresa?: Empresa;  // Mantém para compatibilidade
     name: string;
     email: string;
     role: "admin" | "operador" | "contablista" | "gestor";
     ativo: boolean;
-    ultimo_login?: string | null;
-    email_verified_at?: string | null;
-    created_at: string;
-    updated_at: string;
+    printer_ip: string | null;
+    ultimo_login: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+    email_verified_at: string | null;
 }
 
-// ✅ NOVO: Interface para a resposta do /me
+// Resposta do /me — EXATAMENTE como o backend retorna
 export interface MeResponse {
-    message: string;
+    success?: boolean;
+    message?: string;
     user: User;
-    empresa: Empresa | null;  // ← A empresa vem separada
+    empresa: Empresa | null;
 }
 
 export interface RegisterData {
@@ -45,7 +44,6 @@ export interface RegisterData {
     email: string;
     password: string;
     role: "admin" | "operador" | "contablista" | "gestor";
-    empresa_id?: string;
     ativo?: boolean;
 }
 
@@ -55,7 +53,7 @@ export interface UpdateUserData {
     password?: string;
     role?: "admin" | "operador" | "contablista" | "gestor";
     ativo?: boolean;
-    empresa_id?: string;
+    printer_ip?: string;
 }
 
 export interface UsersFilterParams {
@@ -64,10 +62,10 @@ export interface UsersFilterParams {
 }
 
 export interface LoginResponse {
+    success: boolean;
     message: string;
     user: User;
-    empresa?: Empresa;  // ✅ Adicionar empresa
-    token: string;
+    empresa?: Empresa;
 }
 
 export interface RegisterResponse {
@@ -85,14 +83,14 @@ export interface UsersListResponse {
     users: User[];
 }
 
-// ─── CRUD — todos os paths incluem /api/ explicitamente ───────────────────────
+// ─── CRUD ─────────────────────────────────────────────────────────────────────
 
 export const fetchUsers = async (
     filters?: UsersFilterParams
 ): Promise<User[]> => {
     const params: Record<string, string | boolean> = {};
     if (filters?.ativo !== undefined) params.ativo = filters.ativo;
-    if (filters?.role)                params.role  = filters.role;
+    if (filters?.role) params.role = filters.role;
     const response = await api.get<UsersListResponse>("/api/users", { params });
     return response.data.users;
 };
@@ -121,18 +119,12 @@ export const deleteUser = async (id: string): Promise<void> => {
     await api.delete(`/api/users/${id}`);
 };
 
-export const updateUltimoLogin = async (id: string): Promise<User> => {
-    const response = await api.patch<UserResponse>(`/api/users/${id}/ultimo-login`);
-    return response.data.user;
-};
-
-// ✅ NOVO: Função para buscar o user atual com empresa
-export const fetchCurrentUser = async (): Promise<{ user: User; empresa: Empresa | null }> => {
-    const response = await api.get<MeResponse>("/api/me");
-    return {
-        user: response.data.user,
-        empresa: response.data.empresa,
-    };
+/**
+ * Buscar o utilizador atual com empresa
+ */
+export const fetchCurrentUser = async (): Promise<MeResponse> => {
+    const response = await api.get<MeResponse>("/me");
+    return response.data;
 };
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────

@@ -9,7 +9,18 @@ $empresaTelefone = $empresa['telefone'] ?? 'Telefone não registrado';
 $empresaEmail = $empresa['email'] ?? 'Email não registrado';
 $empresaNome = $empresa['nome'] ?? 'EMPRESA';
 $empresaNif = $empresa['nif'] ?? '0000000000';
-$empresaLogo = asset($empresa['logo'] ?? 'images/default-logo.png');
+
+$logoPath = $empresa['logo'] ?? null;
+
+if (!empty($empresa['logo_base64'])) {
+    $empresaLogo = $empresa['logo_base64']; // já vem pronto como data:image/...
+} elseif (!empty($empresa['logo'])) {
+    $logoPath = ltrim($empresa['logo'], '/');
+    $logoPath = str_replace('public/', '', $logoPath);
+    $empresaLogo = asset($logoPath); // fallback
+} else {
+    $empresaLogo = asset('images/default-logo.png');
+}
 
 $tiposDocumento = [
     'FT' => 'Fatura',

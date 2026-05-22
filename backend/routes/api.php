@@ -18,7 +18,7 @@ use App\Http\Controllers\EmpresaController;
 
 $uuidPattern = '[0-9a-fA-F-]{36}';
 
-// ==================== ROTAS PÚBLICAS (sem tenant e sem nenhum middleware) ====================
+// ==================== ROTAS PÚBLICAS ====================
 Route::withoutMiddleware(['resolve.tenant', 'auth.tenant'])->group(function () {
     // Rota de upload temporário de logo
     Route::post('/upload-temp-logo', [EmpresaController::class, 'uploadTempLogo'])->name('upload.temp.logo');
@@ -27,10 +27,9 @@ Route::withoutMiddleware(['resolve.tenant', 'auth.tenant'])->group(function () {
     Route::post('/empresas', [EmpresaController::class, 'store'])->name('empresas.store');
 });
 
-// ==================== ROTAS PROTEGIDAS (autenticação + tenant) ====================
+// ==================== ROTAS PROTEGIDAS (Tenant) ====================
 Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uuidPattern) {
 
-    // ===== AUTENTICAÇÃO =====
     Route::get('/me', [UserController::class, 'me']);
 
     // ===== DASHBOARD =====
