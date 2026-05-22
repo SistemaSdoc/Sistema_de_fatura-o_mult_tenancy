@@ -11,36 +11,31 @@ export type CodigoIsencao = "M00" | "M01" | "M02" | "M03" | "M04" | "M05" | "M06
 export type TaxaIVA = 0 | 5 | 14;
 
 export interface Categoria {
-    id: string; // UUID
+    id: string;
     nome: string;
     descricao: string | null;
     status: StatusCategoria;
     tipo: TipoCategoria;
-    user_id: string; // UUID
-    // ✅ NOVOS: Campos de IVA
-    taxa_iva: number; // 0, 5 ou 14
-    sujeito_iva: boolean;
-    codigo_isencao: CodigoIsencao | null;
-    // Timestamps
-    created_at?: string;
-    updated_at?: string;
-    deleted_at?: string | null;
-    // Relações/Contadores
-    produtos_count?: number;
-    // Campos computados do backend
-    label_iva?: string; // ex: "14%" ou "Isento (0%)"
-    taxa_iva_efectiva?: number;
-    total_produtos?: number;
-}
-
-// Categoria formatada para dropdown/select
-export interface CategoriaSelect {
-    id: string;
-    nome: string;
-    tipo: TipoCategoria;
+    user_id: string;
     taxa_iva: number;
     sujeito_iva: boolean;
     codigo_isencao: CodigoIsencao | null;
+    created_at?: string;
+    updated_at?: string;
+    deleted_at?: string | null;
+    produtos_count?: number;
+}
+
+export interface CategoriaComputed extends Categoria {
+    label_iva: string;
+    taxa_iva_efectiva: number;
+    is_isenta: boolean;
+}
+
+export interface CategoriaSelect {
+    id: string;
+    nome: string;
+    taxa_iva: number;
     label_iva: string;
 }
 
@@ -49,194 +44,188 @@ export interface CriarCategoriaInput {
     descricao?: string;
     status?: StatusCategoria;
     tipo?: TipoCategoria;
-    // ✅ NOVOS: Campos de IVA
-    taxa_iva?: TaxaIVA; // 0, 5 ou 14 (padrão: 14)
-    sujeito_iva?: boolean; // padrão: true
-    codigo_isencao?: CodigoIsencao; // obrigatório apenas se sujeito_iva = false
+    taxa_iva?: TaxaIVA;
+    sujeito_iva?: boolean;
+    codigo_isencao?: CodigoIsencao;
 }
 
 export type AtualizarCategoriaInput = Partial<CriarCategoriaInput>;
 
-// Filtros para listagem de categorias
 export interface FiltrosCategoria {
     tipo?: TipoCategoria;
     status?: StatusCategoria;
-    busca?: string; // busca por nome
-    taxa_iva?: TaxaIVA;
-    apenas_isentas?: boolean;
+    busca?: string;
 }
 
-// Resumo estatístico da listagem
 export interface ResumoCategorias {
     total: number;
-    com_iva_14: number;
-    com_iva_5: number;
+    iva_14: number;
+    iva_5: number;
     isentas: number;
 }
 
-// Resposta da listagem com resumo
 export interface ListarCategoriasResponse {
     message: string;
     categorias: Categoria[];
-    resumo: ResumoCategorias;
+    resumo?: ResumoCategorias;
+    total?: number;
 }
 
-// Resposta do select para produtos
 export interface ParaSelectProdutosResponse {
     message: string;
     categorias: CategoriaSelect[];
 }
 
-// Resposta do detalhe/show
 export interface DetalheCategoriaResponse {
     message: string;
     categoria: Categoria;
 }
 
-// Resposta da criação
 export interface CriarCategoriaResponse {
     message: string;
     categoria: Categoria;
 }
 
-// Resposta da atualização
 export interface AtualizarCategoriaResponse {
     message: string;
     categoria: Categoria;
-    aviso?: string; // aviso quando taxa de IVA é alterada e existem produtos
 }
 
-// Resposta do delete
 export interface DeletarCategoriaResponse {
     message: string;
+    deleted?: boolean;
 }
 
-// Erro específico do delete quando existem produtos ativos
 export interface DeletarCategoriaError {
     message: string;
-    error: "produtos_activos";
+    error: "produtos_activos" | "produtos_associados";
+}
+
+export interface RestaurarCategoriaResponse {
+    message: string;
+    categoria: Categoria;
 }
 
 const API_PREFIX = "/api";
 
 export const categoriaService = {
-    /* =====================================================================
-     | LISTAGEM
-     | ================================================================== */
-
     /**
-     * Listar todas as categorias com filtros opcionais e resumo estatístico.
+     * Listar categorias ativas (padrão)
      */
     async listarCategorias(filtros?: FiltrosCategoria): Promise<ListarCategoriasResponse> {
-        console.log('[CATEGORIA SERVICE] Listar categorias - Filtros:', filtros);
-        
         const params = new URLSearchParams();
         if (filtros?.tipo) params.append("tipo", filtros.tipo);
         if (filtros?.status) params.append("status", filtros.status);
         if (filtros?.busca) params.append("busca", filtros.busca);
-        if (filtros?.taxa_iva !== undefined) params.append("taxa_iva", String(filtros.taxa_iva));
-        if (filtros?.apenas_isentas) params.append("apenas_isentas", "true");
 
         const url = `${API_PREFIX}/categorias${params.toString() ? `?${params.toString()}` : ""}`;
         const response = await api.get<ListarCategoriasResponse>(url);
-        
-        console.log('[CATEGORIA SERVICE] Listar categorias - Sucesso:', response.data);
         return response.data;
     },
 
     /**
-     * Listar categorias para dropdown/select no formulário de produtos.
-     * Retorna apenas os campos necessários incluindo informações de IVA.
+     * Listar TODAS as categorias (incluindo inativas)
+     */
+    async listarTodasCategorias(filtros?: FiltrosCategoria): Promise<ListarCategoriasResponse> {
+        const params = new URLSearchParams();
+        if (filtros?.tipo) params.append("tipo", filtros.tipo);
+        if (filtros?.status) params.append("status", filtros.status);
+        if (filtros?.busca) params.append("busca", filtros.busca);
+
+        const url = `${API_PREFIX}/categorias/todas${params.toString() ? `?${params.toString()}` : ""}`;
+        const response = await api.get<ListarCategoriasResponse>(url);
+        return response.data;
+    },
+
+    /**
+     * Listar categorias deletadas (soft delete)
+     */
+    async listarCategoriasDeletadas(filtros?: Omit<FiltrosCategoria, 'status'>): Promise<ListarCategoriasResponse> {
+        const params = new URLSearchParams();
+        if (filtros?.tipo) params.append("tipo", filtros.tipo);
+        if (filtros?.busca) params.append("busca", filtros.busca);
+
+        const url = `${API_PREFIX}/categorias/deletadas${params.toString() ? `?${params.toString()}` : ""}`;
+        const response = await api.get<ListarCategoriasResponse>(url);
+        return response.data;
+    },
+
+    /**
+     * Listar categorias para dropdown/select
      */
     async paraSelectProdutos(): Promise<ParaSelectProdutosResponse> {
-        console.log('[CATEGORIA SERVICE] Para select produtos - Iniciando...');
         const response = await api.get<ParaSelectProdutosResponse>(`${API_PREFIX}/categorias/select`);
-        console.log('[CATEGORIA SERVICE] Para select produtos - Sucesso:', response.data);
         return response.data;
     },
 
-    /* =====================================================================
-     | DETALHE
-     | ================================================================== */
-
     /**
-     * Buscar categoria específica com contagem de produtos e campos computados.
+     * Buscar categoria específica
      */
     async buscarCategoria(id: string): Promise<DetalheCategoriaResponse> {
-        console.log('[CATEGORIA SERVICE] Buscar categoria - ID:', id);
         const response = await api.get<DetalheCategoriaResponse>(`${API_PREFIX}/categorias/${id}`);
-        console.log('[CATEGORIA SERVICE] Buscar categoria - Sucesso:', response.data);
         return response.data;
     },
 
-    /* =====================================================================
-     | CRIAR
-     | ================================================================== */
-
     /**
-     * Criar nova categoria com validação de IVA.
-     * Taxas válidas: 0% (isento), 5% (cesta básica), 14% (geral).
+     * Criar nova categoria
      */
     async criarCategoria(dados: CriarCategoriaInput): Promise<CriarCategoriaResponse> {
-        console.log('[CATEGORIA SERVICE] Criar categoria - Dados:', dados);
-        
-        // Validação frontend: código de isenção só faz sentido quando não sujeito a IVA
-        if (dados.codigo_isencao && dados.sujeito_iva !== false) {
-            console.warn('[CATEGORIA SERVICE] Aviso: código_isencao definido mas sujeito_iva é true');
+        const dadosParaEnviar = { ...dados };
+        if (dadosParaEnviar.sujeito_iva !== false) {
+            delete dadosParaEnviar.codigo_isencao;
         }
 
-        const response = await api.post<CriarCategoriaResponse>(`${API_PREFIX}/categorias`, dados);
-        console.log('[CATEGORIA SERVICE] Criar categoria - Sucesso:', response.data);
+        const response = await api.post<CriarCategoriaResponse>(`${API_PREFIX}/categorias`, dadosParaEnviar);
         return response.data;
     },
 
-    /* =====================================================================
-     | ACTUALIZAR
-     | ================================================================== */
-
     /**
-     * Atualizar categoria existente.
-     * Retorna aviso se a taxa de IVA for alterada e existirem produtos associados.
+     * Atualizar categoria - VERSÃO SIMPLES SEM A VISO
      */
     async atualizarCategoria(
         id: string, 
         dados: AtualizarCategoriaInput
     ): Promise<AtualizarCategoriaResponse> {
-        console.log('╔══════════════════════════════════════════════════════════╗');
-        console.log('║ [CATEGORIA SERVICE] ATUALIZAR CATEGORIA - INÍCIO        ║');
-        console.log('╚══════════════════════════════════════════════════════════╝');
-        console.log('[CATEGORIA SERVICE] ID:', id, 'Dados:', dados);
-
         const url = `${API_PREFIX}/categorias/${id}`;
+        const response = await api.put<AtualizarCategoriaResponse>(url, dados);
+        return response.data;
+    },
 
+    /**
+     * Deletar categoria (soft delete)
+     */
+    async deletarCategoria(id: string): Promise<DeletarCategoriaResponse> {
         try {
-            const response = await api.put<AtualizarCategoriaResponse>(url, dados);
-            console.log('[CATEGORIA SERVICE] Sucesso:', response.status);
-            
-            if (response.data.aviso) {
-                console.warn('[CATEGORIA SERVICE] Aviso do backend:', response.data.aviso);
-            }
-            
+            const response = await api.delete<DeletarCategoriaResponse>(`${API_PREFIX}/categorias/${id}`);
             return response.data;
         } catch (error: unknown) {
-            const err = error as { response?: { status: number; data?: { message: string } } };
-            console.error('[CATEGORIA SERVICE] ERRO:', err.response?.status, err.response?.data?.message);
+            const err = error as { 
+                response?: { 
+                    status: number; 
+                    data?: DeletarCategoriaError 
+                } 
+            };
+            
+            if (err.response?.status === 409) {
+                throw err.response.data;
+            }
             throw error;
         }
     },
 
-    /* =====================================================================
-     | APAGAR
-     | ================================================================== */
+    /**
+     * Restaurar categoria deletada
+     */
+    async restaurarCategoria(id: string): Promise<RestaurarCategoriaResponse> {
+        const response = await api.post<RestaurarCategoriaResponse>(`${API_PREFIX}/categorias/${id}/restore`);
+        return response.data;
+    },
 
     /**
-     * Eliminar categoria.
-     * Erro 409 se existirem produtos ativos associados.
+     * Forçar delete permanente
      */
-    async deletarCategoria(id: string): Promise<DeletarCategoriaResponse> {
-        console.log('[CATEGORIA SERVICE] Deletar categoria - ID:', id);
-        const response = await api.delete<DeletarCategoriaResponse>(`${API_PREFIX}/categorias/${id}`);
-        console.log('[CATEGORIA SERVICE] Deletar categoria - Sucesso:', response.status);
+    async forcarDeleteCategoria(id: string): Promise<{ message: string }> {
+        const response = await api.delete<{ message: string }>(`${API_PREFIX}/categorias/${id}/force`);
         return response.data;
     },
 };
@@ -245,71 +234,63 @@ export const categoriaService = {
  | HELPERS DE FORMATAÇÃO
  | ================================================================== */
 
-/**
- * Retorna a cor do badge baseada no status.
- */
 export function getStatusColor(status: StatusCategoria): string {
     return status === "ativo"
         ? "bg-green-100 text-green-700 border-green-200"
         : "bg-red-100 text-red-700 border-red-200";
 }
 
-/**
- * Retorna a cor do badge baseada no tipo.
- */
 export function getTipoColor(tipo: TipoCategoria): string {
     return tipo === "produto"
         ? "bg-blue-100 text-blue-700 border-blue-200"
         : "bg-purple-100 text-purple-700 border-purple-200";
 }
 
-/**
- * Retorna o label traduzido do status.
- */
 export function getStatusLabel(status: StatusCategoria): string {
     return status === "ativo" ? "Ativo" : "Inativo";
 }
 
-/**
- * Retorna o label traduzido do tipo.
- */
 export function getTipoLabel(tipo: TipoCategoria): string {
     return tipo === "produto" ? "Produto" : "Serviço";
 }
 
-/**
- * Retorna a cor do badge baseada na taxa de IVA.
- */
 export function getTaxaIVAColor(taxa: number): string {
-    switch (taxa) {
-        case 0:
-            return "bg-gray-100 text-gray-700 border-gray-200";
-        case 5:
-            return "bg-yellow-100 text-yellow-700 border-yellow-200";
-        case 14:
-            return "bg-blue-100 text-blue-700 border-blue-200";
-        default:
-            return "bg-gray-100 text-gray-700 border-gray-200";
-    }
+    if (taxa === 0) return "bg-gray-100 text-gray-700 border-gray-200";
+    if (taxa === 5) return "bg-yellow-100 text-yellow-700 border-yellow-200";
+    if (taxa === 14) return "bg-blue-100 text-blue-700 border-blue-200";
+    return "bg-gray-100 text-gray-700 border-gray-200";
 }
 
-/**
- * Retorna o label formatado da taxa de IVA.
- * Exemplo: "14%", "5% (Cesta Básica)", "Isento (0%)"
- */
 export function getTaxaIVALabel(taxa: number, sujeitoIVA: boolean = true): string {
-    if (!sujeitoIVA || taxa === 0) {
-        return "Isento (0%)";
-    }
-    if (taxa === 5) {
-        return "5% (Cesta Básica)";
-    }
+    if (!sujeitoIVA || taxa === 0) return "Isento (0%)";
+    if (taxa === 5) return "5% (Cesta Básica)";
     return `${taxa}%`;
 }
 
-/**
- * Retorna a descrição do código de isenção SAF-T.
- */
+export function computeCategoriaProps(categoria: Categoria): CategoriaComputed {
+    const isIsenta = !categoria.sujeito_iva || categoria.taxa_iva === 0;
+    
+    let label_iva: string;
+    if (isIsenta) {
+        label_iva = "Isento (0%)";
+    } else if (categoria.taxa_iva === 5) {
+        label_iva = "5% (Cesta Básica)";
+    } else {
+        label_iva = `${categoria.taxa_iva}%`;
+    }
+    
+    return {
+        ...categoria,
+        label_iva,
+        taxa_iva_efectiva: isIsenta ? 0 : categoria.taxa_iva,
+        is_isenta: isIsenta,
+    };
+}
+
+export function computeCategoriasProps(categorias: Categoria[]): CategoriaComputed[] {
+    return categorias.map(computeCategoriaProps);
+}
+
 export function getCodigoIsencaoLabel(codigo: CodigoIsencao | null): string | null {
     if (!codigo) return null;
     
@@ -327,34 +308,50 @@ export function getCodigoIsencaoLabel(codigo: CodigoIsencao | null): string | nu
     return descricoes[codigo] || codigo;
 }
 
-/**
- * Valida se a combinação de IVA é consistente.
- * Retorna null se válido, ou mensagem de erro se inválido.
- */
 export function validarIVA(
     sujeitoIVA: boolean, 
     taxaIVA: number, 
     codigoIsencao?: CodigoIsencao | null
 ): string | null {
     if (!sujeitoIVA) {
-        // Se não sujeito a IVA, taxa deve ser 0
         if (taxaIVA !== 0) {
             return "Categoria isenta deve ter taxa de IVA igual a 0%";
         }
     } else {
-        // Se sujeito a IVA, não pode ter código de isenção
         if (codigoIsencao) {
             return "Categoria sujeita a IVA não pode ter código de isenção";
         }
+        if (taxaIVA !== 5 && taxaIVA !== 14) {
+            return "Categoria sujeita a IVA deve ter taxa de 5% ou 14%";
+        }
     }
     
-    // Taxas válidas em Angola
     const taxasValidas: TaxaIVA[] = [0, 5, 14];
     if (!taxasValidas.includes(taxaIVA as TaxaIVA)) {
         return "Taxa de IVA inválida. Valores permitidos: 0%, 5% ou 14%";
     }
     
     return null;
+}
+
+export function filtrarCategoriasFrontend(
+    categorias: Categoria[],
+    filtros: {
+        taxa_iva?: TaxaIVA;
+        apenas_isentas?: boolean;
+    }
+): Categoria[] {
+    let resultado = [...categorias];
+    
+    if (filtros.taxa_iva !== undefined) {
+        resultado = resultado.filter(c => c.taxa_iva === filtros.taxa_iva);
+    }
+    
+    if (filtros.apenas_isentas) {
+        resultado = resultado.filter(c => !c.sujeito_iva || c.taxa_iva === 0);
+    }
+    
+    return resultado;
 }
 
 export default categoriaService;

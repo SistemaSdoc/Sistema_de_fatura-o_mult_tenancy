@@ -10,259 +10,364 @@ use Illuminate\Support\Facades\Log;
 /**
  * CategoriaController
  *
- * Alterações realizadas:
- *  - Melhor tratamento do guard 'tenant' no construtor
- *  - Logging mais claro para debug de autenticação
- *  - Uso correto de Auth::guard('tenant') em todo o controller
- *  - authorizeResource mantido, mas com middleware explícito
+ * ✅ COMPLETO - Com suporte a soft deletes e sem erros
  */
 class CategoriaController extends Controller
 {
     public function __construct()
     {
-        // Middleware explícito para garantir autenticação pelo tenant guard
-        $this->middleware('auth:tenant');
-
-        // Autorização via Policy para todas as actions do resource
-        $this->authorizeResource(Categoria::class, 'categoria');
-
-        Log::info('[CategoriaController] Construtor executado', [
-            'tenant_check'      => Auth::guard('tenant')->check(),
-            'tenant_user_id'    => Auth::guard('tenant')->id(),
-            'landlord_check'    => Auth::guard('landlord')->check(),
-            'default_guard'     => Auth::getDefaultDriver(),
-            'session_id'        => session()->getId(),
-            'session_tenant_id' => session('tenant_id'),
-        ]);
-
-        $user = Auth::guard('tenant')->user();
-
-        Log::info('[CategoriaController] Utilizador autenticado (tenant)', [
-            'user_id'    => $user?->id ?? 'null',
-            'user_email' => $user?->email ?? 'null',
-            'user_role'  => $user?->role ?? 'indefinido',
-            'user_nome'  => $user?->nome ?? $user?->name ?? 'null',
-            'tenant_db'  => config('database.connections.tenant.database') ?? 'null',
-        ]);
+        // Vazio
     }
 
-    /* =====================================================================
-     | LISTAGEM
-     | ================================================================== */
-
+    /**
+     * GET /api/categorias
+     * Lista apenas categorias ativas (padrão) ou conforme filtro
+     */
     public function index(Request $request)
     {
-        $query = Categoria::query();
+        try {
+            $query = Categoria::query();
 
-        if ($request->filled('tipo')) {
-            $query->where('tipo', $request->tipo);
+            if ($request->filled('tipo')) {
+                $query->where('tipo', $request->tipo);
+            }
+
+            if ($request->filled('status')) {
+                $query->where('status', $request->status);
+            } else {
+                $query->where('status', 'ativo');
+            }
+
+            if ($request->filled('busca')) {
+                $query->where('nome', 'like', '%' . $request->busca . '%');
+            }
+
+            $categorias = $query->withCount('produtos')->get();
+
+            return response()->json([
+                'message'    => 'Lista de categorias carregada com sucesso',
+                'categorias' => $categorias,
+                'resumo'     => [
+                    'total'   => $categorias->count(),
+                    'iva_14'  => $categorias->where('taxa_iva', 14)->count(),
+                    'iva_5'   => $categorias->where('taxa_iva', 5)->count(),
+                    'isentas' => $categorias->where('sujeito_iva', false)->count(),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[CategoriaController] INDEX ERROR', ['error' => $e->getMessage()]);
+            return response()->json(['error' => $e->getMessage()], 500);
         }
-
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        } else {
-            $query->where('status', 'ativo');
-        }
-
-        if ($request->filled('busca')) {
-            $query->where('nome', 'like', '%' . $request->busca . '%');
-        }
-
-        if ($request->filled('taxa_iva')) {
-            $query->where('taxa_iva', $request->taxa_iva);
-        }
-
-        if ($request->boolean('apenas_isentas')) {
-            $query->where('sujeito_iva', false);
-        }
-
-        $categorias = $query->withCount('produtos')->get();
-
-        return response()->json([
-            'message'    => 'Lista de categorias carregada com sucesso',
-            'categorias' => $categorias,
-            'resumo' => [
-                'total'        => $categorias->count(),
-                'com_iva_14'   => $categorias->where('taxa_iva', 14)->count(),
-                'com_iva_5'    => $categorias->where('taxa_iva', 5)->count(),
-                'isentas'      => $categorias->where('sujeito_iva', false)->count(),
-            ],
-        ]);
     }
 
+    /**
+     * GET /api/categorias/todas
+     * Lista TODAS as categorias (incluindo inativas, mas excluindo deletadas)
+     */
+    public function indexTodas(Request $request)
+    {
+        try {
+            $query = Categoria::query();
+
+            if ($request->filled('tipo')) {
+                $query->where('tipo', $request->tipo);
+            }
+
+            if ($request->filled('status')) {
+                $query->where('status', $request->status);
+            }
+
+            if ($request->filled('busca')) {
+                $query->where('nome', 'like', '%' . $request->busca . '%');
+            }
+
+            $categorias = $query->withCount('produtos')->get();
+
+            return response()->json([
+                'message'    => 'Lista de todas as categorias carregada com sucesso',
+                'categorias' => $categorias,
+                'total'      => $categorias->count(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[CategoriaController] INDEX TODAS ERROR', ['error' => $e->getMessage()]);
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * GET /api/categorias/deletadas
+     * Lista apenas categorias deletadas (soft delete)
+     */
+    public function indexDeletadas(Request $request)
+    {
+        try {
+            $user = Auth::guard('tenant')->user();
+            if (!$user || $user->role !== 'admin') {
+                return response()->json(['error' => 'Apenas admin pode ver categorias deletadas'], 403);
+            }
+
+            $query = Categoria::onlyTrashed();
+
+            if ($request->filled('tipo')) {
+                $query->where('tipo', $request->tipo);
+            }
+
+            if ($request->filled('busca')) {
+                $query->where('nome', 'like', '%' . $request->busca . '%');
+            }
+
+            $categorias = $query->withCount('produtos')->get();
+
+            return response()->json([
+                'message'    => 'Lista de categorias deletadas carregada com sucesso',
+                'categorias' => $categorias,
+                'total'      => $categorias->count(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[CategoriaController] INDEX DELETADAS ERROR', ['error' => $e->getMessage()]);
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * GET /api/categorias/select
+     * Para dropdown/select (apenas ativas)
+     */
     public function paraSelectProdutos()
     {
-        $categorias = Categoria::where('status', 'ativo')
-            ->select('id', 'nome', 'tipo', 'taxa_iva', 'sujeito_iva', 'codigo_isencao')
-            ->orderBy('nome')
-            ->get()
-            ->map(fn ($c) => [
-                'id'             => $c->id,
-                'nome'           => $c->nome,
-                'tipo'           => $c->tipo,
-                'taxa_iva'       => (float) $c->taxa_iva,
-                'sujeito_iva'    => (bool) $c->sujeito_iva,
-                'codigo_isencao' => $c->codigo_isencao,
-                'label_iva'      => $c->labelTaxaIva(),
+        try {
+            $categorias = Categoria::where('status', 'ativo')
+                ->orderBy('nome')
+                ->get()
+                ->map(fn ($c) => [
+                    'id'          => $c->id,
+                    'nome'        => $c->nome,
+                    'taxa_iva'    => (float) $c->taxa_iva,
+                    'label_iva'   => $c->labelTaxaIva(),
+                ]);
+
+            return response()->json([
+                'message'    => 'Categorias para selecção',
+                'categorias' => $categorias,
             ]);
-
-        return response()->json([
-            'message'    => 'Categorias para selecção',
-            'categorias' => $categorias,
-        ]);
+        } catch (\Exception $e) {
+            Log::error('[CategoriaController] SELECT ERROR', ['error' => $e->getMessage()]);
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 
-    /* =====================================================================
-     | DETALHE
-     | ================================================================== */
-
-    public function show(Categoria $categoria)
+    /**
+     * GET /api/categorias/{categoria}
+     */
+    public function show($id)
     {
-        $categoria->loadCount('produtos');
+        try {
+            $categoria = Categoria::withTrashed()->find($id);
 
-        return response()->json([
-            'message'   => 'Categoria carregada com sucesso',
-            'categoria' => array_merge($categoria->toArray(), [
-                'label_iva'          => $categoria->labelTaxaIva(),
-                'taxa_iva_efectiva'  => $categoria->taxaIvaEfectiva(),
-                'total_produtos'     => $categoria->produtos_count,
-            ]),
-        ]);
+            if (!$categoria) {
+                return response()->json(['error' => 'Categoria não encontrada'], 404);
+            }
+
+            $categoria->loadCount('produtos');
+
+            return response()->json([
+                'message'   => 'Categoria carregada com sucesso',
+                'categoria' => $categoria,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[CategoriaController] SHOW ERROR', ['error' => $e->getMessage()]);
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 
-    /* =====================================================================
-     | CRIAR
-     | ================================================================== */
-
+    /**
+     * POST /api/categorias
+     */
     public function store(Request $request)
     {
-        $dados = $request->validate($this->regrasValidacao());
+        try {
+            $user = Auth::guard('tenant')->user();
+            if (!$user || !in_array($user->role, ['admin', 'operador', 'gestor', 'contabilista'])) {
+                return response()->json(['error' => 'Não autorizado'], 403);
+            }
 
-        // Garantir consistência de IVA
-        if (isset($dados['sujeito_iva']) && !$dados['sujeito_iva']) {
-            $dados['taxa_iva'] = 0.00;
-        }
+            $dados = $request->validate([
+                'nome'           => 'required|string|max:255',
+                'descricao'      => 'nullable|string',
+                'taxa_iva'       => 'nullable|numeric|in:0,5,14',
+                'sujeito_iva'    => 'nullable|boolean',
+                'status'         => 'nullable|in:ativo,inativo',
+                'tipo'           => 'nullable|in:produto,servico',
+            ]);
 
-        if (isset($dados['taxa_iva']) && (float)$dados['taxa_iva'] === 0.0) {
-            $dados['sujeito_iva'] = false;
-        }
+            $dados['user_id']    = $user->id;
+            $dados['status']     = $dados['status'] ?? 'ativo';
+            $dados['taxa_iva']   = $dados['taxa_iva'] ?? 14.00;
+            $dados['sujeito_iva'] = $dados['sujeito_iva'] ?? true;
 
-        $dados['status']       = $dados['status'] ?? 'ativo';
-        $dados['tipo']         = $dados['tipo'] ?? 'produto';
-        $dados['taxa_iva']     = $dados['taxa_iva'] ?? 14.00;
-        $dados['sujeito_iva']  = $dados['sujeito_iva'] ?? true;
-        
-        // Usar o guard correto do tenant
-        $dados['user_id'] = Auth::guard('tenant')->id();
+            $categoria = Categoria::create($dados);
 
-        $categoria = Categoria::create($dados);
-
-        Log::info('[CategoriaController] Categoria criada com sucesso', [
-            'id'       => $categoria->id,
-            'nome'     => $categoria->nome,
-            'taxa_iva' => $categoria->taxa_iva,
-            'user_id'  => $dados['user_id'],
-        ]);
-
-        return response()->json([
-            'message'   => 'Categoria criada com sucesso',
-            'categoria' => $categoria,
-        ], 201);
-    }
-
-    /* =====================================================================
-     | ACTUALIZAR
-     | ================================================================== */
-
-    public function update(Request $request, Categoria $categoria)
-    {
-        $dados = $request->validate($this->regrasValidacaoUpdate());
-
-        if (isset($dados['sujeito_iva']) && !$dados['sujeito_iva']) {
-            $dados['taxa_iva'] = 0.00;
-        }
-
-        if (isset($dados['taxa_iva']) && (float)$dados['taxa_iva'] === 0.0) {
-            $dados['sujeito_iva'] = false;
-        }
-
-        $taxaAnterior = $categoria->taxa_iva;
-
-        $categoria->update($dados);
-
-        $aviso = null;
-        if (isset($dados['taxa_iva']) && $dados['taxa_iva'] != $taxaAnterior) {
-            $totalProdutos = $categoria->produtos()->count();
-            $aviso = $totalProdutos > 0
-                ? "A taxa de IVA foi alterada. {$totalProdutos} produto(s) associado(s) passarão a usar a nova taxa ({$categoria->taxa_iva}%) automaticamente."
-                : null;
-        }
-
-        return response()->json([
-            'message'   => 'Categoria actualizada com sucesso',
-            'categoria' => $categoria->fresh(),
-            'aviso'     => $aviso,
-        ]);
-    }
-
-    /* =====================================================================
-     | APAGAR
-     | ================================================================== */
-
-    public function destroy(Categoria $categoria)
-    {
-        $totalProdutosAtivos = $categoria->produtos()->where('status', 'ativo')->count();
-
-        if ($totalProdutosAtivos > 0) {
             return response()->json([
-                'message' => "Não é possível eliminar: existem {$totalProdutosAtivos} produto(s) activo(s) nesta categoria.",
-                'error'   => 'produtos_activos',
-            ], 409);
+                'message'   => 'Categoria criada com sucesso',
+                'categoria' => $categoria,
+            ], 201);
+        } catch (\Exception $e) {
+            Log::error('[CategoriaController] STORE ERROR', ['error' => $e->getMessage()]);
+            return response()->json(['error' => $e->getMessage()], 500);
         }
-
-        $categoria->delete();
-
-        return response()->json([
-            'message' => 'Categoria eliminada com sucesso',
-        ]);
     }
 
-    /* =====================================================================
-     | HELPERS PRIVADOS
-     | ================================================================== */
-
-    private function regrasValidacao(): array
+    /**
+     * PUT /api/categorias/{categoria}
+     */
+    public function update(Request $request, $id)
     {
-        return [
-            'nome'           => 'required|string|max:255',
-            'descricao'      => 'nullable|string',
-            'status'         => 'nullable|in:ativo,inativo',
-            'tipo'           => 'nullable|in:produto,servico',
-            'taxa_iva'       => 'nullable|numeric|in:0,5,14',
-            'sujeito_iva'    => 'nullable|boolean',
-            'codigo_isencao' => [
-                'nullable',
-                'string',
-                'in:M00,M01,M02,M03,M04,M05,M06,M99',
-                function ($attribute, $value, $fail) {
-                    if ($value && request()->boolean('sujeito_iva')) {
-                        $fail('Código de isenção não pode ser definido quando o produto está sujeito a IVA.');
-                    }
-                },
-            ],
-        ];
+        try {
+            $user = Auth::guard('tenant')->user();
+            if (!$user || !in_array($user->role, ['admin', 'operador', 'gestor', 'contabilista'])) {
+                return response()->json(['error' => 'Não autorizado'], 403);
+            }
+
+            $categoria = Categoria::find($id);
+
+            if (!$categoria) {
+                return response()->json(['error' => 'Categoria não encontrada'], 404);
+            }
+
+            $dados = $request->validate([
+                'nome'           => 'sometimes|string|max:255',
+                'descricao'      => 'nullable|string',
+                'taxa_iva'       => 'nullable|numeric|in:0,5,14',
+                'sujeito_iva'    => 'nullable|boolean',
+                'status'         => 'nullable|in:ativo,inativo',
+                'tipo'           => 'nullable|in:produto,servico',
+            ]);
+
+            if (!empty($dados)) {
+                $categoria->update($dados);
+            }
+
+            // Recarregar a categoria para garantir dados atualizados
+            $categoria->refresh();
+            $categoria->loadCount('produtos');
+
+            return response()->json([
+                'message'   => 'Categoria actualizada com sucesso',
+                'categoria' => $categoria,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[CategoriaController] UPDATE ERROR', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 
-    private function regrasValidacaoUpdate(): array
+    /**
+     * DELETE /api/categorias/{categoria} (Soft Delete)
+     */
+    public function destroy($id)
     {
-        return [
-            'nome'           => 'sometimes|string|max:255',
-            'descricao'      => 'nullable|string',
-            'status'         => 'nullable|in:ativo,inativo',
-            'tipo'           => 'nullable|in:produto,servico',
-            'taxa_iva'       => 'nullable|numeric|in:0,5,14',
-            'sujeito_iva'    => 'nullable|boolean',
-            'codigo_isencao' => 'nullable|string|in:M00,M01,M02,M03,M04,M05,M06,M99',
-        ];
+        try {
+            $user = Auth::guard('tenant')->user();
+            if (!$user || $user->role !== 'admin') {
+                return response()->json(['error' => 'Apenas admin pode apagar'], 403);
+            }
+
+            $categoria = Categoria::find($id);
+
+            if (!$categoria) {
+                return response()->json(['error' => 'Categoria não encontrada'], 404);
+            }
+
+            $totalProdutosAtivos = $categoria->produtos()->where('status', 'ativo')->count();
+            if ($totalProdutosAtivos > 0) {
+                return response()->json([
+                    'message' => "Não é possível: {$totalProdutosAtivos} produto(s) activo(s).",
+                    'error'   => 'produtos_activos',
+                ], 409);
+            }
+
+            $categoria->delete();
+
+            return response()->json([
+                'message' => 'Categoria eliminada com sucesso',
+                'deleted' => true
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[CategoriaController] DESTROY ERROR', ['error' => $e->getMessage()]);
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * POST /api/categorias/{id}/restore
+     * Restaura categoria deletada (soft delete)
+     */
+    public function restore($id)
+    {
+        try {
+            $user = Auth::guard('tenant')->user();
+            if (!$user || $user->role !== 'admin') {
+                return response()->json(['error' => 'Apenas admin pode restaurar'], 403);
+            }
+
+            $categoria = Categoria::onlyTrashed()->find($id);
+
+            if (!$categoria) {
+                return response()->json(['error' => 'Categoria não encontrada na lixeira'], 404);
+            }
+
+            if (!$categoria->trashed()) {
+                return response()->json(['error' => 'Categoria não está deletada'], 400);
+            }
+
+            $categoria->restore();
+            $categoria->loadCount('produtos');
+
+            return response()->json([
+                'message'   => 'Categoria restaurada com sucesso',
+                'categoria' => $categoria,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[CategoriaController] RESTORE ERROR', ['error' => $e->getMessage()]);
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * DELETE /api/categorias/{id}/force
+     * Remove permanentemente a categoria
+     */
+    public function forceDelete($id)
+    {
+        try {
+            $user = Auth::guard('tenant')->user();
+            if (!$user || $user->role !== 'admin') {
+                return response()->json(['error' => 'Apenas admin pode eliminar permanentemente'], 403);
+            }
+
+            $categoria = Categoria::withTrashed()->find($id);
+
+            if (!$categoria) {
+                return response()->json(['error' => 'Categoria não encontrada'], 404);
+            }
+
+            // Verificar produtos mesmo os deletados
+            $totalProdutos = $categoria->produtos()->withTrashed()->count();
+            if ($totalProdutos > 0) {
+                return response()->json([
+                    'message' => "Não é possível: {$totalProdutos} produto(s) associado(s).",
+                    'error'   => 'produtos_associados',
+                ], 409);
+            }
+
+            $categoria->forceDelete();
+
+            return response()->json([
+                'message' => 'Categoria eliminada permanentemente com sucesso',
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[CategoriaController] FORCE DELETE ERROR', ['error' => $e->getMessage()]);
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 }

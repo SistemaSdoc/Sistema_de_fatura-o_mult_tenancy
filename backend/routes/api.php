@@ -22,7 +22,7 @@ $uuidPattern = '[0-9a-fA-F-]{36}';
 Route::withoutMiddleware(['resolve.tenant', 'auth.tenant'])->group(function () {
     // Rota de upload temporário de logo
     Route::post('/upload-temp-logo', [EmpresaController::class, 'uploadTempLogo'])->name('upload.temp.logo');
-    
+
     // Rota de registo de empresa
     Route::post('/empresas', [EmpresaController::class, 'store'])->name('empresas.store');
 });
@@ -50,7 +50,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
         Route::get('/users/create', [UserController::class, 'create']);
         Route::apiResource('/users', UserController::class)->except(['store']);
         Route::patch('/empresa/toggle-status', [EmpresaController::class, 'toggleSelfStatus'])->name('empresa.toggle-status');
-        
+
         Route::prefix('clientes')->group(function () use ($uuidPattern) {
             Route::get('/todos', [ClienteController::class, 'indexWithTrashed'])->name('clientes.todos');
             Route::post('/{id}/restore', [ClienteController::class, 'restore'])->where('id', $uuidPattern)->name('clientes.restore');
@@ -61,7 +61,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
     });
 
     // ==================== ADMIN + OPERADOR ====================
-    Route::middleware('role:admin,operador,gestor,contablista')->group(function () use ($uuidPattern) {
+    Route::middleware('role:admin,operador,gestor,contabilista')->group(function () use ($uuidPattern) {
 
         // ---------- PRODUTOS ----------
         Route::prefix('produtos')->group(function () use ($uuidPattern) {
@@ -77,18 +77,25 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::delete('/{id}', [ProdutoController::class, 'destroy'])->where('id', $uuidPattern)->name('produtos.destroy');
         });
 
-        // ---------- CATEGORIAS ----------
+        // ---------- CATEGORIAS (COMPLETO) ----------
         Route::prefix('categorias')->group(function () use ($uuidPattern) {
-            Route::get('/todas', [CategoriaController::class, 'indexWithTrashed'])->name('categorias.todas');
-            Route::get('/deletadas', [CategoriaController::class, 'indexOnlyTrashed'])->name('categorias.deletadas');
-            Route::post('/{id}/restore', [CategoriaController::class, 'restore'])->where('id', $uuidPattern)->name('categorias.restore');
-            Route::delete('/{id}/force', [CategoriaController::class, 'forceDelete'])->where('id', $uuidPattern)->name('categorias.force-delete');
+            // ✅ Listagens
+            Route::get('/', [CategoriaController::class, 'index'])->name('categorias.index');                           // Apenas ativas
+            Route::get('/todas', [CategoriaController::class, 'indexTodas'])->name('categorias.todas');                 // Todas (inclui inativas)
+            Route::get('/deletadas', [CategoriaController::class, 'indexDeletadas'])->name('categorias.deletadas');     // Apenas deletadas (soft delete)
+
+            // ✅ Select para dropdowns
             Route::get('/select', [CategoriaController::class, 'paraSelectProdutos'])->name('categorias.select');
-            Route::get('/', [CategoriaController::class, 'index'])->name('categorias.index');
+
+            // ✅ CRUD básico
             Route::post('/', [CategoriaController::class, 'store'])->name('categorias.store');
             Route::get('/{id}', [CategoriaController::class, 'show'])->where('id', $uuidPattern)->name('categorias.show');
             Route::put('/{id}', [CategoriaController::class, 'update'])->where('id', $uuidPattern)->name('categorias.update');
             Route::delete('/{id}', [CategoriaController::class, 'destroy'])->where('id', $uuidPattern)->name('categorias.destroy');
+
+            // ✅ Soft Delete - Restaurar e Forçar Delete
+            Route::post('/{id}/restore', [CategoriaController::class, 'restore'])->where('id', $uuidPattern)->name('categorias.restore');
+            Route::delete('/{id}/force', [CategoriaController::class, 'forceDelete'])->where('id', $uuidPattern)->name('categorias.force-delete');
         });
 
         // ---------- FORNECEDORES ----------
@@ -125,7 +132,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::post('/ajuste', [MovimentoStockController::class, 'ajuste'])->name('movimentos-stock.ajuste');
             Route::get('/{id}', [MovimentoStockController::class, 'show'])->where('id', $uuidPattern)->name('movimentos-stock.show');
         });
-        
+
         Route::get('/estoque/resumo', [MovimentoStockController::class, 'resumo'])->name('estoque.resumo');
         Route::get('/movimentos-stock/resumo', [MovimentoStockController::class, 'resumo'])->name('movimentos-stock.resumo');
 
