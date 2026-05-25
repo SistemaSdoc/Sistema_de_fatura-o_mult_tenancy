@@ -284,7 +284,7 @@ export default function DashboardPage() {
 
   /* ---- KPI cards ---- */
   const kpiCards = [
-    { href: "/dashboard/Vendas/relatorios", icon: DollarSign, label: "Total Faturado", value: formatKz(metricas.totalFaturado), helper: `${metricas.crescimento >= 0 ? "+" : ""}${metricas.crescimento.toFixed(1)}% vs mês anterior` },
+    { href: "/dashboard/relatorios", icon: DollarSign, label: "Total Faturado", value: formatKz(metricas.totalFaturado), helper: `${metricas.crescimento >= 0 ? "+" : ""}${metricas.crescimento.toFixed(1)}% vs mês anterior` },
     { href: "/dashboard/Clientes/Novo_cliente", icon: Users, label: "Clientes Ativos", value: formatNumber(metricas.totalClientes), helper: `+${data.clientes?.novos_mes || 0} no mês` },
     { href: "/dashboard/relatorios", icon: Clock, label: "Pendente", value: formatKz(metricas.totalPendente), helper: `${formatKz(data.pagamentos?.total_atrasado || 0)} em atraso` },
     { href: "/dashboard/Produtos_servicos/Stock", icon: Package, label: "Stock Baixo", value: formatNumber(metricas.produtosEmStockBaixo), helper: `${formatNumber(data.produtos?.ativos || 0)} produtos e serviços ativos` },
@@ -307,21 +307,21 @@ export default function DashboardPage() {
                 className="px-3 py-2 text-sm text-white flex items-center gap-2 transition-opacity cursor-pointer hover:opacity-80"
                 style={{ backgroundColor: colors.secondary }}
               >
-                <ShoppingCart size={14} /> Nova Venda
+                <FileText size={14} /> Gerar fatura-recibo
               </button>
               <button
                 onClick={() => router.push("/dashboard/Faturas/Fatura_Normal")}
                 className="px-3 py-2 text-sm text-white flex items-center gap-2 transition-opacity cursor-pointer"
                 style={{ backgroundColor: colors.primary }}
               >
-                <FileText size={14} /> Nova Fatura
+                <FileText size={14} /> Gerar Fatura
               </button>
               <button
                 onClick={() => router.push("/dashboard/Faturas/Faturas_Proforma")}
                 className="px-3 py-2 text-sm text-white flex items-center gap-2 transition-opacity cursor-pointer"
-                style={{ backgroundColor: colors.fp }}
+                style={{ backgroundColor: colors.secondary }}
               >
-                <FileText size={14} /> Nova Proforma
+                <FileText size={14} /> Gerar Proforma
               </button>
             </div>
           )}

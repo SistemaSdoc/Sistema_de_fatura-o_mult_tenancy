@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import MainEmpresa from "@/app/components/MainEmpresa";
 import { useRouter } from "next/navigation";
 import InvoiceTable from "@/app/components/Faturas/InvoiceTable";
@@ -11,8 +11,9 @@ import {
   GerarReciboDTO,
 } from "@/services/DocumentoFiscal";
 import { useThemeColors } from "@/context/ThemeContext";
-import { ShoppingCart, FileText } from "lucide-react";
+import { ShoppingCart, FileText, ChevronDown } from "lucide-react";
 import Cookies from "js-cookie";
+import { color } from "framer-motion";
 
 // ── Helper: lê o XSRF-TOKEN do cookie (já descodificado) ───────────────────
 function getXsrfToken(): string {
@@ -117,12 +118,28 @@ export default function FaturasPage() {
   const [baixandoPdf, setBaixandoPdf] = useState<string | null>(null);
   const [imprimindo, setImprimindo] = useState<string | null>(null);
   const [imprimindoTermica, setImprimindoTermica] = useState<string | null>(null);
+  const [dropdownAberto, setDropdownAberto] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // BaseURL dinâmica — igual ao teu axios.ts
   const baseUrl =
     typeof window !== "undefined"
       ? `${window.location.protocol}//${window.location.hostname}:8000`
       : "http://localhost:8000";
+
+  /* ── Fechar dropdown ao clicar fora ── */
+  useEffect(() => {
+    function handleClickFora(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownAberto(false);
+      }
+    }
+
+    if (dropdownAberto) {
+      document.addEventListener("mousedown", handleClickFora);
+      return () => document.removeEventListener("mousedown", handleClickFora);
+    }
+  }, [dropdownAberto]);
 
   /* ── Carregar documentos ── */
   const carregarDocumentos = useCallback(async () => {
@@ -211,7 +228,7 @@ export default function FaturasPage() {
     } finally {
       setBaixandoPdf(null);
     }
-  }, []);                                                    
+  }, []);
 
   /* ── Ver detalhes ── */
   const verDetalhes = (doc: DocumentoFiscal) => {
@@ -251,35 +268,98 @@ export default function FaturasPage() {
     <MainEmpresa>
       {/* ── Barra de ações no topo ── */}
       <div
-        className="flex flex-wrap items-center gap-2 px-3 py-3"
+        className="flex flex-wrap items-center justify-between px-3 py-3"
         style={{ borderBottom: `0.5px solid ${colors.border}` }}
       >
-        <button
-          onClick={() => router.push("/dashboard/Vendas/Nova_venda")}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-white transition-opacity hover:opacity-80"
-          style={{ backgroundColor: colors.secondary }}
-        >
-          <ShoppingCart size={14} />
-          Nova Venda
-        </button>
+        <p className="font-medium " style={{color: colors.secondary }}>Documentos gerados</p>
+        <div></div>
 
-        <button
-          onClick={() => router.push("/dashboard/Faturas/Fatura_Normal")}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-white transition-opacity hover:opacity-80"
-          style={{ backgroundColor: colors.primary }}
-        >
-          <FileText size={14} />
-          Nova Fatura
-        </button>
+        {/* ── Dropdown "Comece a Faturar" alinhado à direita ── */}
+        <div ref={dropdownRef} className="relative">
+          <button
+            onClick={() => setDropdownAberto(!dropdownAberto)}
+            className="flex items-center gap-2 px-4 py-2 text-sm text-white transition-opacity hover:opacity-80 rounded"
+            style={{ backgroundColor: colors.primary }}
+          >
+            <span className="font-medium">Comece a Faturar</span>
+            <ChevronDown
+              size={18}
+              className={`transition-transform duration-200 ${
+                dropdownAberto ? "rotate-180" : ""
+              }`}
+            />
+          </button>
 
-        <button
-          onClick={() => router.push("/dashboard/Faturas/Faturas_Proforma")}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-white transition-opacity hover:opacity-80"
-          style={{ backgroundColor: colors.secondary }}
-        >
-          <FileText size={14} />
-          Nova Proforma
-        </button>
+          {/* ── Menu dropdown ── */}
+          {dropdownAberto && (
+            <div
+              className="absolute right-0 mt-2 w-56 rounded shadow-lg z-50"
+              style={{ backgroundColor: colors.background, border: `1px solid ${colors.border}` }}
+            >
+              {/* Nova Venda */}
+              <button
+                onClick={() => {
+                  router.push("/dashboard/Vendas/Nova_venda");
+                  setDropdownAberto(false);
+                }}
+                className="flex items-center gap-3 w-full px-4 py-3 text-sm transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 first:rounded-t last:rounded-b"
+                style={{
+                  color: colors.text,
+                  borderBottom: `0.5px solid ${colors.border}`,
+                }}
+              >
+                <FileText size={16} style={{ color: colors.secondary }} />
+                <div className="text-left">
+                  <div className="font-medium">Gerar fatura-recibo</div>
+                  <div style={{ color: colors.text, opacity: 0.7 }} className="text-xs">
+                    Registar uma nova venda
+                  </div>
+                </div>
+              </button>
+
+              {/* Nova Fatura */}
+              <button
+                onClick={() => {
+                  router.push("/dashboard/Faturas/Fatura_Normal");
+                  setDropdownAberto(false);
+                }}
+                className="flex items-center gap-3 w-full px-4 py-3 text-sm transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+                style={{
+                  color: colors.text,
+                  borderBottom: `0.5px solid ${colors.border}`,
+                }}
+              >
+                <FileText size={16} style={{ color: colors.primary }} />
+                <div className="text-left">
+                  <div className="font-medium">Gerar fatura</div>
+                  <div style={{ color: colors.text, opacity: 0.7 }} className="text-xs">
+                    Emitir uma fatura normal
+                  </div>
+                </div>
+              </button>
+
+              {/* Nova Proforma */}
+              <button
+                onClick={() => {
+                  router.push("/dashboard/Faturas/Faturas_Proforma");
+                  setDropdownAberto(false);
+                }}
+                className="flex items-center gap-3 w-full px-4 py-3 text-sm transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 last:rounded-b"
+                style={{
+                  color: colors.text,
+                }}
+              >
+                <FileText size={16} style={{ color: colors.secondary }} />
+                <div className="text-left">
+                  <div className="font-medium">Gerar proforma</div>
+                  <div style={{ color: colors.text, opacity: 0.7 }} className="text-xs">
+                    Criar uma fatura proforma
+                  </div>
+                </div>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Mensagem de erro ── */}

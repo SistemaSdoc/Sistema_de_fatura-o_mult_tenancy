@@ -16,7 +16,8 @@ return [
         'logout',
         'me',
         'register',
-        'upload-temp-logo'
+        'upload-temp-logo',
+        '*',
     ],
 
     /*
@@ -34,7 +35,7 @@ return [
     'allowed_origins' => [
         'http://localhost:3000',
         'http://127.0.0.1:3000',
-        'http://192.168.1.192:3000',   // teu IP atual
+        'http://192.168.1.192:3000',   
         'http://192.168.0.173:3000',
 
     ],

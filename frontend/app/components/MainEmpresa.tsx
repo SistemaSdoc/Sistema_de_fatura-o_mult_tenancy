@@ -98,7 +98,7 @@ export default function MainEmpresa({
   const userRole = user?.role || "";
   const userEmail = user?.email || "";
   const userInitial = userName.charAt(0).toUpperCase();
-  const logoFromServer = `http://192.168.0.173:8000/storage/${companyLogo || user?.empresa?.logo || null}`;
+  const logoFromServer = `http://192.168.1.192:8000/storage/${companyLogo || user?.empresa?.logo || null}`;
   
   // FUNÇÃO PARA VALIDAR E FORMATAR URL DA IMAGEM
   const getValidImageUrl = (logo: string | null | undefined): string | null => {
@@ -336,22 +336,22 @@ export default function MainEmpresa({
       roles: ["admin", "contablista", "gestor"],
     },
     {
-      label: "Vendas",
-      icon: ShoppingCart,
+      label: "Faturação",
+      icon: FileText,
       path: "/dashboard/Vendas",
       links: userRole === "admin" || userRole === "operador" || userRole === "gestor"
         ? [
-            { label: "Gerar Faturas-recibo", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart },
-            { label: "Gerar Faturas", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
+            { label: "Gerar fatura-recibo", path: "/dashboard/Vendas/Nova_venda", icon: ShoppingCart },
+            { label: "Gerar faturas", path: "/dashboard/Faturas/Fatura_Normal", icon: FileText },
             { label: "Gerar proformas", path: "/dashboard/Faturas/Faturas_Proforma", icon: FileText },
-            { label: "Vendas", path: "/dashboard/Faturas/Faturas", icon: FileText },
+            { label: "Vendas geradas", path: "/dashboard/Faturas/Faturas", icon: FileText },
           ]
         : [],
       isGroup: true,
       roles: ["admin", "operador", "gestor"],
     },
     {
-      label: "Doc. Fiscais",
+      label: "Outros documentos",
       icon: FileText,
       path: "/dashboard/Faturas/DC",
       links: [],
@@ -365,9 +365,15 @@ export default function MainEmpresa({
       links: [
         { label: "Stock", path: "/dashboard/Produtos_servicos/Stock", icon: Package },
         { label: "Categorias", path: "/dashboard/Produtos_servicos/categorias", icon: Archive },
-        { label: "Fornecedores", path: "/dashboard/Fornecedores/Novo_fornecedor", icon: Truck },
       ],
       isGroup: true,
+      roles: ["admin", "gestor"],
+    },
+    {
+      label: "Fornecedores",
+      icon: Truck,
+      path: "/dashboard/Fornecedores/Novo_fornecedor",
+      links: [],
       roles: ["admin", "gestor"],
     },
     {
@@ -486,7 +492,7 @@ export default function MainEmpresa({
                   {hasLinks ? (
                     // Item com sublinks - apenas botão, nunca Link
                     <div
-                      className="flex items-center justify-between px-3 py-2.5 transition-all duration-200 cursor-pointer rounded-full select-none group"
+                      className="flex items-center justify-between px-3 py-2.5 transition-all duration-200 cursor-pointer select-none group"
                       style={{ 
                         backgroundColor: active ? colors.secondary : "transparent", 
                         color: active ? "white" : colors.text 
@@ -556,7 +562,7 @@ export default function MainEmpresa({
                         return (
                           <Link key={link.path} href={link.path} onClick={handleLinkClick}>
                             <div
-                              className="flex items-center gap-3 px-3 py-2 border-l-2 transition-all duration-200 rounded-full"
+                              className="flex items-center gap-3 px-3 py-2 border-l-2 transition-all duration-200"
                               style={{ 
                                 borderColor: linkActive ? colors.primary : "transparent", 
                                 backgroundColor: linkActive ? `${colors.primary}15` : "transparent" 

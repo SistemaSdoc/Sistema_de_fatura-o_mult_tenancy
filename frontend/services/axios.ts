@@ -2,11 +2,11 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import Cookies from "js-cookie";
 
 const getBaseURL = (): string => {
-    if (typeof window === "undefined") return "http://localhost:8000";
+    if (typeof window === "undefined") return "https://192.168.1.192:8000";
     return `${window.location.protocol}//${window.location.hostname}:8000`;
 };
 
-// ⭐ CONFIGURAÇÃO BASE — withCredentials: true é ESSENCIAL para cookies de sessão
+// CONFIGURAÇÃO BASE — withCredentials: true é ESSENCIAL para cookies de sessão
 export const api = axios.create({
     baseURL: getBaseURL(),
     withCredentials: true,  // ← Envia cookies (laravel_session, XSRF-TOKEN) em TODAS as requisições

@@ -30,6 +30,7 @@ export interface Empresa {
 }
 
 export interface User {
+    printer_ip: string;
     id: string;
     name: string;
     email: string;
@@ -64,7 +65,7 @@ interface AuthContextData {
 
 // ============ CONTEXT ============
 
-const AuthContext = createContext<AuthContextData | null>(null);
+export const AuthContext = createContext<AuthContextData | null>(null);
 
 // ============ COMPONENT ============
 

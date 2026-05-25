@@ -81,7 +81,7 @@ export function NovoProdutoForm({
   const router = useRouter();
   const colors = useThemeColors();
 
-  const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [categorias, setCategorias] = useState<any[]>([]);
   const [categoriaSelecionada, setCategoriaSelecionada] =
     useState<Categoria | null>(null);
   const [loading, setLoading] = useState(false);
@@ -365,7 +365,7 @@ export function NovoProdutoForm({
           dados.markup = parseFloat(formData.markup) || 0;
         }
 
-        // ✅ NÃO enviar taxa_iva e sujeito_iva para produtos
+        // NÃO enviar taxa_iva e sujeito_iva para produtos
         // O backend vai ignorar mesmo se enviar, mas melhor não enviar
       }
 

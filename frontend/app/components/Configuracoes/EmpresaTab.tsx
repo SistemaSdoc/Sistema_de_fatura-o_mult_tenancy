@@ -287,9 +287,9 @@ const handleSubmit = async () => {
                             <ReadonlyField label="Subdomínio" colors={colors} icon={Globe}
                                 value={empresa.subdomain} />
                         )}
-                        {empresa?.data_registro && (
+                        {(empresa as any)?.created_at && (
                             <ReadonlyField label="Data de registro" colors={colors}
-                                value={new Date(empresa.data_registro).toLocaleDateString("pt-PT")} />
+                                value={new Date((empresa as any).created_at).toLocaleDateString("pt-PT")} />
                         )}
                         {empresa?.nif && (
                             <ReadonlyField label="NIF" colors={colors} icon={Hash}

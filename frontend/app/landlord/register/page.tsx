@@ -40,7 +40,7 @@ export default function LandlordRegisterPage() {
             const message = err.response?.data?.message || 'Erro ao registar';
             const errors = err.response?.data?.errors;
             if (errors) {
-                const firstError = Object.values(errors)[0]?.[0];
+                const firstError = (Object.values(errors)[0] as string[])?.[0];
                 setError(firstError || message);
             } else {
                 setError(message);

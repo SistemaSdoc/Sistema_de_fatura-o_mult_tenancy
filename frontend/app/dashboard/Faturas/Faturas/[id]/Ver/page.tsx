@@ -325,15 +325,15 @@ function TotaisSection({
 
     // Desconto global
     const descontoGlobal = Number(
-        nota.venda?.desconto_global ??
+        (typeof nota.venda === 'object' ? nota.venda?.desconto_global : 0) ??
         nota.desconto_global ??
-        docParaTotais.venda?.desconto_global ??
+        (typeof docParaTotais.venda === 'object' ? docParaTotais.venda?.desconto_global : 0) ??
         docParaTotais.desconto_global ??
         0
     );
     const troco = Number(
-        nota.venda?.troco ?? nota.troco ??
-        docParaTotais.venda?.troco ?? docParaTotais.troco ?? 0
+        (typeof nota.venda === 'object' ? nota.venda?.troco : 0) ?? nota.troco ??
+        (typeof docParaTotais.venda === 'object' ? docParaTotais.venda?.troco : 0) ?? docParaTotais.troco ?? 0
     );
     const subtotalBruto = base + descontoGlobal;
     const pctDesconto =

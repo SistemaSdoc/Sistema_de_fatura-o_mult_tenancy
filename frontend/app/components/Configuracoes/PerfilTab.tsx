@@ -163,11 +163,11 @@ export function PerfilTab({ colors }: { colors: ThemeColors }) {
                             value={user?.empresa?.nome ?? "—"} />
 
                         <ReadonlyField label="Último login" colors={colors}
-                            value={formatDate(user?.ultimo_login)} />
+                            value={formatDate((user as any)?.ultimo_login)} />
 
                         <ReadonlyField label="Membro desde" colors={colors}
-                            value={user?.created_at
-                                ? new Date(user.created_at).toLocaleDateString("pt-PT")
+                            value={(user as any)?.created_at
+                                ? new Date((user as any).created_at).toLocaleDateString("pt-PT")
                                 : "—"} />
 
                         {/*<ReadonlyField label="E-mail verificado" colors={colors}>
