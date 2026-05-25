@@ -26,6 +26,10 @@ return new class extends Migration
             $table->string('email')->nullable()->unique();
             $table->text('endereco')->nullable();
 
+            $table->string('cidade')->nullable();
+            $table->string('codigo_postal')->nullable();
+            $table->string('pais', 2)->default('AO');
+
             $table->timestamps(); // created_at e updated_at
             $table->softDeletes(); // deleted_at para soft delete
         });

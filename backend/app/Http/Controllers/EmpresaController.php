@@ -25,7 +25,7 @@ class EmpresaController extends Controller
             'success' => true,
             'data'    => $empresas
         ], 200);
-    }
+     }
 
     
 
@@ -88,18 +88,14 @@ class EmpresaController extends Controller
                 'message' => 'Falha ao fazer upload: ' . $e->getMessage()
             ], 500);
         }
-    }
+ }
 
-    /**
-     * Cria empresa + banco tenant + migrations + seed
-     */
     public function store(Request $request)
     {
         Log::info('[🚀 INÍCIO] Criando nova empresa', [
             'empresa_nome' => $request->nome,
             'admin_email'  => $request->admin_email
         ]);
-
         $request->validate([
             'nome'           => 'required|string|max:255',
             'nif'            => 'required|string|unique:landlord.empresas,nif',

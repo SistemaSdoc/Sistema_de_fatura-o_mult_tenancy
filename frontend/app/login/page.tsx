@@ -265,6 +265,6 @@ export default function LoginPage(): React.ReactElement {
         </div>
         {/* Footer */}
       </div>
-    </div>
+    </div> 
   );
 }

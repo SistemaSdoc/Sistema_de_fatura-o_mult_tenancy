@@ -103,6 +103,13 @@ return new class extends Migration
                 'cheque',
                 'cartao',
             ])->nullable();
+
+            
+            $table->string('cliente_endereco')->nullable();
+            $table->string('cliente_cidade')->nullable();
+            $table->string('cliente_pais', 2)->nullable();
+            $table->unsignedTinyInteger('periodo')->nullable();
+
             $table->string('referencia_pagamento', 100)->nullable();
 
             // ── Campos AGT — Assinatura RSA (obrigatório para certificação) ──

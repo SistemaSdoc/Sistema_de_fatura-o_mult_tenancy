@@ -6,7 +6,6 @@ use DOMDocument;
 use DOMElement;
 use App\Models\Empresa;
 use App\Models\Tenant\Cliente;
-use App\Models\Tenant\Categoria;
 use App\Models\Tenant\Produto;
 use App\Models\Tenant\DocumentoFiscal;
 use App\Models\Tenant\MovimentoStock;
@@ -282,9 +281,29 @@ class SaftService
         ])
             ->whereBetween('data_emissao', [$startDate, $endDate])
             ->where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO)
-            ->with('itens.produto')
+            ->with(['itens.produto', 'cliente'])
             ->get();
 
+        // Totais agregados
+        $numeroEntradas = $documentos->count();
+        $totalDebit = 0;
+        $totalCredit = 0;
+
+        foreach ($documentos as $doc) {
+            $valor = (float) $doc->total_liquido;
+            if ($doc->tipo_documento == DocumentoFiscal::TIPO_NOTA_CREDITO) {
+                $totalDebit += $valor;
+            } else {
+                // Facturas, facturas-recibo, notas de débito aumentam o crédito
+                $totalCredit += $valor;
+            }
+        }
+
+        $invoicesNode->appendChild($dom->createElement('NumberOfEntries', (string) $numeroEntradas));
+        $invoicesNode->appendChild($dom->createElement('TotalDebit', number_format($totalDebit, 2, '.', '')));
+        $invoicesNode->appendChild($dom->createElement('TotalCredit', number_format($totalCredit, 2, '.', '')));
+
+        // Cada documento
         foreach ($documentos as $doc) {
             $invoice = $dom->createElement('Invoice');
             $invoicesNode->appendChild($invoice);
@@ -301,7 +320,7 @@ class SaftService
             $docStatus->appendChild($dom->createElement('SourceBilling', 'P'));
             $invoice->appendChild($docStatus);
 
-            // Hash (se existir)
+            // Hash
             $invoice->appendChild($dom->createElement('Hash', $doc->hash_fiscal ?? ''));
             $invoice->appendChild($dom->createElement('HashControl', '0'));
 
@@ -319,11 +338,17 @@ class SaftService
             $invoice->appendChild($dom->createElement('SystemEntryDate', $doc->created_at->format('Y-m-d\TH:i:s')));
 
             // Cliente
-            $invoice->appendChild($dom->createElement('CustomerID', (string) $doc->cliente_id ?? ''));
-            $customerTaxID = $doc->cliente_nif ?? ($doc->cliente_id ? null : '999999990');
-            $customerName  = $doc->cliente_nome ?? ($doc->cliente_id ? null : 'Consumidor Final');
-            $invoice->appendChild($dom->createElement('CustomerTaxID', $customerTaxID ?? '999999990'));
-            $invoice->appendChild($dom->createElement('CustomerName', $customerName ?? 'Consumidor Final'));
+            $customerId = (string) $doc->cliente_id;
+            if ($doc->cliente_id && $doc->cliente) {
+                $customerTaxID = $doc->cliente->nif ?? '';
+                $customerName  = $doc->cliente->nome ?? '';
+            } else {
+                $customerTaxID = '999999990'; // NIF genérico para consumidor final
+                $customerName  = 'Consumidor Final';
+            }
+            $invoice->appendChild($dom->createElement('CustomerID', $customerId));
+            $invoice->appendChild($dom->createElement('CustomerTaxID', $customerTaxID));
+            $invoice->appendChild($dom->createElement('CustomerName', $customerName));
 
             // ShipTo / ShipFrom
             $this->addShipAddress($dom, $invoice, $doc, $empresa);
@@ -337,6 +362,7 @@ class SaftService
                     $taxaIva = $produto->taxa_iva_efectiva ?? $item->taxa_iva;
                     $taxCode = $this->getTaxCodeForProduct($produto);
                     $isIsento = ($taxaIva == 0);
+                    $isNotaCredito = ($doc->tipo_documento == DocumentoFiscal::TIPO_NOTA_CREDITO);
 
                     $lineNode = $dom->createElement('Line');
                     $invoice->appendChild($lineNode);
@@ -364,7 +390,25 @@ class SaftService
                         $lineNode->appendChild($dom->createElement('TaxExemptionCode', $item->codigo_isencao));
                     }
 
-                    $lineNode->appendChild($dom->createElement('CreditAmount', number_format($item->total_linha, 2, '.', '')));
+                    // Valor: DebitAmount para nota de crédito, CreditAmount para os restantes
+                    if ($isNotaCredito) {
+                        $lineNode->appendChild($dom->createElement('DebitAmount', number_format($item->total_linha, 2, '.', '')));
+                    } else {
+                        $lineNode->appendChild($dom->createElement('CreditAmount', number_format($item->total_linha, 2, '.', '')));
+                    }
+
+                    // Referência ao documento original (para notas de crédito/débito)
+                    if ($doc->tipo_documento == DocumentoFiscal::TIPO_NOTA_CREDITO || $doc->tipo_documento == DocumentoFiscal::TIPO_NOTA_DEBITO) {
+                        if (!empty($doc->documento_origem_numero)) {
+                            $references = $dom->createElement('References');
+                            $ref = $dom->createElement('Reference', $doc->documento_origem_numero);
+                            $references->appendChild($ref);
+                            if (!empty($doc->motivo)) {
+                                $references->appendChild($dom->createElement('Reason', $doc->motivo));
+                            }
+                            $lineNode->appendChild($references);
+                        }
+                    }
                 }
             } else {
                 // Linha genérica de segurança (caso não haja itens)
@@ -396,6 +440,7 @@ class SaftService
             $docTotals->appendChild($dom->createElement('NetTotal', number_format($doc->base_tributavel, 2, '.', '')));
             $docTotals->appendChild($dom->createElement('GrossTotal', number_format($doc->total_liquido, 2, '.', '')));
 
+            // Para factura-recibo, incluir pagamento
             if (in_array($doc->tipo_documento, ['FR', 'RC']) && $doc->metodo_pagamento) {
                 $payment = $dom->createElement('Payment');
                 $payment->appendChild($dom->createElement('PaymentMechanism', $this->mapPaymentMethod($doc->metodo_pagamento)));

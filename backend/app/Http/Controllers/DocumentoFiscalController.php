@@ -19,6 +19,7 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * DocumentoFiscalController
@@ -99,7 +100,6 @@ class DocumentoFiscalController extends Controller
     {
         try {
             $documento = $this->documentoService->buscarDocumento($id);
-
             return response()->json([
                 'success' => true,
                 'message' => 'Documento carregado com sucesso',
@@ -419,7 +419,6 @@ class DocumentoFiscalController extends Controller
     {
         try {
             $alertas = $this->documentoService->alertasPendentes();
-
             return response()->json([
                 'success' => true,
                 'message' => 'Alertas de documentos fiscais',
@@ -457,7 +456,6 @@ class DocumentoFiscalController extends Controller
     {
         try {
             $resumo = $this->documentoService->dadosDashboard();
-
             return response()->json([
                 'success' => true,
                 'message' => 'Dashboard carregado com sucesso',
@@ -472,11 +470,9 @@ class DocumentoFiscalController extends Controller
     {
         try {
             $ano = (int) $request->input('ano', now()->year);
-
             if ($ano < 2020 || $ano > 2100) {
                 $ano = now()->year;
             }
-
             $evolucao = $this->documentoService->evolucaoMensal($ano);
 
             return response()->json([
@@ -493,7 +489,6 @@ class DocumentoFiscalController extends Controller
     {
         try {
             $estatisticas = $this->documentoService->estatisticasPagamentos();
-
             return response()->json([
                 'success' => true,
                 'message' => 'Estatísticas de pagamentos carregadas com sucesso',
@@ -511,7 +506,7 @@ class DocumentoFiscalController extends Controller
     public function imprimirTermica(string $id, ImpressoraTermicaService $impressoraService): JsonResponse
     {
         try {
-            $user = request()->user();
+            $user = Auth::guard('tenant')->user();
 
             if (!$impressoraService->testarConexao()) {
                 return response()->json([
@@ -524,8 +519,7 @@ class DocumentoFiscalController extends Controller
             $dados     = $this->documentoService->dadosParaPdf($documento);
 
             if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
-                $docInfo = DocumentoFiscal::with(['itens.produto', 'cliente'])
-                    ->find($documento->fatura_id);
+                $docInfo = DocumentoFiscal::with(['itens.produto', 'cliente'])->find($documento->fatura_id);
             } else {
                 $docInfo = $documento;
             }
@@ -543,8 +537,8 @@ class DocumentoFiscalController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Documento impresso com sucesso',
                 'id'      => $id,
+                'message' => 'Documento impresso com sucesso',
             ]);
         } catch (\Exception $e) {
             return $this->erroInterno('Erro na impressão térmica', $e);
@@ -563,15 +557,12 @@ class DocumentoFiscalController extends Controller
 
             $documentoOrigem = null;
             if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
-                $documentoOrigem = DocumentoFiscal::with(['itens.produto', 'cliente'])
-                    ->find($documento->fatura_id);
+                $documentoOrigem = DocumentoFiscal::with(['itens.produto', 'cliente'])->find($documento->fatura_id);
             }
-
             $docInfo = $documentoOrigem ?? $documento;
 
             $qrCodeTexto = $dados['qr_code'] ?? null;
             $qrCodeImg   = null;
-
             if ($qrCodeTexto) {
                 $qr     = new QrCode($qrCodeTexto);
                 $qr->setSize(200);
@@ -783,7 +774,7 @@ class DocumentoFiscalController extends Controller
     }
 
     /* =====================================================================
-     | HELPER PRIVADO
+     | HELPERS PRIVADOS
      | ================================================================== */
 
     private function gerarQrHtml(?string $qrCodeTexto): string
@@ -797,7 +788,6 @@ class DocumentoFiscalController extends Controller
             $qr->setSize(200);
             $writer = new PngWriter();
             $result = $writer->write($qr);
-
             return '<img src="data:image/png;base64,' . base64_encode($result->getString()) . '" alt="QR Code">';
         } catch (\Throwable $e) {
             Log::warning('Falha ao gerar QR Code', ['error' => $e->getMessage()]);
