@@ -15,7 +15,6 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
-
 /**
  * DocumentoFiscalController
  *
@@ -559,21 +558,12 @@ class DocumentoFiscalController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Documento impresso com sucesso',
-            ]);
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
-            return response()->json(['success' => false, 'message' => 'Documento não encontrado'], 404);
-        } catch (\Exception $e) {
-            Log::error('Erro na impressão térmica USB', [
                 'id'    => $id,
-                'error' => $e->getMessage(),
             ]);
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Erro ao imprimir: ' . $e->getMessage(),
-            ], 500);
         }
-    }
+        }
+    
 
     /* =====================================================================
      | IMPRESSÃO HTML (A4) — inalterada
@@ -733,19 +723,12 @@ class DocumentoFiscalController extends Controller
                 'qr_html'         => $this->gerarQrHtml($qrCodeTexto),
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
-            abort(404, 'Documento não encontrado');
-        } catch (\Exception $e) {
-            Log::error('Erro ao gerar visualização PDF', ['id' => $id, 'error' => $e->getMessage()]);
-            abort(500, 'Erro ao carregar documento: ' . $e->getMessage());
         }
     }
 
     /* =====================================================================
      | PDF (DomPDF) - Download — inalterado
-     | ================================================================== */
 
-    public function downloadPdf(string $id): Response
-    {
         try {
             $documento = $this->documentoService->buscarDocumento($id);
             $dados     = $this->documentoService->dadosParaPdf($documento);

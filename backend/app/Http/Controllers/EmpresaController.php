@@ -27,35 +27,7 @@ class EmpresaController extends Controller
         ], 200);
     }
 
-    /**
-     * Upload temporário do logo (criação de empresa — público)
-     */
-    public function uploadTempLogo(Request $request)
-    {
-        Log::info('[📸 UPLOAD TEMP] Iniciando upload temporário do logo');
-
-        $request->validate([
-            'logo' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048'
-        ]);
-
-        try {
-            $file     = $request->file('logo');
-            $filename = time() . '_' . Str::random(10) . '.' . $file->getClientOriginalExtension();
-            $path     = $file->storeAs('logos_temp', $filename, 'public');
-
-            return response()->json([
-                'success'  => true,
-                'logo_url' => $path,
-                'message'  => 'Logo enviado com sucesso!'
-            ]);
-        } catch (\Throwable $e) {
-            Log::error('[❌ UPLOAD TEMP] Falha', ['error' => $e->getMessage()]);
-            return response()->json([
-                'success' => false,
-                'message' => 'Falha ao fazer upload do logo: ' . $e->getMessage()
-            ], 500);
-        }
-    }
+    
 
     /**
      * ✅ NOVO: Upload do logo da empresa já existente (tenant autenticado)
@@ -229,10 +201,6 @@ class EmpresaController extends Controller
             ], 500);
         }
     }
-
-    /**
-     * Configura a conexão tenant dinamicamente
-     */
     private function configurarTenantConnection(string $database): void
     {
         config(['database.connections.tenant.database' => $database]);

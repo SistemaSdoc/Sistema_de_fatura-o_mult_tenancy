@@ -213,11 +213,11 @@ export default function LoginPage(): React.ReactElement {
               colors={colors}
             />
 
+
             {/* <div className="flex justify-end">
+
+           {/* <div className="flex justify-end">
               <Link href="/forgot-password" className="text-xs font-medium transition-colors" style={{ color: colors.secondary }}>
-                Esqueceu a senha?
-              </Link>
-            </div>*/}
 
             <button
               type="submit"
@@ -258,11 +258,7 @@ export default function LoginPage(): React.ReactElement {
             </Link>
           </div>
         </div>
-
         {/* Footer */}
-        <p className="text-center text-xs mt-6" style={{ color: colors.textSecondary }}>
-          © {new Date().getFullYear()} SDOCA. Todos os direitos reservados.
-        </p>
       </div>
     </div>
   );

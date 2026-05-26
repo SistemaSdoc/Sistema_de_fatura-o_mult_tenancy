@@ -41,8 +41,6 @@ export interface MeResponse {
 
 export interface RegisterData {
     name: string;
-    email: string;
-    password: string;
     role: "admin" | "operador" | "contablista" | "gestor";
     ativo?: boolean;
 }
