@@ -25,33 +25,153 @@ class RelatoriosController extends Controller
     }
 
     /**
+     * Retorna o utilizador autenticado pelo guard correto (tenant).
+     */
+    private function getAuthUser()
+    {
+        // Tenta o guard 'tenant' primeiro (usado pelo middleware auth.tenant)
+        $user = auth('tenant')->user();
+
+        // Fallback para o guard padrão
+        if (!$user) {
+            $user = auth()->user();
+        }
+
+        return $user;
+    }
+
+    /**
+     * Método auxiliar para controlar permissões
+     */
+    private function authorizeRelatorio(string $tipo = 'basico')
+    {
+        $user = $this->getAuthUser();
+
+        // ─────────────────────────────────────────────────────
+        // 1. Verificar se usuário está autenticado
+        // ─────────────────────────────────────────────────────
+        if (!$user) {
+            Log::warning('Tentativa de acesso a relatório SEM usuário autenticado', [
+                'ip'                   => request()->ip(),
+                'route'                => request()->route()?->getName(),
+                'authorization_header' => request()->header('Authorization') ? 'PRESENTE' : 'AUSENTE',
+            ]);
+            abort(401, 'Usuário não autenticado. Por favor, faça login.');
+        }
+
+        // ─────────────────────────────────────────────────────
+        // 2. Obter role do usuário
+        // ─────────────────────────────────────────────────────
+        $role = $user->role ?? null;
+
+        // Se não tem role direto, tenta buscar de relacionamento
+        if (!$role && method_exists($user, 'roles')) {
+            $role = $user->roles()->pluck('name')->first() ?? null;
+        }
+
+        // ─────────────────────────────────────────────────────
+        // 3. Log detalhado da tentativa
+        // ─────────────────────────────────────────────────────
+        Log::info('Acesso a relatório', [
+            'user_id'        => $user->id,
+            'user_name'      => $user->name,
+            'user_email'     => $user->email,
+            'user_role'      => $role,
+            'tipo_relatorio' => $tipo,
+            'ip'             => request()->ip(),
+            'route'          => request()->route()?->getName(),
+            'guard_usado'    => auth('tenant')->check() ? 'tenant' : 'default',
+        ]);
+
+        // ─────────────────────────────────────────────────────
+        // 4. Validar role
+        // ─────────────────────────────────────────────────────
+        $rolesBasicos = [
+            'admin',
+            'contablista',
+            'gestor',
+            'vendedor',
+            'gerente_vendas',
+            'armazem',
+            'gerente_armazem',
+            'diretor',
+            'supervisor',
+        ];
+
+        if (!$role) {
+            Log::warning('Acesso negado - usuário SEM role definido', [
+                'user_id'   => $user->id,
+                'user_name' => $user->name,
+            ]);
+            abort(403, "Seu usuário não tem role definido. Contacte o administrador.");
+        }
+
+        if (!in_array($role, $rolesBasicos)) {
+            Log::warning('Acesso negado - role não autorizado para relatórios', [
+                'user_id'         => $user->id,
+                'user_name'       => $user->name,
+                'user_role'       => $role,
+                'roles_permitidos' => $rolesBasicos,
+            ]);
+            abort(403, "Role '{$role}' não autorizado para acessar relatórios. Roles permitidos: " . implode(', ', $rolesBasicos));
+        }
+
+        // ─────────────────────────────────────────────────────
+        // 5. Validar relatórios avançados (apenas admin)
+        // ─────────────────────────────────────────────────────
+        if ($tipo === 'avancado' && $role !== 'admin') {
+            Log::warning('Acesso negado - relatório avançado requer admin', [
+                'user_id'   => $user->id,
+                'user_role' => $role,
+            ]);
+            abort(403, 'Apenas administradores podem acessar relatórios avançados.');
+        }
+
+        Log::info('Autorização concedida para relatório', [
+            'user_id'   => $user->id,
+            'user_role' => $role,
+            'tipo'      => $tipo,
+        ]);
+    }
+
+    /**
+     * Endpoint de debug
+     * GET /api/relatorios/debug
+     */
+    public function debug()
+    {
+        $user      = $this->getAuthUser();
+        $token     = request()->header('Authorization');
+        $guardUsed = auth('tenant')->check() ? 'tenant' : (auth()->check() ? 'default' : 'nenhum');
+
+        return response()->json([
+            'authenticated' => !!$user,
+            'guard_usado'   => $guardUsed,
+            'user'          => $user ? [
+                'id'    => $user->id,
+                'name'  => $user->name,
+                'email' => $user->email,
+                'role'  => $user->role ?? 'SEM ROLE',
+            ] : null,
+            'token_present' => !!$token,
+            'token_type'    => $token ? explode(' ', $token)[0] : null,
+            'tenant'        => session('tenant_id'),
+            'ip'            => request()->ip(),
+        ]);
+    }
+
+    /**
      * Dashboard geral com indicadores principais
      * GET /api/relatorios/dashboard
      */
-   
-
-public function exportarSaft(Request $request)
-{
-    $service = new SaftService();
-    $path = $service->generateFull($request->year, $request->month);
-    return response()->download($path)->deleteFileAfterSend(false);
-   
-}
-
-
-public function saftAlertas()
-{
-    $empresa = Empresa::on('landlord')->find(session('tenant_id'));
-    $alertas = (new SaftAlertService())->getAlertas($empresa);
-    return response()->json(['alertas' => $alertas]);
-}
     public function dashboard()
     {
+        $this->authorizeRelatorio('basico');
+
         try {
-            $hoje = now();
+            $hoje      = now();
             $inicioMes = $hoje->copy()->startOfMonth();
 
-            // Totais de documentos fiscais
             $totalDocumentos = DocumentoFiscal::whereNotIn('estado', ['cancelado'])->count();
 
             $totalFaturado = DocumentoFiscal::whereIn('tipo_documento', ['FT', 'FR'])
@@ -64,7 +184,6 @@ public function saftAlertas()
 
             $totalLiquido = $totalFaturado - $totalNotasCredito;
 
-            // Totais de retenção de serviços
             $totalRetencaoServicos = DocumentoFiscal::whereNotIn('estado', ['cancelado'])
                 ->sum('total_retencao');
 
@@ -72,7 +191,6 @@ public function saftAlertas()
                 ->whereNotIn('estado', ['cancelado'])
                 ->sum('total_retencao');
 
-            // Vendas do mês
             $vendasMes = Venda::whereBetween('data_venda', [$inicioMes, $hoje])
                 ->where('status', 'faturada')
                 ->count();
@@ -81,11 +199,9 @@ public function saftAlertas()
                 ->where('status', 'faturada')
                 ->sum('total');
 
-            // Clientes
-            $totalClientes = Cliente::count();
+            $totalClientes    = Cliente::count();
             $clientesNovosMes = Cliente::whereBetween('created_at', [$inicioMes, $hoje])->count();
 
-            // Produtos e Serviços
             $totalProdutos = Produto::where('tipo', 'produto')->count();
             $totalServicos = Produto::where('tipo', 'servico')->count();
             $servicosAtivos = Produto::where('tipo', 'servico')->where('status', 'ativo')->count();
@@ -98,7 +214,6 @@ public function saftAlertas()
                 ->where('estoque_atual', '<=', 0)
                 ->count();
 
-            // Movimentos de stock hoje
             $movimentosStockHoje = MovimentoStock::whereDate('created_at', $hoje->toDateString())->count();
             $entradasHoje = MovimentoStock::whereDate('created_at', $hoje->toDateString())
                 ->where('tipo', 'entrada')
@@ -107,7 +222,6 @@ public function saftAlertas()
                 ->where('tipo', 'saida')
                 ->sum(DB::raw('ABS(quantidade)'));
 
-            // Alertas
             $documentosVencidos = DocumentoFiscal::whereIn('tipo_documento', ['FT', 'FA'])
                 ->whereIn('estado', ['emitido', 'parcialmente_paga'])
                 ->whereNotNull('data_vencimento')
@@ -126,11 +240,11 @@ public function saftAlertas()
 
             $dashboard = [
                 'documentos_fiscais' => [
-                    'total' => $totalDocumentos,
-                    'total_faturado' => $totalFaturado,
+                    'total'              => $totalDocumentos,
+                    'total_faturado'     => $totalFaturado,
                     'total_notas_credito' => $totalNotasCredito,
-                    'total_liquido' => $totalLiquido,
-                    'total_retencao' => $totalRetencaoServicos,
+                    'total_liquido'      => $totalLiquido,
+                    'total_retencao'     => $totalRetencaoServicos,
                     'total_retencao_mes' => $totalRetencaoMes,
                 ],
                 'vendas' => [
@@ -138,46 +252,46 @@ public function saftAlertas()
                     'valor_mes' => $valorVendasMes,
                 ],
                 'clientes' => [
-                    'total' => $totalClientes,
+                    'total'     => $totalClientes,
                     'novos_mes' => $clientesNovosMes,
                 ],
                 'produtos' => [
-                    'total' => $totalProdutos,
+                    'total'         => $totalProdutos,
                     'estoque_baixo' => $produtosEstoqueBaixo,
-                    'sem_estoque' => $produtosSemEstoque,
+                    'sem_estoque'   => $produtosSemEstoque,
                 ],
                 'servicos' => [
-                    'total' => $totalServicos,
-                    'ativos' => $servicosAtivos,
+                    'total'   => $totalServicos,
+                    'ativos'  => $servicosAtivos,
                     'inativos' => $totalServicos - $servicosAtivos,
                 ],
                 'stock' => [
                     'movimentos_hoje' => $movimentosStockHoje,
-                    'entradas_hoje' => $entradasHoje,
-                    'saidas_hoje' => $saidasHoje,
+                    'entradas_hoje'   => $entradasHoje,
+                    'saidas_hoje'     => $saidasHoje,
                 ],
                 'alertas' => [
-                    'documentos_vencidos' => $documentosVencidos,
-                    'proformas_antigas' => $proformasAntigas,
-                    'servicos_com_retencao_pendente' => $servicosComRetencaoPendente,
+                    'documentos_vencidos'              => $documentosVencidos,
+                    'proformas_antigas'                => $proformasAntigas,
+                    'servicos_com_retencao_pendente'   => $servicosComRetencaoPendente,
                 ],
                 'periodo' => [
                     'inicio_mes' => $inicioMes->toDateString(),
-                    'hoje' => $hoje->toDateString(),
+                    'hoje'       => $hoje->toDateString(),
                 ],
             ];
 
             return response()->json([
                 'success' => true,
                 'message' => 'Dashboard carregado com sucesso',
-                'dashboard' => $dashboard
+                'dashboard' => $dashboard,
             ]);
         } catch (\Exception $e) {
             Log::error('Erro ao carregar dashboard:', ['error' => $e->getMessage()]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao carregar dashboard: ' . $e->getMessage()
+                'message' => 'Erro ao carregar dashboard: ' . $e->getMessage(),
             ], 500);
         }
     }
@@ -188,20 +302,22 @@ public function saftAlertas()
      */
     public function vendas(Request $request)
     {
+        $this->authorizeRelatorio('basico');
+
         try {
             $dados = $request->validate([
-                'data_inicio' => 'nullable|date',
-                'data_fim' => 'nullable|date|after_or_equal:data_inicio',
-                'apenas_vendas' => 'nullable|boolean',
-                'cliente_id' => 'nullable|uuid|exists:clientes,id',
-                'tipo_documento' => 'nullable|in:FT,FR,FP,FA,NC,ND,RC,FRt',
-                'estado_pagamento' => 'nullable|in:paga,pendente,parcial,cancelada',
-                'agrupar_por' => 'nullable|in:dia,mes,ano',
-                'incluir_servicos' => 'nullable|boolean',
+                'data_inicio'       => 'nullable|date',
+                'data_fim'          => 'nullable|date|after_or_equal:data_inicio',
+                'apenas_vendas'     => 'nullable|boolean',
+                'cliente_id'        => 'nullable|uuid|exists:clientes,id',
+                'tipo_documento'    => 'nullable|in:FT,FR,FP,FA,NC,ND,RC,FRt',
+                'estado_pagamento'  => 'nullable|in:paga,pendente,parcial,cancelada',
+                'agrupar_por'       => 'nullable|in:dia,mes,ano',
+                'incluir_servicos'  => 'nullable|boolean',
             ]);
 
             $dataInicio = $dados['data_inicio'] ?? now()->startOfMonth()->toDateString();
-            $dataFim = $dados['data_fim'] ?? now()->toDateString();
+            $dataFim    = $dados['data_fim']    ?? now()->toDateString();
 
             $query = Venda::with(['cliente', 'documentoFiscal', 'itens.produto'])
                 ->whereBetween('data_venda', [$dataInicio, $dataFim]);
@@ -228,9 +344,9 @@ public function saftAlertas()
 
             $vendas = $query->orderBy('data_venda', 'desc')->get();
 
-            $totalServicos = 0;
-            $totalRetencaoServicos = 0;
-            $servicosPorVenda = [];
+            $totalServicos          = 0;
+            $totalRetencaoServicos  = 0;
+            $servicosPorVenda       = [];
 
             foreach ($vendas as $venda) {
                 $itensServicos = $venda->itens->filter(function ($item) {
@@ -238,23 +354,23 @@ public function saftAlertas()
                 });
 
                 if ($itensServicos->count() > 0) {
-                    $totalServicos += $itensServicos->count();
+                    $totalServicos         += $itensServicos->count();
                     $totalRetencaoServicos += $itensServicos->sum('valor_retencao');
                     $servicosPorVenda[$venda->id] = [
                         'quantidade' => $itensServicos->count(),
-                        'retencao' => $itensServicos->sum('valor_retencao'),
+                        'retencao'   => $itensServicos->sum('valor_retencao'),
                     ];
                 }
             }
 
             $totais = [
-                'total_vendas' => $vendas->count(),
-                'total_valor' => $vendas->sum('total'),
-                'total_base_tributavel' => $vendas->sum('base_tributavel'),
-                'total_iva' => $vendas->sum('total_iva'),
-                'total_retencao' => $vendas->sum('total_retencao'),
-                'total_servicos' => $totalServicos,
-                'total_retencao_servicos' => $totalRetencaoServicos,
+                'total_vendas'              => $vendas->count(),
+                'total_valor'               => $vendas->sum('total'),
+                'total_base_tributavel'     => $vendas->sum('base_tributavel'),
+                'total_iva'                 => $vendas->sum('total_iva'),
+                'total_retencao'            => $vendas->sum('total_retencao'),
+                'total_servicos'            => $totalServicos,
+                'total_retencao_servicos'   => $totalRetencaoServicos,
                 'percentual_retencao_media' => $vendas->sum('base_tributavel') > 0
                     ? round(($vendas->sum('total_retencao') / $vendas->sum('base_tributavel')) * 100, 2)
                     : 0,
@@ -268,522 +384,28 @@ public function saftAlertas()
             return response()->json([
                 'success' => true,
                 'message' => 'Relatório de vendas carregado com sucesso',
-                'data' => [
+                'data'    => [
                     'periodo' => [
                         'data_inicio' => $dataInicio,
-                        'data_fim' => $dataFim,
+                        'data_fim'    => $dataFim,
                     ],
-                    'filtros' => $dados,
-                    'totais' => $totais,
-                    'vendas' => $vendas->map(function ($v) use ($servicosPorVenda) {
+                    'filtros'  => $dados,
+                    'totais'   => $totais,
+                    'vendas'   => $vendas->map(function ($v) use ($servicosPorVenda) {
                         $resumo = $v->resumo;
-                        $resumo['tem_servicos'] = isset($servicosPorVenda[$v->id]);
+                        $resumo['tem_servicos']   = isset($servicosPorVenda[$v->id]);
                         $resumo['dados_servicos'] = $servicosPorVenda[$v->id] ?? null;
                         return $resumo;
                     }),
                     'agrupado' => $agrupado,
-                ]
+                ],
             ]);
         } catch (\Exception $e) {
             Log::error('Erro ao gerar relatório de vendas:', ['error' => $e->getMessage()]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao gerar relatório de vendas: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Relatório de compras
-     * GET /api/relatorios/compras
-     */
-    public function compras(Request $request)
-    {
-        try {
-            $dados = $request->validate([
-                'data_inicio' => 'nullable|date',
-                'data_fim' => 'nullable|date|after_or_equal:data_inicio',
-                'fornecedor_id' => 'nullable|uuid|exists:fornecedores,id',
-            ]);
-
-            $dataInicio = $dados['data_inicio'] ?? now()->startOfMonth()->toDateString();
-            $dataFim = $dados['data_fim'] ?? now()->toDateString();
-
-            $relatorio = $this->relatoriosService->relatorioCompras($dataInicio, $dataFim, $dados['fornecedor_id'] ?? null);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Relatório de compras carregado com sucesso',
-                'relatorio' => $relatorio
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Erro ao gerar relatório de compras:', ['error' => $e->getMessage()]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Erro ao gerar relatório de compras: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Relatório de faturação (documentos fiscais)
-     * GET /api/relatorios/faturacao
-     */
-    public function faturacao(Request $request)
-    {
-        try {
-            $dados = $request->validate([
-                'data_inicio' => 'nullable|date',
-                'data_fim' => 'nullable|date|after_or_equal:data_inicio',
-                'tipo' => 'nullable|in:FT,FR,FP,FA,NC,ND,RC,FRt',
-                'cliente_id' => 'nullable|uuid|exists:clientes,id',
-                'incluir_retencoes' => 'nullable|boolean',
-            ]);
-
-            $dataInicio = $dados['data_inicio'] ?? now()->startOfMonth()->toDateString();
-            $dataFim = $dados['data_fim'] ?? now()->toDateString();
-
-            $relatorio = $this->relatoriosService->relatorioFaturacao($dataInicio, $dataFim, $dados);
-
-            if (!empty($dados['incluir_retencoes'])) {
-                $retencoes = DocumentoFiscal::whereBetween('data_emissao', [$dataInicio, $dataFim])
-                    ->where('total_retencao', '>', 0)
-                    ->whereNotIn('estado', ['cancelado'])
-                    ->with(['cliente'])
-                    ->get();
-
-                $relatorio['retencoes'] = [
-                    'total' => $retencoes->sum('total_retencao'),
-                    'quantidade_documentos' => $retencoes->count(),
-                    'detalhes' => $retencoes->map(function ($doc) {
-                        return [
-                            'numero' => $doc->numero_documento,
-                            'data' => $doc->data_emissao,
-                            'cliente' => $doc->nome_cliente,
-                            'total' => $doc->total_liquido,
-                            'retencao' => $doc->total_retencao,
-                            'percentual' => $doc->base_tributavel > 0
-                                ? round(($doc->total_retencao / $doc->base_tributavel) * 100, 2)
-                                : 0,
-                        ];
-                    }),
-                ];
-            }
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Relatório de faturação carregado com sucesso',
-                'relatorio' => $relatorio
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Erro ao gerar relatório de faturação:', ['error' => $e->getMessage()]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Erro ao gerar relatório de faturação: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Relatório de stock
-     * GET /api/relatorios/stock
-     */
-    public function stock(Request $request)
-    {
-        try {
-            $dados = $request->validate([
-                'estoque_baixo' => 'nullable|boolean',
-                'sem_estoque' => 'nullable|boolean',
-                'categoria_id' => 'nullable|uuid|exists:categorias,id',
-                'apenas_ativos' => 'nullable|boolean',
-            ]);
-
-            $query = Produto::with(['categoria', 'fornecedor'])
-                ->where('tipo', 'produto');
-
-            if (!empty($dados['apenas_ativos'])) {
-                $query->where('status', 'ativo');
-            }
-
-            if (!empty($dados['categoria_id'])) {
-                $query->where('categoria_id', $dados['categoria_id']);
-            }
-
-            if (!empty($dados['estoque_baixo'])) {
-                $query->estoqueBaixo();
-            }
-
-            if (!empty($dados['sem_estoque'])) {
-                $query->semEstoque();
-            }
-
-            $produtos = $query->get();
-
-            $totalValorEstoque = 0;
-            $porCategoria = [];
-
-            foreach ($produtos as $produto) {
-                $valorEstoque = $produto->estoque_atual * ($produto->custo_medio ?? $produto->preco_compra ?? 0);
-                $totalValorEstoque += $valorEstoque;
-
-                $catNome = $produto->categoria->nome ?? 'Sem Categoria';
-                if (!isset($porCategoria[$catNome])) {
-                    $porCategoria[$catNome] = [
-                        'quantidade' => 0,
-                        'valor' => 0,
-                        'produtos' => 0,
-                    ];
-                }
-                $porCategoria[$catNome]['quantidade'] += $produto->estoque_atual;
-                $porCategoria[$catNome]['valor'] += $valorEstoque;
-                $porCategoria[$catNome]['produtos']++;
-            }
-
-            $relatorio = [
-                'resumo' => [
-                    'total_produtos' => $produtos->count(),
-                    'total_quantidade_estoque' => $produtos->sum('estoque_atual'),
-                    'total_valor_estoque' => $totalValorEstoque,
-                    'produtos_estoque_baixo' => $produtos->filter(fn($p) => $p->estoque_atual <= $p->estoque_minimo)->count(),
-                    'produtos_sem_estoque' => $produtos->filter(fn($p) => $p->estoque_atual <= 0)->count(),
-                ],
-                'por_categoria' => $porCategoria,
-                'produtos' => $produtos->map(fn($p) => [
-                    'id' => $p->id,
-                    'nome' => $p->nome,
-                    'codigo' => $p->codigo,
-                    'categoria' => $p->categoria->nome ?? null,
-                    'estoque_atual' => $p->estoque_atual,
-                    'estoque_minimo' => $p->estoque_minimo,
-                    'preco_venda' => $p->preco_venda,
-                    'custo_medio' => $p->custo_medio,
-                    'valor_estoque' => $p->estoque_atual * ($p->custo_medio ?? $p->preco_compra ?? 0),
-                    'status' => $p->status,
-                    'em_estoque_baixo' => $p->estoque_atual <= $p->estoque_minimo,
-                ]),
-            ];
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Relatório de stock carregado com sucesso',
-                'data' => $relatorio
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Erro ao gerar relatório de stock:', ['error' => $e->getMessage()]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Erro ao gerar relatório de stock: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * ✅ NOVO: Relatório de movimentações de stock
-     * GET /api/relatorios/movimentos-stock
-     */
-    public function movimentosStock(Request $request)
-    {
-        try {
-            $dados = $request->validate([
-                'data_inicio'    => 'nullable|date',
-                'data_fim'       => 'nullable|date|after_or_equal:data_inicio',
-                'produto_id'     => 'nullable|uuid|exists:produtos,id',
-                'tipo'           => 'nullable|in:entrada,saida',
-                'tipo_movimento' => 'nullable|in:compra,venda,ajuste,nota_credito,venda_cancelada,nota_credito_cancelada',
-                'agrupar_por'    => 'nullable|in:dia,mes,produto,tipo_movimento',
-                'paginar'        => 'nullable|boolean',
-                'per_page'       => 'nullable|integer|min:5|max:200',
-            ]);
-
-            $dataInicio = $dados['data_inicio'] ?? now()->startOfMonth()->toDateString();
-            $dataFim    = $dados['data_fim']    ?? now()->toDateString();
-
-            // ── Query base ──────────────────────────────────────────────
-            $query = MovimentoStock::with([
-                'produto' => fn($q) => $q->withTrashed()->select('id', 'nome', 'codigo', 'tipo'),
-                'user'    => fn($q) => $q->select('id', 'name'),
-            ])
-                ->whereDate('created_at', '>=', $dataInicio)
-                ->whereDate('created_at', '<=', $dataFim);
-
-            if (!empty($dados['produto_id'])) {
-                $query->where('produto_id', $dados['produto_id']);
-            }
-
-            if (!empty($dados['tipo'])) {
-                $query->where('tipo', $dados['tipo']);
-            }
-
-            if (!empty($dados['tipo_movimento'])) {
-                $query->where('tipo_movimento', $dados['tipo_movimento']);
-            }
-
-            // ── Totais via query separada (sem paginação) ───────────────
-            $totaisQuery = MovimentoStock::whereDate('created_at', '>=', $dataInicio)
-                ->whereDate('created_at', '<=', $dataFim);
-
-            if (!empty($dados['produto_id'])) {
-                $totaisQuery->where('produto_id', $dados['produto_id']);
-            }
-            if (!empty($dados['tipo'])) {
-                $totaisQuery->where('tipo', $dados['tipo']);
-            }
-            if (!empty($dados['tipo_movimento'])) {
-                $totaisQuery->where('tipo_movimento', $dados['tipo_movimento']);
-            }
-
-            $totalMovimentos   = (clone $totaisQuery)->count();
-            $totalEntradas     = (clone $totaisQuery)->where('tipo', 'entrada')->sum('quantidade');
-            $totalSaidas       = abs((clone $totaisQuery)->where('tipo', 'saida')->sum('quantidade'));
-            $totalPorTipo      = (clone $totaisQuery)
-                ->selectRaw('tipo_movimento, COUNT(*) as total, SUM(ABS(quantidade)) as quantidade_total')
-                ->groupBy('tipo_movimento')
-                ->get()
-                ->keyBy('tipo_movimento');
-
-            // ── Agrupamentos ────────────────────────────────────────────
-            $agrupado = [];
-            if (!empty($dados['agrupar_por'])) {
-                $agrupado = $this->agruparMovimentos(
-                    (clone $totaisQuery)->get(),
-                    $dados['agrupar_por']
-                );
-            }
-
-            // ── Resultado paginado ou completo ──────────────────────────
-            $movimentos = $dados['paginar'] ?? false
-                ? $query->orderBy('created_at', 'desc')->paginate($dados['per_page'] ?? 50)
-                : $query->orderBy('created_at', 'desc')->get();
-
-            // ── Formatar movimentos ─────────────────────────────────────
-            $formatarMovimento = function ($m) {
-                return [
-                    'id'               => $m->id,
-                    'produto_id'       => $m->produto_id,
-                    'produto_nome'     => $m->produto?->nome ?? 'N/A',
-                    'produto_codigo'   => $m->produto?->codigo ?? 'N/A',
-                    'tipo'             => $m->tipo,
-                    'tipo_movimento'   => $m->tipo_movimento,
-                    'quantidade'       => abs($m->quantidade),
-                    'estoque_anterior' => $m->estoque_anterior,
-                    'estoque_novo'     => $m->estoque_novo,
-                    'custo_medio'      => $m->custo_medio,
-                    'referencia'       => $m->referencia,
-                    'observacao'       => $m->observacao,
-                    'user'             => $m->user?->name ?? 'Sistema',
-                    'data'             => $m->created_at?->format('Y-m-d H:i:s'),
-                ];
-            };
-
-            // Compatível com paginação e com collection normal
-            $movimentosFormatados = ($dados['paginar'] ?? false)
-                ? $movimentos->through($formatarMovimento)
-                : $movimentos->map($formatarMovimento);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Relatório de movimentos de stock carregado com sucesso',
-                'data' => [
-                    'periodo' => [
-                        'data_inicio' => $dataInicio,
-                        'data_fim'    => $dataFim,
-                    ],
-                    'filtros' => $dados,
-                    'resumo' => [
-                        'total_movimentos' => $totalMovimentos,
-                        'total_entradas'   => $totalEntradas,
-                        'total_saidas'     => $totalSaidas,
-                        'balanco'          => $totalEntradas - $totalSaidas,
-                        'por_tipo_movimento' => $totalPorTipo->map(fn($t) => [
-                            'total'            => $t->total,
-                            'quantidade_total' => $t->quantidade_total,
-                        ]),
-                    ],
-                    'agrupado'   => $agrupado,
-                    'movimentos' => $movimentosFormatados,
-                ]
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Erro ao gerar relatório de movimentos de stock:', ['error' => $e->getMessage()]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Erro ao gerar relatório de movimentos de stock: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Relatório específico de serviços
-     * GET /api/relatorios/servicos
-     */
-    public function servicos(Request $request)
-    {
-        try {
-            $dados = $request->validate([
-                'data_inicio'  => 'nullable|date',
-                'data_fim'     => 'nullable|date|after_or_equal:data_inicio',
-                'apenas_ativos' => 'nullable|boolean',
-                'agrupar_por'  => 'nullable|in:servico,categoria',
-            ]);
-
-            $dataInicio = $dados['data_inicio'] ?? now()->startOfMonth()->toDateString();
-            $dataFim    = $dados['data_fim']    ?? now()->toDateString();
-
-            $servicosVendidos = DB::table('itens_venda')
-                ->join('produtos', 'itens_venda.produto_id', '=', 'produtos.id')
-                ->join('vendas', 'itens_venda.venda_id', '=', 'vendas.id')
-                ->where('produtos.tipo', 'servico')
-                ->whereBetween('vendas.data_venda', [$dataInicio, $dataFim])
-                ->where('vendas.status', '!=', 'cancelada')
-                ->select(
-                    'produtos.id',
-                    'produtos.nome',
-                    'produtos.retencao',
-                    'produtos.unidade_medida',
-                    DB::raw('SUM(itens_venda.quantidade) as total_quantidade'),
-                    DB::raw('SUM(itens_venda.subtotal) as total_receita'),
-                    DB::raw('SUM(itens_venda.valor_retencao) as total_retencao'),
-                    DB::raw('COUNT(DISTINCT vendas.id) as total_vendas')
-                )
-                ->groupBy('produtos.id', 'produtos.nome', 'produtos.retencao', 'produtos.unidade_medida')
-                ->orderByDesc('total_receita')
-                ->get();
-
-            $totais = [
-                'total_servicos_vendidos'  => $servicosVendidos->count(),
-                'total_receita'            => $servicosVendidos->sum('total_receita'),
-                'total_retencao'           => $servicosVendidos->sum('total_retencao'),
-                'total_quantidade'         => $servicosVendidos->sum('total_quantidade'),
-                'percentual_retencao_media' => $servicosVendidos->sum('total_receita') > 0
-                    ? round(($servicosVendidos->sum('total_retencao') / $servicosVendidos->sum('total_receita')) * 100, 2)
-                    : 0,
-            ];
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Relatório de serviços carregado com sucesso',
-                'data' => [
-                    'periodo' => [
-                        'data_inicio' => $dataInicio,
-                        'data_fim'    => $dataFim,
-                    ],
-                    'totais'   => $totais,
-                    'servicos' => $servicosVendidos->map(function ($item) {
-                        return [
-                            'id'                      => $item->id,
-                            'nome'                    => $item->nome,
-                            'unidade_medida'          => $item->unidade_medida,
-                            'taxa_retencao'           => $item->retencao,
-                            'quantidade'              => (int) $item->total_quantidade,
-                            'vendas'                  => (int) $item->total_vendas,
-                            'receita'                 => round($item->total_receita, 2),
-                            'receita_formatada'       => number_format($item->total_receita, 2, ',', '.') . ' Kz',
-                            'retencao'                => round($item->total_retencao, 2),
-                            'retencao_formatada'      => number_format($item->total_retencao, 2, ',', '.') . ' Kz',
-                            'percentual_retencao_real' => $item->total_receita > 0
-                                ? round(($item->total_retencao / $item->total_receita) * 100, 2)
-                                : 0,
-                        ];
-                    }),
-                ]
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Erro ao gerar relatório de serviços:', ['error' => $e->getMessage()]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Erro ao gerar relatório de serviços: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Relatório de retenções
-     * GET /api/relatorios/retencoes
-     */
-    public function retencoes(Request $request)
-    {
-        try {
-            $dados = $request->validate([
-                'data_inicio' => 'nullable|date',
-                'data_fim'    => 'nullable|date|after_or_equal:data_inicio',
-                'cliente_id'  => 'nullable|uuid|exists:clientes,id',
-            ]);
-
-            $dataInicio = $dados['data_inicio'] ?? now()->startOfMonth()->toDateString();
-            $dataFim    = $dados['data_fim']    ?? now()->toDateString();
-
-            $query = DocumentoFiscal::where('total_retencao', '>', 0)
-                ->whereNotIn('estado', ['cancelado'])
-                ->whereBetween('data_emissao', [$dataInicio, $dataFim])
-                ->with(['cliente', 'itens.produto']);
-
-            if (!empty($dados['cliente_id'])) {
-                $query->where('cliente_id', $dados['cliente_id']);
-            }
-
-            $documentos = $query->orderBy('data_emissao', 'desc')->get();
-
-            $porCliente = [];
-            foreach ($documentos as $doc) {
-                $clienteNome = $doc->nome_cliente ?? 'Consumidor Final';
-                if (!isset($porCliente[$clienteNome])) {
-                    $porCliente[$clienteNome] = [
-                        'cliente'           => $clienteNome,
-                        'total_documentos'  => 0,
-                        'total_base'        => 0,
-                        'total_retencao'    => 0,
-                    ];
-                }
-                $porCliente[$clienteNome]['total_documentos']++;
-                $porCliente[$clienteNome]['total_base']     += $doc->base_tributavel;
-                $porCliente[$clienteNome]['total_retencao'] += $doc->total_retencao;
-            }
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Relatório de retenções carregado com sucesso',
-                'data' => [
-                    'periodo' => [
-                        'data_inicio' => $dataInicio,
-                        'data_fim'    => $dataFim,
-                    ],
-                    'resumo' => [
-                        'total_documentos'  => $documentos->count(),
-                        'total_base'        => $documentos->sum('base_tributavel'),
-                        'total_retencao'    => $documentos->sum('total_retencao'),
-                        'percentual_medio'  => $documentos->sum('base_tributavel') > 0
-                            ? round(($documentos->sum('total_retencao') / $documentos->sum('base_tributavel')) * 100, 2)
-                            : 0,
-                    ],
-                    'por_cliente' => array_values($porCliente),
-                    'documentos'  => $documentos->map(function ($doc) {
-                        return [
-                            'id'        => $doc->id,
-                            'numero'    => $doc->numero_documento,
-                            'data'      => $doc->data_emissao,
-                            'cliente'   => $doc->nome_cliente,
-                            'base'      => $doc->base_tributavel,
-                            'retencao'  => $doc->total_retencao,
-                            'percentual' => $doc->base_tributavel > 0
-                                ? round(($doc->total_retencao / $doc->base_tributavel) * 100, 2)
-                                : 0,
-                            'servicos'  => $doc->itens->filter(fn($i) => $i->produto && $i->produto->isServico())->count(),
-                        ];
-                    }),
-                ]
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Erro ao gerar relatório de retenções:', ['error' => $e->getMessage()]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Erro ao gerar relatório de retenções: ' . $e->getMessage()
+                'message' => 'Erro ao gerar relatório de vendas: ' . $e->getMessage(),
             ], 500);
         }
     }
@@ -794,17 +416,19 @@ public function saftAlertas()
      */
     public function documentosFiscais(Request $request)
     {
+        $this->authorizeRelatorio('basico');
+
         try {
             $dados = $request->validate([
-                'data_inicio'      => 'nullable|date',
-                'data_fim'         => 'nullable|date|after_or_equal:data_inicio',
-                'tipo'             => 'nullable|in:FT,FR,FP,FA,NC,ND,RC,FRt',
-                'cliente_id'       => 'nullable|uuid|exists:clientes,id',
-                'cliente_nome'     => 'nullable|string|max:255',
-                'estado'           => 'nullable|in:emitido,paga,parcialmente_paga,cancelado,expirado',
-                'apenas_vendas'    => 'nullable|boolean',
+                'data_inicio'       => 'nullable|date',
+                'data_fim'          => 'nullable|date|after_or_equal:data_inicio',
+                'tipo'              => 'nullable|in:FT,FR,FP,FA,NC,ND,RC,FRt',
+                'cliente_id'        => 'nullable|uuid|exists:clientes,id',
+                'cliente_nome'      => 'nullable|string|max:255',
+                'estado'            => 'nullable|in:emitido,paga,parcialmente_paga,cancelado,expirado',
+                'apenas_vendas'     => 'nullable|boolean',
                 'apenas_nao_vendas' => 'nullable|boolean',
-                'com_retencao'     => 'nullable|boolean',
+                'com_retencao'      => 'nullable|boolean',
             ]);
 
             $dataInicio = $dados['data_inicio'] ?? now()->startOfMonth()->toDateString();
@@ -860,7 +484,7 @@ public function saftAlertas()
             return response()->json([
                 'success' => true,
                 'message' => 'Relatório de documentos fiscais carregado com sucesso',
-                'data' => [
+                'data'    => [
                     'periodo' => [
                         'data_inicio' => $dataInicio,
                         'data_fim'    => $dataFim,
@@ -870,14 +494,146 @@ public function saftAlertas()
                     'documentos'   => $documentos->map(fn($d) => array_merge($d->toArray(), [
                         'resumo' => $d->resumo,
                     ])),
-                ]
+                ],
             ]);
         } catch (\Exception $e) {
             Log::error('Erro ao gerar relatório de documentos fiscais:', ['error' => $e->getMessage()]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao gerar relatório de documentos fiscais: ' . $e->getMessage()
+                'message' => 'Erro ao gerar relatório de documentos fiscais: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Relatório de movimentos de stock
+     * GET /api/relatorios/movimentos-stock
+     */
+    public function movimentosStock(Request $request)
+    {
+        $this->authorizeRelatorio('basico');
+
+        try {
+            $dados = $request->validate([
+                'data_inicio'    => 'nullable|date',
+                'data_fim'       => 'nullable|date|after_or_equal:data_inicio',
+                'produto_id'     => 'nullable|uuid|exists:produtos,id',
+                'tipo'           => 'nullable|in:entrada,saida',
+                'tipo_movimento' => 'nullable|in:compra,venda,ajuste,nota_credito,venda_cancelada,nota_credito_cancelada',
+                'agrupar_por'    => 'nullable|in:dia,mes,produto,tipo_movimento',
+                'paginar'        => 'nullable|boolean',
+                'per_page'       => 'nullable|integer|min:5|max:200',
+            ]);
+
+            $dataInicio = $dados['data_inicio'] ?? now()->startOfMonth()->toDateString();
+            $dataFim    = $dados['data_fim']    ?? now()->toDateString();
+
+            $query = MovimentoStock::with([
+                'produto' => fn($q) => $q->withTrashed()->select('id', 'nome', 'codigo', 'tipo'),
+                'user'    => fn($q) => $q->select('id', 'name'),
+            ])
+                ->whereDate('created_at', '>=', $dataInicio)
+                ->whereDate('created_at', '<=', $dataFim);
+
+            if (!empty($dados['produto_id'])) {
+                $query->where('produto_id', $dados['produto_id']);
+            }
+
+            if (!empty($dados['tipo'])) {
+                $query->where('tipo', $dados['tipo']);
+            }
+
+            if (!empty($dados['tipo_movimento'])) {
+                $query->where('tipo_movimento', $dados['tipo_movimento']);
+            }
+
+            $totaisQuery = MovimentoStock::whereDate('created_at', '>=', $dataInicio)
+                ->whereDate('created_at', '<=', $dataFim);
+
+            if (!empty($dados['produto_id'])) {
+                $totaisQuery->where('produto_id', $dados['produto_id']);
+            }
+            if (!empty($dados['tipo'])) {
+                $totaisQuery->where('tipo', $dados['tipo']);
+            }
+            if (!empty($dados['tipo_movimento'])) {
+                $totaisQuery->where('tipo_movimento', $dados['tipo_movimento']);
+            }
+
+            $totalMovimentos = (clone $totaisQuery)->count();
+            $totalEntradas   = (clone $totaisQuery)->where('tipo', 'entrada')->sum('quantidade');
+            $totalSaidas     = abs((clone $totaisQuery)->where('tipo', 'saida')->sum('quantidade'));
+            $totalPorTipo    = (clone $totaisQuery)
+                ->selectRaw('tipo_movimento, COUNT(*) as total, SUM(ABS(quantidade)) as quantidade_total')
+                ->groupBy('tipo_movimento')
+                ->get()
+                ->keyBy('tipo_movimento');
+
+            $agrupado = [];
+            if (!empty($dados['agrupar_por'])) {
+                $agrupado = $this->agruparMovimentos(
+                    (clone $totaisQuery)->get(),
+                    $dados['agrupar_por']
+                );
+            }
+
+            $movimentos = ($dados['paginar'] ?? false)
+                ? $query->orderBy('created_at', 'desc')->paginate($dados['per_page'] ?? 50)
+                : $query->orderBy('created_at', 'desc')->get();
+
+            $formatarMovimento = function ($m) {
+                return [
+                    'id'               => $m->id,
+                    'produto_id'       => $m->produto_id,
+                    'produto_nome'     => $m->produto?->nome ?? 'N/A',
+                    'produto_codigo'   => $m->produto?->codigo ?? 'N/A',
+                    'tipo'             => $m->tipo,
+                    'tipo_movimento'   => $m->tipo_movimento,
+                    'quantidade'       => abs($m->quantidade),
+                    'estoque_anterior' => $m->estoque_anterior,
+                    'estoque_novo'     => $m->estoque_novo,
+                    'custo_medio'      => $m->custo_medio,
+                    'referencia'       => $m->referencia,
+                    'observacao'       => $m->observacao,
+                    'user'             => $m->user?->name ?? 'Sistema',
+                    'data'             => $m->created_at?->format('Y-m-d H:i:s'),
+                ];
+            };
+
+            $movimentosFormatados = ($dados['paginar'] ?? false)
+                ? $movimentos->through($formatarMovimento)
+                : $movimentos->map($formatarMovimento);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Relatório de movimentos de stock carregado com sucesso',
+                'data'    => [
+                    'periodo' => [
+                        'data_inicio' => $dataInicio,
+                        'data_fim'    => $dataFim,
+                    ],
+                    'filtros' => $dados,
+                    'resumo'  => [
+                        'total_movimentos' => $totalMovimentos,
+                        'total_entradas'   => $totalEntradas,
+                        'total_saidas'     => $totalSaidas,
+                        'balanco'          => $totalEntradas - $totalSaidas,
+                        'por_tipo_movimento' => $totalPorTipo->map(fn($t) => [
+                            'total'            => $t->total,
+                            'quantidade_total' => $t->quantidade_total,
+                        ]),
+                    ],
+                    'agrupado'   => $agrupado,
+                    'movimentos' => $movimentosFormatados,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Erro ao gerar relatório de movimentos de stock:', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao gerar relatório de movimentos de stock: ' . $e->getMessage(),
             ], 500);
         }
     }
@@ -888,6 +644,8 @@ public function saftAlertas()
      */
     public function pagamentosPendentes(Request $request)
     {
+        $this->authorizeRelatorio('avancado'); // Apenas Admin
+
         try {
             $hoje = now();
 
@@ -954,43 +712,109 @@ public function saftAlertas()
                 ->filter(fn($a) => $a['valor_pendente'] > 0)
                 ->values();
 
-            $totalPendente = $faturasPendentes->sum('valor_pendente') + $adiantamentosPendentes->sum('valor_pendente');
-            $totalAtrasado = $faturasPendentes->where('dias_atraso', '>', 0)->sum('valor_pendente') +
-                            $adiantamentosPendentes->where('dias_atraso', '>', 0)->sum('valor_pendente');
+            $totalPendente = $faturasPendentes->sum('valor_pendente')
+                + $adiantamentosPendentes->sum('valor_pendente');
+
+            $totalAtrasado = $faturasPendentes->where('dias_atraso', '>', 0)->sum('valor_pendente')
+                + $adiantamentosPendentes->where('dias_atraso', '>', 0)->sum('valor_pendente');
 
             $retencaoPendente = $faturasPendentes->sum('retencao');
 
             return response()->json([
                 'success' => true,
                 'message' => 'Relatório de pagamentos pendentes carregado com sucesso',
-                'data' => [
+                'data'    => [
                     'resumo' => [
-                        'total_pendente'         => $totalPendente,
-                        'total_atrasado'         => $totalAtrasado,
-                        'quantidade_faturas'     => $faturasPendentes->count(),
+                        'total_pendente'           => $totalPendente,
+                        'total_atrasado'           => $totalAtrasado,
+                        'quantidade_faturas'        => $faturasPendentes->count(),
                         'quantidade_adiantamentos' => $adiantamentosPendentes->count(),
-                        'retencao_pendente'      => $retencaoPendente,
+                        'retencao_pendente'        => $retencaoPendente,
                     ],
-                    'faturas_pendentes'      => $faturasPendentes,
+                    'faturas_pendentes'       => $faturasPendentes,
                     'adiantamentos_pendentes' => $adiantamentosPendentes,
-                ]
+                ],
             ]);
         } catch (\Exception $e) {
             Log::error('Erro ao gerar relatório de pagamentos pendentes:', ['error' => $e->getMessage()]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao gerar relatório de pagamentos pendentes: ' . $e->getMessage()
+                'message' => 'Erro ao gerar relatório de pagamentos pendentes: ' . $e->getMessage(),
             ], 500);
         }
     }
 
     /**
-     * Relatório de proformas pendentes
+     * Relatório de faturação
+     * GET /api/relatorios/faturacao
+     */
+    public function faturacao(Request $request)
+    {
+        $this->authorizeRelatorio('basico');
+
+        try {
+            $dados = $request->validate([
+                'data_inicio'       => 'nullable|date',
+                'data_fim'          => 'nullable|date|after_or_equal:data_inicio',
+                'tipo'              => 'nullable|in:FT,FR,FP,FA,NC,ND,RC,FRt',
+                'cliente_id'        => 'nullable|uuid|exists:clientes,id',
+                'incluir_retencoes' => 'nullable|boolean',
+            ]);
+
+            $dataInicio = $dados['data_inicio'] ?? now()->startOfMonth()->toDateString();
+            $dataFim    = $dados['data_fim']    ?? now()->toDateString();
+
+            $relatorio = $this->relatoriosService->relatorioFaturacao($dataInicio, $dataFim, $dados);
+
+            if (!empty($dados['incluir_retencoes'])) {
+                $retencoes = DocumentoFiscal::whereBetween('data_emissao', [$dataInicio, $dataFim])
+                    ->where('total_retencao', '>', 0)
+                    ->whereNotIn('estado', ['cancelado'])
+                    ->with(['cliente'])
+                    ->get();
+
+                $relatorio['retencoes'] = [
+                    'total'                => $retencoes->sum('total_retencao'),
+                    'quantidade_documentos' => $retencoes->count(),
+                    'detalhes'             => $retencoes->map(function ($doc) {
+                        return [
+                            'numero'     => $doc->numero_documento,
+                            'data'       => $doc->data_emissao,
+                            'cliente'    => $doc->nome_cliente,
+                            'total'      => $doc->total_liquido,
+                            'retencao'   => $doc->total_retencao,
+                            'percentual' => $doc->base_tributavel > 0
+                                ? round(($doc->total_retencao / $doc->base_tributavel) * 100, 2)
+                                : 0,
+                        ];
+                    }),
+                ];
+            }
+
+            return response()->json([
+                'success'   => true,
+                'message'   => 'Relatório de faturação carregado com sucesso',
+                'relatorio' => $relatorio,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Erro ao gerar relatório de faturação:', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao gerar relatório de faturação: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Relatório de proformas
      * GET /api/relatorios/proformas
      */
     public function proformas(Request $request)
     {
+        $this->authorizeRelatorio('basico');
+
         try {
             $dados = $request->validate([
                 'data_inicio' => 'nullable|date',
@@ -1019,7 +843,7 @@ public function saftAlertas()
             return response()->json([
                 'success' => true,
                 'message' => 'Relatório de proformas carregado com sucesso',
-                'data' => [
+                'data'    => [
                     'periodo' => [
                         'data_inicio' => $dataInicio,
                         'data_fim'    => $dataFim,
@@ -1027,29 +851,71 @@ public function saftAlertas()
                     'total'       => $proformas->count(),
                     'valor_total' => $proformas->sum('total_liquido'),
                     'proformas'   => $proformas,
-                ]
+                ],
             ]);
         } catch (\Exception $e) {
             Log::error('Erro ao gerar relatório de proformas:', ['error' => $e->getMessage()]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao gerar relatório de proformas: ' . $e->getMessage()
+                'message' => 'Erro ao gerar relatório de proformas: ' . $e->getMessage(),
             ], 500);
         }
     }
 
-    /* =====================================================================
-     | MÉTODOS AUXILIARES
-     | ================================================================== */
-
-    /**
-     * Agrupamento de vendas por período
+        /**
+     * Exportar SAF-T
+     * GET /api/relatorios/exportar-saft?year=2026&month=5
      */
+    public function exportarSaft(Request $request)
+    {
+        $this->authorizeRelatorio('avancado'); // Só admin ou contabilidade
+
+        try {
+            $year  = (int) $request->query('year');
+            $month = (int) $request->query('month');
+
+            if (!$year || !$month || $month < 1 || $month > 12) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ano e mês são obrigatórios.'
+                ], 422);
+            }
+
+            $saftService = new SaftService();   // Ou injete no construtor depois
+
+            $path = $saftService->generateFull($year, $month);
+
+            if (!$path || !file_exists($path)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Não foi possível gerar o arquivo SAF-T.'
+                ], 500);
+            }
+
+            return response()->download($path, "SAFT_{$year}_{str_pad($month, 2, '0', STR_PAD_LEFT)}.xml")
+                            ->deleteFileAfterSend(false);
+
+        } catch (\Exception $e) {
+            Log::error('Erro ao exportar SAF-T', [
+                'year'  => $year ?? null,
+                'month' => $month ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao gerar SAF-T: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /* ================== MÉTODOS AUXILIARES ================== */
+
     private function agruparVendas($vendas, $agruparPor)
     {
         $agrupado = [];
-
         foreach ($vendas as $venda) {
             $chave = match ($agruparPor) {
                 'dia'  => $venda->data_venda->format('Y-m-d'),
@@ -1060,12 +926,12 @@ public function saftAlertas()
 
             if (!isset($agrupado[$chave])) {
                 $agrupado[$chave] = [
-                    'periodo'        => $chave,
-                    'quantidade'     => 0,
-                    'total'          => 0,
+                    'periodo'         => $chave,
+                    'quantidade'      => 0,
+                    'total'           => 0,
                     'base_tributavel' => 0,
-                    'total_iva'      => 0,
-                    'total_retencao' => 0,
+                    'total_iva'       => 0,
+                    'total_retencao'  => 0,
                 ];
             }
 
@@ -1079,54 +945,48 @@ public function saftAlertas()
         return array_values($agrupado);
     }
 
-    /**
-     * Agrupamento de movimentos de stock
-     */
     private function agruparMovimentos($movimentos, $agruparPor)
     {
         $agrupado = [];
-
         foreach ($movimentos as $mov) {
             switch ($agruparPor) {
                 case 'dia':
-                    $chave  = $mov->created_at->format('Y-m-d');
-                    $label  = $chave;
+                    $chave = $mov->created_at->format('Y-m-d');
+                    $label = $chave;
                     break;
                 case 'mes':
-                    $chave  = $mov->created_at->format('Y-m');
-                    $label  = $chave;
+                    $chave = $mov->created_at->format('Y-m');
+                    $label = $chave;
                     break;
                 case 'produto':
-                    $chave  = $mov->produto_id;
-                    $label  = optional($mov->produto)->nome ?? 'N/A';
+                    $chave = $mov->produto_id;
+                    $label = optional($mov->produto)->nome ?? 'N/A';
                     break;
                 case 'tipo_movimento':
-                    $chave  = $mov->tipo_movimento;
-                    $label  = $chave;
+                    $chave = $mov->tipo_movimento;
+                    $label = $chave;
                     break;
                 default:
-                    $chave  = $mov->created_at->format('Y-m-d');
-                    $label  = $chave;
+                    $chave = $mov->created_at->format('Y-m-d');
+                    $label = $chave;
             }
 
             if (!isset($agrupado[$chave])) {
                 $agrupado[$chave] = [
-                    'chave'     => $chave,
-                    'label'     => $label,
-                    'entradas'  => 0,
-                    'saidas'    => 0,
-                    'total'     => 0,
+                    'chave'    => $chave,
+                    'label'    => $label,
+                    'entradas' => 0,
+                    'saidas'   => 0,
+                    'total'    => 0,
                 ];
             }
 
             $qty = abs($mov->quantidade);
-
             if ($mov->tipo === 'entrada') {
                 $agrupado[$chave]['entradas'] += $qty;
             } else {
                 $agrupado[$chave]['saidas'] += $qty;
             }
-
             $agrupado[$chave]['total'] += $qty;
         }
 

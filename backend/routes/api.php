@@ -67,7 +67,7 @@ Route::prefix('empresa')->group(function () {
     });
 
     // ==================== ADMIN + OPERADOR ====================
-    Route::middleware('role:admin,operador,gestor,contabilista')->group(function () use ($uuidPattern) {
+    Route::middleware('role:admin,operador,gestor,contablista,suporte')->group(function () use ($uuidPattern) {
 
         // ---------- PRODUTOS ----------
         Route::prefix('produtos')->group(function () use ($uuidPattern) {
@@ -185,15 +185,26 @@ Route::prefix('empresa')->group(function () {
 
         // ---------- RELATÓRIOS ----------
         Route::prefix('relatorios')->group(function () {
+            Route::get('/debug', [RelatoriosController::class, 'debug'])->name('relatorios.debug');
             Route::get('/dashboard', [RelatoriosController::class, 'dashboard'])->name('relatorios.dashboard');
             Route::get('/vendas', [RelatoriosController::class, 'vendas'])->name('relatorios.vendas');
             Route::get('/compras', [RelatoriosController::class, 'compras'])->name('relatorios.compras');
             Route::get('/faturacao', [RelatoriosController::class, 'faturacao'])->name('relatorios.faturacao');
             Route::get('/stock', [RelatoriosController::class, 'stock'])->name('relatorios.stock');
+            Route::get('/movimentos-stock', [RelatoriosController::class, 'movimentosStock'])->name('relatorios.movimentos-stock');
+            Route::get('/servicos', [RelatoriosController::class, 'servicos'])->name('relatorios.servicos');
+            Route::get('/retencoes', [RelatoriosController::class, 'retencoes'])->name('relatorios.retencoes');
             Route::get('/documentos-fiscais', [RelatoriosController::class, 'documentosFiscais'])->name('relatorios.documentos-fiscais');
-            Route::get('/pagamentos-pendentes', [RelatoriosController::class, 'pagamentosPendentes'])->name('relatorios.pagamentos-pendentes');
-            Route::get('/movimentos-stock', [RelatoriosController::class, 'movimentosStock']);
             Route::get('/proformas', [RelatoriosController::class, 'proformas'])->name('relatorios.proformas');
+        });
+
+        // ---------- RELATÓRIOS ADMIN ----------
+        Route::middleware('role:admin')->group(function () {
+            Route::prefix('relatorios')->group(function () {
+                Route::get('/pagamentos-pendentes', [RelatoriosController::class, 'pagamentosPendentes'])->name('relatorios.pagamentos-pendentes');
+                Route::get('/exportar-saft', [RelatoriosController::class, 'exportarSaft'])->name('relatorios.exportar-saft');
+                Route::get('/saft-alertas', [RelatoriosController::class, 'saftAlertas'])->name('relatorios.saft-alertas');
+            });
         });
     });
 });
