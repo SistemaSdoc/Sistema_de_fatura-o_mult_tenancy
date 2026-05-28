@@ -343,7 +343,7 @@ class SaftService
                 $customerTaxID = $doc->cliente->nif ?? '';
                 $customerName  = $doc->cliente->nome ?? '';
             } else {
-                $customerTaxID = '999999990'; // NIF genérico para consumidor final
+                $customerTaxID = '999999999'; // NIF genérico para consumidor final
                 $customerName  = 'Consumidor Final';
             }
             $invoice->appendChild($dom->createElement('CustomerID', $customerId));
