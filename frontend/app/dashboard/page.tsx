@@ -16,93 +16,54 @@ import Link from "next/link";
 import { useAuth } from "@/context/authprovider";
 
 import MainEmpresa from "@/app/components/MainEmpresa";
-import { dashboardService } from "@/services/Dashboard";
-import { useThemeColors, useTheme, ThemeColors } from "@/context/ThemeContext";
+import { dashboardService, DashboardData as ServiceDashboardData } from "@/services/Dashboard";
+import { useThemeColors, useTheme } from "@/context/ThemeContext";
 import { useRouter } from "next/navigation";
 
-/* ==================== TIPOS ==================== */
-
-// Dados retornados pelo dashboardService.fetch()
-interface DashboardData {
-  clientes?: {
-    novos_mes?: number;
-    ativos?: number;
-  };
-  pagamentos?: {
-    total_atrasado?: number;
-  };
-  produtos?: {
-    ativos?: number;
-  };
-  indicadores?: {
-    produtosMaisVendidos?: Array<{
-      produto: string;
-      quantidade: number;
-      valor_total: number;
-    }>;
-  };
-  vendas?: {
-    ultimas?: Array<{
-      cliente: string;
-      total: number;
-      status: string;
-      data: string;
-    }>;
-  };
-  documentos_fiscais?: {
-    ultimos?: Array<{
-      tipo_nome: string;
-      numero: string;
-      total: number;
-      estado: string;
-    }>;
-  };
-  // outros campos usados no código:
-  [key: string]: unknown;
+/* ==================== TIPOS LOCAIS ==================== */
+interface ThemeColors {
+  primary: string;
+  secondary: string;
+  background: string;
+  card: string;
+  text: string;
+  textSecondary: string;
+  border: string;
+  danger: string;
+  hover?: string;
 }
 
-// Métricas calculadas pelo dashboardService
-interface Metricas {
-  totalFaturado: number;
-  crescimento: number;
-  totalClientes: number;
-  totalPendente: number;
-  produtosEmStockBaixo: number;
-}
+// Re-exportar o tipo do serviço para consistência
+type DashboardData = ServiceDashboardData;
 
-// Dados de gráficos preparados
-interface Graficos {
-  evolucaoMensal: Array<{ mes: string; Total: number }>;
-  documentosPorTipo: Array<{ nome: string; quantidade: number; valor: number }>;
-  documentosPorEstado: Array<{ estado: string; quantidade: number }>;
-}
-
-// Item de produto para exibição
+// Dados para gráficos
 interface ProdutoItem {
   nome: string;
   quantidade: number;
   valor: number;
 }
 
-// Item de evolução mensal
 interface EvolucaoItem {
   mes: string;
   total: number;
 }
 
-// Estado do documento (para legenda)
 interface EstadoDocumento {
   estado: string;
   quantidade: number;
 }
 
-// Props dos componentes esqueletos
+// Props para skeletons
 interface SkeletonProps {
   colors: ThemeColors;
   tall?: boolean;
 }
 
-// Status badge variant
+interface EstadoDocumento extends Record<string, unknown> {
+  estado: string;
+  quantidade: number;
+}
+
 type BadgeVariant = "green" | "yellow" | "blue" | "red" | "orange" | "gray";
 
 /* ==================== HELPERS ==================== */
@@ -212,7 +173,6 @@ const StatusBadge = ({ status, theme }: { status: string; theme: string }) => {
 };
 
 /* ==================== MAIN COMPONENT ==================== */
-
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -221,7 +181,7 @@ export default function DashboardPage() {
   const [lastUpdate, setLastUpdate] = useState("-");
 
   const router = useRouter();
-  const colors = useThemeColors();
+  const colors = useThemeColors() as ThemeColors;
   const { theme } = useTheme();
   const { user } = useAuth();
   const userRole = user?.role || '';
@@ -236,7 +196,7 @@ export default function DashboardPage() {
         setError("Não foi possível carregar o dashboard.");
         return;
       }
-      setData(dashboard as DashboardData);
+      setData(dashboard);
       setLastUpdate(new Date().toLocaleString("pt-PT"));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Erro desconhecido";
@@ -304,9 +264,9 @@ export default function DashboardPage() {
     );
   }
 
-  // Dados preparados pelos serviços (tipados)
-  const metricas = dashboardService.calcularMetricas(data) as Metricas;
-  const graficos = dashboardService.prepararDadosGraficos(data) as Graficos;
+  // Dados preparados pelos serviços
+  const metricas = dashboardService.calcularMetricas(data);
+  const graficos = dashboardService.prepararDadosGraficos(data);
 
   const produtosData: ProdutoItem[] = (data.indicadores?.produtosMaisVendidos || [])
     .slice(0, 5)
@@ -341,7 +301,7 @@ export default function DashboardPage() {
     }, {})
   );
 
-  // Tooltip e estilos
+  // Configuração de tooltip com tipo correto (aceita undefined)
   const tooltipStyle: TooltipProps<number, string>['contentStyle'] = {
     backgroundColor: colors.card,
     borderColor: colors.border,
@@ -349,6 +309,20 @@ export default function DashboardPage() {
     fontSize: "11px",
     borderRadius: "8px",
   };
+
+  const formatterQuantidade = (value: number | undefined): [string, "Quantidade"] => {
+    return [`${formatNumber(value ?? 0)} unid.`, "Quantidade"];
+  };
+  const formatterValor = (value: number | undefined): [string, "Valor"] => {
+    return [formatKz(value ?? 0), "Valor"];
+  };
+  const formatterDocsQuantidade = (value: number | undefined): [string, "Quantidade"] => {
+    return [`${formatNumber(value ?? 0)} docs`, "Quantidade"];
+  };
+  const formatterTotal = (value: number | undefined): [string, "Total"] => {
+    return [formatKz(value ?? 0), "Total"];
+  };
+
   const gridStroke = theme === "dark" ? "#404040" : "#E5E7EB";
   const tickStyle = { fill: colors.textSecondary, fontSize: 11 };
   const pieColors = [colors.primary, colors.secondary, "#95a5a6", "#f39c12", "#e74c3c"];
@@ -477,9 +451,10 @@ export default function DashboardPage() {
                     <YAxis type="category" dataKey="nome" width={84} tick={tickStyle} stroke={colors.border} />
                     <Tooltip
                       contentStyle={tooltipStyle}
-                      formatter={(value: number, name: string) =>
-                        name === "quantidade" ? [`${formatNumber(value)} unid.`, "Qtd"] : [formatKz(value), "Valor"]
-                      }
+                      formatter={(value: number | undefined, name: string | undefined) => {
+                        if (name === "quantidade") return formatterQuantidade(value);
+                        return formatterValor(value);
+                      }}
                     />
                     <Bar dataKey="quantidade" radius={[0, 4, 4, 0]} barSize={16}>
                       {produtosData.map((_, index) => (
@@ -522,7 +497,7 @@ export default function DashboardPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
                     <XAxis dataKey="mes" tick={tickStyle} stroke={colors.border} />
                     <YAxis tickFormatter={formatCompact} width={48} tick={tickStyle} stroke={colors.border} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [formatKz(v), "Total"]} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number | undefined) => formatterTotal(v)} />
                     <Area type="monotone" dataKey="total" stroke={colors.secondary} fill="url(#colorTotal)" strokeWidth={2} />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -566,9 +541,10 @@ export default function DashboardPage() {
                     <YAxis yAxisId="right" orientation="right" stroke={colors.secondary} tick={tickStyle} width={36} />
                     <Tooltip
                       contentStyle={tooltipStyle}
-                      formatter={(value: number, name: string) =>
-                        name === "quantidade" ? [formatNumber(value), "Qtd"] : [formatKz(value), "Valor"]
-                      }
+                      formatter={(value: number | undefined, name: string | undefined) => {
+                        if (name === "quantidade") return formatterDocsQuantidade(value);
+                        return formatterValor(value);
+                      }}
                     />
                     <Bar yAxisId="left" dataKey="quantidade" fill={colors.primary} name="Qtd" radius={[3, 3, 0, 0]} barSize={12} />
                     <Bar yAxisId="right" dataKey="valor" fill={colors.secondary} name="Valor" radius={[3, 3, 0, 0]} barSize={12} />
@@ -597,23 +573,23 @@ export default function DashboardPage() {
               {documentosPorEstado.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie
-                      data={documentosPorEstado}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius="38%"
-                      outerRadius="68%"
-                      paddingAngle={4}
-                      dataKey="quantidade"
-                      nameKey="estado"
-                      label={({ percent }) => `${((percent || 0) * 100).toFixed(0)}%`}
-                      labelLine={false}
-                    >
-                      {documentosPorEstado.map((_, i) => (
-                        <Cell key={i} fill={pieColors[i % pieColors.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={tooltipStyle} formatter={(value: number) => [`${formatNumber(value)} docs`, "Quantidade"]} />
+<Pie
+  data={documentosPorEstado}
+  cx="50%"
+  cy="50%"
+  innerRadius="38%"
+  outerRadius="68%"
+  paddingAngle={4}
+  dataKey="quantidade"
+  nameKey="estado"
+  label={({ percent }) => `${((percent || 0) * 100).toFixed(0)}%`}
+  labelLine={false}
+>
+  {documentosPorEstado.map((_, i) => (
+    <Cell key={i} fill={pieColors[i % pieColors.length]} />
+  ))}
+</Pie>
+                    <Tooltip contentStyle={tooltipStyle} formatter={(value: number | undefined) => formatterDocsQuantidade(value)} />
                     <Legend />
                   </PieChart>
                 </ResponsiveContainer>
@@ -715,7 +691,7 @@ export default function DashboardPage() {
                       </td>
                       <td className="px-2 py-2">
                         <StatusBadge status={doc.estado ?? ""} theme={theme} />
-                       </td>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

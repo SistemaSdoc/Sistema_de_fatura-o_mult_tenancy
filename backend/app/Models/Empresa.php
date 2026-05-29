@@ -28,6 +28,7 @@ class Empresa extends Model
         'regime_fiscal', 
         'sujeito_iva', 
         'logo', 
+        'subdomain',
         'status', 
         'data_registro',
         'data_ativacao',

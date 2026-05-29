@@ -454,10 +454,11 @@ class SaftService
     private function addShipAddress(DOMDocument $dom, DOMElement $invoice, DocumentoFiscal $doc, Empresa $empresa): void
     {
         // ShipTo (endereço de entrega)
+        
         $shipTo = $dom->createElement('ShipTo');
         $shipToAddr = $dom->createElement('Address');
         $shipToAddr->appendChild($dom->createElement('AddressDetail', $doc->cliente_endereco ?? 'Desconhecido'));
-        $shipToAddr->appendChild($dom->createElement('City', $doc->cliente_cidade ?? 'Desconhecido'));
+        $shipToAddr->appendChild($dom->createElement('City', $doc->endereco ?? 'Desconhecido'));
         $shipToAddr->appendChild($dom->createElement('Country', $doc->cliente_pais ?? 'AO'));
         $shipTo->appendChild($shipToAddr);
         $invoice->appendChild($shipTo);
