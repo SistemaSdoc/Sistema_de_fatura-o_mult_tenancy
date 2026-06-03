@@ -2,7 +2,7 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import Cookies from "js-cookie";
 
 const getBaseURL = (): string => {
-    if (typeof window === "undefined") return "https://192.168.1.192:8000";
+    if (typeof window === "undefined") return "https://192.168.0.173:8000";
     return `${window.location.protocol}//${window.location.hostname}:8000`;
 };
 
