@@ -116,7 +116,7 @@ class SaftService
         // Endereço estruturado
         $companyAddr = $dom->createElement('CompanyAddress');
         $companyAddr->appendChild($dom->createElement('AddressDetail', $empresa->endereco ?? 'Desconhecido'));
-        $companyAddr->appendChild($dom->createElement('City', $empresa->cidade ?? 'Luanda'));
+        $companyAddr->appendChild($dom->createElement('City', $empresa->cidade ?? 'Desconhecido'));
         $companyAddr->appendChild($dom->createElement('Country', $empresa->pais ?? 'AO'));
         $header->appendChild($companyAddr);
 
@@ -152,13 +152,13 @@ class SaftService
 
             $customer->appendChild($dom->createElement('CustomerID', (string) $cliente->id));
             $customer->appendChild($dom->createElement('AccountID', 'Desconhecido'));
-            $customer->appendChild($dom->createElement('CustomerTaxID', $cliente->nif ?? ($cliente->nif === '999999990' ? '999999990' : '')));
+            $customer->appendChild($dom->createElement('CustomerTaxID', $cliente->nif ?? ''));
 
             $billing = $dom->createElement('BillingAddress');
             $billing->appendChild($dom->createElement('BuildingNumber', ''));
             $billing->appendChild($dom->createElement('StreetName', ''));
             $billing->appendChild($dom->createElement('AddressDetail', $cliente->endereco ?? 'Desconhecido'));
-            $billing->appendChild($dom->createElement('City', $cliente->cidade ?? 'Luanda'));
+            $billing->appendChild($dom->createElement('City', $cliente->cidade ?? 'Desconhecido'));
             $billing->appendChild($dom->createElement('PostalCode', $cliente->codigo_postal ?? ''));
             $billing->appendChild($dom->createElement('Country', $cliente->pais ?? 'AO'));
             $customer->appendChild($billing);
@@ -180,18 +180,16 @@ class SaftService
             $product = $dom->createElement('Product');
             $productsNode->appendChild($product);
 
-            // Usar código amigável se disponível, senão ID
-            $productCode = !empty($produto->codigo) ? $produto->codigo : substr($produto->id, 0, 20);
-            $product->appendChild($dom->createElement('ProductCode', $productCode));
+            $product->appendChild($dom->createElement('ProductCode', $produto->codigo ?? $produto->id));
             $product->appendChild($dom->createElement('ProductDescription', $produto->nome));
             $product->appendChild($dom->createElement('ProductType', $produto->tipo === 'servico' ? 'S' : 'P'));
-            $product->appendChild($dom->createElement('UnitPrice', number_format($produto->preco_venda, 4, '.', '')));
+            $product->appendChild($dom->createElement('UnitPrice', number_format($produto->preco_venda, 2, '.', '')));
             $taxCode = $this->getTaxCodeForProduct($produto);
             if ($taxCode) {
                 $product->appendChild($dom->createElement('TaxCode', $taxCode));
             }
             if ($produto->categoria_id) {
-                $product->appendChild($dom->createElement('ProductGroup', $produto->categoria->nome ?? 'Geral'));
+                $product->appendChild($dom->createElement('ProductGroup', (string) $produto->categoria_id));
             }
         }
     }
@@ -201,21 +199,46 @@ class SaftService
         $taxTable = $dom->createElement('TaxTable');
         $masterFiles->appendChild($taxTable);
 
-        // Taxas padrão Angola: 0%, 5%, 7%, 14%
-        $taxas = [0, 5, 7, 14];
+        // Recolher taxas distintas de IVA usadas nos produtos (físicos e serviços)
+        $taxas = [];
+        $produtos = Produto::where('status', 'ativo')->get();
+        foreach ($produtos as $produto) {
+            if ($produto->tipo === 'servico') {
+                $taxa = (float) $produto->taxa_iva;
+            } else {
+                $categoria = $produto->categoria;
+                $taxa = $categoria ? (float) $categoria->taxa_iva : 0;
+            }
+            if ($taxa > 0) {
+                $taxas[(string) $taxa] = $taxa;
+            }
+        }
 
+        // Se não houver, incluir pelo menos 14% e 0%
+        if (empty($taxas)) {
+            $taxas['14'] = 14;
+        }
+
+        // Entradas para taxas normais e reduzidas
         foreach ($taxas as $taxa) {
             $entry = $dom->createElement('TaxTableEntry');
             $taxTable->appendChild($entry);
             $entry->appendChild($dom->createElement('TaxType', 'IVA'));
-
-            $taxCode = $taxa === 0 ? 'ISE' : ($taxa === 14 ? 'NOR' : 'RED' . $taxa);
+            $taxCode = ((int) $taxa === 14) ? 'NOR' : 'RED' . (int) $taxa;
             $entry->appendChild($dom->createElement('TaxCode', $taxCode));
-            $entry->appendChild($dom->createElement('Description', $taxa === 0 ? 'Isento' : "IVA a {$taxa}%"));
+            $entry->appendChild($dom->createElement('Description', "IVA a {$taxa}%"));
             $entry->appendChild($dom->createElement('TaxAmount', number_format($taxa, 2, '.', '')));
         }
 
-        // Entrada NS (não sujeito)
+        // Entrada ISE (isento)
+        $entryIse = $dom->createElement('TaxTableEntry');
+        $taxTable->appendChild($entryIse);
+        $entryIse->appendChild($dom->createElement('TaxType', 'IVA'));
+        $entryIse->appendChild($dom->createElement('TaxCode', 'ISE'));
+        $entryIse->appendChild($dom->createElement('Description', 'Isento'));
+        $entryIse->appendChild($dom->createElement('TaxAmount', '0'));
+
+        // Entrada NS (não sujeito) – opcional
         $entryNs = $dom->createElement('TaxTableEntry');
         $taxTable->appendChild($entryNs);
         $entryNs->appendChild($dom->createElement('TaxType', 'NS'));
@@ -261,31 +284,22 @@ class SaftService
             ->with(['itens.produto', 'cliente'])
             ->get();
 
-        // Totais agregados (CORRIGIDO)
+        // Totais agregados
         $numeroEntradas = $documentos->count();
-        $totalBase = 0;
-        $totalTax = 0;
-        $totalPayable = 0;
         $totalDebit = 0;
         $totalCredit = 0;
 
         foreach ($documentos as $doc) {
-            $totalBase += (float) $doc->base_tributavel;
-            $totalTax += (float) $doc->total_iva;
-            $totalPayable += (float) $doc->total_liquido;
-
-            // Débito para faturas de venda, Crédito para NC/ND
-            if (in_array($doc->tipo_documento, [DocumentoFiscal::TIPO_NOTA_CREDITO, DocumentoFiscal::TIPO_NOTA_DEBITO])) {
-                $totalCredit += (float) $doc->total_liquido;
+            $valor = (float) $doc->total_liquido;
+            if ($doc->tipo_documento == DocumentoFiscal::TIPO_NOTA_CREDITO) {
+                $totalDebit += $valor;
             } else {
-                $totalDebit += (float) $doc->total_liquido;
+                // Facturas, facturas-recibo, notas de débito aumentam o crédito
+                $totalCredit += $valor;
             }
         }
 
         $invoicesNode->appendChild($dom->createElement('NumberOfEntries', (string) $numeroEntradas));
-        $invoicesNode->appendChild($dom->createElement('TotalBase', number_format($totalBase, 2, '.', '')));
-        $invoicesNode->appendChild($dom->createElement('TotalTax', number_format($totalTax, 2, '.', '')));
-        $invoicesNode->appendChild($dom->createElement('TotalPayable', number_format($totalPayable, 2, '.', '')));
         $invoicesNode->appendChild($dom->createElement('TotalDebit', number_format($totalDebit, 2, '.', '')));
         $invoicesNode->appendChild($dom->createElement('TotalCredit', number_format($totalCredit, 2, '.', '')));
 
@@ -306,10 +320,9 @@ class SaftService
             $docStatus->appendChild($dom->createElement('SourceBilling', 'P'));
             $invoice->appendChild($docStatus);
 
-            // Hash e HashControl
-            $hash = $doc->hash_fiscal ?? hash('sha256', $doc->numero_documento . $doc->data_emissao);
-            $invoice->appendChild($dom->createElement('Hash', $hash));
-            $invoice->appendChild($dom->createElement('HashControl', (string) strlen($hash))); // CORRIGIDO
+            // Hash
+            $invoice->appendChild($dom->createElement('Hash', $doc->hash_fiscal ?? ''));
+            $invoice->appendChild($dom->createElement('HashControl', '0'));
 
             // Period
             $invoice->appendChild($dom->createElement('Period', (string) $month));
@@ -324,21 +337,15 @@ class SaftService
             $invoice->appendChild($dom->createElement('SourceID', '1'));
             $invoice->appendChild($dom->createElement('SystemEntryDate', $doc->created_at->format('Y-m-d\TH:i:s')));
 
-            // Cliente (CORRIGIDO para consumidor final)
+            // Cliente
+            $customerId = (string) $doc->cliente_id;
             if ($doc->cliente_id && $doc->cliente) {
-                $customerId = (string) $doc->cliente_id;
                 $customerTaxID = $doc->cliente->nif ?? '';
                 $customerName  = $doc->cliente->nome ?? '';
-                // Se NIF for vazio ou inválido, usar consumidor final
-                if (empty($customerTaxID)) {
-                    $customerTaxID = '999999990';
-                }
             } else {
-                $customerId = '0';
-                $customerTaxID = '999999990';
+                $customerTaxID = '999999999'; // NIF genérico para consumidor final
                 $customerName  = 'Consumidor Final';
             }
-
             $invoice->appendChild($dom->createElement('CustomerID', $customerId));
             $invoice->appendChild($dom->createElement('CustomerTaxID', $customerTaxID));
             $invoice->appendChild($dom->createElement('CustomerName', $customerName));
@@ -352,25 +359,23 @@ class SaftService
                     $produto = $item->produto;
                     if (!$produto) continue;
 
-                    $taxaIva = $produto->taxa_iva_efectiva ?? $item->taxa_iva ?? 5;
+                    $taxaIva = $produto->taxa_iva_efectiva ?? $item->taxa_iva;
                     $taxCode = $this->getTaxCodeForProduct($produto);
                     $isIsento = ($taxaIva == 0);
-                    $isNotaCredito = in_array($doc->tipo_documento, [DocumentoFiscal::TIPO_NOTA_CREDITO, DocumentoFiscal::TIPO_NOTA_DEBITO]);
+                    $isNotaCredito = ($doc->tipo_documento == DocumentoFiscal::TIPO_NOTA_CREDITO);
 
                     $lineNode = $dom->createElement('Line');
                     $invoice->appendChild($lineNode);
 
                     $lineNode->appendChild($dom->createElement('LineNumber', (string) ($item->ordem ?? 1)));
-
-                    $productCode = !empty($produto->codigo) ? $produto->codigo : substr($produto->id, 0, 20);
-                    $lineNode->appendChild($dom->createElement('ProductCode', $productCode));
+                    $lineNode->appendChild($dom->createElement('ProductCode', $produto->codigo ?? $produto->id));
                     $lineNode->appendChild($dom->createElement('ProductDescription', $produto->nome));
-                    $lineNode->appendChild($dom->createElement('Quantity', number_format($item->quantidade, 4, '.', '')));
+                    $lineNode->appendChild($dom->createElement('Quantity', (string) $item->quantidade));
                     $lineNode->appendChild($dom->createElement('UnitOfMeasure', 'UN'));
-                    $lineNode->appendChild($dom->createElement('UnitPrice', number_format($item->preco_unitario, 4, '.', '')));
+                    $lineNode->appendChild($dom->createElement('UnitPrice', number_format($item->preco_unitario, 2, '.', '')));
                     $lineNode->appendChild($dom->createElement('TaxPointDate', $doc->data_emissao->format('Y-m-d')));
                     $lineNode->appendChild($dom->createElement('Description', $produto->nome));
-                    $lineNode->appendChild($dom->createElement('TaxBase', number_format($item->base_tributavel, 4, '.', '')));
+                    $lineNode->appendChild($dom->createElement('TaxBase', number_format($item->base_tributavel, 2, '.', '')));
 
                     // Tax
                     $taxNode = $dom->createElement('Tax');
@@ -385,7 +390,7 @@ class SaftService
                         $lineNode->appendChild($dom->createElement('TaxExemptionCode', $item->codigo_isencao));
                     }
 
-                    // Valor: DebitAmount para NC/ND, CreditAmount para os restantes
+                    // Valor: DebitAmount para nota de crédito, CreditAmount para os restantes
                     if ($isNotaCredito) {
                         $lineNode->appendChild($dom->createElement('DebitAmount', number_format($item->total_linha, 2, '.', '')));
                     } else {
@@ -412,12 +417,12 @@ class SaftService
                 $lineNode->appendChild($dom->createElement('LineNumber', '1'));
                 $lineNode->appendChild($dom->createElement('ProductCode', 'GERAL'));
                 $lineNode->appendChild($dom->createElement('ProductDescription', 'Venda'));
-                $lineNode->appendChild($dom->createElement('Quantity', '1.0000'));
+                $lineNode->appendChild($dom->createElement('Quantity', '1'));
                 $lineNode->appendChild($dom->createElement('UnitOfMeasure', 'UN'));
-                $lineNode->appendChild($dom->createElement('UnitPrice', number_format($doc->base_tributavel, 4, '.', '')));
+                $lineNode->appendChild($dom->createElement('UnitPrice', number_format($doc->base_tributavel, 2, '.', '')));
                 $lineNode->appendChild($dom->createElement('TaxPointDate', $doc->data_emissao->format('Y-m-d')));
                 $lineNode->appendChild($dom->createElement('Description', 'Venda'));
-                $lineNode->appendChild($dom->createElement('TaxBase', number_format($doc->base_tributavel, 4, '.', '')));
+                $lineNode->appendChild($dom->createElement('TaxBase', number_format($doc->base_tributavel, 2, '.', '')));
                 $taxNode = $dom->createElement('Tax');
                 $taxNode->appendChild($dom->createElement('TaxType', 'IVA'));
                 $taxNode->appendChild($dom->createElement('TaxCountryRegion', 'AO'));
@@ -449,10 +454,11 @@ class SaftService
     private function addShipAddress(DOMDocument $dom, DOMElement $invoice, DocumentoFiscal $doc, Empresa $empresa): void
     {
         // ShipTo (endereço de entrega)
+
         $shipTo = $dom->createElement('ShipTo');
         $shipToAddr = $dom->createElement('Address');
         $shipToAddr->appendChild($dom->createElement('AddressDetail', $doc->cliente_endereco ?? 'Desconhecido'));
-        $shipToAddr->appendChild($dom->createElement('City', $doc->cliente_cidade ?? 'Luanda'));
+        $shipToAddr->appendChild($dom->createElement('City', $doc->endereco ?? 'Desconhecido'));
         $shipToAddr->appendChild($dom->createElement('Country', $doc->cliente_pais ?? 'AO'));
         $shipTo->appendChild($shipToAddr);
         $invoice->appendChild($shipTo);
@@ -461,7 +467,7 @@ class SaftService
         $shipFrom = $dom->createElement('ShipFrom');
         $shipFromAddr = $dom->createElement('Address');
         $shipFromAddr->appendChild($dom->createElement('AddressDetail', $empresa->endereco ?? 'Desconhecido'));
-        $shipFromAddr->appendChild($dom->createElement('City', $empresa->cidade ?? 'Luanda'));
+        $shipFromAddr->appendChild($dom->createElement('City', $empresa->cidade ?? 'Desconhecido'));
         $shipFromAddr->appendChild($dom->createElement('Country', $empresa->pais ?? 'AO'));
         $shipFrom->appendChild($shipFromAddr);
         $invoice->appendChild($shipFrom);
@@ -491,9 +497,7 @@ class SaftService
             $payment->appendChild($dom->createElement('PaymentType', 'RG'));
             $payment->appendChild($dom->createElement('SystemID', '1'));
             $payment->appendChild($dom->createElement('PaymentAmount', number_format($recibo->total_liquido, 2, '.', '')));
-
-            $customerId = $recibo->cliente_id ? (string) $recibo->cliente_id : '0';
-            $payment->appendChild($dom->createElement('CustomerID', $customerId));
+            $payment->appendChild($dom->createElement('CustomerID', (string) $recibo->cliente_id ?? ''));
 
             // DocumentStatus
             $docStatus = $dom->createElement('DocumentStatus');
@@ -567,25 +571,15 @@ class SaftService
             $produto = $mov->produto;
             if (!$produto) continue;
 
-            $productCode = !empty($produto->codigo) ? $produto->codigo : substr($produto->id, 0, 20);
-
-            // Preço unitário: usar custo_medio se disponível
-            $unitPrice = $mov->custo_medio ?? $produto->preco_venda ?? $produto->preco_compra ?? 0;
-
-            // Taxa IVA do produto
-            $taxaIva = $produto->taxa_iva_efectiva ?? ($produto->categoria->taxa_iva ?? 5);
-
-            // Valor base (custo do produto * quantidade)
-            $quantidade = abs($mov->quantidade);
-            $taxBase = $unitPrice * $quantidade;
-            $settlementAmount = $taxBase * (1 + ($taxaIva / 100));
+            // Preço unitário: se disponível usar custo_unitario, senão preço de venda
+            $unitPrice = $mov->custo_unitario;
+            if ($unitPrice <= 0 && $produto) {
+                $unitPrice = $produto->preco_venda ?? $produto->preco_compra ?? 0;
+            }
 
             $stockMovement = $dom->createElement('StockMovement');
             $movNode->appendChild($stockMovement);
-
-            // DocumentNumber: usar referência do movimento ou número do documento associado
-            $docNumber = !empty($mov->referencia) ? $mov->referencia : 'MOV-' . $mov->id;
-            $stockMovement->appendChild($dom->createElement('DocumentNumber', $docNumber));
+            $stockMovement->appendChild($dom->createElement('DocumentNumber', $mov->referencia ?? ''));
             $stockMovement->appendChild($dom->createElement('Date', $mov->created_at->format('Y-m-d')));
             $stockMovement->appendChild($dom->createElement('ProductCode', $productCode));
             $stockMovement->appendChild($dom->createElement('Quantity', ($mov->tipo === 'saida' ? '-' : '') . number_format($quantidade, 4, '.', '')));

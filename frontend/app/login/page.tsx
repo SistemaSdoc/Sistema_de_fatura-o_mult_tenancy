@@ -192,54 +192,59 @@ export default function LoginPage(): React.ReactElement {
           )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <InputField
-              type="email"
-              placeholder="Digite seu email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              icon={Mail}
-              colors={colors}
-            />
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+  <InputField
+    type="email"
+    placeholder="Digite seu email"
+    value={email}
+    onChange={(e) => setEmail(e.target.value)}
+    icon={Mail}
+    colors={colors}
+  />
 
-            <InputField
-              type={showPassword ? "text" : "password"}
-              placeholder="Digite sua senha"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              icon={Lock}
-              showPasswordToggle
-              onTogglePassword={() => setShowPassword(!showPassword)}
-              colors={colors}
-            />
+  <InputField
+    type={showPassword ? "text" : "password"}
+    placeholder="Digite sua senha"
+    value={password}
+    onChange={(e) => setPassword(e.target.value)}
+    icon={Lock}
+    showPasswordToggle
+    onTogglePassword={() => setShowPassword(!showPassword)}
+    colors={colors}
+  />
 
-            {/* <div className="flex justify-end">
-              <Link href="/forgot-password" className="text-xs font-medium transition-colors" style={{ color: colors.secondary }}>
-                Esqueceu a senha?
-              </Link>
-            </div>*/}
+  {/* Forgot password link - aligned right */}
+  <div className="flex justify-end">
+    <Link
+      href="/forgot-password"
+      className="text-xs font-medium transition-colors"
+      style={{ color: colors.secondary }}
+    >
+      Esqueceu a senha?
+    </Link>
+  </div>
 
-            <button
-              type="submit"
-              disabled={isLoading}
-              className={`w-full py-3.5 mt-2  font-semibold text-white flex items-center justify-center gap-2 transition-all duration-300`}
-              style={{ backgroundColor: isLoading ? `${colors.primary}B3` : colors.primary }}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 size={20} className="animate-spin" />
-                  Entrando...
-                </>
-              ) : (
-                <>
-                  Entrar
-                  <ArrowRight size={20} />
-                </>
-              )}
-            </button>
-          </form>
-
-          {/* Divider 
+  {/* Submit button */}
+  <button
+    type="submit"
+    disabled={isLoading}
+    className="w-full py-3.5 mt-2 font-semibold text-white flex items-center justify-center gap-2 transition-all duration-300"
+    style={{ backgroundColor: isLoading ? `${colors.primary}B3` : colors.primary }}
+  >
+    {isLoading ? (
+      <>
+        <Loader2 size={20} className="animate-spin" />
+        Entrando...
+      </>
+    ) : (
+      <>
+        Entrar
+        <ArrowRight size={20} />
+      </>
+    )}
+  </button>
+</form>
+         
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t" style={{ borderColor: colors.border }}></div>
@@ -247,7 +252,7 @@ export default function LoginPage(): React.ReactElement {
             <div className="relative flex justify-center text-sm">
               <span className="px-4" style={{ backgroundColor: colors.card, color: colors.textSecondary }}>ou</span>
             </div>
-          </div>*/}
+          </div>
 
           {/* Link Cadastro */}
           <div className="text-center">
@@ -258,12 +263,8 @@ export default function LoginPage(): React.ReactElement {
             </Link>
           </div>
         </div>
-
         {/* Footer */}
-        <p className="text-center text-xs mt-6" style={{ color: colors.textSecondary }}>
-          © {new Date().getFullYear()} SDOCA. Todos os direitos reservados.
-        </p>
       </div>
-    </div>
+    </div> 
   );
 }

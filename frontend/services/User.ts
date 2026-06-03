@@ -39,11 +39,13 @@ export interface MeResponse {
     empresa: Empresa | null;
 }
 
+
 export interface RegisterData {
     name: string;
-    email: string;
-    password: string;
+    email: string;          
+    password: string;      
     role: "admin" | "operador" | "contablista" | "gestor";
+    empresa_id?: string;   
     ativo?: boolean;
 }
 

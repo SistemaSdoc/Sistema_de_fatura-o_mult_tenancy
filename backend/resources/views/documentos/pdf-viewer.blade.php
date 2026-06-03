@@ -52,33 +52,11 @@ $estadoLabel = match($documento->estado ?? '') {
 };
 
 $metodosPagamento = [
-    'transferencia' => 'Transferência Bancária',
     'multibanco' => 'Multibanco',
     'dinheiro' => 'Dinheiro',
     'cheque' => 'Cheque',
     'cartao' => 'Cartão'
 ];
-
-// Determinar qual documento usar para os totais (para recibos, usa o documento de origem)
-$docParaTotais = $documento;
-if ($documento->tipo_documento === 'RC' && isset($documentoOrigem) && $documentoOrigem) {
-    $docParaTotais = $documentoOrigem;
-}
-
-// Tentar obter o desconto global da venda associada
-$descontoGlobal = 0;
-$troco = 0;
-
-// Se o documento fiscal tem uma venda associada, buscar os dados da venda
-if ($docParaTotais->venda_id && isset($docParaTotais->venda)) {
-    $venda = $docParaTotais->venda;
-    $descontoGlobal = (float) ($venda->desconto_global ?? 0);
-    $troco = (float) ($venda->troco ?? 0);
-} else {
-    // Fallback: usar os campos do próprio documento fiscal
-    $descontoGlobal = (float) ($docParaTotais->desconto_global ?? 0);
-    $troco = (float) ($documento->troco ?? 0);
-}
 
 // Calcular percentual de desconto
 $percentualDesconto = 0;
@@ -124,15 +102,9 @@ $temTroco = $troco > 0;
             background: white;
             width: 70mm;
             min-height: 70vh;
-            padding: 5px 4px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
             color: #000;
         }
-
-        /* Cabeçalho Empresa */
-        .header {
-            text-align: center;
-            margin-bottom: 7px;
             padding-bottom: 7px;
             border-bottom: 2px dashed #000;
         }

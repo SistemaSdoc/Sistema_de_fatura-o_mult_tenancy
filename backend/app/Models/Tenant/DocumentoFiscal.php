@@ -143,6 +143,8 @@ class DocumentoFiscal extends TenantModel
         return $this->belongsTo(DocumentoFiscal::class, 'fatura_id');
     }
 
+    
+
     /** Documentos derivados deste (NC, ND, RC, FRt) */
     public function documentosDerivados()
     {

@@ -6,6 +6,10 @@ use App\Models\Tenant\DocumentoFiscal;
 use App\Services\DocumentoFiscalService;
 use App\Services\ImpressoraTermicaService;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Endroid\QrCode\QrCode;
+use Endroid\QrCode\Writer\PngWriter;
+use Endroid\QrCode\Encoding\Encoding;
+use Endroid\QrCode\ErrorCorrectionLevel\ErrorCorrectionLevel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -15,6 +19,7 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * DocumentoFiscalController
@@ -28,9 +33,6 @@ class DocumentoFiscalController extends Controller
 {
     protected DocumentoFiscalService $documentoService;
 
-    /**
-     * Construtor - INJETAR DEPENDÊNCIA
-     */
     public function __construct(DocumentoFiscalService $documentoService)
     {
         $this->documentoService = $documentoService;
@@ -62,7 +64,6 @@ class DocumentoFiscalController extends Controller
                 'tipo_item'               => 'nullable|in:produto,servico',
             ]);
 
-            // Normaliza strings booleanas enviadas pelo frontend ("true"/"false" → true/false)
             $booleans = [
                 'apenas_vendas',
                 'apenas_nao_vendas',
@@ -99,7 +100,6 @@ class DocumentoFiscalController extends Controller
     {
         try {
             $documento = $this->documentoService->buscarDocumento($id);
-
             return response()->json([
                 'success' => true,
                 'message' => 'Documento carregado com sucesso',
@@ -131,12 +131,9 @@ class DocumentoFiscalController extends Controller
                 'itens.*.descricao'          => 'required_with:itens|string',
                 'itens.*.quantidade'         => 'required_with:itens|numeric|min:0.01',
                 'itens.*.preco_unitario'     => 'required_with:itens|numeric|min:0',
-                // Taxas de IVA válidas em Angola: 0%, 5%, 14%
                 'itens.*.taxa_iva'           => 'required_with:itens|numeric|in:0,5,14',
                 'itens.*.desconto'           => 'nullable|numeric|min:0',
-                // Código de isenção obrigatório quando taxa_iva = 0
                 'itens.*.codigo_isencao'     => 'nullable|string|in:M00,M01,M02,M03,M04,M05,M06,M99',
-                // Taxas de retenção válidas em Angola
                 'itens.*.taxa_retencao'      => 'nullable|numeric|in:0,2,5,6.5,10,15',
                 'dados_pagamento'            => 'nullable|array',
                 'dados_pagamento.metodo'     => 'required_with:dados_pagamento|in:transferencia,multibanco,dinheiro,cheque,cartao',
@@ -148,7 +145,6 @@ class DocumentoFiscalController extends Controller
                 'referencia_externa'         => 'nullable|string|max:100',
             ]);
 
-            // Consumidor Final quando não há identificação de cliente
             if (empty($dados['cliente_id']) && empty($dados['cliente_nome'])) {
                 if ($dados['tipo_documento'] === 'FR') {
                     return response()->json([
@@ -184,7 +180,6 @@ class DocumentoFiscalController extends Controller
         try {
             $documento = $this->documentoService->buscarDocumento($documentoId);
 
-            // === CORREÇÃO PRINCIPAL ===
             if ($documento->tipo_documento === 'FP') {
                 $valorPendente = (float) $documento->total_liquido;
             } else {
@@ -319,8 +314,6 @@ class DocumentoFiscalController extends Controller
 
     /* =====================================================================
      | CANCELAMENTO
-     | AGT: cancelamento é lógico — o hash_fiscal e a assinatura RSA
-     |      são preservados. Apenas o estado é alterado.
      | ================================================================== */
 
     public function cancelar(Request $request, string $documentoId): JsonResponse
@@ -426,7 +419,6 @@ class DocumentoFiscalController extends Controller
     {
         try {
             $alertas = $this->documentoService->alertasPendentes();
-
             return response()->json([
                 'success' => true,
                 'message' => 'Alertas de documentos fiscais',
@@ -464,7 +456,6 @@ class DocumentoFiscalController extends Controller
     {
         try {
             $resumo = $this->documentoService->dadosDashboard();
-
             return response()->json([
                 'success' => true,
                 'message' => 'Dashboard carregado com sucesso',
@@ -479,11 +470,9 @@ class DocumentoFiscalController extends Controller
     {
         try {
             $ano = (int) $request->input('ano', now()->year);
-
             if ($ano < 2020 || $ano > 2100) {
                 $ano = now()->year;
             }
-
             $evolucao = $this->documentoService->evolucaoMensal($ano);
 
             return response()->json([
@@ -500,7 +489,6 @@ class DocumentoFiscalController extends Controller
     {
         try {
             $estatisticas = $this->documentoService->estatisticasPagamentos();
-
             return response()->json([
                 'success' => true,
                 'message' => 'Estatísticas de pagamentos carregadas com sucesso',
@@ -512,20 +500,14 @@ class DocumentoFiscalController extends Controller
     }
 
     /* =====================================================================
-     | IMPRESSÃO TÉRMICA DIRETA — APENAS USB (IGNORA printer_ip)
-     |
-     |  ALTERAÇÃO IMPORTANTE: Não depende mais do printer_ip do usuário
+     | IMPRESSÃO TÉRMICA DIRETA — APENAS USB
      | ================================================================== */
 
     public function imprimirTermica(string $id, ImpressoraTermicaService $impressoraService): JsonResponse
     {
         try {
-            $user = request()->user();
+            $user = Auth::guard('tenant')->user();
 
-            // JÁ NÃO VALIDA O printer_ip DO USUÁRIO
-            // A impressora é configurada APENAS pelo .env
-
-            // Testa a conexão USB (ignora qualquer printer_ip do usuário)
             if (!$impressoraService->testarConexao()) {
                 return response()->json([
                     'success' => false,
@@ -536,10 +518,8 @@ class DocumentoFiscalController extends Controller
             $documento = $this->documentoService->buscarDocumento($id);
             $dados     = $this->documentoService->dadosParaPdf($documento);
 
-            // Para RC: itens e totais vêm do documento de origem
             if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
-                $docInfo = DocumentoFiscal::with(['itens.produto', 'cliente'])
-                    ->find($documento->fatura_id);
+                $docInfo = DocumentoFiscal::with(['itens.produto', 'cliente'])->find($documento->fatura_id);
             } else {
                 $docInfo = $documento;
             }
@@ -553,30 +533,20 @@ class DocumentoFiscalController extends Controller
                 'itens_count'    => count($dados['itens']),
             ]);
 
-            // PASSA O user APENAS para contexto (o service já ignora o printer_ip)
             $impressoraService->imprimirDocumento($documento, $dados, $user);
 
             return response()->json([
                 'success' => true,
+                'id'      => $id,
                 'message' => 'Documento impresso com sucesso',
             ]);
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
-            return response()->json(['success' => false, 'message' => 'Documento não encontrado'], 404);
         } catch (\Exception $e) {
-            Log::error('Erro na impressão térmica USB', [
-                'id'    => $id,
-                'error' => $e->getMessage(),
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Erro ao imprimir: ' . $e->getMessage(),
-            ], 500);
+            return $this->erroInterno('Erro na impressão térmica', $e);
         }
     }
 
     /* =====================================================================
-     | IMPRESSÃO HTML (A4) — inalterada
+     | IMPRESSÃO HTML (A4)
      | ================================================================== */
 
     public function printView(string $id): \Illuminate\Contracts\View\View
@@ -587,19 +557,16 @@ class DocumentoFiscalController extends Controller
 
             $documentoOrigem = null;
             if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
-                $documentoOrigem = DocumentoFiscal::with(['itens.produto', 'cliente'])
-                    ->find($documento->fatura_id);
+                $documentoOrigem = DocumentoFiscal::with(['itens.produto', 'cliente'])->find($documento->fatura_id);
             }
-
             $docInfo = $documentoOrigem ?? $documento;
 
             $qrCodeTexto = $dados['qr_code'] ?? null;
             $qrCodeImg   = null;
-
             if ($qrCodeTexto) {
-                $qr     = new \Endroid\QrCode\QrCode($qrCodeTexto);
+                $qr     = new QrCode($qrCodeTexto);
                 $qr->setSize(200);
-                $writer = new \Endroid\QrCode\Writer\PngWriter();
+                $writer = new PngWriter();
                 $result = $writer->write($qr);
                 $qrCodeImg = base64_encode($result->getString());
             }
@@ -617,13 +584,7 @@ class DocumentoFiscalController extends Controller
     }
 
     /* =====================================================================
-     | PDF VIEWER — TALÃO TÉRMICO HTML (style receipt)
-     |
-     | ALTERAÇÃO: o logo da empresa é convertido para base64 aqui no
-     | controller e enviado para a view como $empresa['logo_base64'].
-     | Assim a view não precisa de fazer asset() nem Storage::url() —
-     | funciona com QUALQUER caminho gravado na base de dados
-     | (logos/xxx.jpg, images/yyy.png, etc.).
+     | PDF VIEWER — TALÃO TÉRMICO HTML
      | ================================================================== */
 
     public function pdfViewer(string $id): \Illuminate\Contracts\View\View
@@ -644,25 +605,25 @@ class DocumentoFiscalController extends Controller
             $qrCodeTexto = $dados['qr_code'] ?? null;
             $qrCodeImg   = null;
 
-            if ($qrCodeTexto && class_exists(\Endroid\QrCode\QrCode::class)) {
+            if ($qrCodeTexto && class_exists(QrCode::class)) {
                 try {
-                    $qrCode = new \Endroid\QrCode\QrCode($qrCodeTexto);
-                    $qrCode->setEncoding(new \Endroid\QrCode\Encoding\Encoding('UTF-8'));
-                    $qrCode->setErrorCorrectionLevel(\Endroid\QrCode\ErrorCorrectionLevel\ErrorCorrectionLevel::Medium);
+                    $qrCode = new QrCode($qrCodeTexto);
+                    $qrCode->setEncoding(new Encoding('UTF-8'));
+                    $qrCode->setErrorCorrectionLevel(ErrorCorrectionLevel::Medium);
                     $qrCode->setSize(200);
                     $qrCode->setMargin(6);
 
-                    $writer    = new \Endroid\QrCode\Writer\PngWriter();
+                    $writer    = new PngWriter();
                     $result    = $writer->write($qrCode);
                     $qrCodeImg = base64_encode($result->getString());
                 } catch (\Throwable $e) {
                     try {
-                        $qrCode = new \Endroid\QrCode\QrCode($qrCodeTexto);
+                        $qrCode = new QrCode($qrCodeTexto);
                         $qrCode->setWriterByName('png');
                         $qrCode->setSize(200);
                         $qrCode->setMargin(6);
                         $qrCode->setEncoding('UTF-8');
-                        $qrCode->setErrorCorrectionLevel(\Endroid\QrCode\ErrorCorrectionLevel::HIGH);
+                        $qrCode->setErrorCorrectionLevel(ErrorCorrectionLevel::High);
                         $qrCodeImg = base64_encode($qrCode->writeString());
                     } catch (\Throwable $e2) {
                         Log::warning('QR Code generation failed', ['error' => $e2->getMessage()]);
@@ -670,48 +631,31 @@ class DocumentoFiscalController extends Controller
                 }
             }
 
-            // Buscar empresa pelo nome da base de dados atual
             $empresa = \App\Models\Empresa::on('landlord')
                 ->where('db_name', config('database.connections.tenant.database'))
                 ->first();
 
             $empresa = $empresa ? $empresa->toArray() : [];
-
-            // ---------------------------------------------------------------
-            // LOGO → BASE64
-            // Converte o logo para base64 aqui no controller.
-            // Aceita qualquer caminho gravado na BD (logos/xxx.jpg,
-            // images/yyy.png, etc.) sem qualquer manipulação de string.
-            // A view recebe $empresa['logo_base64'] pronto a usar no <img>.
-            // ---------------------------------------------------------------
             $empresa['logo_base64'] = null;
 
             $logoPath = $empresa['logo'] ?? null;
 
             if (!empty($logoPath)) {
                 try {
-                    // Tenta primeiro no disco 'public' (storage/app/public)
                     if (Storage::disk('public')->exists($logoPath)) {
                         $logoConteudo           = Storage::disk('public')->get($logoPath);
                         $logoMime               = Storage::disk('public')->mimeType($logoPath) ?: 'image/jpeg';
                         $empresa['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
-
-                    // Fallback: tenta no disco 'local' (storage/app)
                     } elseif (Storage::disk('local')->exists($logoPath)) {
                         $logoConteudo           = Storage::disk('local')->get($logoPath);
                         $logoMime               = Storage::disk('local')->mimeType($logoPath) ?: 'image/jpeg';
                         $empresa['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
-
-                    // Fallback: tenta como caminho absoluto no sistema de ficheiros
                     } elseif (file_exists(public_path($logoPath))) {
                         $logoConteudo           = file_get_contents(public_path($logoPath));
                         $logoMime               = mime_content_type(public_path($logoPath)) ?: 'image/jpeg';
                         $empresa['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
-
                     } else {
-                        Log::warning('pdfViewer: logo não encontrado em nenhum disco', [
-                            'logo_path' => $logoPath,
-                        ]);
+                        Log::warning('pdfViewer: logo não encontrado em nenhum disco', ['logo_path' => $logoPath]);
                     }
                 } catch (\Throwable $logoErr) {
                     Log::warning('pdfViewer: erro ao converter logo para base64', [
@@ -732,19 +676,19 @@ class DocumentoFiscalController extends Controller
                 'qr_code_img'     => $qrCodeImg,
                 'qr_html'         => $this->gerarQrHtml($qrCodeTexto),
             ]);
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             abort(404, 'Documento não encontrado');
         } catch (\Exception $e) {
-            Log::error('Erro ao gerar visualização PDF', ['id' => $id, 'error' => $e->getMessage()]);
-            abort(500, 'Erro ao carregar documento: ' . $e->getMessage());
+            Log::error('Erro no pdfViewer', ['error' => $e->getMessage()]);
+            abort(500, 'Erro ao gerar visualização do PDF');
         }
     }
 
     /* =====================================================================
-     | PDF (DomPDF) - Download — inalterado
+     | PDF (DomPDF) - DOWNLOAD
      | ================================================================== */
 
-    public function downloadPdf(string $id): Response
+    public function downloadPdf(string $id): \Symfony\Component\HttpFoundation\BinaryFileResponse
     {
         try {
             $documento = $this->documentoService->buscarDocumento($id);
@@ -761,13 +705,17 @@ class DocumentoFiscalController extends Controller
                 ]);
 
             return $pdf->download($documento->numero_documento . '.pdf');
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             abort(404, 'Documento não encontrado');
         } catch (\Exception $e) {
             Log::error('Erro ao fazer download do PDF', ['id' => $id, 'error' => $e->getMessage()]);
             abort(500, 'Erro ao gerar PDF: ' . $e->getMessage());
         }
     }
+
+    /* =====================================================================
+     | EXPORTAR EXCEL
+     | ================================================================== */
 
     public function exportarExcel(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
     {
@@ -826,7 +774,7 @@ class DocumentoFiscalController extends Controller
     }
 
     /* =====================================================================
-     | HELPER PRIVADO
+     | HELPERS PRIVADOS
      | ================================================================== */
 
     private function gerarQrHtml(?string $qrCodeTexto): string
@@ -836,11 +784,10 @@ class DocumentoFiscalController extends Controller
         }
 
         try {
-            $qr     = new \Endroid\QrCode\QrCode($qrCodeTexto);
+            $qr     = new QrCode($qrCodeTexto);
             $qr->setSize(200);
-            $writer = new \Endroid\QrCode\Writer\PngWriter();
+            $writer = new PngWriter();
             $result = $writer->write($qr);
-
             return '<img src="data:image/png;base64,' . base64_encode($result->getString()) . '" alt="QR Code">';
         } catch (\Throwable $e) {
             Log::warning('Falha ao gerar QR Code', ['error' => $e->getMessage()]);

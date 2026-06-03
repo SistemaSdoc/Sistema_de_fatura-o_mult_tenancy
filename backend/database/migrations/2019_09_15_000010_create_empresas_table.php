@@ -21,7 +21,7 @@ Schema::create('empresas', function (Blueprint $table) {
 
 
     $table->string('db_name'); // nome da base do tenant
-    $table->string('subdomain')->unique()->nullable();
+    $table->string('subdomain')->unique();
     // Fiscal
     $table->enum('regime_fiscal', ['simplificado', 'geral'])->default('geral');
     $table->boolean('sujeito_iva')->default(true);
@@ -32,6 +32,13 @@ Schema::create('empresas', function (Blueprint $table) {
     $table->date('data_registro')->nullable();
     $table->date('data_ativacao')->nullable();
     $table->date('data_desativacao')->nullable();
+
+    $table->string('cidade')->nullable();
+    $table->string('pais', 2)->default('AO');
+    $table->string('website')->nullable();
+    $table->string('fax')->nullable();
+    $table->string('software_validation_number')->nullable();
+
     // ✅ ÍNDICES
     $table->index('subdomain');
     $table->index('status');
