@@ -10,8 +10,8 @@ interface Empresa {
 }
 
 const empresas: Empresa[] = [
-  { name: "Mwamba Comercail", logo: "/images/mwamba.jpeg", website: "https://sdoca.it.ao/" },
-  { name: "CONTAI-CONTABILIDADE & COMÉRCIO", logo: "/images/Pingodagua.jpeg", website: "https://technova.ao" },
+  { name: "Mwamba Comercail", logo: "/images/mwamba.jpeg", website: "#" },
+  { name: "CONTAI-CONTABILIDADE & COMÉRCIO", logo: "/images/Pingodagua.jpeg", website: "#" },
 ];
 
 const EmpresasSection = () => {

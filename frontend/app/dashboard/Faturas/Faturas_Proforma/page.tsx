@@ -351,7 +351,7 @@ export default function NovaFaturaProformaPage() {
                 {/* ══════════════════════════════════════════════════════
                     CARD 1 — Dados da Proforma
                 ══════════════════════════════════════════════════════ */}
-                <div className="border shadow-sm overflow-hidden"
+                <div className="border shadow-sm"
                     style={{ backgroundColor: colors.card, borderColor: colors.border }}>
 
                     <div className="px-3 py-1.5 flex items-center gap-2"

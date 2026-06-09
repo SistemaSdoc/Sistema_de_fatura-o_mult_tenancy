@@ -8,7 +8,7 @@ import {
   PieChart, Pie, Cell, Legend, TooltipProps
 } from "recharts";
 import {
-  TrendingUp, Users, CreditCard, DollarSign,
+  TrendingUp, Users, DollarSign,
   Package, Receipt, FileText, AlertTriangle,
   RefreshCw, Clock
 } from "lucide-react";
@@ -451,9 +451,9 @@ export default function DashboardPage() {
                     <YAxis type="category" dataKey="nome" width={84} tick={tickStyle} stroke={colors.border} />
                     <Tooltip
                       contentStyle={tooltipStyle}
-                      formatter={(value: number | undefined, name: string | undefined) => {
-                        if (name === "quantidade") return formatterQuantidade(value);
-                        return formatterValor(value);
+                      formatter={(value: any, name: any) => {
+                        if (name === "quantidade") return formatterQuantidade(Number(value));
+                        return formatterValor(Number(value));
                       }}
                     />
                     <Bar dataKey="quantidade" radius={[0, 4, 4, 0]} barSize={16}>
@@ -497,7 +497,7 @@ export default function DashboardPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
                     <XAxis dataKey="mes" tick={tickStyle} stroke={colors.border} />
                     <YAxis tickFormatter={formatCompact} width={48} tick={tickStyle} stroke={colors.border} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number | undefined) => formatterTotal(v)} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => formatterTotal(Number(v))} />
                     <Area type="monotone" dataKey="total" stroke={colors.secondary} fill="url(#colorTotal)" strokeWidth={2} />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -541,9 +541,9 @@ export default function DashboardPage() {
                     <YAxis yAxisId="right" orientation="right" stroke={colors.secondary} tick={tickStyle} width={36} />
                     <Tooltip
                       contentStyle={tooltipStyle}
-                      formatter={(value: number | undefined, name: string | undefined) => {
-                        if (name === "quantidade") return formatterDocsQuantidade(value);
-                        return formatterValor(value);
+                      formatter={(value: any, name: any) => {
+                        if (name === "quantidade") return formatterDocsQuantidade(Number(value));
+                        return formatterValor(Number(value));
                       }}
                     />
                     <Bar yAxisId="left" dataKey="quantidade" fill={colors.primary} name="Qtd" radius={[3, 3, 0, 0]} barSize={12} />
@@ -589,7 +589,7 @@ export default function DashboardPage() {
     <Cell key={i} fill={pieColors[i % pieColors.length]} />
   ))}
 </Pie>
-                    <Tooltip contentStyle={tooltipStyle} formatter={(value: number | undefined) => formatterDocsQuantidade(value)} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(value: any) => formatterDocsQuantidade(Number(value))} />
                     <Legend />
                   </PieChart>
                 </ResponsiveContainer>

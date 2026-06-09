@@ -523,7 +523,7 @@ export default function NovaFaturaNormalPage() {
             CARD 1 — Dados da Fatura
         ══════════════════════════════════════════════════════ */}
         <div
-          className="border shadow-sm overflow-hidden"
+          className="border shadow-sm"
           style={{ backgroundColor: colors.card, borderColor: colors.border }}
         >
           <div

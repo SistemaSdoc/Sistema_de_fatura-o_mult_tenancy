@@ -538,7 +538,7 @@ export default function NovaFaturaReciboPage() {
             CARD 1 — Dados da Venda
         ══════════════════════════════════════════════════════ */}
         <div
-          className="border shadow-sm overflow-hidden"
+          className="border shadow-sm "
           style={{ backgroundColor: colors.card, borderColor: colors.border }}
         >
           <div
