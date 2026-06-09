@@ -172,7 +172,7 @@ class DocumentoFiscalController extends Controller
     }
 
     /* =====================================================================
-     | RECIBO
+     | RECIBO (APENAS PARA FT E FA)
      | ================================================================== */
 
     public function gerarRecibo(Request $request, string $documentoId): JsonResponse
@@ -180,11 +180,23 @@ class DocumentoFiscalController extends Controller
         try {
             $documento = $this->documentoService->buscarDocumento($documentoId);
 
+            // ALTERADO: Proformas (FP) NÃO podem mais gerar recibos diretamente
             if ($documento->tipo_documento === 'FP') {
-                $valorPendente = (float) $documento->total_liquido;
-            } else {
-                $valorPendente = $this->documentoService->calcularValorPendente($documento);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Proformas (FP) não podem gerar recibos diretamente. Utilize o endpoint /converter-proforma/{id} para converter a Proforma em Fatura-Recibo (FR) ou Fatura (FT).',
+                ], 422);
             }
+
+            // Apenas FT e FA podem gerar recibos
+            if (!in_array($documento->tipo_documento, ['FT', 'FA'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Apenas Faturas (FT) e Faturas de Adiantamento (FA) podem gerar recibos. Tipo atual: {$documento->tipo_documento}",
+                ], 422);
+            }
+
+            $valorPendente = $this->documentoService->calcularValorPendente($documento);
 
             $dados = $request->validate([
                 'valor'            => "required|numeric|min:0.01|max:{$valorPendente}",
@@ -202,10 +214,95 @@ class DocumentoFiscalController extends Controller
             ], 201);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             return response()->json(['success' => false, 'message' => 'Documento não encontrado'], 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'message' => 'Erro de validação', 'errors' => $e->errors()], 422);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
             return $this->erroInterno('Erro ao gerar recibo', $e);
+        }
+    }
+
+    /* =====================================================================
+     | CONVERSÃO DE PROFORMA EM FATURA (NOVO ENDPOINT)
+     | ================================================================== */
+
+    /**
+     * Converte uma Proforma (FP) em Fatura-Recibo (FR) ou Fatura (FT)
+     * Este é o fluxo correto para transformar uma proforma em documento fiscal válido
+     */
+    public function converterProforma(Request $request, string $proformaId): JsonResponse
+    {
+        try {
+            $proforma = $this->documentoService->buscarDocumento($proformaId);
+
+            if ($proforma->tipo_documento !== 'FP') {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Este endpoint só pode ser usado para Proformas (FP). Tipo atual: {$proforma->tipo_documento}",
+                ], 422);
+            }
+
+            if ($proforma->estado === 'cancelado') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Não é possível converter uma Proforma cancelada.',
+                ], 422);
+            }
+
+            $dados = $request->validate([
+                'tipo_destino'       => 'required|in:FR,FT',
+                'metodo_pagamento'   => 'required_if:tipo_destino,FR|in:transferencia,multibanco,dinheiro,cheque,cartao',
+                'valor_pago'         => 'nullable|numeric|min:0.01|max:' . $proforma->total_liquido,
+                'data_pagamento'     => 'nullable|date',
+                'referencia_pagamento' => 'nullable|string|max:100',
+            ]);
+
+            $dadosPagamento = [];
+            if ($dados['tipo_destino'] === 'FR') {
+                $dadosPagamento = [
+                    'metodo_pagamento' => $dados['metodo_pagamento'],
+                    'valor'            => $dados['valor_pago'] ?? $proforma->total_liquido,
+                    'data_pagamento'   => $dados['data_pagamento'] ?? now()->toDateString(),
+                    'referencia'       => $dados['referencia_pagamento'] ?? null,
+                ];
+            } elseif ($dados['tipo_destino'] === 'FT' && !empty($dados['valor_pago'])) {
+                $dadosPagamento = [
+                    'metodo_pagamento' => $dados['metodo_pagamento'] ?? 'dinheiro',
+                    'valor'            => $dados['valor_pago'],
+                    'data_pagamento'   => $dados['data_pagamento'] ?? now()->toDateString(),
+                    'referencia'       => $dados['referencia_pagamento'] ?? null,
+                ];
+            }
+
+            $fatura = $this->documentoService->converterProformaEmFatura(
+                $proforma,
+                $dadosPagamento,
+                $dados['tipo_destino']
+            );
+
+            $mensagem = $dados['tipo_destino'] === 'FR' 
+                ? 'Proforma convertida em Fatura-Recibo com sucesso. Stock movimentado.'
+                : 'Proforma convertida em Fatura com sucesso. Stock movimentado.';
+
+            return response()->json([
+                'success' => true,
+                'message' => $mensagem,
+                'data'    => [
+                    'proforma_original' => $proforma,
+                    'documento_emitido' => $fatura,
+                ],
+            ], 201);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
+            return response()->json(['success' => false, 'message' => 'Proforma não encontrada'], 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'message' => 'Erro de validação', 'errors' => $e->errors()], 422);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        } catch (\RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            return $this->erroInterno('Erro ao converter Proforma', $e);
         }
     }
 
@@ -685,14 +782,20 @@ class DocumentoFiscalController extends Controller
     }
 
     /* =====================================================================
-     | PDF (DomPDF) - DOWNLOAD
+     | PDF (DomPDF) - DOWNLOAD (CORRIGIDO)
      | ================================================================== */
 
-    public function downloadPdf(string $id): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    /**
+     * Download do PDF do documento fiscal
+     * 
+     * @param string $id
+     * @return \Symfony\Component\HttpFoundation\BinaryFileResponse|\Illuminate\Http\JsonResponse
+     */
+    public function downloadPdf(string $id)
     {
         try {
             $documento = $this->documentoService->buscarDocumento($id);
-            $dados     = $this->documentoService->dadosParaPdf($documento);
+            $dados = $this->documentoService->dadosParaPdf($documento);
             $dados['qr_html'] = $this->gerarQrHtml($dados['qr_code'] ?? null);
 
             $pdf = Pdf::loadView('documentos.pdf', $dados)
@@ -706,10 +809,17 @@ class DocumentoFiscalController extends Controller
 
             return $pdf->download($documento->numero_documento . '.pdf');
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            abort(404, 'Documento não encontrado');
+            Log::error('Documento não encontrado para download PDF', ['id' => $id, 'error' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Documento não encontrado'
+            ], 404);
         } catch (\Exception $e) {
             Log::error('Erro ao fazer download do PDF', ['id' => $id, 'error' => $e->getMessage()]);
-            abort(500, 'Erro ao gerar PDF: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao gerar PDF: ' . $e->getMessage()
+            ], 500);
         }
     }
 
