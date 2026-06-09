@@ -23,6 +23,9 @@ use Carbon\Carbon;
  *  - Numeração fiscal gerida pelo DocumentoFiscalService.
  *  - IVA 0%, 5%, 14% suportados; retenção lida do produto.
  *  - Adicionado suporte a desconto global e troco.
+ *  - Logs detalhados para diagnóstico do IVA = 0.
+ *  - Corrigida selecção da empresa: agora obtém a empresa do tenant actual
+ *    (via header X-Empresa-ID ou subdomínio) em vez de Empresa::firstOrFail().
  */
 class VendaService
 {
@@ -38,6 +41,56 @@ class VendaService
     }
 
     /* =====================================================================
+     | MÉTODO AUXILIAR: OBTÉM A EMPRESA DO TENANT ACTUAL
+     | ================================================================== */
+
+    /**
+     * Obtém a empresa do tenant actual a partir do header X-Empresa-ID ou do subdomínio.
+     *
+     * @throws \RuntimeException
+     */
+    private function obterEmpresaAtual(): Empresa
+    {
+        // 1ª tentativa: header X-Empresa-ID (enviado pelas APIs do tenant)
+        $empresaId = request()->header('X-Empresa-ID') ?? request()->header('X-Tenant-ID');
+
+        if ($empresaId) {
+            $empresa = Empresa::on('landlord')->find($empresaId);
+            if ($empresa) {
+                Log::debug('[VendaService] Empresa obtida por header', [
+                    'id'   => $empresa->id,
+                    'nome' => $empresa->nome,
+                ]);
+                return $empresa;
+            }
+        }
+
+        // 2ª tentativa: subdomínio (ex: chiquito.faturaja.sdoca.it.com)
+        $host = request()->getHost();
+        $partes = explode('.', $host);
+        $subdominio = $partes[0] ?? null;
+
+        // Ignorar 'www' se presente
+        if ($subdominio === 'www' && count($partes) > 2) {
+            $subdominio = $partes[1];
+        }
+
+        if ($subdominio && !in_array($subdominio, ['localhost', 'faturaja', 'sdoca', 'api'])) {
+            $empresa = Empresa::on('landlord')->where('subdomain', $subdominio)->first();
+            if ($empresa) {
+                Log::debug('[VendaService] Empresa obtida por subdomínio', [
+                    'subdomain' => $subdominio,
+                    'id'        => $empresa->id,
+                ]);
+                return $empresa;
+            }
+        }
+
+        // Fallback (nunca deveria acontecer em requisições de tenant válidas)
+        throw new \RuntimeException('Não foi possível identificar a empresa do tenant actual.');
+    }
+
+    /* =====================================================================
      | CRIAR VENDA
      | ================================================================== */
 
@@ -45,18 +98,26 @@ class VendaService
     {
         return DB::transaction(function () use ($dados, $faturar, $tipoDocumento) {
             Log::info('=== Iniciando criação de venda ===', [
-                'tipo_documento' => $tipoDocumento,
-                'faturar'        => $faturar,
-                'cliente_tipo'   => isset($dados['cliente_id']) ? 'cadastrado' : 'avulso',
+                'tipo_documento'  => $tipoDocumento,
+                'faturar'         => $faturar,
+                'cliente_tipo'    => isset($dados['cliente_id']) ? 'cadastrado' : 'avulso',
                 'desconto_global' => $dados['desconto_global'] ?? 0,
-                'troco'          => $dados['troco'] ?? 0,
+                'troco'           => $dados['troco'] ?? 0,
             ]);
 
             $this->validarTipoDocumento($tipoDocumento);
 
-            $empresa   = Empresa::firstOrFail();
+            // 🔥 CORREÇÃO: obter a empresa do tenant actual (e não a primeira da tabela)
+            $empresa   = $this->obterEmpresaAtual();
             $aplicaIva = $empresa->sujeito_iva;
             $regime    = $empresa->regime_fiscal;
+
+            Log::info('Dados da empresa para cálculo de IVA', [
+                'sujeito_iva'    => $aplicaIva,
+                'regime_fiscal'  => $regime,
+                'empresa_id'     => $empresa->id,
+                'nome'           => $empresa->nome_fantasia ?? $empresa->nome,
+            ]);
 
             $agoraAngola = Carbon::now('Africa/Luanda');
 
@@ -64,28 +125,27 @@ class VendaService
             $numeroVendaFormatado = 'VD-' . str_pad($numeroVenda, 6, '0', STR_PAD_LEFT);
 
             $venda = Venda::create([
-                'id'                  => Str::uuid(),
-                'cliente_id'          => $dados['cliente_id'] ?? null,
-                'cliente_nome'        => $dados['cliente_nome'] ?? null,
-                'cliente_nif'         => $dados['cliente_nif'] ?? null,
-                'user_id'             => auth('tenant')->id(),
-                'documento_fiscal_id' => null,
-                'numero'              => $numeroVenda,
-                'numero_documento'    => $numeroVendaFormatado,
-                'base_tributavel'     => 0,
-                'total_iva'           => 0,
-                'total_retencao'      => 0,
-                'total_pagar'         => 0,
-                'data_venda'          => $agoraAngola->toDateString(),
-                'hora_venda'          => $agoraAngola->format('H:i:s'),
-                'total'               => 0,
-                'status'              => 'aberta',
-                'estado_pagamento'    => $this->determinarEstadoPagamentoInicial($tipoDocumento, $faturar),
+                'id'                    => Str::uuid(),
+                'cliente_id'            => $dados['cliente_id'] ?? null,
+                'cliente_nome'          => $dados['cliente_nome'] ?? null,
+                'cliente_nif'           => $dados['cliente_nif'] ?? null,
+                'user_id'               => auth('tenant')->id(),
+                'documento_fiscal_id'   => null,
+                'numero'                => $numeroVenda,
+                'numero_documento'      => $numeroVendaFormatado,
+                'base_tributavel'       => 0,
+                'total_iva'             => 0,
+                'total_retencao'        => 0,
+                'total_pagar'           => 0,
+                'data_venda'            => $agoraAngola->toDateString(),
+                'hora_venda'            => $agoraAngola->format('H:i:s'),
+                'total'                 => 0,
+                'status'                => 'aberta',
+                'estado_pagamento'      => $this->determinarEstadoPagamentoInicial($tipoDocumento, $faturar),
                 'tipo_documento_fiscal' => $tipoDocumento,
-                'observacoes'         => $dados['observacoes'] ?? null,
-                // NOVOS CAMPOS: desconto global e troco
-                'desconto_global'     => (float) ($dados['desconto_global'] ?? 0),
-                'troco'               => (float) ($dados['troco'] ?? 0),
+                'observacoes'           => $dados['observacoes'] ?? null,
+                'desconto_global'       => (float) ($dados['desconto_global'] ?? 0),
+                'troco'                 => (float) ($dados['troco'] ?? 0),
             ]);
 
             // Processar itens e calcular totais
@@ -97,11 +157,21 @@ class VendaService
                 $totais = $this->aplicarDescontoGlobal($totais, $descontoGlobal);
                 Log::info('Desconto global aplicado', [
                     'desconto_global' => $descontoGlobal,
-                    'novo_total' => $totais['total']
+                    'novo_total'      => $totais['total']
                 ]);
             }
-            
+
             $venda->update($totais);
+
+            // LOG de confirmação dos valores salvos
+            $venda->refresh();
+            Log::info('Venda salva (após update)', [
+                'base_tributavel' => $venda->base_tributavel,
+                'total_iva'       => $venda->total_iva,
+                'total_retencao'  => $venda->total_retencao,
+                'total_pagar'     => $venda->total_pagar,
+                'total'           => $venda->total,
+            ]);
 
             // Emitir documento fiscal se pedido
             if ($faturar) {
@@ -138,16 +208,11 @@ class VendaService
             return $totais;
         }
         
-        // Calcular novo total após desconto
         $novoTotal = max(0, $totalOriginal - $descontoGlobal);
-        
-        // Ajustar base tributável proporcionalmente
         $proporcao = $novoTotal / $totalOriginal;
-        $novaBase = round($totais['base_tributavel'] * $proporcao, 2);
-        $novoIva = round($totais['total_iva'] * $proporcao, 2);
-        
-        // Retenção permanece a mesma (não é afetada por desconto)
-        $novaRetencao = $totais['total_retencao'];
+        $novaBase  = round($totais['base_tributavel'] * $proporcao, 2);
+        $novoIva   = round($totais['total_iva'] * $proporcao, 2);
+        $novaRetencao = $totais['total_retencao']; // retenção não afetada
         
         return [
             'base_tributavel' => $novaBase,
@@ -321,6 +386,15 @@ class VendaService
 
         $totalPagar = round($totalBase + $totalIva - $totalRetencao, 2);
 
+        Log::info('Totais após processar itens', [
+            'venda_id'          => $venda->id,
+            'total_base'        => $totalBase,
+            'total_iva'         => $totalIva,
+            'total_retencao'    => $totalRetencao,
+            'total_pagar'       => $totalPagar,
+            'quantidade_itens'  => count($itens),
+        ]);
+
         return [
             'base_tributavel' => round($totalBase, 2),
             'total_iva'       => round($totalIva, 2),
@@ -346,20 +420,47 @@ class VendaService
         $codigoIsencao = null;
         $motivoIsencao = null;
 
+        Log::debug('Cálculo IVA do item - estado inicial', [
+            'produto_id'        => $produto->id,
+            'produto_nome'      => $produto->nome,
+            'aplicaIva'         => $aplicaIva,
+            'regime'            => $regime,
+            'taxa_iva_produto'  => $produto->taxa_iva,
+            'taxa_iva_item'     => $item['taxa_iva'] ?? null,
+            'subtotal'          => $subtotal,
+        ]);
+
         if ($aplicaIva && $regime === 'geral') {
             $taxaIva = (float) ($item['taxa_iva'] ?? $produto->taxa_iva ?? DocumentoFiscalService::IVA_GERAL);
+            
+            Log::debug('Regime geral - taxa IVA definida', [
+                'taxaIva_final' => $taxaIva,
+                'constante_IVA_GERAL' => DocumentoFiscalService::IVA_GERAL,
+            ]);
 
             if ($taxaIva === 0.0) {
                 $codigoIsencao = $item['codigo_isencao'] ?? $produto->codigo_isencao ?? 'M00';
                 $motivoIsencao = DocumentoFiscalService::MOTIVOS_ISENCAO[$codigoIsencao] ?? 'Isento';
+                Log::info('Item isento de IVA (taxa 0%)', [
+                    'produto'        => $produto->nome,
+                    'codigo_isencao' => $codigoIsencao,
+                ]);
             }
         } elseif ($aplicaIva && $regime === 'simplificado') {
             $taxaIva       = 0.0;
             $codigoIsencao = 'M01';
             $motivoIsencao = DocumentoFiscalService::MOTIVOS_ISENCAO['M01'];
+            Log::info('Regime simplificado - IVA zerado por força de lei', [
+                'produto' => $produto->nome,
+            ]);
         } else {
+            // Empresa não sujeita a IVA
             $codigoIsencao = 'M06';
             $motivoIsencao = DocumentoFiscalService::MOTIVOS_ISENCAO['M06'];
+            Log::info('Empresa não sujeita a IVA', [
+                'produto' => $produto->nome,
+                'sujeito_iva' => $aplicaIva,
+            ]);
         }
 
         $valorIva = round(($subtotal * $taxaIva) / 100, 2);
@@ -376,15 +477,15 @@ class VendaService
         $baseTributavel = round($subtotal, 2);
         $subtotalFinal  = $baseTributavel + $valorIva - $valorRetencao;
 
-        Log::info('Item processado', [
+        Log::info('Item processado (resumo)', [
             'produto'       => $produto->nome,
             'tipo'          => $produto->tipo,
             'subtotal'      => $subtotal,
             'desconto_item' => $desconto,
             'taxa_iva'      => $taxaIva,
-            'iva'           => $valorIva,
+            'valor_iva'     => $valorIva,
             'taxa_retencao' => $taxaRetencao,
-            'retencao'      => $valorRetencao,
+            'valor_retencao'=> $valorRetencao,
             'final'         => $subtotalFinal,
         ]);
 
@@ -448,34 +549,31 @@ class VendaService
         return $this->documentoFiscalService->emitirDocumento($payload);
     }
 
-private function validarFR(array $dados, float $totalVenda): void
-{
-    if (empty($dados['dados_pagamento'])) {
-        throw new \Exception('Campo dados_pagamento é obrigatório para Fatura-Recibo (FR).');
-    }
+    private function validarFR(array $dados, float $totalVenda): void
+    {
+        if (empty($dados['dados_pagamento'])) {
+            throw new \Exception('Campo dados_pagamento é obrigatório para Fatura-Recibo (FR).');
+        }
 
-    $valorPagamento = (float) $dados['dados_pagamento']['valor'];
-    
-    // O valor do pagamento pode ser maior ou igual ao total da venda
-    // Se for menor, erro. Se for maior, gera troco (ok)
-    if ($valorPagamento < $totalVenda - 0.01) {
-        throw new \Exception(
-            'Valor do pagamento (' . number_format($valorPagamento, 2, ',', '.') .
-            ') é insuficiente. Total da venda: ' .
-            number_format($totalVenda, 2, ',', '.') . ' para FR.'
-        );
+        $valorPagamento = (float) $dados['dados_pagamento']['valor'];
+        
+        if ($valorPagamento < $totalVenda - 0.01) {
+            throw new \Exception(
+                'Valor do pagamento (' . number_format($valorPagamento, 2, ',', '.') .
+                ') é insuficiente. Total da venda: ' .
+                number_format($totalVenda, 2, ',', '.') . ' para FR.'
+            );
+        }
+        
+        if ($valorPagamento > $totalVenda + 0.01) {
+            $troco = $valorPagamento - $totalVenda;
+            Log::info('Troco gerado para FR', [
+                'venda_total' => $totalVenda,
+                'pago'        => $valorPagamento,
+                'troco'       => $troco
+            ]);
+        }
     }
-    
-    // Log para registrar o troco
-    if ($valorPagamento > $totalVenda + 0.01) {
-        $troco = $valorPagamento - $totalVenda;
-        Log::info('Troco gerado para FR', [
-            'venda_total' => $totalVenda,
-            'pago' => $valorPagamento,
-            'troco' => $troco
-        ]);
-    }
-}
 
     private function determinarEstadoPagamentoInicial(string $tipoDocumento, bool $faturar): string
     {

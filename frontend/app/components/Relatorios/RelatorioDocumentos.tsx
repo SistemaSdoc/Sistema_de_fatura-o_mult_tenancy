@@ -1,10 +1,33 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from "recharts";
 import { RelatorioDocumentosFiscais, RelatorioProformas, formatarKwanza, formatarData } from "@/services/relatorios";
 import { KpiCell, SecaoGrafico, TabelaDados, EstadoBadge, CarregandoLinha, Vazio, SemDados, tooltipStyle } from "./RelatorioComuns";
 
+// Tipos locais
+interface Colors {
+  primary: string;
+  secondary: string;
+  border: string;
+  textSecondary: string;
+  [key: string]: string;
+}
+
+interface DadosPorTipoItem {
+  tipo: string;
+  quantidade: number;
+  valor: number;
+}
+
+interface ProformaItem {
+  numero_documento: string;
+  cliente: string | { nome?: string } | null;
+  data_emissao: string;
+  total_liquido: number;
+  estado: string;
+}
+
 interface RelatorioDocumentosProps {
-  colors: any;
+  colors: Colors;
   isLoading: boolean;
   relatorioDocumentos: RelatorioDocumentosFiscais | null;
   relatorioProformas: RelatorioProformas | null;
@@ -17,6 +40,32 @@ export function RelatorioDocumentosComponent({
   relatorioProformas,
 }: RelatorioDocumentosProps) {
   const border = `1px solid ${colors.primary}`;
+
+  // Formatação inteligente do eixo Y
+  const formatYAxis = (value: number): string => {
+    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+    if (value >= 1_000) return `${(value / 1_000).toFixed(0)}k`;
+    return value.toString();
+  };
+
+  // Dados para o gráfico de barras (memoizado)
+  const dadosPorTipo = useMemo<DadosPorTipoItem[]>(() => {
+    const porTipo = relatorioDocumentos?.estatisticas?.por_tipo;
+    if (!porTipo) return [];
+    return Object.entries(porTipo).map(([tipo, dados]) => ({
+      tipo,
+      quantidade: dados?.quantidade ?? 0,
+      valor: dados?.valor ?? 0,
+    }));
+  }, [relatorioDocumentos?.estatisticas?.por_tipo]);
+
+  // Últimas 20 proformas (memoizado)
+  const ultimasProformas = useMemo<ProformaItem[]>(() => {
+    return (relatorioProformas?.proformas ?? []).slice(0, 20);
+  }, [relatorioProformas?.proformas]);
+
+  // Tooltip formatador
+  const tooltipFormatter = (value: number, name: string) => [formatarKwanza(value), name];
 
   if (isLoading) return <CarregandoLinha colors={colors} />;
   if (!relatorioDocumentos || !relatorioProformas) return <Vazio colors={colors} />;
@@ -34,15 +83,15 @@ export function RelatorioDocumentosComponent({
           color={colors.secondary} colors={colors} border={border} last />
       </div>
 
-      {Object.keys(relatorioDocumentos.estatisticas?.por_tipo ?? {}).length > 0 && (
+      {dadosPorTipo.length > 0 && (
         <SecaoGrafico titulo="Documentos por Tipo" colors={colors}>
           <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={Object.entries(relatorioDocumentos.estatisticas?.por_tipo ?? {}).map(([tipo, d]: any) => ({ tipo, quantidade: d?.quantidade ?? 0, valor: d?.valor ?? 0 }))}>
+            <BarChart data={dadosPorTipo}>
               <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
               <XAxis dataKey="tipo" tick={{ fontSize: 10, fill: colors.textSecondary }} />
               <YAxis yAxisId="left" tick={{ fontSize: 10, fill: colors.textSecondary }} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: colors.textSecondary }} tickFormatter={(v: any) => `${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v: any, n: any) => [formatarKwanza(Number(v)), String(n ?? "")]} contentStyle={tooltipStyle(colors)} />
+              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: colors.textSecondary }} tickFormatter={formatYAxis} />
+              <Tooltip formatter={tooltipFormatter} contentStyle={tooltipStyle(colors)} />
               <Legend />
               <Bar yAxisId="left" dataKey="quantidade" fill={colors.primary} name="Quantidade" radius={[2, 2, 0, 0]} />
               <Bar yAxisId="right" dataKey="valor" fill={colors.secondary} name="Valor" radius={[2, 2, 0, 0]} />
@@ -52,15 +101,15 @@ export function RelatorioDocumentosComponent({
       )}
 
       <SecaoGrafico titulo="Lista de Proformas" colors={colors}>
-        {(relatorioProformas.proformas?.length ?? 0) > 0 ? (
+        {ultimasProformas.length > 0 ? (
           <TabelaDados
             headers={["Nº Documento", "Cliente", "Data", "Valor", "Estado"]}
-            rows={(relatorioProformas.proformas ?? []).slice(0, 20).map((p: any) => [
-              <span key="n" className="font-mono text-xs">{p.numero_documento}</span>,
-              typeof p.cliente === "string" ? p.cliente : p.cliente?.nome ?? "-",
-              formatarData(p.data_emissao),
-              formatarKwanza(Number(p.total_liquido) ?? 0),
-              <EstadoBadge key="s" estado={p.estado} colors={colors} />,
+            rows={ultimasProformas.map((proforma: ProformaItem) => [
+              <span key="num" className="font-mono text-xs">{proforma.numero_documento}</span>,
+              typeof proforma.cliente === "string" ? proforma.cliente : proforma.cliente?.nome ?? "-",
+              formatarData(proforma.data_emissao),
+              formatarKwanza(proforma.total_liquido),
+              <EstadoBadge key="estado" estado={proforma.estado} colors={colors} />,
             ])}
             aligns={["left", "left", "left", "right", "center"]}
             colors={colors}
