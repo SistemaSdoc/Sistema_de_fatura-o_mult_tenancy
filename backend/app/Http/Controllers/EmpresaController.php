@@ -183,7 +183,7 @@ BUILDING;
         // Validação
         $validated = $request->validate([
             'nome'           => 'required|string|max:255',
-            'nif'            => 'required|string|unique:landlord.empresas,nif',
+            'nif'            => 'required|digits:10|unique:landlord.empresas,nif',
             'email'          => 'required|email|unique:landlord.empresas,email',
             'telefone'       => 'required|string|max:20',
             'endereco'       => 'required|string|max:500',
