@@ -46,7 +46,7 @@ $percentualDesconto = ($descontoGlobal / $subtotalBruto) * 100;
 
 $temTroco = $troco > 0;
 
-$tipos = ['FT'=>'Factura','FR'=>'Factura-Recibo','FP'=>'Factura Proforma','FA'=>'Fat. Adiantamento','NC'=>'Nota de Crédito','ND'=>'Nota de Débito','RC'=>'Recibo','FRt'=>'Fat. Retificação'];
+$tipos = ['FT'=>'Factura','FR'=>'Factura-Recibo','FP'=>'Factura Proforma','FA'=>'Fact. Adiantamento','NC'=>'Nota de Crédito','ND'=>'Nota de Débito','RC'=>'Recibo','FRt'=>'Fact. Retificação'];
 
 $metodosPagamento = [
 'transferencia'=>'Transferência Bancária',

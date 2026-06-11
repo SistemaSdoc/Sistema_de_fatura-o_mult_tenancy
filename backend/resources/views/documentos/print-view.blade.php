@@ -10,13 +10,13 @@ $empresaEmailEstatico = '';
 $empresaLogo = asset('images/1000041800.jpg');
 
 $tiposDocumento = [
-'FT' => 'Fatura',
-'FR' => 'Fatura-Recibo',
-'FA' => 'Fat. Adiantamento',
+'FT' => 'Factura',
+'FR' => 'Factura-Recibo',
+'FA' => 'Fact. Adiantamento',
 'NC' => 'Nota de Crédito',
 'ND' => 'Nota de Débito',
 'RC' => 'Recibo',
-'FRt' => 'Fat. Retificação'
+'FRt' => 'Fact. Retificação'
 ];
 
 // Estado e cores
@@ -488,7 +488,7 @@ $docParaTotais = $documentoOrigem;
             </div>
         </div>
 
-        <!-- Referência (se for RC e tiver fatura de origem) -->
+        <!-- Referência (se for RC e tiver factura de origem) -->
         @if($documento->tipo_documento === 'RC' && $documentoOrigem)
         <div class="reference">
             <strong>Ref. Documento Origem:</strong><br>

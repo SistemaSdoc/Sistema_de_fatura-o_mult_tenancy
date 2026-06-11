@@ -267,7 +267,7 @@ class DocumentoFiscalService {
     // ── Emissão ─────────────────────────────────────────────
     async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
         if (!dados.cliente_id && !dados.cliente_nome && dados.tipo_documento === 'FR') {
-            throw new Error('Fatura-Recibo (FR) requer um cliente (cadastrado ou avulso)');
+            throw new Error('Factura-Recibo (FR) requer um cliente (cadastrado ou avulso)');
         }
         const response = await api.post<ApiResponse<DocumentoFiscal>>(`${this.baseUrl}/emitir`, dados);
         if (!response.data.success) throw new Error(response.data.message);
@@ -549,9 +549,9 @@ async abrirImpressao(id: string, auto = true): Promise<void> {
 
     getTipoDocumentoNome(tipo: TipoDocumento): string {
         const nomes: Record<TipoDocumento, string> = {
-            FT: 'Fatura', FR: 'Fatura-Recibo', FP: 'Fatura Proforma',
-            FA: 'Fatura de Adiantamento', NC: 'Nota de Crédito',
-            ND: 'Nota de Débito', RC: 'Recibo', FRt: 'Fatura de Retificação',
+            FT: 'Factura', FR: 'Factura-Recibo', FP: 'Factura Proforma',
+            FA: 'Factura de Adiantamento', NC: 'Nota de Crédito',
+            ND: 'Nota de Débito', RC: 'Recibo', FRt: 'Factura de Retificação',
         };
         return nomes[tipo] ?? tipo;
     }

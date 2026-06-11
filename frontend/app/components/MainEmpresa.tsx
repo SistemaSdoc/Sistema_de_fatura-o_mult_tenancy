@@ -370,7 +370,7 @@ useEffect(() => {
             roles: ["admin", "contablista", "gestor"],
         },
         {
-            label: "Faturação",
+            label: "Facturação",
             icon: FileText,
             path: "/dashboard/Vendas",
             links:

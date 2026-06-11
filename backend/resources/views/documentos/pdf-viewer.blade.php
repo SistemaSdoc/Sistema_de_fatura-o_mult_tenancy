@@ -28,11 +28,11 @@ if (!empty($empresa['logo_base64'])) {
 $tiposDocumento = [
     'FT' => 'Factura',
     'FR' => 'Factura-Recibo',
-    'FA' => 'Fat. Adiantamento',
+    'FA' => 'Fact. Adiantamento',
     'NC' => 'Nota de Crédito',
     'ND' => 'Nota de Débito',
     'RC' => 'Recibo',
-    'FRt' => 'Fat. Retificação'
+    'FRt' => 'Fact. Retificação'
 ];
 
 // Estado e cores
@@ -538,7 +538,7 @@ $temTroco = $troco > 0;
             </div>
         </div>
 
-        <!-- Referência (se for RC e tiver fatura de origem) -->
+        <!-- Referência (se for RC e tiver factura de origem) -->
         @if($documento->tipo_documento === 'RC' && $documentoOrigem)
         <div class="reference">
             <strong>Ref. Documento Origem:</strong><br>
