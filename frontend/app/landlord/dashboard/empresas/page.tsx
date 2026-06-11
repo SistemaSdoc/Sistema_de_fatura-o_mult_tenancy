@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLandlordAuth } from '@/context/LandlordAuthContext';
 import { api } from '@/services/axios';
+<<<<<<< HEAD
 import { useThemeColors } from '@/context/ThemeContext';
 import { 
     Building2, Plus, AlertCircle, CheckCircle, XCircle, 
@@ -30,6 +31,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+=======
+import { useThemeColors, useTheme } from "@/context/ThemeContext";
+import { Building2, Plus, AlertCircle, CheckCircle, XCircle, RefreshCw, Database, Calendar } from 'lucide-react';
+>>>>>>> c9f9505 (Fase tenant&0040)
 
 interface Empresa {
     id: string;
@@ -177,10 +182,17 @@ export default function EmpresasDashboard() {
 
     if (authLoading || loading) {
         return (
+<<<<<<< HEAD
             <div className="flex items-center justify-center min-h-screen" style={{ backgroundColor: colors.background }}>
                 <div className="text-center">
                     <RefreshCw className="animate-spin w-10 h-10 mx-auto mb-4" style={{ color: colors.primary }} />
                     <p style={{ color: colors.textSecondary }}>A carregar empresas...</p>
+=======
+            <div className="flex items-center justify-center min-h-screen" style={{backgroundColor: colors.border  }}>
+                <div className="text-center">
+                    <RefreshCw className="animate-spin w-10 h-10 mx-auto mb-4" style={{ color: colors.background }} />
+                    <p className="text-gray-600">A carregar empresas...</p>
+>>>>>>> c9f9505 (Fase tenant&0040)
                 </div>
             </div>
         );
@@ -188,6 +200,7 @@ export default function EmpresasDashboard() {
 
     if (error) {
         return (
+<<<<<<< HEAD
             <div className="min-h-screen p-8" style={{ backgroundColor: colors.background }}>
                 <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                     <CardContent className="p-6">
@@ -206,12 +219,23 @@ export default function EmpresasDashboard() {
                         </div>
                     </CardContent>
                 </Card>
+=======
+            <div className="p-8" style={{ backgroundColor: colors.danger }}>
+                <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md flex items-center gap-3">
+                    <AlertCircle className="text-red-500" size={24} />
+                    <div>
+                        <p className="font-semibold text-red-700">Erro ao carregar empresas</p>
+                        <p className="text-red-600">{error}</p>
+                    </div>
+                </div>
+>>>>>>> c9f9505 (Fase tenant&0040)
             </div>
         );
     }
 
     return (
         <div className="min-h-screen p-6 md:p-8" style={{ backgroundColor: colors.background }}>
+<<<<<<< HEAD
             {/* Cabeçalho */}
             <div className="mb-8">
                 <h1 className="text-3xl font-bold mb-2" style={{ color: colors.text }}>
@@ -219,11 +243,22 @@ export default function EmpresasDashboard() {
                 </h1>
                 <p style={{ color: colors.textSecondary }}>
                     Gerir todas as empresas do sistema. Aqui podes criar, ativar ou suspender contas.
+=======
+            {/* Cabeçalho com saudação e branding */}
+            <div className="mb-8">
+                <h1 className="text-3xl font-bold mb-2" style={{ color: colors.fp }}>
+                    Bem‑vindo, {user?.name?.split(' ')[0] || 'Super Admin'} 
+                </h1>
+                <p className="text-gray-500" style={{ color: colors.textSecondary }}>
+                    Gerir todas as empresas (tenants) do <strong className="font-semibold">FaturaJa</strong>. 
+                    Aqui podes criar, activar ou suspender contas de empresas.
+>>>>>>> c9f9505 (Fase tenant&0040)
                 </p>
             </div>
 
             {/* Cards de resumo */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+<<<<<<< HEAD
                 <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                     <CardContent className="p-6">
                         <div className="flex items-center justify-between">
@@ -234,6 +269,13 @@ export default function EmpresasDashboard() {
                             <div className="p-3 rounded-full" style={{ backgroundColor: `${colors.primary}10` }}>
                                 <Building2 size={24} style={{ color: colors.primary }} />
                             </div>
+=======
+                <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 transition hover:shadow-md">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-gray-500 text-sm" style={{ color: colors.secondary }}>Total de Empresas</p>
+                            <p className="text-3xl font-bold text-gray-800" style={{ color: colors.secondary }}>{totalEmpresas}</p>
+>>>>>>> c9f9505 (Fase tenant&0040)
                         </div>
                     </CardContent>
                 </Card>
@@ -267,6 +309,7 @@ export default function EmpresasDashboard() {
                 </Card>
             </div>
 
+<<<<<<< HEAD
             {/* Barra de ferramentas */}
             <Card style={{ backgroundColor: colors.card, borderColor: colors.border }} className="mb-6">
                 <CardContent className="p-4">
@@ -357,6 +400,101 @@ export default function EmpresasDashboard() {
                                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: colors.textSecondary }}>Registo</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: colors.textSecondary }}>Status</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: colors.textSecondary }}>Acções</th>
+=======
+            {/* Título da tabela e botão de nova empresa */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                <div>
+                    <h2 className="text-xl font-semibold" style={{ color: colors.hover }}>
+                        Lista de Empresas
+                    </h2>
+                    <p className="text-sm text-gray-500" style={{ color: colors.textSecondary }}>
+                        Clique em “Suspender” para bloquear o acesso da empresa ao sistema.
+                    </p>
+                </div>
+                <button
+                    onClick={() => router.push('/landlord/dashboard/empresas/criar')}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition shadow-sm"
+                >
+                    <Plus size={18} />
+                    Nova Empresa
+                </button>
+            </div>
+
+            {/* Tabela de empresas */}
+            {empresas.length === 0 ? (
+                <div className="bg-white rounded-xl shadow-sm p-12 text-center border border-gray-100">
+                    <Database size={48} className="mx-auto text-gray-300 mb-4" />
+                    <p className="text-gray-500 text-lg">Nenhuma empresa registada ainda.</p>
+                    <button
+                        onClick={() => router.push('/dashboard/empresas/criar')}
+                        className="mt-4 text-green-600 hover:text-green-700 font-medium inline-flex items-center gap-1" >
+                        <Plus size={16} />
+                        Criar a primeira empresa
+                    </button>
+                </div>
+            ) : (
+                <div className="overflow-x-auto bg-white  shadow-sm border border-gray-100">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead style={{ backgroundColor: colors.fp }} >
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ color: colors.hover }}>Empresa</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ color: colors.hover }}>NIF</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ color: colors.hover }}>Contacto</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ color: colors.hover }}>Regime Fiscal</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ color: colors.hover }}>Base Dados</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ color: colors.hover }}>Registo</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ color: colors.hover }}>Status</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ color: colors.hover }}>Acções</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {empresas.map((emp) => (
+                                <tr key={emp.id} className="hover:bg-gray-50 transition">
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="flex items-center gap-2">
+                                            <Building2 size={16} className="text-gray-400" />
+                                            <span className="font-medium text-gray-900">{emp.nome}</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-gray-600">{emp.nif}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-gray-600">{emp.email}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <span className="capitalize text-sm bg-gray-100 px-2 py-1 rounded-full">
+                                            {emp.regime_fiscal}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm font-mono">{emp.db_name}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm flex items-center gap-1">
+                                        <Calendar size={14} />
+                                        {new Date(emp.data_registro).toLocaleDateString('pt-PT')}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                            emp.status === 'ativo' 
+                                                ? 'bg-green-100 text-green-800' 
+                                                : 'bg-red-100 text-red-800'
+                                        }`}>
+                                            {emp.status === 'ativo' ? 'Activa' : 'Suspensa'}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <button
+                                            onClick={() => toggleStatus(emp.id, emp.status)}
+                                            disabled={actionLoading === emp.id}
+                                            className={`px-3 py-1.5 rounded-md text-white text-sm font-medium transition-all ${
+                                                emp.status === 'ativo'
+                                                    ? 'bg-yellow-500 hover:bg-yellow-600'
+                                                    : 'bg-green-500 hover:bg-green-600'
+                                            } disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1`}
+                                        >
+                                            {actionLoading === emp.id ? (
+                                                <RefreshCw size={14} className="animate-spin" />
+                                            ) : (
+                                                emp.status === 'ativo' ? 'Suspender' : 'Activar'
+                                            )}
+                                        </button>
+                                    </td>
+>>>>>>> c9f9505 (Fase tenant&0040)
                                 </tr>
                             </thead>
                             <tbody className="divide-y" style={{ borderColor: colors.border }}>

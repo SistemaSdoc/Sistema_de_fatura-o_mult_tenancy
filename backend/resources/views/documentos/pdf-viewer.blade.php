@@ -684,7 +684,7 @@ $temTroco = $troco > 0;
         <div class="footer">
             <div class="footer-title">OBRIGADO PELA PREFERÊNCIA!</div>
             <div class="footer-msg">Volte sempre</div>
-            <div class="footer-msg">Processado pelo sistema de faturação faturaja</div>
+            <div class="footer-msg">Processado pelo sistema de facturação facturaja</div>
             <div class="timestamp">
                 {{ now()->format('d/m/Y H:i:s') }}
             </div>

@@ -1,56 +1,10 @@
 @php
 if (!isset($documento) || !$documento) {
-die('Documento não encontrado');
+    die('Documento não encontrado');
 }
 
 // Dados DINÂMICOS da empresa (vindos do controller via $empresa)
-// CORRIGIDO: Busca o endereço de forma mais robusta com fallback
-$empresaMorada = 'Endereço não registrado';
-
-// DEBUG - ver o que está chegando (remova depois)
-// Log::info('[PDF] Dados da empresa:', ['empresa' => $empresa]);
-
-// Tenta obter o endereço de diferentes formas
-if (is_array($empresa)) {
-if (isset($empresa['endereco']) && !empty($empresa['endereco'])) {
-$empresaMorada = $empresa['endereco'];
-} elseif (isset($empresa['morada']) && !empty($empresa['morada'])) {
-$empresaMorada = $empresa['morada'];
-} elseif (isset($empresa['endereco_fiscal']) && !empty($empresa['endereco_fiscal'])) {
-$empresaMorada = $empresa['endereco_fiscal'];
-} elseif (isset($empresa['endereco_empresa']) && !empty($empresa['endereco_empresa'])) {
-$empresaMorada = $empresa['endereco_empresa'];
-}
-} elseif (is_object($empresa)) {
-if (!empty($empresa->endereco)) {
-$empresaMorada = $empresa->endereco;
-} elseif (!empty($empresa->morada)) {
-$empresaMorada = $empresa->morada;
-} elseif (!empty($empresa->endereco_fiscal)) {
-$empresaMorada = $empresa->endereco_fiscal;
-}
-}
-
-// Se ainda não encontrou, tenta buscar do banco de dados
-if ($empresaMorada === 'Endereço não registrado' && isset($empresa['id'])) {
-try {
-$empresaModel = \App\Models\Empresa::find($empresa['id']);
-if ($empresaModel) {
-if (!empty($empresaModel->endereco)) {
-$empresaMorada = $empresaModel->endereco;
-} elseif (!empty($empresaModel->morada)) {
-$empresaMorada = $empresaModel->morada;
-}
-}
-} catch (\Exception $e) {
-// Mantém o valor padrão
-}
-}
-
-// Força um valor para teste (remova depois se funcionar)
-// Se ainda não aparecer, descomente a linha abaixo para testar
-// $empresaMorada = "Rua Rainha Ginga, Nº 145, Ingombota, Luanda, Angola";
-
+$empresaMorada = $empresa['endereco'] ?? $empresa['morada'] ?? 'Endereço não registrado';
 $empresaTelefone = $empresa['telefone'] ?? 'Telefone não registrado';
 $empresaEmail = $empresa['email'] ?? 'Email não registrado';
 $empresaNome = $empresa['nome'] ?? 'EMPRESA';
@@ -59,111 +13,111 @@ $empresaNif = $empresa['nif'] ?? '0000000000';
 // Logo DINÂMICO
 $empresaLogo = asset('images/default-logo.png');
 if (!empty($empresa['logo_base64'])) {
-$empresaLogo = $empresa['logo_base64'];
+    $empresaLogo = $empresa['logo_base64'];
 } elseif (!empty($empresa['logo'])) {
-$logoPath = ltrim($empresa['logo'], '/');
-$logoPath = str_replace('public/', '', $logoPath);
-if (Storage::disk('public')->exists($logoPath)) {
-$logoConteudo = Storage::disk('public')->get($logoPath);
-$empresaLogo = 'data:image/png;base64,' . base64_encode($logoConteudo);
-} else {
-$empresaLogo = asset('storage/' . $logoPath);
-}
+    $logoPath = ltrim($empresa['logo'], '/');
+    $logoPath = str_replace('public/', '', $logoPath);
+    if (Storage::disk('public')->exists($logoPath)) {
+        $logoConteudo = Storage::disk('public')->get($logoPath);
+        $empresaLogo = 'data:image/png;base64,' . base64_encode($logoConteudo);
+    } else {
+        $empresaLogo = asset('storage/' . $logoPath);
+    }
 }
 
 $tiposDocumento = [
-'FT' => 'Fatura',
-'FR' => 'Fatura-Recibo',
-'FA' => 'Fat. Adiantamento',
-'NC' => 'Nota de Crédito',
-'ND' => 'Nota de Débito',
-'RC' => 'Recibo',
-'FRt' => 'Fat. Retificação'
+    'FT' => 'Factura',
+    'FR' => 'Factura-Recibo',
+    'FA' => 'Fact. Adiantamento',
+    'NC' => 'Nota de Crédito',
+    'ND' => 'Nota de Débito',
+    'RC' => 'Recibo',
+    'FRt' => 'Fact. Retificação'
 ];
 
 // Estado e cores
 $estadoClasse = match($documento->estado ?? '') {
-'emitido' => 'estado-emitido',
-'paga' => 'estado-paga',
-'parcialmente_paga' => 'estado-parcial',
-'cancelado' => 'estado-cancelado',
-'expirado' => 'estado-expirado',
-default => 'estado-emitido'
+    'emitido' => 'estado-emitido',
+    'paga' => 'estado-paga',
+    'parcialmente_paga' => 'estado-parcial',
+    'cancelado' => 'estado-cancelado',
+    'expirado' => 'estado-expirado',
+    default => 'estado-emitido'
 };
 
 $estadoLabel = match($documento->estado ?? '') {
-'emitido' => 'Emitido',
-'paga' => 'Pago',
-'parcialmente_paga' => 'Pag. Parcial',
-'cancelado' => 'Cancelado',
-'expirado' => 'Expirado',
-default => ($documento->estado ?? '')
+    'emitido' => 'Emitido',
+    'paga' => 'Pago',
+    'parcialmente_paga' => 'Pag. Parcial',
+    'cancelado' => 'Cancelado',
+    'expirado' => 'Expirado',
+    default => ($documento->estado ?? '')
 };
 
 $metodosPagamento = [
-'transferencia' => 'Transferência Bancária',
-'multibanco' => 'Multibanco',
-'dinheiro' => 'Dinheiro',
-'cheque' => 'Cheque',
-'cartao' => 'Cartão'
+    'transferencia' => 'Transferência Bancária',
+    'multibanco' => 'Multibanco',
+    'dinheiro' => 'Dinheiro',
+    'cheque' => 'Cheque',
+    'cartao' => 'Cartão'
 ];
 
 // ============================================================
-// PARA RECIBOS: Buscar dados da fatura de origem
+// PARA RECIBOS: Buscar dados da factura de origem
 // ============================================================
 $documentoOrigemInfo = null;
 $itensParaExibir = $itens;
 $docParaTotais = $documento;
 
 if ($documento->tipo_documento === 'RC') {
-// Tentar obter o documento de origem (fatura)
-if (isset($documentoOrigem) && $documentoOrigem) {
-$documentoOrigemInfo = $documentoOrigem;
-} elseif (isset($documento->documentoOrigem) && $documento->documentoOrigem) {
-$documentoOrigemInfo = $documento->documentoOrigem;
-} elseif ($documento->fatura_id) {
-$documentoOrigemInfo = \App\Models\Tenant\DocumentoFiscal::with(['itens', 'cliente', 'venda'])
-->find($documento->fatura_id);
+    // Tentar obter o documento de origem (factura)
+    if (isset($documentoOrigem) && $documentoOrigem) {
+        $documentoOrigemInfo = $documentoOrigem;
+    } elseif (isset($documento->documentoOrigem) && $documento->documentoOrigem) {
+        $documentoOrigemInfo = $documento->documentoOrigem;
+    } elseif ($documento->fatura_id) {
+        $documentoOrigemInfo = \App\Models\Tenant\DocumentoFiscal::with(['itens', 'cliente', 'venda'])
+            ->find($documento->fatura_id);
+    }
+    
+    // Se encontrou a factura de origem, usar os dados dela
+    if ($documentoOrigemInfo) {
+        $docParaTotais = $documentoOrigemInfo;
+        
+        // Usar os itens da factura de origem
+        if (isset($documentoOrigemInfo->itens) && count($documentoOrigemInfo->itens) > 0) {
+            $itensParaExibir = $documentoOrigemInfo->itens;
+        }
+        
+        // Se o cliente não veio no documento, buscar da factura
+        if (empty($cliente) || (isset($cliente['nome']) && $cliente['nome'] === 'Consumidor Final')) {
+            if ($documentoOrigemInfo->cliente_id && isset($documentoOrigemInfo->cliente)) {
+                $cliente = [
+                    'nome' => $documentoOrigemInfo->cliente->nome ?? $documentoOrigemInfo->cliente_nome ?? 'Consumidor Final',
+                    'nif' => $documentoOrigemInfo->cliente->nif ?? $documentoOrigemInfo->cliente_nif ?? null,
+                    'morada' => $documentoOrigemInfo->cliente->endereco ?? null,
+                ];
+            } elseif ($documentoOrigemInfo->cliente_nome) {
+                $cliente = [
+                    'nome' => $documentoOrigemInfo->cliente_nome,
+                    'nif' => $documentoOrigemInfo->cliente_nif ?? null,
+                ];
+            }
+        }
+    }
 }
 
-// Se encontrou a fatura de origem, usar os dados dela
-if ($documentoOrigemInfo) {
-$docParaTotais = $documentoOrigemInfo;
-
-// Usar os itens da fatura de origem
-if (isset($documentoOrigemInfo->itens) && count($documentoOrigemInfo->itens) > 0) {
-$itensParaExibir = $documentoOrigemInfo->itens;
-}
-
-// Se o cliente não veio no documento, buscar da fatura
-if (empty($cliente) || (isset($cliente['nome']) && $cliente['nome'] === 'Consumidor Final')) {
-if ($documentoOrigemInfo->cliente_id && isset($documentoOrigemInfo->cliente)) {
-$cliente = [
-'nome' => $documentoOrigemInfo->cliente->nome ?? $documentoOrigemInfo->cliente_nome ?? 'Consumidor Final',
-'nif' => $documentoOrigemInfo->cliente->nif ?? $documentoOrigemInfo->cliente_nif ?? null,
-'morada' => $documentoOrigemInfo->cliente->endereco ?? null,
-];
-} elseif ($documentoOrigemInfo->cliente_nome) {
-$cliente = [
-'nome' => $documentoOrigemInfo->cliente_nome,
-'nif' => $documentoOrigemInfo->cliente_nif ?? null,
-];
-}
-}
-}
-}
-
-// Tentar obter o desconto global da venda associada (usando docParaTotais que agora pode ser a fatura origem)
+// Tentar obter o desconto global da venda associada (usando docParaTotais que agora pode ser a factura origem)
 $descontoGlobal = 0;
 $troco = 0;
 
 if ($docParaTotais->venda_id && isset($docParaTotais->venda)) {
-$venda = $docParaTotais->venda;
-$descontoGlobal = (float) ($venda->desconto_global ?? 0);
-$troco = (float) ($documento->troco ?? 0);
+    $venda = $docParaTotais->venda;
+    $descontoGlobal = (float) ($venda->desconto_global ?? 0);
+    $troco = (float) ($documento->troco ?? 0);
 } else {
-$descontoGlobal = (float) ($docParaTotais->desconto_global ?? 0);
-$troco = (float) ($documento->troco ?? 0);
+    $descontoGlobal = (float) ($docParaTotais->desconto_global ?? 0);
+    $troco = (float) ($documento->troco ?? 0);
 }
 
 // Calcular percentual de desconto
@@ -171,9 +125,9 @@ $percentualDesconto = 0;
 $temDesconto = false;
 
 if ($descontoGlobal > 0 && ($docParaTotais->base_tributavel ?? 0) > 0) {
-$temDesconto = true;
-$subtotalBruto = $docParaTotais->base_tributavel + $descontoGlobal;
-$percentualDesconto = ($descontoGlobal / $subtotalBruto) * 100;
+    $temDesconto = true;
+    $subtotalBruto = $docParaTotais->base_tributavel + $descontoGlobal;
+    $percentualDesconto = ($descontoGlobal / $subtotalBruto) * 100;
 }
 
 $temTroco = $troco > 0;
@@ -359,8 +313,8 @@ $temTroco = $troco > 0;
         table.items {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 25px;
-            font-size: 17px;
+            margin-bottom: 20px;
+            font-size: 13px;
         }
 
         table.items thead th {
@@ -658,17 +612,9 @@ $temTroco = $troco > 0;
                         <div class="empresa-nome">{{ $empresaNome }}</div>
                         <div class="empresa-info">
                             NIF: {{ $empresaNif }}<br>
-                            @if(!empty($empresaEmail) && $empresaEmail !== 'Email não registrado')
-                            {{ $empresaEmail }}<br>
-                            @endif
-                            @if(!empty($empresaTelefone) && $empresaTelefone !== 'Telefone não registrado')
-                            Tel: {{ $empresaTelefone }}<br>
-                            @endif
-                            @if(!empty($empresaMorada))
-                            {{ $empresaMorada }}
-                            @else
-                            Endereço não registrado
-                            @endif
+                            @if(!empty($empresaEmail) && $empresaEmail !== 'Email não registrado'){{ $empresaEmail }}<br>@endif
+                            @if(!empty($empresaTelefone) && $empresaTelefone !== 'Telefone não registrado')Tel: {{ $empresaTelefone }}<br>@endif
+                            @if(!empty($empresaMorada) && $empresaMorada !== 'Endereço não registrado'){{ $empresaMorada }}@endif
                         </div>
                     </div>
                 </div>
@@ -680,7 +626,7 @@ $temTroco = $troco > 0;
             </div>
         </div>
 
-        {{-- ORIGEM (se for recibo, mostra a fatura de origem) --}}
+        {{-- ORIGEM (se for recibo, mostra a factura de origem) --}}
         @if($documento->tipo_documento === 'RC' && $documentoOrigemInfo)
         <div class="origem-box">
             <strong>Documento de Origem:</strong><br>
@@ -719,7 +665,7 @@ $temTroco = $troco > 0;
             </div>
         </div>
 
-        {{-- ITENS (para recibos, mostra os itens da fatura de origem) --}}
+        {{-- ITENS (para recibos, mostra os itens da factura de origem) --}}
         @if(!empty($itensParaExibir) && count($itensParaExibir) > 0)
         <table class="items">
             <thead>
@@ -766,7 +712,7 @@ $temTroco = $troco > 0;
         </div>
         @endif
 
-        {{-- TOTAIS (usa docParaTotais que para recibos é a fatura origem) --}}
+        {{-- TOTAIS (usa docParaTotais que para recibos é a factura origem) --}} 
         <div class="totals-wrapper clearfix">
             <div class="totals-spacer"></div>
             <div class="totals-box">
@@ -813,9 +759,7 @@ $temTroco = $troco > 0;
                         <td><strong>{{ number_format((float)($documento->total_liquido ?? 0), 2, ',', '.') }} Kz</strong></td>
                     </tr>
                     @if($documentoOrigemInfo && ($documentoOrigemInfo->total_liquido ?? 0) > ($documento->total_liquido ?? 0))
-                    <tr class="sep">
-                        <td colspan="2"></td>
-                    </tr>
+                    <tr class="sep"><td colspan="2"></td></tr>
                     <tr>
                         <td class="lbl">Valor Pendente:</td>
                         <td>{{ number_format((float)($documentoOrigemInfo->total_liquido - $documento->total_liquido), 2, ',', '.') }} Kz</td>
@@ -853,19 +797,8 @@ $temTroco = $troco > 0;
         {{-- RODAPÉ --}}
         <div class="footer-thanks">Obrigado pela preferência!</div>
         <div class="footer clearfix">
-            <div class="footer-left">
-                <strong>{{ $empresaNome }}</strong> &nbsp;|&nbsp; NIF: {{ $empresaNif }}<br>
-                @if(!empty($empresaMorada))
-                {{ $empresaMorada }} &nbsp;|&nbsp;
-                @else
-                Endereço não registrado &nbsp;|&nbsp;
-                @endif
-                Tel: {{ $empresaTelefone }}
-            </div>
-            <div class="footer-right">
-                Documento gerado em {{ now()->format('d/m/Y') }} às {{ now()->format('H:i') }}<br>
-                {{ $empresaEmail }}
-            </div>
+            <div class="footer-left"><strong>{{ $empresaNome }}</strong> &nbsp;|&nbsp; NIF: {{ $empresaNif }}<br>{{ $empresaMorada }} &nbsp;|&nbsp; Tel: {{ $empresaTelefone }}</div>
+            <div class="footer-right">Documento gerado em {{ now()->format('d/m/Y') }} às {{ now()->format('H:i') }}<br>{{ $empresaEmail }}</div>
         </div>
 
     </div>
