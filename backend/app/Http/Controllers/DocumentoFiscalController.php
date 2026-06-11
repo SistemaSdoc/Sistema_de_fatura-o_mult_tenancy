@@ -28,6 +28,9 @@ use Illuminate\Support\Facades\Auth;
  * e devolver resposta JSON/PDF/Excel.
  * Toda a lógica de negócio (assinatura RSA, QR Code, IVA, SAF-T) está no
  * DocumentoFiscalService.
+ * 
+ * ALTERAÇÃO: Proformas (FP) NÃO são consideradas em valores de faturação
+ * ou pendências financeiras, pois não representam vendas efetivas.
  */
 class DocumentoFiscalController extends Controller
 {
@@ -220,89 +223,6 @@ class DocumentoFiscalController extends Controller
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
             return $this->erroInterno('Erro ao gerar recibo', $e);
-        }
-    }
-
-    /* =====================================================================
-     | CONVERSÃO DE PROFORMA EM FATURA (NOVO ENDPOINT)
-     | ================================================================== */
-
-    /**
-     * Converte uma Proforma (FP) em Fatura-Recibo (FR) ou Fatura (FT)
-     * Este é o fluxo correto para transformar uma proforma em documento fiscal válido
-     */
-    public function converterProforma(Request $request, string $proformaId): JsonResponse
-    {
-        try {
-            $proforma = $this->documentoService->buscarDocumento($proformaId);
-
-            if ($proforma->tipo_documento !== 'FP') {
-                return response()->json([
-                    'success' => false,
-                    'message' => "Este endpoint só pode ser usado para Proformas (FP). Tipo atual: {$proforma->tipo_documento}",
-                ], 422);
-            }
-
-            if ($proforma->estado === 'cancelado') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Não é possível converter uma Proforma cancelada.',
-                ], 422);
-            }
-
-            $dados = $request->validate([
-                'tipo_destino'       => 'required|in:FR,FT',
-                'metodo_pagamento'   => 'required_if:tipo_destino,FR|in:transferencia,multibanco,dinheiro,cheque,cartao',
-                'valor_pago'         => 'nullable|numeric|min:0.01|max:' . $proforma->total_liquido,
-                'data_pagamento'     => 'nullable|date',
-                'referencia_pagamento' => 'nullable|string|max:100',
-            ]);
-
-            $dadosPagamento = [];
-            if ($dados['tipo_destino'] === 'FR') {
-                $dadosPagamento = [
-                    'metodo_pagamento' => $dados['metodo_pagamento'],
-                    'valor'            => $dados['valor_pago'] ?? $proforma->total_liquido,
-                    'data_pagamento'   => $dados['data_pagamento'] ?? now()->toDateString(),
-                    'referencia'       => $dados['referencia_pagamento'] ?? null,
-                ];
-            } elseif ($dados['tipo_destino'] === 'FT' && !empty($dados['valor_pago'])) {
-                $dadosPagamento = [
-                    'metodo_pagamento' => $dados['metodo_pagamento'] ?? 'dinheiro',
-                    'valor'            => $dados['valor_pago'],
-                    'data_pagamento'   => $dados['data_pagamento'] ?? now()->toDateString(),
-                    'referencia'       => $dados['referencia_pagamento'] ?? null,
-                ];
-            }
-
-            $fatura = $this->documentoService->converterProformaEmFatura(
-                $proforma,
-                $dadosPagamento,
-                $dados['tipo_destino']
-            );
-
-            $mensagem = $dados['tipo_destino'] === 'FR' 
-                ? 'Proforma convertida em Fatura-Recibo com sucesso. Stock movimentado.'
-                : 'Proforma convertida em Fatura com sucesso. Stock movimentado.';
-
-            return response()->json([
-                'success' => true,
-                'message' => $mensagem,
-                'data'    => [
-                    'proforma_original' => $proforma,
-                    'documento_emitido' => $fatura,
-                ],
-            ], 201);
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
-            return response()->json(['success' => false, 'message' => 'Proforma não encontrada'], 404);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json(['success' => false, 'message' => 'Erro de validação', 'errors' => $e->errors()], 422);
-        } catch (\InvalidArgumentException $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
-        } catch (\RuntimeException $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
-        } catch (\Exception $e) {
-            return $this->erroInterno('Erro ao converter Proforma', $e);
         }
     }
 
@@ -549,6 +469,11 @@ class DocumentoFiscalController extends Controller
      | DASHBOARD
      | ================================================================== */
 
+    /**
+     * Dashboard de documentos fiscais
+     * ALTERAÇÃO: Proformas (FP) NÃO são incluídas nos valores de faturação
+     * para não distorcer as métricas financeiras.
+     */
     public function dashboard(): JsonResponse
     {
         try {
@@ -582,6 +507,10 @@ class DocumentoFiscalController extends Controller
         }
     }
 
+    /**
+     * Estatísticas de pagamentos
+     * ALTERAÇÃO: Proformas (FP) NÃO são consideradas em valores pendentes/atrasados
+     */
     public function estatisticasPagamentos(): JsonResponse
     {
         try {
@@ -820,6 +749,7 @@ class DocumentoFiscalController extends Controller
                 'success' => false,
                 'message' => 'Erro ao gerar PDF: ' . $e->getMessage()
             ], 500);
+            
         }
     }
 
@@ -880,6 +810,52 @@ class DocumentoFiscalController extends Controller
         } catch (\Exception $e) {
             Log::error('Erro ao exportar Excel', ['error' => $e->getMessage()]);
             abort(500, 'Erro ao exportar Excel: ' . $e->getMessage());
+        }
+    }
+
+    /* =====================================================================
+     | CONVERSÃO DE PROFORMA PARA FATURA/RECIBO
+     | ================================================================== */
+
+    /**
+     * Converte uma Proforma (FP) em Fatura (FT) ou Fatura-Recibo (FR)
+     * Este é o método correto para transformar proformas em documentos de venda efetiva
+     */
+    public function converterProforma(Request $request, string $proformaId): JsonResponse
+    {
+        try {
+            $proforma = $this->documentoService->buscarDocumento($proformaId);
+
+            if ($proforma->tipo_documento !== 'FP') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Este documento não é uma Proforma (FP). Tipo atual: ' . $proforma->tipo_documento,
+                ], 422);
+            }
+
+            $dados = $request->validate([
+                'tipo_destino' => 'required|in:FT,FR',
+                'dados_pagamento' => 'required_if:tipo_destino,FR|nullable|array',
+                'dados_pagamento.metodo' => 'required_if:tipo_destino,FR|in:transferencia,multibanco,dinheiro,cheque,cartao',
+                'dados_pagamento.valor' => 'required_if:tipo_destino,FR|numeric|min:0.01|max:' . $proforma->total_liquido,
+                'data_vencimento' => 'nullable|date|after_or_equal:today',
+            ]);
+
+            $documento = $this->documentoService->converterProforma($proforma, $dados);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Proforma convertida com sucesso para ' . ($dados['tipo_destino'] === 'FR' ? 'Fatura-Recibo' : 'Fatura'),
+                'data' => $documento,
+            ], 201);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'message' => 'Proforma não encontrada'], 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'message' => 'Erro de validação', 'errors' => $e->errors()], 422);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            return $this->erroInterno('Erro ao converter proforma', $e);
         }
     }
 

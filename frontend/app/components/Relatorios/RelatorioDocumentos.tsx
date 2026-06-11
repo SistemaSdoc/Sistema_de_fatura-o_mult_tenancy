@@ -65,7 +65,7 @@ export function RelatorioDocumentosComponent({
   }, [relatorioProformas?.proformas]);
 
   // Tooltip formatador
-  const tooltipFormatter = (value: number, name: string) => [formatarKwanza(value), name];
+  const tooltipFormatter = (value: any, name: any) => [formatarKwanza(Number(value || 0)), name];
 
   if (isLoading) return <CarregandoLinha colors={colors} />;
   if (!relatorioDocumentos || !relatorioProformas) return <Vazio colors={colors} />;

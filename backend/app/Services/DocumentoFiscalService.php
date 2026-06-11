@@ -28,6 +28,11 @@ use Illuminate\Support\Str;
  *  - Exportação SAF-T (AO) via SaftService
  *  - Documentos rectificativos com referência obrigatória ao original
  *  - Cancelamento lógico — dados originais e hash preservados
+ * 
+ * REGRA SEMÂNTICA IMPORTANTE:
+ *  - Proforma (FP) NÃO é uma venda, NÃO é uma dívida, NÃO é "pendente de pagamento".
+ *    Estado 'emitido' em FP significa "orçamento a aguardar conversão/aceitação".
+ *  - Pendência financeira aplica-se APENAS a FT (Fatura) e FA (Adiantamento).
  */
 class DocumentoFiscalService
 {
@@ -71,7 +76,7 @@ class DocumentoFiscalService
             'exige_cliente'         => false,
             'aceita_pagamento'      => true,
             'pode_ter_adiantamento' => true,
-            'requer_assinatura'     => true,   // AGT: obrigatório assinar
+            'requer_assinatura'     => true,
         ],
         'FR' => [
             'nome'                  => 'Fatura-Recibo',
@@ -86,14 +91,14 @@ class DocumentoFiscalService
         ],
         'FP' => [
             'nome'                  => 'Fatura Proforma',
-            'afeta_stock'           => false,
-            'eh_venda'              => false,
-            'gera_recibo'           => true,
+            'afeta_stock'           => false,      // NÃO afeta stock (é apenas orçamento)
+            'eh_venda'              => false,      // NÃO é uma venda real
+            'gera_recibo'           => true,       // Pode receber sinal/adiantamento
             'estado_inicial'        => 'emitido',
             'exige_cliente'         => false,
-            'aceita_pagamento'      => false,
+            'aceita_pagamento'      => true,       // Pode receber pagamento (sinal)
             'pode_ter_adiantamento' => false,
-            'requer_assinatura'     => false,  // Proforma não é documento fiscal definitivo
+            'requer_assinatura'     => false,
         ],
         'FA' => [
             'nome'                  => 'Fatura de Adiantamento',
@@ -137,7 +142,7 @@ class DocumentoFiscalService
             'exige_cliente'         => false,
             'aceita_pagamento'      => false,
             'pode_ter_adiantamento' => false,
-            'requer_assinatura'     => false,  // AGT: recibos isentos de assinatura
+            'requer_assinatura'     => false,
         ],
         'FRt' => [
             'nome'                  => 'Fatura de Retificação',
@@ -156,14 +161,6 @@ class DocumentoFiscalService
      | EMISSÃO DE DOCUMENTOS
      | ================================================================== */
 
-    /**
-     * Emite qualquer tipo de documento fiscal.
-     *
-     * AGT: O documento só é considerado válido após:
-     *  1. Assinatura RSA (hash_fiscal + rsa_assinatura)
-     *  2. Geração do QR Code
-     *  3. Ambos gravados na BD antes de qualquer impressão
-     */
     public function emitirDocumento(array $dados): DocumentoFiscal
     {
         $tipo = $dados['tipo_documento'];
@@ -188,10 +185,8 @@ class DocumentoFiscalService
 
             $this->validarDadosPorTipo($dados, $tipo, $config);
 
-            // Numeração com lock pessimista (série exclusiva por tipo, sem gaps)
             [$numero, $numeroDocumento, $serieFiscal] = $this->gerarNumeroDocumento($tipo);
 
-            // CORREÇÃO: Usar fuso horário de Angola (UTC+1)
             $agoraAngola = Carbon::now('Africa/Luanda');
             $dataEmissao = $agoraAngola->toDateString();
             $horaEmissao = $agoraAngola->toTimeString();
@@ -218,8 +213,6 @@ class DocumentoFiscalService
                 'total_liquido'       => $totais['liquido'],
                 'estado'              => $config['estado_inicial'],
                 'motivo'              => $dados['motivo'] ?? null,
-                // AGT: campos de assinatura inicializados a null —
-                // preenchidos depois da criação, antes de qualquer impressão
                 'hash_fiscal'         => null,
                 'rsa_assinatura'      => null,
                 'rsa_versao_chave'    => null,
@@ -247,19 +240,14 @@ class DocumentoFiscalService
 
             $this->executarAcoesPosCriacao($documento, $dados, $tipo);
 
-            // ── AGT: Assinatura e QR Code ──────────────────────────────
             if ($config['requer_assinatura']) {
                 $this->assinarDocumento($documento);
             } else {
-                // Documentos não sujeitos a assinatura (RC, FP) recebem
-                // apenas o hash simples para integridade interna
                 $documento->update([
                     'hash_fiscal' => $this->gerarHashSimples($documento),
                 ]);
             }
-            // ── Fim assinatura ─────────────────────────────────────────
 
-            // FT com pagamento imediato → gerar recibo automaticamente
             if ($tipo === 'FT' && ! empty($dados['dados_pagamento'])) {
                 $this->gerarRecibo($documento, [
                     'valor'            => $dados['dados_pagamento']['valor'],
@@ -269,7 +257,6 @@ class DocumentoFiscalService
                 ]);
             }
 
-            // FR — registar método de pagamento no próprio documento
             if ($tipo === 'FR' && ! empty($dados['dados_pagamento'])) {
                 $documento->update([
                     'metodo_pagamento'     => $dados['dados_pagamento']['metodo'],
@@ -293,8 +280,10 @@ class DocumentoFiscalService
      | ================================================================== */
 
     /**
-     * Gera um recibo (RC) para FT, FA ou FP.
-     * Recibos são isentos de assinatura RSA pela AGT.
+     * Gera um recibo para um documento.
+     * CORRIGIDO: FP (Proforma) agora pode receber recibos (sinal/adiantamento),
+     * mas NÃO altera o estado da Proforma para "paga" - continua "emitido"
+     * pois aguarda conversão para FT/FR.
      */
     public function gerarRecibo(DocumentoFiscal $documentoOrigem, array $dados): DocumentoFiscal
     {
@@ -305,19 +294,24 @@ class DocumentoFiscalService
         }
 
         if (in_array($documentoOrigem->estado, [
-            DocumentoFiscal::ESTADO_PAGA,
             DocumentoFiscal::ESTADO_CANCELADO,
         ])) {
             throw new \InvalidArgumentException(
-                "Documento já pago ou cancelado. Estado: {$documentoOrigem->estado}"
+                "Documento cancelado. Não é possível gerar recibo."
+            );
+        }
+
+        if ($documentoOrigem->tipo_documento === 'FT' && $documentoOrigem->estado === DocumentoFiscal::ESTADO_PAGA) {
+            throw new \InvalidArgumentException(
+                "Fatura já está totalmente paga. Estado: {$documentoOrigem->estado}"
             );
         }
 
         return DB::transaction(function () use ($documentoOrigem, $dados) {
             $valorPago = (float) ($dados['valor'] ?? 0);
 
-            // === Cálculo correto do valor pendente ===
             if ($documentoOrigem->tipo_documento === 'FP') {
+                // Proforma: permite pagamento parcial (sinal) sem alterar estado
                 $valorPendente = (float) $documentoOrigem->total_liquido;
             } else {
                 $valorPendente = $this->calcularValorPendente($documentoOrigem);
@@ -362,7 +356,6 @@ class DocumentoFiscalService
                 'hash_anterior'         => null,
             ];
 
-            // Herdar dados do cliente
             if ($documentoOrigem->cliente_id) {
                 $reciboData['cliente_id'] = $documentoOrigem->cliente_id;
             } elseif ($documentoOrigem->cliente_nome) {
@@ -372,10 +365,11 @@ class DocumentoFiscalService
 
             $recibo = DocumentoFiscal::create($reciboData);
 
-            // Atualizar estado do documento de origem
-            $this->actualizarEstadoAposPagamento($documentoOrigem, $valorPago);
+            // CORRIGIDO: Proformas NÃO mudam de estado ao receber pagamento
+            if ($documentoOrigem->tipo_documento !== 'FP') {
+                $this->actualizarEstadoAposPagamento($documentoOrigem, $valorPago);
+            }
 
-            // Gerar hash simples (recibos não precisam de RSA)
             $recibo->update(['hash_fiscal' => $this->gerarHashSimples($recibo)]);
 
             Log::info('Recibo gerado com sucesso', [
@@ -394,10 +388,6 @@ class DocumentoFiscalService
      | NOTA DE CRÉDITO
      | ================================================================== */
 
-    /**
-     * Cria uma NC vinculada a FT ou FR.
-     * AGT: NC deve identificar o(s) documento(s) rectificado(s) (campo References).
-     */
     public function criarNotaCredito(DocumentoFiscal $documentoOrigem, array $dados): DocumentoFiscal
     {
         if (! in_array($documentoOrigem->tipo_documento, ['FT', 'FR'])) {
@@ -573,9 +563,6 @@ class DocumentoFiscalService
 
     /* =====================================================================
      | CANCELAMENTO
-     | AGT: cancelamento é LÓGICO — dados originais e hash_fiscal são
-     |      imutáveis após emissão. Apenas o campo 'estado' e os metadados
-     |      de cancelamento são actualizados.
      | ================================================================== */
 
     public function cancelarDocumento(DocumentoFiscal $documento, string $motivo): DocumentoFiscal
@@ -612,17 +599,13 @@ class DocumentoFiscalService
                 }
             }
 
-            // CORREÇÃO: Usar fuso horário de Angola para data de cancelamento
             $agoraAngola = Carbon::now('Africa/Luanda');
 
-            // AGT: NUNCA sobrescrever hash_fiscal, rsa_assinatura, rsa_versao_chave
-            // Apenas actualizar estado e metadados de cancelamento
             $documento->update([
                 'estado'               => DocumentoFiscal::ESTADO_CANCELADO,
                 'motivo_cancelamento'  => $motivo,
                 'data_cancelamento'    => $agoraAngola,
                 'user_cancelamento_id' => auth('tenant')->id(),
-                // hash_fiscal, rsa_assinatura, rsa_versao_chave, qr_code — NÃO TOCAR
             ]);
 
             Log::info('Documento cancelado (cancelamento lógico — hash preservado)', [
@@ -675,6 +658,8 @@ class DocumentoFiscalService
             $query->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FRt']);
         }
 
+        // CORRIGIDO: "pendentes" = apenas FT com pagamento em aberto.
+        // FP nunca é "pendente de pagamento" — é um orçamento/proforma.
         if (! empty($filtros['pendentes'])) {
             $query->where('tipo_documento', 'FT')
                 ->whereIn('estado', [
@@ -683,17 +668,19 @@ class DocumentoFiscalService
                 ]);
         }
 
+        // CORRIGIDO: adiantamentos pendentes = FA com pagamento em aberto.
         if (! empty($filtros['adiantamentos_pendentes'])) {
             $query->where('tipo_documento', 'FA')
                 ->where('estado', DocumentoFiscal::ESTADO_EMITIDO);
         }
 
+        // CORRIGIDO: proformas_pendentes mantém o nome mas significa "em aberto/por converter",
+        // nunca misturado com pendentes de pagamento.
         if (! empty($filtros['proformas_pendentes'])) {
             $query->where('tipo_documento', 'FP')
                 ->where('estado', DocumentoFiscal::ESTADO_EMITIDO);
         }
 
-        // ORDENAÇÃO: Mais recente para mais antigo (data e hora)
         return $query->orderBy('data_emissao', 'desc')
                      ->orderBy('hora_emissao', 'desc')
                      ->orderBy('numero', 'desc')
@@ -752,7 +739,7 @@ class DocumentoFiscalService
     public function processarAdiantamentosExpirados(): int
     {
         $agoraAngola = Carbon::now('Africa/Luanda');
-        
+
         $expirados = DocumentoFiscal::where('tipo_documento', 'FA')
             ->where('estado', DocumentoFiscal::ESTADO_EMITIDO)
             ->where('data_vencimento', '<', $agoraAngola->toDateString())
@@ -778,12 +765,21 @@ class DocumentoFiscalService
      | DASHBOARD
      | ================================================================== */
 
+    /**
+     * Dados para o dashboard principal.
+     *
+     * REGRA SEMÂNTICA (crítica):
+     *  - "pendente de pagamento" aplica-se APENAS a FT e FA.
+     *  - FP (Proforma) com estado 'emitido' significa "aguarda conversão em FT/FR",
+     *    NÃO é uma dívida nem um pagamento em aberto. Os campos são separados
+     *    explicitamente para evitar que o frontend os misture.
+     */
     public function dadosDashboard(): array
     {
-        // CORREÇÃO: Usar fuso horário de Angola
         $hoje      = Carbon::now('Africa/Luanda');
         $inicioMes = $hoje->copy()->startOfMonth();
 
+        // ── Faturas pendentes de pagamento (apenas FT) ────────────────────
         $faturasPendentes = DocumentoFiscal::where('tipo_documento', 'FT')
             ->whereIn('estado', [
                 DocumentoFiscal::ESTADO_EMITIDO,
@@ -801,15 +797,20 @@ class DocumentoFiscalService
                 ->whereBetween('data_emissao', [$inicioMes->toDateString(), $hoje->toDateString()])
                 ->count(),
 
+            // ── Pendentes de PAGAMENTO (FT e FA apenas) ───────────────────
             'faturas_pendentes' => $faturasPendentes->count(),
 
             'total_pendente_cobranca' => round($totalPendenteCobranca, 2),
 
-            'adiantamentos_pendentes' => DocumentoFiscal::where('tipo_documento', 'FA')
+            // CORRIGIDO: FA pendente de pagamento (separado de proformas).
+            'adiantamentos_pendentes_pagamento' => DocumentoFiscal::where('tipo_documento', 'FA')
                 ->where('estado', DocumentoFiscal::ESTADO_EMITIDO)
                 ->count(),
 
-            'proformas_pendentes' => DocumentoFiscal::where('tipo_documento', 'FP')
+            // ── Proformas em aberto (NÃO são dívidas, NÃO são pagamentos) ─
+            // Estado 'emitido' em FP = "orçamento ainda não convertido/aceite".
+            // Nunca incluir este contador em totais de cobrança.
+            'proformas_em_aberto' => DocumentoFiscal::where('tipo_documento', 'FP')
                 ->where('estado', DocumentoFiscal::ESTADO_EMITIDO)
                 ->count(),
 
@@ -845,6 +846,7 @@ class DocumentoFiscalService
                 ->where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO)
                 ->sum('total_liquido');
 
+            // CORRIGIDO: pendente de cobrança = apenas FT e FA, nunca FP.
             $totalPendente = DocumentoFiscal::whereIn('tipo_documento', ['FT', 'FA'])
                 ->whereIn('estado', [
                     DocumentoFiscal::ESTADO_EMITIDO,
@@ -867,7 +869,6 @@ class DocumentoFiscalService
 
     public function estatisticasPagamentos(): array
     {
-        // CORREÇÃO: Usar fuso horário de Angola
         $hoje      = Carbon::now('Africa/Luanda');
         $inicioMes = $hoje->copy()->startOfMonth();
         $inicioAno = $hoje->copy()->startOfYear();
@@ -908,11 +909,19 @@ class DocumentoFiscalService
         ];
     }
 
+    /**
+     * Alertas de documentos que requerem atenção.
+     *
+     * CORRIGIDO: FP aparece em "proformas_em_aberto" com semântica própria
+     * ("aguarda conversão"), nunca misturada com alertas de cobrança.
+     * Alertas de cobrança (vencidos, parcialmente pagos) aplicam-se
+     * exclusivamente a FT e FA.
+     */
     public function alertasPendentes(): array
     {
-        // CORREÇÃO: Usar fuso horário de Angola
         $hoje = Carbon::now('Africa/Luanda');
 
+        // ── Adiantamentos FA vencidos (prazo expirou, ainda não pagos) ────
         $adiantamentosVencidos = DocumentoFiscal::where('tipo_documento', 'FA')
             ->where('estado', DocumentoFiscal::ESTADO_EMITIDO)
             ->whereNotNull('data_vencimento')
@@ -922,6 +931,7 @@ class DocumentoFiscalService
             ->limit(10)
             ->get();
 
+        // ── Faturas FT com adiantamentos FA ainda por utilizar ────────────
         $faturasComAdiantamentosPendentes = DocumentoFiscal::where('tipo_documento', 'FT')
             ->whereIn('estado', [
                 DocumentoFiscal::ESTADO_EMITIDO,
@@ -943,7 +953,11 @@ class DocumentoFiscalService
             ->limit(10)
             ->get();
 
-        $proformasPendentes = DocumentoFiscal::where('tipo_documento', 'FP')
+        // ── Proformas FP em aberto há mais de 7 dias (aguardam conversão) ─
+        // CORRIGIDO: Este alerta tem semântica de "orçamento esquecido",
+        // NÃO de "pagamento em falta". O nome do campo é "proformas_em_aberto"
+        // para evitar ambiguidade com alertas de cobrança.
+        $proformasEmAberto = DocumentoFiscal::where('tipo_documento', 'FP')
             ->where('estado', DocumentoFiscal::ESTADO_EMITIDO)
             ->where('data_emissao', '<', $hoje->copy()->subDays(7)->toDateString())
             ->with('cliente')
@@ -951,6 +965,7 @@ class DocumentoFiscalService
             ->limit(10)
             ->get();
 
+        // ── Faturas FT vencidas (prazo de pagamento ultrapassado) ─────────
         $faturasVencidas = DocumentoFiscal::where('tipo_documento', 'FT')
             ->whereIn('estado', [
                 DocumentoFiscal::ESTADO_EMITIDO,
@@ -972,6 +987,7 @@ class DocumentoFiscalService
                     ->count(),
                 'items' => $adiantamentosVencidos,
             ],
+
             'faturas_com_adiantamentos_pendentes' => [
                 'total' => DocumentoFiscal::where('tipo_documento', 'FT')
                     ->whereIn('estado', [
@@ -987,13 +1003,17 @@ class DocumentoFiscalService
                     ->count(),
                 'items' => $faturasComAdiantamentosPendentes,
             ],
-            'proformas_pendentes' => [
+
+            // CORRIGIDO: renomeado de "proformas_pendentes" para "proformas_em_aberto"
+            // para deixar claro que NÃO é um alerta de cobrança.
+            'proformas_em_aberto' => [
                 'total' => DocumentoFiscal::where('tipo_documento', 'FP')
                     ->where('estado', DocumentoFiscal::ESTADO_EMITIDO)
                     ->where('data_emissao', '<', $hoje->copy()->subDays(7)->toDateString())
                     ->count(),
-                'items' => $proformasPendentes,
+                'items' => $proformasEmAberto,
             ],
+
             'faturas_vencidas' => [
                 'total' => DocumentoFiscal::where('tipo_documento', 'FT')
                     ->whereIn('estado', [
@@ -1040,7 +1060,6 @@ class DocumentoFiscalService
                 'nome' => $documento->nome_cliente,
                 'nif'  => $documento->nif_cliente,
             ],
-            // AGT: QR Code pré-gerado a incluir no PDF
             'qr_code'   => $documento->qr_code,
         ];
     }
@@ -1074,7 +1093,7 @@ class DocumentoFiscalService
             'Estado',
             'Método Pagamento',
             'Vencimento',
-            'Hash Fiscal',      // AGT: campo de auditoria
+            'Hash Fiscal',
         ];
 
         $linhas = $documentos->map(fn ($doc) => [
@@ -1105,25 +1124,10 @@ class DocumentoFiscalService
      | MÉTODOS PRIVADOS — ASSINATURA RSA (AGT)
      | ================================================================== */
 
-    /**
-     * Assina o documento com RSA e gera o QR Code.
-     *
-     * AGT exige:
-     *  - Algoritmo RSA com chave privada do fabricante
-     *  - Versão da chave gravada com cada documento
-     *  - Assinatura guardada em BD não encriptada
-     *  - Hash encadeado: cada documento referencia o hash do anterior da mesma série
-     *  - QR Code gerado após assinatura
-     *
-     * Configuração necessária em config/agt.php:
-     *   'rsa_private_key_path' => storage_path('keys/agt_private.pem'),
-     *   'rsa_key_version'      => 1,
-     *   'numero_certificado'   => 'AGT-CERT-XXXX',
-     */
     private function assinarDocumento(DocumentoFiscal $documento): void
     {
-        $chavePrivadaPath = config('agt.rsa_private_key_path');
-        $versaoChave      = (int) config('agt.rsa_key_version', 1);
+        $chavePrivadaPath  = config('agt.rsa_private_key_path');
+        $versaoChave       = (int) config('agt.rsa_key_version', 1);
         $numeroCertificado = config('agt.numero_certificado', '');
 
         if (! $chavePrivadaPath || ! file_exists($chavePrivadaPath)) {
@@ -1142,7 +1146,6 @@ class DocumentoFiscalService
             throw new \RuntimeException('Erro ao carregar chave privada RSA: ' . openssl_error_string());
         }
 
-        // ── Hash encadeado: buscar hash do documento anterior da mesma série ──
         $hashAnterior = DocumentoFiscal::where('serie', $documento->serie)
             ->where('tipo_documento', $documento->tipo_documento)
             ->where('numero', '<', $documento->numero)
@@ -1150,8 +1153,6 @@ class DocumentoFiscalService
             ->orderByDesc('numero')
             ->value('hash_fiscal') ?? '0';
 
-        // ── Dados para assinatura (conforme estrutura AGT) ────────────────
-        // Campos obrigatórios: data_emissao;hora_emissao;numero_documento;total_liquido;hash_anterior
         $dadosAssinatura = implode(';', [
             $documento->data_emissao,
             $documento->hora_emissao,
@@ -1160,7 +1161,6 @@ class DocumentoFiscalService
             $hashAnterior,
         ]);
 
-        // ── Assinar com RSA ───────────────────────────────────────────────
         $assinatura = '';
         $resultado  = openssl_sign($dadosAssinatura, $assinatura, $chavePrivada, OPENSSL_ALGO_SHA256);
 
@@ -1168,13 +1168,9 @@ class DocumentoFiscalService
             throw new \RuntimeException('Erro ao gerar assinatura RSA: ' . openssl_error_string());
         }
 
-        // ── Hash fiscal = SHA-256 dos dados de assinatura ─────────────────
-        $hashFiscal = hash('sha256', $dadosAssinatura);
-
-        // ── QR Code (conteúdo conforme DP 71/25) ──────────────────────────
+        $hashFiscal     = hash('sha256', $dadosAssinatura);
         $qrCodeConteudo = $this->gerarConteudoQrCode($documento, $hashFiscal, $numeroCertificado);
 
-        // ── Actualizar documento (campos imutáveis após este ponto) ───────
         $documento->update([
             'hash_fiscal'      => $hashFiscal,
             'rsa_assinatura'   => base64_encode($assinatura),
@@ -1191,25 +1187,16 @@ class DocumentoFiscalService
         ]);
     }
 
-    /**
-     * Gera o conteúdo textual do QR Code conforme DP 71/25.
-     *
-     * Formato: NIF_EMITENTE*NIF_CLIENTE*DATA*TOTAL_SEM_IVA*TOTAL_IVA*TOTAL_COM_IVA*HASH4*CERT
-     *
-     * O QR Code deve ser renderizado em imagem pelo serviço de PDF/impressão
-     * usando a biblioteca endroid/qr-code ou similar.
-     */
     private function gerarConteudoQrCode(
         DocumentoFiscal $documento,
         string $hashFiscal,
         string $numeroCertificado
     ): string {
-        $empresa   = Empresa::firstOrFail();
+        $empresa    = Empresa::firstOrFail();
         $nifCliente = $documento->cliente?->nif
             ?? $documento->cliente_nif
-            ?? 'CF'; // CF = Consumidor Final
+            ?? 'CF';
 
-        // Os 4 primeiros caracteres do hash (código de 4 dígitos AGT)
         $hash4 = strtoupper(substr($hashFiscal, 0, 4));
 
         return implode('*', [
@@ -1224,10 +1211,6 @@ class DocumentoFiscalService
         ]);
     }
 
-    /**
-     * Hash simples (sem RSA) para documentos isentos de assinatura (RC, FP).
-     * Mantém integridade interna sem violar a especificação AGT.
-     */
     private function gerarHashSimples(DocumentoFiscal $documento): string
     {
         $dados = implode('|', [
@@ -1246,21 +1229,6 @@ class DocumentoFiscalService
      | MÉTODOS PRIVADOS — PROCESSAMENTO DE ITENS (IVA)
      | ================================================================== */
 
-    /**
-     * Processa os itens calculando base tributável, IVA e retenção.
-     *
-     * Taxas IVA Angola (Lei 17/19 — Código do IVA):
-     *  - 14% taxa geral
-     *  -  5% taxa reduzida (bens essenciais — Anexo I)
-     *  -  0% taxa zero (exportações, zona franca)
-     *  - Isenção total (com código de motivo obrigatório no SAF-T)
-     *
-     * Retenção na fonte:
-     *  - Configurável por produto/serviço (campo 'taxa_retencao' no produto)
-     *  - Default 6,5% para serviços gerais
-     *  - Pode ser 2%, 6,5%, 10%, 15% conforme natureza do serviço
-     *  - Aplica-se apenas a serviços; produtos físicos não têm retenção
-     */
     private function processarItens(array $itens, bool $aplicaIva, string $regime): array
     {
         $totalBase     = 0.0;
@@ -1287,14 +1255,12 @@ class DocumentoFiscalService
             $desconto       = min($desconto, $valorBruto);
             $baseTributavel = max($valorBruto - $desconto, 0.0);
 
-            // ── Determinar taxa de IVA ─────────────────────────────────
-            $taxaIva         = 0.0;
-            $codigoIsencao   = null;
-            $motivoIsencao   = null;
+            $taxaIva       = 0.0;
+            $codigoIsencao = null;
+            $motivoIsencao = null;
 
             if ($aplicaIva) {
                 if ($regime === 'geral') {
-                    // Taxa explícita no item > taxa do produto > taxa geral 14%
                     $taxaExplicita = $item['taxa_iva'] ?? $produto?->taxa_iva ?? null;
 
                     if ($taxaExplicita !== null) {
@@ -1303,7 +1269,6 @@ class DocumentoFiscalService
                         $taxaIva = self::IVA_GERAL;
                     }
 
-                    // Validar que a taxa é uma das taxas legais angolanas
                     if (! in_array($taxaIva, [self::IVA_GERAL, self::IVA_REDUZIDA, self::IVA_ZERO])) {
                         Log::warning('[AGT] Taxa de IVA fora das taxas legais angolanas', [
                             'taxa_usada' => $taxaIva,
@@ -1311,37 +1276,30 @@ class DocumentoFiscalService
                         ]);
                     }
 
-                    // Se taxa = 0, verificar se há código de isenção
                     if ($taxaIva === 0.0 || $taxaIva === self::IVA_ZERO) {
                         $codigoIsencao = $item['codigo_isencao'] ?? $produto?->codigo_isencao ?? 'M00';
                         $motivoIsencao = self::MOTIVOS_ISENCAO[$codigoIsencao] ?? 'Isento';
                     }
 
                 } elseif ($regime === 'simplificado') {
-                    // Regime simplificado: isento de IVA (contribuintes abaixo do limiar)
                     $taxaIva       = self::IVA_ZERO;
-                    $codigoIsencao = 'M01'; // Artigo 12.º — Regime especial de isenção
+                    $codigoIsencao = 'M01';
                     $motivoIsencao = self::MOTIVOS_ISENCAO['M01'];
                 }
             } else {
-                // Empresa não sujeita a IVA
                 $codigoIsencao = $item['codigo_isencao'] ?? 'M06';
                 $motivoIsencao = self::MOTIVOS_ISENCAO[$codigoIsencao];
             }
 
             $valorIva = round($baseTributavel * $taxaIva / 100, 2);
 
-            // ── Retenção na fonte ──────────────────────────────────────
-            // Aplica-se apenas a serviços, nunca a produtos físicos.
-            // A taxa é configurável por produto; default 6,5%.
-            $valorRetencao = 0.0;
+            $valorRetencao     = 0.0;
             $taxaRetencaoUsada = 0.0;
 
             $isProdutoServico = $produto?->tipo === 'servico';
-            $temRetencao = $isProdutoServico && $aplicaIva;
+            $temRetencao      = $isProdutoServico && $aplicaIva;
 
             if ($temRetencao) {
-                // Hierarquia: item > produto > default 6,5%
                 $taxaRetencaoUsada = (float) (
                     $item['taxa_retencao']
                     ?? $produto?->taxa_retencao
@@ -1363,8 +1321,8 @@ class DocumentoFiscalService
                 'base_tributavel' => round($baseTributavel, 2),
                 'taxa_iva'        => $taxaIva,
                 'valor_iva'       => $valorIva,
-                'codigo_isencao'  => $codigoIsencao, // SAF-T: TaxExemptionCode
-                'motivo_isencao'  => $motivoIsencao, // SAF-T: TaxExemptionReason
+                'codigo_isencao'  => $codigoIsencao,
+                'motivo_isencao'  => $motivoIsencao,
                 'taxa_retencao'   => $taxaRetencaoUsada,
                 'valor_retencao'  => $valorRetencao,
                 'total_linha'     => $totalLinha,
@@ -1380,7 +1338,6 @@ class DocumentoFiscalService
         $totalRetencao = round($totalRetencao, 2);
         $totalLiquido  = round($totalBase + $totalIva - $totalRetencao, 2);
 
-        // Ajuste de arredondamento
         $somaLinhas = round(array_sum(array_column($itensProcessados, 'total_linha')), 2);
         if (abs($somaLinhas - $totalLiquido) > 0.01) {
             Log::warning('[AGT] Diferença de arredondamento ajustada', [
@@ -1521,9 +1478,9 @@ class DocumentoFiscalService
                 );
             }
 
-            if ($tipo === 'RC' && ! in_array($origem->tipo_documento, ['FT', 'FA'])) {
+            if ($tipo === 'RC' && ! in_array($origem->tipo_documento, ['FT', 'FA', 'FP'])) {
                 throw new \InvalidArgumentException(
-                    "Recibo só pode ser gerado a partir de FT ou FA. Tipo: {$origem->tipo_documento}"
+                    "Recibo só pode ser gerado a partir de FT, FA ou FP. Tipo: {$origem->tipo_documento}"
                 );
             }
         }
@@ -1568,8 +1525,8 @@ class DocumentoFiscalService
                 'base_tributavel'     => $item['base_tributavel'],
                 'taxa_iva'            => $item['taxa_iva'],
                 'valor_iva'           => $item['valor_iva'],
-                'codigo_isencao'      => $item['codigo_isencao'],  // SAF-T
-                'motivo_isencao'      => $item['motivo_isencao'],   // SAF-T
+                'codigo_isencao'      => $item['codigo_isencao'],
+                'motivo_isencao'      => $item['motivo_isencao'],
                 'valor_retencao'      => $item['valor_retencao'],
                 'taxa_retencao'       => $item['taxa_retencao'],
                 'desconto'            => $item['desconto'],
@@ -1610,15 +1567,11 @@ class DocumentoFiscalService
     {
         $totalPagoActualizado = $this->calcularTotalPago($documentoOrigem) + $valorPago;
 
-        if ($documentoOrigem->tipo_documento === 'FP') {
-            // FP vira "paga" ao receber o primeiro recibo (converte em venda)
-            $estadoFinal = DocumentoFiscal::ESTADO_PAGA;
-        } elseif ($documentoOrigem->tipo_documento === 'FA') {
+        if ($documentoOrigem->tipo_documento === 'FA') {
             $estadoFinal = $totalPagoActualizado >= (float) $documentoOrigem->total_liquido
                 ? DocumentoFiscal::ESTADO_PAGA
                 : DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA;
         } else {
-            // FT
             $totalAdiantamentos = (float) DB::table('adiantamento_fatura')
                 ->where('fatura_id', $documentoOrigem->id)
                 ->sum('valor_utilizado');

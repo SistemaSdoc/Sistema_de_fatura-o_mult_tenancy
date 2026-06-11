@@ -26,6 +26,11 @@ class RelatoriosService
 
     /**
      * Dashboard geral com indicadores principais
+     *
+     * REGRA SEMÂNTICA (crítica):
+     *  - "Pendente de pagamento" aplica-se APENAS a FT e FA.
+     *  - FP (Proforma) com estado 'emitido' = "aguarda conversão em FT/FR".
+     *    NÃO é dívida. NÃO entra em totais de cobrança.
      */
     public function dashboard()
     {
@@ -49,10 +54,12 @@ class RelatoriosService
 
         $documentosMes = DocumentoFiscal::whereBetween('data_emissao', [$inicioMes, $hoje])->count();
 
+        // CORRIGIDO: apenas FT para faturas pendentes de pagamento
         $faturasPendentes = DocumentoFiscal::where('tipo_documento', 'FT')
             ->whereIn('estado', ['emitido', 'parcialmente_paga'])
             ->count();
 
+        // CORRIGIDO: apenas FT para total pendente de cobrança
         $totalPendenteCobranca = DocumentoFiscal::where('tipo_documento', 'FT')
             ->whereIn('estado', ['emitido', 'parcialmente_paga'])
             ->sum('total_liquido');
@@ -63,11 +70,13 @@ class RelatoriosService
 
         $alertasStock = Produto::whereColumn('estoque_atual', '<=', 'estoque_minimo')->count();
 
+        // CORRIGIDO: apenas FA para adiantamentos pendentes de pagamento
         $adiantamentosPendentes = DocumentoFiscal::where('tipo_documento', 'FA')
             ->where('estado', 'emitido')
             ->count();
 
-        $proformasPendentes = DocumentoFiscal::where('tipo_documento', 'FP')
+        // NOVO: proformas em aberto (NÃO é cobrança, apenas informativo)
+        $proformasEmAberto = DocumentoFiscal::where('tipo_documento', 'FP')
             ->where('estado', 'emitido')
             ->count();
 
@@ -90,7 +99,7 @@ class RelatoriosService
             'faturas_pendentes'        => $faturasPendentes,
             'total_pendente_cobranca'  => $totalPendenteCobranca,
             'adiantamentos_pendentes'  => $adiantamentosPendentes,
-            'proformas_pendentes'      => $proformasPendentes,
+            'proformas_em_aberto'      => $proformasEmAberto,  // NOVO: separado
             'total_clientes'           => $totalClientes,
             'total_produtos'           => $totalProdutos,
             'total_fornecedores'       => $totalFornecedores,
@@ -260,84 +269,113 @@ class RelatoriosService
         return $resultado;
     }
 
-    /**
-     * Relatório detalhado de faturação/documentos fiscais
-     */
-    public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros = [])
-    {
-        Log::info('[RELATORIOS SERVICE] Iniciando relatório de faturação', [
+/**
+ * Relatório detalhado de faturação/documentos fiscais
+ * 
+ * CORRIGIDO: Proformas (FP) NÃO entram nos cálculos de faturação (total, paga, pendente)
+ * porque FP são orçamentos, não vendas efetivas.
+ */
+public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros = [])
+{
+    Log::info('[RELATORIOS SERVICE] Iniciando relatório de faturação', [
+        'data_inicio' => $dataInicio,
+        'data_fim'    => $dataFim,
+        'filtros'     => $filtros,
+    ]);
+
+    $query = DocumentoFiscal::with(['cliente']);
+
+    if ($dataInicio) {
+        $query->whereDate('data_emissao', '>=', $dataInicio);
+    }
+    if ($dataFim) {
+        $query->whereDate('data_emissao', '<=', $dataFim);
+    }
+
+    if (!empty($filtros['tipo'])) {
+        $query->where('tipo_documento', $filtros['tipo']);
+    }
+    if (!empty($filtros['cliente_id'])) {
+        $query->where('cliente_id', $filtros['cliente_id']);
+    }
+    if (!empty($filtros['estado'])) {
+        $query->where('estado', $filtros['estado']);
+    }
+
+    $documentos = $query->orderBy('data_emissao', 'desc')->get();
+
+    Log::info('[RELATORIOS SERVICE] Documentos encontrados', ['quantidade' => $documentos->count()]);
+
+    // CORRIGIDO: Documentos de VENDA REAL (exclui FP)
+    $documentosVenda = $documentos->filter(function ($doc) {
+        return !in_array($doc->tipo_documento, ['FP']); // Exclui Proformas
+    });
+
+    // Documentos APENAS Proformas (para exibição separada)
+    $documentosProforma = $documentos->filter(function ($doc) {
+        return $doc->tipo_documento === 'FP';
+    });
+
+    $porTipo = $documentosVenda->groupBy('tipo_documento')->map(function ($grupo) {
+        return [
+            'quantidade'    => $grupo->count(),
+            'total_liquido' => $grupo->sum('total_liquido'),
+            'total_base'    => $grupo->sum('base_tributavel'),
+            'total_iva'     => $grupo->sum('total_iva'),
+            'total_retencao' => $grupo->sum('total_retencao'),
+        ];
+    });
+
+    // Também inclui FP separadamente (para informação, NÃO entra nos totais)
+    if ($documentosProforma->count() > 0) {
+        $porTipo['FP'] = [
+            'quantidade'    => $documentosProforma->count(),
+            'total_liquido' => $documentosProforma->sum('total_liquido'),
+            'total_base'    => $documentosProforma->sum('base_tributavel'),
+            'total_iva'     => $documentosProforma->sum('total_iva'),
+            'total_retencao' => $documentosProforma->sum('total_retencao'),
+        ];
+    }
+
+    $porEstado = $documentosVenda->groupBy('estado')->map(fn($g) => $g->count());
+
+    // CORRIGIDO: Cálculos apenas com documentos de VENDA REAL (exclui FP)
+    $faturacaoTotal    = $documentosVenda->sum('total_liquido');
+    $faturacaoPaga     = $documentosVenda->whereIn('estado', ['paga'])->sum('total_liquido');
+    $faturacaoPendente = $documentosVenda->whereIn('estado', ['emitido', 'parcialmente_paga'])->sum('total_liquido');
+
+    $faturacaoPorMes = $documentosVenda->groupBy(function ($doc) {
+        return Carbon::parse($doc->data_emissao)->format('Y-m');
+    })->map(function ($grupo, $mes) {
+        return [
+            'mes'        => $mes,
+            'total'      => $grupo->sum('total_liquido'),
+            'quantidade' => $grupo->count(),
+        ];
+    })->values();
+
+    $resultado = [
+        'faturacao_total'    => $faturacaoTotal,
+        'faturacao_paga'     => $faturacaoPaga,
+        'faturacao_pendente' => $faturacaoPendente,
+        'faturacao_por_mes'  => $faturacaoPorMes,
+        'por_tipo'           => $porTipo,
+        'por_estado'         => $porEstado,
+        'periodo' => [
             'data_inicio' => $dataInicio,
             'data_fim'    => $dataFim,
-            'filtros'     => $filtros,
-        ]);
+        ],
+    ];
 
-        $query = DocumentoFiscal::with(['cliente']);
+    Log::info('[RELATORIOS SERVICE] Relatório de faturação processado', [
+        'faturacao_total' => $faturacaoTotal,
+        'faturacao_pendente' => $faturacaoPendente,
+        'documentos_venda' => $documentosVenda->count(),
+        'documentos_proforma' => $documentosProforma->count(),
+    ]);
 
-        if ($dataInicio) {
-            $query->whereDate('data_emissao', '>=', $dataInicio);
-        }
-        if ($dataFim) {
-            $query->whereDate('data_emissao', '<=', $dataFim);
-        }
-
-        if (!empty($filtros['tipo'])) {
-            $query->where('tipo_documento', $filtros['tipo']);
-        }
-        if (!empty($filtros['cliente_id'])) {
-            $query->where('cliente_id', $filtros['cliente_id']);
-        }
-        if (!empty($filtros['estado'])) {
-            $query->where('estado', $filtros['estado']);
-        }
-
-        $documentos = $query->orderBy('data_emissao', 'desc')->get();
-
-        Log::info('[RELATORIOS SERVICE] Documentos encontrados', ['quantidade' => $documentos->count()]);
-
-        $porTipo = $documentos->groupBy('tipo_documento')->map(function ($grupo) {
-            return [
-                'quantidade'    => $grupo->count(),
-                'total_liquido' => $grupo->sum('total_liquido'),
-                'total_base'    => $grupo->sum('base_tributavel'),
-                'total_iva'     => $grupo->sum('total_iva'),
-            ];
-        });
-
-        $porEstado = $documentos->groupBy('estado')->map(fn($g) => $g->count());
-
-        $faturacaoTotal    = $documentos->sum('total_liquido');
-        $faturacaoPaga     = $documentos->whereIn('estado', ['paga'])->sum('total_liquido');
-        $faturacaoPendente = $documentos->whereIn('estado', ['emitido', 'parcialmente_paga'])->sum('total_liquido');
-
-        $faturacaoPorMes = $documentos->groupBy(function ($doc) {
-            return Carbon::parse($doc->data_emissao)->format('Y-m');
-        })->map(function ($grupo, $mes) {
-            return [
-                'mes'        => $mes,
-                'total'      => $grupo->sum('total_liquido'),
-                'quantidade' => $grupo->count(),
-            ];
-        })->values();
-
-        $resultado = [
-            'faturacao_total'    => $faturacaoTotal,
-            'faturacao_paga'     => $faturacaoPaga,
-            'faturacao_pendente' => $faturacaoPendente,
-            'faturacao_por_mes'  => $faturacaoPorMes,
-            'por_tipo'           => $porTipo,
-            'por_estado'         => $porEstado,
-            'periodo' => [
-                'data_inicio' => $dataInicio,
-                'data_fim'    => $dataFim,
-            ],
-        ];
-
-        Log::info('[RELATORIOS SERVICE] Relatório de faturação processado', [
-            'faturacao_total' => $faturacaoTotal,
-        ]);
-
-        return $resultado;
-    }
+    return $resultado;
+}
 
     /**
      * Relatório detalhado de stock
@@ -447,7 +485,7 @@ class RelatoriosService
     }
 
     /**
-     * ✅ NOVO: Relatório de movimentações de stock
+     * Relatório de movimentações de stock
      */
     public function relatorioMovimentosStock(
         $dataInicio = null,
@@ -486,7 +524,7 @@ class RelatoriosService
 
             Log::info('[RELATORIOS SERVICE] Movimentos encontrados', ['quantidade' => $movimentos->count()]);
 
-            // ── Totais ───────────────────────────────────────────────────
+            // Totais
             $totalEntradas = $movimentos->where('tipo', 'entrada')->sum('quantidade');
             $totalSaidas   = abs($movimentos->where('tipo', 'saida')->sum('quantidade'));
 
@@ -497,7 +535,7 @@ class RelatoriosService
                 'saidas'           => abs($grupo->where('tipo', 'saida')->sum('quantidade')),
             ]);
 
-            // ── Por produto (top 10 por movimento) ──────────────────────
+            // Por produto (top 10 por movimento)
             $porProduto = $movimentos->groupBy('produto_id')->map(function ($grupo) {
                 $primeiro = $grupo->first();
                 return [
@@ -509,7 +547,7 @@ class RelatoriosService
                 ];
             })->sortByDesc('total_movimentos')->take(10)->values();
 
-            // ── Por mês ─────────────────────────────────────────────────
+            // Por mês
             $porMes = $movimentos->groupBy(fn($m) => $m->created_at->format('Y-m'))
                 ->map(function ($grupo, $mes) {
                     return [
@@ -520,7 +558,7 @@ class RelatoriosService
                     ];
                 })->values();
 
-            // ── Lista formatada ──────────────────────────────────────────
+            // Lista formatada
             $lista = $movimentos->map(fn($m) => [
                 'id'               => $m->id,
                 'produto_id'       => $m->produto_id,
@@ -590,6 +628,10 @@ class RelatoriosService
 
     /**
      * Relatório de pagamentos pendentes
+     *
+     * CORRIGIDO: apenas FT e FA entram neste relatório.
+     * FP (Proforma) NUNCA é um pagamento pendente — é um orçamento.
+     * Para proformas em aberto, use relatorioProformas().
      */
     public function relatorioPagamentosPendentes()
     {
@@ -598,6 +640,7 @@ class RelatoriosService
         try {
             $hoje = now();
 
+            // ── Faturas FT pendentes de pagamento ─────────────────────────
             $faturasPendentes = DocumentoFiscal::where('tipo_documento', 'FT')
                 ->whereIn('estado', ['emitido', 'parcialmente_paga'])
                 ->with(['cliente'])
@@ -631,6 +674,7 @@ class RelatoriosService
                 ->filter(fn($f) => $f['valor_pendente'] > 0)
                 ->values();
 
+            // ── Adiantamentos FA pendentes de pagamento ───────────────────
             $adiantamentosPendentes = DocumentoFiscal::where('tipo_documento', 'FA')
                 ->whereIn('estado', ['emitido', 'parcialmente_paga'])
                 ->with(['cliente'])
@@ -670,6 +714,8 @@ class RelatoriosService
                     'total_atrasado'           => $totalAtrasado,
                     'quantidade_faturas'       => $faturasPendentes->count(),
                     'quantidade_adiantamentos' => $adiantamentosPendentes->count(),
+                    // NOTA: FP não aparece aqui. Para proformas em aberto,
+                    // use relatorioProformas($apenasPendentes = true)
                 ],
                 'faturas_pendentes'       => $faturasPendentes,
                 'adiantamentos_pendentes' => $adiantamentosPendentes,
@@ -695,6 +741,10 @@ class RelatoriosService
 
     /**
      * Relatório de proformas
+     *
+     * Este é o endpoint correto para FP (Proformas).
+     * FP com estado 'emitido' = "em aberto / aguarda conversão".
+     * NUNCA misturar com relatório de pagamentos pendentes.
      */
     public function relatorioProformas($dataInicio = null, $dataFim = null, $clienteId = null, $apenasPendentes = false)
     {
@@ -715,6 +765,7 @@ class RelatoriosService
                 $query->where('cliente_id', $clienteId);
             }
             if ($apenasPendentes) {
+                // NOTA: "pendentes" aqui significa "por converter", não "por pagar"
                 $query->where('estado', 'emitido');
             }
 
@@ -812,7 +863,6 @@ class RelatoriosService
                             if ($this->dataFim)    $query->whereDate('data_emissao', '<=', $this->dataFim);
                             return $query->orderBy('data_emissao', 'desc')->get();
 
-                        // ✅ NOVO
                         case 'movimentos_stock':
                             $query = MovimentoStock::with([
                                 'produto' => fn($q) => $q->withTrashed()->select('id', 'nome', 'codigo'),
@@ -854,7 +904,6 @@ class RelatoriosService
                         return ['ID', 'Nome', 'Categoria', 'Stock Atual', 'Stock Mínimo', 'Preço Compra', 'Preço Venda', 'Custo Médio', 'Valor Total Stock', 'Margem Lucro (%)', 'Em Risco'];
                     case 'proformas':
                         return ['ID', 'Nº Documento', 'Cliente', 'Data Emissão', 'Total', 'Estado'];
-                    // ✅ NOVO
                     case 'movimentos_stock':
                         return ['ID', 'Produto', 'Código', 'Tipo', 'Tipo Movimento', 'Quantidade', 'Stock Anterior', 'Stock Novo', 'Custo Médio', 'Referência', 'Observação', 'Utilizador', 'Data/Hora'];
                 }
@@ -924,7 +973,6 @@ class RelatoriosService
                                 $row->total_liquido,
                                 $row->estado,
                             ];
-                        // ✅ NOVO
                         case 'movimentos_stock':
                             return [
                                 $row->id,

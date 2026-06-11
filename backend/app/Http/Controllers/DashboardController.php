@@ -27,25 +27,25 @@ class DashboardController extends Controller
 
     public function index()
     {
-    Log::info('[DASHBOARD] Verificação de autenticação', [
-        'tenant_check' => Auth::guard('tenant')->check(),
-        'landlord_check' => Auth::guard('landlord')->check(),
-        'tenant_user_id' => Auth::guard('tenant')->id(),
-        'landlord_user_id' => Auth::guard('landlord')->id(),
-        'session_id' => session()->getId(),
-        'session_tenant_id' => session('tenant_id'),
-    ]);
+        Log::info('[DASHBOARD] Verificação de autenticação', [
+            'tenant_check' => Auth::guard('tenant')->check(),
+            'landlord_check' => Auth::guard('landlord')->check(),
+            'tenant_user_id' => Auth::guard('tenant')->id(),
+            'landlord_user_id' => Auth::guard('landlord')->id(),
+            'session_id' => session()->getId(),
+            'session_tenant_id' => session('tenant_id'),
+        ]);
 
         $user = Auth::guard('tenant')->user();
-    
-    // 🔍 LOG 2: Dados do utilizador do tenant (se existir)
-    Log::info('[DASHBOARD] Utilizador autenticado (tenant)', [
-        'user_id' => $user?->id ?? 'null',
-        'user_email' => $user?->email ?? 'null',
-        'user_role' => $user?->role ?? 'indefinido',
-        'user_nome' => $user?->nome ?? $user?->name ?? 'null',
-        'tenant_db' => config('database.connections.tenant.database'),
-    ]);
+        
+        Log::info('[DASHBOARD] Utilizador autenticado (tenant)', [
+            'user_id' => $user?->id ?? 'null',
+            'user_email' => $user?->email ?? 'null',
+            'user_role' => $user?->role ?? 'indefinido',
+            'user_nome' => $user?->nome ?? $user?->name ?? 'null',
+            'tenant_db' => config('database.connections.tenant.database'),
+        ]);
+        
         try {
             $dashboardData = $this->dashboardService->getDashboard();
 

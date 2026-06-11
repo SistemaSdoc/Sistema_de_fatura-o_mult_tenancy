@@ -129,7 +129,6 @@ export interface DashboardData {
             valor: number;
             retencao?: number;
         }>>;
-        // O backend pode devolver array ou objecto indexado por tipo
         por_estado: Array<{
             tipo: string;
             por_estado: Record<string, { quantidade: number; valor: number; retencao?: number }>;
@@ -242,27 +241,88 @@ export interface EstatisticasPagamentos {
     metodos_pagamento: Record<string, number>;
 }
 
+/**
+ * Alertas pendentes
+ * 
+ * REGRA SEMÂNTICA:
+ * - "vencidos" e "proximos_vencimento" aplicam-se APENAS a FT e FA (dívidas reais)
+ * - "proformas_em_aberto" é um alerta INFORMATIVO sobre orçamentos não convertidos,
+ *   NÃO é uma pendência de pagamento/cobrança.
+ * - O campo "proformas_pendentes" foi renomeado para "proformas_em_aberto"
+ *   para deixar clara esta separação semântica.
+ */
 export interface AlertasPendentes {
     vencidos: {
         quantidade: number;
         valor_total: number;
-        documentos: Array<{ id: string; tipo: TipoDocumentoFiscal; numero: string; cliente?: string; valor: number; valor_pendente: number; data_vencimento: string; dias_atraso: number; retencao?: number }>;
+        documentos: Array<{ 
+            id: string; 
+            tipo: TipoDocumentoFiscal; 
+            numero: string; 
+            cliente?: string; 
+            valor: number; 
+            valor_pendente: number; 
+            data_vencimento: string; 
+            dias_atraso: number; 
+            retencao?: number 
+        }>;
     };
     proximos_vencimento: {
         quantidade: number;
         valor_total: number;
-        documentos: Array<{ id: string; tipo: TipoDocumentoFiscal; numero: string; cliente?: string; valor: number; valor_pendente: number; data_vencimento: string; dias_ate_vencimento: number; retencao?: number }>;
+        documentos: Array<{ 
+            id: string; 
+            tipo: TipoDocumentoFiscal; 
+            numero: string; 
+            cliente?: string; 
+            valor: number; 
+            valor_pendente: number; 
+            data_vencimento: string; 
+            dias_ate_vencimento: number; 
+            retencao?: number 
+        }>;
     };
-    proformas_pendentes: {
+    // CORRIGIDO: renomeado de "proformas_pendentes" para "proformas_em_aberto"
+    // para deixar claro que NÃO é um alerta de cobrança
+    proformas_em_aberto?: {
         quantidade: number;
         valor_total: number;
-        documentos: Array<{ id: string; tipo: TipoDocumentoFiscal; numero: string; cliente?: string; valor: number; data_emissao: string; dias_pendentes: number }>;
+        documentos: Array<{ 
+            id: string; 
+            tipo: TipoDocumentoFiscal; 
+            numero: string; 
+            cliente?: string; 
+            valor: number; 
+            data_emissao: string; 
+            dias_pendentes: number 
+        }>;
+    };
+    // Mantido para compatibilidade com versões anteriores (deprecated)
+    proformas_pendentes?: {
+        quantidade: number;
+        valor_total: number;
+        documentos: Array<{ 
+            id: string; 
+            tipo: TipoDocumentoFiscal; 
+            numero: string; 
+            cliente?: string; 
+            valor: number; 
+            data_emissao: string; 
+            dias_pendentes: number 
+        }>;
     };
     servicos_com_retencao_proximos?: {
         quantidade: number;
         valor_total: number;
         valor_retencao: number;
-        documentos: Array<{ id: string; numero: string; cliente?: string; valor: number; retencao: number; data_vencimento: string }>;
+        documentos: Array<{ 
+            id: string; 
+            numero: string; 
+            cliente?: string; 
+            valor: number; 
+            retencao: number; 
+            data_vencimento: string 
+        }>;
     };
     total_alertas: number;
 }
@@ -457,6 +517,12 @@ export const dashboardService = {
         return cards;
     },
 
+    /**
+     * Formata alertas para exibição no frontend.
+     * 
+     * CORRIGIDO: Proformas em aberto são alertas INFORMATIVOS (tipo 'info'),
+     * NÃO são alertas de cobrança (danger/warning).
+     */
     getAlertasFormatados(d: DashboardData | null): Array<{
         tipo: 'danger' | 'warning' | 'info';
         titulo: string;
@@ -468,20 +534,30 @@ export const dashboardService = {
         const alertas = d.alertas || {};
         const lista: ReturnType<typeof this.getAlertasFormatados> = [];
 
+        // Alertas de cobrança (danger/warning) - apenas FT e FA
         if (alertas.documentos_vencidos > 0)
             lista.push({ tipo: 'danger', titulo: 'Documentos Vencidos', mensagem: `${alertas.documentos_vencidos} documento(s) com pagamento em atraso`, icone: '⚠️', acao: '/documentos?estado=vencido' });
 
         if (alertas.documentos_proximo_vencimento > 0)
             lista.push({ tipo: 'warning', titulo: 'Próximos do Vencimento', mensagem: `${alertas.documentos_proximo_vencimento} documento(s) vencem nos próximos 3 dias`, icone: '⏰', acao: '/documentos?estado=proximo-vencimento' });
 
-        if (alertas.proformas_antigas > 0)
-            lista.push({ tipo: 'info', titulo: 'Proformas Pendentes', mensagem: `${alertas.proformas_antigas} proforma(s) com mais de 7 dias`, icone: '📄', acao: '/documentos?tipo=FP&estado=emitido' });
-
         if (alertas.servicos_com_retencao_pendente && alertas.servicos_com_retencao_pendente > 0)
             lista.push({ tipo: 'warning', titulo: 'Retenções Pendentes', mensagem: `${alertas.servicos_com_retencao_pendente} serviço(s) com retenção a vencer (${this._formatarMoeda(alertas.valor_retencao_pendente || 0)})`, icone: '🔖', acao: '/documentos?com_retencao=true&estado=pendente' });
 
         if ((d.produtos?.stock_baixo || 0) > 0)
             lista.push({ tipo: 'warning', titulo: 'Stock Baixo', mensagem: `${d.produtos.stock_baixo} produto(s) com stock abaixo do mínimo`, icone: '📦', acao: '/produtos?stock=baixo' });
+
+        // CORRIGIDO: Proformas em aberto são alertas INFORMATIVOS (tipo 'info')
+        // NÃO são alertas de cobrança (danger/warning)
+        if (alertas.proformas_antigas && alertas.proformas_antigas > 0) {
+            lista.push({ 
+                tipo: 'info', 
+                titulo: 'Proformas em Aberto', 
+                mensagem: `${alertas.proformas_antigas} proforma(s) não convertida(s) há mais de 7 dias. Agende follow-up comercial.`, 
+                icone: '📄', 
+                acao: '/documentos?tipo=FP&estado=emitido' 
+            });
+        }
 
         return lista;
     },

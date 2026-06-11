@@ -29,10 +29,8 @@ class RelatoriosController extends Controller
      */
     private function getAuthUser()
     {
-        // Tenta o guard 'tenant' primeiro (usado pelo middleware auth.tenant)
         $user = auth('tenant')->user();
 
-        // Fallback para o guard padrão
         if (!$user) {
             $user = auth()->user();
         }
@@ -47,9 +45,6 @@ class RelatoriosController extends Controller
     {
         $user = $this->getAuthUser();
 
-        // ─────────────────────────────────────────────────────
-        // 1. Verificar se usuário está autenticado
-        // ─────────────────────────────────────────────────────
         if (!$user) {
             Log::warning('Tentativa de acesso a relatório SEM usuário autenticado', [
                 'ip'                   => request()->ip(),
@@ -59,19 +54,12 @@ class RelatoriosController extends Controller
             abort(401, 'Usuário não autenticado. Por favor, faça login.');
         }
 
-        // ─────────────────────────────────────────────────────
-        // 2. Obter role do usuário
-        // ─────────────────────────────────────────────────────
         $role = $user->role ?? null;
 
-        // Se não tem role direto, tenta buscar de relacionamento
         if (!$role && method_exists($user, 'roles')) {
             $role = $user->roles()->pluck('name')->first() ?? null;
         }
 
-        // ─────────────────────────────────────────────────────
-        // 3. Log detalhado da tentativa
-        // ─────────────────────────────────────────────────────
         Log::info('Acesso a relatório', [
             'user_id'        => $user->id,
             'user_name'      => $user->name,
@@ -83,9 +71,6 @@ class RelatoriosController extends Controller
             'guard_usado'    => auth('tenant')->check() ? 'tenant' : 'default',
         ]);
 
-        // ─────────────────────────────────────────────────────
-        // 4. Validar role
-        // ─────────────────────────────────────────────────────
         $rolesBasicos = [
             'admin',
             'contablista',
@@ -108,17 +93,14 @@ class RelatoriosController extends Controller
 
         if (!in_array($role, $rolesBasicos)) {
             Log::warning('Acesso negado - role não autorizado para relatórios', [
-                'user_id'         => $user->id,
-                'user_name'       => $user->name,
-                'user_role'       => $role,
+                'user_id'          => $user->id,
+                'user_name'        => $user->name,
+                'user_role'        => $role,
                 'roles_permitidos' => $rolesBasicos,
             ]);
             abort(403, "Role '{$role}' não autorizado para acessar relatórios. Roles permitidos: " . implode(', ', $rolesBasicos));
         }
 
-        // ─────────────────────────────────────────────────────
-        // 5. Validar relatórios avançados (apenas admin)
-        // ─────────────────────────────────────────────────────
         if ($tipo === 'avancado' && $role !== 'admin') {
             Log::warning('Acesso negado - relatório avançado requer admin', [
                 'user_id'   => $user->id,
@@ -163,6 +145,12 @@ class RelatoriosController extends Controller
     /**
      * Dashboard geral com indicadores principais
      * GET /api/relatorios/dashboard
+     *
+     * REGRA SEMÂNTICA (crítica para todo o dashboard):
+     *  - "Pendente de pagamento" / "cobrança" aplica-se APENAS a FT e FA.
+     *  - FP (Proforma) com estado 'emitido' = "aguarda conversão em FT/FR".
+     *    NÃO é dívida. NÃO entra em totais de cobrança. NÃO aparece em
+     *    "documentos vencidos". É reportada num campo próprio e separado.
      */
     public function dashboard()
     {
@@ -174,6 +162,7 @@ class RelatoriosController extends Controller
 
             $totalDocumentos = DocumentoFiscal::whereNotIn('estado', ['cancelado'])->count();
 
+            // Apenas FT e FR para faturação real (exclui FP)
             $totalFaturado = DocumentoFiscal::whereIn('tipo_documento', ['FT', 'FR'])
                 ->whereNotIn('estado', ['cancelado'])
                 ->sum('total_liquido');
@@ -222,30 +211,41 @@ class RelatoriosController extends Controller
                 ->where('tipo', 'saida')
                 ->sum(DB::raw('ABS(quantidade)'));
 
+            // CORRIGIDO: apenas FT e FA entram em "documentos vencidos".
+            // FP nunca vence para efeitos de cobrança.
             $documentosVencidos = DocumentoFiscal::whereIn('tipo_documento', ['FT', 'FA'])
                 ->whereIn('estado', ['emitido', 'parcialmente_paga'])
                 ->whereNotNull('data_vencimento')
                 ->where('data_vencimento', '<', $hoje)
                 ->count();
 
-            $proformasAntigas = DocumentoFiscal::where('tipo_documento', 'FP')
+            // CORRIGIDO: proformas antigas reportadas num campo próprio,
+            // sem qualquer relação com cobrança ou pagamentos em falta.
+            $proformasEmAberto = DocumentoFiscal::where('tipo_documento', 'FP')
                 ->where('estado', 'emitido')
                 ->where('data_emissao', '<', $hoje->copy()->subDays(7))
                 ->count();
 
             $servicosComRetencaoPendente = DocumentoFiscal::where('total_retencao', '>', 0)
+                ->whereIn('tipo_documento', ['FT', 'FA'])
                 ->whereIn('estado', ['emitido', 'parcialmente_paga'])
                 ->where('data_vencimento', '<', $hoje->copy()->addDays(5))
                 ->count();
 
+            // CORRIGIDO: adiantamentos pendentes de pagamento = FA emitido.
+            // Separado de proformas em aberto.
+            $adiantamentosPendentes = DocumentoFiscal::where('tipo_documento', 'FA')
+                ->where('estado', 'emitido')
+                ->count();
+
             $dashboard = [
                 'documentos_fiscais' => [
-                    'total'              => $totalDocumentos,
-                    'total_faturado'     => $totalFaturado,
+                    'total'               => $totalDocumentos,
+                    'total_faturado'      => $totalFaturado,
                     'total_notas_credito' => $totalNotasCredito,
-                    'total_liquido'      => $totalLiquido,
-                    'total_retencao'     => $totalRetencaoServicos,
-                    'total_retencao_mes' => $totalRetencaoMes,
+                    'total_liquido'       => $totalLiquido,
+                    'total_retencao'      => $totalRetencaoServicos,
+                    'total_retencao_mes'  => $totalRetencaoMes,
                 ],
                 'vendas' => [
                     'total_mes' => $vendasMes,
@@ -261,8 +261,8 @@ class RelatoriosController extends Controller
                     'sem_estoque'   => $produtosSemEstoque,
                 ],
                 'servicos' => [
-                    'total'   => $totalServicos,
-                    'ativos'  => $servicosAtivos,
+                    'total'    => $totalServicos,
+                    'ativos'   => $servicosAtivos,
                     'inativos' => $totalServicos - $servicosAtivos,
                 ],
                 'stock' => [
@@ -270,10 +270,15 @@ class RelatoriosController extends Controller
                     'entradas_hoje'   => $entradasHoje,
                     'saidas_hoje'     => $saidasHoje,
                 ],
+                // CORRIGIDO: alertas separados por semântica.
+                // "documentos_vencidos"   = FT/FA com prazo de pagamento ultrapassado.
+                // "proformas_em_aberto"   = FP não convertidas há mais de 7 dias (NÃO é cobrança)
+                // "adiantamentos_pendentes" = FA aguardando pagamento.
                 'alertas' => [
-                    'documentos_vencidos'              => $documentosVencidos,
-                    'proformas_antigas'                => $proformasAntigas,
-                    'servicos_com_retencao_pendente'   => $servicosComRetencaoPendente,
+                    'documentos_vencidos'            => $documentosVencidos,
+                    'proformas_em_aberto'            => $proformasEmAberto,
+                    'adiantamentos_pendentes'         => $adiantamentosPendentes,
+                    'servicos_com_retencao_pendente'  => $servicosComRetencaoPendente,
                 ],
                 'periodo' => [
                     'inicio_mes' => $inicioMes->toDateString(),
@@ -282,8 +287,8 @@ class RelatoriosController extends Controller
             ];
 
             return response()->json([
-                'success' => true,
-                'message' => 'Dashboard carregado com sucesso',
+                'success'   => true,
+                'message'   => 'Dashboard carregado com sucesso',
                 'dashboard' => $dashboard,
             ]);
         } catch (\Exception $e) {
@@ -344,9 +349,9 @@ class RelatoriosController extends Controller
 
             $vendas = $query->orderBy('data_venda', 'desc')->get();
 
-            $totalServicos          = 0;
-            $totalRetencaoServicos  = 0;
-            $servicosPorVenda       = [];
+            $totalServicos         = 0;
+            $totalRetencaoServicos = 0;
+            $servicosPorVenda      = [];
 
             foreach ($vendas as $venda) {
                 $itensServicos = $venda->itens->filter(function ($item) {
@@ -641,14 +646,19 @@ class RelatoriosController extends Controller
     /**
      * Relatório de pagamentos pendentes
      * GET /api/relatorios/pagamentos-pendentes
+     *
+     * CORRIGIDO: apenas FT e FA entram neste relatório.
+     * FP (Proforma) NUNCA é um pagamento pendente — é um orçamento.
+     * Para proformas em aberto, use GET /api/relatorios/proformas?pendentes=1
      */
     public function pagamentosPendentes(Request $request)
     {
-        $this->authorizeRelatorio('avancado'); // Apenas Admin
+        $this->authorizeRelatorio('avancado');
 
         try {
             $hoje = now();
 
+            // ── Faturas FT pendentes de pagamento ─────────────────────────
             $faturasPendentes = DocumentoFiscal::where('tipo_documento', 'FT')
                 ->whereIn('estado', ['emitido', 'parcialmente_paga'])
                 ->with(['cliente'])
@@ -683,6 +693,9 @@ class RelatoriosController extends Controller
                 ->filter(fn($f) => $f['valor_pendente'] > 0)
                 ->values();
 
+            // ── Adiantamentos FA pendentes de pagamento ───────────────────
+            // CORRIGIDO: FA com estado 'emitido' = pagamento de adiantamento em falta.
+            // Incluído neste relatório porque é genuinamente um valor a receber.
             $adiantamentosPendentes = DocumentoFiscal::where('tipo_documento', 'FA')
                 ->whereIn('estado', ['emitido', 'parcialmente_paga'])
                 ->with(['cliente'])
@@ -730,6 +743,8 @@ class RelatoriosController extends Controller
                         'quantidade_faturas'        => $faturasPendentes->count(),
                         'quantidade_adiantamentos' => $adiantamentosPendentes->count(),
                         'retencao_pendente'        => $retencaoPendente,
+                        // NOTA: FP não aparece aqui. Para proformas em aberto,
+                        // usar GET /api/relatorios/proformas?pendentes=1
                     ],
                     'faturas_pendentes'       => $faturasPendentes,
                     'adiantamentos_pendentes' => $adiantamentosPendentes,
@@ -775,9 +790,9 @@ class RelatoriosController extends Controller
                     ->get();
 
                 $relatorio['retencoes'] = [
-                    'total'                => $retencoes->sum('total_retencao'),
+                    'total'                 => $retencoes->sum('total_retencao'),
                     'quantidade_documentos' => $retencoes->count(),
-                    'detalhes'             => $retencoes->map(function ($doc) {
+                    'detalhes'              => $retencoes->map(function ($doc) {
                         return [
                             'numero'     => $doc->numero_documento,
                             'data'       => $doc->data_emissao,
@@ -810,6 +825,10 @@ class RelatoriosController extends Controller
     /**
      * Relatório de proformas
      * GET /api/relatorios/proformas
+     *
+     * FP com estado 'emitido' = "em aberto / aguarda conversão".
+     * Este é o endpoint correto para listar proformas — nunca misturar
+     * com endpoints de pagamentos pendentes ou cobrança.
      */
     public function proformas(Request $request)
     {
@@ -834,6 +853,7 @@ class RelatoriosController extends Controller
                 $query->where('cliente_id', $dados['cliente_id']);
             }
 
+            // NOTA: "pendentes" aqui significa "por converter", não "por pagar".
             if (!empty($dados['pendentes'])) {
                 $query->where('estado', 'emitido');
             }
@@ -863,13 +883,13 @@ class RelatoriosController extends Controller
         }
     }
 
-        /**
+    /**
      * Exportar SAF-T
      * GET /api/relatorios/exportar-saft?year=2026&month=5
      */
     public function exportarSaft(Request $request)
     {
-        $this->authorizeRelatorio('avancado'); // Só admin ou contabilidade
+        $this->authorizeRelatorio('avancado');
 
         try {
             $year  = (int) $request->query('year');
@@ -882,7 +902,7 @@ class RelatoriosController extends Controller
                 ], 422);
             }
 
-            $saftService = new SaftService();   // Ou injete no construtor depois
+            $saftService = new SaftService();
 
             $path = $saftService->generateFull($year, $month);
 
@@ -894,7 +914,7 @@ class RelatoriosController extends Controller
             }
 
             return response()->download($path, "SAFT_{$year}_{str_pad($month, 2, '0', STR_PAD_LEFT)}.xml")
-                            ->deleteFileAfterSend(false);
+                             ->deleteFileAfterSend(false);
 
         } catch (\Exception $e) {
             Log::error('Erro ao exportar SAF-T', [
@@ -918,9 +938,9 @@ class RelatoriosController extends Controller
         $agrupado = [];
         foreach ($vendas as $venda) {
             $chave = match ($agruparPor) {
-                'dia'  => $venda->data_venda->format('Y-m-d'),
-                'mes'  => $venda->data_venda->format('Y-m'),
-                'ano'  => $venda->data_venda->format('Y'),
+                'dia'   => $venda->data_venda->format('Y-m-d'),
+                'mes'   => $venda->data_venda->format('Y-m'),
+                'ano'   => $venda->data_venda->format('Y'),
                 default => $venda->data_venda->format('Y-m-d'),
             };
 

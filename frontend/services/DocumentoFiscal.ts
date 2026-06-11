@@ -11,7 +11,7 @@ export type MetodoPagamento = 'transferencia' | 'multibanco' | 'dinheiro' | 'che
 
 export const TIPOS_VENDA: TipoDocumento[] = ['FT', 'FR', 'RC'];
 export const TIPOS_NAO_VENDA: TipoDocumento[] = ['FP', 'FA', 'NC', 'ND', 'FRt'];
-export const TIPOS_DOCUMENTO_VENDA: TipoDocumento[] = ['FT', 'FR', 'FP'];
+export const TIPOS_DOCUMENTO_VENDA: TipoDocumento[] = ['FT', 'FR'];
 
 export interface ItemDocumento {
     id?: string;
@@ -192,12 +192,22 @@ interface PaginatedResponse<T> {
     to?: number;
 }
 
+/**
+ * Dashboard de documentos fiscais
+ * 
+ * REGRA SEMÂNTICA:
+ * - "faturas_pendentes" = apenas FT (dívida real)
+ * - "adiantamentos_pendentes" = apenas FA (dívida real)
+ * - "proformas_em_aberto" = FP (NÃO é dívida, apenas orçamentos não convertidos)
+ * - O campo "proformas_pendentes" está depreciado, usar "proformas_em_aberto"
+ */
 export interface DashboardDocumentos {
     faturas_emitidas_mes: number;
     faturas_pendentes: number;
     total_pendente_cobranca: number;
     adiantamentos_pendentes: number;
-    proformas_pendentes: number;
+    proformas_em_aberto: number;           // CORRIGIDO: renomeado
+    proformas_pendentes?: number;           // Deprecated, mantido para compatibilidade
     documentos_cancelados_mes: number;
     total_vendas_mes: number;
     total_nao_vendas_mes: number;
@@ -205,10 +215,18 @@ export interface DashboardDocumentos {
     documentos_com_retencao?: number;
 }
 
+/**
+ * Alertas de documentos
+ * 
+ * REGRA SEMÂNTICA:
+ * - "adiantamentos_vencidos" e "faturas_vencidas" = apenas FT/FA (dívida real)
+ * - "proformas_em_aberto" = FP (alerta INFORMATIVO, NÃO é dívida)
+ */
 export interface AlertasDocumentos {
     adiantamentos_vencidos: { total: number; items: DocumentoFiscal[] };
     faturas_com_adiantamentos_pendentes: { total: number; items: DocumentoFiscal[] };
-    proformas_pendentes: { total: number; items: DocumentoFiscal[] };
+    proformas_em_aberto: { total: number; items: DocumentoFiscal[] };  // CORRIGIDO: renomeado
+    proformas_pendentes?: { total: number; items: DocumentoFiscal[] }; // Deprecated
     faturas_vencidas?: { total: number; items: DocumentoFiscal[] };
 }
 
@@ -433,13 +451,14 @@ class DocumentoFiscalService {
      * Abre o template de impressão Laravel numa nova tab.
      * Com auto=true (padrão) chama window.print() imediatamente.
      */
-async abrirImpressao(id: string, auto = true): Promise<void> {
-    const url = `/api/documentos-fiscais/${id}/pdf-viewer${auto ? '?auto=1' : ''}`;
-    const response = await api.get(url, { responseType: 'text' });
-    const blob = new Blob([response.data], { type: 'text/html' });
-    const blobUrl = URL.createObjectURL(blob);
-    window.open(blobUrl, '_blank');
-}
+    async abrirImpressao(id: string, auto = true): Promise<void> {
+        const url = `/api/documentos-fiscais/${id}/pdf-viewer${auto ? '?auto=1' : ''}`;
+        const response = await api.get(url, { responseType: 'text' });
+        const blob = new Blob([response.data], { type: 'text/html' });
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, '_blank');
+    }
+
     /**
      * Download do PDF gerado pelo backend (DomPDF).
      */
@@ -489,21 +508,27 @@ async abrirImpressao(id: string, auto = true): Promise<void> {
     // ── Utilitários ──────────────────────────────────────────
 
     calcularValorPendente(documento: DocumentoFiscal): number {
+        // Apenas FT e FA têm valor pendente real
         if (!['FT', 'FA'].includes(documento.tipo_documento)) return 0;
+        
         const totalPago = documento.recibos?.reduce(
             (sum, r) => r.estado !== 'cancelado' ? sum + Number(r.total_liquido) : sum, 0
         ) ?? 0;
+        
         if (documento.tipo_documento === 'FA') {
             return Math.max(0, Number(documento.total_liquido) - totalPago);
         }
+        
         const totalAdiantamentos = documento.faturasAdiantamento?.reduce(
             (sum, a) => sum + Number(a.pivot?.valor_utilizado ?? 0), 0
         ) ?? 0;
+        
         return Math.max(0, Number(documento.total_liquido) - totalPago - totalAdiantamentos);
     }
 
     calcularValorPago(documento: DocumentoFiscal): number {
         if (['FR', 'RC'].includes(documento.tipo_documento)) return Number(documento.total_liquido);
+        // Proformas (FP) NÃO têm valor pago real - são orçamentos
         if (documento.tipo_documento === 'FP') return 0;
         return documento.recibos?.reduce(
             (sum, r) => r.estado !== 'cancelado' ? sum + Number(r.total_liquido) : sum, 0
@@ -523,7 +548,9 @@ async abrirImpressao(id: string, auto = true): Promise<void> {
     }
 
     podeGerarRecibo(documento: DocumentoFiscal): boolean {
-        return ['FT', 'FA'].includes(documento.tipo_documento)
+        // Apenas FT, FA e FP podem gerar recibos
+        // Nota: FP pode receber sinal/adiantamento, mas NÃO altera estado
+        return ['FT', 'FA', 'FP'].includes(documento.tipo_documento)
             && ['emitido', 'parcialmente_paga'].includes(documento.estado);
     }
 
@@ -533,7 +560,13 @@ async abrirImpressao(id: string, auto = true): Promise<void> {
     }
 
     ehVenda(documento: DocumentoFiscal): boolean { return TIPOS_VENDA.includes(documento.tipo_documento); }
+    
+    /**
+     * Verifica se é uma Proforma (FP)
+     * Proformas NÃO são vendas, NÃO são dívidas - são orçamentos
+     */
     ehProforma(documento: DocumentoFiscal): boolean { return documento.tipo_documento === 'FP'; }
+    
     ehAdiantamento(documento: DocumentoFiscal): boolean { return documento.tipo_documento === 'FA'; }
     ehNotaCredito(documento: DocumentoFiscal): boolean { return documento.tipo_documento === 'NC'; }
     ehNotaDebito(documento: DocumentoFiscal): boolean { return documento.tipo_documento === 'ND'; }

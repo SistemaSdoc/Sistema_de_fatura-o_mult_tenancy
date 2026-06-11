@@ -177,7 +177,6 @@ export default function MainEmpresa({
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    // ==================== NOTIFICAÇÕES DE ESTOQUE ====================
 // ==================== NOTIFICAÇÕES DE ESTOQUE ====================
 const buscarNotificacoesEstoque = useCallback(async () => {
   if (!user || userLoading) return;

@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Log;
  *  - Filtros de data removidos de todos os métodos (simplificação pedida)
  *  - 'retencao' → 'taxa_retencao' no getDadosProdutos()
  *  - Constantes do Model usadas em vez de strings literais
+ *  - Faturas Proforma removidas de contagens de valores pendentes (não são vendas efetivas)
  */
 class DashboardService
 {
@@ -68,12 +69,17 @@ class DashboardService
     {
         $cancelado = DocumentoFiscal::ESTADO_CANCELADO;
 
-        $totalDocumentos = DocumentoFiscal::whereNotIn('estado', [$cancelado])->count();
+        // Documentos que representam vendas efetivas (excluindo proformas)
+        $documentosVenda = [
+            DocumentoFiscal::TIPO_FATURA,
+            DocumentoFiscal::TIPO_FATURA_RECIBO,
+        ];
 
-        $totalFaturado = DocumentoFiscal::whereIn('tipo_documento', [
-                DocumentoFiscal::TIPO_FATURA,
-                DocumentoFiscal::TIPO_FATURA_RECIBO,
-            ])
+        $totalDocumentos = DocumentoFiscal::whereIn('tipo_documento', $documentosVenda)
+            ->whereNotIn('estado', [$cancelado])
+            ->count();
+
+        $totalFaturado = DocumentoFiscal::whereIn('tipo_documento', $documentosVenda)
             ->whereNotIn('estado', [$cancelado])
             ->sum('total_liquido');
 
@@ -84,19 +90,13 @@ class DashboardService
         $totalLiquido = $totalFaturado - $totalNotasCredito;
         $ticketMedio  = $totalDocumentos > 0 ? round($totalLiquido / $totalDocumentos, 2) : 0;
 
-        $receitaMesAtual = DocumentoFiscal::whereIn('tipo_documento', [
-                DocumentoFiscal::TIPO_FATURA,
-                DocumentoFiscal::TIPO_FATURA_RECIBO,
-            ])
+        $receitaMesAtual = DocumentoFiscal::whereIn('tipo_documento', $documentosVenda)
             ->whereNotIn('estado', [$cancelado])
             ->whereMonth('data_emissao', $mesAtual)
             ->whereYear('data_emissao', $anoAtual)
             ->sum('total_liquido');
 
-        $receitaMesAnterior = DocumentoFiscal::whereIn('tipo_documento', [
-                DocumentoFiscal::TIPO_FATURA,
-                DocumentoFiscal::TIPO_FATURA_RECIBO,
-            ])
+        $receitaMesAnterior = DocumentoFiscal::whereIn('tipo_documento', $documentosVenda)
             ->whereNotIn('estado', [$cancelado])
             ->whereMonth('data_emissao', $mesAnterior)
             ->whereYear('data_emissao', $anoAnterior)
@@ -106,10 +106,7 @@ class DashboardService
             ? round((($receitaMesAtual - $receitaMesAnterior) / $receitaMesAnterior) * 100, 2)
             : 0;
 
-        $ivaArrecadado = DocumentoFiscal::whereIn('tipo_documento', [
-                DocumentoFiscal::TIPO_FATURA,
-                DocumentoFiscal::TIPO_FATURA_RECIBO,
-            ])
+        $ivaArrecadado = DocumentoFiscal::whereIn('tipo_documento', $documentosVenda)
             ->whereNotIn('estado', [$cancelado])
             ->sum('total_iva');
 
@@ -139,7 +136,6 @@ class DashboardService
             'servicos'    => [
                 'total'        => Produto::where('tipo', 'servico')->count(),
                 'ativos'       => Produto::where('tipo', 'servico')->where('status', 'ativo')->count(),
-                // Corrigido: 'retencao' → 'taxa_retencao'
                 'com_retencao' => Produto::where('tipo', 'servico')->where('taxa_retencao', '>', 0)->count(),
             ],
         ];
@@ -312,30 +308,34 @@ class DashboardService
     }
 
     // ── Pagamentos ────────────────────────────────────────────────────────
+    // ATENÇÃO: Faturas Proforma NÃO são consideradas pendentes (não são vendas efetivas)
 
     private function getDadosPagamentos(Carbon $hoje): array
     {
         $cancelado = DocumentoFiscal::ESTADO_CANCELADO;
+        
+        // Documentos que representam débitos reais (excluindo proformas)
+        $documentosDebito = [
+            DocumentoFiscal::TIPO_FATURA,
+            DocumentoFiscal::TIPO_NOTA_DEBITO,
+            DocumentoFiscal::TIPO_FATURA_RECIBO,
+        ];
 
         $pagamentosHoje = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_RECIBO)
             ->whereNotIn('estado', [$cancelado])
             ->whereDate('data_emissao', $hoje->toDateString())
             ->sum('total_liquido');
 
-        $totalPendente = DocumentoFiscal::whereIn('tipo_documento', [
-                DocumentoFiscal::TIPO_FATURA,
-                DocumentoFiscal::TIPO_NOTA_DEBITO,
-            ])
+        // Apenas documentos que representam dívidas reais (excluindo proformas)
+        $totalPendente = DocumentoFiscal::whereIn('tipo_documento', $documentosDebito)
             ->whereIn('estado', [
                 DocumentoFiscal::ESTADO_EMITIDO,
                 DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA,
             ])
             ->sum('total_liquido');
 
-        $totalAtrasado = DocumentoFiscal::whereIn('tipo_documento', [
-                DocumentoFiscal::TIPO_FATURA,
-                DocumentoFiscal::TIPO_NOTA_DEBITO,
-            ])
+        // Apenas documentos que representam dívidas reais (excluindo proformas)
+        $totalAtrasado = DocumentoFiscal::whereIn('tipo_documento', $documentosDebito)
             ->whereIn('estado', [
                 DocumentoFiscal::ESTADO_EMITIDO,
                 DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA,
@@ -436,15 +436,20 @@ class DashboardService
     }
 
     // ── Alertas ───────────────────────────────────────────────────────────
+    // ATENÇÃO: Faturas Proforma NÃO são consideradas em alertas de vencimento
 
     private function calcularAlertas(): array
     {
         $hoje = now();
+        
+        // Documentos que representam dívidas reais (excluindo proformas)
+        $documentosDebito = [
+            DocumentoFiscal::TIPO_FATURA,
+            DocumentoFiscal::TIPO_NOTA_DEBITO,
+            DocumentoFiscal::TIPO_FATURA_RECIBO,
+        ];
 
-        $documentosVencidos = DocumentoFiscal::whereIn('tipo_documento', [
-                DocumentoFiscal::TIPO_FATURA,
-                DocumentoFiscal::TIPO_NOTA_DEBITO,
-            ])
+        $documentosVencidos = DocumentoFiscal::whereIn('tipo_documento', $documentosDebito)
             ->whereIn('estado', [
                 DocumentoFiscal::ESTADO_EMITIDO,
                 DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA,
@@ -452,10 +457,7 @@ class DashboardService
             ->whereDate('data_vencimento', '<', $hoje->toDateString())
             ->count();
 
-        $documentosProximos = DocumentoFiscal::whereIn('tipo_documento', [
-                DocumentoFiscal::TIPO_FATURA,
-                DocumentoFiscal::TIPO_NOTA_DEBITO,
-            ])
+        $documentosProximos = DocumentoFiscal::whereIn('tipo_documento', $documentosDebito)
             ->whereIn('estado', [
                 DocumentoFiscal::ESTADO_EMITIDO,
                 DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA,
@@ -464,12 +466,14 @@ class DashboardService
             ->whereDate('data_vencimento', '<=', $hoje->copy()->addDays(3)->toDateString())
             ->count();
 
+        // Proformas antigas são apenas informativas, não geram alerta de pendência financeira
         $proformasAntigas = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_FATURA_PROFORMA)
             ->where('estado', DocumentoFiscal::ESTADO_EMITIDO)
             ->whereDate('data_emissao', '<', $hoje->copy()->subDays(7)->toDateString())
             ->count();
 
         $queryRetencao = DocumentoFiscal::where('total_retencao', '>', 0)
+            ->whereIn('tipo_documento', $documentosDebito)
             ->whereIn('estado', [
                 DocumentoFiscal::ESTADO_EMITIDO,
                 DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA,
@@ -479,7 +483,7 @@ class DashboardService
         return [
             'documentos_vencidos'            => $documentosVencidos,
             'documentos_proximo_vencimento'  => $documentosProximos,
-            'proformas_antigas'              => $proformasAntigas,
+            'proformas_antigas'              => $proformasAntigas, // Apenas informativo
             'servicos_com_retencao_pendente' => $queryRetencao->count(),
             'valor_retencao_pendente'        => $queryRetencao->sum('total_retencao'),
         ];
@@ -537,6 +541,12 @@ class DashboardService
     {
         $hoje      = now();
         $cancelado = DocumentoFiscal::ESTADO_CANCELADO;
+        
+        $documentosDebito = [
+            DocumentoFiscal::TIPO_FATURA,
+            DocumentoFiscal::TIPO_NOTA_DEBITO,
+            DocumentoFiscal::TIPO_FATURA_RECIBO,
+        ];
 
         $recebidosHoje = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_RECIBO)
             ->whereNotIn('estado', [$cancelado])
@@ -554,20 +564,16 @@ class DashboardService
             ->whereYear('data_emissao', $hoje->year)
             ->sum('total_liquido');
 
-        $pendentes = DocumentoFiscal::whereIn('tipo_documento', [
-                DocumentoFiscal::TIPO_FATURA,
-                DocumentoFiscal::TIPO_NOTA_DEBITO,
-            ])
+        // Apenas documentos que representam dívidas reais (excluindo proformas)
+        $pendentes = DocumentoFiscal::whereIn('tipo_documento', $documentosDebito)
             ->whereIn('estado', [
                 DocumentoFiscal::ESTADO_EMITIDO,
                 DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA,
             ])
             ->sum('total_liquido');
 
-        $atrasados = DocumentoFiscal::whereIn('tipo_documento', [
-                DocumentoFiscal::TIPO_FATURA,
-                DocumentoFiscal::TIPO_NOTA_DEBITO,
-            ])
+        // Apenas documentos que representam dívidas reais (excluindo proformas)
+        $atrasados = DocumentoFiscal::whereIn('tipo_documento', $documentosDebito)
             ->whereIn('estado', [
                 DocumentoFiscal::ESTADO_EMITIDO,
                 DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA,
@@ -608,11 +614,21 @@ class DashboardService
     {
         $hoje     = now();
         $tresDias = $hoje->copy()->addDays(3);
+        
+        $documentosDebito = [
+            DocumentoFiscal::TIPO_FATURA,
+            DocumentoFiscal::TIPO_NOTA_DEBITO,
+            DocumentoFiscal::TIPO_FATURA_RECIBO,
+        ];
 
-        $vencidos           = $this->getDocumentosVencidos($hoje);
-        $proximosVencimento = $this->getDocumentosProximosVencimento($hoje, $tresDias);
+        // Apenas documentos de débito real (excluindo proformas)
+        $vencidos           = $this->getDocumentosVencidos($hoje, $documentosDebito);
+        $proximosVencimento = $this->getDocumentosProximosVencimento($hoje, $tresDias, $documentosDebito);
+        
+        // Proformas são apenas informativas, não geram alerta financeiro
         $proformasPendentes = $this->getProformasPendentes($hoje);
-        $servicosRetencao   = $this->getServicosRetencaoProximos($hoje);
+        
+        $servicosRetencao   = $this->getServicosRetencaoProximos($hoje, $documentosDebito);
 
         return [
             'vencidos'              => [
@@ -625,7 +641,7 @@ class DashboardService
                 'valor_total' => $proximosVencimento->sum('valor_pendente'),
                 'documentos'  => $proximosVencimento->toArray(),
             ],
-            'proformas_pendentes'   => [
+            'proformas_pendentes'   => [ // Seção separada para proformas (apenas informativo)
                 'quantidade'  => $proformasPendentes->count(),
                 'valor_total' => $proformasPendentes->sum('valor'),
                 'documentos'  => $proformasPendentes->toArray(),
@@ -638,17 +654,13 @@ class DashboardService
             ],
             'total_alertas' => $vencidos->count()
                 + $proximosVencimento->count()
-                + $proformasPendentes->count()
                 + $servicosRetencao->count(),
         ];
     }
 
-    private function getDocumentosVencidos(Carbon $hoje)
+    private function getDocumentosVencidos(Carbon $hoje, array $documentosDebito)
     {
-        return DocumentoFiscal::whereIn('tipo_documento', [
-                DocumentoFiscal::TIPO_FATURA,
-                DocumentoFiscal::TIPO_NOTA_DEBITO,
-            ])
+        return DocumentoFiscal::whereIn('tipo_documento', $documentosDebito)
             ->whereIn('estado', [
                 DocumentoFiscal::ESTADO_EMITIDO,
                 DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA,
@@ -671,12 +683,9 @@ class DashboardService
             ]);
     }
 
-    private function getDocumentosProximosVencimento(Carbon $hoje, Carbon $tresDias)
+    private function getDocumentosProximosVencimento(Carbon $hoje, Carbon $tresDias, array $documentosDebito)
     {
-        return DocumentoFiscal::whereIn('tipo_documento', [
-                DocumentoFiscal::TIPO_FATURA,
-                DocumentoFiscal::TIPO_NOTA_DEBITO,
-            ])
+        return DocumentoFiscal::whereIn('tipo_documento', $documentosDebito)
             ->whereIn('estado', [
                 DocumentoFiscal::ESTADO_EMITIDO,
                 DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA,
@@ -702,6 +711,7 @@ class DashboardService
 
     private function getProformasPendentes(Carbon $hoje)
     {
+        // Proformas são apenas informativas, não geram alerta financeiro
         return DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_FATURA_PROFORMA)
             ->where('estado', DocumentoFiscal::ESTADO_EMITIDO)
             ->whereDate('data_emissao', '<', $hoje->copy()->subDays(7)->toDateString())
@@ -720,9 +730,10 @@ class DashboardService
             ]);
     }
 
-    private function getServicosRetencaoProximos(Carbon $hoje)
+    private function getServicosRetencaoProximos(Carbon $hoje, array $documentosDebito)
     {
         return DocumentoFiscal::where('total_retencao', '>', 0)
+            ->whereIn('tipo_documento', $documentosDebito)
             ->whereIn('estado', [
                 DocumentoFiscal::ESTADO_EMITIDO,
                 DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA,
@@ -810,7 +821,7 @@ class DashboardService
             if ($valorPago > 0) return 'parcial';
         }
 
-        return 'pendente';
+        return 'proforma';
     }
 
     private function nomeTipoDocumento(string $tipo): string
