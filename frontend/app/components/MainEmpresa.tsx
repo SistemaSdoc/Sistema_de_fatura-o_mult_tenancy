@@ -106,7 +106,7 @@ export default function MainEmpresa({
     const userRole = user?.role || "";
     const userEmail = user?.email || "";
     const userInitial = userName.charAt(0).toUpperCase();
-    const logoFromServer =`http://192.168.1.120:8000/storage/${companyLogo || user?.empresa?.logo || null}`;
+    const logoFromServer =`http://192.168.1.198:8000/storage/${companyLogo || user?.empresa?.logo || null}`;
 
     // FUNÇÃO PARA VALIDAR E FORMATAR URL DA IMAGEM
     const getValidImageUrl = (logo: string | null | undefined): string | null => {
@@ -377,12 +377,12 @@ useEffect(() => {
                 userRole === "admin" || userRole === "operador" || userRole === "gestor"
                     ? [
                         {
-                            label: "Gerar fatura-recibo",
+                            label: "Gerar factura-recibo",
                             path: "/dashboard/Vendas/Nova_venda",
                             icon: ShoppingCart,
                         },
                         {
-                            label: "Gerar faturas",
+                            label: "Gerar facturas",
                             path: "/dashboard/Faturas/Fatura_Normal",
                             icon: FileText,
                         },

@@ -251,6 +251,7 @@ class CategoriaController extends Controller
             $categoria->refresh();
             $categoria->loadCount('produtos');
 
+                Log::info('Categoria ja esta' ,$dados);
             return response()->json([
                 'message'   => 'Categoria actualizada com sucesso',
                 'categoria' => $categoria,

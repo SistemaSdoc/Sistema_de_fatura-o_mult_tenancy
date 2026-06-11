@@ -76,7 +76,7 @@ class FornecedorController extends Controller
 
         $dados = $request->validate([
             'nome'     => 'required|string|max:255',
-            'nif'      => 'required|string|max:50|unique:fornecedores,nif',
+            'nif'      => 'required|string|max:14|unique:fornecedores,nif',
             'telefone' => 'nullable|string|max:20',
             'email'    => 'nullable|email|max:255|unique:fornecedores,email',
             'endereco' => 'nullable|string',
@@ -113,7 +113,7 @@ class FornecedorController extends Controller
         try {
             $dados = $request->validate([
                 'nome'     => 'sometimes|required|string|max:255',
-                'nif'      => 'sometimes|required|string|max:50|unique:fornecedores,nif,' . $fornecedor->id,
+                'nif'      => 'sometimes|required|string|max:14|unique:fornecedores,nif,' . $fornecedor->id,
                 'telefone' => 'nullable|string|max:30',
                 'email'    => 'nullable|email|max:255|unique:fornecedores,email,' . $fornecedor->id,
                 'endereco' => 'nullable|string',

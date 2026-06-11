@@ -63,7 +63,8 @@ class ProdutoController extends Controller
 
         $filtros  = $this->extrairFiltros($request);
         $produtos = $this->produtoService->listarProdutos($filtros);
-
+      
+        
         return response()->json([
             'message'  => 'Lista de produtos carregada com sucesso',
             'produtos' => $produtos,
@@ -106,6 +107,7 @@ class ProdutoController extends Controller
 
             $produtos = $query->with(['categoria', 'fornecedor'])->get();
 
+              Log::info('Produtos ja esta' ,$produtos);
             return response()->json([
                 'message'   => 'Lista de todos os produtos carregada com sucesso',
                 'produtos'  => $produtos,

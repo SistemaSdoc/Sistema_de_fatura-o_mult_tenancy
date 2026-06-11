@@ -218,7 +218,7 @@ export function getTipoLabel(tipo: TipoFornecedor): string {
 
 export function formatarNIF(nif: string): string {
     if (!nif) return "-";
-    if (nif.length >= 10) {
+    if (nif.length >= 14) {
         return nif.replace(/(\d{10})(\d{3})(\d{3})/, '$1 $2 $3');
     }
     return nif;

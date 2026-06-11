@@ -63,7 +63,7 @@ class DocumentoFiscalService
 
     protected array $configuracoesTipo = [
         'FT' => [
-            'nome'                  => 'Fatura',
+            'nome'                  => 'Factura',
             'afeta_stock'           => true,
             'eh_venda'              => true,
             'gera_recibo'           => true,
@@ -74,7 +74,7 @@ class DocumentoFiscalService
             'requer_assinatura'     => true,   // AGT: obrigatório assinar
         ],
         'FR' => [
-            'nome'                  => 'Fatura-Recibo',
+            'nome'                  => 'Factura-Recibo',
             'afeta_stock'           => true,
             'eh_venda'              => true,
             'gera_recibo'           => false,
@@ -85,7 +85,7 @@ class DocumentoFiscalService
             'requer_assinatura'     => true,
         ],
         'FP' => [
-            'nome'                  => 'Fatura Proforma',
+            'nome'                  => 'Factura Proforma',
             'afeta_stock'           => false,
             'eh_venda'              => false,
             'gera_recibo'           => true,
@@ -96,7 +96,7 @@ class DocumentoFiscalService
             'requer_assinatura'     => false,  // Proforma não é documento fiscal definitivo
         ],
         'FA' => [
-            'nome'                  => 'Fatura de Adiantamento',
+            'nome'                  => 'Factura de Adiantamento',
             'afeta_stock'           => false,
             'eh_venda'              => false,
             'gera_recibo'           => false,
@@ -140,7 +140,7 @@ class DocumentoFiscalService
             'requer_assinatura'     => false,  // AGT: recibos isentos de assinatura
         ],
         'FRt' => [
-            'nome'                  => 'Fatura de Retificação',
+            'nome'                  => 'Factura de Retificação',
             'afeta_stock'           => false,
             'eh_venda'              => false,
             'gera_recibo'           => false,
@@ -500,7 +500,7 @@ class DocumentoFiscalService
             DocumentoFiscal::ESTADO_PAGA,
         ])) {
             throw new \InvalidArgumentException(
-                "Fatura cancelada ou paga não pode receber adiantamentos. Estado: {$fatura->estado}"
+                "Factura cancelada ou paga não pode receber adiantamentos. Estado: {$fatura->estado}"
             );
         }
 

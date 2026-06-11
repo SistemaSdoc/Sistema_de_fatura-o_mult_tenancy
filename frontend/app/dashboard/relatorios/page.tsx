@@ -105,7 +105,7 @@ export default function RelatoriosPage() {
       setRelatorioFaturacao(faturacao);
     } catch (error: any) {
       if (error.response?.status !== 403) {
-        toast.error("Erro ao carregar vendas e faturação");
+        toast.error("Erro ao carregar vendas e facturação");
       }
     } finally {
       setLoading(p => ({ ...p, vendas: false }));

@@ -84,7 +84,7 @@ export function RelatorioVendasComponent({
           ) : <SemDados colors={colors} />}
         </SecaoGrafico>
 
-        <SecaoGrafico titulo="Distribuição de Faturação" colors={colors}>
+        <SecaoGrafico titulo="Distribuição de Facturação" colors={colors}>
           {dadosFaturacaoPie.length > 0 ? (
             <ResponsiveContainer width="100%" height={240}>
               <PieChart>

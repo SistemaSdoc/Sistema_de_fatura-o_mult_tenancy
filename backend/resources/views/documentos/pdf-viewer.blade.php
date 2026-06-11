@@ -26,8 +26,8 @@ if (!empty($empresa['logo_base64'])) {
 }
 
 $tiposDocumento = [
-    'FT' => 'Fatura',
-    'FR' => 'Fatura-Recibo',
+    'FT' => 'Factura',
+    'FR' => 'Factura-Recibo',
     'FA' => 'Fat. Adiantamento',
     'NC' => 'Nota de Crédito',
     'ND' => 'Nota de Débito',
@@ -684,7 +684,7 @@ $temTroco = $troco > 0;
         <div class="footer">
             <div class="footer-title">OBRIGADO PELA PREFERÊNCIA!</div>
             <div class="footer-msg">Volte sempre</div>
-            <div class="footer-msg">Processado pelo sistema de faturação faturaja</div>
+            <div class="footer-msg">Processado pelo sistema de facturação faturaja</div>
             <div class="timestamp">
                 {{ now()->format('d/m/Y H:i:s') }}
             </div>

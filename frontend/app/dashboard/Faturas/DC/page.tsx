@@ -7,10 +7,11 @@ import MainEmpresa from "@/app/components/MainEmpresa";
 import {
   documentoFiscalService,
   type DocumentoFiscal,
+  type GerarReciboDTO,
 } from "@/services/DocumentoFiscal";
 import { useThemeColors } from "@/context/ThemeContext";
 import OutrosDocumentosTable from "@/app/components/Faturas/OutrosDocumentosTable";
-import {FileText, ChevronDown } from "lucide-react";
+import { ShoppingCart, FileText, ChevronDown } from "lucide-react";
 
 /* ─── Helpers de autenticação (Sanctum) ──────────────────────────────────── */
 function getXsrfToken(): string {
@@ -31,7 +32,7 @@ async function abrirUrlAutenticada(url: string, tipo: "pdf" | "html" = "pdf") {
   await garantirCsrf(baseUrl);
   const xsrf = getXsrfToken();
 
-  // 2. bObter o tenant ID (igual ao usado no axios.ts)
+  // 2. ⭐ Obter o tenant ID (igual ao usado no axios.ts)
   const tenantId = localStorage.getItem("tenant_id");
   if (!tenantId) {
     throw new Error("Empresa não identificada. Faça login novamente.");
@@ -73,6 +74,7 @@ export default function OutrosDocumentosPage() {
   const [documentos, setDocumentos] = useState<DocumentoFiscal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [gerandoRecibo, setGerandoRecibo] = useState<string | null>(null);
   const [baixandoPdf, setBaixandoPdf] = useState<string | null>(null);
   const [imprimindo] = useState<string | null>(null);
   const [dropdownAberto, setDropdownAberto] = useState(false);
@@ -176,6 +178,26 @@ export default function OutrosDocumentosPage() {
     if (doc.id) router.push(`/dashboard/Faturas/Faturas/${doc.id}/Ver`);
   };
 
+  /* ── Gerar recibo (FP / FA) ── */
+  const gerarRecibo = async (doc: DocumentoFiscal) => {
+    if (!doc.id) return;
+    try {
+      setGerandoRecibo(doc.id);
+      const dados: GerarReciboDTO = {
+        valor: doc.total_liquido,
+        metodo_pagamento: "dinheiro",
+        data_pagamento: new Date().toISOString().split("T")[0],
+      };
+      const recibo = await documentoFiscalService.gerarRecibo(doc.id, dados);
+      await carregarDocumentos();
+      if (recibo?.id) await imprimirPdfNavegador(recibo);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Erro");
+    } finally {
+      setGerandoRecibo(null);
+    }
+  };
+
   /* ── Formatar moeda ── */
   const formatKz = (valor: number | string | undefined) => {
     if (!valor) return "0,00 Kz";
@@ -203,7 +225,7 @@ export default function OutrosDocumentosPage() {
             className="flex items-center gap-2 px-4 py-2 text-sm text-white transition-opacity hover:opacity-80 rounded"
             style={{ backgroundColor: colors.primary }}
           >
-            <span className="font-medium">Comece a Faturar</span>
+            <span className="font-medium">Comece a Facturar</span>
             <ChevronDown
               size={18}
               className={`transition-transform duration-200 ${
@@ -232,7 +254,7 @@ export default function OutrosDocumentosPage() {
               >
                 <FileText size={16} style={{ color: colors.secondary }} />
                 <div className="text-left">
-                  <div className="font-medium">Gerar fatura-recibo</div>
+                  <div className="font-medium">Gerar factura-recibo</div>
                   <div style={{ color: colors.text, opacity: 0.7 }} className="text-xs">
                     Registar uma nova venda
                   </div>
@@ -253,9 +275,9 @@ export default function OutrosDocumentosPage() {
               >
                 <FileText size={16} style={{ color: colors.primary }} />
                 <div className="text-left">
-                  <div className="font-medium">Gerar fatura</div>
+                  <div className="font-medium">Gerar factura</div>
                   <div style={{ color: colors.text, opacity: 0.7 }} className="text-xs">
-                    Emitir uma fatura normal
+                    Emitir uma factura normal
                   </div>
                 </div>
               </button>
@@ -275,7 +297,7 @@ export default function OutrosDocumentosPage() {
                 <div className="text-left">
                   <div className="font-medium">Gerar proforma</div>
                   <div style={{ color: colors.text, opacity: 0.7 }} className="text-xs">
-                    Criar uma fatura proforma
+                    Criar uma factura proforma
                   </div>
                 </div>
               </button>
@@ -295,9 +317,11 @@ export default function OutrosDocumentosPage() {
       <OutrosDocumentosTable
         documentos={documentos}
         loading={loading}
+        gerandoRecibo={gerandoRecibo}
         baixandoPdf={baixandoPdf}
         imprimindo={imprimindo}
         onVerDetalhes={verDetalhes}
+        onGerarRecibo={gerarRecibo}
         onImprimirA4={imprimirA4}
         onImprimirPdf={imprimirPdfNavegador}
         onBaixarPdf={baixarPdf}

@@ -20,17 +20,17 @@ return [
             '0.0.0.0',
 
             // Frontend (Next.js)
+            '192.168.1.198:3000',
             'localhost:3000',
             '127.0.0.1:3000',
             '0.0.0.0:3000',
 
             // Backend (Laravel) - por segurança
+            '192.168.1.198:8000',
             'localhost:8000',
             '127.0.0.1:8000',
             '0.0.0.0:8000',
 
-            // Adiciona o teu IP atual da rede (podes adicionar mais IPs se precisares)
-            '192.168.1.105:3000',
         ]
     ))),
 

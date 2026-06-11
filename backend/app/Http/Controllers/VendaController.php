@@ -155,7 +155,7 @@ class VendaController extends Controller
         $dados = $request->validate([
             'cliente_id'                  => 'nullable|uuid|exists:clientes,id',
             'cliente_nome'                => 'nullable|string|max:255',
-            'cliente_nif'                 => 'nullable|string|max:20',
+            'cliente_nif'                 => 'nullable|string|max:14',
             'itens'                       => 'required|array|min:1',
             'itens.*.produto_id'          => 'required|uuid|exists:produtos,id',
             'itens.*.quantidade'          => 'required|integer|min:1',

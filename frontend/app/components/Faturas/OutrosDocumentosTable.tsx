@@ -14,11 +14,11 @@ import {
 
 /* ─── Labels ──────────────────────────────────────────────────────────────── */
 const TIPO_LABEL: Partial<Record<TipoDocumento, string>> = {
-  FP: "Fatura Proforma",
-  FA: "Fatura de Adiantamento",
+  FP: "Factura Proforma",
+  FA: "Factura de Adiantamento",
   NC: "Nota de Crédito",
   ND: "Nota de Débito",
-  FRt: "Fatura de Retificação",
+  FRt: "Factura de Retificação",
 };
 
 const ESTADO_LABEL: Record<string, string> = {
@@ -57,9 +57,11 @@ interface ColorsTheme {
 interface OutrosDocumentosTableProps {
   documentos: DocumentoFiscal[];
   loading: boolean;
+  gerandoRecibo: string | null;
   baixandoPdf: string | null;
   imprimindo: string | null;
   onVerDetalhes: (doc: DocumentoFiscal) => void;
+  onGerarRecibo: (doc: DocumentoFiscal) => Promise<void> | void;
   onImprimirA4: (doc: DocumentoFiscal) => void;
   onImprimirPdf: (doc: DocumentoFiscal) => void;
   onBaixarPdf: (doc: DocumentoFiscal) => Promise<void>;
@@ -248,9 +250,11 @@ function DocCard({
 export default function OutrosDocumentosTable({
   documentos,
   loading,
+  gerandoRecibo,
   baixandoPdf,
   imprimindo,
   onVerDetalhes,
+  onGerarRecibo,
   onImprimirPdf,
   onBaixarPdf,
   formatKz,
@@ -281,6 +285,11 @@ export default function OutrosDocumentosTable({
   const pg = Math.min(Math.max(paginaAtual, 1), totalPaginas);
   const slice = docsAtivos.slice((pg - 1) * POR_PAGINA, pg * POR_PAGINA);
 
+  /* ── Regras de gerar recibo: FP e FA que não estejam canceladas/pagas ── */
+  const podeGerarRecibo = (d: DocumentoFiscal) =>
+    ["FP", "FA"].includes(d.tipo_documento) &&
+    !["cancelado", "paga"].includes(d.estado || "");
+
   /* ── Vazio ── */
   if (!loading && documentos.length === 0) {
     return (
@@ -296,6 +305,22 @@ export default function OutrosDocumentosTable({
       <IconBtn onClick={() => onVerDetalhes(doc)} title="Ver detalhes" color={colors.text}>
         <Eye size={16} />
       </IconBtn>
+
+      {podeGerarRecibo(doc) && (
+        <IconBtn
+          onClick={() => onGerarRecibo(doc)}
+          disabled={gerandoRecibo === doc.id}
+          title="Gerar Recibo"
+          color={colors.success}
+        >
+          {gerandoRecibo === doc.id ? (
+            <Spinner color={colors.success} />
+          ) : (
+            <FileText size={16} />
+          )}
+        </IconBtn>
+      )}
+
       <IconBtn
         onClick={() => onImprimirPdf(doc)}
         disabled={imprimindo === doc.id}

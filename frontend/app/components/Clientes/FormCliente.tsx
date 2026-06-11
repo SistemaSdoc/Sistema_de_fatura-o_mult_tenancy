@@ -105,7 +105,7 @@ export function FormCliente({
   };
 
   const handleTelNum = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = e.target.value.replace(/\D/g, "").slice(0, 9);
+    const v = e.target.value.replace(/\D/g, "").slice(0, 14);
     setNumTel(v);
     setField("telefone", v ? `${codPais} ${v}` : "");
   };
@@ -121,8 +121,8 @@ export function FormCliente({
     if (!form.nome?.trim()) e.nome = "Nome é obrigatório";
     if (empresa) {
       if (!form.nif?.trim()) e.nif = "NIF é obrigatório para empresas";
-      else if (form.nif.length !== 10)
-        e.nif = "NIF deve ter exactamente 10 dígitos";
+      else if (form.nif.length !== 14)
+        e.nif = "NIF deve ter exactamente 10 ou 14 dígitos no caso de uso do BI";
       if (!form.telefone?.trim())
         e.telefone = "Telefone é obrigatório para empresas";
       else if (numTel.length !== 9) e.telefone = "Telefone deve ter 9 dígitos";

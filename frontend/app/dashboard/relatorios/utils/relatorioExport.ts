@@ -33,7 +33,7 @@ export async function exportarPDF(tab: TipoRelatorio, dados: any, periodo: strin
   const lastY = () => ((doc as any).lastAutoTable?.finalY ?? 0) + 10;
 
   const titulos: Record<TipoRelatorio, string> = {
-    vendas: "RELATÓRIO DE VENDAS E FATURAÇÃO",
+    vendas: "RELATÓRIO DE VENDAS E FACTURAÇÃO",
     documentos: "RELATÓRIO DE DOCUMENTOS FISCAIS E PROFORMAS",
     pagamentos: "RELATÓRIO DE PAGAMENTOS PENDENTES",
     movimentos_stock: "RELATÓRIO DE MOVIMENTOS DE STOCK",
@@ -105,14 +105,14 @@ export async function exportarPDF(tab: TipoRelatorio, dados: any, periodo: strin
     });
     y = lastY();
 
-    secTitle("Resumo de Faturação");
+    secTitle("Resumo de Facturação");
     autoT({
       startY: y,
       head: [["Indicador", "Valor"]],
       body: [
-        ["Faturação Total", formatarKwanza(f.faturacao_total ?? 0)],
-        ["Faturação Paga", formatarKwanza(f.faturacao_paga ?? 0)],
-        ["Faturação Pendente", formatarKwanza(f.faturacao_pendente ?? 0)],
+        ["Facturação Total", formatarKwanza(f.faturacao_total ?? 0)],
+        ["Facturação Paga", formatarKwanza(f.faturacao_paga ?? 0)],
+        ["Facturação Pendente", formatarKwanza(f.faturacao_pendente ?? 0)],
       ],
       columnStyles: { 1: { halign: "right" } },
       ...tableDefaults,
@@ -227,7 +227,7 @@ export async function exportarPDF(tab: TipoRelatorio, dados: any, periodo: strin
       body: [
         ["Total Pendente", formatarKwanza(r.total_pendente ?? 0)],
         ["Total em Atraso", formatarKwanza(r.total_atrasado ?? 0)],
-        ["Quantidade de Faturas Pendentes", String(r.quantidade_faturas ?? 0)],
+        ["Quantidade de Facturas Pendentes", String(r.quantidade_faturas ?? 0)],
         ["Retenção Pendente", formatarKwanza(r.retencao_pendente ?? 0)],
       ],
       columnStyles: { 1: { halign: "right" } },
@@ -236,7 +236,7 @@ export async function exportarPDF(tab: TipoRelatorio, dados: any, periodo: strin
     y = lastY();
 
     if (dados.faturas_pendentes?.length > 0) {
-      secTitle("Faturas Pendentes");
+      secTitle("Facturas Pendentes");
       autoT({
         startY: y,
         head: [["Nº Documento", "Cliente", "Valor Pendente (Kz)", "Dias em Atraso"]],
@@ -321,7 +321,7 @@ export async function exportarPDF(tab: TipoRelatorio, dados: any, periodo: strin
     doc.setTextColor(...WH);
     doc.setFontSize(6.5);
     doc.setFont("helvetica", "normal");
-    doc.text("FacturaJá — Sistema de Faturação", 14, ph - 4);
+    doc.text("FaturaJá — Sistema de Facturação", 14, ph - 4);
     doc.text(`Pág. ${i} de ${totalPages}`, pw - 14, ph - 4, { align: "right" });
   }
 
@@ -351,9 +351,9 @@ export async function exportarExcel(tab: TipoRelatorio, dados: any, periodo: str
       ["Retenções", formatarKwanza(t.total_retencao ?? 0)],
       ["Nº Vendas", t.total_vendas ?? 0],
       [],
-      ["Faturação Total", formatarKwanza(ft.faturacao_total ?? 0)],
-      ["Faturação Paga", formatarKwanza(ft.faturacao_paga ?? 0)],
-      ["Faturação Pendente", formatarKwanza(ft.faturacao_pendente ?? 0)],
+      ["Facturação Total", formatarKwanza(ft.faturacao_total ?? 0)],
+      ["Facturação Paga", formatarKwanza(ft.faturacao_paga ?? 0)],
+      ["Facturação Pendente", formatarKwanza(ft.faturacao_pendente ?? 0)],
     ]);
     if (vd.vendas?.length > 0) {
       addSheet("Vendas", [
@@ -415,11 +415,11 @@ export async function exportarExcel(tab: TipoRelatorio, dados: any, periodo: str
       ["Indicador", "Valor"],
       ["Total Pendente", formatarKwanza(r.total_pendente ?? 0)],
       ["Total Atrasado", formatarKwanza(r.total_atrasado ?? 0)],
-      ["Faturas Pendentes", r.quantidade_faturas ?? 0],
+      ["Facturas Pendentes", r.quantidade_faturas ?? 0],
       ["Retenção Pendente", formatarKwanza(r.retencao_pendente ?? 0)],
     ]);
     if (dados.faturas_pendentes?.length > 0) {
-      addSheet("Faturas Pendentes", [
+      addSheet("Facturas Pendentes", [
         ["Documento", "Cliente", "Pendente", "Dias Atraso"],
         ...dados.faturas_pendentes.map((f: any) => [
           f.numero_documento ?? "-",

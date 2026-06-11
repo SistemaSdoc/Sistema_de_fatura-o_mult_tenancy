@@ -13,14 +13,14 @@ import {
 } from "lucide-react";
 
 const TIPO_LABEL: Record<TipoDocumento, string> = {
-  FT: "Fatura",
-  FR: "Fatura-Recibo",
-  FP: "Fatura Proforma",
-  FA: "Fatura de Adiantamento",
+  FT: "Factura",
+  FR: "Factura-Recibo",
+  FP: "Factura Proforma",
+  FA: "Factura de Adiantamento",
   NC: "Nota de Crédito",
   ND: "Nota de Débito",
   RC: "Recibo",
-  FRt: "Fatura de Retificação",
+  FRt: "Factura de Retificação",
 };
 
 const ESTADO_LABEL: Record<string, string> = {
@@ -510,7 +510,7 @@ export default function InvoiceTable({
                   className="px-3 py-8 text-center text-xs"
                   style={{ color: colors.textSecondary, borderBottom: `0.5px solid ${colors.border}` }}
                 >
-                  Nenhuma fatura encontrada
+                  Nenhuma factura encontrada
                 </td>
               </tr>
             ) : (
@@ -554,7 +554,7 @@ export default function InvoiceTable({
       <div className="sm:hidden">
         {sliceFT.length === 0 ? (
           <div className="px-3 py-8 text-center text-xs" style={{ color: colors.textSecondary }}>
-            Nenhuma fatura encontrada
+            Nenhuma factura encontrada
           </div>
         ) : (
           sliceFT.map((doc) => (
@@ -603,7 +603,7 @@ export default function InvoiceTable({
             marginBottom: -1,
           }}
         >
-          Faturas-Recibo &amp; Recibos
+          Facturas-Recibo &amp; Recibos
           {docsFR.length > 0 && (
             <span
               className="px-1.5 py-0.5 text-xs font-semibold"
@@ -626,7 +626,7 @@ export default function InvoiceTable({
             marginBottom: -1,
           }}
         >
-          Faturas
+          Facturas
           {docsFT.length > 0 && (
             <span
               className="px-1.5 py-0.5 text-xs font-semibold"

@@ -281,7 +281,7 @@ export default function FaturasPage() {
             className="flex items-center gap-2 px-4 py-2 text-sm text-white transition-opacity hover:opacity-80 rounded"
             style={{ backgroundColor: colors.primary }}
           >
-            <span className="font-medium">Comece a Faturar</span>
+            <span className="font-medium">Comece a Facturar</span>
             <ChevronDown
               size={18}
               className={`transition-transform duration-200 ${
@@ -310,7 +310,7 @@ export default function FaturasPage() {
               >
                 <FileText size={16} style={{ color: colors.secondary }} />
                 <div className="text-left">
-                  <div className="font-medium">Gerar fatura-recibo</div>
+                  <div className="font-medium">Gerar factura-recibo</div>
                   <div style={{ color: colors.text, opacity: 0.7 }} className="text-xs">
                     Registar uma nova venda
                   </div>
@@ -331,9 +331,9 @@ export default function FaturasPage() {
               >
                 <FileText size={16} style={{ color: colors.primary }} />
                 <div className="text-left">
-                  <div className="font-medium">Gerar fatura</div>
+                  <div className="font-medium">Gerar factura</div>
                   <div style={{ color: colors.text, opacity: 0.7 }} className="text-xs">
-                    Emitir uma fatura normal
+                    Emitir uma factura normal
                   </div>
                 </div>
               </button>
@@ -353,7 +353,7 @@ export default function FaturasPage() {
                 <div className="text-left">
                   <div className="font-medium">Gerar proforma</div>
                   <div style={{ color: colors.text, opacity: 0.7 }} className="text-xs">
-                    Criar uma fatura proforma
+                    Criar uma factura proforma
                   </div>
                 </div>
               </button>
