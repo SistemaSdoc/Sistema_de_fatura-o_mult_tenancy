@@ -632,11 +632,9 @@ $temTroco = $troco > 0;
                 max-width: 60px;
                 max-height: 60px;
             }
-
             .empresa-nome {
                 font-size: 16px;
             }
-
             .empresa-info {
                 font-size: 9px;
             }
@@ -809,9 +807,7 @@ $temTroco = $troco > 0;
                         <td>{{ number_format($troco, 2, ',', '.') }} Kz</td>
                     </tr>
                     @endif
-                    <tr class="sep">
-                        <td colspan="2"></td>
-                    </tr>
+                    <tr class="sep"><td colspan="2"></td></tr>
                     <tr class="total-final">
                         <td><strong>TOTAL PAGO:</strong></td>
                         <td><strong>{{ number_format((float)($documento->total_liquido ?? 0), 2, ',', '.') }} Kz</strong></td>

@@ -22,9 +22,7 @@ class ResolveTenant
         'landlord/*',
         'api/landlord/*',
         'admin/*',
-        'api/empresas',   
-        
-    'api/empresa/toggle-status',    
+        'api/empresas',      
         'login',
         'register',
         'sanctum/csrf-cookie',

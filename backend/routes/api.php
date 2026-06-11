@@ -30,12 +30,11 @@ Route::withoutMiddleware(['resolve.tenant', 'auth.tenant'])->group(function () {
 // ==================== ROTAS PROTEGIDAS (Tenant) ====================
 Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uuidPattern) {
 
-    Route::prefix('empresa')->group(function () {
-        Route::get('/', [EmpresaController::class, 'showSelf']);           // Opcional: ver dados
-        Route::put('/', [EmpresaController::class, 'updateTenant']);       // ← Correto
-        Route::post('/logo', [EmpresaController::class, 'uploadLogo']);    // Upload separado
-        Route::patch('/toggle-status', [EmpresaController::class, 'toggleSelfStatus']);
-    });
+Route::prefix('empresa')->group(function () {
+    Route::get('/', [EmpresaController::class, 'showSelf']);           // Opcional: ver dados
+    Route::put('/', [EmpresaController::class, 'updateTenant']);       // ← Correto
+    Route::post('/logo', [EmpresaController::class, 'uploadLogo']);    // Upload separado
+});
 
     Route::get('/me', [UserController::class, 'me']);
 
@@ -55,7 +54,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
         Route::get('/saft/alertas', [RelatoriosController::class, 'alertas']);
         Route::get('/users/create', [UserController::class, 'create']);
         Route::apiResource('/users', UserController::class)->except(['store']);
-        Route::patch('/empresa/toggle-status', [EmpresaController::class, 'toggleSelfStatus'])->name('empresa.toggle-status');
+        Route::patch('/empresa/toggle-status', [EmpresaController::class, 'toggleSelfStatus']);
 
         Route::prefix('clientes')->group(function () use ($uuidPattern) {
             Route::get('/todos', [ClienteController::class, 'indexWithTrashed'])->name('clientes.todos');

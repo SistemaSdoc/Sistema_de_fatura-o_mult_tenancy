@@ -494,55 +494,58 @@ BUILDING;
     // 10. ALTERAR PRÓPRIO STATUS (tenant autenticado)
     // Rota: PATCH /api/empresa/toggle-status
     // ============================================================
-    public function toggleSelfStatus(Request $request)
-    {
-        $empresaId = $request->header('X-Empresa-ID') ?? $request->header('X-Tenant-ID');
-
-        if (!$empresaId) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Empresa não identificada. Header X-Empresa-ID ausente.'
-            ], 400);
-        }
-
-        $empresa = Empresa::on('landlord')->find($empresaId);
-
-        if (!$empresa) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Empresa não encontrada no landlord.'
-            ], 404);
-        }
-
-        $statusAnterior = $empresa->status;
-        $novoStatus     = $statusAnterior === 'ativo' ? 'suspenso' : 'ativo';
-
-        $afetados = DB::connection('landlord')
-            ->table('empresas')
-            ->where('id', $empresa->id)
-            ->where('status', $statusAnterior)
-            ->update([
-                'status'     => $novoStatus,
-                'updated_at' => now(),
-            ]);
-
-        if ($afetados === 0) {
-            return response()->json([
-                'success' => false,
-                'message' => 'O status foi alterado por outro utilizador. Recarregue a página.',
-            ], 409);
-        }
-
-        $acao = $novoStatus === 'ativo' ? 'reativada' : 'suspensa';
-
+public function toggleSelfStatus(Request $request)
+{
+    // ✅ Usar o tenant JÁ RESOLVIDO pelo middleware
+    $empresa = $request->attributes->get('current_empresa');
+    if (!$empresa) {
         return response()->json([
-            'success'         => true,
-            'message'         => "Empresa {$acao} com sucesso.",
-            'status'          => $novoStatus,
-            'status_anterior' => $statusAnterior,
-        ]);
+            'success' => false,
+            'message' => 'Tenant não resolvido.'
+        ], 400);
     }
 
+    // ✅ Ou usar o user autenticado (garantido pelo auth.tenant)
+    $user = $request->user();
+    // $user->empresa_id já está no contexto do tenant correto
+
+    $statusAnterior = $empresa->status;
+    $novoStatus = $statusAnterior === 'ativo' ? 'suspenso' : 'ativo';
+
+    // ✅ Update com verificação de concorrência (optimistic locking)
+    $afetados = DB::connection('landlord')
+        ->table('empresas')
+        ->where('id', $empresa->id)
+        ->where('status', $statusAnterior)
+        ->update([
+            'status'     => $novoStatus,
+            'updated_at' => now(),
+        ]);
+
+    if ($afetados === 0) {
+        return response()->json([
+            'success' => false,
+            'message' => 'O status foi alterado por outro utilizador.',
+        ], 409);
+    }
+
+    // ✅ Log de auditoria
+    \Log::info("Empresa status alterado", [
+        'empresa_id' => $empresa->id,
+        'user_id'    => $user->id,
+        'de'         => $statusAnterior,
+        'para'       => $novoStatus,
+    ]);
+
+    $acao = $novoStatus === 'ativo' ? 'reativada' : 'suspensa';
+
+    return response()->json([
+        'success'         => true,
+        'message'         => "Empresa {$acao} com sucesso.",
+        'status'          => $novoStatus,
+        'status_anterior' => $statusAnterior,
+    ]);
+}
     // ============================================================
     // 11. ALTERAR STATUS POR LANDLORD (painel landlord)
     // ============================================================

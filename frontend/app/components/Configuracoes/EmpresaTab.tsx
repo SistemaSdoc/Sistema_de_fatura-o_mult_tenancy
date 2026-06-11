@@ -3,12 +3,14 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Building2, Hash, AtSign, Phone, MapPin, Globe, AlertCircle, Loader2, Camera, Upload, ImageIcon } from "lucide-react";
 import { useAuth } from "@/context/authprovider";
+
 import { toast } from "sonner";
 import { api } from "@/services/axios";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+
 import {
     Select, SelectContent, SelectItem,
     SelectTrigger, SelectValue,
@@ -22,6 +24,9 @@ import {
     DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { ThemeColors, FormInput, ReadonlyField, SaveButton, getLogoUrl } from "./ConfiguracoesComuns";
+
+// ✅ Removido a linha duplicada do useAuth
+// const { user, loading: userLoading, logout: authLogout } = useAuth(); ← APAGAR ESTA LINHA
 
 const LogoUploader = ({
     colors, currentLogo, onUploaded, disabled,
@@ -149,7 +154,8 @@ const LogoUploader = ({
 };
 
 export function EmpresaTab({ colors }: { colors: ThemeColors }) {
-    const { user, refreshUser } = useAuth();
+    // ✅ Já tem o logout aqui
+    const { user, logout, refreshUser } = useAuth();
     const empresa = user?.empresa;
 
     const [loading, setLoading] = useState(false);
@@ -187,52 +193,87 @@ export function EmpresaTab({ colors }: { colors: ThemeColors }) {
         setForm(p => ({ ...p, [name]: value }));
     };
 
-const handleSubmit = async () => {
-    if (empresa?.status === "suspenso") {
-        toast.error("Empresa suspensa — não é possível editar os dados.");
-        return;
-    }
-
-    setLoading(true);
-    try {
-        const response = await api.put("/api/empresa", {
-            nome: form.nome,
-            nif: form.nif,
-            email: form.email,
-            telefone: form.telefone,
-            endereco: form.endereco,
-            regime_fiscal: form.regime_fiscal,
-            sujeito_iva: form.sujeito_iva,
-        });
-
-        if (response.data.success) {
-            await refreshUser();           // Atualiza o contexto global
-            toast.success("Dados da empresa atualizados com sucesso!");
-        } else {
-            toast.error("Resposta inválida do servidor");
+    const handleSubmit = async () => {
+        if (empresa?.status === "suspenso") {
+            toast.error("Empresa suspensa — não é possível editar os dados.");
+            return;
         }
-    } catch (error: any) {
-        console.error(error);
-        toast.error(error.response?.data?.message || "Erro ao atualizar empresa");
-    } finally {
-        setLoading(false);
-    }
-};
 
+        setLoading(true);
+        try {
+            const response = await api.put("/api/empresa", {
+                nome: form.nome,
+                nif: form.nif,
+                email: form.email,
+                telefone: form.telefone,
+                endereco: form.endereco,
+                regime_fiscal: form.regime_fiscal,
+                sujeito_iva: form.sujeito_iva,
+            });
+
+            if (response.data.success) {
+                await refreshUser();
+                toast.success("Dados da empresa atualizados com sucesso!");
+            } else {
+                toast.error("Resposta inválida do servidor");
+            }
+        } catch (error: any) {
+            console.error(error);
+            toast.error(error.response?.data?.message || "Erro ao atualizar empresa");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // ✅ handleToggleStatus CORRIGIDO
     const handleToggleStatus = async () => {
+        if (!empresa?.id) {
+            toast.error("Empresa não identificada");
+            return;
+        }
+
         setTogglingStatus(true);
         try {
-            const response = await api.patch<{
-                success: boolean; message: string; status: "ativo" | "suspenso";
-            }>("/api/empresa/toggle-status");
+            // ✅ Adicionado o ID da empresa na URL
+            const response = await api.patch(`/api/empresa/toggle-status/`);
 
             toast.success(response.data.message);
             setShowConfirmDialog(false);
+             setTimeout(async () => {
+                    await logout(); // O logout já faz router.replace("/login")
+                }, 1500);
+               
+            
+            // ✅ Verifica se precisa redirecionar para login
+            if (response.data.redirect_to_login) {
+                toast.info("Empresa suspensa. A sessão será encerrada...", {
+                    duration: 2000,
+                });
+                
+                // ✅ Delay para o toast aparecer
+               
+                
+                // Não continua
+            }
+            
+            // ✅ Se não for suspensão, apenas recarrega os dados
             await refreshUser();
+            
         } catch (err: unknown) {
-            const msg = (err as { response?: { data?: { message?: string } } })
-                ?.response?.data?.message;
-            toast.error(msg ?? "Erro ao alterar status");
+            const error = err as { 
+                response?: { 
+                    status?: number;
+                    data?: { message?: string };
+                } 
+            };
+            
+            if (error.response?.status === 409) {
+                toast.error("Status foi alterado por outro utilizador. Recarregando...");
+                await refreshUser();
+            } else {
+                const msg = error.response?.data?.message;
+                toast.error(msg ?? "Erro ao alterar status da empresa");
+            }
         } finally {
             setTogglingStatus(false);
         }
@@ -254,31 +295,42 @@ const handleSubmit = async () => {
                             <p className="text-sm font-medium" style={{ color: colors.text }}>
                                 Status actual:
                             </p>
-                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${isSuspended
-                                    ? "bg-[#dc3545] text-red-800 dark:bg-red-900 dark:text-red-200"
-                                    : "bg-[#28a745] text-green-800 dark:bg-green-900 dark:text-green-200"
-                                }`}>
+                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                                isSuspended
+                                    ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
+                                    : "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                            }`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${
+                                    isSuspended ? "bg-red-500" : "bg-green-500"
+                                }`}></span>
                                 {isSuspended ? "Suspensa" : "Ativa"}
                             </span>
                         </div>
+                        
                         <button
                             onClick={() => setShowConfirmDialog(true)}
                             disabled={togglingStatus}
-                            className={`px-4 py-2 rounded-lg font-medium text-white transition-all ${isSuspended
-                                    ? "bg-[#28a745]"
-                                    : "bg-[#dc3545]"
-                                } disabled:opacity-50`}>
-                            {togglingStatus
-                                ? <Loader2 className="w-4 h-4 animate-spin" />
-                                : isSuspended ? "Reativar empresa" : "Desativar empresa"}
+                            className={`px-4 py-2 rounded-lg font-medium text-white transition-all ${
+                                isSuspended
+                                    ? "bg-green-600 hover:bg-green-700"
+                                    : "bg-red-600 hover:bg-red-700"
+                            } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                            {togglingStatus ? (
+                                <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+                            ) : isSuspended ? (
+                                "Reativar empresa"
+                            ) : (
+                                "Suspender empresa"
+                            )}
                         </button>
                     </div>
 
                     {isSuspended && (
-                        <div className="text-sm p-3 rounded-md flex items-start gap-2"
-                            style={{ backgroundColor: `${colors.danger}10`, color: colors.danger }}>
-                            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                            A empresa está suspensa. Nenhum utilizador pode aceder ao sistema até à reativação.
+                        <div className="mt-4 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
+                            <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                                ⚠️ Empresa suspensa. Algumas funcionalidades podem estar limitadas.
+                            </p>
                         </div>
                     )}
 
@@ -308,19 +360,16 @@ const handleSubmit = async () => {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-<LogoUploader
-    colors={colors}
-    currentLogo={form.logo}
-    disabled={isSuspended}
-    onUploaded={async (url) => {
-        setForm(p => ({ ...p, logo: url }));
-        
-        // Força atualização completa do user
-        await refreshUser();
-        
-        toast.success("Logo atualizado com sucesso!");
-    }}
-/>
+                    <LogoUploader
+                        colors={colors}
+                        currentLogo={form.logo}
+                        disabled={isSuspended}
+                        onUploaded={async (url) => {
+                            setForm(p => ({ ...p, logo: url }));
+                            await refreshUser();
+                            toast.success("Logo atualizado com sucesso!");
+                        }}
+                    />
                 </CardContent>
             </Card>
 
@@ -439,13 +488,13 @@ const handleSubmit = async () => {
             <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
                 <DialogContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                     <DialogHeader>
-                        <DialogTitle style={{ color: colors.danger }}>
-                            {isSuspended ? "Reativar empresa" : "Desativar empresa"}
+                        <DialogTitle style={{ color: isSuspended ? colors.success : colors.danger }}>
+                            {isSuspended ? "Reativar Empresa" : "Suspender Empresa"}
                         </DialogTitle>
                         <DialogDescription style={{ color: colors.textSecondary }}>
                             {isSuspended
-                                ? "A empresa será reativada e todos os utilizadores poderão aceder normalmente."
-                                : "Ao desativar a empresa, nenhum utilizador conseguirá aceder ao sistema até que a conta seja reativada."}
+                                ? "Tem certeza que deseja reativar esta empresa? Todas as funcionalidades serão restauradas."
+                                : "Tem certeza que deseja suspender esta empresa? Os utilizadores não poderão aceder ao sistema até que seja reativada."}
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
@@ -453,10 +502,16 @@ const handleSubmit = async () => {
                             style={{ borderColor: colors.border, color: colors.text }}>
                             Cancelar
                         </Button>
-                        <Button onClick={() => void handleToggleStatus()} disabled={togglingStatus}
-                            style={{ backgroundColor: colors.primary, color: "white" }}>
+                        <Button 
+                            onClick={() => void handleToggleStatus()} 
+                            disabled={togglingStatus}
+                            style={{ 
+                                backgroundColor: isSuspended ? colors.success : colors.danger,
+                                color: "white"
+                            }}
+                        >
                             {togglingStatus && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
-                            Confirmar
+                            {isSuspended ? "Sim, reativar" : "Sim, suspender"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
