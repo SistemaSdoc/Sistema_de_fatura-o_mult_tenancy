@@ -526,7 +526,7 @@ class DocumentoFiscalController extends Controller
     }
 
     /* =====================================================================
-     | IMPRESSÃO TÉRMICA DIRETA — APENAS USB
+     | IMPRESSÃO TÉRMICA DIRETA — APENAS USB (70mm)
      | ================================================================== */
 
     public function imprimirTermica(string $id, ImpressoraTermicaService $impressoraService): JsonResponse
@@ -572,45 +572,190 @@ class DocumentoFiscalController extends Controller
     }
 
     /* =====================================================================
-     | IMPRESSÃO HTML (A4)
+     | IMPRESSÃO A4 (HTML para impressão)
      | ================================================================== */
 
-    public function printView(string $id): \Illuminate\Contracts\View\View
+    /**
+     * Abre uma página HTML formatada para impressão em papel A4
+     * Rota: GET /api/documentos-fiscais/{id}/print-a4
+     */
+    public function printA4(string $id): \Illuminate\Contracts\View\View
     {
         try {
+            Log::info('printA4 called', ['id' => $id]);
+            
             $documento = $this->documentoService->buscarDocumento($id);
-            $dados     = $this->documentoService->dadosParaPdf($documento);
-
+            $dados = $this->documentoService->dadosParaPdf($documento);
+            
+            // Buscar dados completos da empresa
+            $empresa = \App\Models\Empresa::on('landlord')
+                ->where('db_name', config('database.connections.tenant.database'))
+                ->first();
+            
+            if ($empresa) {
+                $empresaArray = $empresa->toArray();
+                $empresaArray['logo_base64'] = null;
+                
+                // Tenta carregar o logo em base64
+                $logoPath = $empresaArray['logo'] ?? null;
+                if (!empty($logoPath)) {
+                    try {
+                        if (Storage::disk('public')->exists($logoPath)) {
+                            $logoConteudo = Storage::disk('public')->get($logoPath);
+                            $logoMime = Storage::disk('public')->mimeType($logoPath) ?: 'image/jpeg';
+                            $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
+                        } elseif (file_exists(public_path($logoPath))) {
+                            $logoConteudo = file_get_contents(public_path($logoPath));
+                            $logoMime = mime_content_type(public_path($logoPath)) ?: 'image/jpeg';
+                            $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
+                        }
+                    } catch (\Throwable $logoErr) {
+                        Log::warning('printA4: erro ao converter logo', ['error' => $logoErr->getMessage()]);
+                    }
+                }
+                
+                $dados['empresa'] = $empresaArray;
+            } else {
+                $dados['empresa'] = $dados['empresa'] ?? [];
+            }
+            
+            // Garantir que o endereço está presente
+            if (empty($dados['empresa']['endereco']) && !empty($dados['empresa']['morada'])) {
+                $dados['empresa']['endereco'] = $dados['empresa']['morada'];
+            }
+            
+            // Buscar documento de origem para recibos
             $documentoOrigem = null;
             if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
                 $documentoOrigem = DocumentoFiscal::with(['itens.produto', 'cliente'])->find($documento->fatura_id);
             }
+            
             $docInfo = $documentoOrigem ?? $documento;
-
+            
+            // Gerar QR Code
             $qrCodeTexto = $dados['qr_code'] ?? null;
-            $qrCodeImg   = null;
+            $qrCodeImg = null;
             if ($qrCodeTexto) {
-                $qr     = new QrCode($qrCodeTexto);
-                $qr->setSize(200);
-                $writer = new PngWriter();
-                $result = $writer->write($qr);
-                $qrCodeImg = base64_encode($result->getString());
+                try {
+                    $qr = new QrCode($qrCodeTexto);
+                    $qr->setSize(150);
+                    $writer = new PngWriter();
+                    $result = $writer->write($qr);
+                    $qrCodeImg = base64_encode($result->getString());
+                } catch (\Throwable $e) {
+                    Log::warning('printA4: erro ao gerar QR Code', ['error' => $e->getMessage()]);
+                }
             }
-
-            return view('documentos.print', [
-                'documento'  => $documento,
-                'dados'      => $dados,
-                'docInfo'    => $docInfo,
-                'qrCodeImg'  => $qrCodeImg,
+            
+            return view('documentos.print-view', [
+                'empresa'         => $dados['empresa'],
+                'documento'       => $documento,
+                'documentoOrigem' => $documentoOrigem,
+                'docInfo'         => $docInfo,
+                'itens'           => $docInfo->itens ?? [],
+                'cliente'         => $dados['cliente'],
+                'qr_code'         => $qrCodeTexto,
+                'qr_code_img'     => $qrCodeImg,
+                'qr_html'         => $this->gerarQrHtml($qrCodeTexto),
+                'descontoGlobal'  => $dados['desconto_global'] ?? 0,
+                'troco'           => $dados['troco'] ?? 0,
+                'temDesconto'     => ($dados['desconto_global'] ?? 0) > 0,
             ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            Log::error('printA4: documento não encontrado', ['id' => $id]);
+            abort(404, 'Documento não encontrado');
         } catch (\Exception $e) {
-            Log::error('Erro no printView', ['id' => $id, 'error' => $e->getMessage()]);
-            abort(500, 'Erro ao gerar impressão');
+            Log::error('Erro no printA4', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            abort(500, 'Erro ao gerar impressão A4: ' . $e->getMessage());
         }
     }
 
     /* =====================================================================
-     | PDF VIEWER — TALÃO TÉRMICO HTML
+     | PDF (DomPDF) - DOWNLOAD A4
+     | ================================================================== */
+
+    /**
+     * Download do PDF do documento fiscal em formato A4
+     * 
+     * @param string $id
+     * @return \Symfony\Component\HttpFoundation\BinaryFileResponse|\Illuminate\Http\JsonResponse
+     */
+    public function downloadPdf(string $id)
+    {
+        try {
+            $documento = $this->documentoService->buscarDocumento($id);
+            $dados = $this->documentoService->dadosParaPdf($documento);
+            $dados['qr_html'] = $this->gerarQrHtml($dados['qr_code'] ?? null);
+
+            // Buscar os dados completos da empresa (igual ao pdfViewer)
+            $empresa = \App\Models\Empresa::on('landlord')
+                ->where('db_name', config('database.connections.tenant.database'))
+                ->first();
+
+            if ($empresa) {
+                $empresaArray = $empresa->toArray();
+                $empresaArray['logo_base64'] = null;
+
+                // Tenta carregar o logo em base64
+                $logoPath = $empresaArray['logo'] ?? null;
+                if (!empty($logoPath)) {
+                    try {
+                        if (Storage::disk('public')->exists($logoPath)) {
+                            $logoConteudo = Storage::disk('public')->get($logoPath);
+                            $logoMime = Storage::disk('public')->mimeType($logoPath) ?: 'image/jpeg';
+                            $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
+                        } elseif (file_exists(public_path($logoPath))) {
+                            $logoConteudo = file_get_contents(public_path($logoPath));
+                            $logoMime = mime_content_type(public_path($logoPath)) ?: 'image/jpeg';
+                            $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
+                        }
+                    } catch (\Throwable $logoErr) {
+                        Log::warning('downloadPdf: erro ao converter logo', ['error' => $logoErr->getMessage()]);
+                    }
+                }
+
+                $dados['empresa'] = $empresaArray;
+            } else {
+                $dados['empresa'] = $dados['empresa'] ?? [];
+            }
+
+            // Garantir que o endereço está presente
+            if (empty($dados['empresa']['endereco']) && !empty($dados['empresa']['morada'])) {
+                $dados['empresa']['endereco'] = $dados['empresa']['morada'];
+            }
+
+            Log::info('[downloadPdf] Dados da empresa preparados', [
+                'empresa_nome' => $dados['empresa']['nome'] ?? 'N/A',
+                'empresa_endereco' => $dados['empresa']['endereco'] ?? 'N/A',
+            ]);
+
+            $pdf = Pdf::loadView('documentos.pdf', $dados)
+                ->setPaper('a4', 'portrait')
+                ->setOptions([
+                    'defaultFont'          => 'DejaVu Sans',
+                    'isRemoteEnabled'      => true,
+                    'isHtml5ParserEnabled' => true,
+                    'dpi'                  => 150,
+                ]);
+
+            return $pdf->download($documento->numero_documento . '.pdf');
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            Log::error('Documento não encontrado para download PDF', ['id' => $id, 'error' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Documento não encontrado'
+            ], 404);
+        } catch (\Exception $e) {
+            Log::error('Erro ao fazer download do PDF', ['id' => $id, 'error' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao gerar PDF: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /* =====================================================================
+     | PDF VIEWER — TALÃO TÉRMICO HTML (70mm)
      | ================================================================== */
 
     public function pdfViewer(string $id): \Illuminate\Contracts\View\View
@@ -707,49 +852,6 @@ class DocumentoFiscalController extends Controller
         } catch (\Exception $e) {
             Log::error('Erro no pdfViewer', ['error' => $e->getMessage()]);
             abort(500, 'Erro ao gerar visualização do PDF');
-        }
-    }
-
-    /* =====================================================================
-     | PDF (DomPDF) - DOWNLOAD (CORRIGIDO)
-     | ================================================================== */
-
-    /**
-     * Download do PDF do documento fiscal
-     * 
-     * @param string $id
-     * @return \Symfony\Component\HttpFoundation\BinaryFileResponse|\Illuminate\Http\JsonResponse
-     */
-    public function downloadPdf(string $id)
-    {
-        try {
-            $documento = $this->documentoService->buscarDocumento($id);
-            $dados = $this->documentoService->dadosParaPdf($documento);
-            $dados['qr_html'] = $this->gerarQrHtml($dados['qr_code'] ?? null);
-
-            $pdf = Pdf::loadView('documentos.pdf', $dados)
-                ->setPaper('a4', 'portrait')
-                ->setOptions([
-                    'defaultFont'          => 'DejaVu Sans',
-                    'isRemoteEnabled'      => true,
-                    'isHtml5ParserEnabled' => true,
-                    'dpi'                  => 150,
-                ]);
-
-            return $pdf->download($documento->numero_documento . '.pdf');
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            Log::error('Documento não encontrado para download PDF', ['id' => $id, 'error' => $e->getMessage()]);
-            return response()->json([
-                'success' => false,
-                'message' => 'Documento não encontrado'
-            ], 404);
-        } catch (\Exception $e) {
-            Log::error('Erro ao fazer download do PDF', ['id' => $id, 'error' => $e->getMessage()]);
-            return response()->json([
-                'success' => false,
-                'message' => 'Erro ao gerar PDF: ' . $e->getMessage()
-            ], 500);
-            
         }
     }
 

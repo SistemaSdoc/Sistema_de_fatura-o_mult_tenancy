@@ -76,6 +76,22 @@ interface AuthProviderProps {
 // Rotas que NÃO precisam de autenticação (não chamam /me)
 const NO_AUTH_ROUTES = ["/", "/login", "/register", "/forgot-password", "/reset-password"];
 
+// Roles permitidas no sistema
+const ALLOWED_ROLES = [
+    "admin",
+    "gestor",
+    "contablista",
+    "operador",
+];
+
+// Mapa de redirecionamento por role
+const REDIRECT_MAP: Record<string, string> = {
+    admin: "/dashboard",
+    gestor: "/dashboard/Produtos_servicos/Stock",        
+    contablista: "/dashboard/relatorios",                
+    operador: "/dashboard/Vendas/Nova_venda",                                  
+};
+
 export function AuthProvider({ children }: AuthProviderProps) {
     const router = useRouter();
     const pathname = usePathname();
@@ -90,43 +106,61 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const isNoAuthRoute = pathname ? NO_AUTH_ROUTES.includes(pathname) : false;
 
     // ========== FETCH USER ==========
-const fetchUser = useCallback(async (): Promise<void> => {
-    console.log("[AuthProvider] fetchUser iniciado");
+    const fetchUser = useCallback(async (): Promise<void> => {
+        console.log("[AuthProvider] fetchUser iniciado");
 
-    if (isNoAuthRoute) {
-        setLoading(false);
-        return;
-    }
-
-    try {
-        const response = await authApi.me();
-
-        if (response.data?.success && response.data.user) {
-            const userData: User = {
-                ...response.data.user,
-                empresa: response.data.empresa,
-            };
-
-            setUser(userData);
-
-            if (response.data.empresa?.id) {
-                setTenant({
-                    id: response.data.empresa.id,
-                    subdomain: response.data.empresa.subdomain,
-                });
-            }
-
-            console.log("[AuthProvider] User atualizado com sucesso:", userData.empresa?.nome);
-        } else {
-            setUser(null);
+        if (isNoAuthRoute) {
+            setLoading(false);
+            return;
         }
-    } catch (error) {
-        console.error("[AuthProvider] fetchUser falhou:", error);
-        setUser(null);
-    } finally {
-        setLoading(false);
-    }
-}, [isNoAuthRoute]);
+
+        try {
+            const response = await authApi.me();
+
+            if (response.data?.success && response.data.user) {
+                const userData: User = {
+                    ...response.data.user,
+                    empresa: response.data.empresa,
+                };
+
+                // Verifica se a role é válida
+                if (!ALLOWED_ROLES.includes(userData.role)) {
+                    console.warn("[AuthProvider] Role não reconhecida:", userData.role);
+                    setUser(null);
+                    clearTenant();
+                    
+                    // Se não estiver na página de login, redireciona
+                    if (!isNoAuthRoute && pathname !== "/login") {
+                        router.replace("/login");
+                        toast.error(`Role "${userData.role}" não autorizada. Contacte o administrador.`);
+                    }
+                    return;
+                }
+
+                setUser(userData);
+
+                if (response.data.empresa?.id) {
+                    setTenant({
+                        id: response.data.empresa.id,
+                        subdomain: response.data.empresa.subdomain,
+                    });
+                }
+
+                console.log("[AuthProvider] User atualizado com sucesso:", {
+                    id: userData.id,
+                    role: userData.role,
+                    empresa: userData.empresa?.nome,
+                });
+            } else {
+                setUser(null);
+            }
+        } catch (error) {
+            console.error("[AuthProvider] fetchUser falhou:", error);
+            setUser(null);
+        } finally {
+            setLoading(false);
+        }
+    }, [isNoAuthRoute, pathname, router]);
 
     // ========== MOUNT EFFECT ==========
     useEffect(() => {
@@ -165,6 +199,13 @@ const fetchUser = useCallback(async (): Promise<void> => {
                     throw new Error("Dados do usuário não retornados");
                 }
 
+                // Verifica se a role é válida antes de prosseguir
+                if (!ALLOWED_ROLES.includes(data.user.role)) {
+                    console.warn("[AuthProvider] Login com role inválida:", data.user.role);
+                    toast.error(`Role "${data.user.role}" não autorizada. Contacte o administrador.`);
+                    return { success: false, message: "Role não autorizada" };
+                }
+
                 // 3. Persiste tenant
                 if (data.empresa) {
                     setTenant(data.empresa);
@@ -180,12 +221,26 @@ const fetchUser = useCallback(async (): Promise<void> => {
                 };
                 setUser(userData);
 
+                console.log("[AuthProvider] Login bem-sucedido:", {
+                    id: userData.id,
+                    role: userData.role,
+                    name: userData.name,
+                });
+
                 toast.success(`Bem-vindo, ${data.user.name}!`);
 
                 // Pequeno delay para garantir que cookies foram processados
-                await new Promise((resolve) => setTimeout(resolve, 50));
+                await new Promise((resolve) => setTimeout(resolve, 100));
 
-                router.replace("/dashboard");
+                // ========== REDIRECIONAMENTO POR ROLE ==========
+                const destination = REDIRECT_MAP[userData.role] || "/dashboard";
+                
+                console.log("[AuthProvider] Redirecionando para:", {
+                    role: userData.role,
+                    destination,
+                });
+                
+                router.replace(destination);
 
                 return { success: true };
             } catch (error: unknown) {
@@ -241,20 +296,20 @@ const fetchUser = useCallback(async (): Promise<void> => {
     }, [router]);
 
     // ========== REFRESH USER ==========
-const refreshUser = useCallback(async (): Promise<void> => {
-    console.log("[AuthProvider] refreshUser chamado - Forçando atualização");
+    const refreshUser = useCallback(async (): Promise<void> => {
+        console.log("[AuthProvider] refreshUser chamado - Forçando atualização");
 
-    // Força re-fetch sempre que refreshUser for chamado
-    hasFetched.current = false;
-    setUser(null);        // ← Limpa temporariamente para forçar busca
-    setLoading(true);
+        // Força re-fetch sempre que refreshUser for chamado
+        hasFetched.current = false;
+        setUser(null);        // ← Limpa temporariamente para forçar busca
+        setLoading(true);
 
-    try {
-        await fetchUser();
-    } catch (error) {
-        console.error("[AuthProvider] Erro no refreshUser", error);
-    }
-}, [fetchUser]);
+        try {
+            await fetchUser();
+        } catch (error) {
+            console.error("[AuthProvider] Erro no refreshUser", error);
+        }
+    }, [fetchUser]);
 
     // ========== CONTEXT VALUE ==========
     const value: AuthContextData = {

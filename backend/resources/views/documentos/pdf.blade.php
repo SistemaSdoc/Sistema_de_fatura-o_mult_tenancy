@@ -1,78 +1,184 @@
 @php
-$logoPath = public_path('images/3.png');
-$logoBase64 = base64_encode(file_get_contents($logoPath));
-
-// Dados estáticos da empresa
-$empresaMoradaEstatica = 'Avenida 21 de Janeiro, Gamek';
-$empresaTelefoneEstatico = '+244 943 489 186';
-$empresaEmailEstatico = 'geral@sdoca.it.ao';
-
-// Determinar qual documento usar para os dados (para recibos, usa o documento de origem)
-$docParaDados = $documento;
-$documentoOrigemInfo = null;
-
-if ($documento->tipo_documento === 'RC' && isset($documento->documentoOrigem) && $documento->documentoOrigem) {
-$docParaDados = $documento->documentoOrigem;
-$documentoOrigemInfo = $documento->documentoOrigem;
+if (!isset($documento) || !$documento) {
+die('Documento não encontrado');
 }
 
-// Para recibos, usar os itens do documento de origem
+// Dados DINÂMICOS da empresa (vindos do controller via $empresa)
+// CORRIGIDO: Busca o endereço de forma mais robusta com fallback
+$empresaMorada = 'Endereço não registrado';
+
+// DEBUG - ver o que está chegando (remova depois)
+// Log::info('[PDF] Dados da empresa:', ['empresa' => $empresa]);
+
+// Tenta obter o endereço de diferentes formas
+if (is_array($empresa)) {
+if (isset($empresa['endereco']) && !empty($empresa['endereco'])) {
+$empresaMorada = $empresa['endereco'];
+} elseif (isset($empresa['morada']) && !empty($empresa['morada'])) {
+$empresaMorada = $empresa['morada'];
+} elseif (isset($empresa['endereco_fiscal']) && !empty($empresa['endereco_fiscal'])) {
+$empresaMorada = $empresa['endereco_fiscal'];
+} elseif (isset($empresa['endereco_empresa']) && !empty($empresa['endereco_empresa'])) {
+$empresaMorada = $empresa['endereco_empresa'];
+}
+} elseif (is_object($empresa)) {
+if (!empty($empresa->endereco)) {
+$empresaMorada = $empresa->endereco;
+} elseif (!empty($empresa->morada)) {
+$empresaMorada = $empresa->morada;
+} elseif (!empty($empresa->endereco_fiscal)) {
+$empresaMorada = $empresa->endereco_fiscal;
+}
+}
+
+// Se ainda não encontrou, tenta buscar do banco de dados
+if ($empresaMorada === 'Endereço não registrado' && isset($empresa['id'])) {
+try {
+$empresaModel = \App\Models\Empresa::find($empresa['id']);
+if ($empresaModel) {
+if (!empty($empresaModel->endereco)) {
+$empresaMorada = $empresaModel->endereco;
+} elseif (!empty($empresaModel->morada)) {
+$empresaMorada = $empresaModel->morada;
+}
+}
+} catch (\Exception $e) {
+// Mantém o valor padrão
+}
+}
+
+// Força um valor para teste (remova depois se funcionar)
+// Se ainda não aparecer, descomente a linha abaixo para testar
+// $empresaMorada = "Rua Rainha Ginga, Nº 145, Ingombota, Luanda, Angola";
+
+$empresaTelefone = $empresa['telefone'] ?? 'Telefone não registrado';
+$empresaEmail = $empresa['email'] ?? 'Email não registrado';
+$empresaNome = $empresa['nome'] ?? 'EMPRESA';
+$empresaNif = $empresa['nif'] ?? '0000000000';
+
+// Logo DINÂMICO
+$empresaLogo = asset('images/default-logo.png');
+if (!empty($empresa['logo_base64'])) {
+$empresaLogo = $empresa['logo_base64'];
+} elseif (!empty($empresa['logo'])) {
+$logoPath = ltrim($empresa['logo'], '/');
+$logoPath = str_replace('public/', '', $logoPath);
+if (Storage::disk('public')->exists($logoPath)) {
+$logoConteudo = Storage::disk('public')->get($logoPath);
+$empresaLogo = 'data:image/png;base64,' . base64_encode($logoConteudo);
+} else {
+$empresaLogo = asset('storage/' . $logoPath);
+}
+}
+
+$tiposDocumento = [
+'FT' => 'Fatura',
+'FR' => 'Fatura-Recibo',
+'FA' => 'Fat. Adiantamento',
+'NC' => 'Nota de Crédito',
+'ND' => 'Nota de Débito',
+'RC' => 'Recibo',
+'FRt' => 'Fat. Retificação'
+];
+
+// Estado e cores
+$estadoClasse = match($documento->estado ?? '') {
+'emitido' => 'estado-emitido',
+'paga' => 'estado-paga',
+'parcialmente_paga' => 'estado-parcial',
+'cancelado' => 'estado-cancelado',
+'expirado' => 'estado-expirado',
+default => 'estado-emitido'
+};
+
+$estadoLabel = match($documento->estado ?? '') {
+'emitido' => 'Emitido',
+'paga' => 'Pago',
+'parcialmente_paga' => 'Pag. Parcial',
+'cancelado' => 'Cancelado',
+'expirado' => 'Expirado',
+default => ($documento->estado ?? '')
+};
+
+$metodosPagamento = [
+'transferencia' => 'Transferência Bancária',
+'multibanco' => 'Multibanco',
+'dinheiro' => 'Dinheiro',
+'cheque' => 'Cheque',
+'cartao' => 'Cartão'
+];
+
+// ============================================================
+// PARA RECIBOS: Buscar dados da fatura de origem
+// ============================================================
+$documentoOrigemInfo = null;
 $itensParaExibir = $itens;
-if ($documento->tipo_documento === 'RC' && isset($documentoOrigemInfo) && $documentoOrigemInfo && isset($documentoOrigemInfo->itens)) {
+$docParaTotais = $documento;
+
+if ($documento->tipo_documento === 'RC') {
+// Tentar obter o documento de origem (fatura)
+if (isset($documentoOrigem) && $documentoOrigem) {
+$documentoOrigemInfo = $documentoOrigem;
+} elseif (isset($documento->documentoOrigem) && $documento->documentoOrigem) {
+$documentoOrigemInfo = $documento->documentoOrigem;
+} elseif ($documento->fatura_id) {
+$documentoOrigemInfo = \App\Models\Tenant\DocumentoFiscal::with(['itens', 'cliente', 'venda'])
+->find($documento->fatura_id);
+}
+
+// Se encontrou a fatura de origem, usar os dados dela
+if ($documentoOrigemInfo) {
+$docParaTotais = $documentoOrigemInfo;
+
+// Usar os itens da fatura de origem
+if (isset($documentoOrigemInfo->itens) && count($documentoOrigemInfo->itens) > 0) {
 $itensParaExibir = $documentoOrigemInfo->itens;
 }
 
-// Calcular desconto global e troco
+// Se o cliente não veio no documento, buscar da fatura
+if (empty($cliente) || (isset($cliente['nome']) && $cliente['nome'] === 'Consumidor Final')) {
+if ($documentoOrigemInfo->cliente_id && isset($documentoOrigemInfo->cliente)) {
+$cliente = [
+'nome' => $documentoOrigemInfo->cliente->nome ?? $documentoOrigemInfo->cliente_nome ?? 'Consumidor Final',
+'nif' => $documentoOrigemInfo->cliente->nif ?? $documentoOrigemInfo->cliente_nif ?? null,
+'morada' => $documentoOrigemInfo->cliente->endereco ?? null,
+];
+} elseif ($documentoOrigemInfo->cliente_nome) {
+$cliente = [
+'nome' => $documentoOrigemInfo->cliente_nome,
+'nif' => $documentoOrigemInfo->cliente_nif ?? null,
+];
+}
+}
+}
+}
+
+// Tentar obter o desconto global da venda associada (usando docParaTotais que agora pode ser a fatura origem)
 $descontoGlobal = 0;
 $troco = 0;
 
-if ($docParaDados->venda_id && isset($docParaDados->venda)) {
-$venda = $docParaDados->venda;
+if ($docParaTotais->venda_id && isset($docParaTotais->venda)) {
+$venda = $docParaTotais->venda;
 $descontoGlobal = (float) ($venda->desconto_global ?? 0);
 $troco = (float) ($documento->troco ?? 0);
 } else {
-$descontoGlobal = (float) ($docParaDados->desconto_global ?? 0);
+$descontoGlobal = (float) ($docParaTotais->desconto_global ?? 0);
 $troco = (float) ($documento->troco ?? 0);
 }
 
+// Calcular percentual de desconto
 $percentualDesconto = 0;
 $temDesconto = false;
 
-if ($descontoGlobal > 0 && ($docParaDados->base_tributavel ?? 0) > 0) {
+if ($descontoGlobal > 0 && ($docParaTotais->base_tributavel ?? 0) > 0) {
 $temDesconto = true;
-$subtotalBruto = $docParaDados->base_tributavel + $descontoGlobal;
+$subtotalBruto = $docParaTotais->base_tributavel + $descontoGlobal;
 $percentualDesconto = ($descontoGlobal / $subtotalBruto) * 100;
 }
 
 $temTroco = $troco > 0;
-
-$tipos = ['FT'=>'Factura','FR'=>'Factura-Recibo','FP'=>'Factura Proforma','FA'=>'Fact. Adiantamento','NC'=>'Nota de Crédito','ND'=>'Nota de Débito','RC'=>'Recibo','FRt'=>'Fact. Retificação'];
-
-$metodosPagamento = [
-'transferencia'=>'Transferência Bancária',
-'multibanco'=>'Multibanco',
-'dinheiro'=>'Dinheiro/Cache',
-'cheque'=>'Cheque',
-'cartao'=>'Cartão'
-];
-
-$estadoClasse = match($documento->estado ?? '') {
-'emitido'=>'estado-emitido',
-'paga'=>'estado-paga',
-'parcialmente_paga'=>'estado-parcial',
-'cancelado'=>'estado-cancelado',
-'expirado'=>'estado-expirado',
-default=>'estado-emitido'
-};
-$estadoLabel = match($documento->estado ?? '') {
-'emitido'=>'Emitido',
-'paga'=>'Pago',
-'parcialmente_paga'=>'Pag. Parcial',
-'cancelado'=>'Cancelado',
-'expirado'=>'Expirado',
-default=>($documento->estado ?? '')
-};
 @endphp
+
 <!DOCTYPE html>
 <html lang="pt">
 
@@ -120,7 +226,7 @@ default=>($documento->estado ?? '')
             width: 60%;
         }
 
-        /* Logo e Empresa lado a lado - USANDO DISPLAY INLINE-BLOCK */
+        /* Logo e Empresa lado a lado */
         .logo-empresa-wrapper {
             white-space: nowrap;
         }
@@ -132,8 +238,8 @@ default=>($documento->estado ?? '')
         }
 
         .logo-img {
-            max-width: 60px;
-            max-height: 60px;
+            max-width: 100px;
+            max-height: 100px;
             width: auto;
             height: auto;
             display: block;
@@ -145,7 +251,7 @@ default=>($documento->estado ?? '')
         }
 
         .empresa-nome {
-            font-size: 20px;
+            font-size: 25px;
             font-weight: bold;
             color: #000000;
             margin-bottom: 5px;
@@ -153,7 +259,7 @@ default=>($documento->estado ?? '')
         }
 
         .empresa-info {
-            font-size: 11px;
+            font-size: 15px;
             color: #333333;
             line-height: 1.4;
         }
@@ -191,7 +297,7 @@ default=>($documento->estado ?? '')
             border: 1px solid #000000;
         }
 
-        /* ORIGEM */
+        /* ORIGEM (para recibos) */
         .origem-box {
             background: #f5f5f5;
             border: 1px solid #cccccc;
@@ -250,26 +356,21 @@ default=>($documento->estado ?? '')
         }
 
         /* ITENS */
-
         table.items {
-            font-size: larger;
             width: 100%;
-            border-bottom: #000000 2px solid;
-            border-collapse: collapse 4px;
-            margin-bottom: 20px;
-            font-size: 13px;
-        }
-
-        table.items thead tr {
-            color: #fff;
+            border-collapse: collapse;
+            margin-bottom: 25px;
+            font-size: 17px;
         }
 
         table.items thead th {
             padding: 10px 8px;
-            font-size: 13px;
+            font-size: 15px;
             font-weight: bold;
             text-transform: uppercase;
             text-align: left;
+            background: #f0f0f0;
+            border-bottom: 2px solid #000000;
         }
 
         table.items thead th.r {
@@ -284,12 +385,8 @@ default=>($documento->estado ?? '')
             background: #f5f5f5;
         }
 
-        table.items tbody tr:nth-child(odd) {
-            background: #ffffff;
-        }
-
         table.items tbody td {
-            padding: 10px 8px;
+            padding: 12px 10px;
             border-bottom: 1px solid #dddddd;
             vertical-align: top;
         }
@@ -305,17 +402,17 @@ default=>($documento->estado ?? '')
         .item-nome {
             font-weight: bold;
             color: #000000;
-            font-size: 13px;
+            font-size: 15px;
         }
 
         .item-sub {
-            font-size: 11px;
+            font-size: 13px;
             color: #666666;
             margin-top: 3px;
         }
 
         .item-badge {
-            font-size: 11px;
+            font-size: 13px;
             background: #e0e0e0;
             color: #000000;
             border-radius: 3px;
@@ -325,34 +422,34 @@ default=>($documento->estado ?? '')
 
         .ret-badge {
             color: #cc0000;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: bold;
         }
 
         /* TOTAIS */
         .totals-wrapper {
-            margin-bottom: 20px;
+            margin-bottom: 25px;
             overflow: hidden;
         }
 
         .totals-spacer {
             float: left;
-            width: 52%;
+            width: 54%;
         }
 
         .totals-box {
             float: right;
-            width: 44%;
+            width: 46%;
         }
 
         table.totals {
             width: 100%;
             border-collapse: collapse;
-            font-size: 14px;
+            font-size: 17px;
         }
 
         table.totals td {
-            padding: 8px 10px;
+            padding: 10px 12px;
         }
 
         table.totals td:last-child {
@@ -362,7 +459,7 @@ default=>($documento->estado ?? '')
 
         table.totals .sep td {
             padding: 0;
-            height: 1px;
+            height: 2px;
         }
 
         table.totals .total-final {
@@ -371,7 +468,7 @@ default=>($documento->estado ?? '')
         }
 
         table.totals .total-final td {
-            font-size: 17px;
+            font-size: 19px;
             font-weight: bold;
             padding: 10px 10px;
         }
@@ -438,13 +535,13 @@ default=>($documento->estado ?? '')
             background: #f5f5f5;
             border: 1px solid #dddddd;
             border-radius: 5px;
-            padding: 12px 14px;
-            font-size: 12px;
+            padding: 14px 18px;
+            font-size: 14px;
             word-break: break-all;
         }
 
         .hash-title {
-            font-size: 13px;
+            font-size: 15px;
             font-weight: bold;
             color: #000000;
             margin-bottom: 5px;
@@ -454,7 +551,7 @@ default=>($documento->estado ?? '')
             font-family: 'DejaVu Sans Mono', monospace;
             color: #333333;
             line-height: 1.5;
-            font-size: 11px;
+            font-size: 13px;
         }
 
         .qr-box {
@@ -462,15 +559,11 @@ default=>($documento->estado ?? '')
         }
 
         .qr-label {
-            font-size: 11px;
+            font-size: 13px;
             color: #666666;
             text-transform: uppercase;
             letter-spacing: 0.4px;
             margin-bottom: 5px;
-        }
-
-        .qr-svg-wrap {
-            display: block;
         }
 
         .qr-svg-wrap img,
@@ -489,25 +582,6 @@ default=>($documento->estado ?? '')
             line-height: 1.2;
         }
 
-        /* ASSINATURAS */
-        .sig-left {
-            float: left;
-            width: 40%;
-            text-align: center;
-            font-size: 13px;
-            color: #555555;
-            margin-top: 50px;
-        }
-
-        .sig-right {
-            float: right;
-            width: 40%;
-            text-align: center;
-            font-size: 13px;
-            color: #555555;
-            margin-top: 50px;
-        }
-
         .sig-line {
             border-top: 1px solid #999999;
             margin-bottom: 6px;
@@ -519,15 +593,15 @@ default=>($documento->estado ?? '')
         /* RODAPÉ */
         .footer {
             border-top: 2px solid #000000;
-            padding-top: 12px;
-            margin-top: 12px;
+            padding-top: 20px;
+            margin-top: 16px;
             overflow: hidden;
         }
 
         .footer-left {
             float: left;
             width: 60%;
-            font-size: 11px;
+            font-size: 14px;
             color: #666666;
             line-height: 1.5;
         }
@@ -536,24 +610,23 @@ default=>($documento->estado ?? '')
             float: right;
             width: 36%;
             text-align: right;
-            font-size: 11px;
+            font-size: 14px;
             color: #666666;
             line-height: 1.5;
         }
 
         .footer-thanks {
             text-align: center;
-            font-size: 15px;
+            font-size: 16px;
             font-weight: bold;
             color: #000000;
-            margin-bottom: 10px;
+            margin-bottom: 14px;
         }
 
         .clear-both {
             clear: both;
         }
 
-        /* Responsivo para telas menores */
         @media print {
             .logo-img {
                 max-width: 60px;
@@ -578,34 +651,47 @@ default=>($documento->estado ?? '')
         <div class="header">
             <div class="header-left">
                 <div class="logo-empresa-wrapper">
+                    @if(!empty($empresaLogo) && $empresaLogo !== asset('images/default-logo.png'))
                     <div class="logo-area">
-                        <img src="data:image/jpeg;base64,{{ $logoBase64 }}" class="logo-img" alt="Logo">
+                        <img src="{{ $empresaLogo }}" class="logo-img" alt="Logo">
                     </div>
+                    @endif
                     <div class="empresa-info-area">
-                        <div class="empresa-nome">{{ $empresa['nome'] ?? 'EMPRESA' }}</div>
+                        <div class="empresa-nome">{{ $empresaNome }}</div>
                         <div class="empresa-info">
-                            Nº Contribuinte: {{ $empresa['nif'] ?? '0000000000' }}<br>
-                            {{ $empresaEmailEstatico }}<br>
-                            {{ $empresaTelefoneEstatico }}<br>
-                            {{ $empresaMoradaEstatica }}
+                            NIF: {{ $empresaNif }}<br>
+                            @if(!empty($empresaEmail) && $empresaEmail !== 'Email não registrado')
+                            {{ $empresaEmail }}<br>
+                            @endif
+                            @if(!empty($empresaTelefone) && $empresaTelefone !== 'Telefone não registrado')
+                            Tel: {{ $empresaTelefone }}<br>
+                            @endif
+                            @if(!empty($empresaMorada))
+                            {{ $empresaMorada }}
+                            @else
+                            Endereço não registrado
+                            @endif
                         </div>
                     </div>
                 </div>
             </div>
             <div class="header-right">
-                <div class="doc-tipo">{{ $tipos[$documento->tipo_documento] ?? $documento->tipo_documento }}</div>
+                <div class="doc-tipo">{{ $tiposDocumento[$documento->tipo_documento] ?? $documento->tipo_documento }}</div>
                 <div class="doc-numero">{{ $documento->numero_documento }}</div>
                 <div class="doc-estado {{ $estadoClasse }}">{{ $estadoLabel }}</div>
             </div>
         </div>
 
-        {{-- ORIGEM (se for recibo) --}}
-        @if($documento->tipo_documento === 'RC' && isset($documento->documentoOrigem) && $documento->documentoOrigem)
+        {{-- ORIGEM (se for recibo, mostra a fatura de origem) --}}
+        @if($documento->tipo_documento === 'RC' && $documentoOrigemInfo)
         <div class="origem-box">
-            <strong>Referente a:</strong>
-            {{ $tipos[$documento->documentoOrigem->tipo_documento] ?? $documento->documentoOrigem->tipo_documento }}
-            Nº {{ $documento->documentoOrigem->numero_documento }}
-            — emitido em {{ \Carbon\Carbon::parse($documento->documentoOrigem->data_emissao)->format('d/m/Y') }}
+            <strong>Documento de Origem:</strong><br>
+            {{ $tiposDocumento[$documentoOrigemInfo->tipo_documento] ?? $documentoOrigemInfo->tipo_documento }}
+            Nº {{ $documentoOrigemInfo->numero_documento }}
+            — emitido em {{ \Carbon\Carbon::parse($documentoOrigemInfo->data_emissao)->format('d/m/Y') }}
+            @if($documentoOrigemInfo->data_vencimento)
+            <br><strong>Vencimento original:</strong> {{ \Carbon\Carbon::parse($documentoOrigemInfo->data_vencimento)->format('d/m/Y') }}
+            @endif
         </div>
         @endif
 
@@ -614,30 +700,28 @@ default=>($documento->estado ?? '')
             <div class="info-col-left">
                 <div class="info-box">
                     <div class="info-box-title">Dados do Documento</div>
-                    <div class="info-line"><span class="info-label">Série: {{ $documento->serie ?? 'A' }}</span></div>
+                    <div class="info-line"><span class="info-label">Série: </span><span class="info-value">{{ $documento->serie ?? 'A' }}</span></div>
                     <div class="info-line">
-                        <span class="info-label">Data de Emissão:</span>
+                        <span class="info-label">Data de Emissão: </span>
                         <span class="info-value">{{ \Carbon\Carbon::parse($documento->data_emissao)->format('d/m/Y') }}{{ $documento->hora_emissao ? ' às '.substr($documento->hora_emissao, 0, 5) : '' }}</span>
                     </div>
                     @if($documento->data_vencimento)
-                    <div class="info-line"><span class="info-label">Vencimento:</span><span class="info-value">{{ \Carbon\Carbon::parse($documento->data_vencimento)->format('d/m/Y') }}</span></div>
+                    <div class="info-line"><span class="info-label">Vencimento: </span><span class="info-value">{{ \Carbon\Carbon::parse($documento->data_vencimento)->format('d/m/Y') }}</span></div>
                     @endif
-                    <div class="info-line"><span class="info-label">Operador: {{ $documento->user->name ?? 'Sistema' }}</span></div>
+                    <div class="info-line"><span class="info-label">Operador: </span><span class="info-value">{{ $documento->user->name ?? 'Sistema' }}</span></div>
                 </div>
             </div>
             <div class="info-col-right">
                 <div class="info-box">
                     <div class="info-box-title">Cliente</div>
-                    <div class="info-line"><span class="info-label">Nome:</span><span class="info-value">{{ $cliente['nome'] ?? 'Consumidor Final' }}</span></div>
-                    @if(!empty($cliente['nif']))<div class="info-line"><span class="info-label">NIF:</span><span class="info-value">{{ $cliente['nif'] }}</span></div>@endif
-                    @if(isset($documento->cliente) && !empty($documento->cliente->telefone))<div class="info-line"><span class="info-label">Telefone:</span><span class="info-value">{{ $documento->cliente->telefone }}</span></div>@endif
-                    @if(isset($documento->cliente) && !empty($documento->cliente->email))<div class="info-line"><span class="info-label">Email:</span><span class="info-value">{{ $documento->cliente->email }}</span></div>@endif
-                    @if(isset($documento->cliente) && !empty($documento->cliente->endereco))<div class="info-line"><span class="info-label">Morada:</span><span class="info-value">{{ $documento->cliente->endereco }}</span></div>@endif
+                    <div class="info-line"><span class="info-label">Nome: </span><span class="info-value">{{ $cliente['nome'] ?? 'Consumidor Final' }}</span></div>
+                    @if(!empty($cliente['nif']))<div class="info-line"><span class="info-label">NIF: </span><span class="info-value">{{ $cliente['nif'] }}</span></div>@endif
+                    @if(!empty($cliente['morada']))<div class="info-line"><span class="info-label">Morada: </span><span class="info-value">{{ $cliente['morada'] }}</span></div>@endif
                 </div>
             </div>
         </div>
 
-        {{-- ITENS --}}
+        {{-- ITENS (para recibos, mostra os itens da fatura de origem) --}}
         @if(!empty($itensParaExibir) && count($itensParaExibir) > 0)
         <table class="items">
             <thead>
@@ -653,7 +737,7 @@ default=>($documento->estado ?? '')
             <tbody>
                 @foreach($itensParaExibir as $item)
                 <tr>
-                    <td>
+                    <td class="item-nome">
                         <div class="item-nome">{{ $item->descricao ?? $item->nome_produto ?? '' }}</div>
                         @if(!empty($item->codigo_produto))<div class="item-sub">Ref: {{ $item->codigo_produto }}</div>@endif
                     </td>
@@ -684,7 +768,7 @@ default=>($documento->estado ?? '')
         </div>
         @endif
 
-        {{-- TOTAIS --}}
+        {{-- TOTAIS (usa docParaTotais que para recibos é a fatura origem) --}}
         <div class="totals-wrapper clearfix">
             <div class="totals-spacer"></div>
             <div class="totals-box">
@@ -692,7 +776,7 @@ default=>($documento->estado ?? '')
                     @if($temDesconto)
                     <tr class="disc-row">
                         <td class="lbl">Subtotal Bruto:</td>
-                        <td>{{ number_format($docParaDados->base_tributavel + $descontoGlobal, 2, ',', '.') }} Kz</td>
+                        <td>{{ number_format($docParaTotais->base_tributavel + $descontoGlobal, 2, ',', '.') }} Kz</td>
                     </tr>
                     <tr class="disc-row">
                         <td class="lbl">Desconto ({{ number_format($percentualDesconto, 2, ',', '.') }}%):</td>
@@ -701,19 +785,19 @@ default=>($documento->estado ?? '')
                     @endif
                     <tr>
                         <td class="lbl">Base Tributável:</td>
-                        <td>{{ number_format($docParaDados->base_tributavel ?? 0, 2, ',', '.') }} Kz</td>
+                        <td>{{ number_format($docParaTotais->base_tributavel ?? 0, 2, ',', '.') }} Kz</td>
                     </tr>
                     <tr>
                         <td class="lbl">Total IVA:</td>
-                        <td>{{ number_format($docParaDados->total_iva ?? 0, 2, ',', '.') }} Kz</td>
+                        <td>{{ number_format($docParaTotais->total_iva ?? 0, 2, ',', '.') }} Kz</td>
                     </tr>
-                    @if(($docParaDados->total_retencao ?? 0) > 0)
+                    @if(($docParaTotais->total_retencao ?? 0) > 0)
                     <tr class="ret-row">
                         <td class="lbl">Retenção na Fonte:</td>
-                        <td>- {{ number_format((float)$docParaDados->total_retencao, 2, ',', '.') }} Kz</td>
+                        <td>- {{ number_format((float)$docParaTotais->total_retencao, 2, ',', '.') }} Kz</td>
                     </tr>
                     @endif
-                    @if(in_array($documento->tipo_documento, ['FR', 'RC']) && !empty($documento->metodo_pagamento))
+                    @if(!empty($documento->metodo_pagamento))
                     <tr>
                         <td class="lbl">Forma de Pagamento:</td>
                         <td>{{ $metodosPagamento[$documento->metodo_pagamento] ?? ucfirst($documento->metodo_pagamento) }}</td>
@@ -729,39 +813,21 @@ default=>($documento->estado ?? '')
                         <td colspan="2"></td>
                     </tr>
                     <tr class="total-final">
-                        <td><strong>
-                                @if($documento->tipo_documento === 'FT')
-                                TOTAL A PAGAR:
-                                @elseif(in_array($documento->tipo_documento, ['FR', 'RC']))
-                                TOTAL PAGO:
-                                @else
-                                TOTAL:
-                                @endif
-                            </strong></td>
-                        <td><strong>{{ number_format((float)($documento->total_liquido ?? $docParaDados->total_liquido ?? 0), 2, ',', '.') }} Kz</strong></td>
+                        <td><strong>TOTAL PAGO:</strong></td>
+                        <td><strong>{{ number_format((float)($documento->total_liquido ?? 0), 2, ',', '.') }} Kz</strong></td>
                     </tr>
+                    @if($documentoOrigemInfo && ($documentoOrigemInfo->total_liquido ?? 0) > ($documento->total_liquido ?? 0))
+                    <tr class="sep">
+                        <td colspan="2"></td>
+                    </tr>
+                    <tr>
+                        <td class="lbl">Valor Pendente:</td>
+                        <td>{{ number_format((float)($documentoOrigemInfo->total_liquido - $documento->total_liquido), 2, ',', '.') }} Kz</td>
+                    </tr>
+                    @endif
                 </table>
             </div>
         </div>
-
-        {{-- PAGAMENTO --}}
-        @if(!empty($documento->metodo_pagamento))
-        <div class="clearfix" style="margin-bottom:18px">
-            <div class="payment-box">
-                <div class="payment-title">Pagamento</div>
-                <div class="info-line"><span class="info-label">Método:</span><span class="info-value">{{ $metodosPagamento[$documento->metodo_pagamento] ?? $documento->metodo_pagamento }}</span></div>
-                @if(!empty($documento->referencia_pagamento))<div class="info-line"><span class="info-label">Referência:</span><span class="info-value">{{ $documento->referencia_pagamento }}</span></div>@endif
-                @if($temTroco)<div class="info-line"><span class="info-label">Troco:</span><span class="info-value">{{ number_format($troco, 2, ',', '.') }} Kz</span></div>@endif
-            </div>
-        </div>
-        @endif
-
-        {{-- OBSERVAÇÕES --}}
-        @if(!empty($documento->observacoes))
-        <div class="obs-box">
-            <div class="obs-title">Observações</div>{{ $documento->observacoes }}
-        </div>
-        @endif
 
         {{-- HASH FISCAL + QR CODE --}}
         @if(!empty($documento->hash_fiscal) || !empty($qr_html))
@@ -788,21 +854,22 @@ default=>($documento->estado ?? '')
         </div>
         @endif
 
-        {{-- ASSINATURAS --}}
-        <div class="clearfix" style="margin-top:45px; margin-bottom:12px">
-            <div class="sig-left">
-                <div class="sig-line"></div>Assinatura do Responsável
-            </div>
-            <div class="sig-right">
-                <div class="sig-line"></div>Carimbo da Empresa
-            </div>
-        </div>
-
         {{-- RODAPÉ --}}
         <div class="footer-thanks">Obrigado pela preferência!</div>
         <div class="footer clearfix">
-            <div class="footer-left"><strong>{{ $empresa['nome'] ?? 'EMPRESA' }}</strong> &nbsp;|&nbsp; NIF: {{ $empresa['nif'] ?? '0000000000' }}<br>{{ $empresaMoradaEstatica }} &nbsp;|&nbsp; Tel: {{ $empresaTelefoneEstatico }}</div>
-            <div class="footer-right">Documento gerado em {{ now()->format('d/m/Y') }} às {{ now()->format('H:i') }}<br>{{ $empresaEmailEstatico }}</div>
+            <div class="footer-left">
+                <strong>{{ $empresaNome }}</strong> &nbsp;|&nbsp; NIF: {{ $empresaNif }}<br>
+                @if(!empty($empresaMorada))
+                {{ $empresaMorada }} &nbsp;|&nbsp;
+                @else
+                Endereço não registrado &nbsp;|&nbsp;
+                @endif
+                Tel: {{ $empresaTelefone }}
+            </div>
+            <div class="footer-right">
+                Documento gerado em {{ now()->format('d/m/Y') }} às {{ now()->format('H:i') }}<br>
+                {{ $empresaEmail }}
+            </div>
         </div>
 
     </div>

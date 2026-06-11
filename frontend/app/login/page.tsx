@@ -117,6 +117,7 @@ export default function LoginPage(): React.ReactElement {
       admin: "/dashboard",
       contablista: "/dashboard/",
       operador: "/dashboard/Vendas/Nova_venda",
+      gestor: "/dashboard/Produtos_servicos/Stock",
     };
     const destination = redirectMap[user.role] || "/login";
     setTimeout(() => router.push(destination), 500);

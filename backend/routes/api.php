@@ -30,12 +30,12 @@ Route::withoutMiddleware(['resolve.tenant', 'auth.tenant'])->group(function () {
 // ==================== ROTAS PROTEGIDAS (Tenant) ====================
 Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uuidPattern) {
 
-Route::prefix('empresa')->group(function () {
-    Route::get('/', [EmpresaController::class, 'showSelf']);           // Opcional: ver dados
-    Route::put('/', [EmpresaController::class, 'updateTenant']);       // ← Correto
-    Route::post('/logo', [EmpresaController::class, 'uploadLogo']);    // Upload separado
-    Route::patch('/toggle-status', [EmpresaController::class, 'toggleSelfStatus']);
-});
+    Route::prefix('empresa')->group(function () {
+        Route::get('/', [EmpresaController::class, 'showSelf']);           // Opcional: ver dados
+        Route::put('/', [EmpresaController::class, 'updateTenant']);       // ← Correto
+        Route::post('/logo', [EmpresaController::class, 'uploadLogo']);    // Upload separado
+        Route::patch('/toggle-status', [EmpresaController::class, 'toggleSelfStatus']);
+    });
 
     Route::get('/me', [UserController::class, 'me']);
 
@@ -49,7 +49,7 @@ Route::prefix('empresa')->group(function () {
     });
 
     // ==================== ADMIN apenas ====================
-    Route::middleware('role:admin')->group(function () use ($uuidPattern) {
+    Route::middleware('role:admin,gestor')->group(function () use ($uuidPattern) {
         Route::post('/users', [UserController::class, 'store']);
         Route::get('/relatorios/exportar-saft', [RelatoriosController::class, 'exportarSaft']);
         Route::get('/saft/alertas', [RelatoriosController::class, 'alertas']);
@@ -66,8 +66,8 @@ Route::prefix('empresa')->group(function () {
         });
     });
 
-    // ==================== ADMIN + OPERADOR ====================
-    Route::middleware('role:admin,operador,gestor,contablista,suporte')->group(function () use ($uuidPattern) {
+    // ==================== ADMIN + GESTOR + CONTABLISTA ====================
+    Route::middleware('role:admin,gestor,contablista,operador')->group(function () use ($uuidPattern) {
 
         // ---------- PRODUTOS ----------
         Route::prefix('produtos')->group(function () use ($uuidPattern) {
@@ -162,10 +162,16 @@ Route::prefix('empresa')->group(function () {
             Route::post('/emitir', [DocumentoFiscalController::class, 'emitir'])->name('documentos.emitir');
             Route::get('/', [DocumentoFiscalController::class, 'index'])->name('documentos.index');
             Route::get('/{documento}', [DocumentoFiscalController::class, 'show'])->where('documento', $uuidPattern)->name('documentos.show');
+            
+            // PDF e Impressão
             Route::get('/{id}/pdf/download', [DocumentoFiscalController::class, 'downloadPdf'])->where('id', $uuidPattern)->name('documentos.pdf-download');
             Route::get('/{id}/pdf-viewer', [DocumentoFiscalController::class, 'pdfViewer'])->where('id', $uuidPattern)->name('documentos.pdf-viewer');
             Route::get('/{id}/imprimir-termica', [DocumentoFiscalController::class, 'imprimirTermica'])->where('id', $uuidPattern)->name('documentos.imprimir-termica');
             Route::get('/{id}/print-view', [DocumentoFiscalController::class, 'printView'])->where('id', $uuidPattern)->name('documentos.print');
+            
+            // 🆕 NOVA ROTA PARA IMPRESSÃO A4
+            Route::get('/{id}/print-a4', [DocumentoFiscalController::class, 'printA4'])->where('id', $uuidPattern)->name('documentos.print-view');
+            
             Route::get('/{documento}/recibos', [DocumentoFiscalController::class, 'listarRecibos'])->where('documento', $uuidPattern)->name('documentos.recibos');
             Route::post('/{id}/recibo', [DocumentoFiscalController::class, 'gerarRecibo'])->where('id', $uuidPattern)->name('documentos.gerar-recibo');
             Route::post('/{documento}/cancelar', [DocumentoFiscalController::class, 'cancelar'])->where('documento', $uuidPattern)->name('documentos.cancelar');
@@ -198,8 +204,8 @@ Route::prefix('empresa')->group(function () {
             Route::get('/proformas', [RelatoriosController::class, 'proformas'])->name('relatorios.proformas');
         });
 
-        // ---------- RELATÓRIOS ADMIN ----------
-        Route::middleware('role:admin')->group(function () {
+        // ---------- RELATÓRIOS ADMIN (APENAS ADMIN E GESTOR) ----------
+        Route::middleware('role:admin,gestor')->group(function () {
             Route::prefix('relatorios')->group(function () {
                 Route::get('/pagamentos-pendentes', [RelatoriosController::class, 'pagamentosPendentes'])->name('relatorios.pagamentos-pendentes');
                 Route::get('/exportar-saft', [RelatoriosController::class, 'exportarSaft'])->name('relatorios.exportar-saft');

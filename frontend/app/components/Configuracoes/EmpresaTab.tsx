@@ -337,7 +337,7 @@ const handleSubmit = async () => {
                         <FormInput label="Nome da empresa" name="nome" value={form.nome}
                             onChange={handleChange} colors={colors} disabled={isSuspended}
                             icon={Building2} />
-                        <FormInput label="NIF" name="nif" value={form.nif}
+                        <FormInput label="NIF" name="nif" value={form.nif} 
                             onChange={handleChange} colors={colors} disabled={isSuspended}
                             icon={Hash} />
                         <FormInput label="E-mail" name="email" type="email" value={form.email}

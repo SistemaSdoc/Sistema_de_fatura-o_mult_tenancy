@@ -106,7 +106,7 @@ export default function MainEmpresa({
     const userRole = user?.role || "";
     const userEmail = user?.email || "";
     const userInitial = userName.charAt(0).toUpperCase();
-    const logoFromServer =`http://192.168.1.198:8000/storage/${companyLogo || user?.empresa?.logo || null}`;
+    const logoFromServer =`http://192.168.1.192:8000/storage/${companyLogo || user?.empresa?.logo || null}`;
 
     // FUNÇÃO PARA VALIDAR E FORMATAR URL DA IMAGEM
     const getValidImageUrl = (logo: string | null | undefined): string | null => {
@@ -366,7 +366,7 @@ useEffect(() => {
             icon: Home,
             path: "/dashboard",
             links: [],
-            roles: ["admin", "contablista", "gestor"],
+            roles: ["admin", "contablista"],
         },
         {
             label: "Facturação",
@@ -406,7 +406,7 @@ useEffect(() => {
             path: "/dashboard/Faturas/DC",
             links: [],
             isGroup: false,
-            roles: ["admin", "operador"],
+            roles: ["admin", "operador","gestor"],
         },
         {
             label: "Gestão de Stock",

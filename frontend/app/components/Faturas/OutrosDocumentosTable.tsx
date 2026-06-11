@@ -9,7 +9,6 @@ import {
   Download,
   ChevronLeft,
   ChevronRight,
-  Receipt,
 } from "lucide-react";
 
 /* ─── Labels ──────────────────────────────────────────────────────────────── */
@@ -57,13 +56,11 @@ interface ColorsTheme {
 interface OutrosDocumentosTableProps {
   documentos: DocumentoFiscal[];
   loading: boolean;
-  gerandoRecibo: string | null;
   baixandoPdf: string | null;
   imprimindo: string | null;
   onVerDetalhes: (doc: DocumentoFiscal) => void;
-  onGerarRecibo: (doc: DocumentoFiscal) => Promise<void> | void;
-  onImprimirA4: (doc: DocumentoFiscal) => void;
-  onImprimirPdf: (doc: DocumentoFiscal) => void;
+  onImprimirA4: (doc: DocumentoFiscal) => void;        // 🆕 Impressão A4
+  onImprimirPdf: (doc: DocumentoFiscal) => void;       // PDF visualização
   onBaixarPdf: (doc: DocumentoFiscal) => Promise<void>;
   formatKz: (v: number | string | undefined) => string;
   documentoFiscalService: {
@@ -250,11 +247,10 @@ function DocCard({
 export default function OutrosDocumentosTable({
   documentos,
   loading,
-  gerandoRecibo,
   baixandoPdf,
   imprimindo,
   onVerDetalhes,
-  onGerarRecibo,
+  onImprimirA4,
   onImprimirPdf,
   onBaixarPdf,
   formatKz,
@@ -285,11 +281,6 @@ export default function OutrosDocumentosTable({
   const pg = Math.min(Math.max(paginaAtual, 1), totalPaginas);
   const slice = docsAtivos.slice((pg - 1) * POR_PAGINA, pg * POR_PAGINA);
 
-  /* ── Regras de gerar recibo: FP e FA que não estejam canceladas/pagas ── */
-  const podeGerarRecibo = (d: DocumentoFiscal) =>
-    ["FP", "FA"].includes(d.tipo_documento) &&
-    !["cancelado", "paga"].includes(d.estado || "");
-
   /* ── Vazio ── */
   if (!loading && documentos.length === 0) {
     return (
@@ -299,39 +290,106 @@ export default function OutrosDocumentosTable({
     );
   }
 
-  /* ── Acções por documento ── */
-  const acoes = (doc: DocumentoFiscal) => (
-    <>
+  /* ── Menu de ações (dropdown para mobile, inline para desktop) ── */
+  const AcoesDropdown = ({ doc }: { doc: DocumentoFiscal }) => {
+    const [open, setOpen] = useState(false);
+    
+    return (
+      <div className="relative">
+        <button
+          onClick={() => setOpen(!open)}
+          className="p-1.5 hover:opacity-70"
+          style={{ color: colors.text }}
+          title="Ações"
+        >
+          <FileText size={16} />
+        </button>
+        {open && (
+          <>
+            <div
+              className="fixed inset-0 z-10"
+              onClick={() => setOpen(false)}
+            />
+            <div
+              className="absolute right-0 z-20 mt-1 w-36 rounded shadow-lg py-1"
+              style={{
+                backgroundColor: colors.card,
+                border: `1px solid ${colors.border}`,
+              }}
+            >
+              <button
+                onClick={() => {
+                  onVerDetalhes(doc);
+                  setOpen(false);
+                }}
+                className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:opacity-70"
+                style={{ color: colors.text }}
+              >
+                <Eye size={12} /> Ver detalhes
+              </button>
+              <button
+                onClick={() => {
+                  onImprimirA4(doc);
+                  setOpen(false);
+                }}
+                disabled={imprimindo === doc.id}
+                className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:opacity-70"
+                style={{ color: colors.secondary }}
+              >
+                {imprimindo === doc.id ? (
+                  <Spinner color={colors.secondary} />
+                ) : (
+                  <Printer size={12} />
+                )}
+                Imprimir A4
+              </button>
+              <button
+                onClick={() => {
+                  onBaixarPdf(doc);
+                  setOpen(false);
+                }}
+                disabled={baixandoPdf === doc.id}
+                className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:opacity-70"
+                style={{ color: colors.text }}
+              >
+                {baixandoPdf === doc.id ? (
+                  <Spinner color={colors.text} />
+                ) : (
+                  <Download size={12} />
+                )}
+                Baixar PDF
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  /* ── Acções por documento (desktop - várias opções) ── */
+  const acoesDesktop = (doc: DocumentoFiscal) => (
+    <div className="flex justify-center gap-0.5">
       <IconBtn onClick={() => onVerDetalhes(doc)} title="Ver detalhes" color={colors.text}>
         <Eye size={16} />
       </IconBtn>
 
-      {podeGerarRecibo(doc) && (
-        <IconBtn
-          onClick={() => onGerarRecibo(doc)}
-          disabled={gerandoRecibo === doc.id}
-          title="Gerar Recibo"
-          color={colors.success}
-        >
-          {gerandoRecibo === doc.id ? (
-            <Spinner color={colors.success} />
-          ) : (
-            <FileText size={16} />
-          )}
-        </IconBtn>
-      )}
+      <IconBtn
+        onClick={() => onImprimirA4(doc)}
+        disabled={imprimindo === doc.id}
+        title="Imprimir A4"
+        color={colors.secondary}
+      >
+        {imprimindo === doc.id ? <Spinner color={colors.secondary} /> : <Printer size={16} />}
+      </IconBtn>
+
 
       <IconBtn
         onClick={() => onImprimirPdf(doc)}
         disabled={imprimindo === doc.id}
-        title="Imprimir"
-        color={colors.secondary}
+        title="Talão 80mm"
+        color={colors.teal || colors.primary}
       >
-        {imprimindo === doc.id ? (
-          <Spinner color={colors.secondary} />
-        ) : (
-          <Printer size={16} />
-        )}
+        {imprimindo === doc.id ? <Spinner color={colors.teal || colors.primary} /> : <Printer size={16} />}
       </IconBtn>
 
       <IconBtn
@@ -342,7 +400,7 @@ export default function OutrosDocumentosTable({
       >
         {baixandoPdf === doc.id ? <Spinner color={colors.text} /> : <Download size={16} />}
       </IconBtn>
-    </>
+    </div>
   );
 
   /* ── Tabela desktop ── */
@@ -350,15 +408,15 @@ export default function OutrosDocumentosTable({
     <div className="hidden sm:block overflow-x-auto w-full">
       <table
         className="w-full text-sm"
-        style={{ borderCollapse: "collapse", tableLayout: "fixed", minWidth: 520 }}
+        style={{ borderCollapse: "collapse", tableLayout: "fixed", minWidth: 620 }}
       >
         <colgroup>
-          <col style={{ width: "18%" }} />
-          <col style={{ width: "28%" }} />
-          <col style={{ width: "13%" }} />
+          <col style={{ width: "15%" }} />
+          <col style={{ width: "25%" }} />
           <col style={{ width: "12%" }} />
-          <col style={{ width: "13%" }} />
-          <col style={{ width: "16%" }} />
+          <col style={{ width: "10%" }} />
+          <col style={{ width: "10%" }} />
+          <col style={{ width: "28%" }} />
         </colgroup>
         <thead style={{ backgroundColor: colors.primary }}>
           <tr className="text-white text-xs">
@@ -429,7 +487,12 @@ export default function OutrosDocumentosTable({
                   {formatKz(doc.total_liquido)}
                 </td>
                 <td className="px-3 py-2 text-center">
-                  <div className="flex justify-center gap-0.5">{acoes(doc)}</div>
+                  <div className="hidden md:flex justify-center gap-0.5">
+                    {acoesDesktop(doc)}
+                  </div>
+                  <div className="md:hidden">
+                    <AcoesDropdown doc={doc} />
+                  </div>
                 </td>
               </tr>
             ))
@@ -457,7 +520,7 @@ export default function OutrosDocumentosTable({
             colors={colors}
             formatKz={formatKz}
             getNomeCliente={documentoFiscalService.getNomeCliente}
-            acoes={acoes(doc)}
+            acoes={<AcoesDropdown doc={doc} />}
           />
         ))
       )}
