@@ -25,13 +25,13 @@ export function RelatorioPagamentosComponent({
           color={colors.primary} colors={colors} border={border} alerta={(relatorioPagamentos.resumo?.total_pendente ?? 0) > 0} />
         <KpiCell label="Total em Atraso" value={formatarKwanza(relatorioPagamentos.resumo?.total_atrasado ?? 0)}
           color="#dc2626" colors={colors} border={border} alerta={(relatorioPagamentos.resumo?.total_atrasado ?? 0) > 0} />
-        <KpiCell label="Faturas Pendentes" value={String(relatorioPagamentos.resumo?.quantidade_faturas ?? 0)}
+        <KpiCell label="Facturas Pendentes" value={String(relatorioPagamentos.resumo?.quantidade_faturas ?? 0)}
           color={colors.secondary} colors={colors} border={border} />
         <KpiCell label="Retenção Pendente" value={formatarKwanza(relatorioPagamentos.resumo?.retencao_pendente ?? 0)}
           color="#f97316" colors={colors} border={border} last />
       </div>
 
-      <SecaoGrafico titulo="Faturas Pendentes" colors={colors}>
+      <SecaoGrafico titulo="Facturas Pendentes" colors={colors}>
         {(relatorioPagamentos.faturas_pendentes?.length ?? 0) > 0 ? (
           <TabelaDados
             headers={["Documento", "Cliente", "Valor Pendente", "Situação"]}
@@ -49,7 +49,7 @@ export function RelatorioPagamentosComponent({
           />
         ) : (
           <div className="py-10 text-center text-sm" style={{ color: colors.textSecondary }}>
-            Nenhuma fatura pendente
+            Nenhuma factura pendente
           </div>
         )}
       </SecaoGrafico>

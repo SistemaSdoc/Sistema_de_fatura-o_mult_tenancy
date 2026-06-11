@@ -61,7 +61,7 @@ export function NotificacoesTab({ colors }: { colors: ThemeColors }) {
     {
       key: "alertas_pagamentos" as const,
       label: "Alertas de pagamento",
-      desc: "Faturas próximas do vencimento",
+      desc: "Facturas próximas do vencimento",
     },
     {
       key: "relatorios_automaticos" as const,

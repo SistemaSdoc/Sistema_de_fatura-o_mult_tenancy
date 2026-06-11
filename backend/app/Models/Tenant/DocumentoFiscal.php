@@ -310,14 +310,14 @@ class DocumentoFiscal extends TenantModel
     public function getTipoDocumentoNomeAttribute(): string
     {
         return [
-            self::TIPO_FATURA              => 'Fatura',
-            self::TIPO_FATURA_RECIBO       => 'Fatura-Recibo',
-            self::TIPO_FATURA_PROFORMA     => 'Fatura Proforma',
-            self::TIPO_FATURA_ADIANTAMENTO => 'Fatura de Adiantamento',
+            self::TIPO_FATURA              => 'Factura',
+            self::TIPO_FATURA_RECIBO       => 'Factura-Recibo',
+            self::TIPO_FATURA_PROFORMA     => 'Factura Proforma',
+            self::TIPO_FATURA_ADIANTAMENTO => 'Factura de Adiantamento',
             self::TIPO_NOTA_CREDITO        => 'Nota de Crédito',
             self::TIPO_NOTA_DEBITO         => 'Nota de Débito',
             self::TIPO_RECIBO              => 'Recibo',
-            self::TIPO_FATURA_RETIFICACAO  => 'Fatura de Retificação',
+            self::TIPO_FATURA_RETIFICACAO  => 'Factura de Retificação',
         ][$this->tipo_documento] ?? 'Desconhecido';
     }
 

@@ -9,10 +9,10 @@ use Illuminate\Support\Facades\Auth;
 /**
  * CategoriaPolicy - VERSÃO ULTRA-SIMPLES
  *
- * ✅ SEM imports de User
- * ✅ SEM type hints
- * ✅ Usa Auth::guard('tenant') directamente
- * ✅ Funciona 100%
+ *  SEM imports de User
+ *  SEM type hints
+ *  Usa Auth::guard('tenant') directamente
+ *  Funciona 100%
  */
 class CategoriaPolicy
 {

@@ -235,17 +235,24 @@ export default function NovaFaturaReciboPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const nums = e.target.value.replace(/\D/g, "");
-    if (nums.length <= 9) {
-      setClienteAvulsoNif(nums);
-      if (nums.length > 0 && nums.length !== 9) {
-        setNifError("NIF deve ter 9 dígitos");
-      } else {
-        setNifError(null);
-      }
+const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const value = e.target.value.toUpperCase();
+
+  // aceita letras e números
+  const clean = value.replace(/[^A-Z0-9]/g, "");
+
+  if (clean.length <= 14) {
+    setClienteAvulsoNif(clean);
+
+    // validação simples:
+    // BI pode ter letras, então só valida tamanho mínimo/máximo
+    if (clean.length > 0 && clean.length < 14) {
+      setNifError("NIF/BI demasiado curto");
+    } else {
+      setNifError(null);
     }
-  };
+  }
+};
 
   // Filtrar itens baseado no tipo selecionado e na busca
   const itensFiltrados = produtos.filter((p) => {
@@ -419,6 +426,7 @@ export default function NovaFaturaReciboPage() {
         troco: troco,
       };
 
+      
       if (modoCliente === "cadastrado" && clienteSelecionado) {
         payload.cliente_id = clienteSelecionado.id;
       } else if (modoCliente === "avulso") {
@@ -428,13 +436,14 @@ export default function NovaFaturaReciboPage() {
           payload.cliente_nome = "Consumidor Final";
         }
 
-        if (clienteAvulsoNif.trim() && clienteAvulsoNif.length === 9) {
+        if (clienteAvulsoNif.trim() && clienteAvulsoNif.length === 14) {
           payload.cliente_nif = clienteAvulsoNif.trim();
         } else {
-          payload.cliente_nif = "Consumidor Final";
+          payload.cliente_nif = "9999999999";
         }
       }
-
+console.log("cliente_nif =", payload.cliente_nif);
+console.log("tamanho =", payload.cliente_nif?.length);
       if (observacoes.trim()) payload.observacoes = observacoes.trim();
 
       const erroVal = validarPayloadVenda(payload);
@@ -624,21 +633,20 @@ export default function NovaFaturaReciboPage() {
                       onChange={(e) => setClienteAvulso(e.target.value)}
                     />
                     <div className="relative w-32 sm:w-36 shrink-0">
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="NIF (opcional)"
-                        className="w-full px-3 py-1.5 text-sm outline-none"
-                        maxLength={9}
-                        style={{
-                          ...inp,
-                          borderColor: nifError
-                            ? colors.danger
-                            : inp.borderColor,
-                        }}
-                        value={clienteAvulsoNif}
-                        onChange={handleNifChange}
-                      />
+                                            <input
+  type="text"
+  inputMode="text"
+  autoCapitalize="characters"
+  placeholder="NIF / BI (opcional)"
+  maxLength={14}
+  className="w-full px-3 py-1.5 text-sm outline-none"
+  style={{
+    ...inp,
+    borderColor: nifError ? colors.danger : inp.borderColor,
+  }}
+  value={clienteAvulsoNif}
+  onChange={handleNifChange}
+/>
                       {nifError && (
                         <span
                           className="absolute -bottom-4 left-0 text-[10px] whitespace-nowrap"

@@ -14,7 +14,7 @@ Schema::create('empresas', function (Blueprint $table) {
     $table->uuid('id')->primary();
 
     $table->string('nome');
-    $table->string('nif')->unique();
+    $table->string('nif', 10)->unique();
     $table->string('email')->unique();
     $table->string('telefone')->nullable();
     $table->text('endereco')->nullable();

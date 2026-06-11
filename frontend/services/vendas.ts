@@ -1240,7 +1240,7 @@ export function formatarUnidadeMedida(unidade: UnidadeMedida | undefined): strin
 
 export function formatarNIF(nif: string | null): string {
  if (!nif) return "-";
- if (nif.length === 14) return `${nif.slice(0, 9)} ${nif.slice(9, 11)} ${nif.slice(11)}`;
+ if (nif.length === 14) return `${nif.slice(0, 14)} ${nif.slice(9, 14)} ${nif.slice(14)}`;
  return nif;
 }
 

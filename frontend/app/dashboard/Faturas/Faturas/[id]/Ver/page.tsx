@@ -18,14 +18,14 @@ import { useThemeColors, useTheme } from "@/context/ThemeContext";
 
 /* ── Constantes ─────────────────────────────────────── */
 const TIPO_LABEL: Record<TipoDocumento, string> = {
-    FT: "Fatura",
-    FR: "Fatura-Recibo",
-    FP: "Fatura Proforma",
-    FA: "Fatura de Adiantamento",
+    FT: "Factura",
+    FR: "Factura-Recibo",
+    FP: "Factura Proforma",
+    FA: "Factura de Adiantamento",
     NC: "Nota de Crédito",
     ND: "Nota de Débito",
     RC: "Recibo",
-    FRt: "Fatura de Retificação",
+    FRt: "Factura de Retificação",
 };
 
 const METODOS_PAGAMENTO: Record<string, string> = {

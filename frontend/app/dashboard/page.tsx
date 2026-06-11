@@ -152,7 +152,7 @@ const badgeClasses: Record<BadgeVariant, { dark: string; light: string }> = {
 };
 
 const statusMap: Record<string, { label: string; variant: BadgeVariant }> = {
-  faturada: { label: "Faturada", variant: "green" },
+  faturada: { label: "Facturada", variant: "green" },
   pendente: { label: "Pendente", variant: "yellow" },
   paga: { label: "Pago", variant: "green" },
   emitido: { label: "Emitido", variant: "blue" },
@@ -337,7 +337,7 @@ export default function DashboardPage() {
     {
       href: "/dashboard/relatorios",
       icon: DollarSign,
-      label: "Total Faturado",
+      label: "Total Facturado",
       value: formatKz(metricas.totalFaturado),
       helper: `${metricas.crescimento >= 0 ? "+" : ""}${metricas.crescimento.toFixed(1)}% vs mês anterior`,
     },
@@ -378,14 +378,14 @@ export default function DashboardPage() {
                 className="px-3 py-2 text-sm text-white flex items-center gap-2 transition-opacity cursor-pointer hover:opacity-80"
                 style={{ backgroundColor: colors.secondary }}
               >
-                <FileText size={14} /> Gerar fatura-recibo
+                <FileText size={14} /> Gerar factura-recibo
               </button>
               <button
                 onClick={() => router.push("/dashboard/Faturas/Fatura_Normal")}
                 className="px-3 py-2 text-sm text-white flex items-center gap-2 transition-opacity cursor-pointer"
                 style={{ backgroundColor: colors.primary }}
               >
-                <FileText size={14} /> Gerar Fatura
+                <FileText size={14} /> Gerar Factura
               </button>
               <button
                 onClick={() => router.push("/dashboard/Faturas/Faturas_Proforma")}

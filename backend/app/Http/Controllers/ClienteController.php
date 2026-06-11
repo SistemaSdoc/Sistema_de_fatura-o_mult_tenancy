@@ -111,7 +111,7 @@ class ClienteController extends Controller
     {
         $dados = $request->validate([
             'nome' => 'required|string|max:255',
-            'nif' => 'nullable|string|max:50|unique:clientes,nif',
+            'nif' => 'nullable|string|max:14|unique:clientes,nif',
             'tipo' => 'nullable|in:consumidor_final,empresa',
             'status' => 'nullable|in:ativo,inativo', // NOVO
             'telefone' => 'nullable|string|max:20',
@@ -140,7 +140,7 @@ class ClienteController extends Controller
 
         $dados = $request->validate([
             'nome' => 'sometimes|required|string|max:255',
-            'nif' => 'sometimes|nullable|string|max:50|unique:clientes,nif,' . $cliente->id,
+            'nif' => 'sometimes|nullable|string|max:14|unique:clientes,nif,' . $cliente->id,
             'tipo' => 'nullable|in:consumidor_final,empresa',
             'status' => 'nullable|in:ativo,inativo', // NOVO
             'telefone' => 'nullable|string|max:20',

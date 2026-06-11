@@ -127,7 +127,7 @@ class DocumentoFiscalController extends Controller
                 'venda_id'                   => 'nullable|uuid|exists:vendas,id',
                 'cliente_id'                 => 'nullable|uuid|exists:clientes,id',
                 'cliente_nome'               => 'nullable|string|max:255',
-                'cliente_nif'                => 'nullable|string|max:20',
+                'cliente_nif'                => 'nullable|string|max:14',
                 'fatura_id'                  => 'nullable|uuid|exists:documentos_fiscais,id',
                 'itens'                      => 'required_unless:tipo_documento,FA|array',
                 'itens.*.produto_id'         => 'nullable|uuid|exists:produtos,id',
@@ -175,7 +175,7 @@ class DocumentoFiscalController extends Controller
     }
 
     /* =====================================================================
-     | RECIBO (APENAS PARA FT E FA)
+     | RECIBO
      | ================================================================== */
 
     public function gerarRecibo(Request $request, string $documentoId): JsonResponse
