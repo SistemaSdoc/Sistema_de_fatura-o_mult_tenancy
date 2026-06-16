@@ -24,15 +24,19 @@ import { useThemeColors } from "@/context/ThemeContext";
 import {
   criarVenda,
   Produto,
-  Cliente,
-  clienteService,
   produtoService,
   CriarVendaPayload,
-  formatarNIF,
   isServico,
   formatarPreco,
   validarPayloadVenda,
 } from "@/services/vendas";
+
+import {
+  clienteService,
+  formatarNIF,
+  type Cliente,
+} from "@/services/clientes";
+
 
 const ESTOQUE_MINIMO = 5;
 const arredondar = (v: number) => Math.round(v * 100) / 100;
@@ -154,28 +158,51 @@ export default function NovaFaturaNormalPage() {
     if (!authLoading && !user) router.push("/login");
   }, [authLoading, user, router]);
 
+  // 🔥 CORREÇÃO: Carregar dados iniciais
   useEffect(() => {
     if (!user) return;
-    (async () => {
+    
+    const carregarDados = async () => {
       try {
-        const [clientesData, produtosData] = await Promise.all([
-          clienteService.listar(),
-          produtoService
-            .listar({ status: "ativo", paginar: false })
-            .then((r) => (Array.isArray(r.produtos) ? r.produtos : [])),
-        ]);
+        console.log('🔄 Carregando dados iniciais...');
+        
+        // 1. Carregar clientes
+        const clientesResponse = await clienteService.listar({
+          status: 'ativo',
+          per_page: 999,
+        });
+        console.log('✅ Clientes carregados:', clientesResponse);
+        
+        // Extrair os dados da resposta paginada
+        const clientesData = clientesResponse.data || [];
         setClientes(clientesData);
+        console.log(`📋 ${clientesData.length} clientes ativos carregados`);
+        
+        // 2. Carregar produtos
+        const produtosData = await produtoService
+          .listar({ status: "ativo", paginar: false })
+          .then((r) => (Array.isArray(r.produtos) ? r.produtos : []));
         setProdutos(produtosData);
+        console.log(`📦 ${produtosData.length} produtos carregados`);
+        
+        // 3. Verificar estoque baixo
         const fisicos = produtosData.filter((p) => !isServico(p));
-        setProdutosEstoqueBaixo(
-          fisicos.filter(
-            (p) => p.estoque_atual > 0 && p.estoque_atual <= ESTOQUE_MINIMO,
-          ),
+        const estoqueBaixo = fisicos.filter(
+          (p) => p.estoque_atual > 0 && p.estoque_atual <= ESTOQUE_MINIMO,
         );
-      } catch {
+        setProdutosEstoqueBaixo(estoqueBaixo);
+        
+        if (estoqueBaixo.length > 0) {
+          console.warn(`⚠️ ${estoqueBaixo.length} produtos com estoque baixo`);
+        }
+        
+      } catch (error) {
+        console.error('❌ Erro ao carregar dados:', error);
         setError("Erro ao carregar dados iniciais");
       }
-    })();
+    };
+    
+    carregarDados();
   }, [user]);
 
   // Fechar dropdown ao clicar fora
@@ -241,8 +268,10 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
 
     // validação simples:
     // BI pode ter letras, então só valida tamanho mínimo/máximo
-    if (clean.length > 0 && clean.length < 14) {
-      setNifError("NIF/BI demasiado curto");
+    if (clean.length > 0 && clean.length < 10) {
+      setNifError("NIF/BI demasiado curto (mínimo 10 caracteres)");
+    } else if (clean.length > 10 && clean.length < 14) {
+      setNifError("BI deve ter 14 caracteres (9 números + 2 letras + 3 números)");
     } else {
       setNifError(null);
     }
@@ -401,7 +430,6 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         })),
         tipo_documento: "FT",
         faturar: true,
-        // NOVOS CAMPOS: desconto global e troco
         desconto_global: totalDesconto,
         troco: 0,
       };
@@ -415,10 +443,11 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
           payload.cliente_nome = "Consumidor Final";
         }
 
-        if (clienteAvulsoNif.trim() && clienteAvulsoNif.length === 9) {
+        // 🔥 CORREÇÃO: NIF para consumidor final
+        if (clienteAvulsoNif.trim() && clienteAvulsoNif.length >= 10) {
           payload.cliente_nif = clienteAvulsoNif.trim();
         } else {
-          payload.cliente_nif = "999999999";
+          payload.cliente_nif = "9999999999";
         }
       }
 
@@ -431,6 +460,7 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         return;
       }
       await criarVenda(payload);
+      setSucesso("Factura criada com sucesso! Redirecionando...");
       setTimeout(() => router.push("/dashboard/Faturas/Faturas"), 1500);
     } catch (err: unknown) {
       setError(
@@ -441,6 +471,13 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // 🔥 Handler para seleção de cliente
+  const handleClienteChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const cliente = clientes.find((c) => c.id === e.target.value);
+    setClienteSelecionado(cliente || null);
+    console.log('Cliente selecionado:', cliente);
   };
 
   const produtoSel = produtos.find((p) => p.id === formItem.produto_id);
@@ -592,17 +629,14 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
                     className="flex-1 min-w-0 px-3 py-1.5 text-sm outline-none"
                     style={inp}
                     value={clienteSelecionado?.id ?? ""}
-                    onChange={(e) =>
-                      setClienteSelecionado(
-                        clientes.find((c) => c.id === e.target.value) ?? null,
-                      )
-                    }
+                    onChange={handleClienteChange}
                   >
                     <option value="">Selecione um cliente…</option>
                     {clientes.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.nome}
                         {c.nif ? ` (${formatarNIF(c.nif)})` : ""}
+                        {c.tipo === "empresa"}
                       </option>
                     ))}
                   </select>
@@ -617,20 +651,20 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
                       onChange={(e) => setClienteAvulso(e.target.value)}
                     />
                     <div className="relative w-32 sm:w-36 shrink-0">
-                                                               <input
-  type="text"
-  inputMode="text"
-  autoCapitalize="characters"
-  placeholder="NIF / BI (opcional)"
-  maxLength={14}
-  className="w-full px-3 py-1.5 text-sm outline-none"
-  style={{
-    ...inp,
-    borderColor: nifError ? colors.danger : inp.borderColor,
-  }}
-  value={clienteAvulsoNif}
-  onChange={handleNifChange}
-/>
+                      <input
+                        type="text"
+                        inputMode="text"
+                        autoCapitalize="characters"
+                        placeholder="NIF / BI (opcional)"
+                        maxLength={14}
+                        className="w-full px-3 py-1.5 text-sm outline-none"
+                        style={{
+                          ...inp,
+                          borderColor: nifError ? colors.danger : inp.borderColor,
+                        }}
+                        value={clienteAvulsoNif}
+                        onChange={handleNifChange}
+                      />
                       {nifError && (
                         <span
                           className="absolute -bottom-4 left-0 text-[10px] whitespace-nowrap"
@@ -645,7 +679,7 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
               </div>
             </div>
 
-            {/* ── Produto e Serviço - SUBSTITUÍDO mantendo todos os campos ── */}
+            {/* ── Produto e Serviço ── */}
             <div className="flex min-h-[44px]">
               <div
                 className="flex items-center gap-1.5 px-3 py-2.5 w-24 sm:w-28 shrink-0"

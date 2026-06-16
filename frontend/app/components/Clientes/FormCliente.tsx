@@ -12,6 +12,109 @@ import {
 import type { Cliente, CriarClienteInput, AtualizarClienteInput } from "@/services/clientes";
 import { CODIGOS_PAIS, ThemeColors } from "./ClientesComuns";
 
+// ─── Funções de validação do NIF/BI ──────────────────────────────
+type TipoDocumento = 'NIF' | 'BI' | 'INVALIDO' | null;
+
+function identificarTipoDocumento(valor: string): TipoDocumento {
+  if (!valor || valor.trim() === '') return null;
+  
+  const clean = valor.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  
+  // NIF: 10 dígitos
+  if (/^[0-9]{10}$/.test(clean)) {
+    return 'NIF';
+  }
+  
+  // BI: 9 números + 2 letras + 3 números
+  if (/^[0-9]{9}[A-Z]{2}[0-9]{3}$/.test(clean)) {
+    return 'BI';
+  }
+  
+  return 'INVALIDO';
+}
+
+function validarNIF(nif: string, tipo: 'empresa' | 'consumidor_final'): { 
+  valido: boolean; 
+  tipo?: TipoDocumento;
+  mensagem?: string;
+  clean?: string;
+} {
+  if (!nif || nif.trim() === '') {
+    if (tipo === 'empresa') {
+      return { valido: false, mensagem: 'NIF é obrigatório para empresas' };
+    }
+    return { valido: true }; // Consumidor final pode ter NIF vazio
+  }
+  
+  const clean = nif.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const tipoDoc = identificarTipoDocumento(clean);
+  
+  if (tipo === 'empresa') {
+    if (tipoDoc === 'NIF') {
+      return { valido: true, tipo: 'NIF', clean };
+    }
+    return { 
+      valido: false, 
+      mensagem: 'Empresa deve ter NIF com exatamente 10 dígitos numéricos'
+    };
+  }
+  
+  // Consumidor final
+  if (tipoDoc === 'NIF' || tipoDoc === 'BI') {
+    return { valido: true, tipo: tipoDoc, clean };
+  }
+  
+  return { 
+    valido: false, 
+    mensagem: 'Formato inválido. Use NIF (10 dígitos) ou BI (9 números + 2 letras + 3 números)'
+  };
+}
+
+function aplicarMascaraNIF(valor: string, tipo: 'empresa' | 'consumidor_final'): string {
+  // Remove tudo que não é alfanumérico
+  let clean = valor.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  
+  // Limita o tamanho máximo
+  const maxLen = tipo === 'empresa' ? 10 : 14;
+  if (clean.length > maxLen) {
+    clean = clean.slice(0, maxLen);
+  }
+  
+  // Se for empresa (apenas NIF - 10 dígitos)
+  if (tipo === 'empresa') {
+    if (clean.length <= 3) return clean;
+    if (clean.length <= 6) return clean.replace(/(\d{3})(\d+)/, '$1 $2');
+    if (clean.length <= 10) return clean.replace(/(\d{3})(\d{3})(\d+)/, '$1 $2 $3');
+    return clean;
+  }
+  
+  // Consumidor final: pode ser NIF ou BI
+  // Se for apenas números e tem até 10 dígitos, aplica máscara de NIF
+  if (/^[0-9]+$/.test(clean) && clean.length <= 10) {
+    if (clean.length <= 3) return clean;
+    if (clean.length <= 6) return clean.replace(/(\d{3})(\d+)/, '$1 $2');
+    if (clean.length <= 10) return clean.replace(/(\d{3})(\d{3})(\d+)/, '$1 $2 $3');
+  }
+  
+  // Se tem letras, provavelmente é BI
+  if (/[A-Z]/.test(clean)) {
+    // BI: 123 456 789 AB 123
+    const match = clean.match(/^(\d{0,3})(\d{0,3})(\d{0,3})([A-Z]{0,2})(\d{0,3})/);
+    if (match) {
+      let resultado = '';
+      if (match[1]) resultado += match[1];
+      if (match[2]) resultado += (resultado ? ' ' : '') + match[2];
+      if (match[3]) resultado += (resultado ? ' ' : '') + match[3];
+      if (match[4]) resultado += (resultado ? ' ' : '') + match[4];
+      if (match[5]) resultado += (resultado ? ' ' : '') + match[5];
+      return resultado;
+    }
+  }
+  
+  return clean;
+}
+
+// ─── Componente Principal ──────────────────────────────────────────
 export function FormCliente({
   cliente,
   onSubmit,
@@ -37,6 +140,8 @@ export function FormCliente({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [codPais, setCodPais] = useState("+244");
   const [numTel, setNumTel] = useState("");
+  const [nifTipo, setNifTipo] = useState<TipoDocumento>(null);
+  const [nifValido, setNifValido] = useState<boolean>(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,6 +158,16 @@ export function FormCliente({
           email: cliente.email || "",
           endereco: cliente.endereco || "",
         });
+        
+        // Valida NIF existente
+        if (cliente.nif) {
+          const validacao = validarNIF(cliente.nif, cliente.tipo);
+          if (validacao.valido) {
+            setNifTipo(validacao.tipo || null);
+            setNifValido(true);
+          }
+        }
+        
         if (cliente.telefone) {
           const found = CODIGOS_PAIS.find((c) =>
             cliente.telefone?.startsWith(c.codigo),
@@ -74,6 +189,8 @@ export function FormCliente({
         });
         setCodPais("+244");
         setNumTel("");
+        setNifTipo(null);
+        setNifValido(false);
       }
     });
 
@@ -87,22 +204,63 @@ export function FormCliente({
     if (errors[name]) setErrors((p) => ({ ...p, [name]: "" }));
   };
 
-const handleChange = (
-  e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
-) => {
-  const { name, value } = e.target;
-  if (name === "nif") {
-    const raw = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    const maxLen = form.tipo === "empresa" ? 10 : 14; // BI tem 14 caracteres
-    const clean = raw.slice(0, maxLen);
-    setField("nif", clean);
-  } else {
-    setField(name, value);
-  }
-};
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
+  ) => {
+    const { name, value } = e.target;
+    if (name === "tipo") {
+      setField("tipo", value);
+      setField("nif", "");
+      setNifTipo(null);
+      setNifValido(false);
+    } else {
+      setField(name, value);
+    }
+  };
+
+  // Handler específico para NIF com máscara e validação
+  const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const valor = e.target.value;
+    const mascara = aplicarMascaraNIF(valor, form.tipo || 'consumidor_final' );
+    
+    setForm((p) => ({ ...p, nif: mascara }));
+    if (errors.nif) setErrors((p) => ({ ...p, nif: "" }));
+    
+    // Validação em tempo real
+    if (mascara.length > 0) {
+      const clean = mascara.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+      const validacao = validarNIF(clean, form.tipo || 'consumidor_final' );
+      
+      if (validacao.valido) {
+        setNifTipo(validacao.tipo || null);
+        setNifValido(true);
+        setErrors((p) => ({ ...p, nif: "" }));
+      } else {
+        // Só mostra erro se tiver digitado o mínimo necessário
+        const minLen = form.tipo === 'empresa' ? 10 : 10;
+        if (clean.length >= minLen) {
+          setNifTipo(null);
+          setNifValido(false);
+          setErrors((p) => ({ ...p, nif: validacao.mensagem || 'Formato inválido' }));
+        } else {
+          setNifTipo(null);
+          setNifValido(false);
+          setErrors((p) => ({ ...p, nif: "" }));
+        }
+      }
+    } else {
+      setNifTipo(null);
+      setNifValido(false);
+      if (form.tipo === 'empresa') {
+        setErrors((p) => ({ ...p, nif: "NIF é obrigatório para empresas" }));
+      } else {
+        setErrors((p) => ({ ...p, nif: "" }));
+      }
+    }
+  };
 
   const handleTelNum = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = e.target.value.replace(/\D/g, "").slice(0, 14);
+    const v = e.target.value.replace(/\D/g, "").slice(0, 9);
     setNumTel(v);
     setField("telefone", v ? `${codPais} ${v}` : "");
   };
@@ -112,67 +270,70 @@ const handleChange = (
     setField("telefone", numTel ? `${e.target.value} ${numTel}` : "");
   };
 
- const validate = () => {
-  const e: Record<string, string> = {};
-  const empresa = form.tipo === "empresa";
-  
-  if (!form.nome?.trim()) e.nome = "Nome é obrigatório";
-  
-  // Validação NIF
-  if (empresa) {
-    if (!form.nif?.trim()) {
-      e.nif = "NIF é obrigatório para empresas";
-    } else if (!/^\d{10}$/.test(form.nif)) {
-      e.nif = "NIF deve ter exatamente 10 dígitos numéricos";
-    }
-  } else {
-    // Consumidor final: opcional, mas se preenchido deve ser válido
-    if (form.nif && form.nif.trim() !== "") {
-      const cleanNif = form.nif.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-      if (!/^\d{10}$|^\d{9}[A-Z]{2}\d{2}$/.test(cleanNif)) {
-        e.nif = "NIF deve ter 10 números ou BI (9 números + 2 letras + 2 números)";
+  const validate = () => {
+    const e: Record<string, string> = {};
+    const empresa = form.tipo === "empresa";
+    
+    if (!form.nome?.trim()) e.nome = "Nome é obrigatório";
+    
+    // Validação NIF
+    if (empresa) {
+      if (!form.nif?.trim()) {
+        e.nif = "NIF é obrigatório para empresas";
+      } else {
+        const validacao = validarNIF(form.nif, form.tipo || 'consumidor_final' );
+        if (!validacao.valido) {
+          e.nif = validacao.mensagem || "NIF inválido";
+        }
+      }
+    } else {
+      // Consumidor final: opcional, mas se preenchido deve ser válido
+      if (form.nif && form.nif.trim() !== "") {
+        const cleanNif = form.nif.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+        // 🔥 CORREÇÃO: 3 números no final do BI
+        if (!/^\d{10}$/.test(cleanNif) && !/^\d{9}[A-Z]{2}\d{3}$/.test(cleanNif)) {
+          e.nif = "NIF deve ter 10 números ou BI (9 números + 2 letras + 3 números)";
+        }
       }
     }
-  }
-  
-  // Telefone
-  if (empresa) {
-    if (!form.telefone?.trim()) {
-      e.telefone = "Telefone é obrigatório para empresas";
-    } else if (numTel.length !== 9) {
-      e.telefone = "Telefone deve ter 9 dígitos";
+    
+    // Telefone
+    if (empresa) {
+      if (!form.telefone?.trim()) {
+        e.telefone = "Telefone é obrigatório para empresas";
+      } else if (numTel.length !== 9) {
+        e.telefone = "Telefone deve ter 9 dígitos";
+      }
+    } else {
+      if (numTel.length > 0 && numTel.length !== 9) {
+        e.telefone = "Telefone deve ter 9 dígitos";
+      }
     }
-  } else {
-    if (numTel.length > 0 && numTel.length !== 9) {
-      e.telefone = "Telefone deve ter 9 dígitos";
+    
+    // Email
+    if (empresa) {
+      if (!form.email?.trim()) {
+        e.email = "Email é obrigatório para empresas";
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+        e.email = "Email inválido";
+      }
+    } else {
+      if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+        e.email = "Email inválido";
+      }
     }
-  }
-  
-  // Email
-  if (empresa) {
-    if (!form.email?.trim()) {
-      e.email = "Email é obrigatório para empresas";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      e.email = "Email inválido";
+    
+    // Endereço
+    if (empresa && !form.endereco?.trim()) {
+      e.endereco = "Endereço é obrigatório para empresas";
     }
-  } else {
-    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      e.email = "Email inválido";
-    }
-  }
-  
-  // Endereço
-  if (empresa && !form.endereco?.trim()) {
-    e.endereco = "Endereço é obrigatório para empresas";
-  }
-  
-  setErrors(e);
-  return Object.keys(e).length === 0;
-};
+    
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
 
   const empresa = form.tipo === "empresa";
 
-  /* Estilos reutilizáveis - SEM ROUNDED */
   const inputCls =
     "w-full px-3 py-2 border outline-none transition-all text-sm";
   const inputStyle = (err?: string) => ({
@@ -186,7 +347,14 @@ const handleChange = (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (validate()) onSubmit(form);
+        if (validate()) {
+          // 🔥 Limpa o NIF antes de enviar
+          const dadosLimpos = {
+            ...form,
+            nif: form.nif ? form.nif.replace(/[^A-Za-z0-9]/g, '').toUpperCase() : ''
+          };
+          onSubmit(dadosLimpos);
+        }
       }}
       className="space-y-4"
     >
@@ -209,10 +377,7 @@ const handleChange = (
                 name="tipo"
                 value={t}
                 checked={active}
-                onChange={() => {
-                  setField("tipo", t);
-                  setField("nif", "");
-                }}
+                onChange={handleChange}
                 className="hidden"
               />
               {t === "empresa" ? (
@@ -334,29 +499,54 @@ const handleChange = (
         </div>
 
         <div>
-<label className={labelCls} style={{ color: colors.text }}>
-  {empresa ? "NIF (10 dígitos)" : "NIF/BI (opcional)"}
-</label>
-<input
-  type="text"
-  name="nif"
-  value={form.nif}
-  onChange={handleChange}
-  placeholder={empresa ? "0000000000" : "0000000000 ou 123456789AB01"}
-  maxLength={empresa ? 10 : 14} // BI tem 14 caracteres
-  className={`${inputCls} font-mono text-xs uppercase`}
-  style={inputStyle(errors.nif)}
-/>
-{!empresa && (
-  <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
-    Consumidor final: deixe em branco ou informe 10 números (NIF) ou 13 caracteres (9 números + 2 letras + 2 números)
-  </p>
-)}
-{errors.nif && (
-  <p className="mt-1 text-xs" style={{ color: colors.danger }}>
-    {errors.nif}
-  </p>
-)}
+          <label className={labelCls} style={{ color: colors.text }}>
+            {empresa ? "NIF (10 dígitos)" : "NIF/BI (opcional)"}
+          </label>
+          <div className="relative">
+            <input
+              type="text"
+              name="nif"
+              value={form.nif}
+              onChange={handleNifChange}
+              placeholder={empresa ? "000 000 0000" : "000 000 0000  ou  000 000 000 AB 000"}
+              maxLength={empresa ? 17 : 20} // Com espaços
+              className={`${inputCls} font-mono text-xs`}
+              style={{
+                ...inputStyle(errors.nif),
+                paddingRight: nifTipo ? '40px' : '10px'
+              }}
+            />
+            {nifTipo && nifValido && (
+              <span 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold px-1.5 py-0.5 rounded"
+                style={{
+                  backgroundColor: nifTipo === 'NIF' 
+                    ? `${colors.primary}20` 
+                    : `${colors.secondary}20`,
+                  color: nifTipo === 'NIF' 
+                    ? colors.primary 
+                    : colors.secondary
+                }}
+              >
+                {nifTipo}
+              </span>
+            )}
+          </div>
+          {!empresa && (
+            <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+              Deixe em branco ou informe: 10 números (NIF) ou 9 números + 2 letras + 3 números (BI)
+            </p>
+          )}
+          {errors.nif && (
+            <p className="mt-1 text-xs" style={{ color: colors.danger }}>
+              {errors.nif}
+            </p>
+          )}
+          {!errors.nif && form.nif && nifValido && (
+            <p className="mt-1 text-xs" style={{ color: colors.success }}>
+              ✓ {nifTipo} válido
+            </p>
+          )}
         </div>
       </div>
 
