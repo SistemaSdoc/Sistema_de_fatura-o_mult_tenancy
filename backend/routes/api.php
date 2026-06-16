@@ -18,6 +18,29 @@ use App\Http\Controllers\EmpresaController;
 
 $uuidPattern = '[0-9a-fA-F-]{36}';
 
+
+
+
+// ==================== ROTAS DO LANDLORD ====================
+Route::prefix('landlord')->group(function () {
+    Route::post('/login', [LandlordAuthController::class, 'login']);
+    Route::post('/register', [LandlordAuthController::class, 'register']);
+
+    Route::middleware(['auth:landlord_api'])->group(function () {
+        
+        Route::post('/logout', [LandlordAuthController::class, 'logout']);
+        Route::get('/landlordme', [LandlordAuthController::class, 'landlordme']);
+
+        Route::get('/empresas', [EmpresaController::class, 'index']);
+        Route::post('/empresas', [EmpresaController::class, 'store']);
+        Route::get('/empresas/{empresa}', [EmpresaController::class, 'show']);
+        Route::put('/empresas/{empresa}', [EmpresaController::class, 'update']);
+        Route::patch('/empresas/{empresa}/toggle-status', [EmpresaController::class, 'toggleStatusLandlord']);
+    });
+});
+
+
+
 // ==================== ROTAS PÚBLICAS ====================
 Route::withoutMiddleware(['resolve.tenant', 'auth.tenant'])->group(function () {
     // Rota de upload temporário de logo
@@ -211,24 +234,5 @@ Route::prefix('empresa')->group(function () {
                 Route::get('/saft-alertas', [RelatoriosController::class, 'saftAlertas'])->name('relatorios.saft-alertas');
             });
         });
-    });
-});
-
-// ==================== ROTAS DO LANDLORD ====================
-Route::prefix('landlord')->group(function () {
-    Route::post('/login', [LandlordAuthController::class, 'login']);
-    Route::post('/register', [LandlordAuthController::class, 'register']);
-
-    Route::middleware(['auth:landlord_api'])->group(function () {
-        Route::get('/me', function () {
-            return response()->json(['user' => auth('landlord_api')->user()]);
-        });
-        Route::post('/logout', [LandlordAuthController::class, 'logout']);
-
-        Route::get('/empresas', [EmpresaController::class, 'index']);
-        Route::post('/empresas', [EmpresaController::class, 'store']);
-        Route::get('/empresas/{empresa}', [EmpresaController::class, 'show']);
-        Route::put('/empresas/{empresa}', [EmpresaController::class, 'update']);
-        Route::patch('/empresas/{empresa}/toggle-status', [EmpresaController::class, 'toggleStatusLandlord']);
     });
 });

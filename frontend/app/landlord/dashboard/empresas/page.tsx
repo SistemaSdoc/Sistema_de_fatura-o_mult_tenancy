@@ -233,7 +233,7 @@ export default function EmpresasDashboard() {
                             backgroundClip: 'text'
                         }}
                     >
-                        {user?.name?.split(' ')[0] || 'Super Admin'}
+                        {user?.name || 'Super Admin'}
                     </span>
                 </h1>
                 

@@ -182,12 +182,30 @@ export const clienteService = {
     },
 };
 
+
+
 export function formatarNIF(nif: string | null): string {
     if (!nif) return "-";
-    if (nif.length === 14) {
-        return `${nif.slice(0, 14)} ${nif.slice(9, 14)} ${nif.slice(14)}`;
+    
+    // Remove caracteres não numéricos
+    const apenasNumeros = nif.replace(/\D/g, '');
+    
+    // Empresa: 10 dígitos → 000.000.0000
+    if (apenasNumeros.length === 10) {
+        return apenasNumeros.replace(/^(\d{3})(\d{3})(\d{4})$/, '$1.$2.$3');
     }
-    return nif;
+    
+    // Consumidor: 14 dígitos → 00.000.000/0000-00
+    if (apenasNumeros.length === 14) {
+        return apenasNumeros.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+    }
+    
+    // Outros formatos (ex: 11 dígitos CPF)
+    if (apenasNumeros.length === 11) {
+        return apenasNumeros.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
+    }
+    
+    return apenasNumeros;
 }
 
 export function getTipoClienteLabel(tipo: TipoCliente): string {

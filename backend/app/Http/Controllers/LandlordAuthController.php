@@ -13,6 +13,29 @@ use Illuminate\Support\Str;
 class LandlordAuthController extends Controller
 {
 
+// app/Http/Controllers/LandlordAuthController.php
+
+public function landlordme(Request $request)
+{
+    Log::info('[LANDLORD ME]   Início', [
+        'session_id' => $request->session()->getId(),
+        'has_user' => Auth::guard('landlord_api')->check(),
+        'url' => $request->fullUrl(),
+    ]);
+    
+    $user = Auth::guard('landlord_api')->user();
+    
+    if (!$user) {
+        Log::warning('[LANDLORD ME] Não autenticado');
+        return response()->json(['message' => 'Não autenticado'], 401);
+    }
+    
+    Log::info('[LANDLORD ME] me Autenticado', ['user_id' => $user->id]);
+    
+    return response()->json([
+        'user' => $user->only(['id', 'name', 'email', 'role'])
+    ]);
+}
 
 public function login(Request $request)
 {

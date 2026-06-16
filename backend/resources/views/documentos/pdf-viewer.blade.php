@@ -26,13 +26,13 @@ if (!empty($empresa['logo_base64'])) {
 }
 
 $tiposDocumento = [
-    'FT' => 'Fatura',
-    'FR' => 'Fatura-Recibo',
-    'FA' => 'Fat. Adiantamento',
+    'FT' => 'Factura',
+    'FR' => 'Factura-Recibo',
+    'FA' => 'Fact. Adiantamento',
     'NC' => 'Nota de Crédito',
     'ND' => 'Nota de Débito',
     'RC' => 'Recibo',
-    'FRt' => 'Fat. Retificação'
+    'FRt' => 'Fact. Retificação'
 ];
 
 // Estado e cores
@@ -538,7 +538,7 @@ $temTroco = $troco > 0;
             </div>
         </div>
 
-        <!-- Referência (se for RC e tiver fatura de origem) -->
+        <!-- Referência (se for RC e tiver factura de origem) -->
         @if($documento->tipo_documento === 'RC' && $documentoOrigem)
         <div class="reference">
             <strong>Ref. Documento Origem:</strong><br>
@@ -684,7 +684,7 @@ $temTroco = $troco > 0;
         <div class="footer">
             <div class="footer-title">OBRIGADO PELA PREFERÊNCIA!</div>
             <div class="footer-msg">Volte sempre</div>
-            <div class="footer-msg">Processado pelo sistema de facturação facturaja</div>
+            <div class="footer-msg">Processado pelo sistema de facturação faturaja</div>
             <div class="timestamp">
                 {{ now()->format('d/m/Y H:i:s') }}
             </div>

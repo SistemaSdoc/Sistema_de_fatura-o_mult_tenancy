@@ -184,7 +184,7 @@ const CheckIcon: React.FC<{ color: string }> = ({ color }) => (
   </svg>
 );
 
-// Ícone de Fatura
+// Ícone de Factura
 const InvoiceIcon: React.FC<{ sizeClass?: string }> = ({ sizeClass = 'w-12 h-12' }) => (
   <img src="/images/3.png" alt="Invoice Icon" className={sizeClass} />
 );
@@ -326,28 +326,28 @@ const PricingCard: React.FC<PricingCardProps> = ({ plan, index, colors }) => {
 
 // DADOS
 const allFeaturesData = [
-  { title: "Emissão de Faturas", description: "Crie faturas, notas de crédito e recibos rapidamente, associe clientes, produtos e impostos, e envie por email." },
-  { title: "Gestão de Clientes", description: "Cadastre e administre os seus clientes, consulte o histórico de faturas e contactos de forma organizada e segura." },
-  { title: "Controle de Produtos", description: "Gerencie produtos e serviços, preços e stock em tempo real, directamente ligados às faturas." },
-  { title: "Relatórios Financeiros", description: "Visualize relatórios detalhados sobre vendas, faturamento e desempenho financeiro da sua empresa." },
+  { title: "Emissão de Facturas", description: "Crie facturas, notas de crédito e recibos rapidamente, associe clientes, produtos e impostos, e envie por email." },
+  { title: "Gestão de Clientes", description: "Cadastre e administre os seus clientes, consulte o histórico de facturas e contactos de forma organizada e segura." },
+  { title: "Controle de Produtos", description: "Gerencie produtos e serviços, preços e stock em tempo real, directamente ligados às facturas." },
+  { title: "Relatórios Financeiros", description: "Visualize relatórios detalhados sobre vendas, facturamento e desempenho financeiro da sua empresa." },
   { title: "Gestão de Utilizadores", description: "Adicione membros da equipa com permissões diferentes, garantindo controlo e colaboração eficiente." },
 ];
 
 const processSteps = [
-  { number: 1, title: "Registo Rápido", description: "Comece em minutos! Crie sua conta sem papelada e esteja pronto para faturar hoje mesmo." },
+  { number: 1, title: "Registo Rápido", description: "Comece em minutos! Crie sua conta sem papelada e esteja pronto para facturar hoje mesmo." },
   { number: 2, title: "Produtividade Garantida", description: "Otimize processos internos e dedique mais tempo ao crescimento do negócio." },
-  { number: 3, title: "Fature Já", description: "Fature em um clique! Crie e envie sua primeira fatura sem complicações." },
+  { number: 3, title: "Facture Já", description: "Facture em um clique! Crie e envie sua primeira factura sem complicações." },
 ];
 
 const faqData = [
-  { q: "O que torna o Fatura Já diferente de outras plataformas?", a: "O FacturaJá foca-se na simplicidade e rapidez. Pode criar uma fatura profissional em menos de 60 segundos, com ênfase na conformidade legal angolana e num design limpo e moderno." },
-  { q: "Posso cancelar o meu plano a qualquer momento?", a: "Sim, todos os planos podem ser cancelados a qualquer momento, sem taxas de rescisão. Caso cancele, mantém o acesso até ao final do ciclo de faturação." },
+  { q: "O que torna o Factura Já diferente de outras plataformas?", a: "O FaturaJá foca-se na simplicidade e rapidez. Pode criar uma factura profissional em menos de 60 segundos, com ênfase na conformidade legal angolana e num design limpo e moderno." },
+  { q: "Posso cancelar o meu plano a qualquer momento?", a: "Sim, todos os planos podem ser cancelados a qualquer momento, sem taxas de rescisão. Caso cancele, mantém o acesso até ao final do ciclo de facturação." },
   { q: "Como é que a segurança dos meus dados é garantida?", a: "Utilizamos encriptação SSL de 256 bits para todas as comunicações, e os seus dados são armazenados em servidores seguros, cumprindo a legislação angolana de protecção de dados pessoais. A privacidade é a nossa prioridade." },
-  { q: "O Fatura Já é compatível com telemóveis?", a: "Absolutamente! A plataforma é 100% responsiva, funcionando perfeitamente em dispositivos móveis, tablets e desktops." },
-  { q: "Posso adicionar vários utilizadores à minha conta?", a: "Sim, dependendo do plano, pode adicionar vários utilizadores com diferentes permissões para gerir clientes, produtos e faturas de forma colaborativa." },
-  { q: "Quais métodos de pagamento estão disponíveis para os clientes finais?", a: "Pode aceitar pagamentos por transferência bancária, Multicaixa ou cartões de débito/crédito, e acompanhar o estado das faturas (pendente, pago, cancelado)." },
-  { q: "Posso gerar relatórios das minhas vendas e faturamento?", a: "Sim, os planos Essencial, Pro, Premium e Empresa permitem gerar relatórios detalhados de faturamento e vendas, ajudando a monitorizar o desempenho financeiro da sua empresa." },
-  { q: "As faturas cumprem a legislação fiscal angolana?", a: "Sim, todas as faturas emitidas pelo FacturaJá cumprem as normas da Autoridade Tributária Angolana, garantindo conformidade legal." },
+  { q: "O Factura Já é compatível com telemóveis?", a: "Absolutamente! A plataforma é 100% responsiva, funcionando perfeitamente em dispositivos móveis, tablets e desktops." },
+  { q: "Posso adicionar vários utilizadores à minha conta?", a: "Sim, dependendo do plano, pode adicionar vários utilizadores com diferentes permissões para gerir clientes, produtos e facturas de forma colaborativa." },
+  { q: "Quais métodos de pagamento estão disponíveis para os clientes finais?", a: "Pode aceitar pagamentos por transferência bancária, Multicaixa ou cartões de débito/crédito, e acompanhar o estado das facturas (pendente, pago, cancelado)." },
+  { q: "Posso gerar relatórios das minhas vendas e facturamento?", a: "Sim, os planos Essencial, Pro, Premium e Empresa permitem gerar relatórios detalhados de facturamento e vendas, ajudando a monitorizar o desempenho financeiro da sua empresa." },
+  { q: "As facturas cumprem a legislação fiscal angolana?", a: "Sim, todas as facturas emitidas pelo FaturaJá cumprem as normas da Autoridade Tributária Angolana, garantindo conformidade legal." },
 ];
 
 const pricingPlans = [
@@ -356,14 +356,14 @@ const pricingPlans = [
     price: "0 KZ",
     interval: "/mês",
     isPopular: false,
-    features: ["Até 5 faturas/mês", "1 utilizador", "Suporte comunitário", "Armazenamento de 100MB", "Design padrão", "Sem relatórios"]
+    features: ["Até 5 facturas/mês", "1 utilizador", "Suporte comunitário", "Armazenamento de 100MB", "Design padrão", "Sem relatórios"]
   },
   {
     name: "Essencial",
     price: "19.000 KZ",
     interval: "/mês",
     isPopular: true,
-    features: ["Faturação ilimitada", "Até 3 utilizadores", "Suporte prioritário", "Armazenamento ilimitado", "Gestão de clientes avançada", "Relatórios detalhados (trimestrais)"]
+    features: ["Facturação ilimitada", "Até 3 utilizadores", "Suporte prioritário", "Armazenamento ilimitado", "Gestão de clientes avançada", "Relatórios detalhados (trimestrais)"]
   },
   {
     name: "Pro",
@@ -524,13 +524,13 @@ export default function App() {
               <div className="text-center lg:text-left">
                 <AnimatedSection animation="fade-up" delay={0}>
                   <h2 className="text-5xl md:text-6xl font-extrabold tracking-tight mb-4" style={{ color: colors.primary }}>
-                    Faturação Simples, <br className="sm:hidden" />
+                    Facturação Simples, <br className="sm:hidden" />
                     <span style={{ color: colors.secondary }}>Poderosa</span> e Rápida.
                   </h2>
                 </AnimatedSection>
                 <AnimatedSection animation="fade-up" delay={200}>
                   <p className="text-xl md:text-2xl mb-8 max-w-lg mx-auto lg:mx-0" style={{ color: colors.textSecondary }}>
-                    Gere faturas profissionais em segundos, sem complicações.
+                    Gere facturas profissionais em segundos, sem complicações.
                     A ferramenta ideal para pequenos negócios e freelancers.
                   </p>
                 </AnimatedSection>
@@ -567,7 +567,7 @@ export default function App() {
                 Ferramentas Essenciais para o seu Negócio
               </h1>
               <p className="text-center mb-12 text-lg" style={{ color: colors.textSecondary }}>
-                Tudo o que precisa para começar a faturar de forma simples, segura e eficiente.
+                Tudo o que precisa para começar a facturar de forma simples, segura e eficiente.
               </p>
             </AnimatedSection>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -652,7 +652,7 @@ export default function App() {
                 <h4 className="text-2xl font-extrabold mb-4 text-white">
                   Fatura<span style={{ color: colors.secondary }}>Já</span>
                 </h4>
-                <p className="mb-4 text-white">A sua solução definitiva para gestão e faturação simplificada. Rápido, seguro e compatível com as normas fiscais.</p>
+                <p className="mb-4 text-white">A sua solução definitiva para gestão e facturação simplificada. Rápido, seguro e compatível com as normas fiscais.</p>
                 <p className="space-y-1">
                   <span className="block text-white">Luanda, Angola</span>
                   <a href="mailto:geral@sdoca.it.ao" className="block font-semibold hover:underline" style={{ color: colors.secondary }}>geral@sdoca.it.ao</a>

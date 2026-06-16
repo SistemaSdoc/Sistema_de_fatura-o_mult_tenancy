@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api } from "@/services/axios";// instância axios com withCredentials
+import { api } from "@/services/axios";
 
 export default function LandlordRegisterPage() {
     const router = useRouter();
@@ -14,6 +14,7 @@ export default function LandlordRegisterPage() {
         password: '',
         password_confirmation: '',
     });
+
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [isLoading, setIsLoading] = useState(false);

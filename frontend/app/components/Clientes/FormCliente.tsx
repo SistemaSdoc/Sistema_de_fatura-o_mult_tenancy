@@ -121,7 +121,7 @@ export function FormCliente({
     if (!form.nome?.trim()) e.nome = "Nome é obrigatório";
     if (empresa) {
       if (!form.nif?.trim()) e.nif = "NIF é obrigatório para empresas";
-      else if (form.nif.length !== 14)
+      else if (form.nif.length !== 11)
         e.nif = "NIF deve ter exactamente 10 ou 14 dígitos no caso de uso do BI";
       if (!form.telefone?.trim())
         e.telefone = "Telefone é obrigatório para empresas";
@@ -305,19 +305,24 @@ export function FormCliente({
         </div>
 
         <div>
-          <label className={labelCls} style={{ color: colors.text }}>
-            NIF
-          </label>
-          <input
-            type="text"
-            name="nif"
-            value={form.nif}
-            onChange={handleChange}
-            placeholder={empresa ? "0000000000" : "000000000LA000"}
-            maxLength={empresa ? 10 : 14}
-            className={`${inputCls} font-mono text-xs`}
-            style={inputStyle(errors.nif)}
-          />
+<label className={labelCls} style={{ color: colors.text }}>
+  {empresa ? "NIF (10 dígitos)" : "NIF/BI (opcional)"}
+</label>
+<input
+  type="text"
+  name="nif"
+  value={form.nif}
+  onChange={handleChange}
+  placeholder={empresa ? "0000000000" : "0000000000 ou 00000000000000"}
+  maxLength={empresa ? 10 : 14}
+  className={`${inputCls} font-mono text-xs`}
+  style={inputStyle(errors.nif)}
+/>
+{!empresa && (
+  <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+    Consumidor final: deixe em branco ou informe NIF de 10 ou 14 dígitos
+  </p>
+)}
           {errors.nif && (
             <p className="mt-1 text-xs" style={{ color: colors.danger }}>
               {errors.nif}

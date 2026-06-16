@@ -108,55 +108,95 @@ class ClienteController extends Controller
      * Criar novo cliente
      */
     public function store(Request $request)
-    {
-        $dados = $request->validate([
-            'nome' => 'required|string|max:255',
-            'nif' => 'nullable|string|max:14|unique:clientes,nif',
-            'tipo' => 'nullable|in:consumidor_final,empresa',
-            'status' => 'nullable|in:ativo,inativo', // NOVO
-            'telefone' => 'nullable|string|max:20',
-            'email' => 'nullable|email|max:255|unique:clientes,email',
-            'endereco' => 'nullable|string',
-            'data_registro' => 'nullable|date',
-        ]);
+{
+    $dados = $request->validate([
+        'nome' => 'required|string|max:255',
+        'tipo' => 'required|in:consumidor_final,empresa',
+        'nif' => 'nullable|string|unique:clientes,nif', // ← Remove o max:14
+        'status' => 'nullable|in:ativo,inativo',
+        'telefone' => 'nullable|string|max:20',
+        'email' => 'nullable|email|max:255|unique:clientes,email',
+        'endereco' => 'nullable|string',
+        'data_registro' => 'nullable|date',
+    ]);
 
-        $dados['data_registro'] = $dados['data_registro'] ?? now();
-        $dados['status'] = $dados['status'] ?? 'ativo'; // Valor padrão
-
-        $cliente = Cliente::create($dados);
-
-        return response()->json([
-            'message' => 'Cliente criado com sucesso',
-            'cliente' => $cliente,
-        ], 201);
+    // Validação específica para empresa
+    if ($dados['tipo'] === 'empresa') {
+        if (empty($dados['nif']) || !preg_match('/^\d{10}$/', $dados['nif'])) {
+            return response()->json([
+                'message' => 'Empresa deve ter NIF com exatamente 10 dígitos numéricos'
+            ], 422);
+        }
     }
+
+    // Validação específica para consumidor final
+    if ($dados['tipo'] === 'consumidor_final' && !empty($dados['nif'])) {
+        if (!preg_match('/^\d{10}$|^\d{14}$/', $dados['nif'])) {
+            return response()->json([
+                'message' => 'Consumidor final: NIF deve ter 10 ou 14 dígitos numéricos'
+            ], 422);
+        }
+    }
+
+    $dados['data_registro'] = $dados['data_registro'] ?? now();
+    $dados['status'] = $dados['status'] ?? 'ativo';
+
+    $cliente = Cliente::create($dados);
+
+    return response()->json([
+        'message' => 'Cliente criado com sucesso',
+        'cliente' => $cliente,
+    ], 201);
+}
 
     /**
      * Atualizar cliente
      */
-    public function update(Request $request, $id)
-    {
-        $cliente = Cliente::findOrFail($id);
+ public function update(Request $request, $id)
+{
+    $cliente = Cliente::findOrFail($id);
 
-        $dados = $request->validate([
-            'nome' => 'sometimes|required|string|max:255',
-            'nif' => 'sometimes|nullable|string|max:14|unique:clientes,nif,' . $cliente->id,
-            'tipo' => 'nullable|in:consumidor_final,empresa',
-            'status' => 'nullable|in:ativo,inativo', // NOVO
-            'telefone' => 'nullable|string|max:20',
-            'email' => 'nullable|email|max:255|unique:clientes,email,' . $cliente->id,
-            'endereco' => 'nullable|string',
-            'data_registro' => 'nullable|date',
-        ]);
+    $dados = $request->validate([
+        'nome' => 'sometimes|required|string|max:255',
+        'tipo' => 'nullable|in:consumidor_final,empresa',
+        'nif' => 'sometimes|nullable|string|unique:clientes,nif,' . $cliente->id,
+        'status' => 'nullable|in:ativo,inativo',
+        'telefone' => 'nullable|string|max:20',
+        'email' => 'nullable|email|max:255|unique:clientes,email,' . $cliente->id,
+        'endereco' => 'nullable|string',
+        'data_registro' => 'nullable|date',
+    ]);
 
-        $cliente->update($dados);
-        $cliente->refresh();
+    // Determina o tipo (pode vir do request ou do cliente existente)
+    $tipo = $dados['tipo'] ?? $cliente->tipo;
+    $nif = $dados['nif'] ?? $cliente->nif;
 
-        return response()->json([
-            'message' => 'Cliente atualizado com sucesso',
-            'cliente' => $cliente,
-        ]);
+    // Validação específica para empresa
+    if ($tipo === 'empresa') {
+        if (empty($nif) || !preg_match('/^\d{10}$/', $nif)) {
+            return response()->json([
+                'message' => 'Empresa deve ter NIF com exatamente 10 dígitos numéricos'
+            ], 422);
+        }
     }
+
+    // Validação específica para consumidor final
+    if ($tipo === 'consumidor_final' && !empty($nif)) {
+        if (!preg_match('/^\d{10}$|^\d{14}$/', $nif)) {
+            return response()->json([
+                'message' => 'Consumidor final: NIF deve ter 10 ou 14 dígitos numéricos'
+            ], 422);
+        }
+    }
+
+    $cliente->update($dados);
+    $cliente->refresh();
+
+    return response()->json([
+        'message' => 'Cliente atualizado com sucesso',
+        'cliente' => $cliente,
+    ]);
+}
 
     /**
      * NOVO: Ativar cliente

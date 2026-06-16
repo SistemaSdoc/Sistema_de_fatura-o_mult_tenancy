@@ -53,7 +53,7 @@ export default function DashboardHeader() {
                                 className="font-medium transition-colors duration-200"
                                 style={{ color: colors.primary }}
                             >
-                                {user?.name?.split(' ')[0] || 'Super Admin'}
+                                {user?.name || 'Super Admin'}
                             </span>
                         </p>
                     </div>
@@ -68,7 +68,7 @@ export default function DashboardHeader() {
                     {user?.name || 'Super Admin'}
                 </p>
                 <p className="text-xs" style={{ color: colors.textSecondary }}>
-                    super_admin@faturaja.com
+                    {user?.email || 'Super Admin'}
                 </p>
             </div>
             <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white" style={{ 
