@@ -70,76 +70,129 @@ class FornecedorController extends Controller
     /**
      * Criar novo fornecedor
      */
-    public function store(Request $request)
-    {
-        Gate::forUser(auth('tenant')->user())->authorize('create', Fornecedor::class);
+public function store(Request $request)
+{
+    Gate::forUser(auth('tenant')->user())->authorize('create', Fornecedor::class);
 
+    $dados = $request->validate([
+        'nome'     => 'required|string|max:255',
+        'nif'      => [
+            'required',
+            'string',
+            'max:14',
+            'unique:fornecedores,nif',
+            function ($attribute, $value, $fail) {
+                // Remove espaços e caracteres especiais
+                $clean = preg_replace('/[^a-zA-Z0-9]/', '', $value);
+                
+                // Verifica NIF (10 dígitos)
+                if (preg_match('/^[0-9]{10}$/', $clean)) {
+                    return; // Válido - NIF
+                }
+                
+                // Verifica BI (9 números + 2 letras + 3 números)
+                if (preg_match('/^[0-9]{9}[A-Za-z]{2}[0-9]{3}$/', $clean)) {
+                    return; // Válido - BI
+                }
+                
+                $fail('O NIF deve ter 10 dígitos ou o BI deve ter 9 números, 2 letras e 3 números (ex: 123456789AB123)');
+            }
+        ],
+        'telefone' => 'nullable|string|max:20',
+        'email'    => 'nullable|email|max:255|unique:fornecedores,email',
+        'endereco' => 'nullable|string',
+        'tipo'     => 'nullable|in:Nacional,Internacional',
+        'status'   => 'nullable|in:ativo,inativo',
+    ], [
+        'nif.required' => 'O NIF/BI é obrigatório',
+        'nif.unique' => 'Este NIF/BI já está cadastrado',
+    ]);
+
+    // Limpa o NIF/BI antes de salvar (remove espaços, pontos, etc)
+    $dados['nif'] = preg_replace('/[^a-zA-Z0-9]/', '', $dados['nif']);
+    $dados['user_id'] = auth('tenant')->id();
+    $dados['tipo']    = $dados['tipo'] ?? 'Nacional';
+    $dados['status']  = $dados['status'] ?? 'ativo';
+
+    $fornecedor = Fornecedor::create($dados);
+
+    Log::info('Fornecedor criado com sucesso', [
+        'fornecedor_id' => $fornecedor->id,
+        'nome' => $fornecedor->nome
+    ]);
+
+    return response()->json([
+        'message' => 'Fornecedor criado com sucesso',
+        'fornecedor' => $fornecedor
+    ], 201);
+}
+
+public function update(Request $request, $id)
+{
+    $fornecedor = Fornecedor::findOrFail($id);
+
+    Gate::forUser(auth('tenant')->user())->authorize('update', $fornecedor);
+
+    try {
         $dados = $request->validate([
-            'nome'     => 'required|string|max:255',
-            'nif'      => 'required|string|max:14|unique:fornecedores,nif',
-            'telefone' => 'nullable|string|max:20',
-            'email'    => 'nullable|email|max:255|unique:fornecedores,email',
+            'nome'     => 'sometimes|required|string|max:255',
+            'nif'      => [
+                'sometimes',
+                'required',
+                'string',
+                'max:14',
+                'unique:fornecedores,nif,' . $fornecedor->id,
+                function ($attribute, $value, $fail) {
+                    $clean = preg_replace('/[^a-zA-Z0-9]/', '', $value);
+                    
+                    // NIF: 10 dígitos
+                    if (preg_match('/^[0-9]{10}$/', $clean)) {
+                        return;
+                    }
+                    
+                    // BI: 9 números + 2 letras + 3 números
+                    if (preg_match('/^[0-9]{9}[A-Za-z]{2}[0-9]{3}$/', $clean)) {
+                        return;
+                    }
+                    
+                    $fail('O NIF deve ter 10 dígitos ou o BI deve ter 9 números, 2 letras e 3 números (ex: 123456789AB123)');
+                }
+            ],
+            'telefone' => 'nullable|string|max:30',
+            'email'    => 'nullable|email|max:255|unique:fornecedores,email,' . $fornecedor->id,
             'endereco' => 'nullable|string',
             'tipo'     => 'nullable|in:Nacional,Internacional',
             'status'   => 'nullable|in:ativo,inativo',
+        ], [
+            'nif.required' => 'O NIF/BI é obrigatório',
+            'nif.unique' => 'Este NIF/BI já está cadastrado',
         ]);
 
-        $dados['user_id'] = auth('tenant')->id();
-        $dados['tipo']    = $dados['tipo'] ?? 'Nacional';
-        $dados['status']  = $dados['status'] ?? 'ativo';
+        // Limpa o NIF/BI antes de salvar
+        if (isset($dados['nif'])) {
+            $dados['nif'] = preg_replace('/[^a-zA-Z0-9]/', '', $dados['nif']);
+        }
 
-        $fornecedor = Fornecedor::create($dados);
+        // Normalização extra (segurança)
+        if (isset($dados['tipo'])) {
+            $dados['tipo'] = ucfirst(strtolower($dados['tipo']));
+        }
 
-        Log::info('Fornecedor criado com sucesso', [
-            'fornecedor_id' => $fornecedor->id,
-            'nome' => $fornecedor->nome
-        ]);
+        $fornecedor->update($dados);
 
         return response()->json([
-            'message' => 'Fornecedor criado com sucesso',
-            'fornecedor' => $fornecedor
-        ], 201);
+            'message'    => 'Fornecedor atualizado com sucesso',
+            'fornecedor' => $fornecedor->fresh()
+        ]);
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'message' => 'Erro de validação',
+            'errors'  => $e->errors()
+        ], 422);
     }
+}
 
-    /**
-     * Atualizar fornecedor (EDITAR)
-     */
-    public function update(Request $request, $id)
-    {
-        $fornecedor = Fornecedor::findOrFail($id);
-
-        Gate::forUser(auth('tenant')->user())->authorize('update', $fornecedor);
-
-        try {
-            $dados = $request->validate([
-                'nome'     => 'sometimes|required|string|max:255',
-                'nif'      => 'sometimes|required|string|max:14|unique:fornecedores,nif,' . $fornecedor->id,
-                'telefone' => 'nullable|string|max:30',
-                'email'    => 'nullable|email|max:255|unique:fornecedores,email,' . $fornecedor->id,
-                'endereco' => 'nullable|string',
-                'tipo'     => 'nullable|in:Nacional,Internacional',
-                'status'   => 'nullable|in:ativo,inativo',
-            ]);
-
-            // Normalização extra (segurança)
-            if (isset($dados['tipo'])) {
-                $dados['tipo'] = ucfirst(strtolower($dados['tipo']));
-            }
-
-            $fornecedor->update($dados);
-
-            return response()->json([
-                'message'    => 'Fornecedor atualizado com sucesso',
-                'fornecedor' => $fornecedor->fresh()
-            ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'message' => 'Erro de validação',
-                'errors'  => $e->errors()
-            ], 422);
-        }
-    }
-    /**
+  /**
      * Soft Delete - Mover fornecedor para a lixeira
      */
     public function destroy($id)

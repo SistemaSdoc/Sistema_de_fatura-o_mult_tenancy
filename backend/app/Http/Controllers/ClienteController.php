@@ -103,16 +103,12 @@ class ClienteController extends Controller
             'cliente' => $cliente,
         ]);
     }
-
-    /**
-     * Criar novo cliente
-     */
-    public function store(Request $request)
+public function store(Request $request)
 {
     $dados = $request->validate([
         'nome' => 'required|string|max:255',
         'tipo' => 'required|in:consumidor_final,empresa',
-        'nif' => 'nullable|string|unique:clientes,nif', // ← Remove o max:14
+        'nif' => 'nullable|string|max:20|unique:clientes,nif',
         'status' => 'nullable|in:ativo,inativo',
         'telefone' => 'nullable|string|max:20',
         'email' => 'nullable|email|max:255|unique:clientes,email',
@@ -120,7 +116,12 @@ class ClienteController extends Controller
         'data_registro' => 'nullable|date',
     ]);
 
-    // Validação específica para empresa
+    // Normaliza NIF: remove espaços, barras, hífens, pontos
+    if (!empty($dados['nif'])) {
+        $dados['nif'] = preg_replace('/[^A-Za-z0-9]/', '', $dados['nif']);
+    }
+
+    // Validação específica para empresa (10 dígitos numéricos)
     if ($dados['tipo'] === 'empresa') {
         if (empty($dados['nif']) || !preg_match('/^\d{10}$/', $dados['nif'])) {
             return response()->json([
@@ -129,11 +130,11 @@ class ClienteController extends Controller
         }
     }
 
-    // Validação específica para consumidor final
+    // Validação para consumidor final
     if ($dados['tipo'] === 'consumidor_final' && !empty($dados['nif'])) {
-        if (!preg_match('/^\d{10}$|^\d{14}$/', $dados['nif'])) {
+        if (!preg_match('/^\d{10}$|^\d{9}[A-Za-z]{2}\d{2}$/', $dados['nif'])) {
             return response()->json([
-                'message' => 'Consumidor final: NIF deve ter 10 ou 14 dígitos numéricos'
+                'message' => 'Consumidor final: NIF deve ter 10 dígitos ou formato BI (9 números + 2 letras + 2 números)'
             ], 422);
         }
     }
@@ -149,17 +150,14 @@ class ClienteController extends Controller
     ], 201);
 }
 
-    /**
-     * Atualizar cliente
-     */
- public function update(Request $request, $id)
+public function update(Request $request, $id)
 {
     $cliente = Cliente::findOrFail($id);
 
     $dados = $request->validate([
         'nome' => 'sometimes|required|string|max:255',
         'tipo' => 'nullable|in:consumidor_final,empresa',
-        'nif' => 'sometimes|nullable|string|unique:clientes,nif,' . $cliente->id,
+        'nif' => 'nullable|string|max:20|unique:clientes,nif,' . $cliente->id,
         'status' => 'nullable|in:ativo,inativo',
         'telefone' => 'nullable|string|max:20',
         'email' => 'nullable|email|max:255|unique:clientes,email,' . $cliente->id,
@@ -167,11 +165,16 @@ class ClienteController extends Controller
         'data_registro' => 'nullable|date',
     ]);
 
+    // Normaliza NIF: remove espaços, barras, hífens, pontos
+    if (!empty($dados['nif'])) {
+        $dados['nif'] = preg_replace('/[^A-Za-z0-9]/', '', $dados['nif']);
+    }
+
     // Determina o tipo (pode vir do request ou do cliente existente)
     $tipo = $dados['tipo'] ?? $cliente->tipo;
     $nif = $dados['nif'] ?? $cliente->nif;
 
-    // Validação específica para empresa
+    // Validação específica para empresa (10 dígitos numéricos)
     if ($tipo === 'empresa') {
         if (empty($nif) || !preg_match('/^\d{10}$/', $nif)) {
             return response()->json([
@@ -180,11 +183,11 @@ class ClienteController extends Controller
         }
     }
 
-    // Validação específica para consumidor final
+    // Validação para consumidor final
     if ($tipo === 'consumidor_final' && !empty($nif)) {
-        if (!preg_match('/^\d{10}$|^\d{14}$/', $nif)) {
+        if (!preg_match('/^\d{10}$|^\d{9}[A-Za-z]{2}\d{2}$/', $nif)) {
             return response()->json([
-                'message' => 'Consumidor final: NIF deve ter 10 ou 14 dígitos numéricos'
+                'message' => 'Consumidor final: NIF deve ter 10 dígitos ou formato BI (9 números + 2 letras + 2 números)'
             ], 422);
         }
     }

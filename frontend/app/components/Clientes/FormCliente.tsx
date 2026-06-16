@@ -87,22 +87,19 @@ export function FormCliente({
     if (errors[name]) setErrors((p) => ({ ...p, [name]: "" }));
   };
 
-  const handleChange = (
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-    >,
-  ) => {
-    const { name, value } = e.target;
-    if (name === "nif") {
-      const clean =
-        form.tipo === "empresa"
-          ? value.replace(/\D/g, "").slice(0, 10)
-          : value.slice(0, 14);
-      setField("nif", clean);
-    } else {
-      setField(name, value);
-    }
-  };
+const handleChange = (
+  e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
+) => {
+  const { name, value } = e.target;
+  if (name === "nif") {
+    const raw = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const maxLen = form.tipo === "empresa" ? 10 : 14; // BI tem 14 caracteres
+    const clean = raw.slice(0, maxLen);
+    setField("nif", clean);
+  } else {
+    setField(name, value);
+  }
+};
 
   const handleTelNum = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value.replace(/\D/g, "").slice(0, 14);
@@ -115,31 +112,63 @@ export function FormCliente({
     setField("telefone", numTel ? `${e.target.value} ${numTel}` : "");
   };
 
-  const validate = () => {
-    const e: Record<string, string> = {};
-    const empresa = form.tipo === "empresa";
-    if (!form.nome?.trim()) e.nome = "Nome é obrigatório";
-    if (empresa) {
-      if (!form.nif?.trim()) e.nif = "NIF é obrigatório para empresas";
-      else if (form.nif.length !== 11)
-        e.nif = "NIF deve ter exactamente 10 ou 14 dígitos no caso de uso do BI";
-      if (!form.telefone?.trim())
-        e.telefone = "Telefone é obrigatório para empresas";
-      else if (numTel.length !== 9) e.telefone = "Telefone deve ter 9 dígitos";
-      if (!form.email?.trim()) e.email = "Email é obrigatório para empresas";
-      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
-        e.email = "Email inválido";
-      if (!form.endereco?.trim())
-        e.endereco = "Endereço é obrigatório para empresas";
-    } else {
-      if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
-        e.email = "Email inválido";
-      if (numTel.length > 0 && numTel.length !== 9)
-        e.telefone = "Telefone deve ter 9 dígitos";
+ const validate = () => {
+  const e: Record<string, string> = {};
+  const empresa = form.tipo === "empresa";
+  
+  if (!form.nome?.trim()) e.nome = "Nome é obrigatório";
+  
+  // Validação NIF
+  if (empresa) {
+    if (!form.nif?.trim()) {
+      e.nif = "NIF é obrigatório para empresas";
+    } else if (!/^\d{10}$/.test(form.nif)) {
+      e.nif = "NIF deve ter exatamente 10 dígitos numéricos";
     }
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
+  } else {
+    // Consumidor final: opcional, mas se preenchido deve ser válido
+    if (form.nif && form.nif.trim() !== "") {
+      const cleanNif = form.nif.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+      if (!/^\d{10}$|^\d{9}[A-Z]{2}\d{2}$/.test(cleanNif)) {
+        e.nif = "NIF deve ter 10 números ou BI (9 números + 2 letras + 2 números)";
+      }
+    }
+  }
+  
+  // Telefone
+  if (empresa) {
+    if (!form.telefone?.trim()) {
+      e.telefone = "Telefone é obrigatório para empresas";
+    } else if (numTel.length !== 9) {
+      e.telefone = "Telefone deve ter 9 dígitos";
+    }
+  } else {
+    if (numTel.length > 0 && numTel.length !== 9) {
+      e.telefone = "Telefone deve ter 9 dígitos";
+    }
+  }
+  
+  // Email
+  if (empresa) {
+    if (!form.email?.trim()) {
+      e.email = "Email é obrigatório para empresas";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      e.email = "Email inválido";
+    }
+  } else {
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      e.email = "Email inválido";
+    }
+  }
+  
+  // Endereço
+  if (empresa && !form.endereco?.trim()) {
+    e.endereco = "Endereço é obrigatório para empresas";
+  }
+  
+  setErrors(e);
+  return Object.keys(e).length === 0;
+};
 
   const empresa = form.tipo === "empresa";
 
@@ -313,21 +342,21 @@ export function FormCliente({
   name="nif"
   value={form.nif}
   onChange={handleChange}
-  placeholder={empresa ? "0000000000" : "0000000000 ou 00000000000000"}
-  maxLength={empresa ? 10 : 14}
-  className={`${inputCls} font-mono text-xs`}
+  placeholder={empresa ? "0000000000" : "0000000000 ou 123456789AB01"}
+  maxLength={empresa ? 10 : 14} // BI tem 14 caracteres
+  className={`${inputCls} font-mono text-xs uppercase`}
   style={inputStyle(errors.nif)}
 />
 {!empresa && (
   <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
-    Consumidor final: deixe em branco ou informe NIF de 10 ou 14 dígitos
+    Consumidor final: deixe em branco ou informe 10 números (NIF) ou 13 caracteres (9 números + 2 letras + 2 números)
   </p>
 )}
-          {errors.nif && (
-            <p className="mt-1 text-xs" style={{ color: colors.danger }}>
-              {errors.nif}
-            </p>
-          )}
+{errors.nif && (
+  <p className="mt-1 text-xs" style={{ color: colors.danger }}>
+    {errors.nif}
+  </p>
+)}
         </div>
       </div>
 
