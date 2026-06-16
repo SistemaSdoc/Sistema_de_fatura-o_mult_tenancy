@@ -25,6 +25,11 @@ Schema::create('empresas', function (Blueprint $table) {
     // Fiscal
     $table->enum('regime_fiscal', ['simplificado', 'geral'])->default('geral');
     $table->boolean('sujeito_iva')->default(true);
+    // Bancos
+    $table->string('nome_banco')->nullable();
+    $table->string('numero_conta', 11)->nullable()->unique();
+    $table->string('iban', 25)->nullable()->unique();
+
 
     $table->string('logo')->nullable();
     $table->enum('status', ['ativo', 'suspenso'])->default('ativo');
