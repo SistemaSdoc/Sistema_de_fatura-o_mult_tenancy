@@ -274,14 +274,7 @@ export default function EmpresasDashboard() {
                     </div>
                 </div>
 
-                <Button
-                    onClick={() => router.push("/landlord/dashboard/empresas/criar")}
-                    className="w-full sm:w-auto transition-all duration-200 hover:scale-105 cursor-pointer shrink-0"
-                    style={{ backgroundColor: colors.primary, color: '#fff' }}
-                >
-                    <Plus size={18} className="mr-2" />
-                    Nova Empresa
-                </Button>
+             
             </div>
 
             {/* Cards de resumo */}

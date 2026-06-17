@@ -12,6 +12,11 @@ $empresaTelefone = $empresa['telefone'] ?? 'Telefone não registrado';
 $empresaEmail = $empresa['email'] ?? 'Email não registrado';
 $empresaNome = $empresa['nome'] ?? 'EMPRESA';
 $empresaNif = $empresa['nif'] ?? '0000000000';
+// ✅ ADICIONAR DADOS BANCÁRIOS
+$empresaBanco = $empresa['nome_banco'] ?? null;
+$empresaConta = $empresa['numero_conta'] ?? null;
+$empresaIban = $empresa['iban'] ?? null;
+
 
 $logoPath = $empresa['logo'] ?? null;
 
@@ -120,6 +125,44 @@ $temTroco = $troco > 0;
             font-size: 11.5px;
             line-height: 1.35;
         }
+
+        /* Dados Bancários */
+.bank-box {
+    background: #f0f5ff;
+    border: 1px solid #cccccc;
+    border-radius: 5px;
+    padding: 14px 16px;
+    margin-bottom: 18px;
+    font-size: 14px;
+}
+
+.bank-box .bank-title {
+    font-weight: bold;
+    font-size: 15px;
+    color: #000000;
+    margin-bottom: 8px;
+}
+
+.bank-box .bank-row {
+    display: table-row;
+}
+
+.bank-box .bank-label {
+    display: table-cell;
+    padding: 4px 8px 4px 0;
+    font-weight: bold;
+    width: 120px;
+}
+
+.bank-box .bank-value {
+    display: table-cell;
+    padding: 4px 0;
+}
+
+.bank-box .iban-value {
+    font-family: 'DejaVu Sans Mono', monospace;
+    letter-spacing: 1px;
+}
 
         /* Container do Talão - 70mm */
         .receipt {
@@ -679,6 +722,22 @@ $temTroco = $troco > 0;
             @endif
         </div>
         @endif
+
+                {{-- RODAPÉ COM DADOS BANCÁRIOS --}}
+ <!-- 
+<div class="footer clearfix">
+    <div class="footer-left">
+ 
+        <br><br>
+        <div style="font-size: 13px; border-top: 1px dashed #ccc; padding-top: 8px; margin-top: 4px;">
+            <strong>Referências Bancárias :</strong><br>
+            <strong>Banco:</strong> {{ $empresaBanco }}<br>
+            <strong>Nº Conta:</strong> {{ $empresaConta }}<br>
+            <strong>IBAN:</strong> {{ $empresaIban }}<br>
+        </div>
+
+    </div>
+</div>-->
 
         <!-- Rodapé -->
         <div class="footer">

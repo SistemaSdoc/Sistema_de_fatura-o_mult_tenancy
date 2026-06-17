@@ -26,6 +26,14 @@ $empresaEmail = $empresa['email'] ?? 'Email não registrado';
 $empresaNome = $empresa['nome'] ?? 'EMPRESA';
 $empresaNif = $empresa['nif'] ?? '0000000000';
 
+// ✅ ADICIONAR DADOS BANCÁRIOS
+$empresaBanco = $empresa['nome_banco'] ?? null;
+$empresaConta = $empresa['numero_conta'] ?? null;
+$empresaIban = $empresa['iban'] ?? null;
+
+// ✅ CRIAR A VARIÁVEL QUE FALTAVA
+$temDadosBancarios = !empty($empresaBanco) || !empty($empresaConta) || !empty($empresaIban);
+
 // Logo DINÂMICO
 $empresaLogo = asset('images/default-logo.png');
 if (!empty($empresa['logo_base64'])) {
@@ -391,6 +399,44 @@ $temTroco = $troco > 0;
             height: 60px;
         }
 
+        /* Dados Bancários */
+        .bank-box {
+            background: #f0f5ff;
+            border: 1px solid #cccccc;
+            border-radius: 5px;
+            padding: 10px 14px;
+            margin-bottom: 12px;
+            font-size: 10px;
+        }
+
+        .bank-box .bank-title {
+            font-weight: bold;
+            font-size: 11px;
+            color: #000000;
+            margin-bottom: 6px;
+        }
+
+        .bank-box .bank-row {
+            display: table-row;
+        }
+
+        .bank-box .bank-label {
+            display: table-cell;
+            padding: 2px 8px 2px 0;
+            font-weight: bold;
+            width: 80px;
+        }
+
+        .bank-box .bank-value {
+            display: table-cell;
+            padding: 2px 0;
+        }
+
+        .bank-box .iban-value {
+            font-family: 'DejaVu Sans Mono', monospace;
+            letter-spacing: 1px;
+        }
+
         /* RODAPÉ */
         .footer-thanks {
             text-align: center;
@@ -416,6 +462,18 @@ $temTroco = $troco > 0;
 
         .footer-right {
             text-align: right;
+        }
+
+        .footer-bank {
+            font-size: 8px;
+            border-top: 1px dashed #ccc;
+            padding-top: 6px;
+            margin-top: 4px;
+            color: #333;
+        }
+
+        .footer-bank strong {
+            color: #000;
         }
 
         @media print {
@@ -579,12 +637,48 @@ $temTroco = $troco > 0;
         </div>
         @endif
 
+        {{-- DADOS BANCÁRIOS (Se houver) --}}
+        @if($temDadosBancarios)
+        <div class="bank-box">
+            <div class="bank-title"> Dados Bancários para Pagamento</div>
+            <div style="display: table; width: 100%;">
+                @if(!empty($empresaBanco))
+                <div class="bank-row">
+                    <span class="bank-label">Banco:</span>
+                    <span class="bank-value">{{ $empresaBanco }}</span>
+                </div>
+                @endif
+                @if(!empty($empresaConta))
+                <div class="bank-row">
+                    <span class="bank-label">Nº Conta:</span>
+                    <span class="bank-value">{{ $empresaConta }}</span>
+                </div>
+                @endif
+                @if(!empty($empresaIban))
+                <div class="bank-row">
+                    <span class="bank-label">IBAN:</span>
+                    <span class="bank-value iban-value">{{ $empresaIban }}</span>
+                </div>
+                @endif
+            </div>
+        </div>
+        @endif
+
         {{-- RODAPÉ --}}
         <div class="footer-thanks">Obrigado pela preferência!</div>
         <div class="footer">
             <div class="footer-left">
                 <strong>{{ $empresaNome }}</strong> | NIF: {{ $empresaNif }}<br>
                 {{ $empresaMorada }} | Tel: {{ $empresaTelefone }}
+                
+                {{-- DADOS BANCÁRIOS NO RODAPÉ (opcional) --}}
+                @if($temDadosBancarios)
+                <div class="footer-bank">
+                    <strong>Banco:</strong> {{ $empresaBanco }} 
+                    @if(!empty($empresaConta))| <strong>Conta:</strong> {{ $empresaConta }} @endif
+                    @if(!empty($empresaIban))| <strong>IBAN:</strong> {{ $empresaIban }} @endif
+                </div>
+                @endif
             </div>
             <div class="footer-right">
                 Documento gerado em {{ now()->format('d/m/Y H:i') }}<br>

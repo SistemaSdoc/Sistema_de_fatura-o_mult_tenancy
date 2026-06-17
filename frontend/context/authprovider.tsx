@@ -22,6 +22,9 @@ export interface Empresa {
     subdomain: string;
     email: string;
     logo: string | null;
+    nome_banco?: string | null;
+    numero_conta?: string | null;
+    iban?: string | null;
     telefone: string | null;
     endereco: string | null;
     regime_fiscal?: string | null;

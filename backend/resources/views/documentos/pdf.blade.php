@@ -9,6 +9,13 @@ $empresaTelefone = $empresa['telefone'] ?? 'Telefone não registrado';
 $empresaEmail = $empresa['email'] ?? 'Email não registrado';
 $empresaNome = $empresa['nome'] ?? 'EMPRESA';
 $empresaNif = $empresa['nif'] ?? '0000000000';
+// ✅ ADICIONAR DADOS BANCÁRIOS
+$empresaBanco = $empresa['nome_banco'] ?? null;
+$empresaConta = $empresa['numero_conta'] ?? null;
+$empresaIban = $empresa['iban'] ?? null;
+
+// Verificar se tem dados bancários
+$temDadosBancarios = !empty($empresaBanco) || !empty($empresaConta) || !empty($empresaIban);
 
 // Logo DINÂMICO
 $empresaLogo = asset('images/default-logo.png');
@@ -158,6 +165,43 @@ $temTroco = $troco > 0;
             padding: 28px 32px;
         }
 
+/* Dados Bancários */
+.bank-box {
+    background: #f0f5ff;
+    border: 1px solid #cccccc;
+    border-radius: 5px;
+    padding: 14px 16px;
+    margin-bottom: 18px;
+    font-size: 14px;
+}
+
+.bank-box .bank-title {
+    font-weight: bold;
+    font-size: 15px;
+    color: #000000;
+    margin-bottom: 8px;
+}
+
+.bank-box .bank-row {
+    display: table-row;
+}
+
+.bank-box .bank-label {
+    display: table-cell;
+    padding: 4px 8px 4px 0;
+    font-weight: bold;
+    width: 120px;
+}
+
+.bank-box .bank-value {
+    display: table-cell;
+    padding: 4px 0;
+}
+
+.bank-box .iban-value {
+    font-family: 'DejaVu Sans Mono', monospace;
+    letter-spacing: 1px;
+}
         .clearfix::after {
             content: "";
             display: block;
@@ -794,14 +838,29 @@ $temTroco = $troco > 0;
         </div>
         @endif
 
-        {{-- RODAPÉ --}}
-        <div class="footer-thanks">Obrigado pela preferência!</div>
-        <div class="footer clearfix">
-            <div class="footer-left"><strong>{{ $empresaNome }}</strong> &nbsp;|&nbsp; NIF: {{ $empresaNif }}<br>{{ $empresaMorada }} &nbsp;|&nbsp; Tel: {{ $empresaTelefone }}</div>
-            <div class="footer-right">Documento gerado em {{ now()->format('d/m/Y') }} às {{ now()->format('H:i') }}<br>{{ $empresaEmail }}</div>
+        {{-- RODAPÉ COM DADOS BANCÁRIOS --}}
+<div class="footer-thanks">Obrigado pela preferência!</div>
+<div class="footer clearfix">
+    <div class="footer-left">
+        <strong>{{ $empresaNome }}</strong> &nbsp;|&nbsp; NIF: {{ $empresaNif }}<br>
+        {{ $empresaMorada }} &nbsp;|&nbsp; Tel: {{ $empresaTelefone }}
+        
+        @if($temDadosBancarios)
+        <br><br>
+        <div style="font-size: 13px; border-top: 1px dashed #ccc; padding-top: 8px; margin-top: 4px;">
+            <strong>Referncias Bancárias :</strong><br>
+            @if(!empty($empresaBanco))<strong>Banco:</strong> {{ $empresaBanco }}<br>@endif
+            @if(!empty($empresaConta))<strong>Nº Conta:</strong> {{ $empresaConta }}<br>@endif
+            @if(!empty($empresaIban))<strong>IBAN:</strong> {{ $empresaIban }}<br>@endif
         </div>
-
+        @endif
     </div>
+    <div class="footer-right">
+        Documento gerado em {{ now()->format('d/m/Y') }} às {{ now()->format('H:i') }}<br>
+        {{ $empresaEmail }}
+    </div>
+</div>
+
 </body>
 
 </html>

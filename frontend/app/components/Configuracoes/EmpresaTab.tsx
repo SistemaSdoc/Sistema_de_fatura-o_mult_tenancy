@@ -25,9 +25,6 @@ import {
 } from "@/components/ui/dialog";
 import { ThemeColors, FormInput, ReadonlyField, SaveButton, getLogoUrl } from "./ConfiguracoesComuns";
 
-// ✅ Removido a linha duplicada do useAuth
-// const { user, loading: userLoading, logout: authLogout } = useAuth(); ← APAGAR ESTA LINHA
-
 const LogoUploader = ({
     colors, currentLogo, onUploaded, disabled,
 }: {
@@ -154,7 +151,6 @@ const LogoUploader = ({
 };
 
 export function EmpresaTab({ colors }: { colors: ThemeColors }) {
-    // ✅ Já tem o logout aqui
     const { user, logout, refreshUser } = useAuth();
     const empresa = user?.empresa;
 
@@ -170,6 +166,9 @@ export function EmpresaTab({ colors }: { colors: ThemeColors }) {
         endereco: "",
         regime_fiscal: "simplificado" as "simplificado" | "geral",
         sujeito_iva: true,
+        nome_banco: "",
+        iban: "",
+        numero_conta: "",
         logo: null as string | null,
     });
 
@@ -183,6 +182,9 @@ export function EmpresaTab({ colors }: { colors: ThemeColors }) {
                 endereco: empresa.endereco ?? "",
                 regime_fiscal: (empresa.regime_fiscal ?? "simplificado") as "simplificado" | "geral",
                 sujeito_iva: empresa.sujeito_iva === true,
+                nome_banco: empresa.nome_banco ?? "",
+                numero_conta: empresa.numero_conta ?? "",
+                iban: empresa.iban ?? "",
                 logo: empresa.logo ?? null,
             });
         }
@@ -208,6 +210,9 @@ export function EmpresaTab({ colors }: { colors: ThemeColors }) {
                 telefone: form.telefone,
                 endereco: form.endereco,
                 regime_fiscal: form.regime_fiscal,
+                iban: form.iban,
+                numero_conta: form.numero_conta,
+                nome_banco: form.nome_banco,
                 sujeito_iva: form.sujeito_iva,
             });
 
@@ -225,7 +230,6 @@ export function EmpresaTab({ colors }: { colors: ThemeColors }) {
         }
     };
 
-    // ✅ handleToggleStatus CORRIGIDO
     const handleToggleStatus = async () => {
         if (!empresa?.id) {
             toast.error("Empresa não identificada");
@@ -234,29 +238,20 @@ export function EmpresaTab({ colors }: { colors: ThemeColors }) {
 
         setTogglingStatus(true);
         try {
-            // ✅ Adicionado o ID da empresa na URL
             const response = await api.patch(`/api/empresa/toggle-status/`);
 
             toast.success(response.data.message);
             setShowConfirmDialog(false);
              setTimeout(async () => {
-                    await logout(); // O logout já faz router.replace("/login")
+                    await logout();
                 }, 1500);
-               
             
-            // ✅ Verifica se precisa redirecionar para login
             if (response.data.redirect_to_login) {
                 toast.info("Empresa suspensa. A sessão será encerrada...", {
                     duration: 2000,
                 });
-                
-                // ✅ Delay para o toast aparecer
-               
-                
-                // Não continua
             }
             
-            // ✅ Se não for suspensão, apenas recarrega os dados
             await refreshUser();
             
         } catch (err: unknown) {
@@ -472,6 +467,56 @@ export function EmpresaTab({ colors }: { colors: ThemeColors }) {
                                     {form.sujeito_iva === true ? "Sim" : "Não"}
                                 </span>
                             </div>
+                        </div>
+                    </div>
+                </CardContent>
+                <CardFooter className="flex justify-end border-t pt-6"
+                    style={{ borderColor: colors.border }}>
+                    <SaveButton
+                        onClick={() => void handleSubmit()}
+                        loading={loading} colors={colors} disabled={isSuspended}
+                    />
+                </CardFooter>
+            </Card>
+
+            {/* Dados Bancários */}
+            <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                <CardHeader>
+                    <CardTitle style={{ color: colors.secondary }}>Dados Bancários</CardTitle>
+                    <CardDescription style={{ color: colors.textSecondary }}>
+                        Informações para pagamentos e transferências
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormInput 
+                            label="Nome do Banco" 
+                            name="nome_banco" 
+                            value={form.nome_banco}
+                            onChange={handleChange} 
+                            colors={colors} 
+                            disabled={isSuspended}
+                            icon={Building2} 
+                        />
+                        <FormInput 
+                            label="Número de Conta" 
+                            name="numero_conta" 
+                            value={form.numero_conta}
+                            onChange={handleChange} 
+                            colors={colors} 
+                            disabled={isSuspended}
+                            icon={Hash} 
+                        />
+                        <div className="md:col-span-2">
+                            <FormInput 
+                                label="IBAN" 
+                                name="iban" 
+                                value={form.iban}
+                                onChange={handleChange} 
+                                colors={colors} 
+                                disabled={isSuspended}
+                                icon={Globe} 
+                            />
                         </div>
                     </div>
                 </CardContent>

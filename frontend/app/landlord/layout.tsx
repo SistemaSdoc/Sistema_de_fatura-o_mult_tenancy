@@ -34,7 +34,7 @@ export default function LandlordLayout({
                     {!isPublicRoute && (
                         <footer className="border-t py-4 text-center text-sm text-gray-500">
                             <div className="container mx-auto">
-                                © {new Date().getFullYear()} FacturaJá - Sbbbbbbbbbbbbbbbbbbbbistema de Gestão de Empresas
+                                © {new Date().getFullYear()} FacturaJá - Sistema de Gestão de Empresas
                             </div>
                         </footer>
                     )}
