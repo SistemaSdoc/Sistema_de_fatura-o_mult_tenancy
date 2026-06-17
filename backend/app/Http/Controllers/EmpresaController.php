@@ -189,6 +189,9 @@ BUILDING;
             'endereco'       => 'required|string|max:500',
             'regime_fiscal'  => 'required|in:simplificado,geral',
             'sujeito_iva'    => 'required|boolean',
+            'nome_banco'     => 'nullable|string|max:255',
+            'numero_conta'   => 'nullable|size:11|unique:landlord.empresas,numero_conta|max:50',
+            'iban'           => 'nullable|size:25|unique:landlord.empresas,iban',
             'logo'           => 'required|string|max:255',
             'subdomain'      => [
                 'required',
@@ -225,6 +228,9 @@ BUILDING;
             'subdomain'     => $request->subdomain,
             'regime_fiscal' => $request->regime_fiscal,
             'sujeito_iva'   => $request->sujeito_iva,
+            'nome_banco'    => $request->nome_banco,
+            'numero_conta'  => $request->numero_conta,
+            'iban'          => $request->iban,
             'logo'          => $request->logo,
             'status'        => 'ativo',
             'data_registro' => now(),
@@ -474,13 +480,17 @@ BUILDING;
             'email'     => 'sometimes|email|unique:landlord.empresas,email,' . $empresa->id,
             'telefone'  => 'nullable|string',
             'endereco'  => 'nullable|string',
+            'nome_banco' => 'nullable|string|max:255',
+            'numero_conta' => 'nullable|string|unique:landlord.empresas,numero_conta|max:50',
+            'iban' => 'nullable|size:25|unique:landlord.empresas,iban',
+            
             'logo'      => 'nullable|string|max:255',
             'status'    => 'sometimes|in:ativo,suspenso',
             'subdomain' => 'sometimes|string|unique:landlord.empresas,subdomain,' . $empresa->id,
         ]);
 
         $empresa->update($request->only([
-            'nome', 'email', 'telefone', 'endereco', 'status', 'logo', 'subdomain'
+            'nome', 'email', 'telefone', 'endereco', 'status', 'nome_banco', 'numero_conta', 'iban', 'logo', 'subdomain'
         ]));
 
         return response()->json([

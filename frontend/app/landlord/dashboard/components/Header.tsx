@@ -47,8 +47,11 @@ export default function DashboardHeader() {
                         </h1>
                         <p className="text-xs sm:text-sm hidden sm:block truncate" style={{ color: colors.textSecondary }}>
                             Bem‑vindo,{' '}
-                            <span className="font-medium" style={{ color: colors.primary }}>
-                                Super Admin
+                            <span 
+                                className="font-medium transition-colors duration-200"
+                                style={{ color: colors.primary }}
+                            >
+                                {user?.name || 'Super Admin'}
                             </span>
                         </p>
                     </div>

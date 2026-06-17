@@ -28,6 +28,9 @@ export interface CriarFornecedorInput {
     status?: StatusFornecedor;
 }
 
+type TipoDocumento = 'NIF' | 'BI' | 'INVALIDO';
+
+
 export interface AtualizarFornecedorInput extends Partial<CriarFornecedorInput> { }
 
 const API_PREFIX = "/api";
@@ -215,13 +218,38 @@ export function getStatusLabel(status: StatusFornecedor): string {
 export function getTipoLabel(tipo: TipoFornecedor): string {
     return tipo === "Nacional" ? "Nacional" : "Internacional";
 }
-
-export function formatarNIF(nif: string): string {
-    if (!nif) return "-";
-    if (nif.length >= 14) {
-        return nif.replace(/(\d{10})(\d{3})(\d{3})/, '$1 $2 $3');
+export function identificarDocumento(valor: string): TipoDocumento {
+    const clean = valor.replace(/[^a-zA-Z0-9]/g, '');
+    
+    // NIF: 10 dígitos
+    if (/^[0-9]{10}$/.test(clean)) {
+        return 'NIF';
     }
-    return nif;
+    
+    // BI: 9 números + 2 letras + 3 números
+    if (/^[0-9]{9}[A-Za-z]{2}[0-9]{3}$/.test(clean)) {
+        return 'BI';
+    }
+    
+    return 'INVALIDO';
+}
+export function formatarNIF(nif: string): string {
+    if (!nif) return '-';
+    
+    const clean = nif.replace(/[^a-zA-Z0-9]/g, '');
+    const tipo = identificarDocumento(clean);
+    
+    if (tipo === 'NIF') {
+        // 1234567890 -> 123 456 7890
+        return clean.replace(/(\d{3})(\d{3})(\d{4})/, '$1 $2 $3');
+    }
+    
+    if (tipo === 'BI') {
+        // 123456789AB123 -> 123 456 789 AB 123
+        return clean.replace(/(\d{3})(\d{3})(\d{3})([A-Za-z]{2})(\d{3})/, '$1 $2 $3 $4 $5');
+    }
+    
+    return clean; // Retorna sem formatação se inválido
 }
 
 export default fornecedorService;

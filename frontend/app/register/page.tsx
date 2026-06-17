@@ -27,6 +27,8 @@ import {
     UserPlus,
     ArrowRight,
     Globe,
+    Landmark,
+    CreditCard,
 } from "lucide-react";
 
 // --- Tipagem local do tema ---
@@ -51,6 +53,9 @@ interface FormData {
     endereco: string;
     regime_fiscal: "simplificado" | "geral";
     sujeito_iva: boolean;
+    nome_banco?: string | null;
+    numero_conta?: string | null;
+    iban?: string | null;
     logo: string;
     subdomain: string;
     admin_name: string;
@@ -70,6 +75,8 @@ interface InputFieldProps {
     required?: boolean;
     isSelect?: boolean;
     options?: { value: string; label: string }[];
+    prefix?: string; // <-- nova prop
+    maxLength?: number; // <-- nova prop para limitar caracteres
 }
 
 const InputField: React.FC<InputFieldProps> = ({
@@ -83,6 +90,8 @@ const InputField: React.FC<InputFieldProps> = ({
     required = false,
     isSelect = false,
     options = [],
+    prefix,
+    maxLength,
 }) => {
     const [isFocused, setIsFocused] = useState(false);
     return (
@@ -92,6 +101,11 @@ const InputField: React.FC<InputFieldProps> = ({
                 className="absolute left-3 top-1/2 -translate-y-1/2"
                 style={{ color: isFocused ? colors.primary : colors.textSecondary }}
             />
+            {prefix && (
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: colors.textSecondary }}>
+                    {prefix}
+                </div>
+            )}
             {isSelect ? (
                 <select
                     name={name}
@@ -128,6 +142,7 @@ const InputField: React.FC<InputFieldProps> = ({
                         borderColor: isFocused ? colors.primary : colors.border,
                         color: colors.text,
                     }}
+                    maxLength={maxLength}
                 />
             )}
         </div>
@@ -147,6 +162,9 @@ export default function RegisterCompanyPage() {
         endereco: "",
         regime_fiscal: "geral",
         sujeito_iva: true,
+        nome_banco: "",
+        numero_conta: "",
+        iban: "",
         logo: "",
         subdomain: "",
         admin_name: "",
@@ -295,6 +313,9 @@ export default function RegisterCompanyPage() {
                 endereco: form.endereco,
                 regime_fiscal: form.regime_fiscal,
                 sujeito_iva: form.sujeito_iva,
+                nome_banco: form.nome_banco,
+                numero_conta: form.numero_conta,
+                iban: form.iban,
                 logo: logoUrl || "images/3.png",
                 subdomain: form.subdomain,
                 admin_name: form.admin_name,
@@ -409,6 +430,9 @@ export default function RegisterCompanyPage() {
                                         <InputField name="nif" icon={FileText} placeholder="NIF *" value={form.nif} onChange={handleChange} colors={colors} required />
                                         <InputField name="email" icon={Mail} type="email" placeholder="Email da empresa *" value={form.email} onChange={handleChange} colors={colors} required />
                                         <InputField name="telefone" icon={Phone} placeholder="Telefone *" value={form.telefone} onChange={handleChange} colors={colors} required />
+                                        <InputField name="nome_banco" icon={Landmark} placeholder="Nome do Banco" value={form.nome_banco ?? ""} onChange={handleChange} colors={colors} />
+                                        <InputField name="numero_conta" icon={CreditCard} placeholder="Número da Conta" value={form.numero_conta ?? ""} onChange={(e) => {  const raw = e.target.value.replace(/\D/g, '').slice(0, 11); setForm({ ...form, numero_conta: raw });}} colors={colors}  maxLength={11}/>
+                                        <InputField name="iban" icon={Globe} placeholder="Digite os 21 dígitos do IBAN" value={form.iban?.replace(/^AO06/, "") ?? ""} onChange={(e) => { const raw = e.target.value.replace(/\D/g, '').slice(0, 21); setForm({ ...form, iban: `AO06${raw}` }); }} colors={colors} prefix="AO06" maxLength={21} />
                                         <InputField name="subdomain" icon={Globe} placeholder="Subdomínio * (ex: minhaempresa)" value={form.subdomain} onChange={handleChange} colors={colors} required />
                                         <div className="md:col-span-2">
                                             <InputField name="endereco" icon={MapPin} placeholder="Endereço completo *" value={form.endereco} onChange={handleChange} colors={colors} required />

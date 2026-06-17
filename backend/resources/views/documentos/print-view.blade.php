@@ -42,13 +42,13 @@ if (!empty($empresa['logo_base64'])) {
 }
 
 $tiposDocumento = [
-    'FT' => 'Fatura',
-    'FR' => 'Fatura-Recibo',
-    'FA' => 'Fat. Adiantamento',
+    'FT' => 'Factura',
+    'FR' => 'Factura-Recibo',
+    'FA' => 'Fact. Adiantamento',
     'NC' => 'Nota de Crédito',
     'ND' => 'Nota de Débito',
     'RC' => 'Recibo',
-    'FRt' => 'Fat. Retificação'
+    'FRt' => 'Fact. Retificação'
 ];
 
 $estadoLabel = match($documento->estado ?? '') {
@@ -68,7 +68,7 @@ $metodosPagamento = [
     'cartao' => 'Cartão'
 ];
 
-// PARA RECIBOS: Buscar dados da fatura de origem
+// PARA RECIBOS: Buscar dados da factura de origem
 $documentoOrigemInfo = null;
 $itensParaExibir = $itens;
 $docParaTotais = $documento;

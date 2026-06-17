@@ -15,46 +15,76 @@ import { useThemeColors } from "@/context/ThemeContext";
 import {
     emitirDocumentoFiscal,
     Produto,
-    Cliente,
-    clienteService,
     produtoService,
     CriarDocumentoFiscalPayload,
-    formatarNIF,
     isServico,
     formatarPreco,
 } from "@/services/vendas";
+
+// 🔥 Importação do serviço de clientes
+import {
+    clienteService,
+    formatarNIF,
+    type Cliente,
+} from "@/services/clientes";
 
 const ESTOQUE_MINIMO = 5;
 const arredondar = (v: number) => Math.round(v * 100) / 100;
 
 interface ItemDocumentoUI {
-    id: string; produto_id: string; descricao: string;
-    quantidade: number; preco_unitario: number;
-    base_tributavel: number; valor_iva: number; valor_retencao: number;
-    subtotal: number; taxa_iva?: number; codigo_produto?: string;
+    id: string; 
+    produto_id: string; 
+    descricao: string;
+    quantidade: number; 
+    preco_unitario: number;
+    base_tributavel: number; 
+    valor_iva: number; 
+    valor_retencao: number;
+    subtotal: number; 
+    taxa_iva?: number; 
+    codigo_produto?: string;
 }
-interface FormItemState { produto_id: string; quantidade: number; }
+interface FormItemState { 
+    produto_id: string; 
+    quantidade: number; 
+}
 type ModoCliente = 'cadastrado' | 'avulso';
 type TipoItem = 'produto' | 'servico';
 
 interface ThemeColors {
-    background: string; card: string; border: string; text: string;
-    textSecondary: string; primary: string; secondary: string;
-    danger: string; success: string; warning: string; hover: string;
+    background: string; 
+    card: string; 
+    border: string; 
+    text: string;
+    textSecondary: string; 
+    primary: string; 
+    secondary: string;
+    danger: string; 
+    success: string; 
+    warning: string; 
+    hover: string;
 }
 
 /* ── Linha fiscal ───────────────────────────────────────────── */
 function LinhaFiscal({ label, valor, cor, negrito, colors }: {
-    label: string; valor: string; cor?: string; negrito?: boolean; colors: ThemeColors;
+    label: string; 
+    valor: string; 
+    cor?: string; 
+    negrito?: boolean; 
+    colors: ThemeColors;
 }) {
     return (
         <div className="flex items-center justify-between gap-4 py-1">
-            <span className={`text-sm ${negrito ? "font-semibold" : ""}`}
-                style={{ color: negrito ? colors.text : colors.textSecondary }}>
+            <span
+                className={`text-sm ${negrito ? "font-semibold" : ""}`}
+                style={{ color: negrito ? colors.text : colors.textSecondary }}
+            >
                 {label}
             </span>
-            <span className={`text-sm tabular-nums ${negrito ? "font-bold" : "font-medium"}`}
-                style={{ color: cor || (negrito ? colors.text : colors.textSecondary) }}>
+            <span
+                className={`text-sm tabular-nums ${negrito ? "font-bold" : "font-medium"}`}
+                style={{ color: cor || (negrito ? colors.text : colors.textSecondary) }}
+            >
                 {valor}
             </span>
         </div>
@@ -105,24 +135,51 @@ export default function NovaFaturaProformaPage() {
         if (!authLoading && !user) router.push("/login");
     }, [authLoading, user, router]);
 
+    // 🔥 CORREÇÃO: Carregar dados iniciais
     useEffect(() => {
         if (!user) return;
-        (async () => {
+        
+        const carregarDados = async () => {
             try {
-                const [clientesData, produtosData] = await Promise.all([
-                    clienteService.listar(),
-                    produtoService.listar({ status: "ativo", paginar: false }).then(r =>
-                        Array.isArray(r.produtos) ? r.produtos : []
-                    ),
-                ]);
+                console.log('🔄 Carregando dados iniciais...');
+                
+                // 1. Carregar clientes ativos
+                const clientesResponse = await clienteService.listar({
+                    status: 'ativo',
+                    per_page: 999,
+                });
+                console.log('✅ Clientes carregados:', clientesResponse);
+                
+                // Extrair os dados da resposta paginada
+                const clientesData = clientesResponse.data || [];
                 setClientes(clientesData);
+                console.log(`📋 ${clientesData.length} clientes ativos carregados`);
+                
+                // 2. Carregar produtos
+                const produtosData = await produtoService
+                    .listar({ status: "ativo", paginar: false })
+                    .then(r => Array.isArray(r.produtos) ? r.produtos : []);
                 setProdutos(produtosData);
+                console.log(`📦 ${produtosData.length} produtos carregados`);
+                
+                // 3. Verificar estoque baixo
                 const fisicos = produtosData.filter(p => !isServico(p));
-                setProdutosEstoqueBaixo(fisicos.filter(p => p.estoque_atual > 0 && p.estoque_atual <= ESTOQUE_MINIMO));
-            } catch {
+                const estoqueBaixo = fisicos.filter(
+                    p => p.estoque_atual > 0 && p.estoque_atual <= ESTOQUE_MINIMO
+                );
+                setProdutosEstoqueBaixo(estoqueBaixo);
+                
+                if (estoqueBaixo.length > 0) {
+                    console.warn(`⚠️ ${estoqueBaixo.length} produtos com estoque baixo`);
+                }
+                
+            } catch (error) {
+                console.error('❌ Erro ao carregar dados:', error);
                 setError("Erro ao carregar dados iniciais");
             }
-        })();
+        };
+        
+        carregarDados();
     }, [user]);
 
     // Fechar dropdown ao clicar fora
@@ -137,25 +194,30 @@ export default function NovaFaturaProformaPage() {
     }, []);
 
     /* ── NIF ── */
+    const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value.toUpperCase();
+        const clean = value.replace(/[^A-Z0-9]/g, "");
 
-const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  const value = e.target.value.toUpperCase();
+        if (clean.length <= 14) {
+            setClienteAvulsoNif(clean);
 
-  // aceita letras e números
-  const clean = value.replace(/[^A-Z0-9]/g, "");
+            if (clean.length > 0 && clean.length < 10) {
+                setNifError("NIF/BI demasiado curto (mínimo 10 caracteres)");
+            } else if (clean.length > 10 && clean.length < 14) {
+                setNifError("BI deve ter 14 caracteres (9 números + 2 letras + 3 números)");
+            } else {
+                setNifError(null);
+            }
+        }
+    };
 
-  if (clean.length <= 14) {
-    setClienteAvulsoNif(clean);
+    // 🔥 Handler para seleção de cliente
+    const handleClienteChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const cliente = clientes.find(c => c.id === e.target.value);
+        setClienteSelecionado(cliente || null);
+        console.log('Cliente selecionado:', cliente);
+    };
 
-    // validação simples:
-    // BI pode ter letras, então só valida tamanho mínimo/máximo
-    if (clean.length > 0 && clean.length < 14) {
-      setNifError("NIF/BI demasiado curto");
-    } else {
-      setNifError(null);
-    }
-  }
-};
     // Filtrar itens baseado no tipo selecionado e na busca
     const itensFiltrados = produtos.filter(p => {
         if (p.status !== 'ativo') return false;
@@ -178,9 +240,15 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
 
     /* ── Preview ── */
     useEffect(() => {
-        if (!formItem.produto_id) { setPreviewItem(null); return; }
+        if (!formItem.produto_id) { 
+            setPreviewItem(null); 
+            return; 
+        }
         const p = produtos.find(x => x.id === formItem.produto_id);
-        if (!p) { setPreviewItem(null); return; }
+        if (!p) { 
+            setPreviewItem(null); 
+            return; 
+        }
         const ehServico = isServico(p);
         const qtd = Math.min(formItem.quantidade, ehServico ? 9999 : p.estoque_atual);
         const base = arredondar(p.preco_venda * qtd);
@@ -188,10 +256,16 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const iva = arredondar(base * taxaIva / 100);
         const ret = ehServico ? arredondar(base * 0.065) : 0;
         setPreviewItem({
-            id: "preview", produto_id: p.id, descricao: p.nome,
-            quantidade: qtd, preco_unitario: p.preco_venda,
-            base_tributavel: base, valor_iva: iva, valor_retencao: ret,
-            subtotal: arredondar(base + iva - ret), taxa_iva: taxaIva,
+            id: "preview", 
+            produto_id: p.id, 
+            descricao: p.nome,
+            quantidade: qtd, 
+            preco_unitario: p.preco_venda,
+            base_tributavel: base, 
+            valor_iva: iva, 
+            valor_retencao: ret,
+            subtotal: arredondar(base + iva - ret), 
+            taxa_iva: taxaIva,
             codigo_produto: p.codigo || undefined,
         });
     }, [formItem, produtos]);
@@ -204,27 +278,38 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const iva = arredondar(base * taxaIva / 100);
         const ret = ehServico ? arredondar(base * 0.065) : 0;
         return {
-            id, produto_id: p.id, descricao: p.nome, quantidade: qtd,
+            id, 
+            produto_id: p.id, 
+            descricao: p.nome, 
+            quantidade: qtd,
             preco_unitario: p.preco_venda,
-            base_tributavel: base, valor_iva: iva, valor_retencao: ret,
+            base_tributavel: base, 
+            valor_iva: iva, 
+            valor_retencao: ret,
             subtotal: arredondar(base + iva - ret),
-            taxa_iva: taxaIva, codigo_produto: p.codigo || undefined,
+            taxa_iva: taxaIva, 
+            codigo_produto: p.codigo || undefined,
         };
     };
 
     /* ── Adicionar ── */
     const adicionarItem = () => {
-        if (!formItem.produto_id || !previewItem) { setError("Selecione um produto/serviço"); return; }
+        if (!formItem.produto_id || !previewItem) { 
+            setError("Selecione um produto/serviço"); 
+            return; 
+        }
         const p = produtos.find(x => x.id === formItem.produto_id);
         if (!p) return;
         if (!isServico(p) && formItem.quantidade > p.estoque_atual) {
-            setError(`Estoque insuficiente. Disponível: ${p.estoque_atual}`); return;
+            setError(`Estoque insuficiente. Disponível: ${p.estoque_atual}`); 
+            return;
         }
         const idx = itens.findIndex(i => i.produto_id === formItem.produto_id);
         if (idx >= 0) {
             const novaQtd = itens[idx].quantidade + formItem.quantidade;
             if (!isServico(p) && novaQtd > p.estoque_atual) {
-                setError(`Estoque insuficiente para ${novaQtd} unidades.`); return;
+                setError(`Estoque insuficiente para ${novaQtd} unidades.`); 
+                return;
             }
             setItens(prev => prev.map((it, i) => i === idx ? calcularItem(p, novaQtd, it.id) : it));
         } else {
@@ -239,12 +324,16 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const atualizarQtd = (itemId: string, novaQtd: number) => {
         const idx = itens.findIndex(i => i.id === itemId);
         if (idx < 0) return;
-        if (novaQtd < 1) { setItens(p => p.filter(i => i.id !== itemId)); return; }
+        if (novaQtd < 1) { 
+            setItens(p => p.filter(i => i.id !== itemId)); 
+            return; 
+        }
         const item = itens[idx];
         const p = produtos.find(x => x.id === item.produto_id);
         if (!p) return;
         if (!isServico(p) && novaQtd > p.estoque_atual) {
-            setError(`Máximo disponível: ${p.estoque_atual}`); return;
+            setError(`Máximo disponível: ${p.estoque_atual}`); 
+            return;
         }
         setItens(prev => prev.map((it, i) => i === idx ? calcularItem(p, novaQtd, item.id) : it));
         setError(null);
@@ -268,14 +357,18 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     /* ── Finalizar ── */
     const finalizarProforma = async () => {
         if (!podeFinalizar()) return;
-        setLoading(true); setError(null); setSucesso(null);
+        setLoading(true); 
+        setError(null); 
+        setSucesso(null);
         try {
             const payload: CriarDocumentoFiscalPayload = {
                 tipo_documento: 'FP',
                 itens: itens.map(item => ({
-                    produto_id: item.produto_id, descricao: item.descricao,
-                    quantidade: item.quantidade, preco_unitario: arredondar(item.preco_unitario),
-                     taxa_iva: item.taxa_iva,
+                    produto_id: item.produto_id, 
+                    descricao: item.descricao,
+                    quantidade: item.quantidade, 
+                    preco_unitario: arredondar(item.preco_unitario),
+                    taxa_iva: item.taxa_iva,
                 })),
             };
 
@@ -288,18 +381,24 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
                     payload.cliente_nome = "Consumidor Final";
                 }
 
-                if (clienteAvulsoNif.trim() && clienteAvulsoNif.length === 14) {
+                // 🔥 CORREÇÃO: NIF para consumidor final
+                if (clienteAvulsoNif.trim() && clienteAvulsoNif.length >= 10) {
                     payload.cliente_nif = clienteAvulsoNif.trim();
                 } else {
-                    payload.cliente_nif = "999999999";
+                    payload.cliente_nif = "9999999999";
                 }
             }
 
             if (observacoes.trim()) payload.motivo = observacoes.trim();
-            const resultado = await emitirDocumentoFiscal(payload);
+            await emitirDocumentoFiscal(payload);
+            setSucesso("Proforma criada com sucesso! Redirecionando...");
             setTimeout(() => router.push("/dashboard/Faturas/DC"), 1500);
         } catch (err: unknown) {
-            setError(err instanceof AxiosError ? err.response?.data?.message || "Erro ao salvar proforma" : "Erro ao salvar proforma");
+            setError(
+                err instanceof AxiosError 
+                    ? err.response?.data?.message || "Erro ao salvar proforma" 
+                    : "Erro ao salvar proforma"
+            );
         } finally {
             setLoading(false);
         }
@@ -402,11 +501,13 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
                                     <select className="flex-1 min-w-0 px-3 py-1.5 text-sm outline-none"
                                         style={inp}
                                         value={clienteSelecionado?.id ?? ""}
-                                        onChange={e => setClienteSelecionado(clientes.find(c => c.id === e.target.value) ?? null)}>
+                                        onChange={handleClienteChange}>
                                         <option value="">Selecione um cliente…</option>
                                         {clientes.map(c => (
                                             <option key={c.id} value={c.id}>
-                                                {c.nome}{c.nif ? ` — ${formatarNIF(c.nif)}` : ''}
+                                                {c.nome}
+                                                {c.nif ? ` — ${formatarNIF(c.nif)}` : ''}
+                                                {c.tipo === "empresa"}
                                             </option>
                                         ))}
                                     </select>
@@ -418,20 +519,20 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
                                             value={clienteAvulso}
                                             onChange={e => setClienteAvulso(e.target.value)} />
                                         <div className="relative w-32 sm:w-36 shrink-0">
-                                                                                     <input
-  type="text"
-  inputMode="text"
-  autoCapitalize="characters"
-  placeholder="NIF / BI (opcional)"
-  maxLength={14}
-  className="w-full px-3 py-1.5 text-sm outline-none"
-  style={{
-    ...inp,
-    borderColor: nifError ? colors.danger : inp.borderColor,
-  }}
-  value={clienteAvulsoNif}
-  onChange={handleNifChange}
-/>
+                                            <input
+                                                type="text"
+                                                inputMode="text"
+                                                autoCapitalize="characters"
+                                                placeholder="NIF / BI (opcional)"
+                                                maxLength={14}
+                                                className="w-full px-3 py-1.5 text-sm outline-none"
+                                                style={{
+                                                    ...inp,
+                                                    borderColor: nifError ? colors.danger : inp.borderColor,
+                                                }}
+                                                value={clienteAvulsoNif}
+                                                onChange={handleNifChange}
+                                            />
                                             {nifError && (
                                                 <span className="absolute -bottom-4 left-0 text-[10px] whitespace-nowrap"
                                                     style={{ color: colors.danger }}>{nifError}</span>
@@ -442,7 +543,7 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
                             </div>
                         </div>
 
-                        {/* ── Produto e Serviço - SUBSTITUÍDO ── */}
+                        {/* ── Produto e Serviço ── */}
                         <div className="flex min-h-[44px]" style={{ borderColor: colors.border }}>
                             <div className="flex items-center gap-1.5 px-3 py-2.5 w-24 sm:w-28 shrink-0"
                                 style={{ backgroundColor: colors.hover }}>
@@ -767,7 +868,7 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
                                 <div className="flex-1 px-4 py-3">
                                     <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: colors.textSecondary }}>Impostos</p>
                                     <LinhaFiscal label="IVA" valor={formatarPreco(totalIva)} colors={colors} />
-                                        <LinhaFiscal label="Retenção" valor={`−${formatarPreco(totalRetencao)}`} cor={colors.textSecondary} colors={colors} />
+                                    <LinhaFiscal label="Retenção" valor={`−${formatarPreco(totalRetencao)}`} cor={colors.textSecondary} colors={colors} />
                                     <div className="mt-2 pt-2 border-t" style={{ borderColor: colors.border }}>
                                         <LinhaFiscal label="Total" valor={formatarPreco(totalLiquido)} cor={colors.secondary} negrito colors={colors} />
                                     </div>

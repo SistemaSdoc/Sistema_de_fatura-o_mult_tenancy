@@ -24,20 +24,24 @@ import { useAuth } from "@/context/authprovider";
 import { useThemeColors } from "@/context/ThemeContext";
 import {
   vendaService,
-  clienteService,
   produtoService,
-  formatarNIF,
-  isServico,
   formatarPreco,
   validarPayloadVenda,
+  isServico,
 } from "@/services/vendas";
 import type {
   Produto,
-  Cliente,
   CriarVendaPayload,
   DadosPagamento,
   TipoDocumentoFiscal,
 } from "@/services/vendas";
+
+// 🔥 Importação do serviço de clientes
+import {
+  clienteService,
+  formatarNIF,
+  type Cliente,
+} from "@/services/clientes";
 
 const ESTOQUE_MINIMO = 5;
 const arredondar = (v: number) => Math.round(v * 100) / 100;
@@ -58,11 +62,13 @@ interface ItemVendaUI {
   codigo_produto?: string;
   eh_servico: boolean;
 }
+
 interface FormItemState {
   produto_id: string;
   quantidade: number;
   desconto: number;
 }
+
 type ModoCliente = "cadastrado" | "avulso";
 type TipoItem = "produto" | "servico";
 
@@ -154,14 +160,11 @@ export default function NovaFaturaReciboPage() {
     fontSize: "14px",
   };
 
+  // ─── STATES ──────────────────────────────────────────────────────────
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
-  const [produtosEstoqueBaixo, setProdutosEstoqueBaixo] = useState<Produto[]>(
-    [],
-  );
-  const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(
-    null,
-  );
+  const [produtosEstoqueBaixo, setProdutosEstoqueBaixo] = useState<Produto[]>([]);
+  const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
   const [itens, setItens] = useState<ItemVendaUI[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -184,41 +187,66 @@ export default function NovaFaturaReciboPage() {
   });
   const [observacoes, setObservacoes] = useState("");
 
-  // Estados para o novo componente de busca
-  const [tipoItemSelecionado, setTipoItemSelecionado] =
-    useState<TipoItem>("produto");
+  // Estados para o componente de busca
+  const [tipoItemSelecionado, setTipoItemSelecionado] = useState<TipoItem>("produto");
   const [buscaItem, setBuscaItem] = useState("");
   const [dropdownAberto, setDropdownAberto] = useState(false);
 
   const buscaInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // ─── EFFECTS ─────────────────────────────────────────────────────────
+
+  // Verificar autenticação
   useEffect(() => {
     if (!authLoading && !user) router.push("/login");
   }, [authLoading, user, router]);
 
+  // Carregar dados iniciais
   useEffect(() => {
     if (!user) return;
-    (async () => {
+
+    const carregarDadosIniciais = async () => {
       try {
-        const [clientesData, produtosData] = await Promise.all([
-          clienteService.listar({ status: "ativo" }),
-          produtoService
-            .listar({ status: "ativo", paginar: false })
-            .then((r) => (Array.isArray(r.produtos) ? r.produtos : [])),
-        ]);
+        console.log('🔄 Carregando dados iniciais...');
+
+        // 1. Carregar clientes ativos
+        const clientesResponse = await clienteService.listar({
+          status: 'ativo',
+          per_page: 999,
+        });
+        console.log('✅ Clientes carregados:', clientesResponse);
+
+        // Extrair os dados da resposta paginada
+        const clientesData = clientesResponse.data || [];
         setClientes(clientesData);
+        console.log(`📋 ${clientesData.length} clientes ativos carregados`);
+
+        // 2. Carregar produtos
+        const produtosData = await produtoService
+          .listar({ status: "ativo", paginar: false })
+          .then((r) => (Array.isArray(r.produtos) ? r.produtos : []));
         setProdutos(produtosData);
+        console.log(`📦 ${produtosData.length} produtos carregados`);
+
+        // 3. Verificar estoque baixo
         const fisicos = produtosData.filter((p) => !isServico(p));
-        setProdutosEstoqueBaixo(
-          fisicos.filter(
-            (p) => p.estoque_atual > 0 && p.estoque_atual <= ESTOQUE_MINIMO,
-          ),
+        const estoqueBaixo = fisicos.filter(
+          (p) => p.estoque_atual > 0 && p.estoque_atual <= ESTOQUE_MINIMO,
         );
-      } catch {
+        setProdutosEstoqueBaixo(estoqueBaixo);
+
+        if (estoqueBaixo.length > 0) {
+          console.warn(`⚠️ ${estoqueBaixo.length} produtos com estoque baixo`);
+        }
+
+      } catch (error) {
+        console.error('❌ Erro ao carregar dados:', error);
         setError("Erro ao carregar dados");
       }
-    })();
+    };
+
+    carregarDadosIniciais();
   }, [user]);
 
   // Fechar dropdown ao clicar fora
@@ -235,49 +263,7 @@ export default function NovaFaturaReciboPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  const value = e.target.value.toUpperCase();
-
-  // aceita letras e números
-  const clean = value.replace(/[^A-Z0-9]/g, "");
-
-  if (clean.length <= 14) {
-    setClienteAvulsoNif(clean);
-
-    // validação simples:
-    // BI pode ter letras, então só valida tamanho mínimo/máximo
-    if (clean.length > 0 && clean.length < 14) {
-      setNifError("NIF/BI demasiado curto");
-    } else {
-      setNifError(null);
-    }
-  }
-};
-
-  // Filtrar itens baseado no tipo selecionado e na busca
-  const itensFiltrados = produtos.filter((p) => {
-    if (p.status !== "ativo") return false;
-    if (tipoItemSelecionado === "produto" && p.tipo !== "produto") return false;
-    if (tipoItemSelecionado === "servico" && p.tipo !== "servico") return false;
-    if (buscaItem.trim() === "") return true;
-    const buscaLower = buscaItem.toLowerCase();
-    return (
-      p.nome.toLowerCase().includes(buscaLower) ||
-      (p.codigo && p.codigo.toLowerCase().includes(buscaLower))
-    );
-  });
-
-  const handleSelectItem = (produto: Produto) => {
-    setFormItem({
-      produto_id: produto.id,
-      quantidade:
-        produto.tipo === "produto" ? Math.min(1, produto.estoque_atual) : 1,
-      desconto: 0,
-    });
-    setBuscaItem(produto.nome);
-    setDropdownAberto(false);
-  };
-
+  // Atualizar preview do item
   useEffect(() => {
     if (!formItem.produto_id) {
       setPreviewItem(null);
@@ -297,6 +283,49 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       id: "preview",
     });
   }, [formItem, produtos]);
+
+  // Atualizar valor do pagamento
+  useEffect(() => {
+    setFormPagamento((p) => ({
+      ...p,
+      valor_pago: itens.length > 0 ? totalLiquido.toString() : "",
+    }));
+  }, [itens]);
+
+  // ─── HANDLERS ───────────────────────────────────────────────────────
+
+  const handleClienteChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const cliente = clientes.find((c) => c.id === e.target.value);
+    setClienteSelecionado(cliente || null);
+    console.log('Cliente selecionado:', cliente);
+  };
+
+  const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.toUpperCase();
+    const clean = value.replace(/[^A-Z0-9]/g, "");
+
+    if (clean.length <= 14) {
+      setClienteAvulsoNif(clean);
+
+      if (clean.length > 0 && clean.length < 10) {
+        setNifError("NIF/BI demasiado curto (mínimo 10 caracteres)");
+      } else if (clean.length > 10 && clean.length < 14) {
+        setNifError("BI deve ter 14 caracteres (9 números + 2 letras + 3 números)");
+      } else {
+        setNifError(null);
+      }
+    }
+  };
+
+  const handleSelectItem = (produto: Produto) => {
+    setFormItem({
+      produto_id: produto.id,
+      quantidade: produto.tipo === "produto" ? Math.min(1, produto.estoque_atual) : 1,
+      desconto: 0,
+    });
+    setBuscaItem(produto.nome);
+    setDropdownAberto(false);
+  };
 
   const adicionarItem = () => {
     if (!formItem.produto_id || !previewItem) {
@@ -357,7 +386,8 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
   const removerItem = (id: string) =>
     setItens((p) => p.filter((i) => i.id !== id));
 
-  // Cálculo dos totais
+  // ─── CÁLCULOS ──────────────────────────────────────────────────────
+
   const subtotalBruto = arredondar(
     itens.reduce((a, i) => a + i.preco_venda * i.quantidade, 0),
   );
@@ -371,16 +401,8 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
   );
   const totalLiquido = arredondar(itens.reduce((a, i) => a + i.subtotal, 0));
 
-  // Calcular percentual de desconto
   const percentualDesconto =
     subtotalBruto > 0 ? (totalDesconto / subtotalBruto) * 100 : 0;
-
-  useEffect(() => {
-    setFormPagamento((p) => ({
-      ...p,
-      valor_pago: itens.length > 0 ? totalLiquido.toString() : "",
-    }));
-  }, [itens, totalLiquido]);
 
   const valorPagamento = parseFloat(formPagamento.valor_pago) || 0;
   const troco =
@@ -393,6 +415,8 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       : 0;
   const pagamentoSuficiente =
     valorPagamento >= totalLiquido && totalLiquido > 0;
+
+  // ─── FINALIZAR VENDA ──────────────────────────────────────────────
 
   const podeFinalizar = () => {
     if (itens.length === 0) return false;
@@ -426,24 +450,18 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         troco: troco,
       };
 
-      
       if (modoCliente === "cadastrado" && clienteSelecionado) {
         payload.cliente_id = clienteSelecionado.id;
       } else if (modoCliente === "avulso") {
-        if (clienteAvulso.trim()) {
-          payload.cliente_nome = clienteAvulso.trim();
-        } else {
-          payload.cliente_nome = "Consumidor Final";
-        }
+        payload.cliente_nome = clienteAvulso.trim() || "Consumidor Final";
 
-        if (clienteAvulsoNif.trim() && clienteAvulsoNif.length === 14) {
+        if (clienteAvulsoNif.trim() && clienteAvulsoNif.length >= 10) {
           payload.cliente_nif = clienteAvulsoNif.trim();
         } else {
           payload.cliente_nif = "9999999999";
         }
       }
-console.log("cliente_nif =", payload.cliente_nif);
-console.log("tamanho =", payload.cliente_nif?.length);
+
       if (observacoes.trim()) payload.observacoes = observacoes.trim();
 
       const erroVal = validarPayloadVenda(payload);
@@ -452,6 +470,7 @@ console.log("tamanho =", payload.cliente_nif?.length);
         return;
       }
       await vendaService.criar(payload);
+      setSucesso("Venda criada com sucesso! Redirecionando...");
       setTimeout(() => router.push("/dashboard/Faturas/Faturas"), 1500);
     } catch (err: unknown) {
       setError(
@@ -464,7 +483,20 @@ console.log("tamanho =", payload.cliente_nif?.length);
     }
   };
 
+  // ─── RENDER ────────────────────────────────────────────────────────
+
   const produtoSel = produtos.find((p) => p.id === formItem.produto_id);
+  const itensFiltrados = produtos.filter((p) => {
+    if (p.status !== "ativo") return false;
+    if (tipoItemSelecionado === "produto" && p.tipo !== "produto") return false;
+    if (tipoItemSelecionado === "servico" && p.tipo !== "servico") return false;
+    if (buscaItem.trim() === "") return true;
+    const buscaLower = buscaItem.toLowerCase();
+    return (
+      p.nome.toLowerCase().includes(buscaLower) ||
+      (p.codigo && p.codigo.toLowerCase().includes(buscaLower))
+    );
+  });
 
   return (
     <MainEmpresa>
@@ -508,7 +540,7 @@ console.log("tamanho =", payload.cliente_nif?.length);
         )}
         {sucesso && (
           <div
-            className="p-3 rounded-full border text-sm flex items-center gap-2"
+            className="p-3 border text-sm flex items-center gap-2"
             style={{
               backgroundColor: `${colors.success}15`,
               borderColor: colors.success,
@@ -543,11 +575,11 @@ console.log("tamanho =", payload.cliente_nif?.length);
           </div>
         )}
 
-        {/* ══════════════════════════════════════════════════════
+        {/* ════════════════════════════════════════════════════════════════
             CARD 1 — Dados da Venda
-        ══════════════════════════════════════════════════════ */}
+        ════════════════════════════════════════════════════════════════ */}
         <div
-          className="border shadow-sm "
+          className="border shadow-sm"
           style={{ backgroundColor: colors.card, borderColor: colors.border }}
         >
           <div
@@ -608,17 +640,14 @@ console.log("tamanho =", payload.cliente_nif?.length);
                     className="flex-1 min-w-0 px-3 py-1.5 text-sm outline-none"
                     style={inp}
                     value={clienteSelecionado?.id ?? ""}
-                    onChange={(e) =>
-                      setClienteSelecionado(
-                        clientes.find((c) => c.id === e.target.value) ?? null,
-                      )
-                    }
+                    onChange={handleClienteChange}
                   >
                     <option value="">Selecione um cliente…</option>
                     {clientes.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.nome}
                         {c.nif ? ` — ${formatarNIF(c.nif)}` : ""}
+                        {c.tipo === "empresa" }
                       </option>
                     ))}
                   </select>
@@ -633,20 +662,20 @@ console.log("tamanho =", payload.cliente_nif?.length);
                       onChange={(e) => setClienteAvulso(e.target.value)}
                     />
                     <div className="relative w-32 sm:w-36 shrink-0">
-                                            <input
-  type="text"
-  inputMode="text"
-  autoCapitalize="characters"
-  placeholder="NIF / BI (opcional)"
-  maxLength={14}
-  className="w-full px-3 py-1.5 text-sm outline-none"
-  style={{
-    ...inp,
-    borderColor: nifError ? colors.danger : inp.borderColor,
-  }}
-  value={clienteAvulsoNif}
-  onChange={handleNifChange}
-/>
+                      <input
+                        type="text"
+                        inputMode="text"
+                        autoCapitalize="characters"
+                        placeholder="NIF / BI (opcional)"
+                        maxLength={14}
+                        className="w-full px-3 py-1.5 text-sm outline-none"
+                        style={{
+                          ...inp,
+                          borderColor: nifError ? colors.danger : inp.borderColor,
+                        }}
+                        value={clienteAvulsoNif}
+                        onChange={handleNifChange}
+                      />
                       {nifError && (
                         <span
                           className="absolute -bottom-4 left-0 text-[10px] whitespace-nowrap"
@@ -661,7 +690,7 @@ console.log("tamanho =", payload.cliente_nif?.length);
               </div>
             </div>
 
-            {/* ── Produto e Serviços - SUBSTITUÍDO ── */}
+            {/* ── Produto e Serviços ── */}
             <div className="flex min-h-[44px]">
               <div
                 className="flex items-center gap-1.5 px-3 py-2.5 w-24 sm:w-28 shrink-0"
@@ -672,12 +701,12 @@ console.log("tamanho =", payload.cliente_nif?.length);
                   className="text-sm font-semibold whitespace-nowrap"
                   style={{ color: colors.text }}
                 >
-                  itens
+                  Itens
                 </span>
               </div>
               <div className="flex-1 px-3 py-2.5 min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  {/* Seletor de tipo (Produto/Serviço) */}
+                  {/* Seletor de tipo */}
                   <div
                     className="inline-flex border overflow-hidden shrink-0"
                     style={{ borderColor: colors.border }}
@@ -799,10 +828,10 @@ console.log("tamanho =", payload.cliente_nif?.length);
                                 (e.currentTarget.style.backgroundColor = `${colors.hover}`)
                               }
                               onMouseLeave={(e) =>
-                              (e.currentTarget.style.backgroundColor =
-                                formItem.produto_id === item.id
-                                  ? `${colors.primary}10`
-                                  : "transparent")
+                                (e.currentTarget.style.backgroundColor =
+                                  formItem.produto_id === item.id
+                                    ? `${colors.primary}10`
+                                    : "transparent")
                               }
                             >
                               <div className="flex-1">
@@ -969,7 +998,7 @@ console.log("tamanho =", payload.cliente_nif?.length);
                     Adicionar
                   </button>
 
-                  {/* Indicador de estoque (apenas para produtos) */}
+                  {/* Indicador de estoque */}
                   {produtoSel && produtoSel.tipo === "produto" && (
                     <span
                       className="text-xs shrink-0"
@@ -1010,9 +1039,9 @@ console.log("tamanho =", payload.cliente_nif?.length);
           </div>
         </div>
 
-        {/* ══════════════════════════════════════════════════════════════
+        {/* ════════════════════════════════════════════════════════════════
             CARD 2 — Itens + Resumo Fiscal + Pagamento
-        ══════════════════════════════════════════════════════════════ */}
+        ════════════════════════════════════════════════════════════════ */}
         {itens.length > 0 ? (
           <div
             className="border shadow-sm overflow-hidden"
@@ -1186,7 +1215,7 @@ console.log("tamanho =", payload.cliente_nif?.length);
               </table>
             </div>
 
-            {/* ── Resumo Fiscal — 2 colunas com divisor vertical ── */}
+            {/* ── Resumo Fiscal ── */}
             <div className="border-t" style={{ borderColor: colors.border }}>
               <div className="flex flex-col sm:flex-row">
                 <div

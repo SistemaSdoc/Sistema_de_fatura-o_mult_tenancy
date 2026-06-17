@@ -15,7 +15,7 @@ return new class extends Migration
             $table->uuid('id')->primary();
 
             $table->string('nome');
-            $table->string('nif')->nullable()->unique();
+            $table->string('nif', 14)->nullable()->unique();
             $table->enum('tipo', ['consumidor_final', 'empresa'])->default('consumidor_final');
 
             // Campo status para ativar/inativar sem deletar

@@ -1,27 +1,26 @@
+// services/axios.ts
+
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import Cookies from "js-cookie";
 
+// ============ CONFIGURAÇÃO BASE ============
+
 const getBaseURL = (): string => {
-    if (typeof window === "undefined") return "https://192.168.1.192:8000";
+    if (typeof window === "undefined") return "https://192.168.1.198:8000";
     return `${window.location.protocol}//${window.location.hostname}:8000`;
 };
 
-// CONFIGURAÇÃO BASE — withCredentials: true é ESSENCIAL para cookies de sessão
-export const api = axios.create({
-    baseURL: getBaseURL(),
-    withCredentials: true,  // ← Envia cookies (laravel_session, XSRF-TOKEN) em TODAS as requisições
+const baseConfig = {
+    withCredentials: true, // ESSENCIAL para cookies de sessão
     headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
         "X-Requested-With": "XMLHttpRequest",
     },
-    timeout: 930000, // 30s é suficiente para a maioria das requisições
-});
+    timeout: 890000, // 30 segundos
+};
 
-api.defaults.xsrfCookieName = "XSRF-TOKEN";
-api.defaults.xsrfHeaderName = "X-XSRF-TOKEN";
-
-// ============ TENANT ============
+// ============ TENANT HELPERS ============
 
 interface EmpresaData {
     id: string;
@@ -29,13 +28,35 @@ interface EmpresaData {
 }
 
 /**
- * Descobre tenant automaticamente
- * Prioridade: localStorage UUID > subdomain > query param
+ * Limpa os dados do tenant do localStorage
  */
-const discoverTenant = (): string | null => {
+export const clearTenant = (): void => {
+    if (typeof window === "undefined") return;
+    localStorage.removeItem("tenant_id");
+    localStorage.removeItem("tenant_subdomain");
+    console.log("[TENANT] Limpo");
+};
+
+/**
+ * Salva os dados do tenant no localStorage
+ */
+export const setTenant = (empresa: EmpresaData): void => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("tenant_id", empresa.id);
+    if (empresa.subdomain) {
+        localStorage.setItem("tenant_subdomain", empresa.subdomain);
+    }
+    console.log("[TENANT] Definido:", empresa.id, empresa.subdomain);
+};
+
+/**
+ * Descobre o tenant automaticamente
+ * Prioridade: localStorage > subdomain > query param
+ */
+export const getTenant = (): string | null => {
     if (typeof window === "undefined") return null;
 
-    // 1. UUID da empresa (sempre prioritário)
+    // 1. UUID da empresa (prioritário)
     const tenantId = localStorage.getItem("tenant_id");
     if (tenantId) return tenantId;
 
@@ -77,71 +98,135 @@ const isIP = (value: string): boolean => {
     return /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(value);
 };
 
-// ============ EXPORTS ============
+// ============ FUNÇÕES AUXILIARES ============
 
-export const getTenant = discoverTenant;
-
-export const setTenant = (empresa: EmpresaData): void => {
+const forceLandlordLogout = (): void => {
     if (typeof window === "undefined") return;
-    localStorage.setItem("tenant_id", empresa.id);
-    if (empresa.subdomain) {
-        localStorage.setItem("tenant_subdomain", empresa.subdomain);
+    console.log("[LANDLORD] Forçando logout...");
+    localStorage.removeItem("landlord_user");
+    clearTenant();
+    
+    if (!window.location.pathname.includes("/landlord/login")) {
+        window.location.href = "/landlord/login";
     }
-    console.log("[TENANT] Definido:", empresa.id, empresa.subdomain);
 };
 
-export const clearTenant = (): void => {
-    if (typeof window === "undefined") return;
-    localStorage.removeItem("tenant_id");
-    localStorage.removeItem("tenant_subdomain");
-    console.log("[TENANT] Limpo");
-};
+// ============ INSTÂNCIA DO LANDLORD (NUNCA ENVIA TENANT) ============
 
-// ============ INTERCEPTORS ============
+export const landlordApi = axios.create({
+    baseURL: getBaseURL(),
+    ...baseConfig,
+});
 
-// Request: injeta CSRF e Tenant
-api.interceptors.request.use(
-    (config: InternalAxiosRequestConfig) => {
-        const method = config.method?.toLowerCase();
+landlordApi.defaults.xsrfCookieName = "XSRF-TOKEN";
+landlordApi.defaults.xsrfHeaderName = "X-XSRF-TOKEN";
 
-        //  CSRF Token para TODAS as requisições (não só mutações)
-        // Laravel Sanctum exige XSRF-TOKEN em todas as requisições autenticadas
+// Interceptor de REQUEST do Landlord
+landlordApi.interceptors.request.use(
+    (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
+        // Adiciona CSRF token
         const xsrfToken = Cookies.get("XSRF-TOKEN");
         if (xsrfToken) {
             config.headers["X-XSRF-TOKEN"] = xsrfToken;
-        } else {
-            // Só loga warning se NÃO for rota pública de CSRF
-            const csrfPaths = ["/sanctum/csrf-cookie"];
-            if (!csrfPaths.some((p) => config.url?.includes(p))) {
-                console.warn("[AXIOS] CSRF token não encontrado para", config.url);
-            }
         }
 
-        //  Injeta tenant se disponível (ESSENCIAL para o middleware ResolveTenant)
-        const tenant = discoverTenant();
+        // Identifica como requisição do landlord
+        config.headers["X-Landlord-Request"] = "true";
+        
+        // GARANTE que headers de tenant NÃO existem
+        delete config.headers["X-Empresa-ID"];
+        delete config.headers["X-Tenant-ID"];
+
+        // Log em desenvolvimento
+        if (process.env.NODE_ENV === "development") {
+            console.log(`🏠 [LANDLORD] ${config.method?.toUpperCase()} ${config.url}`);
+        }
+
+        return config;
+    },
+    (error: AxiosError) => Promise.reject(error)
+);
+
+// Interceptor de RESPONSE do Landlord
+landlordApi.interceptors.response.use(
+    (response) => {
+        if (process.env.NODE_ENV === "development") {
+            console.log(`✅ [LANDLORD] ${response.status} ${response.config.url}`);
+        }
+        return response;
+    },
+    async (error: AxiosError): Promise<any> => {
+        const status = error.response?.status;
+        const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+        
+        // CSRF expirado (419) - renova e tenta novamente
+        if (status === 419 && !originalRequest._retry) {
+            console.log("[LANDLORD] CSRF expirado, renovando...");
+            originalRequest._retry = true;
+            
+            try {
+                await landlordApi.get("/sanctum/csrf-cookie");
+                return landlordApi(originalRequest);
+            } catch {
+                forceLandlordLogout();
+            }
+        }
+        
+        // Não autorizado (401)
+        if (status === 401 && !originalRequest.url?.includes("/login")) {
+            forceLandlordLogout();
+        }
+        
+        // Erro 403 - Sem permissão
+        if (status === 403) {
+            console.error("[LANDLORD] Acesso negado:", originalRequest.url);
+        }
+        
+        // Erro 500 - Servidor
+        if (status === 500) {
+            console.error("[LANDLORD] Erro interno do servidor:", originalRequest.url);
+        }
+        
+        return Promise.reject(error);
+    }
+);
+
+// ============ INSTÂNCIA DO TENANT (SEMPRE ENVIA TENANT) ============
+
+export const tenantApi = axios.create({
+    baseURL: getBaseURL(),
+    ...baseConfig,
+});
+
+tenantApi.defaults.xsrfCookieName = "XSRF-TOKEN";
+tenantApi.defaults.xsrfHeaderName = "X-XSRF-TOKEN";
+
+// Interceptor de REQUEST do Tenant
+tenantApi.interceptors.request.use(
+    (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
+        // Adiciona CSRF token
+        const xsrfToken = Cookies.get("XSRF-TOKEN");
+        if (xsrfToken) {
+            config.headers["X-XSRF-TOKEN"] = xsrfToken;
+        }
+
+        // Adiciona headers de tenant
+        const tenant = getTenant();
         if (tenant) {
             config.headers["X-Empresa-ID"] = tenant;
-            config.headers["X-Tenant-ID"] = tenant;  // Header alternativo para compatibilidade
+            config.headers["X-Tenant-ID"] = tenant;
         } else {
-            const publicPaths = ["/sanctum/csrf-cookie", "/login", "/register", "/forgot-password", "/logout"];
-            if (!publicPaths.some((p) => config.url?.includes(p))) {
-                console.warn("[AXIOS] Tenant não encontrado para", config.url);
+            // Log apenas em desenvolvimento e para rotas não públicas
+            const publicPaths = ["/sanctum/csrf-cookie", "/login", "/register"];
+            if (!publicPaths.some(p => config.url?.includes(p))) {
+                console.warn("[TENANT] Nenhum tenant encontrado para:", config.url);
             }
         }
 
-        //  DEBUG: Loga config da requisição para rotas API (ajudar a diagnosticar)
-        if (config.url?.startsWith("/api/")) {
-            console.log("[AXIOS][API] Requisição:", {
-                url: config.url,
-                method: config.method,
-                withCredentials: config.withCredentials,
-                hasXsrf: !!xsrfToken,
-                hasTenant: !!tenant,
-                tenant: tenant,
-                headers: {
-                    "X-Empresa-ID": config.headers["X-Empresa-ID"],
-                    "X-XSRF-TOKEN": config.headers["X-XSRF-TOKEN"] ? "presente" : "ausente",
-                },
+        // Log em desenvolvimento
+        if (process.env.NODE_ENV === "development") {
+            console.log(`🏢 [TENANT] ${config.method?.toUpperCase()} ${config.url}`, {
+                tenant: getTenant()
             });
         }
 
@@ -150,147 +235,132 @@ api.interceptors.request.use(
     (error: AxiosError) => Promise.reject(error)
 );
 
-// Response: trata erros comuns SEM destruir estado global
-let isRefreshingCsrf = false;
-let csrfRefreshPromise: Promise<void> | null = null;
-
-api.interceptors.response.use(
+// Interceptor de RESPONSE do Tenant
+tenantApi.interceptors.response.use(
     (response) => {
-        // Salva tenant após login bem-sucedido
-        const isLogin = response.config.url?.includes("/login");
-        if (isLogin && response.data?.success && response.data.empresa) {
+        // Salva tenant após login bem-sucedido do tenant
+        const isTenantLogin = response.config.url?.includes("/login") && 
+                              !response.config.url?.includes("/api/landlord/");
+        if (isTenantLogin && response.data?.empresa) {
             setTenant(response.data.empresa);
         }
+        
+        if (process.env.NODE_ENV === "development") {
+            console.log(`✅ [TENANT] ${response.status} ${response.config.url}`);
+        }
+        
         return response;
     },
-    async (error: AxiosError<{ message?: string }>) => {
+    async (error: AxiosError): Promise<any> => {
         const status = error.response?.status;
         const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-
-        // 419: CSRF token expirado — tenta refresh UMA vez
+        
+        // CSRF expirado (419) - renova e tenta novamente
         if (status === 419 && !originalRequest._retry) {
-            console.log("[AXIOS] CSRF expirado (419), tentando refresh...");
+            console.log("[TENANT] CSRF expirado, renovando...");
             originalRequest._retry = true;
-
-            if (!isRefreshingCsrf) {
-                isRefreshingCsrf = true;
-                csrfRefreshPromise = authApi
-                    .getCsrf()
-                    .then(() => {
-                        console.log("[AXIOS] CSRF refresh OK");
-                    })
-                    .catch(() => {
-                        console.error("[AXIOS] CSRF refresh falhou");
-                    })
-                    .finally(() => {
-                        isRefreshingCsrf = false;
-                        csrfRefreshPromise = null;
-                    });
+            
+            try {
+                await tenantApi.get("/sanctum/csrf-cookie");
+                return tenantApi(originalRequest);
+            } catch {
+                // Se falhar, limpa tenant
+                clearTenant();
             }
-
-            await csrfRefreshPromise;
-            return api(originalRequest);
         }
-
-        // 401: Sessão expirada ou não autenticado
-        if (status === 401) {
-            console.log("[AXIOS] 401 em", originalRequest?.url, "- delegando ao AuthProvider");
-
-            // NÃO faz redirect automático aqui — deixa o AuthProvider decidir
-            // Isso evita loops de redirect quando /me ainda funciona
-        }
-
-        if (status === 500) {
-            console.error("[AXIOS] 500 em", originalRequest?.url, error.response?.data);
-        }
-
+        
         return Promise.reject(error);
     }
 );
 
 // ============ API SERVICES ============
 
-export const authApi = {
-    api, // expõe instância para requisições genéricas
-    getCsrf: () => api.get("/sanctum/csrf-cookie"),
-    login: (email: string, password: string) =>
-        api.post("/login", { email, password }),
-    logout: () => api.post("/logout"),
-    me: () => api.get("/me"),
-};
-
+/**
+ * API para o LANDLORD (Super Admin)
+ * - NUNCA envia headers de tenant
+ * - Usa rotas com prefixo /api/landlord
+ */
 export const landAuthApi = {
-    api, // expõe instância
-    getCsrf: () => api.get("/sanctum/csrf-cookie"),
+    api: landlordApi,
+    
+    getCsrf: () => landlordApi.get("/sanctum/csrf-cookie"),
+    
     login: (email: string, password: string) =>
-        api.post("/api/landlord/login", { email, password }),
-    logout: () => api.post("/api/landlord/logout"),
-    me: () => api.get("/api/landlord/me"),
+        landlordApi.post("/api/landlord/login", { email, password }),
+    
+    logout: () => landlordApi.post("/api/landlord/logout"),
+    
+    me: () => landlordApi.get("/api/landlord/landlordme"),
+    
+    empresas: {
+        list: () => landlordApi.get("/api/landlord/empresas"),
+        create: (data: any) => landlordApi.post("/api/landlord/empresas", data),
+        show: (id: string) => landlordApi.get(`/api/landlord/empresas/${id}`),
+        update: (id: string, data: any) => landlordApi.put(`/api/landlord/empresas/${id}`, data),
+        toggleStatus: (id: string) => landlordApi.patch(`/api/landlord/empresas/${id}/toggle-status`),
+    },
 };
 
-// ⭐ INSTÂNCIA ESPECÍFICA PARA API — GARANTE withCredentials
-export const apiService = axios.create({
-    baseURL: getBaseURL(),
-    withCredentials: true,  // ← ESSENCIAL!
-    headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        "X-Requested-With": "XMLHttpRequest",
+/**
+ * API para o TENANT (Empresas)
+ * - SEMPRE envia headers de tenant (X-Empresa-ID)
+ * - Usa rotas com prefixo /api (sem /landlord)
+ * 
+ * EXEMPLOS DE ROTAS:
+ * - POST   /api/login
+ * - GET    /api/me
+ * - GET    /api/empresa
+ * - GET    /api/produtos
+ * - POST   /api/vendas
+ * - GET    /api/documentos-fiscais
+ */
+export const authApi = {
+    api: tenantApi,
+    
+    getCsrf: () => tenantApi.get("/sanctum/csrf-cookie"),
+    
+    // Rotas de autenticação do tenant
+    login: (email: string, password: string) =>
+        tenantApi.post("/login", { email, password }),
+    
+    logout: () => tenantApi.post("/logout"),
+    
+    me: () => tenantApi.get("/me"),
+    
+    // Rotas de empresa (tenant)
+    empresa: {
+        get: () => tenantApi.get("/api/empresa"),
+        update: (data: any) => tenantApi.put("/api/empresa", data),
+        uploadLogo: (formData: FormData) => tenantApi.post("/api/empresa/logo", formData, {
+            headers: { "Content-Type": "multipart/form-data" }
+        }),
     },
-    timeout: 930000,
-});
-
-// Copia os mesmos interceptores da instância principal
-apiService.defaults.xsrfCookieName = "XSRF-TOKEN";
-apiService.defaults.xsrfHeaderName = "X-XSRF-TOKEN";
-
-// Aplica os mesmos interceptores
-apiService.interceptors.request.use(
-    (config: InternalAxiosRequestConfig) => {
-        const xsrfToken = Cookies.get("XSRF-TOKEN");
-        if (xsrfToken) {
-            config.headers["X-XSRF-TOKEN"] = xsrfToken;
-        }
-
-        const tenant = discoverTenant();
-        if (tenant) {
-            config.headers["X-Empresa-ID"] = tenant;
-            config.headers["X-Tenant-ID"] = tenant;
-        }
-
-        if (config.url?.startsWith("/api/")) {
-            console.log("[AXIOS][apiService] Requisição:", {
-                url: config.url,
-                method: config.method,
-                withCredentials: config.withCredentials,
-                hasXsrf: !!xsrfToken,
-                hasTenant: !!tenant,
-            });
-        }
-
-        return config;
+    
+    // Rotas de negócio do tenant
+    produtos: {
+        list: () => tenantApi.get("/api/produtos"),
+        create: (data: any) => tenantApi.post("/api/produtos", data),
+        update: (id: string, data: any) => tenantApi.put(`/api/produtos/${id}`, data),
+        delete: (id: string) => tenantApi.delete(`/api/produtos/${id}`),
     },
-    (error: AxiosError) => Promise.reject(error)
-);
+    
+    vendas: {
+        list: () => tenantApi.get("/api/vendas"),
+        create: (data: any) => tenantApi.post("/api/vendas", data),
+        show: (id: string) => tenantApi.get(`/api/vendas/${id}`),
+    },
+    
+    // Rotas genéricas - para qualquer endpoint do tenant
+    get: (url: string) => tenantApi.get(`/api/${url}`),
+    post: (url: string, data: any) => tenantApi.post(`/api/${url}`, data),
+    put: (url: string, data: any) => tenantApi.put(`/api/${url}`, data),
+    delete: (url: string) => tenantApi.delete(`/api/${url}`),
+};
 
-apiService.interceptors.response.use(
-    (response) => response,
-    async (error: AxiosError<{ message?: string }>) => {
-        const status = error.response?.status;
-        const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-
-        if (status === 419 && !originalRequest._retry) {
-            originalRequest._retry = true;
-            await authApi.getCsrf();
-            return apiService(originalRequest);
-        }
-
-        if (status === 401) {
-            console.log("[AXIOS][apiService] 401 em", originalRequest?.url);
-        }
-
-        return Promise.reject(error);
-    }
-);
+/**
+ * Instância padrão (para compatibilidade com código existente)
+ * Recomendado usar landAuthApi ou authApi explicitamente
+ */
+export const api = tenantApi;
 
 export default api;

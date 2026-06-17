@@ -7,6 +7,9 @@ export interface Empresa {
   email: string;
   telefone?: string | null;
   endereco?: string | null;
+  nome_banco?: string | null;
+  numero_conta?: string | null;
+  iban?: string | null;
   logo?: string | null;
   db_name: string;
   regime_fiscal: "simplificado" | "geral";
@@ -23,6 +26,9 @@ export interface UpdateEmpresaData {
   email?: string;
   endereco?: string;
   telefone?: string;
+  nome_banco?: string | null;
+  numero_conta?: string | null;
+  iban?: string | null;
   regime_fiscal?: "simplificado" | "geral";
   sujeito_iva?: boolean;
 }
