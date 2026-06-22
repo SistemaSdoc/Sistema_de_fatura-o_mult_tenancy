@@ -4,8 +4,9 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
     ArrowLeft, FileText, User, MinusCircle, PlusCircle,
-    XCircle, Download, Loader2, Printer, Package, AlertTriangle,
-    Receipt, Hash, Clock, UserCheck, Tag
+    XCircle, Loader2, Package, AlertTriangle,
+    Receipt, Clock, FilePlus, FileMinus,
+    Info
 } from "lucide-react";
 import MainEmpresa from "@/app/components/MainEmpresa";
 import {
@@ -14,7 +15,7 @@ import {
     ItemDocumento,
     TipoDocumento,
 } from "@/services/DocumentoFiscal";
-import { useThemeColors, useTheme } from "@/context/ThemeContext";
+import { useThemeColors, LIGHT_COLORS } from "@/context/ThemeContext";
 
 /* ── Constantes ─────────────────────────────────────── */
 const TIPO_LABEL: Record<TipoDocumento, string> = {
@@ -36,6 +37,14 @@ const METODOS_PAGAMENTO: Record<string, string> = {
     cartao: "Cartão",
 };
 
+const ESTADO_LABEL: Record<string, string> = {
+    emitido: "Emitido",
+    paga: "Pago",
+    parcialmente_paga: "Parcial",
+    cancelado: "Cancelado",
+    expirado: "Expirado",
+};
+
 /* ── Utilitários ─────────────────────────────────────── */
 const fmtKz = (v?: number | null) =>
     v == null
@@ -52,7 +61,7 @@ const fmtHora = (h?: string | null) =>
     h ? String(h).substring(0, 5) : "—";
 
 /* ── Badge ───────────────────────────────────────────── */
-function Badge({ estado, colors }: { estado: string; colors: any }) {
+function Badge({ estado, colors }: { estado: string; colors: typeof LIGHT_COLORS }) {
     const map: Record<string, { bg: string; text: string; border: string }> = {
         emitido: {
             bg: `${colors.secondary}20`,
@@ -80,13 +89,6 @@ function Badge({ estado, colors }: { estado: string; colors: any }) {
             border: `${colors.textSecondary}30`,
         },
     };
-    const labels: Record<string, string> = {
-        emitido: "Emitido",
-        cancelado: "Cancelado",
-        paga: "Pago",
-        parcialmente_paga: "Parcial",
-        expirado: "Expirado",
-    };
     const style = map[estado] ?? map.emitido;
     return (
         <span
@@ -97,7 +99,7 @@ function Badge({ estado, colors }: { estado: string; colors: any }) {
                 borderColor: style.border,
             }}
         >
-            {labels[estado] ?? estado}
+            {ESTADO_LABEL[estado] ?? estado}
         </span>
     );
 }
@@ -116,7 +118,7 @@ function Row({
     value: React.ReactNode;
     link?: boolean;
     onLink?: () => void;
-    colors: any;
+    colors: typeof LIGHT_COLORS;
     accent?: string;
     mono?: boolean;
 }) {
@@ -154,7 +156,7 @@ function ItensTable({
     colors,
 }: {
     itens: ItemDocumento[];
-    colors: any;
+    colors: typeof LIGHT_COLORS;
 }) {
     if (itens.length === 0) {
         return (
@@ -201,7 +203,6 @@ function ItensTable({
                         >
                             IVA
                         </th>
-                        {/* Coluna de retenção se existir */}
                         <th
                             className="px-3 py-2 text-right font-semibold w-20"
                             style={{ color: colors.textSecondary }}
@@ -307,7 +308,7 @@ function TotaisSection({
 }: {
     nota: DocumentoFiscal;
     docParaTotais: DocumentoFiscal;
-    colors: any;
+    colors: typeof LIGHT_COLORS;
     accent: string;
 }) {
     const isNC = nota.tipo_documento === "NC";
@@ -323,7 +324,6 @@ function TotaisSection({
     const pctIva = base > 0 ? (iva / base) * 100 : 0;
     const pctRet = base > 0 ? (ret / base) * 100 : 0;
 
-    // Desconto global
     const descontoGlobal = Number(
         (typeof nota.venda === 'object' ? nota.venda?.desconto_global : 0) ??
         nota.desconto_global ??
@@ -430,24 +430,71 @@ function TotaisSection({
     );
 }
 
-/* ── Secção Fiscal (QR Code + Hash) ──────────────────── */
+/* ── Botão de Ação para Gerar NC/ND ──────────────────── */
+function AcaoCard({
+    icon: Icon,
+    title,
+    description,
+    onClick,
+    colors,
+    accent,
+    disabled,
+    tooltip,
+}: {
+    icon: React.ElementType;
+    title: string;
+    description: string;
+    onClick: () => void;
+    colors: typeof LIGHT_COLORS;
+    accent: string;
+    disabled?: boolean;
+    tooltip?: string;
+}) {
+    return (
+        <button
+            onClick={onClick}
+            disabled={disabled}
+            className={`flex items-start gap-3 p-3 border rounded transition-all text-left w-full ${
+                disabled ? "opacity-50 cursor-not-allowed" : "hover:shadow-md"
+            }`}
+            style={{
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                cursor: disabled ? "not-allowed" : "pointer",
+            }}
+            title={tooltip}
+        >
+            <div
+                className="p-2 rounded shrink-0"
+                style={{ backgroundColor: `${accent}15` }}
+            >
+                <Icon className="w-5 h-5" style={{ color: accent }} />
+            </div>
+            <div>
+                <div className="font-semibold text-sm" style={{ color: colors.text }}>
+                    {title}
+                </div>
+                <div className="text-xs" style={{ color: colors.textSecondary }}>
+                    {description}
+                </div>
+            </div>
+        </button>
+    );
+}
 
-
-/* ── Modal de geração NC / ND ────────────────────────── */
+/* ── Modal de geração NC / ND (CORRIGIDO) ────────────── */
 function ModalNota({
     tipo,
     documento,
     onClose,
     onSuccess,
     colors,
-    theme,
 }: {
     tipo: "NC" | "ND";
     documento: DocumentoFiscal;
     onClose: () => void;
     onSuccess: (nota: DocumentoFiscal) => void;
-    colors: any;
-    theme: string;
+    colors: typeof LIGHT_COLORS;
 }) {
     const isNC = tipo === "NC";
     const accent = isNC ? colors.danger : colors.success;
@@ -460,10 +507,23 @@ function ModalNota({
         Object.fromEntries(
             itensOriginais.map((item, i) => [
                 `${item.id ?? i}`,
-                Number(item.quantidade),
+                Number(item.quantidade ?? 0),
             ])
         )
     );
+    const [saldoDisponivel, setSaldoDisponivel] = useState<number | null>(null);
+
+    // Buscar saldo disponível para NC
+    useEffect(() => {
+        if (isNC && documento.id) {
+            documentoFiscalService.buscarPorId(documento.id)
+                .then(doc => {
+                    const saldo = documentoFiscalService.calcularSaldoDisponivel(doc);
+                    setSaldoDisponivel(saldo);
+                })
+                .catch(() => setSaldoDisponivel(null));
+        }
+    }, [isNC, documento.id]);
 
     const itensComChave = itensOriginais.map((item, i) => ({
         ...item,
@@ -478,43 +538,101 @@ function ModalNota({
     }, 0);
 
     const handleGerar = async () => {
-        if (isNC && !motivo.trim()) {
-            setErro("O motivo é obrigatório para Nota de Crédito.");
+        // === VALIDAÇÕES FRONTEND ===
+        
+        // 1. Motivo obrigatório para NC
+        if (isNC && (!motivo.trim() || motivo.trim().length < 10)) {
+            setErro(
+                "O motivo da Nota de Crédito é obrigatório e deve ter pelo menos 10 caracteres. " +
+                "Forneça uma descrição detalhada da correção."
+            );
             return;
         }
+
+        // 2. Motivo opcional para ND mas com validação
+        if (!isNC && motivo.trim().length > 0 && motivo.trim().length < 5) {
+            setErro("O motivo deve ter pelo menos 5 caracteres (ou deixe em branco).");
+            return;
+        }
+
+        // 3. Itens selecionados
         const itens = itensComChave
             .filter((item) => (quantidades[item._key] ?? 0) > 0)
             .map((item) => ({
                 produto_id: item.produto_id ?? undefined,
                 descricao: item.descricao,
-                quantidade: quantidades[item._key],
+                quantidade: Number(quantidades[item._key]),
                 preco_unitario: Number(item.preco_unitario),
                 taxa_iva: Number(item.taxa_iva),
+                taxa_retencao: item.taxa_retencao,
             }));
 
         if (itens.length === 0) {
-            setErro("Seleccione pelo menos um item.");
+            setErro("Seleccione pelo menos um item com quantidade > 0.");
             return;
         }
+
+        // 4. Para NC: validar saldo disponível
+        if (isNC && saldoDisponivel !== null && totalSelecionado > saldoDisponivel) {
+            setErro(
+                `O valor total da Nota de Crédito (${fmtKz(totalSelecionado)}) ` +
+                `excede o saldo disponível da fatura (${fmtKz(saldoDisponivel)}).\n` +
+                `Reduza as quantidades ou seleccione menos itens.`
+            );
+            return;
+        }
+
+        // 5. Para ND: verificar se os itens são serviços
+        if (!isNC) {
+            for (const item of itens) {
+                const descricaoLower = item.descricao.toLowerCase();
+                const isServico = 
+                    ['serviço', 'servico', 'consulta', 'consultoria', 'manutenção', 
+                     'manutencao', 'instalação', 'instalacao', 'juro', 'multa', 
+                     'penalidade', 'taxa', 'comissão', 'comissao'].some(
+                        term => descricaoLower.includes(term)
+                    );
+                
+                if (!isServico && item.produto_id) {
+                    setErro(
+                        `Nota de Débito não pode ser usada para produtos físicos. ` +
+                        `Item "${item.descricao}" parece ser um produto. ` +
+                        `Use Nota de Débito apenas para serviços adicionais, juros ou multas.`
+                    );
+                    return;
+                }
+            }
+        }
+
         try {
             setLoading(true);
             setErro(null);
-            const nota = isNC
-                ? await documentoFiscalService.criarNotaCredito(documento.id, {
-                      itens,
-                      motivo,
-                  })
-                : await documentoFiscalService.criarNotaDebito(documento.id, {
-                      itens,
-                      motivo,
-                  });
-            onSuccess(nota);
+            
+            let resposta;
+            if (isNC) {
+                resposta = await documentoFiscalService.criarNotaCredito(documento.id, {
+                    itens,
+                    motivo: motivo.trim(),
+                });
+                onSuccess(resposta.nota_credito);
+            } else {
+                resposta = await documentoFiscalService.criarNotaDebito(documento.id, {
+                    itens,
+                    motivo: motivo.trim() || undefined,
+                });
+                onSuccess(resposta.nota_debito);
+            }
         } catch (e) {
             setErro(e instanceof Error ? e.message : "Erro ao gerar nota.");
         } finally {
             setLoading(false);
         }
     };
+
+    // Calcular saldo restante para exibição
+    const saldoRestante = saldoDisponivel !== null 
+        ? saldoDisponivel - totalSelecionado 
+        : null;
 
     return (
         <div
@@ -531,23 +649,18 @@ function ModalNota({
             >
                 <div
                     className="flex items-center justify-between px-4 py-3 border-b"
-                    style={{
-                        borderLeftWidth: 4,
-                        borderLeftColor: accent,
-                        borderLeftStyle: "solid",
-                        borderBottomColor: colors.border,
-                    }}
+
                 >
                     <div className="flex items-center gap-2">
                         {isNC ? (
                             <MinusCircle
                                 className="w-4 h-4"
-                                style={{ color: accent }}
+                                style={{ color: colors.secondary }}
                             />
                         ) : (
                             <PlusCircle
                                 className="w-4 h-4"
-                                style={{ color: accent }}
+                                style={{ color: colors.primary }}
                             />
                         )}
                         <span
@@ -574,6 +687,76 @@ function ModalNota({
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    {/* Info do documento original */}
+                    <div
+                        className="flex items-center gap-2 px-3 py-2 rounded text-xs border"
+                        style={{
+                            color: colors.textSecondary,
+                        }}
+                    >
+                        <FileText className="w-3.5 h-3.5 shrink-0" />
+                        <span>
+                            Documento original: <strong style={{ color: colors.text }}>
+                                {documento.numero_documento}
+                            </strong>
+                            {" · "}
+                            {TIPO_LABEL[documento.tipo_documento]}
+                            {" · "}
+                            <Badge estado={documento.estado} colors={colors} />
+                        </span>
+                    </div>
+
+                    {/* Saldo disponível (apenas NC) 
+                    {isNC && saldoDisponivel !== null && (
+                        <div
+                            className="flex items-center gap-2 px-3 py-2 rounded text-xs border"
+                            style={{
+                                backgroundColor: `${accent}08`,
+                                borderColor: `${accent}20`,
+                            }}
+                        >
+                            <Info className="w-3.5 h-3.5 shrink-0" style={{ color: accent }} />
+                            <span style={{ color: colors.textSecondary }}>
+                                Saldo disponível para crédito:{" "}
+                                <strong style={{ color: accent }}>
+                                    {fmtKz(saldoDisponivel)}
+                                </strong>
+                                {saldoRestante !== null && (
+                                    <span style={{ color: colors.textSecondary }}>
+                                        {" · Restante após NC: "}
+                                        <strong style={{ 
+                                            color: saldoRestante < 0 ? colors.danger : colors.success 
+                                        }}>
+                                            {fmtKz(saldoRestante)}
+                                        </strong>
+                                    </span>
+                                )}
+                            </span>
+                        </div>
+                    )}*/} 
+
+                    {/* Prazo para ND 
+                    {!isNC && (
+                        <div
+                            className="flex items-center gap-2 px-3 py-2 rounded text-xs border"
+                            style={{
+                                backgroundColor: `${colors.warning}10`,
+                                borderColor: `${colors.warning}30`,
+                                color: colors.textSecondary,
+                            }}
+                        >
+                            <Clock className="w-3.5 h-3.5 shrink-0" style={{ color: colors.warning }} />
+                            <span>
+                                Nota de Débito pode ser emitida até 30 dias após a emissão da fatura.
+                                {documento.data_emissao && (
+                                    <>
+                                        {" "}Data de emissão: {fmtData(documento.data_emissao)}
+                                    </>
+                                )}
+                            </span>
+                        </div>
+                    )}*/}
+
                     <div>
                         <label
                             className="block text-xs font-semibold mb-1"
@@ -581,7 +764,10 @@ function ModalNota({
                         >
                             Motivo{" "}
                             {isNC && (
-                                <span style={{ color: colors.danger }}>*</span>
+                                <span style={{ color: colors.text }}> obrigatório (min 10 caracteres)</span>
+                            )}
+                            {!isNC && (
+                                <span style={{ color: colors.textSecondary }}>(opcional)</span>
                             )}
                         </label>
                         <textarea
@@ -589,17 +775,29 @@ function ModalNota({
                             onChange={(e) => setMotivo(e.target.value)}
                             placeholder={
                                 isNC
-                                    ? "Ex: Devolução de mercadoria…"
-                                    : "Ex: Custos adicionais…"
+                                    ? "Ex: Devolução de mercadoria X - cliente devolveu 5 unidades com defeito…"
+                                    : "Ex: Serviço adicional de instalação… (opcional)"
                             }
-                            rows={2}
-                            className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 resize-none"
+                            rows={3}
+                            className={`w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 resize-none ${
+                                isNC && motivo.trim().length > 0 && motivo.trim().length < 10
+                                    ? `ring-1 ring-${colors.danger}`
+                                    : ""
+                            }`}
                             style={{
                                 backgroundColor: colors.background,
                                 borderColor: colors.border,
                                 color: colors.text,
                             }}
                         />
+                        {isNC && motivo.trim().length > 0 && motivo.trim().length < 10 && (
+                            <p
+                                className="text-xs mt-1"
+                                style={{ color: colors.danger }}
+                            >
+                                O motivo deve ter pelo menos 10 caracteres. Faltam {10 - motivo.trim().length} caracteres.
+                            </p>
+                        )}
                     </div>
 
                     <div>
@@ -610,7 +808,7 @@ function ModalNota({
                             Seleccionar itens
                         </p>
                         <div
-                            className="border rounded divide-y"
+                            className="border rounded divide-y max-h-48 overflow-y-auto"
                             style={{ borderColor: colors.border }}
                         >
                             {itensComChave.length === 0 ? (
@@ -642,6 +840,11 @@ function ModalNota({
                                             >
                                                 {fmtKz(item.preco_unitario)} ·
                                                 IVA {item.taxa_iva}%
+                                                {item.eh_servico && (
+                                                    <span className="ml-1" style={{ color: colors.secondary }}>
+                                                        · Serviço
+                                                    </span>
+                                                )}
                                             </p>
                                         </div>
                                         <div className="flex items-center gap-1 shrink-0">
@@ -667,7 +870,7 @@ function ModalNota({
                                             <input
                                                 type="number"
                                                 min={0}
-                                                max={Number(item.quantidade)}
+                                                max={Number(item.quantidade ?? 0)}
                                                 value={
                                                     quantidades[item._key] ?? 0
                                                 }
@@ -676,7 +879,7 @@ function ModalNota({
                                                         ...q,
                                                         [item._key]: Math.min(
                                                             Number(
-                                                                item.quantidade
+                                                                item.quantidade ?? 0
                                                             ),
                                                             Math.max(
                                                                 0,
@@ -702,7 +905,7 @@ function ModalNota({
                                                         ...q,
                                                         [item._key]: Math.min(
                                                             Number(
-                                                                item.quantidade
+                                                                item.quantidade ?? 0
                                                             ),
                                                             (q[item._key] ??
                                                                 0) + 1
@@ -723,9 +926,8 @@ function ModalNota({
                                                     color: colors.textSecondary,
                                                 }}
                                             >
-                                                /
-                                                {Number(
-                                                    item.quantidade
+                                                /{Number(
+                                                    item.quantidade ?? 0
                                                 ).toFixed(0)}
                                             </span>
                                         </div>
@@ -737,20 +939,16 @@ function ModalNota({
 
                     <div
                         className="flex justify-between items-center px-3 py-2 rounded border"
-                        style={{
-                            borderColor: accent + "40",
-                            backgroundColor: accent + "08",
-                        }}
                     >
                         <span
                             className="text-sm font-semibold"
-                            style={{ color: colors.text }}
+                            style={{ color: colors.textSecondary }}
                         >
                             Total da Nota
                         </span>
                         <span
                             className="text-base font-bold"
-                            style={{ color: accent }}
+                            style={{ color: colors.text }}
                         >
                             {isNC ? "−" : "+"}
                             {fmtKz(totalSelecionado)}
@@ -759,15 +957,15 @@ function ModalNota({
 
                     {erro && (
                         <div
-                            className="flex items-center gap-2 px-3 py-2 border rounded text-sm"
+                            className="flex items-start gap-2 px-3 py-2 border rounded text-sm whitespace-pre-wrap"
                             style={{
                                 backgroundColor: `${colors.danger}10`,
                                 borderColor: `${colors.danger}30`,
                                 color: colors.danger,
                             }}
                         >
-                            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                            {erro}
+                            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                            <span>{erro}</span>
                         </div>
                     )}
                 </div>
@@ -792,9 +990,9 @@ function ModalNota({
                     </button>
                     <button
                         onClick={handleGerar}
-                        disabled={loading}
+                        disabled={loading || (isNC && totalSelecionado === 0)}
                         className="flex-1 px-3 py-2 text-sm font-medium text-white rounded disabled:opacity-50 flex items-center justify-center gap-2"
-                        style={{ backgroundColor: accent }}
+                        style={{ backgroundColor: colors.secondary }}
                     >
                         {loading && (
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -807,21 +1005,21 @@ function ModalNota({
     );
 }
 
-/* ── Componente principal ────────────────────────────── */
+/* ── Componente principal (CORRIGIDO) ────────────────── */
 export default function VisualizarNotaPage() {
     const router = useRouter();
     const params = useParams();
     const notaId = params?.id as string;
     const colors = useThemeColors();
-    const { theme } = useTheme();
 
     const [nota, setNota] = useState<DocumentoFiscal | null>(null);
     const [documentoOrigem, setDocumentoOrigem] =
         useState<DocumentoFiscal | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [baixandoPdf, setBaixandoPdf] = useState(false);
     const [modalTipo, setModalTipo] = useState<"NC" | "ND" | null>(null);
+    const [podeGerarNC, setPodeGerarNC] = useState<{ pode: boolean; motivo?: string }>({ pode: false });
+    const [podeGerarND, setPodeGerarND] = useState<{ pode: boolean; motivo?: string }>({ pode: false });
 
     const carregarNota = useCallback(async () => {
         if (!notaId) {
@@ -833,6 +1031,11 @@ export default function VisualizarNotaPage() {
             setLoading(true);
             const doc = await documentoFiscalService.buscarPorId(notaId);
             setNota(doc);
+            
+            // Verificar se pode gerar NC/ND
+            setPodeGerarNC(documentoFiscalService.podeEmitirNotaCredito(doc));
+            setPodeGerarND(documentoFiscalService.podeEmitirNotaDebito(doc));
+            
             if (
                 (doc.tipo_documento === "NC" ||
                     doc.tipo_documento === "ND" ||
@@ -855,29 +1058,6 @@ export default function VisualizarNotaPage() {
         carregarNota();
     }, [carregarNota]);
 
-    const handleImprimir = () => {
-        if (!nota?.id) return;
-        const backend = `${window.location.protocol}//${window.location.hostname}:8000`;
-        window.open(
-            `${backend}/api/documentos-fiscais/${nota.id}/print?auto=1`,
-            "_blank"
-        );
-    };
-
-    const handleDownloadPDF = async () => {
-        if (!nota?.id) return;
-        try {
-            setBaixandoPdf(true);
-            await documentoFiscalService.downloadPdf(
-                nota.id,
-                `${nota.tipo_documento}_${nota.numero_documento ?? nota.id}.pdf`
-            );
-        } catch {
-            alert("Erro ao baixar PDF.");
-        } finally {
-            setBaixandoPdf(false);
-        }
-    };
 
     const handleNotaGerada = (notaGerada: DocumentoFiscal) => {
         setModalTipo(null);
@@ -942,15 +1122,23 @@ export default function VisualizarNotaPage() {
     const isNC = nota.tipo_documento === "NC";
     const isND = nota.tipo_documento === "ND";
     const isRC = nota.tipo_documento === "RC";
+    const isFT = nota.tipo_documento === "FT";
+    const isFR = nota.tipo_documento === "FR";
+    const isFP = nota.tipo_documento === "FP";
     const accent = isNC
         ? colors.danger
         : isND
         ? colors.success
         : colors.secondary;
 
-    const podeGerarNotas =
-        ["FT", "FR"].includes(nota.tipo_documento) &&
-        nota.estado !== "cancelado";
+    // Verificar se pode gerar notas (apenas FT/FR que não estão canceladas)
+    const podeGerarNotas = 
+        (isFT || isFR) && 
+        nota.estado !== "cancelado" && 
+        nota.estado !== "expirado";
+
+    // Verificar se é uma nota de crédito/débito (mostrar botão de voltar para origem)
+    const isNotaCorrecao = isNC || isND || isRC;
 
     /* Para recibos, usar itens do documento de origem */
     const itensParaExibir =
@@ -963,7 +1151,7 @@ export default function VisualizarNotaPage() {
         isRC && documentoOrigem ? documentoOrigem : nota;
 
     /* Operador / utilizador */
-    const operador = nota.user?.name  ?? "Sistema";
+    const operador = nota.user?.name ?? "Sistema";
 
     return (
         <MainEmpresa>
@@ -971,7 +1159,7 @@ export default function VisualizarNotaPage() {
 
                 {/* ── Barra de topo ── */}
                 <div
-                    className="flex items-center justify-between px-3 py-2.5 rounded border"
+                    className="flex items-center justify-between px-3 py-2.5 rounded border flex-wrap gap-2"
                     style={{
                         backgroundColor: colors.card,
                         borderColor: colors.border,
@@ -1020,6 +1208,66 @@ export default function VisualizarNotaPage() {
                         </div>
                     </div>
 
+                    {/* ── Ações ── */}
+                    <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                        {/* ── Botão para Gerar Nota de Crédito ── */}
+                        {podeGerarNotas && (
+                            <button
+                                onClick={() => {
+                                    if (podeGerarNC.pode) {
+                                        setModalTipo("NC");
+                                    } else {
+                                        alert(podeGerarNC.motivo || "Não é possível gerar Nota de Crédito para esta fatura.");
+                                    }
+                                }}
+                                className="p-2 rounded transition-colors flex items-center gap-1.5 text-xs font-medium disabled:opacity-50"
+                                style={{
+                                    backgroundColor: podeGerarNC.pode 
+                                        ? `${colors.secondary}` 
+                                        : `${colors.textSecondary}`,
+                                    color: podeGerarNC.pode 
+                                        ? colors.textSecondary 
+                                        : colors.textSecondary,
+                                }}
+                                title={podeGerarNC.pode 
+                                    ? "Gerar Nota de Crédito" 
+                                    : podeGerarNC.motivo || "Não disponível"}
+                                disabled={!podeGerarNC.pode}
+                            >
+                                <FileMinus className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">NC</span>
+                            </button>
+                        )}
+
+                        {/* ── Botão para Gerar Nota de Débito ── */}
+                        {podeGerarNotas && (
+                            <button
+                                onClick={() => {
+                                    if (podeGerarND.pode) {
+                                        setModalTipo("ND");
+                                    } else {
+                                        alert(podeGerarND.motivo || "Não é possível gerar Nota de Débito para esta fatura.");
+                                    }
+                                }}
+                                className="p-2 rounded transition-colors flex items-center gap-1.5 text-xs font-medium disabled:opacity-50"
+                                style={{
+                                    backgroundColor: podeGerarND.pode 
+                                        ? `${colors.primary}` 
+                                        : `${colors.textSecondary}`,
+                                    color: podeGerarND.pode 
+                                        ? colors.textSecondary 
+                                        : colors.textSecondary,
+                                }}
+                                title={podeGerarND.pode 
+                                    ? "Gerar Nota de Débito" 
+                                    : podeGerarND.motivo || "Não disponível"}
+                                disabled={!podeGerarND.pode}
+                            >
+                                <FilePlus className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">ND</span>
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* ── Card principal ── */}
@@ -1076,10 +1324,10 @@ export default function VisualizarNotaPage() {
                                     colors={colors}
                                 />
                             )}
-                            {(nota.cliente?.endereco ) && (
+                            {(nota.cliente?.endereco) && (
                                 <Row
                                     label="Morada"
-                                    value={nota.cliente.endereco }
+                                    value={nota.cliente.endereco}
                                     colors={colors}
                                 />
                             )}
@@ -1173,6 +1421,22 @@ export default function VisualizarNotaPage() {
                                     (do documento de origem)
                                 </span>
                             )}
+                            {isNC && (
+                                <span
+                                    className="text-xs ml-1"
+                                    style={{ color: colors.danger }}
+                                >
+                                    (CRÉDITO)
+                                </span>
+                            )}
+                            {isND && (
+                                <span
+                                    className="text-xs ml-1"
+                                    style={{ color: colors.success }}
+                                >
+                                    (DÉBITO)
+                                </span>
+                            )}
                         </div>
                         <ItensTable
                             itens={itensParaExibir}
@@ -1189,6 +1453,60 @@ export default function VisualizarNotaPage() {
                     />
 
                 </div>
+
+                {/* ── Mensagem para Proformas ── */}
+                {isFP && (
+                    <div
+                        className="border rounded p-4 text-center"
+                        style={{
+                            backgroundColor: `${colors.warning}08`,
+                            borderColor: `${colors.warning}30`,
+                        }}
+                    >
+                        <p style={{ color: colors.textSecondary }}>
+                            <Info className="w-4 h-4 inline mr-2" style={{ color: colors.warning }} />
+                            Esta é uma Proforma (orçamento). Não pode gerar Notas de Crédito/Débito.
+                            Para emitir uma Nota de Correção, converta primeiro a Proforma em Fatura.
+                        </p>
+                    </div>
+                )}
+
+                {/* ── Mensagem para Notas de Correção ── */}
+                {isNotaCorrecao && documentoOrigem && (
+                    <div
+                        className="border rounded p-3 text-sm"
+                        style={{
+                            backgroundColor: `${colors.secondary}08`,
+                            borderColor: `${colors.secondary}20`,
+                            color: colors.textSecondary,
+                        }}
+                    >
+                        <div className="flex items-center gap-2">
+                            {isNC && <MinusCircle className="w-4 h-4" style={{ color: colors.danger }} />}
+                            {isND && <PlusCircle className="w-4 h-4" style={{ color: colors.success }} />}
+                            {isRC && <Receipt className="w-4 h-4" style={{ color: colors.secondary }} />}
+                            <span>
+                                {isNC ? "Nota de Crédito" : isND ? "Nota de Débito" : "Recibo"} 
+                                {" gerado a partir de "}
+                                <button
+                                    onClick={() =>
+                                        router.push(
+                                            `/dashboard/Faturas/Faturas/${documentoOrigem.id}/Ver`
+                                        )
+                                    }
+                                    className="font-medium underline underline-offset-2"
+                                    style={{ color: colors.secondary }}
+                                >
+                                    {documentoOrigem.numero_documento}
+                                </button>
+                                {" ("}
+                                {TIPO_LABEL[documentoOrigem.tipo_documento] ?? documentoOrigem.tipo_documento}
+                                {")"}
+                            </span>
+                        </div>
+                    </div>
+                )}
+
             </div>
 
             {/* ── Modal NC / ND ── */}
@@ -1199,7 +1517,6 @@ export default function VisualizarNotaPage() {
                     onClose={() => setModalTipo(null)}
                     onSuccess={handleNotaGerada}
                     colors={colors}
-                    theme={theme}
                 />
             )}
         </MainEmpresa>

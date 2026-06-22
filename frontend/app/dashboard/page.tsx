@@ -334,35 +334,35 @@ export default function DashboardPage() {
     value: string;
     helper: string;
   }> = [
-    {
-      href: "/dashboard/relatorios",
-      icon: DollarSign,
-      label: "Total Facturado",
-      value: formatKz(metricas.totalFaturado),
-      helper: `${metricas.crescimento >= 0 ? "+" : ""}${metricas.crescimento.toFixed(1)}% vs mês anterior`,
-    },
-    {
-      href: "/dashboard/Clientes/Novo_cliente",
-      icon: Users,
-      label: "Clientes Ativos",
-      value: formatNumber(metricas.totalClientes),
-      helper: `+${data.clientes?.novos_mes || 0} no mês`,
-    },
-    {
-      href: "/dashboard/relatorios",
-      icon: Clock,
-      label: "Pendente",
-      value: formatKz(metricas.totalPendente),
-      helper: `${formatKz(data.pagamentos?.total_atrasado || 0)} em atraso`,
-    },
-    {
-      href: "/dashboard/Produtos_servicos/Stock",
-      icon: Package,
-      label: "Stock Baixo",
-      value: formatNumber(metricas.produtosEmStockBaixo),
-      helper: `${formatNumber(data.produtos?.ativos || 0)} produtos e serviços ativos`,
-    },
-  ];
+      {
+        href: "/dashboard/relatorios",
+        icon: DollarSign,
+        label: "Total Facturado",
+        value: formatKz(metricas.totalFaturado),
+        helper: `${metricas.crescimento >= 0 ? "+" : ""}${metricas.crescimento.toFixed(1)}% vs mês anterior`,
+      },
+      {
+        href: "/dashboard/Clientes/Novo_cliente",
+        icon: Users,
+        label: "Clientes Ativos",
+        value: formatNumber(metricas.totalClientes),
+        helper: `+${data.clientes?.novos_mes || 0} no mês`,
+      },
+      {
+        href: "/dashboard/relatorios",
+        icon: Clock,
+        label: "Pendente",
+        value: formatKz(metricas.totalPendente),
+        helper: `${formatKz(data.pagamentos?.total_atrasado || 0)} em atraso`,
+      },
+      {
+        href: "/dashboard/Produtos_servicos/Stock",
+        icon: Package,
+        label: "Stock Baixo",
+        value: formatNumber(metricas.produtosEmStockBaixo),
+        helper: `${formatNumber(data.produtos?.ativos || 0)} produtos e serviços ativos`,
+      },
+    ];
 
   return (
     <MainEmpresa>
@@ -541,9 +541,13 @@ export default function DashboardPage() {
                     <YAxis yAxisId="right" orientation="right" stroke={colors.secondary} tick={tickStyle} width={36} />
                     <Tooltip
                       contentStyle={tooltipStyle}
-                      formatter={(value: any, name: any) => {
-                        if (name === "quantidade") return formatterDocsQuantidade(Number(value));
-                        return formatterValor(Number(value));
+                      formatter={(value: any, _name: any, props: any) => {
+                        const key = props?.dataKey;
+
+                        if (key === "quantidade") return formatterDocsQuantidade(Number(value));
+                        if (key === "valor") return formatterValor(Number(value));
+
+                        return [value, ""];
                       }}
                     />
                     <Bar yAxisId="left" dataKey="quantidade" fill={colors.primary} name="Qtd" radius={[3, 3, 0, 0]} barSize={12} />
@@ -573,22 +577,22 @@ export default function DashboardPage() {
               {documentosPorEstado.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-<Pie
-  data={documentosPorEstado}
-  cx="50%"
-  cy="50%"
-  innerRadius="38%"
-  outerRadius="68%"
-  paddingAngle={4}
-  dataKey="quantidade"
-  nameKey="estado"
-  label={({ percent }) => `${((percent || 0) * 100).toFixed(0)}%`}
-  labelLine={false}
->
-  {documentosPorEstado.map((_, i) => (
-    <Cell key={i} fill={pieColors[i % pieColors.length]} />
-  ))}
-</Pie>
+                    <Pie
+                      data={documentosPorEstado}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius="38%"
+                      outerRadius="68%"
+                      paddingAngle={4}
+                      dataKey="quantidade"
+                      nameKey="estado"
+                      label={({ percent }) => `${((percent || 0) * 100).toFixed(0)}%`}
+                      labelLine={false}
+                    >
+                      {documentosPorEstado.map((_, i) => (
+                        <Cell key={i} fill={pieColors[i % pieColors.length]} />
+                      ))}
+                    </Pie>
                     <Tooltip contentStyle={tooltipStyle} formatter={(value: any) => formatterDocsQuantidade(Number(value))} />
                     <Legend />
                   </PieChart>

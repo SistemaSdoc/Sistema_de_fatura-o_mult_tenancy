@@ -1,6 +1,6 @@
 import api from "./axios";
 
-export type TipoFornecedor = "Nacional" | "Internacional";
+export type TipoFornecedor = "nacional" | "internacional";
 export type StatusFornecedor = "ativo" | "inativo";
 
 export interface Fornecedor {
@@ -206,7 +206,7 @@ export function getStatusColor(status: StatusFornecedor): string {
 }
 
 export function getTipoColor(tipo: TipoFornecedor): string {
-    return tipo === "Nacional"
+    return tipo === "nacional"
         ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
         : "bg-[#123859] text-[#F2F2F2] dark:bg-[#123859] dark:text-[#F2F2F2]";
 }
@@ -216,7 +216,7 @@ export function getStatusLabel(status: StatusFornecedor): string {
 }
 
 export function getTipoLabel(tipo: TipoFornecedor): string {
-    return tipo === "Nacional" ? "Nacional" : "Internacional";
+    return tipo === "nacional" ? "nacional" : "internacional";
 }
 export function identificarDocumento(valor: string): TipoDocumento {
     const clean = valor.replace(/[^a-zA-Z0-9]/g, '');

@@ -33,6 +33,12 @@ use Illuminate\Support\Str;
  *  - Proforma (FP) NÃO é uma venda, NÃO é uma dívida, NÃO é "pendente de pagamento".
  *    Estado 'emitido' em FP significa "orçamento a aguardar conversão/aceitação".
  *  - Pendência financeira aplica-se APENAS a FT (Fatura) e FA (Adiantamento).
+ * 
+ * REGRAS PARA NOTAS DE CRÉDITO E DÉBITO (Angola):
+ *  - Nota de Crédito (NC): Reduz o valor de uma fatura. Só pode ser emitida a partir de
+ *    FT ou FR que NÃO esteja cancelada. Não pode ultrapassar o saldo da fatura.
+ *  - Nota de Débito (ND): Aumenta o valor de uma fatura. Só pode ser emitida a partir de
+ *    FT que NÃO esteja cancelada. Serve para cobrar serviços adicionais, juros ou multas.
  */
 class DocumentoFiscalService
 {
@@ -385,77 +391,357 @@ class DocumentoFiscalService
     }
 
     /* =====================================================================
-     | NOTA DE CRÉDITO
+     | NOTA DE CRÉDITO (CORRIGIDO)
      | ================================================================== */
 
     public function criarNotaCredito(DocumentoFiscal $documentoOrigem, array $dados): DocumentoFiscal
     {
+        // 1. VALIDAR TIPO DE DOCUMENTO ORIGEM
         if (! in_array($documentoOrigem->tipo_documento, ['FT', 'FR'])) {
             throw new \InvalidArgumentException(
-                "NC só pode ser gerada a partir de FT ou FR. Tipo: {$documentoOrigem->tipo_documento}"
+                "Nota de Crédito só pode ser gerada a partir de Fatura (FT) ou Fatura-Recibo (FR). " .
+                "Tipo atual: {$documentoOrigem->tipo_documento}"
             );
         }
 
+        // 2. VALIDAR SE A FATURA NÃO ESTÁ CANCELADA
         if ($documentoOrigem->estado === DocumentoFiscal::ESTADO_CANCELADO) {
             throw new \InvalidArgumentException(
-                "Não é possível gerar NC de documento cancelado: {$documentoOrigem->numero_documento}"
+                "Não é possível gerar Nota de Crédito de documento cancelado: {$documentoOrigem->numero_documento}"
             );
         }
 
+        // 3. VALIDAR SE A FATURA NÃO ESTÁ TOTALMENTE PAGA
+        //    (Impedir NC de fatura já paga - a menos que seja para devolução)
+        if ($documentoOrigem->estado === DocumentoFiscal::ESTADO_PAGA) {
+            $valorPendente = $this->calcularValorPendente($documentoOrigem);
+            if ($valorPendente <= 0.01) {
+                throw new \InvalidArgumentException(
+                    "Não é possível emitir Nota de Crédito para uma fatura já totalmente paga. " .
+                    "Considere emitir uma Nota de Débito para ajustes ou contactar o suporte. " .
+                    "Fatura: {$documentoOrigem->numero_documento}"
+                );
+            }
+        }
+
+        // 4. VALIDAR SE A FATURA NÃO ESTÁ EXPIRADA
+        if ($documentoOrigem->estado === DocumentoFiscal::ESTADO_EXPIRADO) {
+            throw new \InvalidArgumentException(
+                "Não é possível emitir Nota de Crédito para uma fatura expirada: {$documentoOrigem->numero_documento}"
+            );
+        }
+
+        // 5. CALCULAR TOTAL JÁ CREDITADO
         $totalJaCreditado = $documentoOrigem->notasCredito()
             ->where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO)
             ->sum('total_liquido');
 
-        $empresa  = Empresa::firstOrFail();
-        $totais   = $this->processarItens($dados['itens'], $empresa->sujeito_iva, $empresa->regime_fiscal);
+        // 6. PROCESSAR ITENS DA NC
+        $empresa = Empresa::firstOrFail();
+        $totais  = $this->processarItens($dados['itens'], $empresa->sujeito_iva, $empresa->regime_fiscal);
         $valorNova = $totais['liquido'];
+
+        // 7. VALIDAR VALOR MÁXIMO DA NC
+        $valorMaximo = (float) $documentoOrigem->total_liquido - $totalJaCreditado;
+
+        if ($valorMaximo <= 0.01) {
+            throw new \InvalidArgumentException(
+                "Esta fatura já possui créditos emitidos que cobrem todo o seu valor. " .
+                "Total da fatura: {$documentoOrigem->total_liquido} Kz, " .
+                "Créditos já emitidos: {$totalJaCreditado} Kz, " .
+                "Saldo disponível: 0.00 Kz"
+            );
+        }
 
         if (($totalJaCreditado + $valorNova) > ((float) $documentoOrigem->total_liquido + 0.01)) {
             throw new \InvalidArgumentException(
                 "Total creditado ({$totalJaCreditado}) + esta NC ({$valorNova}) " .
-                "ultrapassa o valor do documento ({$documentoOrigem->total_liquido})."
+                "ultrapassa o valor da fatura ({$documentoOrigem->total_liquido}). " .
+                "Valor máximo permitido: {$valorMaximo} Kz"
             );
         }
 
+        // 8. VALIDAR MOTIVO (obrigatório para NC)
+        if (empty($dados['motivo'])) {
+            throw new \InvalidArgumentException(
+                "O motivo da Nota de Crédito é obrigatório. " .
+                "Informe o motivo da correção (ex: devolução de mercadoria, erro de valor, etc.)"
+            );
+        }
+
+        if (strlen($dados['motivo']) < 10) {
+            throw new \InvalidArgumentException(
+                "O motivo da Nota de Crédito deve ter pelo menos 10 caracteres. " .
+                "Forneça uma descrição detalhada da correção."
+            );
+        }
+
+        // 9. VALIDAR ITENS DA NC VS FATURA ORIGINAL
+        $this->validarItensNotaCredito($documentoOrigem, $dados['itens']);
+
+        // 10. PREPARAR DADOS PARA EMISSÃO
         $dados['tipo_documento'] = 'NC';
         $dados['fatura_id']      = $documentoOrigem->id;
-        $dados['motivo']         = $dados['motivo'] ?? "Correção de {$documentoOrigem->numero_documento}";
+        $dados['motivo']         = $dados['motivo'];
 
         $this->herdarCliente($dados, $documentoOrigem);
 
-        return $this->emitirDocumento($dados);
+        // 11. EMITIR A NOTA DE CRÉDITO
+        $nc = $this->emitirDocumento($dados);
+
+        // 12. ATUALIZAR ESTADO DA FATURA ORIGINAL
+        $this->atualizarEstadoFaturaAposCredito($documentoOrigem);
+
+        Log::info('Nota de Crédito emitida com sucesso', [
+            'nc_id'              => $nc->id,
+            'nc_numero'          => $nc->numero_documento,
+            'fatura_id'          => $documentoOrigem->id,
+            'fatura_numero'      => $documentoOrigem->numero_documento,
+            'valor_credito'      => $valorNova,
+            'total_creditado'    => $totalJaCreditado + $valorNova,
+            'saldo_restante'     => (float) $documentoOrigem->total_liquido - ($totalJaCreditado + $valorNova),
+        ]);
+
+        return $nc->load('documentoOrigem', 'itens', 'cliente');
+    }
+
+    /**
+     * Valida se os itens da Nota de Crédito são compatíveis com a fatura original
+     */
+    private function validarItensNotaCredito(DocumentoFiscal $fatura, array $itensNC): void
+    {
+        $itensFatura = $fatura->itens()->get();
+
+        foreach ($itensNC as $itemNC) {
+            // Se tem produto_id, verifica se existe na fatura
+            if (! empty($itemNC['produto_id'])) {
+                $existeNaFatura = $itensFatura->contains('produto_id', $itemNC['produto_id']);
+                
+                if (! $existeNaFatura) {
+                    Log::warning('Item da Nota de Crédito não encontrado na fatura original', [
+                        'produto_id' => $itemNC['produto_id'],
+                        'fatura_id'  => $fatura->id,
+                        'descricao'  => $itemNC['descricao'] ?? 'sem descrição'
+                    ]);
+                    // Não lança exceção, apenas loga - pode ser um serviço adicional
+                }
+            }
+
+            // Verifica se a quantidade não excede o que foi faturado
+            if (! empty($itemNC['produto_id'])) {
+                $itemFatura = $itensFatura->firstWhere('produto_id', $itemNC['produto_id']);
+                if ($itemFatura) {
+                    $quantidadeFaturada = (float) $itemFatura->quantidade;
+                    $quantidadeNC = (float) ($itemNC['quantidade'] ?? 0);
+                    
+                    // Verifica créditos anteriores para este produto
+                    $totalCreditadoProduto = $fatura->notasCredito()
+                        ->where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO)
+                        ->whereHas('itens', function ($q) use ($itemNC) {
+                            $q->where('produto_id', $itemNC['produto_id']);
+                        })
+                        ->sum('quantidade');
+                    
+                    $quantidadeTotalCreditada = $totalCreditadoProduto + $quantidadeNC;
+                    
+                    if ($quantidadeTotalCreditada > $quantidadeFaturada + 0.01) {
+                        throw new \InvalidArgumentException(
+                            "Quantidade creditada para o produto '{$itemNC['descricao']}' " .
+                            "({$quantidadeTotalCreditada}) excede a quantidade faturada ({$quantidadeFaturada})."
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Atualiza o estado da fatura após emissão de Nota de Crédito
+     */
+    private function atualizarEstadoFaturaAposCredito(DocumentoFiscal $fatura): void
+    {
+        $totalJaCreditado = $fatura->notasCredito()
+            ->where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO)
+            ->sum('total_liquido');
+        
+        $saldo = (float) $fatura->total_liquido - $totalJaCreditado;
+        
+        if ($saldo <= 0.01) {
+            $fatura->update(['estado' => DocumentoFiscal::ESTADO_PAGA]);
+            Log::info('Fatura marcada como paga após crédito total', [
+                'fatura_id' => $fatura->id,
+                'saldo' => $saldo
+            ]);
+        } else {
+            // Verifica se já estava paga e agora tem crédito
+            $totalPago = $this->calcularTotalPago($fatura);
+            if ($totalPago > 0 && $saldo < (float) $fatura->total_liquido) {
+                $fatura->update(['estado' => DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA]);
+            }
+        }
     }
 
     /* =====================================================================
-     | NOTA DE DÉBITO
+     | NOTA DE DÉBITO (CORRIGIDO)
      | ================================================================== */
 
     public function criarNotaDebito(DocumentoFiscal $documentoOrigem, array $dados): DocumentoFiscal
     {
-        if (! in_array($documentoOrigem->tipo_documento, ['FT', 'FR'])) {
+        // 1. VALIDAR TIPO DE DOCUMENTO ORIGEM (apenas FT)
+        if (! in_array($documentoOrigem->tipo_documento, ['FT'])) {
             throw new \InvalidArgumentException(
-                "ND só pode ser gerada a partir de FT ou FR. Tipo: {$documentoOrigem->tipo_documento}"
+                "Nota de Débito só pode ser gerada a partir de Fatura (FT). " .
+                "Tipo atual: {$documentoOrigem->tipo_documento} " .
+                "Motivo: Nota de Débito serve para acrescentar serviços adicionais, " .
+                "juros ou multas a uma fatura, NÃO a uma Fatura-Recibo ou Proforma."
             );
         }
 
+        // 2. VALIDAR SE A FATURA NÃO ESTÁ CANCELADA
         if ($documentoOrigem->estado === DocumentoFiscal::ESTADO_CANCELADO) {
             throw new \InvalidArgumentException(
-                "Não é possível gerar ND de documento cancelado: {$documentoOrigem->numero_documento}"
+                "Não é possível gerar Nota de Débito de documento cancelado: {$documentoOrigem->numero_documento}"
             );
         }
 
-        if (empty($dados['itens'])) {
-            throw new \InvalidArgumentException('A Nota de Débito deve conter pelo menos um item.');
+        // 3. VALIDAR SE A FATURA NÃO ESTÁ EXPIRADA
+        if ($documentoOrigem->estado === DocumentoFiscal::ESTADO_EXPIRADO) {
+            throw new \InvalidArgumentException(
+                "Não é possível emitir Nota de Débito para uma fatura expirada: {$documentoOrigem->numero_documento}"
+            );
         }
 
+        // 4. VALIDAR ITENS (obrigatório)
+        if (empty($dados['itens'])) {
+            throw new \InvalidArgumentException(
+                'A Nota de Débito deve conter pelo menos um item. ' .
+                'Os itens devem descrever serviços adicionais, juros ou multas.'
+            );
+        }
+
+        // 5. VALIDAR SE O DÉBITO É PARA SERVIÇOS (não para produtos que já foram faturados)
+        foreach ($dados['itens'] as $item) {
+            if (! empty($item['produto_id'])) {
+                $produto = Produto::find($item['produto_id']);
+                if ($produto && $produto->tipo === 'produto') {
+                    throw new \InvalidArgumentException(
+                        "Nota de Débito não pode ser usada para produtos físicos. " .
+                        "Produto '{$produto->nome}' é um produto. " .
+                        "Use Nota de Débito apenas para serviços adicionais, juros ou multas."
+                    );
+                }
+            }
+            
+            // Verifica se a descrição é clara sobre o motivo do débito
+            if (empty($item['descricao']) || strlen($item['descricao']) < 5) {
+                throw new \InvalidArgumentException(
+                    "Cada item da Nota de Débito deve ter uma descrição detalhada " .
+                    "do serviço adicional ou motivo do débito."
+                );
+            }
+        }
+
+        // 6. VALIDAR PRAZO PARA DÉBITO (até 30 dias após emissão da fatura)
+        $dataEmissaoFatura = Carbon::parse($documentoOrigem->data_emissao, 'Africa/Luanda');
+        $prazoMaximo = $dataEmissaoFatura->copy()->addDays(30);
+        $hoje = Carbon::now('Africa/Luanda');
+
+        if ($hoje->gt($prazoMaximo)) {
+            throw new \InvalidArgumentException(
+                "O prazo para emitir Nota de Débito é de até 30 dias após a emissão da fatura. " .
+                "Fatura emitida em: {$dataEmissaoFatura->format('d/m/Y')}, " .
+                "Prazo máximo: {$prazoMaximo->format('d/m/Y')}."
+            );
+        }
+
+        // 7. VERIFICAR SE A FATURA JÁ FOI PAGA E O DÉBITO É PARA JUROS/MULTAS
+        $valorPago = $this->calcularTotalPago($documentoOrigem);
+        $isPaga = $documentoOrigem->estado === DocumentoFiscal::ESTADO_PAGA;
+        
+        if ($isPaga) {
+            // Se a fatura está paga, o débito deve ser claramente para juros ou multa
+            $temJuros = false;
+            $temMulta = false;
+            
+            foreach ($dados['itens'] as $item) {
+                $descricao = strtolower($item['descricao']);
+                if (strpos($descricao, 'juro') !== false || strpos($descricao, 'juros') !== false) {
+                    $temJuros = true;
+                }
+                if (strpos($descricao, 'multa') !== false || strpos($descricao, 'penalidade') !== false) {
+                    $temMulta = true;
+                }
+            }
+            
+            if (!$temJuros && !$temMulta) {
+                throw new \InvalidArgumentException(
+                    "A fatura já está paga. Nota de Débito para fatura paga deve ser " .
+                    "exclusivamente para cobrança de juros de mora ou multas contratuais. " .
+                    "Inclua 'juros' ou 'multa' na descrição dos itens."
+                );
+            }
+            
+            Log::info('Nota de Débito para fatura paga - cobrança de juros/multas', [
+                'fatura_id' => $documentoOrigem->id,
+                'valor_pago' => $valorPago
+            ]);
+        }
+
+        // 8. PREPARAR DADOS PARA EMISSÃO
         $dados['tipo_documento'] = 'ND';
         $dados['fatura_id']      = $documentoOrigem->id;
-        $dados['motivo']         = $dados['motivo']
+        $dados['motivo']         = $dados['motivo'] 
             ?? "Débito adicional referente à {$documentoOrigem->numero_documento}";
 
         $this->herdarCliente($dados, $documentoOrigem);
 
-        return $this->emitirDocumento($dados);
+        // 9. EMITIR A NOTA DE DÉBITO
+        $nd = $this->emitirDocumento($dados);
+
+        // 10. ATUALIZAR ESTADO DA FATURA ORIGINAL
+        $this->atualizarEstadoFaturaAposDebito($documentoOrigem, $nd);
+
+        // 11. CALCULAR NOVO VALOR TOTAL
+        $valorND = (float) $nd->total_liquido;
+        $novoValorFatura = (float) $documentoOrigem->total_liquido + $valorND;
+
+        Log::info('Nota de Débito emitida com sucesso', [
+            'nd_id'              => $nd->id,
+            'nd_numero'          => $nd->numero_documento,
+            'fatura_id'          => $documentoOrigem->id,
+            'fatura_numero'      => $documentoOrigem->numero_documento,
+            'valor_debito'       => $valorND,
+            'valor_original'     => $documentoOrigem->total_liquido,
+            'novo_valor_total'   => $novoValorFatura,
+            'valor_pago'         => $this->calcularTotalPago($documentoOrigem),
+            'saldo_pendente'     => $this->calcularValorPendente($documentoOrigem),
+        ]);
+
+        return $nd->load('documentoOrigem', 'itens', 'cliente');
+    }
+
+    /**
+     * Atualiza o estado da fatura após emissão de Nota de Débito
+     */
+    private function atualizarEstadoFaturaAposDebito(DocumentoFiscal $fatura, DocumentoFiscal $nd): void
+    {
+        $valorDebito = (float) $nd->total_liquido;
+        $novoValorTotal = (float) $fatura->total_liquido + $valorDebito;
+        
+        // Atualiza o valor total da fatura para refletir o débito
+        $fatura->update([
+            'total_liquido' => $novoValorTotal
+        ]);
+        
+        // Se a fatura estava paga, passa a ter saldo pendente
+        if ($fatura->estado === DocumentoFiscal::ESTADO_PAGA) {
+            $fatura->update(['estado' => DocumentoFiscal::ESTADO_PARCIALMENTE_PAGA]);
+            Log::info('Fatura voltou a ficar parcialmente paga após débito', [
+                'fatura_id' => $fatura->id,
+                'valor_debito' => $valorDebito,
+                'novo_valor' => $novoValorTotal
+            ]);
+        }
     }
 
     /* =====================================================================
@@ -730,6 +1016,16 @@ class DocumentoFiscalService
             ->sum('valor_utilizado');
 
         return max(0.0, (float) $documento->total_liquido - $totalPago - $totalAdiantamentos);
+    }
+
+    /**
+     * Calcula o total de créditos já emitidos para uma fatura
+     */
+    public function calcularTotalCreditosEmitidos(DocumentoFiscal $fatura): float
+    {
+        return (float) $fatura->notasCredito()
+            ->where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO)
+            ->sum('total_liquido');
     }
 
     /* =====================================================================

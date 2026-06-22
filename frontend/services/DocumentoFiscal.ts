@@ -12,6 +12,8 @@ export type MetodoPagamento = 'transferencia' | 'multibanco' | 'dinheiro' | 'che
 export const TIPOS_VENDA: TipoDocumento[] = ['FT', 'FR', 'RC'];
 export const TIPOS_NAO_VENDA: TipoDocumento[] = ['FP', 'FA', 'NC', 'ND', 'FRt'];
 export const TIPOS_DOCUMENTO_VENDA: TipoDocumento[] = ['FT', 'FR'];
+export const TIPOS_ORIGEM_NC: TipoDocumento[] = ['FT', 'FR'];  // Nota de Crédito
+export const TIPOS_ORIGEM_ND: TipoDocumento[] = ['FT'];       // Nota de Débito
 
 export interface ItemDocumento {
     id?: string;
@@ -95,6 +97,12 @@ export interface DocumentoFiscal {
     quantidade_servicos?: number;
     total_retencao_servicos?: number;
     percentual_retencao?: number;
+    
+    // Campos para validação de crédito/débito
+    total_creditado?: number;      // Total de créditos já emitidos
+    saldo_disponivel?: number;     // Saldo disponível para crédito
+    total_debitos?: number;        // Total de débitos já emitidos
+    valor_pago?: number;           // Valor já pago
 }
 
 export interface Cliente {
@@ -170,6 +178,54 @@ export interface VincularAdiantamentoDTO {
 
 export interface CancelarDocumentoDTO {
     motivo: string;
+}
+
+/**
+ * DTO para criar Nota de Crédito
+ * Requer motivo obrigatório com mínimo de 10 caracteres
+ */
+export interface CriarNotaCreditoDTO extends Omit<EmitirDocumentoDTO, 'tipo_documento' | 'fatura_id'> {
+    motivo: string;  // Obrigatório
+    itens: ItemDocumento[];  // Obrigatório
+}
+
+/**
+ * DTO para criar Nota de Débito
+ * Itens devem ser serviços (não produtos físicos)
+ */
+export interface CriarNotaDebitoDTO extends Omit<EmitirDocumentoDTO, 'tipo_documento' | 'fatura_id'> {
+    itens: ItemDocumento[];  // Obrigatório
+    motivo?: string;
+}
+
+/**
+ * Resposta detalhada após emissão de Nota de Crédito
+ */
+export interface RespostaNotaCredito {
+    nota_credito: DocumentoFiscal;
+    fatura_original: {
+        id: string;
+        numero: string;
+        valor_total: number;
+        creditos_emitidos: number;
+        saldo_restante: number;
+    };
+}
+
+/**
+ * Resposta detalhada após emissão de Nota de Débito
+ */
+export interface RespostaNotaDebito {
+    nota_debito: DocumentoFiscal;
+    fatura_original: {
+        id: string;
+        numero: string;
+        valor_original: number;
+        valor_debito: number;
+        novo_valor_total: number;
+        valor_pago_anterior: number;
+        saldo_pendente_atual: number;
+    };
 }
 
 // ==================== API RESPONSES ====================
@@ -267,7 +323,6 @@ class DocumentoFiscalService {
 
         const documentos = response.data.data;
 
-        // ✅ REMOVIDO O SORT - APENAS ENRIQUECE OS DADOS
         documentos.data = documentos.data
             .map(this._enriquecerDocumento.bind(this));
 
@@ -333,27 +388,306 @@ class DocumentoFiscalService {
         return this.emitir({ ...dados, tipo_documento: 'FRt' });
     }
 
-    // ── Notas de Crédito / Débito ────────────────────────────
+    // ── Notas de Crédito / Débito (CORRIGIDO) ──────────────
+
+    /**
+     * Cria uma Nota de Crédito (NC) para uma fatura
+     * 
+     * REGRAS (Angola):
+     * - Apenas FT ou FR podem originar NC
+     * - Motivo é OBRIGATÓRIO e deve ter pelo menos 10 caracteres
+     * - Valor da NC não pode ultrapassar o saldo da fatura
+     * - Não pode ser emitida para fatura cancelada ou expirada
+     * 
+     * @param documentoOrigemId - ID da fatura original (FT ou FR)
+     * @param dados - Dados da NC (motivo, itens, etc.)
+     * @returns Resposta com detalhes da NC e saldo da fatura
+     */
     async criarNotaCredito(
         documentoOrigemId: string,
-        dados: Omit<EmitirDocumentoDTO, 'tipo_documento' | 'fatura_id'>
-    ): Promise<DocumentoFiscal> {
-        const response = await api.post<ApiResponse<DocumentoFiscal>>(
-            `${this.baseUrl}/${documentoOrigemId}/nota-credito`, dados
+        dados: CriarNotaCreditoDTO
+    ): Promise<RespostaNotaCredito> {
+        // === VALIDAÇÕES FRONTEND ===
+        
+        // 1. Validar motivo
+        if (!dados.motivo || dados.motivo.trim().length === 0) {
+            throw new Error(
+                'O motivo da Nota de Crédito é obrigatório. ' +
+                'Informe o motivo da correção (ex: devolução de mercadoria, erro de valor, etc.)'
+            );
+        }
+        
+        if (dados.motivo.trim().length < 10) {
+            throw new Error(
+                'O motivo da Nota de Crédito deve ter pelo menos 10 caracteres. ' +
+                'Forneça uma descrição detalhada da correção.'
+            );
+        }
+
+        // 2. Validar itens
+        if (!dados.itens || dados.itens.length === 0) {
+            throw new Error('A Nota de Crédito deve conter pelo menos um item.');
+        }
+
+        // 3. Validar valores dos itens (não podem ser negativos)
+        for (const item of dados.itens) {
+            if (item.quantidade <= 0) {
+                throw new Error(`A quantidade do item "${item.descricao}" deve ser maior que zero.`);
+            }
+            if (item.preco_unitario < 0) {
+                throw new Error(`O preço unitário do item "${item.descricao}" não pode ser negativo.`);
+            }
+        }
+
+        // 4. Buscar a fatura original para validações adicionais
+        const fatura = await this.buscarPorId(documentoOrigemId);
+        
+        // 5. Validar tipo de documento origem
+        if (!TIPOS_ORIGEM_NC.includes(fatura.tipo_documento)) {
+            throw new Error(
+                `Nota de Crédito só pode ser emitida a partir de Fatura (FT) ou Fatura-Recibo (FR). ` +
+                `Tipo atual: ${fatura.tipo_documento}`
+            );
+        }
+
+        // 6. Validar se a fatura não está cancelada ou expirada
+        if (fatura.estado === 'cancelado') {
+            throw new Error(
+                `Não é possível emitir Nota de Crédito para a fatura cancelada: ${fatura.numero_documento}`
+            );
+        }
+        
+        if (fatura.estado === 'expirado') {
+            throw new Error(
+                `Não é possível emitir Nota de Crédito para a fatura expirada: ${fatura.numero_documento}`
+            );
+        }
+
+        // 7. Validar se a fatura não está totalmente paga (sem saldo)
+        const valorPendente = this.calcularValorPendente(fatura);
+        if (valorPendente <= 0.01 && fatura.estado === 'paga') {
+            throw new Error(
+                `Não é possível emitir Nota de Crédito para uma fatura já totalmente paga. ` +
+                `Fatura: ${fatura.numero_documento}. ` +
+                `Considere emitir uma Nota de Débito para ajustes.`
+            );
+        }
+
+        // 8. Calcular valor total da NC
+        const valorNC = dados.itens.reduce((sum, item) => {
+            const subtotal = item.quantidade * item.preco_unitario;
+            const iva = subtotal * ((item.taxa_iva || 0) / 100);
+            const desconto = item.desconto || 0;
+            return sum + subtotal + iva - desconto;
+        }, 0);
+
+        // 9. Verificar se o valor da NC não ultrapassa o saldo disponível
+        const saldoDisponivel = this.calcularSaldoDisponivel(fatura);
+        if (valorNC > saldoDisponivel) {
+            throw new Error(
+                `O valor total da Nota de Crédito (${valorNC.toFixed(2)} Kz) ` +
+                `excede o saldo disponível da fatura (${saldoDisponivel.toFixed(2)} Kz).\n` +
+                `Total da fatura: ${fatura.total_liquido} Kz\n` +
+                `Créditos já emitidos: ${(fatura.total_creditado || 0).toFixed(2)} Kz\n` +
+                `Saldo disponível: ${saldoDisponivel.toFixed(2)} Kz`
+            );
+        }
+
+        // 10. Enviar requisição para o backend
+        const response = await api.post<ApiResponse<RespostaNotaCredito>>(
+            `${this.baseUrl}/${documentoOrigemId}/nota-credito`,
+            {
+                motivo: dados.motivo.trim(),
+                itens: dados.itens,
+                cliente_id: dados.cliente_id,
+                cliente_nome: dados.cliente_nome,
+                cliente_nif: dados.cliente_nif,
+                referencia_externa: dados.referencia_externa,
+                observacoes: dados.observacoes,
+            }
         );
+        
         if (!response.data.success) throw new Error(response.data.message);
-        return this._enriquecerDocumento(response.data.data);
+        
+        // Enriquecer a nota de crédito na resposta
+        if (response.data.data.nota_credito) {
+            response.data.data.nota_credito = this._enriquecerDocumento(
+                response.data.data.nota_credito
+            );
+        }
+        
+        return response.data.data;
     }
 
+    /**
+     * Cria uma Nota de Débito (ND) para uma fatura
+     * 
+     * REGRAS (Angola):
+     * - Apenas FT pode originar ND (NÃO FR ou FP)
+     * - Itens devem ser SERVIÇOS (não produtos físicos)
+     * - Prazo máximo de 30 dias após emissão da fatura
+     * - Se fatura já paga, deve ser para juros ou multas
+     * - Descrição detalhada obrigatória para cada item
+     * 
+     * @param documentoOrigemId - ID da fatura original (apenas FT)
+     * @param dados - Dados da ND (itens, motivo, etc.)
+     * @returns Resposta com detalhes da ND e novo valor da fatura
+     */
     async criarNotaDebito(
         documentoOrigemId: string,
-        dados: Omit<EmitirDocumentoDTO, 'tipo_documento' | 'fatura_id'>
-    ): Promise<DocumentoFiscal> {
-        const response = await api.post<ApiResponse<DocumentoFiscal>>(
-            `${this.baseUrl}/${documentoOrigemId}/nota-debito`, dados
+        dados: CriarNotaDebitoDTO
+    ): Promise<RespostaNotaDebito> {
+        // === VALIDAÇÕES FRONTEND ===
+
+        // 1. Validar itens
+        if (!dados.itens || dados.itens.length === 0) {
+            throw new Error(
+                'A Nota de Débito deve conter pelo menos um item. ' +
+                'Os itens devem descrever serviços adicionais, juros ou multas.'
+            );
+        }
+
+        // 2. Validar cada item
+        let temServico = false;
+        let temJurosOuMulta = false;
+
+        for (const item of dados.itens) {
+            // 2.1 Descrição detalhada
+            if (!item.descricao || item.descricao.trim().length < 5) {
+                throw new Error(
+                    `Cada item da Nota de Débito deve ter uma descrição detalhada ` +
+                    `do serviço adicional ou motivo do débito. Item: "${item.descricao || 'sem descrição'}"`
+                );
+            }
+
+            // 2.2 Quantidade e preço válidos
+            if (item.quantidade <= 0) {
+                throw new Error(`A quantidade do item "${item.descricao}" deve ser maior que zero.`);
+            }
+            if (item.preco_unitario <= 0) {
+                throw new Error(`O preço unitário do item "${item.descricao}" deve ser maior que zero.`);
+            }
+
+            // 2.3 Verificar se é serviço (não produto físico)
+            const descricaoLower = item.descricao.toLowerCase();
+            const isServico = item.eh_servico || 
+                ['serviço', 'servico', 'consulta', 'consultoria', 'manutenção', 
+                 'manutencao', 'instalação', 'instalacao', 'juro', 'multa', 
+                 'penalidade', 'taxa', 'comissão', 'comissao'].some(
+                    term => descricaoLower.includes(term)
+                );
+
+            if (!isServico && item.produto_id) {
+                throw new Error(
+                    `Nota de Débito não pode ser usada para produtos físicos. ` +
+                    `Item "${item.descricao}" parece ser um produto. ` +
+                    `Use Nota de Débito apenas para serviços adicionais, juros ou multas.`
+                );
+            }
+
+            temServico = true;
+
+            // 2.4 Verificar se é juros ou multa (para fatura paga)
+            if (descricaoLower.includes('juro') || descricaoLower.includes('juros') ||
+                descricaoLower.includes('multa') || descricaoLower.includes('penalidade')) {
+                temJurosOuMulta = true;
+            }
+        }
+
+        if (!temServico) {
+            throw new Error(
+                'A Nota de Débito deve conter pelo menos um serviço. ' +
+                'Os itens devem descrever serviços adicionais, juros ou multas.'
+            );
+        }
+
+        // 3. Buscar a fatura original
+        const fatura = await this.buscarPorId(documentoOrigemId);
+
+        // 4. Validar tipo de documento origem (apenas FT)
+        if (!TIPOS_ORIGEM_ND.includes(fatura.tipo_documento)) {
+            throw new Error(
+                `Nota de Débito só pode ser emitida a partir de Fatura (FT). ` +
+                `Tipo atual: ${fatura.tipo_documento}. ` +
+                `Motivo: Nota de Débito serve para acrescentar serviços adicionais, ` +
+                `juros ou multas a uma fatura, NÃO a uma Fatura-Recibo ou Proforma.`
+            );
+        }
+
+        // 5. Validar se a fatura não está cancelada ou expirada
+        if (fatura.estado === 'cancelado') {
+            throw new Error(
+                `Não é possível emitir Nota de Débito para a fatura cancelada: ${fatura.numero_documento}`
+            );
+        }
+        
+        if (fatura.estado === 'expirado') {
+            throw new Error(
+                `Não é possível emitir Nota de Débito para a fatura expirada: ${fatura.numero_documento}`
+            );
+        }
+
+        // 6. Validar prazo de 30 dias para débito
+        const dataEmissao = new Date(fatura.data_emissao);
+        const prazoMaximo = new Date(dataEmissao);
+        prazoMaximo.setDate(prazoMaximo.getDate() + 30);
+        const hoje = new Date();
+
+        if (hoje > prazoMaximo) {
+            throw new Error(
+                `O prazo para emitir Nota de Débito é de até 30 dias após a emissão da fatura.\n` +
+                `Fatura emitida em: ${dataEmissao.toLocaleDateString('pt-PT')}\n` +
+                `Prazo máximo: ${prazoMaximo.toLocaleDateString('pt-PT')}\n` +
+                `Hoje: ${hoje.toLocaleDateString('pt-PT')}`
+            );
+        }
+
+        // 7. Validar se a fatura já foi paga - então precisa ser juros/multa
+        const valorPago = this.calcularValorPago(fatura);
+        if (fatura.estado === 'paga' && !temJurosOuMulta) {
+            throw new Error(
+                `A fatura já está paga. Nota de Débito para fatura paga deve ser ` +
+                `exclusivamente para cobrança de juros de mora ou multas contratuais.\n` +
+                `Inclua "juros" ou "multa" na descrição dos itens.`
+            );
+        }
+
+        // 8. Calcular valor total do débito
+        const valorND = dados.itens.reduce((sum, item) => {
+            const subtotal = item.quantidade * item.preco_unitario;
+            const iva = subtotal * ((item.taxa_iva || 0) / 100);
+            const desconto = item.desconto || 0;
+            return sum + subtotal + iva - desconto;
+        }, 0);
+
+        if (valorND <= 0) {
+            throw new Error('O valor total da Nota de Débito deve ser maior que zero.');
+        }
+
+        // 9. Enviar requisição para o backend
+        const response = await api.post<ApiResponse<RespostaNotaDebito>>(
+            `${this.baseUrl}/${documentoOrigemId}/nota-debito`,
+            {
+                itens: dados.itens,
+                motivo: dados.motivo || `Débito adicional referente à ${fatura.numero_documento}`,
+                cliente_id: dados.cliente_id,
+                cliente_nome: dados.cliente_nome,
+                cliente_nif: dados.cliente_nif,
+                referencia_externa: dados.referencia_externa,
+                observacoes: dados.observacoes,
+            }
         );
+        
         if (!response.data.success) throw new Error(response.data.message);
-        return this._enriquecerDocumento(response.data.data);
+        
+        // Enriquecer a nota de débito na resposta
+        if (response.data.data.nota_debito) {
+            response.data.data.nota_debito = this._enriquecerDocumento(
+                response.data.data.nota_debito
+            );
+        }
+        
+        return response.data.data;
     }
 
     // ── Recibos ──────────────────────────────────────────────
@@ -505,7 +839,7 @@ class DocumentoFiscalService {
         setTimeout(() => URL.revokeObjectURL(url), 10_000);
     }
 
-    // ── Utilitários ──────────────────────────────────────────
+    // ── Utilitários (CORRIGIDO) ─────────────────────────────
 
     calcularValorPendente(documento: DocumentoFiscal): number {
         // Apenas FT e FA têm valor pendente real
@@ -533,6 +867,90 @@ class DocumentoFiscalService {
         return documento.recibos?.reduce(
             (sum, r) => r.estado !== 'cancelado' ? sum + Number(r.total_liquido) : sum, 0
         ) ?? 0;
+    }
+
+    /**
+     * Calcula o saldo disponível para crédito em uma fatura
+     * Útil para validar se uma NC pode ser emitida
+     */
+    calcularSaldoDisponivel(documento: DocumentoFiscal): number {
+        if (!['FT', 'FR'].includes(documento.tipo_documento)) return 0;
+        
+        const totalCreditado = documento.notasCredito?.reduce(
+            (sum, nc) => nc.estado !== 'cancelado' ? sum + Number(nc.total_liquido) : sum, 0
+        ) ?? 0;
+        
+        return Math.max(0, Number(documento.total_liquido) - totalCreditado);
+    }
+
+    /**
+     * Verifica se pode emitir Nota de Crédito para este documento
+     */
+    podeEmitirNotaCredito(documento: DocumentoFiscal): { pode: boolean; motivo?: string } {
+        // 1. Tipo de documento
+        if (!TIPOS_ORIGEM_NC.includes(documento.tipo_documento)) {
+            return { 
+                pode: false, 
+                motivo: `Apenas Fatura (FT) ou Fatura-Recibo (FR) podem originar Nota de Crédito. Tipo atual: ${documento.tipo_documento}` 
+            };
+        }
+
+        // 2. Estado
+        if (documento.estado === 'cancelado') {
+            return { pode: false, motivo: 'Não é possível emitir Nota de Crédito para uma fatura cancelada.' };
+        }
+        if (documento.estado === 'expirado') {
+            return { pode: false, motivo: 'Não é possível emitir Nota de Crédito para uma fatura expirada.' };
+        }
+
+        // 3. Saldo disponível
+        const saldo = this.calcularSaldoDisponivel(documento);
+        if (saldo <= 0.01) {
+            return { 
+                pode: false, 
+                motivo: 'Esta fatura não possui saldo disponível para crédito. Considere emitir uma Nota de Débito para ajustes.' 
+            };
+        }
+
+        return { pode: true };
+    }
+
+    /**
+     * Verifica se pode emitir Nota de Débito para este documento
+     */
+    podeEmitirNotaDebito(documento: DocumentoFiscal): { pode: boolean; motivo?: string } {
+        // 1. Tipo de documento (apenas FT)
+        if (!TIPOS_ORIGEM_ND.includes(documento.tipo_documento)) {
+            return { 
+                pode: false, 
+                motivo: `Apenas Fatura (FT) pode originar Nota de Débito. Tipo atual: ${documento.tipo_documento}` 
+            };
+        }
+
+        // 2. Estado
+        if (documento.estado === 'cancelado') {
+            return { pode: false, motivo: 'Não é possível emitir Nota de Débito para uma fatura cancelada.' };
+        }
+        if (documento.estado === 'expirado') {
+            return { pode: false, motivo: 'Não é possível emitir Nota de Débito para uma fatura expirada.' };
+        }
+
+        // 3. Prazo de 30 dias
+        const dataEmissao = new Date(documento.data_emissao);
+        const prazoMaximo = new Date(dataEmissao);
+        prazoMaximo.setDate(prazoMaximo.getDate() + 30);
+        const hoje = new Date();
+
+        if (hoje > prazoMaximo) {
+            return { 
+                pode: false, 
+                motivo: `O prazo para emitir Nota de Débito é de até 30 dias após a emissão da fatura.\n` +
+                        `Fatura emitida em: ${dataEmissao.toLocaleDateString('pt-PT')}\n` +
+                        `Prazo máximo: ${prazoMaximo.toLocaleDateString('pt-PT')}` 
+            };
+        }
+
+        return { pode: true };
     }
 
     calcularRetencaoTotal(documento: DocumentoFiscal): number {
@@ -639,6 +1057,14 @@ class DocumentoFiscalService {
 
     private _enriquecerDocumento(doc: DocumentoFiscal): DocumentoFiscal {
         const servicos = doc.itens?.filter(item => item.eh_servico) ?? [];
+        const totalCreditado = doc.notasCredito?.reduce(
+            (sum, nc) => nc.estado !== 'cancelado' ? sum + Number(nc.total_liquido) : sum, 0
+        ) ?? 0;
+        const totalDebitos = doc.notasDebito?.reduce(
+            (sum, nd) => nd.estado !== 'cancelado' ? sum + Number(nd.total_liquido) : sum, 0
+        ) ?? 0;
+        const valorPago = this.calcularValorPago(doc);
+
         return {
             ...doc,
             tem_servicos: servicos.length > 0,
@@ -647,6 +1073,11 @@ class DocumentoFiscalService {
             percentual_retencao: Number(doc.base_tributavel) > 0
                 ? Math.round((Number(doc.total_retencao) / Number(doc.base_tributavel)) * 100 * 100) / 100
                 : 0,
+            // Campos adicionais para validação
+            total_creditado: totalCreditado,
+            total_debitos: totalDebitos,
+            valor_pago: valorPago,
+            saldo_disponivel: this.calcularSaldoDisponivel(doc),
         };
     }
 }
@@ -706,12 +1137,13 @@ export const useCriarNotaCredito = () => {
     return useMutation({
         mutationFn: ({ documentoOrigemId, dados }: {
             documentoOrigemId: string;
-            dados: Omit<EmitirDocumentoDTO, 'tipo_documento' | 'fatura_id'>;
+            dados: CriarNotaCreditoDTO;
         }) => documentoFiscalService.criarNotaCredito(documentoOrigemId, dados),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.documentos] });
             queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.dashboard] });
             queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.resumo] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.alertas] });
         },
     });
 };
@@ -721,12 +1153,13 @@ export const useCriarNotaDebito = () => {
     return useMutation({
         mutationFn: ({ documentoOrigemId, dados }: {
             documentoOrigemId: string;
-            dados: Omit<EmitirDocumentoDTO, 'tipo_documento' | 'fatura_id'>;
+            dados: CriarNotaDebitoDTO;
         }) => documentoFiscalService.criarNotaDebito(documentoOrigemId, dados),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.documentos] });
             queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.dashboard] });
             queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.resumo] });
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.alertas] });
         },
     });
 };

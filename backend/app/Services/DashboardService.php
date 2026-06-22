@@ -132,7 +132,9 @@ class DashboardService
             'total'       => Produto::count(),
             'ativos'      => Produto::where('status', 'ativo')->count(),
             'inativos'    => Produto::where('status', 'inativo')->count(),
-            'stock_baixo' => Produto::whereColumn('estoque_atual', '<=', 'estoque_minimo')->count(),
+            'stock_baixo' => Produto::where('tipo', 'produto')
+                ->whereColumn('estoque_atual', '<=', 'estoque_minimo')
+                ->count(),
             'servicos'    => [
                 'total'        => Produto::where('tipo', 'servico')->count(),
                 'ativos'       => Produto::where('tipo', 'servico')->where('status', 'ativo')->count(),
@@ -149,7 +151,7 @@ class DashboardService
             ->latest()
             ->limit(5)
             ->get()
-            ->map(fn ($v) => [
+            ->map(fn($v) => [
                 'id'               => $v->id,
                 'cliente'          => $v->cliente?->nome ?? 'Consumidor Final',
                 'total'            => $v->total,
@@ -184,7 +186,7 @@ class DashboardService
             ->latest()
             ->limit(5)
             ->get()
-            ->map(fn ($d) => [
+            ->map(fn($d) => [
                 'id'               => $d->id,
                 'tipo'             => $d->tipo_documento,
                 'tipo_nome'        => $d->tipo_documento_nome,
@@ -219,7 +221,7 @@ class DashboardService
             )
             ->groupBy('tipo_documento')
             ->get()
-            ->mapWithKeys(fn ($item) => [
+            ->mapWithKeys(fn($item) => [
                 $item->tipo_documento => [
                     'nome'       => $this->nomeTipoDocumento($item->tipo_documento),
                     'quantidade' => $item->quantidade,
@@ -243,9 +245,9 @@ class DashboardService
             ->groupBy('tipo_documento', 'estado')
             ->get()
             ->groupBy('tipo_documento')
-            ->map(fn ($grupo) => [
+            ->map(fn($grupo) => [
                 'tipo'             => $grupo->first()->tipo_documento,
-                'por_estado'       => $grupo->mapWithKeys(fn ($item) => [
+                'por_estado'       => $grupo->mapWithKeys(fn($item) => [
                     $item->estado => [
                         'quantidade' => $item->quantidade,
                         'valor'      => $item->valor_total,
@@ -273,7 +275,7 @@ class DashboardService
             ->orderBy('mes')
             ->get()
             ->groupBy('mes')
-            ->map(fn ($grupo) => [
+            ->map(fn($grupo) => [
                 'mes'     => Carbon::createFromFormat('Y-m', $grupo->first()->mes)->format('m/Y'),
                 'FT'      => $grupo->firstWhere('tipo_documento', 'FT')?->total ?? 0,
                 'FR'      => $grupo->firstWhere('tipo_documento', 'FR')?->total ?? 0,
@@ -298,7 +300,7 @@ class DashboardService
             ->groupBy('dia')
             ->orderBy('dia')
             ->get()
-            ->map(fn ($item) => [
+            ->map(fn($item) => [
                 'dia'      => Carbon::parse($item->dia)->format('d/m'),
                 'total'    => $item->total,
                 'retencao' => $item->retencao,
@@ -313,7 +315,7 @@ class DashboardService
     private function getDadosPagamentos(Carbon $hoje): array
     {
         $cancelado = DocumentoFiscal::ESTADO_CANCELADO;
-        
+
         // Documentos que representam débitos reais (excluindo proformas)
         $documentosDebito = [
             DocumentoFiscal::TIPO_FATURA,
@@ -362,7 +364,7 @@ class DashboardService
             )
             ->groupBy('metodo_pagamento')
             ->get()
-            ->map(fn ($p) => [
+            ->map(fn($p) => [
                 'metodo'      => $p->metodo_pagamento,
                 'metodo_nome' => $this->nomeMetodoPagamento($p->metodo_pagamento),
                 'quantidade'  => $p->quantidade,
@@ -441,7 +443,7 @@ class DashboardService
     private function calcularAlertas(): array
     {
         $hoje = now();
-        
+
         // Documentos que representam dívidas reais (excluindo proformas)
         $documentosDebito = [
             DocumentoFiscal::TIPO_FATURA,
@@ -541,7 +543,7 @@ class DashboardService
     {
         $hoje      = now();
         $cancelado = DocumentoFiscal::ESTADO_CANCELADO;
-        
+
         $documentosDebito = [
             DocumentoFiscal::TIPO_FATURA,
             DocumentoFiscal::TIPO_NOTA_DEBITO,
@@ -597,7 +599,7 @@ class DashboardService
             'atrasados'      => [
                 'quantidade'  => $atrasados->count(),
                 'valor_total' => $atrasados->sum('total_liquido'),
-                'documentos'  => $atrasados->take(5)->map(fn ($d) => [
+                'documentos'  => $atrasados->take(5)->map(fn($d) => [
                     'id'          => $d->id,
                     'numero'      => $d->numero_documento,
                     'cliente'     => $d->cliente?->nome,
@@ -614,7 +616,7 @@ class DashboardService
     {
         $hoje     = now();
         $tresDias = $hoje->copy()->addDays(3);
-        
+
         $documentosDebito = [
             DocumentoFiscal::TIPO_FATURA,
             DocumentoFiscal::TIPO_NOTA_DEBITO,
@@ -624,10 +626,10 @@ class DashboardService
         // Apenas documentos de débito real (excluindo proformas)
         $vencidos           = $this->getDocumentosVencidos($hoje, $documentosDebito);
         $proximosVencimento = $this->getDocumentosProximosVencimento($hoje, $tresDias, $documentosDebito);
-        
+
         // Proformas são apenas informativas, não geram alerta financeiro
         $proformasPendentes = $this->getProformasPendentes($hoje);
-        
+
         $servicosRetencao   = $this->getServicosRetencaoProximos($hoje, $documentosDebito);
 
         return [
@@ -670,7 +672,7 @@ class DashboardService
             ->orderBy('data_vencimento')
             ->limit(10)
             ->get()
-            ->map(fn ($d) => [
+            ->map(fn($d) => [
                 'id'              => $d->id,
                 'tipo'            => $d->tipo_documento,
                 'numero'          => $d->numero_documento,
@@ -696,7 +698,7 @@ class DashboardService
             ->orderBy('data_vencimento')
             ->limit(10)
             ->get()
-            ->map(fn ($d) => [
+            ->map(fn($d) => [
                 'id'                  => $d->id,
                 'tipo'                => $d->tipo_documento,
                 'numero'              => $d->numero_documento,
@@ -719,7 +721,7 @@ class DashboardService
             ->orderBy('data_emissao')
             ->limit(10)
             ->get()
-            ->map(fn ($d) => [
+            ->map(fn($d) => [
                 'id'             => $d->id,
                 'tipo'           => $d->tipo_documento,
                 'numero'         => $d->numero_documento,
@@ -744,7 +746,7 @@ class DashboardService
             ->orderBy('data_vencimento')
             ->limit(10)
             ->get()
-            ->map(fn ($d) => [
+            ->map(fn($d) => [
                 'id'                  => $d->id,
                 'numero'              => $d->numero_documento,
                 'cliente'             => $d->cliente?->nome,

@@ -53,11 +53,11 @@ Route::withoutMiddleware(['resolve.tenant', 'auth.tenant'])->group(function () {
 // ==================== ROTAS PROTEGIDAS (Tenant) ====================
 Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uuidPattern) {
 
-Route::prefix('empresa')->group(function () {
-    Route::get('/', [EmpresaController::class, 'showSelf']);           // Opcional: ver dados
-    Route::put('/', [EmpresaController::class, 'updateTenant']);       // ← Correto
-    Route::post('/logo', [EmpresaController::class, 'uploadLogo']);    // Upload separado
-});
+    Route::prefix('empresa')->group(function () {
+        Route::get('/', [EmpresaController::class, 'showSelf']);           // Opcional: ver dados
+        Route::put('/', [EmpresaController::class, 'updateTenant']);       // ← Correto
+        Route::post('/logo', [EmpresaController::class, 'uploadLogo']);    // Upload separado
+    });
 
     Route::get('/me', [UserController::class, 'me']);
 
@@ -173,33 +173,101 @@ Route::prefix('empresa')->group(function () {
             Route::post('/{venda}/recibo', [VendaController::class, 'gerarRecibo'])->where('venda', $uuidPattern)->name('vendas.recibo');
         });
 
-        // ---------- DOCUMENTOS FISCAIS ----------
+        // ---------- DOCUMENTOS FISCAIS (CORRIGIDO) ----------
         Route::prefix('documentos-fiscais')->group(function () use ($uuidPattern) {
+            
+            // ── Exportação ──
             Route::get('/exportar-excel', [DocumentoFiscalController::class, 'exportarExcel'])->name('documentos.exportar-excel');
+            
+            // ── Listagens especiais ──
             Route::get('/adiantamentos-pendentes', [DocumentoFiscalController::class, 'adiantamentosPendentes'])->name('documentos.adiantamentos-pendentes');
             Route::get('/proformas-pendentes', [DocumentoFiscalController::class, 'proformasPendentes'])->name('documentos.proformas-pendentes');
             Route::get('/alertas', [DocumentoFiscalController::class, 'alertas'])->name('documentos.alertas');
+            
+            // ── Dashboard e Processamento ──
             Route::get('/dashboard', [DocumentoFiscalController::class, 'dashboard'])->name('documentos.dashboard');
             Route::post('/processar-expirados', [DocumentoFiscalController::class, 'processarExpirados'])->name('documentos.processar-expirados');
+            
+            // ── Emissão ──
             Route::post('/emitir', [DocumentoFiscalController::class, 'emitir'])->name('documentos.emitir');
+            
+            // ── Listagem geral ──
             Route::get('/', [DocumentoFiscalController::class, 'index'])->name('documentos.index');
             Route::get('/{documento}', [DocumentoFiscalController::class, 'show'])->where('documento', $uuidPattern)->name('documentos.show');
             
-            // PDF e Impressão
+            // ═══════════════════════════════════════════════════════════
+            //  PDF e Impressão
+            // ═══════════════════════════════════════════════════════════
             Route::get('/{id}/pdf/download', [DocumentoFiscalController::class, 'downloadPdf'])->where('id', $uuidPattern)->name('documentos.pdf-download');
             Route::get('/{id}/pdf-viewer', [DocumentoFiscalController::class, 'pdfViewer'])->where('id', $uuidPattern)->name('documentos.pdf-viewer');
             Route::get('/{id}/imprimir-termica', [DocumentoFiscalController::class, 'imprimirTermica'])->where('id', $uuidPattern)->name('documentos.imprimir-termica');
             Route::get('/{id}/print-view', [DocumentoFiscalController::class, 'printView'])->where('id', $uuidPattern)->name('documentos.print');
-            
-            // 🆕 NOVA ROTA PARA IMPRESSÃO A4
             Route::get('/{id}/print-a4', [DocumentoFiscalController::class, 'printA4'])->where('id', $uuidPattern)->name('documentos.print-view');
             
-            Route::get('/{documento}/recibos', [DocumentoFiscalController::class, 'listarRecibos'])->where('documento', $uuidPattern)->name('documentos.recibos');
-            Route::post('/{id}/recibo', [DocumentoFiscalController::class, 'gerarRecibo'])->where('id', $uuidPattern)->name('documentos.gerar-recibo');
-            Route::post('/{documento}/cancelar', [DocumentoFiscalController::class, 'cancelar'])->where('documento', $uuidPattern)->name('documentos.cancelar');
-            Route::post('/{id}/nota-credito', [DocumentoFiscalController::class, 'criarNotaCredito'])->where('id', $uuidPattern)->name('documentos.nota-credito');
-            Route::post('/{id}/nota-debito', [DocumentoFiscalController::class, 'criarNotaDebito'])->where('id', $uuidPattern)->name('documentos.nota-debito');
-            Route::post('/{id}/vincular-adiantamento', [DocumentoFiscalController::class, 'vincularAdiantamento'])->where('id', $uuidPattern)->name('documentos.vincular');
+            // ═══════════════════════════════════════════════════════════
+            //  NOTAS DE CRÉDITO E DÉBITO (Regras Angola)
+            // ═══════════════════════════════════════════════════════════
+            // 
+            // NOTA DE CRÉDITO (NC):
+            //   - Reduz o valor de uma fatura
+            //   - Apenas FT ou FR podem originar NC
+            //   - Motivo OBRIGATÓRIO (mín 10 caracteres)
+            //   - Não pode ultrapassar o saldo da fatura
+            //   - Não pode ser emitida para fatura cancelada ou expirada
+            //
+            // NOTA DE DÉBITO (ND):
+            //   - Aumenta o valor de uma fatura
+            //   - Apenas FT pode originar ND (NÃO FR)
+            //   - Itens devem ser SERVIÇOS (não produtos físicos)
+            //   - Prazo máximo de 30 dias após emissão da fatura
+            //   - Se fatura já paga, deve ser para juros ou multas
+            //
+            // ═══════════════════════════════════════════════════════════
+            Route::post('/{id}/nota-credito', [DocumentoFiscalController::class, 'criarNotaCredito'])
+                ->where('id', $uuidPattern)
+                ->name('documentos.nota-credito');
+            
+            Route::post('/{id}/nota-debito', [DocumentoFiscalController::class, 'criarNotaDebito'])
+                ->where('id', $uuidPattern)
+                ->name('documentos.nota-debito');
+            
+            // ═══════════════════════════════════════════════════════════
+            //  🆕 ROTA PARA VISUALIZAÇÃO DEDICADA DE NC/ND
+            //  (usada pelo frontend após criação da nota)
+            // ═══════════════════════════════════════════════════════════
+            Route::get('/{id}/Ver_NC_ND', [DocumentoFiscalController::class, 'show'])
+                ->where('id', $uuidPattern)
+                ->name('documentos.ver-nc-nd');
+            
+            // ═══════════════════════════════════════════════════════════
+            //  🆕 ROTA PARA CONVERSÃO DE PROFORMA EM FATURA
+            //  (importante: FP NÃO é venda, precisa ser convertida)
+            // ═══════════════════════════════════════════════════════════
+            Route::post('/{id}/converter-proforma', [DocumentoFiscalController::class, 'converterProforma'])
+                ->where('id', $uuidPattern)
+                ->name('documentos.converter-proforma');
+            
+            // ═══════════════════════════════════════════════════════════
+            //  Recibos e Pagamentos
+            // ═══════════════════════════════════════════════════════════
+            Route::get('/{documento}/recibos', [DocumentoFiscalController::class, 'listarRecibos'])
+                ->where('documento', $uuidPattern)
+                ->name('documentos.recibos');
+            
+            Route::post('/{id}/recibo', [DocumentoFiscalController::class, 'gerarRecibo'])
+                ->where('id', $uuidPattern)
+                ->name('documentos.gerar-recibo');
+            
+            // ═══════════════════════════════════════════════════════════
+            //  Cancelamento e Vinculação de Adiantamentos
+            // ═══════════════════════════════════════════════════════════
+            Route::post('/{documento}/cancelar', [DocumentoFiscalController::class, 'cancelar'])
+                ->where('documento', $uuidPattern)
+                ->name('documentos.cancelar');
+            
+            Route::post('/{id}/vincular-adiantamento', [DocumentoFiscalController::class, 'vincularAdiantamento'])
+                ->where('id', $uuidPattern)
+                ->name('documentos.vincular');
         });
 
         // ---------- PAGAMENTOS ----------
@@ -224,6 +292,9 @@ Route::prefix('empresa')->group(function () {
             Route::get('/retencoes', [RelatoriosController::class, 'retencoes'])->name('relatorios.retencoes');
             Route::get('/documentos-fiscais', [RelatoriosController::class, 'documentosFiscais'])->name('relatorios.documentos-fiscais');
             Route::get('/proformas', [RelatoriosController::class, 'proformas'])->name('relatorios.proformas');
+            
+            // 🆕 Relatório específico de Notas de Crédito/Débito
+            Route::get('/notas-correcao', [RelatoriosController::class, 'notasCorrecao'])->name('relatorios.notas-correcao');
         });
 
         // ---------- RELATÓRIOS ADMIN (APENAS ADMIN E GESTOR) ----------

@@ -119,7 +119,7 @@ interface FormFornecedorData {
   telefone: string;
   email: string;
   endereco: string;
-  tipo: "Nacional" | "Internacional";
+  tipo: "nacional" | "internacional";
   status: "ativo" | "inativo";
 }
 
@@ -129,7 +129,7 @@ const INITIAL_FORM: FormFornecedorData = {
   telefone: "",
   email: "",
   endereco: "",
-  tipo: "Nacional",
+  tipo: "nacional",
   status: "ativo",
 };
 
@@ -491,7 +491,7 @@ function FormFornecedor({
     >
       {/* Tipo */}
       <div className="grid grid-cols-2 gap-3">
-        {(["Nacional", "Internacional"] as const).map((t) => {
+        {(["nacional", "internacional"] as const).map((t) => {
           const active = form.tipo === t;
           const clr = colors.secondary;
           return (
@@ -511,7 +511,7 @@ function FormFornecedor({
                 onChange={() => setField("tipo", t)}
                 className="hidden"
               />
-              {t === "Nacional" ? (
+              {t === "nacional" ? (
                 <Building2
                   className="w-4 h-4"
                   style={{ color: active ? clr : colors.textSecondary }}
@@ -764,7 +764,7 @@ export default function FornecedoresPage() {
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState<"todos" | "ativo" | "inativo">("todos");
-  const [filtroTipo, setFiltroTipo] = useState<"todos" | "Nacional" | "Internacional">("todos");
+  const [filtroTipo, setFiltroTipo] = useState<"todos" | "nacional" | "internacional">("todos");
   const [abaAtiva, setAbaAtiva] = useState<"ativos" | "lixeira">("ativos");
 
   const [modalForm, setModalForm] = useState(false);
@@ -834,9 +834,9 @@ export default function FornecedoresPage() {
         ...dados,
         tipo:
           dados.tipo === ("nacional" as any)
-            ? "Nacional"
+            ? "nacional"
             : dados.tipo === ("internacional" as any)
-              ? "Internacional"
+              ? "internacional"
               : dados.tipo,
       };
       if (selecao)
@@ -1004,8 +1004,8 @@ export default function FornecedoresPage() {
               }}
             >
               <option value="todos">Todos tipos</option>
-              <option value="Nacional">Nacional</option>
-              <option value="Internacional">Internacional</option>
+              <option value="nacional">Nacional</option>
+              <option value="internacional">Internacional</option>
             </select>
 
             {/* Novo */}
@@ -1137,12 +1137,12 @@ export default function FornecedoresPage() {
                               className="w-9 h-9 flex items-center justify-center flex-shrink-0"
                               style={{
                                 backgroundColor:
-                                  f.tipo === "Internacional"
+                                  f.tipo === "internacional"
                                     ? `${colors.secondary}20`
                                     : colors.hover,
                               }}
                             >
-                              {f.tipo === "Internacional" ? (
+                              {f.tipo === "internacional" ? (
                                 <Globe
                                   className="w-4 h-4"
                                   style={{ color: colors.secondary }}
@@ -1188,16 +1188,16 @@ export default function FornecedoresPage() {
                             className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium"
                             style={{
                               backgroundColor:
-                                f.tipo === "Internacional"
+                                f.tipo === "internacional"
                                   ? `${colors.secondary}`
                                   : `${colors.primary}`,
                               color:
-                                f.tipo === "Internacional"
+                                f.tipo === "internacional"
                                   ? colors.text
                                   : colors.text,
                             }}
                           >
-                            {f.tipo === "Internacional" ? (
+                            {f.tipo === "internacional" ? (
                               <Globe className="w-3 h-3" />
                             ) : (
                               <Building2 className="w-3 h-3" />
