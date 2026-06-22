@@ -1,0 +1,112 @@
+
+<h1>1.Configuração Backend</h1>
+
+<h3>2.Clonar o repositorio</h3>
+ <p>Git clone  <url> endereco_do_repositorio </url> </p>
+<br>
+
+<h3>3.Instalar dependências</h3>
+  <p>Composer install </p>
+  <br>
+
+<h3>4.Configuração do ambiente (env)</h3>
+  <p>cp .env.example .env </p>
+  <br>
+
+  <h3>5.Chave da aplicação</h3>
+  <p>php artisan key:generate </p>
+  <br>
+
+  <h3>6.Configuração da base de dados (env)</h3>
+  <h4><p>
+  Definir as variáveis de ambiente no arquivo .env, conforme abaixo:
+  <br>
+  <ul>DB_CONNECTION=mysql</ul>
+  <ul>DB_HOST=127.0.0.1</ul>
+  <ul>DB_PORT=3306</ul>
+  <ul>DB_DATABASE=example</ul>
+  <ul>DB_USERNAME=root</ul>
+  <ul>DB_PASSWORD=opcional</ul>
+  </p></h4>
+  <br>
+
+  <h3>7.Criação das tabelas</h3>
+  <p>php artisan migrate </p>
+  <br>
+
+  <h3>8.População da base de dados (se houver dados iniciais)</h3>
+  <p>php artisan db:seed </p>
+  <br>
+
+  <h3>9.Criação do link simbólico para armazenamento</h3>
+  <p>php artisan storage:link </p>
+  <br>
+
+  <h3>10.Limpeza de cache</h3>
+  <p>php artisan config:clear </p>
+  <br>
+
+  <h3>11.Iniciar o servidor</h3>
+  <p>php artisan serve
+   </p>
+    <p>php artisan serve --host=0.0.0.0 --port=8000</p>
+  <br>
+
+  <h3>12.Configuração adicional</h3>
+  <p>Definir as variáveis de ambiente no arquivo .env, conforme abaixo:
+  <br>
+   <ul>TENANT_DB_HOST=127.0.0.1</ul>
+   <ul>TENANT_DB_PORT=3306</ul>
+   <ul>TENANT_DB_USERNAME=root</ul>
+   <ul>TENANT_DB_PASSWORD=</ul>
+  </p>
+
+   <h3>13.Configuração da URL da aplicação(APP_URL)</h3>
+
+     <p>APP_URL=http://localhost:port</p> 
+     <br>
+
+  <h3>14. Lista os IPs mais comuns — o cors.php aceita todos os IPs locais automaticamente</h3>
+  <p>SANCTUM_STATEFUL_DOMAINS=localhost:3000,localhost:port,127.0.0.1:3000,127.0.0.1:8000,192.168.1.120:3000,192.168.1.120:8000</p>
+    <br>
+
+     <h3>15.FRONTEND</h3>
+  <p>
+    <ul>1.VITE_APP_NAME="${APP_NAME}"</ul>
+    <ul>2.VITE_APP_URL="${APP_URL}"(IP&PORT)</ul>
+    <ul>3.VITE_FRONTEND_URL="http://localhost:3000"</ul> 
+     </p>
+  <br>
+
+  <h3>16. AGT - Assinatura RSA</h3>
+  <p>AGT_RSA_PRIVATE_KEY_PATH="/home/maria/Documentos/Sistema_de_fatura-o_mult_tenancy/backend/storage/keys/agt_private.pem"</p>
+    <br>
+
+
+<h1>Configuração Frontend</h1>
+<h3>1.Instalar dependências</h3>
+  <p>npm install </p>
+  <br>
+
+  <h3>2.Criar arquirvo .env.local</h3>
+ <br>
+
+  <h3>3.Definição das variáveis</h3>
+  <p>APP</p>
+  <ul>NEXT_PUBLIC_APP_NAME=</ul>
+  <ul>NEXT_PUBLIC_APP_ENV=local
+</ul>
+  <br>
+  <p>BACKEND (LARAVEL)</p>
+  <ul>NEXT_PUBLIC_API_URL=http://localhost:port</ul>
+  <ul>NEXT_PUBLIC_BACKEND_URL=http://localhost:port</ul>
+<br>
+   <p>AUTH / SANCTUM</p>
+  <ul>NEXT_PUBLIC_CSRF_URL=http://localhost:port/sanctum/csrf-cookie</ul>
+  <ul>NEXT_PUBLIC_AUTH_COOKIE=true</ul>
+<br>
+
+  <h3>4.Iniciar o servidor</h3>
+  <p>npm run dev </p>
+  <br>
+
