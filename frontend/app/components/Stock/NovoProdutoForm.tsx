@@ -372,8 +372,8 @@ export function NovoProdutoForm({
           dados.taxa_iva = parseFloat(formData.taxa_iva) || 0;
           dados.sujeito_iva = true;
         } else {
-          // Usuário NÃO quer IVA - envia null
-          dados.taxa_iva = null;
+          // ✅ CORRIGIDO: Usuário NÃO quer IVA - envia undefined (não null)
+          dados.taxa_iva = undefined;
           dados.sujeito_iva = false;
         }
 
@@ -387,7 +387,7 @@ export function NovoProdutoForm({
         // ============================================================
         // ✅ CÓDIGO DE ISENÇÃO: Só envia se tiver valor
         // ============================================================
-        dados.codigo_isencao = formData.codigo_isencao || null;
+        dados.codigo_isencao = formData.codigo_isencao || undefined;
 
         // Campos específicos de serviço
         dados.duracao_estimada = `${formData.duracao_estimada} ${formData.unidade_medida}`;

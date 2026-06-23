@@ -20,6 +20,8 @@ const baseConfig = {
     timeout: 890000, // 30 segundos
 };
 
+const debugApi = process.env.NEXT_PUBLIC_DEBUG_API === "true";
+
 // ============ TENANT HELPERS ============
 
 interface EmpresaData {
@@ -138,7 +140,7 @@ landlordApi.interceptors.request.use(
         delete config.headers["X-Tenant-ID"];
 
         // Log em desenvolvimento
-        if (process.env.NODE_ENV === "development") {
+        if (debugApi) {
             console.log(`🏠 [LANDLORD] ${config.method?.toUpperCase()} ${config.url}`);
         }
 
@@ -150,7 +152,7 @@ landlordApi.interceptors.request.use(
 // Interceptor de RESPONSE do Landlord
 landlordApi.interceptors.response.use(
     (response) => {
-        if (process.env.NODE_ENV === "development") {
+        if (debugApi) {
             console.log(`✅ [LANDLORD] ${response.status} ${response.config.url}`);
         }
         return response;
@@ -224,7 +226,7 @@ tenantApi.interceptors.request.use(
         }
 
         // Log em desenvolvimento
-        if (process.env.NODE_ENV === "development") {
+        if (debugApi) {
             console.log(`🏢 [TENANT] ${config.method?.toUpperCase()} ${config.url}`, {
                 tenant: getTenant()
             });
@@ -245,7 +247,7 @@ tenantApi.interceptors.response.use(
             setTenant(response.data.empresa);
         }
         
-        if (process.env.NODE_ENV === "development") {
+        if (debugApi) {
             console.log(`✅ [TENANT] ${response.status} ${response.config.url}`);
         }
         

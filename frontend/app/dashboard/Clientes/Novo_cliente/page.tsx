@@ -66,12 +66,35 @@ export default function ClientesPage() {
   const carregar = useCallback(async () => {
     setLoading(true);
     try {
-      const data =
-        filtroStatus === "todos"
-          ? await clienteService.listarClientes(true)
-          : filtroStatus === "ativos"
-            ? await clienteService.listarClientesAtivos()
-            : await clienteService.listarClientesInativos();
+      let data;
+      
+      // ✅ CORRIGIDO: Usar listar() com parâmetros
+      if (filtroStatus === "todos") {
+        // Buscar todos (ativos + inativos)
+        const ativos = await clienteService.listar({ 
+          status: 'ativo', 
+          per_page: 999 
+        });
+        const inativos = await clienteService.listar({ 
+          status: 'inativo', 
+          per_page: 999 
+        });
+        // Combinar os resultados
+        data = [...(ativos.data || []), ...(inativos.data || [])];
+      } else if (filtroStatus === "ativos") {
+        const response = await clienteService.listar({ 
+          status: 'ativo', 
+          per_page: 999 
+        });
+        data = response.data || [];
+      } else {
+        const response = await clienteService.listar({ 
+          status: 'inativo', 
+          per_page: 999 
+        });
+        data = response.data || [];
+      }
+      
       setClientes(data);
       setClientesFiltrados(data);
     } catch {

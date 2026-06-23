@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import MainEmpresa from "../../../components/MainEmpresa";
 import { Plus, Package, AlertTriangle, Wrench, XCircle, ArrowLeft } from "lucide-react";
@@ -15,12 +16,26 @@ import { TabelaItens } from "@/app/components/Stock/TabelaItens";
 import { TabelaMovimentacoes } from "@/app/components/Stock/TabelaMovimentacoes";
 import { TabelaLixeira } from "@/app/components/Stock/TabelaLixeira";
 import { TabsEstoque } from "@/app/components/Stock/TabsEstoque";
-import { NovoProdutoForm } from "@/app/components/Stock/NovoProdutoForm";
-import { ModalEdicao } from "@/app/components/Stock/ModalEdicao";
 
 // Hooks
 import { useEstoque } from "@/hooks/useEstoque";
 
+const NovoProdutoForm = dynamic(
+    () => import("@/app/components/Stock/NovoProdutoForm").then((mod) => mod.NovoProdutoForm),
+    {
+        ssr: false,
+        loading: () => (
+            <div className="flex min-h-[320px] items-center justify-center text-sm text-slate-500">
+                Carregando formulário...
+            </div>
+        ),
+    },
+);
+
+const ModalEdicao = dynamic(
+    () => import("@/app/components/Stock/ModalEdicao").then((mod) => mod.ModalEdicao),
+    { ssr: false },
+);
 
 export default function EstoquePage() {
     const router = useRouter();
@@ -58,6 +73,7 @@ export default function EstoquePage() {
 
         // Actions
         carregarDados,
+        carregarMovimentacoes,
         carregarDeletados,
         aplicarFiltros,
         abrirModalEntrada,
@@ -76,6 +92,12 @@ export default function EstoquePage() {
     useEffect(() => {
         carregarDados();
     }, [carregarDados]);
+
+    useEffect(() => {
+        if (abaAtiva === "movimentacoes") {
+            carregarMovimentacoes();
+        }
+    }, [abaAtiva, carregarMovimentacoes]);
 
     useEffect(() => {
         if (abaAtiva === "deletados") {

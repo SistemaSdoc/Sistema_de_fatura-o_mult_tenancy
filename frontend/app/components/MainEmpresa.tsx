@@ -15,7 +15,6 @@ import {
     BarChart2,
     LogOut,
     ChevronDown,
-    ShoppingCart,
     Package,
     Archive,
     Truck,
@@ -61,6 +60,15 @@ interface MainEmpresaProps {
     companyName?: string;
 }
 
+type ApiError = {
+    response?: {
+        status?: number;
+    };
+};
+
+const getApiError = (error: unknown): ApiError =>
+    typeof error === "object" && error !== null ? (error as ApiError) : {};
+
 export default function MainEmpresa({
     children,
     companyLogo,
@@ -97,7 +105,6 @@ export default function MainEmpresa({
 
     // Refs para controlar chamadas concorrentes
     const fetchingNotificacoesRef = useRef(false);
-    const intervalRef = useRef<NodeJS.Timeout | null>(null);
     const notificacoesRef = useRef<HTMLDivElement>(null);
     const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -224,11 +231,12 @@ const buscarNotificacoesEstoque = useCallback(async () => {
     }
 
     setUltimaAtualizacao(new Date());
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const apiError = getApiError(error);
     console.error("[MainEmpresa] Erro ao buscar notificações:", error);
     
     // Opcional: só mostrar toast em erros que não sejam 403
-    if (error.response?.status !== 403) {
+    if (apiError.response?.status !== 403) {
       toast.error("Erro ao carregar alertas de estoque");
     }
   } finally {
@@ -236,30 +244,6 @@ const buscarNotificacoesEstoque = useCallback(async () => {
     fetchingNotificacoesRef.current = false;
   }
 }, [user, userLoading, userRole]);
-
-useEffect(() => {
-  if (intervalRef.current) {
-    clearInterval(intervalRef.current);
-    intervalRef.current = null;
-  }
-
-  const rolesPermitidos = ["admin", "operador", "gestor"];
-
-  if (user && !userLoading && rolesPermitidos.includes(userRole)) {
-    const timeoutId = setTimeout(() => {
-      buscarNotificacoesEstoque();
-    }, 100);
-
-    intervalRef.current = setInterval(() => {
-      buscarNotificacoesEstoque();
-    }, 300000); // 5 minutos
-
-    return () => {
-      clearTimeout(timeoutId);
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }
-}, [user, userLoading, userRole, buscarNotificacoesEstoque]);
 
     // ==================== HELPERS ====================
     const closeSidebar = () => setSidebarOpen(false);

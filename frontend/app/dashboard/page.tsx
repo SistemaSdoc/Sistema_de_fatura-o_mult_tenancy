@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, AreaChart, Area, CartesianGrid,
   PieChart, Pie, Cell, Legend, TooltipProps
 } from "recharts";
+import type { NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 import {
   TrendingUp, Users, DollarSign,
   Package, Receipt, FileText, AlertTriangle,
@@ -98,22 +98,18 @@ const formatDate = (value?: string): string => {
 
 /* ==================== SKELETONS ==================== */
 const SkeletonCard = ({ colors }: SkeletonProps) => (
-  <motion.div
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
+  <div
     className="p-3 sm:p-4 rounded-xl shadow border animate-pulse"
     style={{ backgroundColor: colors.card, borderColor: colors.border }}
   >
     <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg mb-2 sm:mb-3" style={{ background: colors.border }} />
     <div className="h-3 sm:h-4 rounded w-16 sm:w-20 mb-1 sm:mb-2" style={{ background: colors.border }} />
     <div className="h-4 sm:h-6 rounded w-20 sm:w-24" style={{ background: colors.border }} />
-  </motion.div>
+  </div>
 );
 
 const SkeletonChart = ({ colors, tall = false }: SkeletonProps) => (
-  <motion.div
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
+  <div
     className="p-3 sm:p-4 rounded-xl shadow border animate-pulse"
     style={{ backgroundColor: colors.card, borderColor: colors.border }}
   >
@@ -122,13 +118,11 @@ const SkeletonChart = ({ colors, tall = false }: SkeletonProps) => (
       className={`rounded ${tall ? "h-56 sm:h-72" : "h-48 sm:h-60"}`}
       style={{ background: colors.hover }}
     />
-  </motion.div>
+  </div>
 );
 
 const SkeletonTable = ({ colors }: SkeletonProps) => (
-  <motion.div
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
+  <div
     className="p-3 sm:p-4 rounded-xl shadow border animate-pulse"
     style={{ backgroundColor: colors.card, borderColor: colors.border }}
   >
@@ -138,7 +132,7 @@ const SkeletonTable = ({ colors }: SkeletonProps) => (
         <div key={i} className="h-6 sm:h-8 rounded" style={{ background: colors.hover }} />
       ))}
     </div>
-  </motion.div>
+  </div>
 );
 
 /* ==================== STATUS BADGE ==================== */
@@ -176,9 +170,7 @@ const StatusBadge = ({ status, theme }: { status: string; theme: string }) => {
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastUpdate, setLastUpdate] = useState("-");
 
   const router = useRouter();
   const colors = useThemeColors() as ThemeColors;
@@ -187,7 +179,6 @@ export default function DashboardPage() {
   const userRole = user?.role || '';
 
   const carregarDashboard = async () => {
-    setRefreshing(true);
     setError(null);
     try {
       const dashboard = await dashboardService.fetch();
@@ -197,13 +188,11 @@ export default function DashboardPage() {
         return;
       }
       setData(dashboard);
-      setLastUpdate(new Date().toLocaleString("pt-PT"));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Erro desconhecido";
       setError(message);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 
@@ -218,14 +207,12 @@ export default function DashboardPage() {
     return (
       <MainEmpresa>
         <div className="space-y-4 sm:space-y-6 pb-8">
-          <motion.h1
-            initial={{ opacity: 0, y: -16 }}
-            animate={{ opacity: 1, y: 0 }}
+          <h1
             className="text-xl sm:text-2xl font-bold"
             style={{ color: colors.secondary }}
           >
             Dashboard
-          </motion.h1>
+          </h1>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[...Array(4)].map((_, i) => <SkeletonCard key={i} colors={colors} />)}
           </div>
@@ -301,7 +288,7 @@ export default function DashboardPage() {
     }, {})
   );
 
-  // Configuração de tooltip com tipo correto (aceita undefined)
+  // ✅ Configuração de tooltip com tipo correto
   const tooltipStyle: TooltipProps<number, string>['contentStyle'] = {
     backgroundColor: colors.card,
     borderColor: colors.border,
@@ -310,16 +297,20 @@ export default function DashboardPage() {
     borderRadius: "8px",
   };
 
-  const formatterQuantidade = (value: number | undefined): [string, "Quantidade"] => {
+  // ✅ Formatters com assinatura correta para Recharts
+  const formatterQuantidade = (value: any): [string, string] => {
     return [`${formatNumber(value ?? 0)} unid.`, "Quantidade"];
   };
-  const formatterValor = (value: number | undefined): [string, "Valor"] => {
+  
+  const formatterValor = (value: any): [string, string] => {
     return [formatKz(value ?? 0), "Valor"];
   };
-  const formatterDocsQuantidade = (value: number | undefined): [string, "Quantidade"] => {
+  
+  const formatterDocsQuantidade = (value: any): [string, string] => {
     return [`${formatNumber(value ?? 0)} docs`, "Quantidade"];
   };
-  const formatterTotal = (value: number | undefined): [string, "Total"] => {
+  
+  const formatterTotal = (value: any): [string, string] => {
     return [formatKz(value ?? 0), "Total"];
   };
 
@@ -400,13 +391,10 @@ export default function DashboardPage() {
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {kpiCards.map(({ href, icon: Icon, label, value, helper }, i) => (
-            <motion.div
+            <div
               key={label}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.07 }}
-              whileHover={{ scale: 1.02, y: -2 }}
-              whileTap={{ scale: 0.98 }}
+              className="transition-transform duration-150 hover:-translate-y-0.5 active:scale-[0.98]"
+              style={{ transitionDelay: `${i * 30}ms` }}
             >
               <Link
                 href={href}
@@ -426,15 +414,13 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </Link>
-            </motion.div>
+            </div>
           ))}
         </div>
 
         {/* Row 1: Top Produtos + Evolução Mensal */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <motion.div
-            initial={{ opacity: 0, x: -16 }}
-            animate={{ opacity: 1, x: 0 }}
+          <div
             className="p-3 sm:p-4 shadow border"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
           >
@@ -452,8 +438,8 @@ export default function DashboardPage() {
                     <Tooltip
                       contentStyle={tooltipStyle}
                       formatter={(value: any, name: any) => {
-                        if (name === "quantidade") return formatterQuantidade(Number(value));
-                        return formatterValor(Number(value));
+                        if (name === "quantidade") return formatterQuantidade(value);
+                        return formatterValor(value);
                       }}
                     />
                     <Bar dataKey="quantidade" radius={[0, 4, 4, 0]} barSize={16}>
@@ -472,11 +458,9 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
-          </motion.div>
+          </div>
 
-          <motion.div
-            initial={{ opacity: 0, x: 16 }}
-            animate={{ opacity: 1, x: 0 }}
+          <div
             className="p-3 sm:p-4 shadow border"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
           >
@@ -497,7 +481,10 @@ export default function DashboardPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
                     <XAxis dataKey="mes" tick={tickStyle} stroke={colors.border} />
                     <YAxis tickFormatter={formatCompact} width={48} tick={tickStyle} stroke={colors.border} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => formatterTotal(Number(v))} />
+                    <Tooltip 
+                      contentStyle={tooltipStyle} 
+                      formatter={(value: any) => formatterTotal(value)} 
+                    />
                     <Area type="monotone" dataKey="total" stroke={colors.secondary} fill="url(#colorTotal)" strokeWidth={2} />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -507,15 +494,12 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
-          </motion.div>
+          </div>
         </div>
 
         {/* Row 2: Docs por Tipo + Estado */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <motion.div
-            initial={{ opacity: 0, x: -16 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.1 }}
+          <div
             className="p-3 sm:p-4 shadow border"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
           >
@@ -541,13 +525,14 @@ export default function DashboardPage() {
                     <YAxis yAxisId="right" orientation="right" stroke={colors.secondary} tick={tickStyle} width={36} />
                     <Tooltip
                       contentStyle={tooltipStyle}
-                      formatter={(value: any, _name: any, props: any) => {
-                        const key = props?.dataKey;
-
-                        if (key === "quantidade") return formatterDocsQuantidade(Number(value));
-                        if (key === "valor") return formatterValor(Number(value));
-
-                        return [value, ""];
+                      formatter={(value: any, name: any) => {
+                        if (name === "quantidade" || name === "Qtd") {
+                          return formatterDocsQuantidade(value);
+                        }
+                        if (name === "valor" || name === "Valor") {
+                          return formatterValor(value);
+                        }
+                        return [String(value ?? 0), name || ""];
                       }}
                     />
                     <Bar yAxisId="left" dataKey="quantidade" fill={colors.primary} name="Qtd" radius={[3, 3, 0, 0]} barSize={12} />
@@ -560,12 +545,9 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
-          </motion.div>
+          </div>
 
-          <motion.div
-            initial={{ opacity: 0, x: 16 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.1 }}
+          <div
             className="p-3 sm:p-4 shadow border"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
           >
@@ -593,7 +575,10 @@ export default function DashboardPage() {
                         <Cell key={i} fill={pieColors[i % pieColors.length]} />
                       ))}
                     </Pie>
-                    <Tooltip contentStyle={tooltipStyle} formatter={(value: any) => formatterDocsQuantidade(Number(value))} />
+                    <Tooltip 
+                      contentStyle={tooltipStyle} 
+                      formatter={(value: any) => formatterDocsQuantidade(value)} 
+                    />
                     <Legend />
                   </PieChart>
                 </ResponsiveContainer>
@@ -615,15 +600,12 @@ export default function DashboardPage() {
                 ))}
               </div>
             )}
-          </motion.div>
+          </div>
         </div>
 
         {/* Row 3: Tabelas */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
+          <div
             className="p-3 sm:p-4 shadow border overflow-hidden"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
           >
@@ -661,12 +643,9 @@ export default function DashboardPage() {
             <Link href="/dashboard/relatorios" className="block text-center mt-4 text-xs hover:underline" style={{ color: colors.secondary }}>
               Ver mais →
             </Link>
-          </motion.div>
+          </div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
+          <div
             className="p-3 sm:p-4 shadow border overflow-hidden"
             style={{ backgroundColor: colors.card, borderColor: colors.border }}
           >
@@ -704,7 +683,7 @@ export default function DashboardPage() {
             <Link href="/dashboard/Faturas/Faturas" className="block text-center mt-4 text-xs hover:underline" style={{ color: colors.secondary }}>
               Ver mais →
             </Link>
-          </motion.div>
+          </div>
         </div>
       </div>
     </MainEmpresa>

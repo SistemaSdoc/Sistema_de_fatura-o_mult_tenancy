@@ -1,10 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Plus,
   Search,
-  Edit2,
   Trash2,
   MoreVertical,
   Package,
@@ -42,14 +41,12 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
   Select,
@@ -85,6 +82,18 @@ const INITIAL_FORM_DATA: FormCategoriaData = {
   codigo_isencao: "",
 };
 
+type ApiError = {
+  response?: {
+    data?: {
+      message?: string;
+    };
+  };
+  error?: string;
+};
+
+const getApiError = (error: unknown): ApiError =>
+  typeof error === "object" && error !== null ? (error as ApiError) : {};
+
 export default function CategoriasPage() {
   const colors = useThemeColors();
 
@@ -93,15 +102,12 @@ export default function CategoriasPage() {
   const [categoriasDeletadas, setCategoriasDeletadas] = useState<Categoria[]>(
     [],
   );
-  const [categoriasFiltradas, setCategoriasFiltradas] = useState<Categoria[]>(
-    [],
-  );
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<string>("ativas");
   const [searchTerm, setSearchTerm] = useState("");
-  const [filtroStatus, setFiltroStatus] = useState<string>("todos");
-  const [filtroTipo, setFiltroTipo] = useState<string>("todos");
-  const [filtroIVA, setFiltroIVA] = useState<string>("todos");
+  const [filtroStatus] = useState<string>("todos");
+  const [filtroTipo] = useState<string>("todos");
+  const [filtroIVA] = useState<string>("todos");
 
   // Estados do modal/formulário
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -118,48 +124,49 @@ export default function CategoriasPage() {
   >({});
 
   // Carregar categorias ativas
-  const carregarCategorias = async () => {
+  const carregarCategorias = useCallback(async () => {
     try {
       setIsLoading(true);
       const response = await categoriaService.listarCategorias();
       setCategorias(response.categorias);
-      setCategoriasFiltradas(response.categorias);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const apiError = getApiError(error);
       toast.error("Erro ao carregar categorias", {
         description:
-          error.response?.data?.message || "Tente novamente mais tarde",
+          apiError.response?.data?.message || "Tente novamente mais tarde",
       });
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   // Carregar categorias deletadas
-  const carregarCategoriasDeletadas = async () => {
+  const carregarCategoriasDeletadas = useCallback(async () => {
     try {
       const response = await categoriaService.listarCategoriasDeletadas();
       setCategoriasDeletadas(response.categorias);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erro ao carregar categorias deletadas:", error);
     }
-  };
+  }, []);
 
   const router = useRouter();
 
   useEffect(() => {
     carregarCategorias();
     carregarCategoriasDeletadas();
-  }, []);
+  }, [carregarCategorias, carregarCategoriasDeletadas]);
 
   // Filtrar categorias ativas
-  useEffect(() => {
-    let filtradas = [...categorias];
+  const categoriasFiltradas = useMemo(() => {
+    const termo = searchTerm.trim().toLowerCase();
+    let filtradas = categorias;
 
-    if (searchTerm) {
+    if (termo) {
       filtradas = filtradas.filter(
         (cat) =>
-          cat.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          cat.descricao?.toLowerCase().includes(searchTerm.toLowerCase()),
+          cat.nome.toLowerCase().includes(termo) ||
+          cat.descricao?.toLowerCase().includes(termo),
       );
     }
 
@@ -183,7 +190,7 @@ export default function CategoriasPage() {
       }
     }
 
-    setCategoriasFiltradas(filtradas);
+    return filtradas;
   }, [searchTerm, filtroStatus, filtroTipo, filtroIVA, categorias]);
 
   // Handlers do formulário
@@ -294,9 +301,10 @@ export default function CategoriasPage() {
       setIsModalOpen(false);
       await carregarCategorias();
       await carregarCategoriasDeletadas();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const apiError = getApiError(error);
       const message =
-        error.response?.data?.message || "Erro ao salvar categoria";
+        apiError.response?.data?.message || "Erro ao salvar categoria";
       toast.error("Erro ao salvar", { description: message });
     } finally {
       setIsSubmitting(false);
@@ -317,11 +325,12 @@ export default function CategoriasPage() {
       setIsDeleteModalOpen(false);
       await carregarCategorias();
       await carregarCategoriasDeletadas();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const apiError = getApiError(error);
       const message =
-        error.response?.data?.message || "Não foi possível deletar";
+        apiError.response?.data?.message || "Não foi possível deletar";
 
-      if (error.error === "produtos_activos") {
+      if (apiError.error === "produtos_activos") {
         toast.error("Não é possível eliminar", {
           description: message,
           duration: 6000,
@@ -346,9 +355,10 @@ export default function CategoriasPage() {
       setIsRestoreModalOpen(false);
       await carregarCategorias();
       await carregarCategoriasDeletadas();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const apiError = getApiError(error);
       toast.error("Erro ao restaurar", {
-        description: error.response?.data?.message || "Tente novamente",
+        description: apiError.response?.data?.message || "Tente novamente",
       });
     }
   };
@@ -367,14 +377,15 @@ export default function CategoriasPage() {
       setIsForceDeleteModalOpen(false);
       await carregarCategorias();
       await carregarCategoriasDeletadas();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const apiError = getApiError(error);
       toast.error("Erro ao excluir permanentemente", {
-        description: error.response?.data?.message || "Tente novamente",
+        description: apiError.response?.data?.message || "Tente novamente",
       });
     }
   };
 
-  const stats = {
+  const stats = useMemo(() => ({
     ativas: {
       total: categorias.length,
       ativos: categorias.filter((c) => c.status === "ativo").length,
@@ -384,7 +395,7 @@ export default function CategoriasPage() {
     lixeira: {
       total: categoriasDeletadas.length,
     },
-  };
+  }), [categorias, categoriasDeletadas.length]);
 
   return (
     <MainEmpresa>

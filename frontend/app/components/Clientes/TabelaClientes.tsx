@@ -135,6 +135,15 @@ interface TabelaClientesProps {
   mostrarLixeira?: boolean;
 }
 
+// ✅ Definir o tipo do modal config
+type ModalConfig = {
+  title: string;
+  message: string;
+  confirmText: string;
+  cancelText: string;
+  type: "warning" | "danger" | "info";
+};
+
 export function TabelaClientes({
   clientes,
   busca,
@@ -232,8 +241,8 @@ export function TabelaClientes({
     }
   };
 
-  // ── Configuração do modal ──
-  const getModalConfig = () => {
+  // ✅ CORRIGIDO: Configuração do modal com tipo explícito
+  const getModalConfig = (): ModalConfig | null => {
     const cliente = modalConfirm.cliente;
     if (!cliente) return null;
 
@@ -245,7 +254,7 @@ export function TabelaClientes({
           message: `Tem certeza que deseja ${isAtivando ? "ativar" : "inativar"} "${cliente.nome}"?`,
           confirmText: isAtivando ? "Ativar" : "Inativar",
           cancelText: "Cancelar",
-          type: isAtivando ? "info" : ("warning" as const),
+          type: isAtivando ? "info" : "warning",
         };
       }
       case "arquivar":
@@ -254,7 +263,7 @@ export function TabelaClientes({
           message: `Tem certeza que deseja arquivar "${cliente.nome}"? O cliente será movido para a lixeira.`,
           confirmText: "Arquivar",
           cancelText: "Cancelar",
-          type: "warning" as const,
+          type: "warning",
         };
       case "restaurar":
         return {
@@ -262,7 +271,7 @@ export function TabelaClientes({
           message: `Tem certeza que deseja restaurar "${cliente.nome}"? O cliente voltará à lista de ativos.`,
           confirmText: "Restaurar",
           cancelText: "Cancelar",
-          type: "info" as const,
+          type: "info",
         };
       case "excluir":
         return {
@@ -270,7 +279,7 @@ export function TabelaClientes({
           message: `Tem certeza que deseja excluir permanentemente "${cliente.nome}"? Esta ação não pode ser desfeita!`,
           confirmText: "Excluir",
           cancelText: "Cancelar",
-          type: "danger" as const,
+          type: "danger",
         };
       default:
         return null;

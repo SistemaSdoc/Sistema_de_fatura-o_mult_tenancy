@@ -6,6 +6,9 @@ import {
     Produto,
     Categoria,
     MovimentoStock,
+    AtualizarProdutoInput,
+    PaginatedResponse,
+    ResumoStockResponse,
     isServico,
     isProduto
 } from "@/services/produtos";
@@ -16,14 +19,24 @@ interface ModalConfirmacaoState {
     produto: Produto | null;
 }
 
-interface ModalEdicaoState {
-    isOpen: boolean;
-    item: Produto | null;
-}
+type ApiError = {
+    response?: {
+        data?: {
+            message?: string;
+        };
+    };
+    message?: string;
+};
+
+const getApiError = (error: unknown): ApiError =>
+    typeof error === "object" && error !== null ? (error as ApiError) : {};
+
+const getCollection = <T,>(value: T[] | PaginatedResponse<T>): T[] =>
+    Array.isArray(value) ? value : value.data || [];
 
 export function useEstoque() {
     const [loading, setLoading] = useState(true);
-    const [resumo, setResumo] = useState<any>(null);
+    const [resumo, setResumo] = useState<ResumoStockResponse | null>(null);
     const [itens, setItens] = useState<Produto[]>([]);
     const [itensDeletados, setItensDeletados] = useState<Produto[]>([]);
     const [categorias, setCategorias] = useState<Categoria[]>([]);
@@ -51,23 +64,15 @@ export function useEstoque() {
     const carregarDados = useCallback(async () => {
         setLoading(true);
         try {
-            const [resumoData, itensData, cats, movs] = await Promise.all([
+            const [resumoData, itensData, cats] = await Promise.all([
                 movimentoStockService.resumo(),
                 produtoService.listarProdutos({}),
                 produtoService.listarCategorias(),
-                movimentoStockService.listarMovimentos({ paginar: false }),
             ]);
 
             setResumo(resumoData);
-            const listaItens = Array.isArray(itensData.produtos)
-                ? itensData.produtos
-                : (itensData.produtos as any)?.data || [];
-            setItens(listaItens);
+            setItens(getCollection(itensData.produtos));
             setCategorias(cats);
-            const listaMovs = Array.isArray(movs.movimentos)
-                ? movs.movimentos
-                : (movs.movimentos as any)?.data || [];
-            setMovimentacoes(listaMovs);
         } catch (error) {
             console.error("Erro ao carregar dados:", error);
         } finally {
@@ -75,13 +80,22 @@ export function useEstoque() {
         }
     }, []);
 
+    const carregarMovimentacoes = useCallback(async () => {
+        try {
+            const movs = await movimentoStockService.listarMovimentos({
+                paginar: true,
+                per_page: 50,
+            });
+            setMovimentacoes(getCollection(movs.movimentos));
+        } catch (error) {
+            console.error("Erro ao carregar movimentações:", error);
+        }
+    }, []);
+
     const carregarDeletados = useCallback(async () => {
         try {
             const response = await produtoService.listarDeletados({ paginar: false });
-            const listaDeletados = Array.isArray(response.produtos)
-                ? response.produtos
-                : (response.produtos as any)?.data || [];
-            setItensDeletados(listaDeletados);
+            setItensDeletados(getCollection(response.produtos));
         } catch (error) {
             console.error("Erro ao carregar itens deletados:", error);
         }
@@ -99,10 +113,7 @@ export function useEstoque() {
             if (filtroEstoque === "zerado") filtros.sem_estoque = true;
 
             const data = await produtoService.listarProdutos(filtros);
-            const listaItens = Array.isArray(data.produtos)
-                ? data.produtos
-                : (data.produtos as any)?.data || [];
-            setItens(listaItens);
+            setItens(getCollection(data.produtos));
         } catch (error) {
             console.error("Erro ao filtrar:", error);
         } finally {
@@ -123,7 +134,7 @@ export function useEstoque() {
         setModalEntradaAberto(false);
     }, [itemSelecionado, carregarDados]);
 
-    const handleEditarItem = useCallback(async (dados: any): Promise<{ success: boolean; error?: any }> => {
+    const handleEditarItem = useCallback(async (dados: AtualizarProdutoInput): Promise<{ success: boolean; error?: string }> => {
         if (!itemSelecionado) {
             return { success: false, error: "Nenhum item selecionado" };
         }
@@ -160,9 +171,10 @@ export function useEstoque() {
             setItemSelecionado(null);
             
             return { success: true };
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const apiError = getApiError(error);
             console.error("Erro ao editar item:", error);
-            return { success: false, error: error.response?.data?.message || error.message || "Erro ao salvar alterações" };
+            return { success: false, error: apiError.response?.data?.message || apiError.message || "Erro ao salvar alterações" };
         }
     }, [itemSelecionado, carregarDados]);
 
@@ -253,6 +265,7 @@ export function useEstoque() {
 
         // Actions
         carregarDados,
+        carregarMovimentacoes,
         carregarDeletados,
         aplicarFiltros,
         abrirModalEntrada,
