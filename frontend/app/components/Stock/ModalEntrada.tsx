@@ -56,29 +56,40 @@ export function ModalEntrada({
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="shadow-xl max-w-md w-full" style={{ backgroundColor: colors.card }}>
-                <div className="p-6 border-b" style={{ borderColor: colors.border }}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in-0 duration-200">
+            <div
+                className="w-full max-w-md animate-in zoom-in-95 fade-in-0 duration-300 rounded-lg shadow-2xl overflow-hidden border"
+                style={{ backgroundColor: colors.card, borderColor: colors.border }}
+            >
+                {/* Header */}
+                <div
+                    className="px-6 py-4 border-b"
+                    style={{ borderColor: colors.border, backgroundColor: colors.hover }}
+                >
                     <h3 className="text-lg font-semibold flex items-center gap-2" style={{ color: colors.text }}>
                         <Plus className="w-5 h-5" style={{ color: colors.secondary }} />
                         Registrar Entrada
                     </h3>
                 </div>
 
-                <div className="p-6">
-                    <div className="mb-4 p-3 " style={{ backgroundColor: colors.hover }}>
-                        <p className="font-medium" style={{ color: colors.text }}>{produto.nome}</p>
-                        <p className="text-sm" style={{ color: colors.textSecondary }}>
-                            Stock atual: <span className="font-semibold" style={{ color: colors.text }}>{produto.estoque_atual}</span> unidades
+                {/* Conteúdo */}
+                <div className="px-6 py-4">
+                    <div className="mb-4 p-4 rounded-lg" style={{ backgroundColor: colors.hover }}>
+                        <p className="font-medium text-sm" style={{ color: colors.text }}>{produto.nome}</p>
+                        <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+                            Stock atual: <span className="font-semibold" style={{ color: colors.primary }}>{produto.estoque_atual}</span> unidades
                         </p>
                     </div>
 
                     {erro && (
-                        <div className="mb-4 p-3 text-sm flex items-center gap-2" style={{ 
-                            backgroundColor: `${colors.danger}20`, 
-                            color: colors.danger 
-                        }}>
-                            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                        <div
+                            className="mb-4 p-3 rounded-lg text-sm flex items-center gap-2"
+                            style={{
+                                backgroundColor: `${colors.danger}20`,
+                                color: colors.danger,
+                            }}
+                        >
+                            <AlertCircle className="w-4 h-4 shrink-0" />
                             <span>{erro}</span>
                         </div>
                     )}
@@ -98,7 +109,7 @@ export function ModalEntrada({
                                 style={{
                                     backgroundColor: colors.card,
                                     borderColor: colors.border,
-                                    color: colors.text
+                                    color: colors.text,
                                 }}
                                 placeholder="0"
                                 autoFocus
@@ -118,7 +129,7 @@ export function ModalEntrada({
                                 style={{
                                     backgroundColor: colors.card,
                                     borderColor: colors.border,
-                                    color: colors.text
+                                    color: colors.text,
                                 }}
                                 placeholder="Ex: Compra ao fornecedor X"
                             />
@@ -126,20 +137,28 @@ export function ModalEntrada({
                     </div>
                 </div>
 
-                <div className="p-6 border-t flex gap-3" style={{ borderColor: colors.border }}>
+                {/* Footer */}
+                <div
+                    className="px-6 py-4 border-t flex gap-3"
+                    style={{ borderColor: colors.border, backgroundColor: colors.hover }}
+                >
                     <button
                         onClick={onClose}
                         disabled={loading}
-                        className="flex-1 px-4 py-2 transition-colors disabled:opacity-50"
-                        style={{ color: colors.textSecondary }}
+                        className="flex-1 px-4 py-2 rounded-lg transition-all disabled:opacity-50 font-medium text-sm"
+                        style={{
+                            color: colors.text,
+                            backgroundColor: colors.background,
+                            border: `1px solid ${colors.border}`,
+                        }}
                     >
                         Cancelar
                     </button>
                     <button
                         onClick={handleConfirm}
                         disabled={loading}
-                        className="flex-1 px-4 py-2 text-white transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                        style={{ backgroundColor: colors.primary }}
+                        className="flex-1 px-4 py-2 rounded-lg text-white transition-all disabled:opacity-50 flex items-center justify-center gap-2 font-medium text-sm hover:shadow-lg"
+                        style={{ backgroundColor: colors.secondary }}
                     >
                         {loading ? (
                             <RefreshCcw className="w-4 h-4 animate-spin" />

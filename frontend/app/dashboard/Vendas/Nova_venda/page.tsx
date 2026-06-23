@@ -86,6 +86,7 @@ interface ThemeColors {
   hover: string;
 }
 
+// ✅ CORRIGIDO: Função calcularItem com taxa de retenção dinâmica
 function calcularItem(
   produto: Produto,
   qtd: number,
@@ -94,10 +95,13 @@ function calcularItem(
 ): ItemVendaUI {
   const ehServico = isServico(produto);
   const base = arredondar(arredondar(produto.preco_venda * qtd) - desc);
-  const taxaIva = produto.taxa_iva;
+  const taxaIva = produto.taxa_iva ?? 14;
   const iva = arredondar((base * taxaIva) / 100);
-  const taxaRet = ehServico ? 6.5 : 0;
+  
+  // ✅ CORRIGIDO: Usa a taxa de retenção do produto
+  const taxaRet = ehServico ? (produto.taxa_retencao || 0) : 0;
   const ret = ehServico ? arredondar((base * taxaRet) / 100) : 0;
+  
   return {
     id,
     produto_id: produto.id,

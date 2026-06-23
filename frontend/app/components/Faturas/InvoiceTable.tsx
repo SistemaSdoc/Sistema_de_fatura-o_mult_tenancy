@@ -9,7 +9,6 @@ import {
   Download,
   ChevronLeft,
   ChevronRight,
-  Receipt,
 } from "lucide-react";
 
 const TIPO_LABEL: Record<TipoDocumento, string> = {
@@ -258,11 +257,11 @@ export default function InvoiceTable({
   gerandoRecibo,
   baixandoPdf,
   imprimindo,
-  imprimindoTermica,
+  
   onVerDetalhes,
   onGerarRecibo,
   onImprimirPdf,
-  onImprimirTermica,
+  
   onBaixarPdf,
   formatKz,
   documentoFiscalService,
@@ -588,7 +587,7 @@ export default function InvoiceTable({
     <div className="w-full flex flex-col">
       {/* Abas */}
       <div
-        className="flex overflow-x-auto"
+        className="flex "
         style={{ borderBottom: `1px solid ${colors.border}` }}
       >
         <button

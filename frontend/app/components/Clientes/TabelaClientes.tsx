@@ -70,44 +70,38 @@ function ConfirmModal({
       : colors.warning;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in-0 duration-200">
       <div
-        className="shadow-xl max-w-md w-full p-5"
-        style={{ backgroundColor: colors.card }}
+        className="w-full max-w-md shadow-2xl rounded-lg overflow-hidden border animate-in zoom-in-95 fade-in-0 duration-300"
+        style={{ backgroundColor: colors.card, borderColor: colors.border }}
       >
-        <div className="flex items-center gap-3 mb-3">
-          <div className="p-2.5" style={{ backgroundColor: iconBg }}>
-            <AlertCircle className="w-5 h-5" style={{ color: iconClr }} />
+        {/* Header */}
+        <div className="px-6 py-4 border-b" style={{ borderColor: colors.border, backgroundColor: colors.hover }}>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg" style={{ backgroundColor: `${iconBg}20` }}>
+              <AlertCircle className="w-5 h-5" style={{ color: iconClr }} />
+            </div>
+            <h3 className="text-lg font-semibold" style={{ color: colors.text }}>{title}</h3>
           </div>
-          <h3
-            className="text-base font-semibold"
-            style={{ color: colors.text }}
-          >
-            {title}
-          </h3>
         </div>
-        <p
-          className="text-sm mb-5 ml-[52px]"
-          style={{ color: colors.textSecondary }}
-        >
-          {message}
-        </p>
-        <div className="flex gap-3">
+        {/* Conteúdo */}
+        <div className="px-6 py-4">
+          <p className="text-sm leading-relaxed" style={{ color: colors.textSecondary }}>{message}</p>
+        </div>
+        {/* Footer */}
+        <div className="px-6 py-4 border-t flex gap-3" style={{ borderColor: colors.border, backgroundColor: colors.hover }}>
           <button
             onClick={onClose}
             disabled={loading}
-            className="flex-1 px-4 py-2 text-sm transition-colors"
-            style={{
-              color: colors.textSecondary,
-              border: `1px solid ${colors.border}`,
-            }}
+            className="flex-1 px-4 py-2 rounded-lg transition-all disabled:opacity-50 font-medium text-sm"
+            style={{ color: colors.text, backgroundColor: colors.background, border: `1px solid ${colors.border}` }}
           >
             {cancelText}
           </button>
           <button
             onClick={onConfirm}
             disabled={loading}
-            className="flex-1 px-4 py-2 text-white text-sm flex items-center justify-center gap-2 transition-opacity disabled:opacity-60"
+            className="flex-1 px-4 py-2 rounded-lg text-white transition-all disabled:opacity-50 flex items-center justify-center gap-2 font-medium text-sm hover:shadow-lg"
             style={{ backgroundColor: btnColor }}
           >
             {loading ? (

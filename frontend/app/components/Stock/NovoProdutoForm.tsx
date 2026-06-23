@@ -73,6 +73,19 @@ interface NovoProdutoFormProps {
   initialTipo?: TipoProduto;
 }
 
+// CONSTANTES PARA CÓDIGOS DE ISENÇÃO
+const OPCOES_ISENCAO = [
+  { value: "", label: "Sem isenção" },
+  { value: "M00", label: "Sujeito a IVA (normal)" },
+  { value: "M01", label: "Isento (Art. 12 - Operações isentas)" },
+  { value: "M02", label: "Isento (Art. 13 - Exportações)" },
+  { value: "M03", label: "Isento (Art. 14 - Serviços financeiros)" },
+  { value: "M04", label: "Isento (Art. 15 - Operações imobiliárias)" },
+  { value: "M05", label: "Isento (Art. 16 - Serviços de saúde)" },
+  { value: "M06", label: "Isento (Art. 17 - Educação)" },
+  { value: "M99", label: "Outras isenções" },
+] as const;
+
 export function NovoProdutoForm({
   onSuccess,
   onCancel,
@@ -257,6 +270,15 @@ export function NovoProdutoForm({
     const { name, value, type } = e.target;
     const checked = (e.target as HTMLInputElement).checked;
 
+    // ✅ VALIDAÇÃO: Retenção não pode ser menor que 0
+    if (name === "taxa_retencao") {
+      const numValue = parseFloat(value);
+      if (!isNaN(numValue) && numValue < 0) {
+        // Se for menor que 0, não atualiza
+        return;
+      }
+    }
+
     setFormData((prev) => ({
       ...prev,
       [name]: type === "checkbox" ? checked : value,
@@ -278,6 +300,8 @@ export function NovoProdutoForm({
       // Reset IVA para padrão de serviço
       taxa_iva: tipo === "servico" ? "14" : "0",
       sujeito_iva: tipo === "servico" ? true : false,
+      // Reset código de isenção
+      codigo_isencao: tipo === "servico" ? "" : "",
     }));
     setErrors({});
   };
@@ -297,6 +321,12 @@ export function NovoProdutoForm({
     const precoVenda = parseFloat(formData.preco_venda);
     if (!precoVenda || precoVenda <= 0) {
       newErrors.preco_venda = "Preço de venda obrigatório";
+    }
+
+    // ✅ VALIDAÇÃO: Retenção não pode ser menor que 0
+    const retencao = parseFloat(formData.taxa_retencao);
+    if (!isNaN(retencao) && retencao < 0) {
+      newErrors.taxa_retencao = "Retenção não pode ser menor que 0";
     }
 
     if (!isServico) {
@@ -334,20 +364,54 @@ export function NovoProdutoForm({
       };
 
       if (isServico) {
-        // SERVIÇO: envia próprio IVA
-        dados.taxa_iva = parseFloat(formData.taxa_iva) || 0;
-        dados.sujeito_iva = formData.sujeito_iva;
-        dados.taxa_retencao = parseFloat(formData.taxa_retencao) || 0;
+        // ============================================================
+        // ✅ SERVIÇO: Só envia IVA se o checkbox estiver marcado
+        // ============================================================
+        if (formData.sujeito_iva) {
+          // Usuário quer IVA - envia o valor configurado
+          dados.taxa_iva = parseFloat(formData.taxa_iva) || 0;
+          dados.sujeito_iva = true;
+        } else {
+          // Usuário NÃO quer IVA - envia null
+          dados.taxa_iva = null;
+          dados.sujeito_iva = false;
+        }
+
+        // ============================================================
+        // ✅ RETENÇÃO: Aceita 0 ou valores positivos, envia como número
+        // ============================================================
+        const retencao = parseFloat(formData.taxa_retencao) || 0;
+        // Garante que não seja menor que 0
+        dados.taxa_retencao = Math.max(0, retencao);
+
+        // ============================================================
+        // ✅ CÓDIGO DE ISENÇÃO: Só envia se tiver valor
+        // ============================================================
+        dados.codigo_isencao = formData.codigo_isencao || null;
+
+        // Campos específicos de serviço
         dados.duracao_estimada = `${formData.duracao_estimada} ${formData.unidade_medida}`;
         dados.unidade_medida = formData.unidade_medida;
-        dados.codigo_isencao = formData.codigo_isencao || undefined;
         dados.categoria_id = null;
         dados.codigo = null;
         dados.preco_compra = 0;
         dados.estoque_atual = 0;
         dados.estoque_minimo = 0;
+
+        // ============================================================
+        // 📝 LOG para debug - ver o que está sendo enviado
+        // ============================================================
+        console.log("📤 Enviando serviço:", {
+          taxa_iva: dados.taxa_iva,
+          sujeito_iva: dados.sujeito_iva,
+          taxa_retencao: dados.taxa_retencao,
+          codigo_isencao: dados.codigo_isencao,
+        });
+
       } else {
-        // PRODUTO: NÃO envia taxa_iva e sujeito_iva (vem da categoria)
+        // ============================================================
+        // ✅ PRODUTO: NÃO envia taxa_iva e sujeito_iva (vem da categoria)
+        // ============================================================
         dados.categoria_id = formData.categoria_id || null;
         dados.codigo = formData.codigo.trim() || null;
         dados.preco_compra = parseFloat(formData.preco_compra) || 0;
@@ -366,7 +430,7 @@ export function NovoProdutoForm({
         }
 
         // NÃO enviar taxa_iva e sujeito_iva para produtos
-        // O backend vai ignorar mesmo se enviar, mas melhor não enviar
+        // O backend usa os valores da categoria
       }
 
       await produtoService.criarProduto(dados);
@@ -1050,7 +1114,7 @@ export function NovoProdutoForm({
                 )}
               </div>
 
-              {/* Retenção para serviços */}
+              {/* ✅ RETENÇÃO - Aceita 0 ou valores positivos com vírgula */}
               <div
                 className="flex items-center gap-4"
                 style={{ borderColor: colors.border }}
@@ -1073,7 +1137,9 @@ export function NovoProdutoForm({
                     className="w-20 px-2 py-1 border text-sm"
                     style={{
                       backgroundColor: colors.card,
-                      borderColor: colors.border,
+                      borderColor: errors.taxa_retencao
+                        ? colors.danger
+                        : colors.border,
                       color: colors.text,
                     }}
                   />
@@ -1086,6 +1152,12 @@ export function NovoProdutoForm({
                 </div>
               </div>
             </div>
+          )}
+
+          {errors.taxa_retencao && (
+            <p className="mt-1 text-xs" style={{ color: colors.danger }}>
+              {errors.taxa_retencao}
+            </p>
           )}
 
           {/* Preview de Cálculos */}
@@ -1283,7 +1355,7 @@ export function NovoProdutoForm({
               </div>
             </div>
 
-            {/* Código de Isenção para serviços */}
+            {/* ✅ CORRIGIDO: Código de Isenção para serviços com valores válidos */}
             <div>
               <label
                 className="block text-sm font-medium mb-1"
@@ -1302,37 +1374,17 @@ export function NovoProdutoForm({
                   color: colors.text,
                 }}
               >
-                <option value="">Sem isenção</option>
-
-                <option value="NAO_SUJEITO">Não sujeito a IVA</option>
-
-                <option value="ISENTO_ART12">
-                  Isento - Art.º 12.º (Bens e serviços isentos)
-                </option>
-
-                <option value="ISENTO_SAUDE">
-                  Isento - Serviços de saúde (Art.º 12.º)
-                </option>
-
-                <option value="ISENTO_EDUCACAO">
-                  Isento - Serviços de educação (Art.º 12.º)
-                </option>
-
-                <option value="ISENTO_MEDICAMENTOS">
-                  Isento - Medicamentos
-                </option>
-
-                <option value="ISENTO_IMPORTACAO">
-                  Isento - Importações específicas
-                </option>
-
-                <option value="OUTROS">Outras isenções</option>
+                {OPCOES_ISENCAO.map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
               </select>
               <p
                 className="mt-1 text-xs"
                 style={{ color: colors.textSecondary }}
               >
-                Para serviços isentos de IVA segundo o Código do IVA de Angola
+                Código de isenção conforme Código do IVA de Angola
               </p>
             </div>
           </div>

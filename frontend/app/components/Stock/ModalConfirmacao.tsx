@@ -69,33 +69,44 @@ export function ModalConfirmacao({
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="shadow-xl max-w-md w-full" style={{ backgroundColor: colors.card }}>
-                <div className="p-6">
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="p-2 " style={{ backgroundColor: `${config.buttonColor}20` }}>
-                            <div style={{ color: config.buttonColor }}>
-                                {config.icon}
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in-0 duration-200">
+            <div className="w-full max-w-md animate-in zoom-in-95 fade-in-0 duration-300" style={{ backgroundColor: colors.card }}>
+                <div className="rounded-lg shadow-2xl overflow-hidden border" style={{ borderColor: colors.border }}>
+                    {/* Header */}
+                    <div className="px-6 py-4 border-b" style={{ borderColor: colors.border, backgroundColor: colors.hover }}>
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg" style={{ backgroundColor: `${config.buttonColor}20` }}>
+                                <div style={{ color: config.buttonColor }}>
+                                    {config.icon}
+                                </div>
                             </div>
+                            <h3 className="text-lg font-semibold" style={{ color: colors.text }}>{titulo}</h3>
                         </div>
-                        <h3 className="text-lg font-semibold" style={{ color: colors.text }}>{titulo}</h3>
                     </div>
 
-                    <p className="mb-6" style={{ color: colors.textSecondary }}>{mensagem}</p>
+                    {/* Conteúdo */}
+                    <div className="px-6 py-4">
+                        <p className="text-sm" style={{ color: colors.textSecondary }}>{mensagem}</p>
+                    </div>
 
-                    <div className="flex gap-3">
+                    {/* Footer */}
+                    <div className="px-6 py-4 border-t flex gap-3" style={{ borderColor: colors.border, backgroundColor: colors.hover }}>
                         <button
                             onClick={onClose}
                             disabled={loading}
-                            className="flex-1 px-4 py-2 transition-colors disabled:opacity-50"
-                            style={{ color: colors.textSecondary }}
+                            className="flex-1 px-4 py-2 rounded-lg transition-all disabled:opacity-50 font-medium text-sm"
+                            style={{ 
+                                color: colors.text,
+                                backgroundColor: colors.background,
+                                border: `1px solid ${colors.border}`
+                            }}
                         >
                             Cancelar
                         </button>
                         <button
                             onClick={handleConfirm}
                             disabled={loading}
-                            className="flex-1 px-4 py-2 text-white transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            className="flex-1 px-4 py-2 rounded-lg text-white transition-all disabled:opacity-50 flex items-center justify-center gap-2 font-medium text-sm hover:shadow-lg"
                             style={{ backgroundColor: config.buttonColor }}
                         >
                             {loading && <RefreshCcw className="w-4 h-4 animate-spin" />}

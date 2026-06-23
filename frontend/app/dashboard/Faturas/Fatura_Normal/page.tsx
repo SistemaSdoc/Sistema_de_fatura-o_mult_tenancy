@@ -219,6 +219,7 @@ export default function NovaFaturaNormalPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // ✅ CORRIGIDO: Preview com taxa de retenção dinâmica
   useEffect(() => {
     if (!formItem.produto_id) {
       setPreviewItem(null);
@@ -239,7 +240,11 @@ export default function NovaFaturaNormalPage() {
     );
     const taxaIva = p.taxa_iva ?? 14;
     const iva = arredondar((base * taxaIva) / 100);
-    const ret = ehServico ? arredondar(base * 0.065) : 0;
+    
+    // ✅ CORRIGIDO: Usa a taxa de retenção do produto
+    const taxaRetencao = ehServico ? (p.taxa_retencao || 0) : 0;
+    const ret = ehServico ? arredondar((base * taxaRetencao) / 100) : 0;
+    
     setPreviewItem({
       id: "preview",
       produto_id: p.id,
@@ -302,6 +307,7 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setDropdownAberto(false);
   };
 
+  // ✅ CORRIGIDO: calcularItem com taxa de retenção dinâmica
   const calcularItem = (
     p: Produto,
     qtd: number,
@@ -312,7 +318,11 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const base = arredondar(arredondar(p.preco_venda * qtd) - desc);
     const taxaIva = p.taxa_iva ?? 14;
     const iva = arredondar((base * taxaIva) / 100);
-    const ret = ehServico ? arredondar(base * 0.065) : 0;
+    
+    // ✅ CORRIGIDO: Usa a taxa de retenção do produto
+    const taxaRetencao = ehServico ? (p.taxa_retencao || 0) : 0;
+    const ret = ehServico ? arredondar((base * taxaRetencao) / 100) : 0;
+    
     return {
       id,
       produto_id: p.id,

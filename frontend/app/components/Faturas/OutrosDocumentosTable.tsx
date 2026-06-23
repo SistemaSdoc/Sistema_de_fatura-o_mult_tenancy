@@ -77,7 +77,7 @@ function TipoBadge({ tipo, colors }: { tipo: TipoDocumento; colors: ColorsTheme 
   const palette: Partial<Record<TipoDocumento, { bg: string; text: string }>> = {
     FP: { bg: `${colors.warning}1a`, text: colors.warning },
     FA: { bg: `${colors.warning}1a`, text: colors.warning },
-    NC: { bg: `${colors.danger}1a`, text: colors.danger },
+    NC: { bg: `${colors.warning}1a`, text: colors.warning },
     ND: { bg: `${colors.secondary}1a`, text: colors.secondary },
     FRt: { bg: `${colors.primary}1a`, text: colors.primary },
   };
@@ -532,7 +532,7 @@ export default function OutrosDocumentosTable({
     <div className="w-full flex flex-col">
       {/* Abas */}
       <div
-        className="flex overflow-x-auto"
+        className="flex   "
         style={{ borderBottom: `1px solid ${colors.border}` }}
       >
         {TABS.map((tab) => {

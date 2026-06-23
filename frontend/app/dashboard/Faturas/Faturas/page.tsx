@@ -11,9 +11,8 @@ import {
   GerarReciboDTO,
 } from "@/services/DocumentoFiscal";
 import { useThemeColors } from "@/context/ThemeContext";
-import { ShoppingCart, FileText, ChevronDown } from "lucide-react";
+import {  FileText, ChevronDown } from "lucide-react";
 import Cookies from "js-cookie";
-import { color } from "framer-motion";
 
 // ── Helper: lê o XSRF-TOKEN do cookie (já descodificado) ───────────────────
 function getXsrfToken(): string {

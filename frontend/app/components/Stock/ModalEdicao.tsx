@@ -70,42 +70,39 @@ export function ModalEdicao({ isOpen, item, onSave, onClose, categorias }: Modal
 
     const isServicoItem = formData.tipo === "servico";
 
-useEffect(() => {
-    if (item) {
-        let duracaoNum = "1";
-        let unidade: UnidadeMedida = "hora";
+    useEffect(() => {
+        if (item) {
+            let duracaoNum = "1";
+            let unidade: UnidadeMedida = "hora";
 
-        if (item.duracao_estimada) {
-            const match = item.duracao_estimada.match(/^(\d+)\s*(\w+)$/);
-            if (match) {
-                duracaoNum = match[1];
-                unidade = match[2] as UnidadeMedida;
+            if (item.duracao_estimada) {
+                const match = item.duracao_estimada.match(/^(\d+)\s*(\w+)$/);
+                if (match) {
+                    duracaoNum = match[1];
+                    unidade = match[2] as UnidadeMedida;
+                }
             }
+
+            setFormData({
+                tipo: item.tipo,
+                categoria_id: item.categoria_id || "",
+                codigo: item.codigo || "",
+                nome: item.nome || "",
+                descricao: item.descricao || "",
+                preco_compra: item.preco_compra?.toString() || "0",
+                preco_venda: item.preco_venda?.toString() || "0",
+                taxa_iva: item.taxa_iva?.toString() || "0",
+                sujeito_iva: item.sujeito_iva ?? true,
+                estoque_minimo: item.estoque_minimo?.toString() || "5",
+                status: item.status || "ativo",
+                taxa_retencao: item.taxa_retencao?.toString() || "0",
+                duracao_estimada: duracaoNum,
+                unidade_medida: unidade,
+            });
+            setErrors({});
+            setError(null);
         }
-
-        setFormData({
-            tipo: item.tipo,
-            categoria_id: item.categoria_id || "",
-            codigo: item.codigo || "",
-            nome: item.nome || "",
-            descricao: item.descricao || "",
-            preco_compra: item.preco_compra?.toString() || "0",
-            preco_venda: item.preco_venda?.toString() || "0",
-            taxa_iva: item.taxa_iva?.toString() || "0",
-            
-            // ← LINHA CORRIGIDA
-            sujeito_iva: item.sujeito_iva ?? true,
-
-            estoque_minimo: item.estoque_minimo?.toString() || "5",
-            status: item.status || "ativo",
-            taxa_retencao: item.taxa_retencao?.toString() || "0",
-            duracao_estimada: duracaoNum,
-            unidade_medida: unidade,
-        });
-        setErrors({});
-        setError(null);
-    }
-}, [item]);
+    }, [item]);
 
     const margemLucro = useMemo(() => {
         if (isServicoItem) return 0;
@@ -208,7 +205,7 @@ useEffect(() => {
             }
         } catch (err: any) {
             let errorMessage = "Erro ao salvar alterações";
-            
+
             if (err.response?.data?.message) {
                 errorMessage = err.response.data.message;
             } else if (err.response?.data?.errors) {
@@ -217,7 +214,7 @@ useEffect(() => {
             } else if (err.message) {
                 errorMessage = err.message;
             }
-            
+
             setError(errorMessage);
         } finally {
             setLoading(false);
@@ -228,12 +225,11 @@ useEffect(() => {
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-2"
-            style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-2 bg-black/40 backdrop-blur-sm animate-in fade-in-0 duration-200"
             onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
         >
             <div
-                className="relative w-full max-w-2xl border shadow-2xl flex flex-col"
+                className="relative w-full max-w-2xl rounded-lg shadow-2xl flex flex-col animate-in zoom-in-95 fade-in-0 duration-300 border overflow-hidden"
                 style={{
                     backgroundColor: colors.background,
                     maxHeight: "95vh",
@@ -241,10 +237,10 @@ useEffect(() => {
                 }}
                 onClick={(e) => e.stopPropagation()}
             >
-                {/* Header Compacto */}
+                {/* Header */}
                 <div
-                    className="flex items-center justify-between px-3 py-2 border-b"
-                    style={{ borderColor: colors.border }}
+                    className="flex items-center justify-between px-6 py-4 border-b"
+                    style={{ borderColor: colors.border, backgroundColor: colors.hover }}
                 >
                     <div className="flex items-center gap-2">
                         {!isServicoItem ? (
@@ -312,7 +308,7 @@ useEffect(() => {
                             </div>
                         </div>
 
-                        {/* Nome e Descrição - Linha única onde possível */}
+                        {/* Nome e Descrição */}
                         <div className="space-y-1">
                             <div>
                                 <label className="block text-xs font-medium mb-0.5" style={{ color: colors.text }}>
@@ -424,7 +420,7 @@ useEffect(() => {
                             </select>
                         </div>
 
-                        {/* Preços - Layout horizontal compacto */}
+                        {/* Preços */}
                         <div className="border p-2 space-y-2" style={{ borderColor: colors.border }}>
                             <div className="grid grid-cols-2 gap-2">
                                 {!isServicoItem && (
@@ -482,7 +478,7 @@ useEffect(() => {
                                 </div>
                             </div>
 
-                            {/* IVA e Retenção - Linha única */}
+                            {/* IVA e Retenção */}
                             <div className="flex flex-wrap items-center gap-3 pt-1 border-t" style={{ borderColor: colors.border }}>
                                 <label className="flex items-center gap-1 cursor-pointer">
                                     <input
@@ -544,7 +540,7 @@ useEffect(() => {
                                 )}
                             </div>
 
-                            {/* Preview de cálculo - Inline */}
+                            {/* Preview de cálculo */}
                             <div className="flex items-center justify-between text-xs pt-1 border-t" style={{ borderColor: colors.border }}>
                                 <div className="flex items-center gap-1" style={{ color: colors.textSecondary }}>
                                     <Calculator className="w-3 h-3" />
@@ -646,7 +642,7 @@ useEffect(() => {
                             </div>
                         )}
 
-                        {/* Botões - Compactos */}
+                        {/* Botões */}
                         <div
                             className="flex items-center justify-end gap-2 pt-2 border-t"
                             style={{ borderColor: colors.border }}
@@ -655,10 +651,10 @@ useEffect(() => {
                                 type="button"
                                 onClick={onClose}
                                 className="px-3 py-1.5 border text-xs font-medium hover:opacity-80 transition-opacity"
-                                style={{ 
+                                style={{
                                     color: colors.textSecondary,
                                     borderColor: colors.border,
-                                    backgroundColor: colors.card
+                                    backgroundColor: colors.card,
                                 }}
                             >
                                 Cancelar

@@ -1,6 +1,6 @@
 // src/app/(empresa)/estoque/components/TabsEstoque.tsx
 import React from "react";
-import { Layers, History, Archive } from "lucide-react";
+import { Layers,Trash2,ArrowRightLeft } from "lucide-react";
 import { useThemeColors } from "@/context/ThemeContext";
 
 interface TabsEstoqueProps {
@@ -47,7 +47,7 @@ export function TabsEstoque({ abaAtiva, onAbaChange, totalItens, totalDeletados,
                         color: abaAtiva === "movimentacoes" ? colors.text : colors.textSecondary
                     }}
                 >
-                    <History className="w-4 h-4" />
+                    <ArrowRightLeft className="w-4 h-4" />
                     Movimentações
                 </button>
                 
@@ -59,7 +59,7 @@ export function TabsEstoque({ abaAtiva, onAbaChange, totalItens, totalDeletados,
                         color: abaAtiva === "deletados" ? colors.text : colors.textSecondary
                     }}
                 >
-                    <Archive className="w-4 h-4" />
+                    <Trash2 className="w-4 h-4" />
                     Lixeira
                     {totalDeletados > 0 && (
                         <span 

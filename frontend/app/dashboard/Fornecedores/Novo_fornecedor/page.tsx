@@ -148,9 +148,9 @@ function Modal({
   const colors = useThemeColors();
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 bg-black/5 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in-0 duration-200">
       <div
-        className="shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden"
+        className="shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden animate-in zoom-in-95 fade-in-0 duration-300"
         style={{ backgroundColor: colors.card }}
       >
         <div
@@ -224,9 +224,9 @@ function ConfirmModal({
         : colors.warning;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in-0 duration-200">
       <div
-        className="shadow-xl max-w-md w-full p-5"
+        className="shadow-2xl max-w-md w-full p-5 animate-in zoom-in-95 fade-in-0 duration-300"
         style={{ backgroundColor: colors.card }}
       >
         <div className="flex items-center gap-3 mb-3">

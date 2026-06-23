@@ -238,7 +238,7 @@ export default function NovaFaturaProformaPage() {
         setDropdownAberto(false);
     };
 
-    /* ── Preview ── */
+    /* ── Preview com taxa de retenção dinâmica ── */
     useEffect(() => {
         if (!formItem.produto_id) { 
             setPreviewItem(null); 
@@ -254,7 +254,11 @@ export default function NovaFaturaProformaPage() {
         const base = arredondar(p.preco_venda * qtd);
         const taxaIva = p.taxa_iva ?? 14;
         const iva = arredondar(base * taxaIva / 100);
-        const ret = ehServico ? arredondar(base * 0.065) : 0;
+        
+        // ✅ CORRIGIDO: Usa a taxa de retenção do produto
+        const taxaRetencao = ehServico ? (p.taxa_retencao || 0) : 0;
+        const ret = ehServico ? arredondar((base * taxaRetencao) / 100) : 0;
+        
         setPreviewItem({
             id: "preview", 
             produto_id: p.id, 
@@ -270,13 +274,17 @@ export default function NovaFaturaProformaPage() {
         });
     }, [formItem, produtos]);
 
-    /* ── Calcular item ── */
+    /* ── Calcular item com taxa de retenção dinâmica ── */
     const calcularItem = (p: Produto, qtd: number, id = uuidv4()): ItemDocumentoUI => {
         const ehServico = isServico(p);
         const base = arredondar(p.preco_venda * qtd);
         const taxaIva = p.taxa_iva ?? 14;
         const iva = arredondar(base * taxaIva / 100);
-        const ret = ehServico ? arredondar(base * 0.065) : 0;
+        
+        // ✅ CORRIGIDO: Usa a taxa de retenção do produto
+        const taxaRetencao = ehServico ? (p.taxa_retencao || 0) : 0;
+        const ret = ehServico ? arredondar((base * taxaRetencao) / 100) : 0;
+        
         return {
             id, 
             produto_id: p.id, 

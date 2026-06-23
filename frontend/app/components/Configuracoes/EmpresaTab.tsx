@@ -114,8 +114,7 @@ const LogoUploader = ({
                             style={{ border: `1px solid ${colors.border}` }}
                         />
                         {!disabled && (
-                            <div className="absolute inset-0 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                                style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+                            <div className="absolute inset-0 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
                                 <Camera className="w-6 h-6 text-white" />
                             </div>
                         )}

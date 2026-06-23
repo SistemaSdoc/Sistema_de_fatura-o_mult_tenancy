@@ -20,13 +20,12 @@ import { ModalEdicao } from "@/app/components/Stock/ModalEdicao";
 
 // Hooks
 import { useEstoque } from "@/hooks/useEstoque";
-import getBaseWebpackConfig, { babelIncludeRegexes } from "next/dist/build/webpack-config";
-import { backIn } from "framer-motion";
+
 
 export default function EstoquePage() {
     const router = useRouter();
     const colors = useThemeColors();
-    
+
     // Estado para controlar o modal de novo produto
     const [modalNovoProdutoAberto, setModalNovoProdutoAberto] = useState(false);
 
@@ -102,12 +101,12 @@ export default function EstoquePage() {
         return (
             <MainEmpresa>
                 <div className="flex items-center justify-center min-h-[400px] " style={{ backgroundColor: colors.background }}>
-                    <div 
+                    <div
                         className="animate-spin w-10 h-10 border-3 rounded-full"
-                        style={{ 
-                            borderColor: `${colors.primary}30`, 
-                            borderTopColor: colors.primary 
-                        }} 
+                        style={{
+                            borderColor: `${colors.primary}30`,
+                            borderTopColor: colors.primary
+                        }}
                     />
                 </div>
             </MainEmpresa>
@@ -120,25 +119,36 @@ export default function EstoquePage() {
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
-                        <button 
+                        <button
                             className="flex items-center gap-2 p-1.5 transition-colors hover:opacity-70"
-                            style={{ color: colors.primary }} 
+                            style={{ color: colors.primary }}
                             onClick={() => router.back()}
-                        > 
+                        >
                             <ArrowLeft className="w-4 h-4" />
                             <h1 className="text-2xl md:text-3xl font-bold" style={{ color: colors.secondary }}>Seu Stock</h1>
                         </button>
-                        
+
                         <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>Gerencie seu catálogo e controle de estoque</p>
                     </div>
-                    <button
-                        onClick={abrirModalNovoProduto}
-                        className="flex items-center gap-2 px-4 py-2 text-white transition-colors text-sm font-medium hover:opacity-90"
-                        style={{ backgroundColor: colors.secondary }}
-                    >
-                        <Plus className="w-4 h-4" />
-                        Novo Item
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={abrirModalNovoProduto}
+                            className="flex items-center gap-2 px-4 py-2 text-white transition-colors text-sm font-medium hover:opacity-90"
+                            style={{ backgroundColor: colors.secondary }}
+                        >
+                            <Plus className="w-4 h-4" />
+                            Novo Item
+                        </button>
+
+                        <button
+                            onClick={() => router.push("/dashboard/Produtos_servicos/categorias")}
+                            className="flex items-center gap-2 px-4 py-2 text-white transition-colors text-sm font-medium hover:opacity-90"
+                            style={{ backgroundColor: colors.primary }}
+                        >
+                            <Plus className="w-4 h-4" />
+                            Nova Categoria
+                        </button>
+                    </div>
                 </div>
 
                 {/* Cards de Resumo */}
@@ -234,13 +244,13 @@ export default function EstoquePage() {
 
             {/* Modal de Novo Produto - Usando NovoProdutoForm diretamente */}
             {modalNovoProdutoAberto && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
-                    <div 
-                        className="shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden rounded-lg"
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in-0 duration-200">
+                    <div
+                        className="shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden rounded-lg animate-in zoom-in-95 fade-in-0 duration-300"
                         style={{ backgroundColor: colors.card }}
                     >
                         <div className="p-6 overflow-y-auto max-h-[90vh]">
-                            <NovoProdutoForm 
+                            <NovoProdutoForm
                                 onSuccess={handleProdutoCriado}
                                 onCancel={fecharModalNovoProduto}
                             />

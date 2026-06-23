@@ -468,7 +468,7 @@ export const ModalVisualizacao: React.FC<ModalVisualizacaoProps> = ({
     return (
         <>
             {/* Overlay */}
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100]" onClick={onClose} />
+            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] animate-in fade-in-0 duration-200" onClick={onClose} />
 
             {/* Modal Container */}
             <div
@@ -477,7 +477,7 @@ export const ModalVisualizacao: React.FC<ModalVisualizacaoProps> = ({
             >
                 <div className="flex items-center justify-center min-h-full p-2 text-center sm:p-4">
                     <div
-                        className="relative w-full max-w-3xl overflow-hidden text-left align-middle transition-all transform shadow-xl rounded-xl sm:rounded-2xl"
+                        className="relative w-full max-w-3xl overflow-hidden text-left align-middle transition-all transform shadow-2xl rounded-xl sm:rounded-2xl animate-in zoom-in-95 fade-in-0 duration-300"
                         style={{ backgroundColor: colors.card }}
                         onClick={(e) => e.stopPropagation()}
                     >

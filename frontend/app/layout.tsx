@@ -1,19 +1,7 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/context/ThemeContext";
-
-import { AuthProvider } from '@/context/authprovider';
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+import { AuthProvider } from "@/context/authprovider";
 
 export const metadata: Metadata = {
   title: {
@@ -26,30 +14,28 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html
       lang="pt"
       suppressHydrationWarning
       className="h-full"
+      style={{
+        fontFamily: '"Georgia, serif',
+      }}
     >
       <body
         suppressHydrationWarning
-        className={`
-          ${geistSans.variable}
-          ${geistMono.variable}
-          min-h-screen
-          bg-background
-          text-foreground
-          antialiased
-        `}
+        className="min-h-screen bg-background text-foreground antialiased"
       >
-        <ThemeProvider> 
+        <ThemeProvider>
           <AuthProvider>
-                
-                            {children}
-                     
-            </AuthProvider>
+            {children}
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>
