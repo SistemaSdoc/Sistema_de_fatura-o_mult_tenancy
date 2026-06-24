@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\DB;
  *    (causava queries extras e pode sobrescrever o valor calculado pelo service)
  *  - Acessores: apenas leitura de atributos já carregados, sem queries adicionais
  *  - Métodos de estado: mutações simples, sem lógica de negócio (que está no service)
- *  - retencao renomeada para taxa_retencao nos fillable (consistência com o service)
+ *  - taxa_retencao removido do fillable (já está no service)
  */
 class DocumentoFiscal extends TenantModel
 {
@@ -137,18 +137,28 @@ class DocumentoFiscal extends TenantModel
         return $this->belongsTo(User::class, 'user_cancelamento_id');
     }
 
-    /** Documento de origem — para NC, ND, RC, FRt */
+    /**
+     * Documento de origem — para NC, ND, RC, FRt
+     * Usa fatura_id para referenciar o documento original
+     */
     public function documentoOrigem()
     {
         return $this->belongsTo(DocumentoFiscal::class, 'fatura_id');
     }
 
-    
-
-    /** Documentos derivados deste (NC, ND, RC, FRt) */
+    /**
+     * Documentos derivados deste (NC, ND, RC, FRt)
+     * Inclui todos os tipos de documentos que podem ser gerados a partir deste
+     */
     public function documentosDerivados()
     {
-        return $this->hasMany(DocumentoFiscal::class, 'fatura_id');
+        return $this->hasMany(DocumentoFiscal::class, 'fatura_id')
+            ->whereIn('tipo_documento', [
+                self::TIPO_NOTA_CREDITO,
+                self::TIPO_NOTA_DEBITO,
+                self::TIPO_RECIBO,
+                self::TIPO_FATURA_RETIFICACAO,
+            ]);
     }
 
     /** Itens do documento */
@@ -373,27 +383,33 @@ class DocumentoFiscal extends TenantModel
 
     public function getPodeGerarReciboAttribute(): bool
     {
-        return in_array($this->tipo_documento, [self::TIPO_FATURA, self::TIPO_FATURA_ADIANTAMENTO])
+        return in_array($this->tipo_documento, [self::TIPO_FATURA, self::TIPO_FATURA_ADIANTAMENTO, self::TIPO_FATURA_PROFORMA])
             && in_array($this->estado, [self::ESTADO_EMITIDO, self::ESTADO_PARCIALMENTE_PAGA]);
     }
 
+    /**
+     * CORRIGIDO: Nota de Crédito só pode ser emitida a partir de FT ou FR
+     */
     public function getPodeGerarNotaCreditoAttribute(): bool
     {
         return in_array($this->tipo_documento, [self::TIPO_FATURA, self::TIPO_FATURA_RECIBO])
             && in_array($this->estado, [
                 self::ESTADO_EMITIDO,
-                self::ESTADO_PAGA,
                 self::ESTADO_PARCIALMENTE_PAGA,
             ]);
     }
 
+    /**
+     * CORRIGIDO: Nota de Débito só pode ser emitida a partir de FT (NÃO FR)
+     * De acordo com a lei angolana
+     */
     public function getPodeGerarNotaDebitoAttribute(): bool
     {
-        return in_array($this->tipo_documento, [self::TIPO_FATURA, self::TIPO_FATURA_RECIBO])
+        return $this->tipo_documento === self::TIPO_FATURA
             && in_array($this->estado, [
                 self::ESTADO_EMITIDO,
-                self::ESTADO_PAGA,
                 self::ESTADO_PARCIALMENTE_PAGA,
+                self::ESTADO_PAGA, // Permite ND para fatura paga (juros/multas)
             ]);
     }
 
@@ -552,6 +568,48 @@ class DocumentoFiscal extends TenantModel
         }
 
         return $this->data_vencimento && $this->data_vencimento->isPast();
+    }
+
+    /**
+     * Verifica se o documento tem saldo disponível para crédito
+     * Útil para validar se pode emitir NC
+     */
+    public function getSaldoDisponivelAttribute(): float
+    {
+        if (! in_array($this->tipo_documento, [self::TIPO_FATURA, self::TIPO_FATURA_RECIBO])) {
+            return 0.0;
+        }
+
+        $totalCreditado = $this->notasCredito()
+            ->where('estado', '!=', self::ESTADO_CANCELADO)
+            ->sum('total_liquido');
+
+        return max(0.0, (float) $this->total_liquido - $totalCreditado);
+    }
+
+    /**
+     * Verifica se o documento tem saldo pendente
+     * Útil para validar se pode emitir recibo
+     */
+    public function getSaldoPendenteAttribute(): float
+    {
+        if (! in_array($this->tipo_documento, [self::TIPO_FATURA, self::TIPO_FATURA_ADIANTAMENTO])) {
+            return 0.0;
+        }
+
+        $totalPago = $this->recibos()
+            ->where('estado', '!=', self::ESTADO_CANCELADO)
+            ->sum('total_liquido');
+
+        if ($this->tipo_documento === self::TIPO_FATURA) {
+            $totalAdiantamentos = DB::table('adiantamento_fatura')
+                ->where('fatura_id', $this->id)
+                ->sum('valor_utilizado');
+            
+            return max(0.0, (float) $this->total_liquido - $totalPago - $totalAdiantamentos);
+        }
+
+        return max(0.0, (float) $this->total_liquido - $totalPago);
     }
 
     /* =====================================================================

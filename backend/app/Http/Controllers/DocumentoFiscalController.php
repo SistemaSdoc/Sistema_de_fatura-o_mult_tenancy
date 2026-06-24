@@ -20,6 +20,7 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 /**
  * DocumentoFiscalController
@@ -227,7 +228,7 @@ class DocumentoFiscalController extends Controller
     }
 
     /* =====================================================================
-     | NOTA DE CRÉDITO
+     | NOTA DE CRÉDITO (CORRIGIDO)
      | ================================================================== */
 
     public function criarNotaCredito(Request $request, string $documentoId): JsonResponse
@@ -236,8 +237,15 @@ class DocumentoFiscalController extends Controller
             $documento = $this->documentoService->buscarDocumento($documentoId);
 
             /**
-             * VALIDAÇÕES ADICIONAIS PARA NOTA DE CRÉDITO (Angola)
-             * Baseado na lógica: Nota de Crédito reduz o valor de uma fatura
+             * VALIDAÇÕES PARA NOTA DE CRÉDITO (Angola)
+             * 
+             * NOTA DE CRÉDITO = DIMINUI o valor da fatura
+             * Usos permitidos:
+             * - Devolução total ou parcial de mercadoria
+             * - Correção de erro no valor da fatura
+             * - Desconto concedido após emissão
+             * - Cancelamento de serviços não prestados
+             * - Retificação de IVA incorreto
              */
             
             // 1. Verificar se o documento é uma Fatura (FT) ou Fatura-Recibo (FR)
@@ -248,7 +256,7 @@ class DocumentoFiscalController extends Controller
                 ], 422);
             }
 
-            // 2. Verificar se a fatura não está cancelada
+            // 2. Verificar se a fatura não está cancelada ou expirada
             if ($documento->estado === 'cancelado') {
                 return response()->json([
                     'success' => false,
@@ -256,12 +264,18 @@ class DocumentoFiscalController extends Controller
                 ], 422);
             }
 
-            // 3. Verificar se a fatura tem valor suficiente para crédito
-            $valorPendente = $this->documentoService->calcularValorPendente($documento);
+            if ($documento->estado === 'expirado') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Não é possível emitir Nota de Crédito para uma fatura expirada',
+                ], 422);
+            }
+
+            // 3. Verificar se a fatura tem saldo disponível para crédito
             $valorTotalCreditos = $this->documentoService->calcularTotalCreditosEmitidos($documento);
             $valorMaximoCredito = $documento->total_liquido - $valorTotalCreditos;
 
-            if ($valorMaximoCredito <= 0) {
+            if ($valorMaximoCredito <= 0.01) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Esta fatura já possui créditos emitidos que cobrem todo o seu valor',
@@ -281,7 +295,7 @@ class DocumentoFiscalController extends Controller
                 'itens.*.preco_unitario' => 'required|numeric|min:0',
                 'itens.*.taxa_iva'       => 'required|numeric|in:0,5,14',
                 'itens.*.codigo_isencao' => 'nullable|string|in:M00,M01,M02,M03,M04,M05,M06,M99',
-                'motivo'                 => 'required|string|min:10|max:500', // Motivo obrigatório e com tamanho mínimo
+                'motivo'                 => 'required|string|min:10|max:500', // Motivo obrigatório
             ]);
 
             /**
@@ -298,7 +312,7 @@ class DocumentoFiscalController extends Controller
             if ($valorTotalNC > $valorMaximoCredito) {
                 return response()->json([
                     'success' => false,
-                    'message' => "O valor total da Nota de Crédito ({$valorTotalNC} Kz) excede o saldo disponível da fatura ({$valorMaximoCredito} Kz)",
+                    'message' => "O valor total da Nota de Crédito (" . number_format($valorTotalNC, 2) . " Kz) excede o saldo disponível da fatura (" . number_format($valorMaximoCredito, 2) . " Kz)",
                     'data' => [
                         'total_fatura' => $documento->total_liquido,
                         'creditos_emitidos' => $valorTotalCreditos,
@@ -310,33 +324,41 @@ class DocumentoFiscalController extends Controller
 
             /**
              * 5. A nota de crédito deve referenciar a fatura original
-             *    O campo 'fatura_id' é obrigatório para NC (já validado no service)
              */
             $dados['fatura_id'] = $documento->id;
             $dados['tipo_documento'] = 'NC';
 
-            $nc = $this->documentoService->emitirDocumento($dados);
+            DB::beginTransaction();
 
-            /**
-             * 6. Após emitir, atualizar o estado da fatura original se necessário
-             *    (ex: se o crédito zerar o saldo, mudar para 'paga')
-             */
-            $this->documentoService->atualizarEstadoFaturaAposCredito($documento);
+            try {
+                $nc = $this->documentoService->emitirDocumento($dados);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Nota de Crédito emitida com sucesso',
-                'data' => [
-                    'nota_credito' => $nc,
-                    'fatura_original' => [
-                        'id' => $documento->id,
-                        'numero' => $documento->numero_documento,
-                        'valor_total' => $documento->total_liquido,
-                        'creditos_emitidos' => $valorTotalCreditos + $valorTotalNC,
-                        'saldo_restante' => $valorMaximoCredito - $valorTotalNC
+                /**
+                 * 6. Após emitir, atualizar o estado da fatura original
+                 */
+                $this->documentoService->atualizarEstadoFaturaAposCredito($documento);
+
+                DB::commit();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Nota de Crédito emitida com sucesso',
+                    'data' => [
+                        'nota_credito' => $nc,
+                        'fatura_original' => [
+                            'id' => $documento->id,
+                            'numero' => $documento->numero_documento,
+                            'valor_total' => $documento->total_liquido,
+                            'creditos_emitidos' => $valorTotalCreditos + $valorTotalNC,
+                            'saldo_restante' => $valorMaximoCredito - $valorTotalNC
+                        ]
                     ]
-                ]
-            ], 201);
+                ], 201);
+
+            } catch (\Exception $e) {
+                DB::rollBack();
+                throw $e;
+            }
 
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             return response()->json(['success' => false, 'message' => 'Documento de origem não encontrado'], 404);
@@ -350,7 +372,7 @@ class DocumentoFiscalController extends Controller
     }
 
     /* =====================================================================
-     | NOTA DE DÉBITO
+     | NOTA DE DÉBITO (CORRIGIDO)
      | ================================================================== */
 
     public function criarNotaDebito(Request $request, string $documentoId): JsonResponse
@@ -359,12 +381,26 @@ class DocumentoFiscalController extends Controller
             $documento = $this->documentoService->buscarDocumento($documentoId);
 
             /**
-             * VALIDAÇÕES ADICIONAIS PARA NOTA DE DÉBITO (Angola)
-             * Baseado na lógica: Nota de Débito aumenta o valor de uma fatura
+             * VALIDAÇÕES PARA NOTA DE DÉBITO (Angola)
+             * 
+             * NOTA DE DÉBITO = AUMENTA o valor da fatura
+             * Usos permitidos (de acordo com a lei):
+             * 1. Cobrança de serviços adicionais não previstos
+             * 2. Juros de mora (até 30 dias após vencimento)
+             * 3. Multas contratuais
+             * 4. Correção de preço para cima
+             * 5. Custos adicionais (frete, taxas, comissões)
+             * 6. Serviços complementares solicitados posteriormente
+             * 
+             * RESTRIÇÕES:
+             * - Apenas FT (NÃO FR, FP, FA)
+             * - Apenas serviços (NÃO produtos físicos)
+             * - Prazo máximo de 30 dias após emissão
+             * - Fatura não pode estar cancelada ou expirada
+             * - Se fatura já paga, apenas para juros/multas
              */
             
-            // 1. Verificar se o documento é uma Fatura (FT) 
-            //    (Nota de Débito NÃO pode ser emitida de Fatura-Recibo ou Proforma)
+            // 1. Verificar se o documento é uma Fatura (FT)
             if (!in_array($documento->tipo_documento, ['FT'])) {
                 return response()->json([
                     'success' => false,
@@ -380,16 +416,36 @@ class DocumentoFiscalController extends Controller
                 ], 422);
             }
 
-            // 3. Verificar se a fatura não está completamente paga (para evitar abusos)
-            //    Nota: Débito pode ser emitido em fatura paga para cobrança de juros/multas,
-            //    mas deve ter uma validação específica
-            $valorPendente = $this->documentoService->calcularValorPendente($documento);
-            $valorPago = $documento->total_liquido - $valorPendente;
+            if ($documento->estado === 'expirado') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Não é possível emitir Nota de Débito para uma fatura expirada',
+                ], 422);
+            }
+
+            // 3. Validar prazo máximo de 30 dias
+            $dataEmissao = new \DateTime($documento->data_emissao);
+            $prazoMaximo = (clone $dataEmissao)->modify('+30 days');
+            $hoje = new \DateTime();
+
+            if ($hoje > $prazoMaximo) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "O prazo para emitir Nota de Débito é de até 30 dias após a emissão da fatura.\n" .
+                                 "Fatura emitida em: {$dataEmissao->format('d/m/Y')}\n" .
+                                 "Prazo máximo: {$prazoMaximo->format('d/m/Y')}\n" .
+                                 "Hoje: {$hoje->format('d/m/Y')}",
+                ], 422);
+            }
+
+            // 4. Validar se a fatura já foi paga (neste caso, só permite juros/multas)
+            $valorPago = $this->documentoService->calcularValorPago($documento);
+            $faturaPaga = $documento->estado === 'paga' || $valorPago >= $documento->total_liquido;
 
             $dados = $request->validate([
                 'itens'                  => 'required|array|min:1',
                 'itens.*.produto_id'     => 'nullable|uuid|exists:produtos,id',
-                'itens.*.descricao'      => 'required|string',
+                'itens.*.descricao'      => 'required|string|min:5', // Descrição detalhada
                 'itens.*.quantidade'     => 'required|numeric|min:0.01',
                 'itens.*.preco_unitario' => 'required|numeric|min:0',
                 'itens.*.taxa_iva'       => 'required|numeric|in:0,5,14',
@@ -398,28 +454,87 @@ class DocumentoFiscalController extends Controller
             ]);
 
             /**
-             * 4. A nota de débito deve referenciar a fatura original
+             * 5. VALIDAÇÃO: Os itens devem ser SERVIÇOS (não produtos físicos)
+             * E para fatura paga, devem ser juros ou multas
              */
-            $dados['fatura_id'] = $documento->id;
-            $dados['tipo_documento'] = 'ND';
+            $temServico = false;
+            $temJurosOuMulta = false;
+            $itensInvalidos = [];
 
-            /**
-             * 5. Nota de débito aumenta o valor da fatura e, consequentemente,
-             *    aumenta a dívida do cliente e o IVA a pagar
-             */
-            $nd = $this->documentoService->emitirDocumento($dados);
+            foreach ($dados['itens'] as $item) {
+                // Verifica se é serviço pelo produto_id
+                if (!empty($item['produto_id'])) {
+                    $produto = \App\Models\Tenant\Produto::find($item['produto_id']);
+                    if ($produto && $produto->tipo !== 'servico') {
+                        $itensInvalidos[] = $item['descricao'];
+                    } else if ($produto && $produto->tipo === 'servico') {
+                        $temServico = true;
+                    }
+                } else {
+                    // Item avulso - verifica pela descrição
+                    $descricaoLower = strtolower($item['descricao']);
+                    $palavrasServico = [
+                        'serviço', 'servico', 'consulta', 'consultoria', 
+                        'manutenção', 'manutencao', 'instalação', 'instalacao',
+                        'juro', 'multa', 'penalidade', 'taxa', 'comissão', 'comissao'
+                    ];
+                    $isServico = false;
+                    foreach ($palavrasServico as $palavra) {
+                        if (strpos($descricaoLower, $palavra) !== false) {
+                            $isServico = true;
+                            break;
+                        }
+                    }
+                    if ($isServico) {
+                        $temServico = true;
+                    } else {
+                        $itensInvalidos[] = $item['descricao'];
+                    }
+                }
 
-            /**
-             * 6. Atualizar o estado da fatura original para 'parcialmente_paga'
-             *    se já estava paga e agora tem débito
-             */
-            if ($valorPago > 0 && $documento->estado === 'paga') {
-                $documento->estado = 'parcialmente_paga';
-                $documento->save();
+                // Verifica se é juros ou multa (para fatura paga)
+                $descricaoLower = strtolower($item['descricao']);
+                if (strpos($descricaoLower, 'juro') !== false || 
+                    strpos($descricaoLower, 'juros') !== false ||
+                    strpos($descricaoLower, 'multa') !== false ||
+                    strpos($descricaoLower, 'penalidade') !== false) {
+                    $temJurosOuMulta = true;
+                }
+            }
+
+            // 5.1 Se não tiver serviços válidos
+            if (!$temServico) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Nota de Débito só pode ser usada para serviços.\n" .
+                                 "Os seguintes itens não são serviços: " . implode(', ', $itensInvalidos),
+                ], 422);
+            }
+
+            // 5.2 Se tiver itens inválidos (produtos)
+            if (!empty($itensInvalidos)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Nota de Débito não pode ser usada para produtos físicos.\n" .
+                                 "Os seguintes itens são produtos: " . implode(', ', $itensInvalidos) . "\n" .
+                                 "Use Nota de Débito apenas para serviços adicionais, juros ou multas.",
+                ], 422);
+            }
+
+            // 5.3 Se fatura já está paga, exige que seja juros ou multa
+            if ($faturaPaga && !$temJurosOuMulta) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "A fatura já está paga.\n" .
+                                 "Nota de Débito para fatura paga deve ser exclusivamente para:\n" .
+                                 "- Juros de mora\n" .
+                                 "- Multas contratuais\n" .
+                                 "Inclua 'juros' ou 'multa' na descrição dos itens.",
+                ], 422);
             }
 
             /**
-             * 7. Calcular novo valor total da fatura após débito
+             * 6. Calcular valor total do débito
              */
             $valorTotalND = 0;
             foreach ($dados['itens'] as $item) {
@@ -428,22 +543,59 @@ class DocumentoFiscalController extends Controller
                 $valorTotalND += $subtotal + $iva;
             }
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Nota de Débito emitida com sucesso',
-                'data' => [
-                    'nota_debito' => $nd,
-                    'fatura_original' => [
-                        'id' => $documento->id,
-                        'numero' => $documento->numero_documento,
-                        'valor_original' => $documento->total_liquido,
-                        'valor_debito' => $valorTotalND,
-                        'novo_valor_total' => $documento->total_liquido + $valorTotalND,
-                        'valor_pago_anterior' => $valorPago,
-                        'saldo_pendente_atual' => ($documento->total_liquido + $valorTotalND) - $valorPago
+            if ($valorTotalND <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'O valor total da Nota de Débito deve ser maior que zero.',
+                ], 422);
+            }
+
+            /**
+             * 7. A nota de débito deve referenciar a fatura original
+             */
+            $dados['fatura_id'] = $documento->id;
+            $dados['tipo_documento'] = 'ND';
+
+            DB::beginTransaction();
+
+            try {
+                $nd = $this->documentoService->emitirDocumento($dados);
+
+                /**
+                 * 8. Atualizar o estado da fatura original
+                 */
+                $novoValorTotal = $documento->total_liquido + $valorTotalND;
+                
+                // Se a fatura estava paga, passa a parcialmente_paga
+                if ($documento->estado === 'paga') {
+                    $documento->estado = 'parcialmente_paga';
+                    $documento->save();
+                }
+
+                DB::commit();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Nota de Débito emitida com sucesso',
+                    'data' => [
+                        'nota_debito' => $nd,
+                        'fatura_original' => [
+                            'id' => $documento->id,
+                            'numero' => $documento->numero_documento,
+                            'valor_original' => $documento->total_liquido,
+                            'valor_debito' => $valorTotalND,
+                            'novo_valor_total' => $novoValorTotal,
+                            'valor_pago_anterior' => $valorPago,
+                            'saldo_pendente_atual' => $novoValorTotal - $valorPago,
+                            'fatura_estava_paga' => $faturaPaga
+                        ]
                     ]
-                ]
-            ], 201);
+                ], 201);
+
+            } catch (\Exception $e) {
+                DB::rollBack();
+                throw $e;
+            }
 
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             return response()->json(['success' => false, 'message' => 'Documento de origem não encontrado'], 404);

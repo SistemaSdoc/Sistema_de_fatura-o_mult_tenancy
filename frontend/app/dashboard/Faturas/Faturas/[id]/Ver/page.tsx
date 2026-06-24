@@ -3,10 +3,23 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
-    ArrowLeft, FileText, User, MinusCircle, PlusCircle,
-    XCircle, Loader2, Package, AlertTriangle,
-    Receipt, Clock, FilePlus, FileMinus,
-    Info
+    ArrowLeft,
+    FileText,
+    User,
+    MinusCircle,
+    PlusCircle,
+    XCircle,
+    Loader2,
+    Package,
+    AlertTriangle,
+    Receipt,
+    Clock,
+    FilePlus,
+    FileMinus,
+    Info,
+    CheckCircle,
+    AlertCircle as AlertCircleIcon,
+    DollarSign,
 } from "lucide-react";
 import MainEmpresa from "@/app/components/MainEmpresa";
 import {
@@ -16,6 +29,7 @@ import {
     TipoDocumento,
 } from "@/services/DocumentoFiscal";
 import { useThemeColors, LIGHT_COLORS } from "@/context/ThemeContext";
+import { toast } from "sonner";
 
 /* ── Constantes ─────────────────────────────────────── */
 const TIPO_LABEL: Record<TipoDocumento, string> = {
@@ -154,9 +168,13 @@ function Row({
 function ItensTable({
     itens,
     colors,
+    isNC,
+    isND,
 }: {
     itens: ItemDocumento[];
     colors: typeof LIGHT_COLORS;
+    isNC?: boolean;
+    isND?: boolean;
 }) {
     if (itens.length === 0) {
         return (
@@ -240,6 +258,8 @@ function ItensTable({
                                     className="font-medium"
                                     style={{ color: colors.text }}
                                 >
+                                    {isNC && <span style={{ color: colors.secondary }}>− </span>}
+                                    {isND && <span style={{ color: colors.primary }}>+ </span>}
                                     {item.descricao}
                                 </div>
                                 {item.codigo_produto && (
@@ -250,12 +270,20 @@ function ItensTable({
                                         Ref: {item.codigo_produto}
                                     </div>
                                 )}
-                                {item.eh_servico && (
+                                {item.produto?.tipo === 'servico' && (
                                     <span
                                         className="text-xs"
                                         style={{ color: colors.secondary }}
                                     >
                                         Serviço
+                                    </span>
+                                )}
+                                {isND && item.produto?.tipo === 'produto' && (
+                                    <span
+                                        className="text-xs"
+                                        style={{ color: colors.danger }}
+                                    >
+                                        Produto (não permitido)
                                     </span>
                                 )}
                             </td>
@@ -287,8 +315,11 @@ function ItensTable({
                             </td>
                             <td
                                 className="px-3 py-2 text-right font-bold tabular-nums"
-                                style={{ color: colors.text }}
+                                style={{ 
+                                    color: isNC ? colors.danger : isND ? colors.success : colors.text 
+                                }}
                             >
+                                {isNC ? "−" : isND ? "+" : ""}
                                 {fmtKz(item.total_linha)}
                             </td>
                         </tr>
@@ -354,9 +385,9 @@ function TotaisSection({
         : isFR || isRC
         ? "TOTAL PAGO"
         : isNC
-        ? "TOTAL (CRÉDITO)"
+        ? "TOTAL A CREDITAR"
         : isND
-        ? "TOTAL (DÉBITO)"
+        ? "TOTAL A DEBITAR"
         : "TOTAL";
 
     return (
@@ -430,74 +461,18 @@ function TotaisSection({
     );
 }
 
-/* ── Botão de Ação para Gerar NC/ND ──────────────────── */
-function AcaoCard({
-    icon: Icon,
-    title,
-    description,
-    onClick,
-    colors,
-    accent,
-    disabled,
-    tooltip,
-}: {
-    icon: React.ElementType;
-    title: string;
-    description: string;
-    onClick: () => void;
-    colors: typeof LIGHT_COLORS;
-    accent: string;
-    disabled?: boolean;
-    tooltip?: string;
-}) {
-    return (
-        <button
-            onClick={onClick}
-            disabled={disabled}
-            className={`flex items-start gap-3 p-3 border rounded transition-all text-left w-full ${
-                disabled ? "opacity-50 cursor-not-allowed" : "hover:shadow-md"
-            }`}
-            style={{
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-                cursor: disabled ? "not-allowed" : "pointer",
-            }}
-            title={tooltip}
-        >
-            <div
-                className="p-2 rounded shrink-0"
-                style={{ backgroundColor: `${accent}15` }}
-            >
-                <Icon className="w-5 h-5" style={{ color: accent }} />
-            </div>
-            <div>
-                <div className="font-semibold text-sm" style={{ color: colors.text }}>
-                    {title}
-                </div>
-                <div className="text-xs" style={{ color: colors.textSecondary }}>
-                    {description}
-                </div>
-            </div>
-        </button>
-    );
-}
-
-/* ── Modal de geração NC / ND (CORRIGIDO) ────────────── */
-function ModalNota({
-    tipo,
+/* ── Modal de geração NC (Nota de Crédito) ────────────── */
+function ModalNotaCredito({
     documento,
     onClose,
     onSuccess,
     colors,
 }: {
-    tipo: "NC" | "ND";
     documento: DocumentoFiscal;
     onClose: () => void;
     onSuccess: (nota: DocumentoFiscal) => void;
     colors: typeof LIGHT_COLORS;
 }) {
-    const isNC = tipo === "NC";
-    const accent = isNC ? colors.danger : colors.success;
     const itensOriginais = documento.itens ?? [];
 
     const [motivo, setMotivo] = useState("");
@@ -515,7 +490,7 @@ function ModalNota({
 
     // Buscar saldo disponível para NC
     useEffect(() => {
-        if (isNC && documento.id) {
+        if (documento.id) {
             documentoFiscalService.buscarPorId(documento.id)
                 .then(doc => {
                     const saldo = documentoFiscalService.calcularSaldoDisponivel(doc);
@@ -523,7 +498,7 @@ function ModalNota({
                 })
                 .catch(() => setSaldoDisponivel(null));
         }
-    }, [isNC, documento.id]);
+    }, [documento.id]);
 
     const itensComChave = itensOriginais.map((item, i) => ({
         ...item,
@@ -538,10 +513,8 @@ function ModalNota({
     }, 0);
 
     const handleGerar = async () => {
-        // === VALIDAÇÕES FRONTEND ===
-        
-        // 1. Motivo obrigatório para NC
-        if (isNC && (!motivo.trim() || motivo.trim().length < 10)) {
+        // 1. Motivo obrigatório
+        if (!motivo.trim() || motivo.trim().length < 10) {
             setErro(
                 "O motivo da Nota de Crédito é obrigatório e deve ter pelo menos 10 caracteres. " +
                 "Forneça uma descrição detalhada da correção."
@@ -549,13 +522,7 @@ function ModalNota({
             return;
         }
 
-        // 2. Motivo opcional para ND mas com validação
-        if (!isNC && motivo.trim().length > 0 && motivo.trim().length < 5) {
-            setErro("O motivo deve ter pelo menos 5 caracteres (ou deixe em branco).");
-            return;
-        }
-
-        // 3. Itens selecionados
+        // 2. Itens selecionados
         const itens = itensComChave
             .filter((item) => (quantidades[item._key] ?? 0) > 0)
             .map((item) => ({
@@ -572,8 +539,8 @@ function ModalNota({
             return;
         }
 
-        // 4. Para NC: validar saldo disponível
-        if (isNC && saldoDisponivel !== null && totalSelecionado > saldoDisponivel) {
+        // 3. Validar saldo disponível
+        if (saldoDisponivel !== null && totalSelecionado > saldoDisponivel) {
             setErro(
                 `O valor total da Nota de Crédito (${fmtKz(totalSelecionado)}) ` +
                 `excede o saldo disponível da fatura (${fmtKz(saldoDisponivel)}).\n` +
@@ -582,46 +549,15 @@ function ModalNota({
             return;
         }
 
-        // 5. Para ND: verificar se os itens são serviços
-        if (!isNC) {
-            for (const item of itens) {
-                const descricaoLower = item.descricao.toLowerCase();
-                const isServico = 
-                    ['serviço', 'servico', 'consulta', 'consultoria', 'manutenção', 
-                     'manutencao', 'instalação', 'instalacao', 'juro', 'multa', 
-                     'penalidade', 'taxa', 'comissão', 'comissao'].some(
-                        term => descricaoLower.includes(term)
-                    );
-                
-                if (!isServico && item.produto_id) {
-                    setErro(
-                        `Nota de Débito não pode ser usada para produtos físicos. ` +
-                        `Item "${item.descricao}" parece ser um produto. ` +
-                        `Use Nota de Débito apenas para serviços adicionais, juros ou multas.`
-                    );
-                    return;
-                }
-            }
-        }
-
         try {
             setLoading(true);
             setErro(null);
-            
-            let resposta;
-            if (isNC) {
-                resposta = await documentoFiscalService.criarNotaCredito(documento.id, {
-                    itens,
-                    motivo: motivo.trim(),
-                });
-                onSuccess(resposta.nota_credito);
-            } else {
-                resposta = await documentoFiscalService.criarNotaDebito(documento.id, {
-                    itens,
-                    motivo: motivo.trim() || undefined,
-                });
-                onSuccess(resposta.nota_debito);
-            }
+
+            const resposta = await documentoFiscalService.criarNotaCredito(documento.id, {
+                itens,
+                motivo: motivo.trim(),
+            });
+            onSuccess(resposta.nota_credito);
         } catch (e) {
             setErro(e instanceof Error ? e.message : "Erro ao gerar nota.");
         } finally {
@@ -629,9 +565,8 @@ function ModalNota({
         }
     };
 
-    // Calcular saldo restante para exibição
-    const saldoRestante = saldoDisponivel !== null 
-        ? saldoDisponivel - totalSelecionado 
+    const saldoRestante = saldoDisponivel !== null
+        ? saldoDisponivel - totalSelecionado
         : null;
 
     return (
@@ -649,26 +584,17 @@ function ModalNota({
             >
                 <div
                     className="flex items-center justify-between px-4 py-3 border-b"
-
                 >
                     <div className="flex items-center gap-2">
-                        {isNC ? (
-                            <MinusCircle
-                                className="w-4 h-4"
-                                style={{ color: colors.secondary }}
-                            />
-                        ) : (
-                            <PlusCircle
-                                className="w-4 h-4"
-                                style={{ color: colors.primary }}
-                            />
-                        )}
+                        <MinusCircle
+                            className="w-4 h-4"
+                            style={{ color: colors.secondary }}
+                        />
                         <span
                             className="font-bold text-sm"
                             style={{ color: colors.text }}
                         >
-                            Gerar{" "}
-                            {isNC ? "Nota de Crédito" : "Nota de Débito"}
+                            Nota de Crédito
                         </span>
                         <span
                             className="text-xs"
@@ -687,6 +613,25 @@ function ModalNota({
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    {/* Descrição da NC */}
+                    <div
+                        className="flex items-start gap-2 px-3 py-2 rounded text-xs border"
+                        style={{
+                            backgroundColor: `${colors.secondary}08`,
+                            color: colors.textSecondary,
+                        }}
+                    >
+                        <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: colors.secondary }} />
+                        <div>
+                            <span className="font-medium" style={{ color: colors.secondary }}>
+                                Nota de Crédito
+                            </span>
+                            <span>
+                                {" — Diminui o valor de uma factura. "}
+                            </span>
+                        </div>
+                    </div>
+
                     {/* Info do documento original */}
                     <div
                         className="flex items-center gap-2 px-3 py-2 rounded text-xs border"
@@ -706,81 +651,39 @@ function ModalNota({
                         </span>
                     </div>
 
-                    {/* Saldo disponível (apenas NC) 
-                    {isNC && saldoDisponivel !== null && (
+                    {/* Saldo disponível */}
+                    {saldoDisponivel !== null && (
                         <div
                             className="flex items-center gap-2 px-3 py-2 rounded text-xs border"
                             style={{
-                                backgroundColor: `${accent}08`,
-                                borderColor: `${accent}20`,
+                                backgroundColor: `${colors.secondary}08`,
+                                borderColor: `${colors.secondary}30`,
                             }}
                         >
-                            <Info className="w-3.5 h-3.5 shrink-0" style={{ color: accent }} />
+                            <DollarSign className="w-3.5 h-3.5 shrink-0" style={{ color: colors.secondary }} />
                             <span style={{ color: colors.textSecondary }}>
                                 Saldo disponível para crédito:{" "}
-                                <strong style={{ color: accent }}>
+                                <strong style={{ color: colors.secondary }}>
                                     {fmtKz(saldoDisponivel)}
                                 </strong>
-                                {saldoRestante !== null && (
-                                    <span style={{ color: colors.textSecondary }}>
-                                        {" · Restante após NC: "}
-                                        <strong style={{ 
-                                            color: saldoRestante < 0 ? colors.danger : colors.success 
-                                        }}>
-                                            {fmtKz(saldoRestante)}
-                                        </strong>
-                                    </span>
-                                )}
                             </span>
                         </div>
-                    )}*/} 
-
-                    {/* Prazo para ND 
-                    {!isNC && (
-                        <div
-                            className="flex items-center gap-2 px-3 py-2 rounded text-xs border"
-                            style={{
-                                backgroundColor: `${colors.warning}10`,
-                                borderColor: `${colors.warning}30`,
-                                color: colors.textSecondary,
-                            }}
-                        >
-                            <Clock className="w-3.5 h-3.5 shrink-0" style={{ color: colors.warning }} />
-                            <span>
-                                Nota de Débito pode ser emitida até 30 dias após a emissão da fatura.
-                                {documento.data_emissao && (
-                                    <>
-                                        {" "}Data de emissão: {fmtData(documento.data_emissao)}
-                                    </>
-                                )}
-                            </span>
-                        </div>
-                    )}*/}
+                    )}
 
                     <div>
                         <label
                             className="block text-xs font-semibold mb-1"
                             style={{ color: colors.text }}
                         >
-                            Motivo{" "}
-                            {isNC && (
-                                <span style={{ color: colors.text }}> obrigatório (min 10 caracteres)</span>
-                            )}
-                            {!isNC && (
-                                <span style={{ color: colors.textSecondary }}>(opcional)</span>
-                            )}
+                            Motivo <span style={{ color: colors.secondary }}>obrigatório (min 10 caracteres)</span>
                         </label>
                         <textarea
                             value={motivo}
                             onChange={(e) => setMotivo(e.target.value)}
-                            placeholder={
-                                isNC
-                                    ? "Ex: Devolução de mercadoria X - cliente devolveu 5 unidades com defeito…"
-                                    : "Ex: Serviço adicional de instalação… (opcional)"
-                            }
+                            placeholder="Ex: Devolução de mercadoria X - cliente devolveu 5 unidades com defeito…"
                             rows={3}
                             className={`w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 resize-none ${
-                                isNC && motivo.trim().length > 0 && motivo.trim().length < 10
+                                motivo.trim().length > 0 && motivo.trim().length < 10
                                     ? `ring-1 ring-${colors.danger}`
                                     : ""
                             }`}
@@ -790,12 +693,12 @@ function ModalNota({
                                 color: colors.text,
                             }}
                         />
-                        {isNC && motivo.trim().length > 0 && motivo.trim().length < 10 && (
+                        {motivo.trim().length > 0 && motivo.trim().length < 10 && (
                             <p
                                 className="text-xs mt-1"
                                 style={{ color: colors.danger }}
                             >
-                                O motivo deve ter pelo menos 10 caracteres. Faltam {10 - motivo.trim().length} caracteres.
+                                Faltam {10 - motivo.trim().length} caracteres.
                             </p>
                         )}
                     </div>
@@ -805,7 +708,7 @@ function ModalNota({
                             className="text-xs font-semibold mb-2"
                             style={{ color: colors.text }}
                         >
-                            Seleccionar itens
+                            Seleccionar itens para crédito
                         </p>
                         <div
                             className="border rounded divide-y max-h-48 overflow-y-auto"
@@ -819,120 +722,106 @@ function ModalNota({
                                     Sem itens disponíveis
                                 </p>
                             ) : (
-                                itensComChave.map((item) => (
-                                    <div
-                                        key={item._key}
-                                        className="flex items-center justify-between px-3 py-2 gap-3"
-                                        style={{ borderColor: colors.border }}
-                                    >
-                                        <div className="min-w-0 flex-1">
-                                            <p
-                                                className="text-sm font-medium truncate"
-                                                style={{ color: colors.text }}
-                                            >
-                                                {item.descricao}
-                                            </p>
-                                            <p
-                                                className="text-xs"
-                                                style={{
-                                                    color: colors.textSecondary,
-                                                }}
-                                            >
-                                                {fmtKz(item.preco_unitario)} ·
-                                                IVA {item.taxa_iva}%
-                                                {item.eh_servico && (
-                                                    <span className="ml-1" style={{ color: colors.secondary }}>
-                                                        · Serviço
-                                                    </span>
-                                                )}
-                                            </p>
-                                        </div>
-                                        <div className="flex items-center gap-1 shrink-0">
-                                            <button
-                                                onClick={() =>
-                                                    setQtd((q) => ({
-                                                        ...q,
-                                                        [item._key]: Math.max(
-                                                            0,
-                                                            (q[item._key] ??
-                                                                0) - 1
-                                                        ),
-                                                    }))
-                                                }
-                                                className="w-6 h-6 flex items-center justify-center border rounded text-sm"
-                                                style={{
-                                                    borderColor: colors.border,
-                                                    color: colors.textSecondary,
-                                                }}
-                                            >
-                                                −
-                                            </button>
-                                            <input
-                                                type="number"
-                                                min={0}
-                                                max={Number(item.quantidade ?? 0)}
-                                                value={
-                                                    quantidades[item._key] ?? 0
-                                                }
-                                                onChange={(e) =>
-                                                    setQtd((q) => ({
-                                                        ...q,
-                                                        [item._key]: Math.min(
-                                                            Number(
-                                                                item.quantidade ?? 0
-                                                            ),
-                                                            Math.max(
+                                itensComChave.map((item) => {
+                                    const maxQtd = Number(item.quantidade ?? 0);
+                                    return (
+                                        <div
+                                            key={item._key}
+                                            className="flex items-center justify-between px-3 py-2 gap-3"
+                                            style={{ borderColor: colors.border }}
+                                        >
+                                            <div className="min-w-0 flex-1">
+                                                <p
+                                                    className="text-sm font-medium truncate"
+                                                    style={{ color: colors.text }}
+                                                >
+                                                    {item.descricao}
+                                                </p>
+                                                <p
+                                                    className="text-xs"
+                                                    style={{
+                                                        color: colors.textSecondary,
+                                                    }}
+                                                >
+                                                    {fmtKz(item.preco_unitario)} ·
+                                                    IVA {item.taxa_iva}%
+                                                    {item.produto?.tipo === 'servico' && (
+                                                        <span className="ml-1" style={{ color: colors.secondary }}>
+                                                            · Serviço
+                                                        </span>
+                                                    )}
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center gap-1 shrink-0">
+                                                <button
+                                                    onClick={() =>
+                                                        setQtd((q) => ({
+                                                            ...q,
+                                                            [item._key]: Math.max(
                                                                 0,
-                                                                Number(
-                                                                    e.target
-                                                                        .value
-                                                                )
-                                                            )
-                                                        ),
-                                                    }))
-                                                }
-                                                className="w-14 text-center text-sm border rounded px-1 py-0.5 focus:outline-none"
-                                                style={{
-                                                    backgroundColor:
-                                                        colors.background,
-                                                    borderColor: colors.border,
-                                                    color: colors.text,
-                                                }}
-                                            />
-                                            <button
-                                                onClick={() =>
-                                                    setQtd((q) => ({
-                                                        ...q,
-                                                        [item._key]: Math.min(
-                                                            Number(
-                                                                item.quantidade ?? 0
+                                                                (q[item._key] ?? 0) - 1
                                                             ),
-                                                            (q[item._key] ??
-                                                                0) + 1
-                                                        ),
-                                                    }))
-                                                }
-                                                className="w-6 h-6 flex items-center justify-center border rounded text-sm"
-                                                style={{
-                                                    borderColor: colors.border,
-                                                    color: colors.textSecondary,
-                                                }}
-                                            >
-                                                +
-                                            </button>
-                                            <span
-                                                className="text-xs w-8 text-center"
-                                                style={{
-                                                    color: colors.textSecondary,
-                                                }}
-                                            >
-                                                /{Number(
-                                                    item.quantidade ?? 0
-                                                ).toFixed(0)}
-                                            </span>
+                                                        }))
+                                                    }
+                                                    className="w-6 h-6 flex items-center justify-center border rounded text-sm"
+                                                    style={{
+                                                        borderColor: colors.border,
+                                                        color: colors.textSecondary,
+                                                    }}
+                                                >
+                                                    −
+                                                </button>
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    max={maxQtd}
+                                                    value={quantidades[item._key] ?? 0}
+                                                    onChange={(e) =>
+                                                        setQtd((q) => ({
+                                                            ...q,
+                                                            [item._key]: Math.min(
+                                                                maxQtd,
+                                                                Math.max(0, Number(e.target.value))
+                                                            ),
+                                                        }))
+                                                    }
+                                                    className="w-14 text-center text-sm border rounded px-1 py-0.5 focus:outline-none"
+                                                    style={{
+                                                        backgroundColor: colors.background,
+                                                        borderColor: colors.border,
+                                                        color: colors.text,
+                                                    }}
+                                                />
+                                                <button
+                                                    onClick={() =>
+                                                        setQtd((q) => ({
+                                                            ...q,
+                                                            [item._key]: Math.min(
+                                                                maxQtd,
+                                                                (q[item._key] ?? 0) + 1
+                                                            ),
+                                                        }))
+                                                    }
+                                                    className="w-6 h-6 flex items-center justify-center border rounded text-sm"
+                                                    style={{
+                                                        borderColor: colors.border,
+                                                        color: colors.textSecondary,
+                                                    }}
+                                                >
+                                                    +
+                                                </button>
+                                                <span
+                                                    className="text-xs w-8 text-center"
+                                                    style={{
+                                                        color: colors.textSecondary,
+                                                    }}
+                                                >
+                                                    /{maxQtd.toFixed(0)}
+                                                </span>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))
+                                    );
+                                })
                             )}
                         </div>
                     </div>
@@ -944,14 +833,13 @@ function ModalNota({
                             className="text-sm font-semibold"
                             style={{ color: colors.textSecondary }}
                         >
-                            Total da Nota
+                            Total a Creditar
                         </span>
                         <span
                             className="text-base font-bold"
-                            style={{ color: colors.text }}
+                            style={{ color: colors.secondary }}
                         >
-                            {isNC ? "−" : "+"}
-                            {fmtKz(totalSelecionado)}
+                            − {fmtKz(totalSelecionado)}
                         </span>
                     </div>
 
@@ -990,14 +878,14 @@ function ModalNota({
                     </button>
                     <button
                         onClick={handleGerar}
-                        disabled={loading || (isNC && totalSelecionado === 0)}
+                        disabled={loading || totalSelecionado === 0}
                         className="flex-1 px-3 py-2 text-sm font-medium text-white rounded disabled:opacity-50 flex items-center justify-center gap-2"
                         style={{ backgroundColor: colors.secondary }}
                     >
                         {loading && (
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
                         )}
-                        {loading ? "A gerar…" : `Gerar ${tipo}`}
+                        {loading ? "A gerar…" : "Gerar NC"}
                     </button>
                 </div>
             </div>
@@ -1005,7 +893,640 @@ function ModalNota({
     );
 }
 
-/* ── Componente principal (CORRIGIDO) ────────────────── */
+/* ── Modal de geração ND (Nota de Débito) ────────────── */
+function ModalNotaDebito({
+    documento,
+    onClose,
+    onSuccess,
+    colors,
+}: {
+    documento: DocumentoFiscal;
+    onClose: () => void;
+    onSuccess: (nota: DocumentoFiscal) => void;
+    colors: typeof LIGHT_COLORS;
+}) {
+    const itensOriginais = documento.itens ?? [];
+
+    const [motivo, setMotivo] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [erro, setErro] = useState<string | null>(null);
+    const [quantidades, setQtd] = useState<Record<string, number>>(
+        Object.fromEntries(
+            itensOriginais.map((item, i) => [
+                `${item.id ?? i}`,
+                Number(item.quantidade ?? 0),
+            ])
+        )
+    );
+    const [novosItens, setNovosItens] = useState<ItemDocumento[]>([]);
+    const [showNovoItem, setShowNovoItem] = useState(false);
+    const [novoItemDescricao, setNovoItemDescricao] = useState("");
+    const [novoItemPreco, setNovoItemPreco] = useState("");
+    const [novoItemIva, setNovoItemIva] = useState("14");
+    const [novoItemQuantidade, setNovoItemQuantidade] = useState("1");
+
+    // Buscar prazo máximo para ND
+    const [prazoMaximo, setPrazoMaximo] = useState<Date | null>(null);
+    const [prazoExpirado, setPrazoExpirado] = useState(false);
+
+    useEffect(() => {
+        if (documento.id && documento.data_emissao) {
+            const dataEmissao = new Date(documento.data_emissao);
+            const prazo = new Date(dataEmissao);
+            prazo.setDate(prazo.getDate() + 30);
+            setPrazoMaximo(prazo);
+            setPrazoExpirado(new Date() > prazo);
+        }
+    }, [documento.id, documento.data_emissao]);
+
+    const itensComChave = itensOriginais.map((item, i) => ({
+        ...item,
+        _key: `${item.id ?? i}`,
+        // ✅ INCLUI O PRODUTO COMPLETO PARA VALIDAÇÃO
+        produto: item.produto,
+    }));
+
+    const totalSelecionado = itensComChave.reduce((acc, item) => {
+        const qtd = quantidades[item._key] ?? 0;
+        const preco = Number(item.preco_unitario ?? 0);
+        const taxa = Number(item.taxa_iva ?? 0);
+        return acc + qtd * preco * (1 + taxa / 100);
+    }, 0);
+
+    const totalNovosItens = novosItens.reduce((acc, item) => {
+        const qtd = Number(item.quantidade ?? 0);
+        const preco = Number(item.preco_unitario ?? 0);
+        const taxa = Number(item.taxa_iva ?? 0);
+        return acc + qtd * preco * (1 + taxa / 100);
+    }, 0);
+
+    const totalGeral = totalSelecionado + totalNovosItens;
+
+    const handleAdicionarNovoItem = () => {
+        if (!novoItemDescricao.trim() || !novoItemPreco || Number(novoItemPreco) <= 0) {
+            setErro("Preencha a descrição e o preço do novo serviço.");
+            return;
+        }
+
+        const isServico = ['serviço', 'servico', 'consulta', 'consultoria', 'manutenção',
+            'manutencao', 'instalação', 'instalacao', 'juro', 'multa',
+            'penalidade', 'taxa', 'comissão', 'comissao'].some(
+                term => novoItemDescricao.toLowerCase().includes(term)
+            );
+
+        if (!isServico) {
+            setErro("Nota de Débito só pode ser usada para serviços. Inclua 'serviço', 'juros' ou 'multa' na descrição.");
+            return;
+        }
+
+        const novoItem: ItemDocumento = {
+            descricao: novoItemDescricao.trim(),
+            quantidade: Number(novoItemQuantidade) || 1,
+            preco_unitario: Number(novoItemPreco),
+            taxa_iva: Number(novoItemIva),
+            eh_servico: true,
+        };
+
+        setNovosItens([...novosItens, novoItem]);
+        setNovoItemDescricao("");
+        setNovoItemPreco("");
+        setNovoItemIva("14");
+        setNovoItemQuantidade("1");
+        setShowNovoItem(false);
+        setErro(null);
+    };
+
+    const handleRemoverNovoItem = (index: number) => {
+        setNovosItens(novosItens.filter((_, i) => i !== index));
+    };
+
+    const handleGerar = async () => {
+        // 1. Validar itens selecionados
+        const itensSelecionados = itensComChave
+            .filter((item) => (quantidades[item._key] ?? 0) > 0)
+            .map((item) => ({
+                produto_id: item.produto_id ?? undefined,
+                descricao: item.descricao,
+                quantidade: Number(quantidades[item._key]),
+                preco_unitario: Number(item.preco_unitario),
+                taxa_iva: Number(item.taxa_iva),
+                taxa_retencao: item.taxa_retencao,
+                // ✅ INCLUI O PRODUTO PARA VALIDAÇÃO
+                produto: item.produto,
+            }));
+
+        // ✅ CORREÇÃO FINAL: Validação usando o campo tipo do produto
+        const itensInvalidos = itensSelecionados.filter(
+            item => item.produto_id && item.produto?.tipo !== 'servico'
+        );
+
+        if (itensInvalidos.length > 0) {
+            const nomesInvalidos = itensInvalidos.map(i => `"${i.descricao}"`).join(', ');
+            setErro(
+                `Nota de Débito só pode ser usada para serviços.\n` +
+                `Os seguintes itens não estão cadastrados como serviços: ${nomesInvalidos}\n` +
+                `Verifique o cadastro do item ou seleccione apenas serviços para esta nota.`
+            );
+            return;
+        }
+
+        const todosItens = [...itensSelecionados, ...novosItens.map(item => ({
+            produto_id: undefined,
+            descricao: item.descricao,
+            quantidade: Number(item.quantidade),
+            preco_unitario: Number(item.preco_unitario),
+            taxa_iva: Number(item.taxa_iva),
+            taxa_retencao: 0,
+        }))];
+
+        if (todosItens.length === 0) {
+            setErro("Adicione pelo menos um item ou serviço.");
+            return;
+        }
+
+        // 2. Validar prazo
+        if (prazoExpirado) {
+            setErro("O prazo de 30 dias para emitir Nota de Débito já expirou.");
+            return;
+        }
+
+        try {
+            setLoading(true);
+            setErro(null);
+
+            // Remove o campo produto antes de enviar para a API
+            const itensParaEnviar = todosItens.map(({ produto, ...item }) => item);
+
+            const resposta = await documentoFiscalService.criarNotaDebito(documento.id, {
+                itens: itensParaEnviar,
+                motivo: motivo.trim() || undefined,
+            });
+            onSuccess(resposta.nota_debito);
+        } catch (e) {
+            setErro(e instanceof Error ? e.message : "Erro ao gerar nota.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in-0 duration-200"
+            onClick={onClose}
+        >
+            <div
+                className="border rounded w-full max-w-lg max-h-[90vh] flex flex-col shadow-xl"
+                style={{
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                }}
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div
+                    className="flex items-center justify-between px-4 py-3 border-b"
+                >
+                    <div className="flex items-center gap-2">
+                        <PlusCircle
+                            className="w-4 h-4"
+                            style={{ color: colors.primary }}
+                        />
+                        <span
+                            className="font-bold text-sm"
+                            style={{ color: colors.text }}
+                        >
+                            Nota de Débito
+                        </span>
+                        <span
+                            className="text-xs"
+                            style={{ color: colors.textSecondary }}
+                        >
+                            — {documento.numero_documento}
+                        </span>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className="p-1 rounded"
+                        style={{ color: colors.textSecondary }}
+                    >
+                        <XCircle className="w-4 h-4" />
+                    </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    {/* Descrição da ND */}
+                    <div
+                        className="flex items-start gap-2 px-3 py-2 rounded text-xs border"
+                        style={{
+                            backgroundColor: `${colors.primary}08`,
+                            color: colors.textSecondary,
+                        }}
+                    >
+                        <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: colors.text }} />
+                        <div>
+                            <span className="font-medium" style={{ color: colors.text }}>
+                                Nota de Débito
+                            </span>
+                            <span>
+                                {" — Aumenta o valor da fatura. "}
+                                <span className="font-medium" style={{ color: colors.text }}>
+                                    Apenas serviços (juros, multas, serviços adicionais).
+                                </span>
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Prazo para ND */}
+                    {prazoMaximo && (
+                        <div
+                            className="flex items-center gap-2 px-3 py-2 rounded text-xs border"
+                            style={{
+                                backgroundColor: prazoExpirado ? `${colors.danger}10` : `${colors.warning}10`,
+                                borderColor: prazoExpirado ? `${colors.danger}30` : `${colors.warning}30`,
+                                color: colors.textSecondary,
+                            }}
+                        >
+                            {prazoExpirado ? (
+                                <AlertCircleIcon className="w-3.5 h-3.5 shrink-0" style={{ color: colors.danger }} />
+                            ) : (
+                                <Clock className="w-3.5 h-3.5 shrink-0" style={{ color: colors.warning }} />
+                            )}
+                            <span>
+                                {prazoExpirado ? (
+                                    <span style={{ color: colors.danger }}>
+                                        ⚠️ Prazo de 30 dias expirou! Não é possível emitir ND.
+                                    </span>
+                                ) : (
+                                    <>
+                                        Prazo para emitir ND: até{" "}
+                                        <strong style={{ color: colors.warning }}>
+                                            {prazoMaximo.toLocaleDateString('pt-PT')}
+                                        </strong>
+                                        {documento.data_emissao && (
+                                            <> · Emitida em: {fmtData(documento.data_emissao)}</>
+                                        )}
+                                    </>
+                                )}
+                            </span>
+                        </div>
+                    )}
+
+                    <div>
+                        <label
+                            className="block text-xs font-semibold mb-1"
+                            style={{ color: colors.text }}
+                        >
+                            Motivo <span style={{ color: colors.textSecondary }}>(opcional)</span>
+                        </label>
+                        <textarea
+                            value={motivo}
+                            onChange={(e) => setMotivo(e.target.value)}
+                            placeholder="Ex: Cobrança de serviços adicionais, juros de mora, multas…"
+                            rows={2}
+                            className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 resize-none"
+                            style={{
+                                backgroundColor: colors.background,
+                                borderColor: colors.border,
+                                color: colors.text,
+                            }}
+                        />
+                    </div>
+
+                    {/* Itens existentes */}
+                    <div>
+                        <p
+                            className="text-xs font-semibold mb-2"
+                            style={{ color: colors.text }}
+                        >
+                            Seleccionar itens existentes
+                        </p>
+                        <div
+                            className="border rounded divide-y max-h-32 overflow-y-auto"
+                            style={{ borderColor: colors.border }}
+                        >
+                            {itensComChave.length === 0 ? (
+                                <p
+                                    className="px-3 py-3 text-sm italic text-center"
+                                    style={{ color: colors.textSecondary }}
+                                >
+                                    Sem itens disponíveis
+                                </p>
+                            ) : (
+                                itensComChave.map((item) => {
+                                    const isServico = item.produto?.tipo === 'servico';
+                                    const isProduto = item.produto_id && !isServico;
+                                    const maxQtd = Number(item.quantidade ?? 0);
+
+                                    return (
+                                        <div
+                                            key={item._key}
+                                            className="flex items-center justify-between px-3 py-2 gap-3"
+                                            style={{ borderColor: colors.border }}
+                                        >
+                                            <div className="min-w-0 flex-1">
+                                                <p
+                                                    className="text-sm font-medium truncate"
+                                                    style={{ color: colors.text }}
+                                                >
+                                                    {item.descricao}
+                                                </p>
+                                                <p
+                                                    className="text-xs"
+                                                    style={{
+                                                        color: colors.textSecondary,
+                                                    }}
+                                                >
+                                                    {fmtKz(item.preco_unitario)} ·
+                                                    IVA {item.taxa_iva}%
+                                                    {isServico && (
+                                                        <span className="ml-1" style={{ color: colors.secondary }}>
+                                                            · Serviço
+                                                        </span>
+                                                    )}
+                                                    {isProduto && (
+                                                        <span className="ml-1" style={{ color: colors.danger }}>
+                                                             Produto
+                                                        </span>
+                                                    )}
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center gap-1 shrink-0">
+                                                <button
+                                                    onClick={() =>
+                                                        setQtd((q) => ({
+                                                            ...q,
+                                                            [item._key]: Math.max(
+                                                                0,
+                                                                (q[item._key] ?? 0) - 1
+                                                            ),
+                                                        }))
+                                                    }
+                                                    className="w-6 h-6 flex items-center justify-center border rounded text-sm"
+                                                    style={{
+                                                        borderColor: colors.border,
+                                                        color: colors.textSecondary,
+                                                    }}
+                                                >
+                                                    −
+                                                </button>
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    max={isProduto ? 0 : 9999}
+                                                    value={quantidades[item._key] ?? 0}
+                                                    onChange={(e) =>
+                                                        setQtd((q) => ({
+                                                            ...q,
+                                                            [item._key]: Math.min(
+                                                                isProduto ? 0 : 9999,
+                                                                Math.max(0, Number(e.target.value))
+                                                            ),
+                                                        }))
+                                                    }
+                                                    className="w-14 text-center text-sm border rounded px-1 py-0.5 focus:outline-none"
+                                                    style={{
+                                                        backgroundColor: colors.background,
+                                                        borderColor: colors.border,
+                                                        color: colors.text,
+                                                    }}
+                                                />
+                                                <button
+                                                    onClick={() =>
+                                                        setQtd((q) => ({
+                                                            ...q,
+                                                            [item._key]: Math.min(
+                                                                isProduto ? 0 : 9999,
+                                                                (q[item._key] ?? 0) + 1
+                                                            ),
+                                                        }))
+                                                    }
+                                                    className="w-6 h-6 flex items-center justify-center border rounded text-sm"
+                                                    style={{
+                                                        borderColor: colors.border,
+                                                        color: colors.textSecondary,
+                                                    }}
+                                                >
+                                                    +
+                                                </button>
+                                                <span
+                                                    className="text-xs w-8 text-center"
+                                                    style={{
+                                                        color: colors.textSecondary,
+                                                    }}
+                                                >
+                                                    {isProduto ? "🚫" : "/∞"}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                        {itensComChave.some(item => item.produto_id && item.produto?.tipo !== 'servico') && (
+                            <p className="text-xs mt-1" style={{ color: colors.danger }}>
+                                ⚠️ Itens marcados como Produto não podem ser selecionados para ND.
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Novos itens */}
+                    <div>
+                        <div className="flex items-center justify-between mb-2">
+                            <p
+                                className="text-xs font-semibold"
+                                style={{ color: colors.text }}
+                            >
+                                Serviços Adicionais
+                            </p>
+                            <button
+                                onClick={() => setShowNovoItem(!showNovoItem)}
+                                className="text-xs flex items-center gap-1"
+                                style={{ color: colors.text }}
+                            >
+                                <PlusCircle className="w-3.5 h-3.5" />
+                                Adicionar
+                            </button>
+                        </div>
+
+                        {showNovoItem && (
+                            <div
+                                className="border rounded p-3 space-y-2 mb-2"
+                                style={{ borderColor: colors.border }}
+                            >
+                                <input
+                                    type="text"
+                                    value={novoItemDescricao}
+                                    onChange={(e) => setNovoItemDescricao(e.target.value)}
+                                    placeholder="Descrição do serviço adicional..."
+                                    className="w-full border rounded px-2 py-1 text-sm focus:outline-none"
+                                    style={{
+                                        backgroundColor: colors.background,
+                                        borderColor: colors.border,
+                                        color: colors.text,
+                                    }}
+                                />
+                                <div className="grid grid-cols-3 gap-2">
+                                    <input
+                                        type="number"
+                                        value={novoItemQuantidade}
+                                        onChange={(e) => setNovoItemQuantidade(e.target.value)}
+                                        placeholder="Qtd"
+                                        min="1"
+                                        className="border rounded px-2 py-1 text-sm focus:outline-none"
+                                        style={{
+                                            backgroundColor: colors.background,
+                                            borderColor: colors.border,
+                                            color: colors.text,
+                                        }}
+                                    />
+                                    <input
+                                        type="number"
+                                        value={novoItemPreco}
+                                        onChange={(e) => setNovoItemPreco(e.target.value)}
+                                        placeholder="Preço"
+                                        min="0"
+                                        className="border rounded px-2 py-1 text-sm focus:outline-none"
+                                        style={{
+                                            backgroundColor: colors.background,
+                                            borderColor: colors.border,
+                                            color: colors.text,
+                                        }}
+                                    />
+                                    <select
+                                        value={novoItemIva}
+                                        onChange={(e) => setNovoItemIva(e.target.value)}
+                                        className="border rounded px-2 py-1 text-sm focus:outline-none"
+                                        style={{
+                                            backgroundColor: colors.background,
+                                            borderColor: colors.border,
+                                            color: colors.text,
+                                        }}
+                                    >
+                                        <option value="0">0%</option>
+                                        <option value="5">5%</option>
+                                        <option value="14">14%</option>
+                                    </select>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setShowNovoItem(false)}
+                                        className="flex-1 px-3 py-1 text-sm border rounded"
+                                        style={{
+                                            borderColor: colors.border,
+                                            color: colors.textSecondary,
+                                        }}
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        onClick={handleAdicionarNovoItem}
+                                        className="flex-1 px-3 py-1 text-sm text-white rounded"
+                                        style={{ backgroundColor: colors.primary }}
+                                    >
+                                        Adicionar
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Lista de novos itens adicionados */}
+                        {novosItens.length > 0 && (
+                            <div className="space-y-1">
+                                {novosItens.map((item, index) => (
+                                    <div
+                                        key={index}
+                                        className="flex items-center justify-between px-3 py-1.5 border rounded text-sm"
+                                        style={{
+                                            borderColor: colors.border,
+                                            backgroundColor: `${colors.success}05`,
+                                        }}
+                                    >
+                                        <div>
+                                            <span style={{ color: colors.text }}>{item.descricao}</span>
+                                            <span className="text-xs ml-2" style={{ color: colors.textSecondary }}>
+                                                {item.quantidade} × {fmtKz(item.preco_unitario)}
+                                            </span>
+                                        </div>
+                                        <button
+                                            onClick={() => handleRemoverNovoItem(index)}
+                                            className="text-xs"
+                                            style={{ color: colors.danger }}
+                                        >
+                                            <XCircle className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div
+                        className="flex justify-between items-center px-3 py-2 rounded border"
+                    >
+                        <span
+                            className="text-sm font-semibold"
+                            style={{ color: colors.textSecondary }}
+                        >
+                            Total a Debitar
+                        </span>
+                        <span
+                            className="text-base font-bold"
+                            style={{ color: colors.success }}
+                        >
+                            + {fmtKz(totalGeral)}
+                        </span>
+                    </div>
+
+                    {erro && (
+                        <div
+                            className="flex items-start gap-2 px-3 py-2 border rounded text-sm whitespace-pre-wrap"
+                            style={{
+                                backgroundColor: `${colors.danger}10`,
+                                borderColor: `${colors.danger}30`,
+                                color: colors.danger,
+                            }}
+                        >
+                            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                            <span>{erro}</span>
+                        </div>
+                    )}
+                </div>
+
+                <div
+                    className="flex gap-2 px-4 py-3 border-t"
+                    style={{
+                        backgroundColor: colors.hover,
+                        borderColor: colors.border,
+                    }}
+                >
+                    <button
+                        onClick={onClose}
+                        className="flex-1 px-3 py-2 text-sm font-medium border rounded"
+                        style={{
+                            backgroundColor: "transparent",
+                            borderColor: colors.border,
+                            color: colors.textSecondary,
+                        }}
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        onClick={handleGerar}
+                        disabled={loading || totalGeral === 0 || prazoExpirado}
+                        className="flex-1 px-3 py-2 text-sm font-medium text-white rounded disabled:opacity-50 flex items-center justify-center gap-2"
+                        style={{ backgroundColor: colors.primary }}
+                    >
+                        {loading && (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        )}
+                        {loading ? "A gerar…" : "Gerar ND"}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/* ── Componente principal ────────────────── */
 export default function VisualizarNotaPage() {
     const router = useRouter();
     const params = useParams();
@@ -1031,11 +1552,11 @@ export default function VisualizarNotaPage() {
             setLoading(true);
             const doc = await documentoFiscalService.buscarPorId(notaId);
             setNota(doc);
-            
+
             // Verificar se pode gerar NC/ND
             setPodeGerarNC(documentoFiscalService.podeEmitirNotaCredito(doc));
             setPodeGerarND(documentoFiscalService.podeEmitirNotaDebito(doc));
-            
+
             if (
                 (doc.tipo_documento === "NC" ||
                     doc.tipo_documento === "ND" ||
@@ -1058,12 +1579,16 @@ export default function VisualizarNotaPage() {
         carregarNota();
     }, [carregarNota]);
 
-
     const handleNotaGerada = (notaGerada: DocumentoFiscal) => {
         setModalTipo(null);
-        router.push(
-            `/dashboard/Faturas/Faturas/${notaGerada.id}/Ver_NC_ND`
-        );
+        if (notaGerada?.id) {
+            router.push(
+                `/dashboard/Faturas/Faturas/${notaGerada.id}/Ver_NC_ND`
+            );
+        } else {
+            toast.error("Erro ao redirecionar para a nota gerada.");
+            router.push("/dashboard/Faturas/Faturas");
+        }
     };
 
     /* ── Loading ── */
@@ -1132,9 +1657,9 @@ export default function VisualizarNotaPage() {
         : colors.secondary;
 
     // Verificar se pode gerar notas (apenas FT/FR que não estão canceladas)
-    const podeGerarNotas = 
-        (isFT || isFR) && 
-        nota.estado !== "cancelado" && 
+    const podeGerarNotas =
+        (isFT || isFR) &&
+        nota.estado !== "cancelado" &&
         nota.estado !== "expirado";
 
     // Verificar se é uma nota de crédito/débito (mostrar botão de voltar para origem)
@@ -1152,6 +1677,23 @@ export default function VisualizarNotaPage() {
 
     /* Operador / utilizador */
     const operador = nota.user?.name ?? "Sistema";
+
+    // Verificar se tem documentos derivados (NC/ND/RC)
+    const temDocumentosDerivados = (nota.notasCredito && nota.notasCredito.length > 0) ||
+        (nota.notasDebito && nota.notasDebito.length > 0) ||
+        (nota.recibos && nota.recibos.length > 0);
+
+    const totalNotasCredito = nota.notasCredito?.reduce((sum, nc) => 
+        nc.estado !== 'cancelado' ? sum + Number(nc.total_liquido) : sum, 0
+    ) ?? 0;
+
+    const totalNotasDebito = nota.notasDebito?.reduce((sum, nd) => 
+        nd.estado !== 'cancelado' ? sum + Number(nd.total_liquido) : sum, 0
+    ) ?? 0;
+
+    // Informações adicionais para NC e ND
+    const saldoDisponivel = nota.saldo_disponivel ?? 0;
+    const totalCreditado = nota.total_creditado ?? 0;
 
     return (
         <MainEmpresa>
@@ -1196,6 +1738,19 @@ export default function VisualizarNotaPage() {
                                     {TIPO_LABEL[nota.tipo_documento]}
                                 </span>
                                 <Badge estado={nota.estado} colors={colors} />
+                                {/* Badge indicando que tem documentos derivados */}
+                                {temDocumentosDerivados && (
+                                    <span
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded"
+                                        style={{
+                                            backgroundColor: `${colors.secondary}20`,
+                                            color: colors.secondary,
+                                        }}
+                                    >
+                                        <CheckCircle className="w-3 h-3" />
+                                        Tem ajustes
+                                    </span>
+                                )}
                             </div>
                             <p
                                 className="text-xs"
@@ -1222,15 +1777,15 @@ export default function VisualizarNotaPage() {
                                 }}
                                 className="p-2 rounded transition-colors flex items-center gap-1.5 text-xs font-medium disabled:opacity-50"
                                 style={{
-                                    backgroundColor: podeGerarNC.pode 
-                                        ? `${colors.secondary}` 
-                                        : `${colors.textSecondary}`,
-                                    color: podeGerarNC.pode 
-                                        ? colors.textSecondary 
-                                        : colors.textSecondary,
+                                    backgroundColor: podeGerarNC.pode
+                                        ? `${colors.secondary}`
+                                        : `${colors.textSecondary}20`,
+                                    color: podeGerarNC.pode
+                                        ? "#fff"
+                                        : colors.text,
                                 }}
-                                title={podeGerarNC.pode 
-                                    ? "Gerar Nota de Crédito" 
+                                title={podeGerarNC.pode
+                                    ? "Gerar Nota de Crédito"
                                     : podeGerarNC.motivo || "Não disponível"}
                                 disabled={!podeGerarNC.pode}
                             >
@@ -1251,15 +1806,15 @@ export default function VisualizarNotaPage() {
                                 }}
                                 className="p-2 rounded transition-colors flex items-center gap-1.5 text-xs font-medium disabled:opacity-50"
                                 style={{
-                                    backgroundColor: podeGerarND.pode 
-                                        ? `${colors.primary}` 
-                                        : `${colors.textSecondary}`,
-                                    color: podeGerarND.pode 
-                                        ? colors.textSecondary 
-                                        : colors.textSecondary,
+                                    backgroundColor: podeGerarND.pode
+                                        ? `${colors.primary}`
+                                        : `${colors.textSecondary}20`,
+                                    color: podeGerarND.pode
+                                        ? "#fff"
+                                        : colors.text,
                                 }}
-                                title={podeGerarND.pode 
-                                    ? "Gerar Nota de Débito" 
+                                title={podeGerarND.pode
+                                    ? "Gerar Nota de Débito"
                                     : podeGerarND.motivo || "Não disponível"}
                                 disabled={!podeGerarND.pode}
                             >
@@ -1269,6 +1824,66 @@ export default function VisualizarNotaPage() {
                         )}
                     </div>
                 </div>
+
+                {/* ── Info adicional para NC ── */}
+                {isNC && (
+                    <div
+                        className="border rounded p-3 text-sm"
+                        style={{
+                            backgroundColor: `${colors.danger}08`,
+                            borderColor: `${colors.danger}30`,
+                            color: colors.textSecondary,
+                        }}
+                    >
+                        <div className="flex items-center gap-2">
+                            <MinusCircle className="w-4 h-4" style={{ color: colors.danger }} />
+                            <span>
+                                <strong style={{ color: colors.danger }}>Nota de Crédito</strong>
+                                {" — Esta nota REDUZ o valor da fatura original. "}
+                                <span className="font-medium" style={{ color: colors.danger }}>
+                                    Total creditado: {fmtKz(totalCreditado)}
+                                </span>
+                                {saldoDisponivel > 0 && (
+                                    <span style={{ color: colors.textSecondary }}>
+                                        {" · Saldo restante: "}
+                                        <span style={{ color: colors.success }}>
+                                            {fmtKz(saldoDisponivel)}
+                                        </span>
+                                    </span>
+                                )}
+                            </span>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── Info adicional para ND ── */}
+                {isND && (
+                    <div
+                        className="border rounded p-3 text-sm"
+                        style={{
+                            backgroundColor: `${colors.success}08`,
+                            borderColor: `${colors.success}30`,
+                            color: colors.textSecondary,
+                        }}
+                    >
+                        <div className="flex items-center gap-2">
+                            <PlusCircle className="w-4 h-4" style={{ color: colors.success }} />
+                            <span>
+                                <strong style={{ color: colors.success }}>Nota de Débito</strong>
+                                {" — Esta nota AUMENTA o valor da fatura original. "}
+                                <span className="font-medium" style={{ color: colors.success }}>
+                                    Total debitado: {fmtKz(totalNotasDebito)}
+                                </span>
+                                {nota.motivo && (
+                                    <span style={{ color: colors.textSecondary }}>
+                                        {" · Motivo: "}
+                                        <span style={{ color: colors.text }}>{nota.motivo}</span>
+                                    </span>
+                                )}
+                            </span>
+                        </div>
+                    </div>
+                )}
 
                 {/* ── Card principal ── */}
                 <div
@@ -1391,6 +2006,24 @@ export default function VisualizarNotaPage() {
                                     accent={accent}
                                 />
                             )}
+                            {/* Mostra o total creditado para NC */}
+                            {isNC && (
+                                <Row
+                                    label="Total Creditado"
+                                    value={fmtKz(totalCreditado)}
+                                    colors={colors}
+                                    accent={colors.danger}
+                                />
+                            )}
+                            {/* Mostra o saldo disponível */}
+                            {saldoDisponivel > 0 && (
+                                <Row
+                                    label="Saldo Disponível"
+                                    value={fmtKz(saldoDisponivel)}
+                                    colors={colors}
+                                    accent={colors.success}
+                                />
+                            )}
                         </div>
                     </div>
 
@@ -1411,7 +2044,7 @@ export default function VisualizarNotaPage() {
                                 className="text-xs font-bold uppercase tracking-wider"
                                 style={{ color: colors.textSecondary }}
                             >
-                                Produtos / Serviços
+                                {isNC ? "Itens Creditados" : isND ? "Itens Debitados" : "Produtos / Serviços"}
                             </span>
                             {isRC && documentoOrigem && (
                                 <span
@@ -1441,6 +2074,8 @@ export default function VisualizarNotaPage() {
                         <ItensTable
                             itens={itensParaExibir}
                             colors={colors}
+                            isNC={isNC}
+                            isND={isND}
                         />
                     </div>
 
@@ -1453,6 +2088,192 @@ export default function VisualizarNotaPage() {
                     />
 
                 </div>
+
+                {/* ── Seção de Documentos Derivados (NC/ND/RC) ── */}
+                {(nota.notasCredito && nota.notasCredito.length > 0) ||
+                 (nota.notasDebito && nota.notasDebito.length > 0) ||
+                 (nota.recibos && nota.recibos.length > 0) ? (
+                    <div
+                        className="border rounded divide-y"
+                        style={{
+                            backgroundColor: colors.card,
+                            borderColor: colors.border,
+                        }}
+                    >
+                        <div
+                            className="flex items-center gap-1.5 px-4 py-2 border-b"
+                            style={{
+                                backgroundColor: colors.hover,
+                                borderColor: colors.border,
+                            }}
+                        >
+                            <FileText
+                                className="w-3.5 h-3.5"
+                                style={{ color: colors.secondary }}
+                            />
+                            <span
+                                className="text-xs font-bold uppercase tracking-wider"
+                                style={{ color: colors.textSecondary }}
+                            >
+                                Documentos Gerados a partir desta Fatura
+                            </span>
+                        </div>
+                        <div className="p-3 space-y-2">
+                            {/* Notas de Crédito */}
+                            {nota.notasCredito && nota.notasCredito.length > 0 && (
+                                <div>
+                                    <p
+                                        className="text-xs font-semibold mb-1 flex items-center gap-2"
+                                        style={{ color: colors.danger }}
+                                    >
+                                        <MinusCircle className="w-3.5 h-3.5" />
+                                        Notas de Crédito ({nota.notasCredito.length})
+                                        <span className="font-normal text-xs" style={{ color: colors.textSecondary }}>
+                                            Total: {fmtKz(totalNotasCredito)}
+                                        </span>
+                                    </p>
+                                    <div className="space-y-1 pl-6">
+                                        {nota.notasCredito.map((nc) => (
+                                            <button
+                                                key={nc.id}
+                                                onClick={() =>
+                                                    router.push(
+                                                        `/dashboard/Faturas/Faturas/${nc.id}/Ver_NC_ND`
+                                                    )
+                                                }
+                                                className="flex items-center gap-2 text-sm transition-colors hover:opacity-70 w-full text-left px-2 py-1 rounded"
+                                                style={{
+                                                    backgroundColor: `${colors.danger}08`,
+                                                }}
+                                            >
+                                                <span
+                                                    className="font-medium"
+                                                    style={{ color: colors.text }}
+                                                >
+                                                    {nc.numero_documento}
+                                                </span>
+                                                <span
+                                                    className="text-xs"
+                                                    style={{ color: colors.textSecondary }}
+                                                >
+                                                    {fmtData(nc.data_emissao)}
+                                                </span>
+                                                <span
+                                                    className="text-xs font-bold ml-auto"
+                                                    style={{ color: colors.danger }}
+                                                >
+                                                    − {fmtKz(nc.total_liquido)}
+                                                </span>
+                                                <Badge estado={nc.estado} colors={colors} />
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Notas de Débito */}
+                            {nota.notasDebito && nota.notasDebito.length > 0 && (
+                                <div>
+                                    <p
+                                        className="text-xs font-semibold mb-1 flex items-center gap-2"
+                                        style={{ color: colors.success }}
+                                    >
+                                        <PlusCircle className="w-3.5 h-3.5" />
+                                        Notas de Débito ({nota.notasDebito.length})
+                                        <span className="font-normal text-xs" style={{ color: colors.textSecondary }}>
+                                            Total: {fmtKz(totalNotasDebito)}
+                                        </span>
+                                    </p>
+                                    <div className="space-y-1 pl-6">
+                                        {nota.notasDebito.map((nd) => (
+                                            <button
+                                                key={nd.id}
+                                                onClick={() =>
+                                                    router.push(
+                                                        `/dashboard/Faturas/Faturas/${nd.id}/Ver_NC_ND`
+                                                    )
+                                                }
+                                                className="flex items-center gap-2 text-sm transition-colors hover:opacity-70 w-full text-left px-2 py-1 rounded"
+                                                style={{
+                                                    backgroundColor: `${colors.success}08`,
+                                                }}
+                                            >
+                                                <span
+                                                    className="font-medium"
+                                                    style={{ color: colors.text }}
+                                                >
+                                                    {nd.numero_documento}
+                                                </span>
+                                                <span
+                                                    className="text-xs"
+                                                    style={{ color: colors.textSecondary }}
+                                                >
+                                                    {fmtData(nd.data_emissao)}
+                                                </span>
+                                                <span
+                                                    className="text-xs font-bold ml-auto"
+                                                    style={{ color: colors.success }}
+                                                >
+                                                    + {fmtKz(nd.total_liquido)}
+                                                </span>
+                                                <Badge estado={nd.estado} colors={colors} />
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Recibos */}
+                            {nota.recibos && nota.recibos.length > 0 && (
+                                <div>
+                                    <p
+                                        className="text-xs font-semibold mb-1 flex items-center gap-2"
+                                        style={{ color: colors.secondary }}
+                                    >
+                                        <Receipt className="w-3.5 h-3.5" />
+                                        Recibos ({nota.recibos.length})
+                                    </p>
+                                    <div className="space-y-1 pl-6">
+                                        {nota.recibos.map((rc) => (
+                                            <button
+                                                key={rc.id}
+                                                onClick={() =>
+                                                    router.push(
+                                                        `/dashboard/Faturas/Faturas/${rc.id}/Ver_NC_ND`
+                                                    )
+                                                }
+                                                className="flex items-center gap-2 text-sm transition-colors hover:opacity-70 w-full text-left px-2 py-1 rounded"
+                                                style={{
+                                                    backgroundColor: `${colors.secondary}08`,
+                                                }}
+                                            >
+                                                <span
+                                                    className="font-medium"
+                                                    style={{ color: colors.text }}
+                                                >
+                                                    {rc.numero_documento}
+                                                </span>
+                                                <span
+                                                    className="text-xs"
+                                                    style={{ color: colors.textSecondary }}
+                                                >
+                                                    {fmtData(rc.data_emissao)}
+                                                </span>
+                                                <span
+                                                    className="text-xs font-bold ml-auto"
+                                                    style={{ color: colors.secondary }}
+                                                >
+                                                    {fmtKz(rc.total_liquido)}
+                                                </span>
+                                                <Badge estado={rc.estado} colors={colors} />
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ) : null}
 
                 {/* ── Mensagem para Proformas ── */}
                 {isFP && (
@@ -1486,7 +2307,7 @@ export default function VisualizarNotaPage() {
                             {isND && <PlusCircle className="w-4 h-4" style={{ color: colors.success }} />}
                             {isRC && <Receipt className="w-4 h-4" style={{ color: colors.secondary }} />}
                             <span>
-                                {isNC ? "Nota de Crédito" : isND ? "Nota de Débito" : "Recibo"} 
+                                {isNC ? "Nota de Crédito" : isND ? "Nota de Débito" : "Recibo"}
                                 {" gerado a partir de "}
                                 <button
                                     onClick={() =>
@@ -1509,10 +2330,19 @@ export default function VisualizarNotaPage() {
 
             </div>
 
-            {/* ── Modal NC / ND ── */}
-            {modalTipo && (
-                <ModalNota
-                    tipo={modalTipo}
+            {/* ── Modal NC ── */}
+            {modalTipo === "NC" && (
+                <ModalNotaCredito
+                    documento={nota}
+                    onClose={() => setModalTipo(null)}
+                    onSuccess={handleNotaGerada}
+                    colors={colors}
+                />
+            )}
+
+            {/* ── Modal ND ── */}
+            {modalTipo === "ND" && (
+                <ModalNotaDebito
                     documento={nota}
                     onClose={() => setModalTipo(null)}
                     onSuccess={handleNotaGerada}

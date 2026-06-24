@@ -13,7 +13,7 @@ export const TIPOS_VENDA: TipoDocumento[] = ['FT', 'FR', 'RC'];
 export const TIPOS_NAO_VENDA: TipoDocumento[] = ['FP', 'FA', 'NC', 'ND', 'FRt'];
 export const TIPOS_DOCUMENTO_VENDA: TipoDocumento[] = ['FT', 'FR'];
 export const TIPOS_ORIGEM_NC: TipoDocumento[] = ['FT', 'FR'];  // Nota de Crédito
-export const TIPOS_ORIGEM_ND: TipoDocumento[] = ['FT'];       // Nota de Débito
+export const TIPOS_ORIGEM_ND: TipoDocumento[] = ['FT'];       // Nota de Débito (apenas FT)
 
 export interface ItemDocumento {
     id?: string;
@@ -31,6 +31,13 @@ export interface ItemDocumento {
     codigo_produto?: string;
     unidade?: string;
     eh_servico?: boolean;
+    produto?: {
+        id: string;
+        nome: string;
+        tipo: 'produto' | 'servico';
+        taxa_iva: number;
+        taxa_retencao?: number;
+    };
 }
 
 export interface DocumentoFiscal {
@@ -103,6 +110,7 @@ export interface DocumentoFiscal {
     saldo_disponivel?: number;     // Saldo disponível para crédito
     total_debitos?: number;        // Total de débitos já emitidos
     valor_pago?: number;           // Valor já pago
+    saldo_pendente?: number;       // Saldo pendente de pagamento
 }
 
 export interface Cliente {
@@ -463,11 +471,11 @@ class DocumentoFiscalService {
             );
         }
 
-        // 7. Validar se a fatura não está totalmente paga (sem saldo)
-        const valorPendente = this.calcularValorPendente(fatura);
-        if (valorPendente <= 0.01 && fatura.estado === 'paga') {
+        // 7. Validar saldo disponível
+        const saldoDisponivel = this.calcularSaldoDisponivel(fatura);
+        if (saldoDisponivel <= 0.01) {
             throw new Error(
-                `Não é possível emitir Nota de Crédito para uma fatura já totalmente paga. ` +
+                `Não é possível emitir Nota de Crédito para uma fatura sem saldo disponível. ` +
                 `Fatura: ${fatura.numero_documento}. ` +
                 `Considere emitir uma Nota de Débito para ajustes.`
             );
@@ -482,7 +490,6 @@ class DocumentoFiscalService {
         }, 0);
 
         // 9. Verificar se o valor da NC não ultrapassa o saldo disponível
-        const saldoDisponivel = this.calcularSaldoDisponivel(fatura);
         if (valorNC > saldoDisponivel) {
             throw new Error(
                 `O valor total da Nota de Crédito (${valorNC.toFixed(2)} Kz) ` +
@@ -568,26 +575,42 @@ class DocumentoFiscalService {
                 throw new Error(`O preço unitário do item "${item.descricao}" deve ser maior que zero.`);
             }
 
-            // 2.3 Verificar se é serviço (não produto físico)
-            const descricaoLower = item.descricao.toLowerCase();
-            const isServico = item.eh_servico || 
-                ['serviço', 'servico', 'consulta', 'consultoria', 'manutenção', 
-                 'manutencao', 'instalação', 'instalacao', 'juro', 'multa', 
-                 'penalidade', 'taxa', 'comissão', 'comissao'].some(
-                    term => descricaoLower.includes(term)
-                );
+            // 2.3 CORRIGIDO: Verificar se é serviço usando o campo eh_servico ou produto.tipo
+            // Prioriza o campo eh_servico que vem do backend
+            const isServico = item.eh_servico === true || 
+                (item.produto && item.produto.tipo === 'servico');
 
+            // Se não for serviço E tem produto_id, é inválido
             if (!isServico && item.produto_id) {
                 throw new Error(
                     `Nota de Débito não pode ser usada para produtos físicos. ` +
-                    `Item "${item.descricao}" parece ser um produto. ` +
+                    `Item "${item.descricao}" está cadastrado como produto. ` +
                     `Use Nota de Débito apenas para serviços adicionais, juros ou multas.`
                 );
+            }
+
+            // Se não tem produto_id, valida pela descrição (para itens avulsos)
+            if (!item.produto_id && !isServico) {
+                const descricaoLower = item.descricao.toLowerCase();
+                const palavrasServico = [
+                    'serviço', 'servico', 'consulta', 'consultoria', 'manutenção',
+                    'manutencao', 'instalação', 'instalacao', 'juro', 'juros',
+                    'multa', 'penalidade', 'taxa', 'comissão', 'comissao'
+                ];
+                const found = palavrasServico.some(term => descricaoLower.includes(term));
+                if (!found) {
+                    throw new Error(
+                        `Nota de Débito só pode ser usada para serviços. ` +
+                        `Item "${item.descricao}" não parece ser um serviço. ` +
+                        `Use Nota de Débito apenas para serviços adicionais, juros ou multas.`
+                    );
+                }
             }
 
             temServico = true;
 
             // 2.4 Verificar se é juros ou multa (para fatura paga)
+            const descricaoLower = item.descricao.toLowerCase();
             if (descricaoLower.includes('juro') || descricaoLower.includes('juros') ||
                 descricaoLower.includes('multa') || descricaoLower.includes('penalidade')) {
                 temJurosOuMulta = true;
@@ -908,7 +931,7 @@ class DocumentoFiscalService {
         if (saldo <= 0.01) {
             return { 
                 pode: false, 
-                motivo: 'Esta fatura não possui saldo disponível para crédito. Considere emitir uma Nota de Débito para ajustes.' 
+                motivo: 'Esta fatura não possui saldo disponível para crédito.' 
             };
         }
 
@@ -916,7 +939,8 @@ class DocumentoFiscalService {
     }
 
     /**
-     * Verifica se pode emitir Nota de Débito para este documento
+     * CORRIGIDO: Verifica se pode emitir Nota de Débito para este documento
+     * Apenas FT pode originar ND
      */
     podeEmitirNotaDebito(documento: DocumentoFiscal): { pode: boolean; motivo?: string } {
         // 1. Tipo de documento (apenas FT)
@@ -965,16 +989,27 @@ class DocumentoFiscalService {
         return !['cancelado', 'expirado'].includes(documento.estado);
     }
 
+    /**
+     * CORRIGIDO: Verifica se pode gerar recibo
+     * FT, FA e FP podem gerar recibos
+     */
     podeGerarRecibo(documento: DocumentoFiscal): boolean {
-        // Apenas FT, FA e FP podem gerar recibos
+        // FT, FA e FP podem gerar recibos
         // Nota: FP pode receber sinal/adiantamento, mas NÃO altera estado
         return ['FT', 'FA', 'FP'].includes(documento.tipo_documento)
             && ['emitido', 'parcialmente_paga'].includes(documento.estado);
     }
 
-    podeGerarNotaCorrecao(documento: DocumentoFiscal): boolean {
-        return ['FT', 'FR'].includes(documento.tipo_documento)
-            && documento.estado !== 'cancelado';
+    /**
+     * CORRIGIDO: Verifica se pode gerar Nota de Correção (NC ou ND)
+     * Separado em dois métodos específicos
+     */
+    podeGerarNotaCredito(documento: DocumentoFiscal): boolean {
+        return this.podeEmitirNotaCredito(documento).pode;
+    }
+
+    podeGerarNotaDebito(documento: DocumentoFiscal): boolean {
+        return this.podeEmitirNotaDebito(documento).pode;
     }
 
     ehVenda(documento: DocumentoFiscal): boolean { return TIPOS_VENDA.includes(documento.tipo_documento); }
@@ -1056,7 +1091,7 @@ class DocumentoFiscalService {
     // ── Privado ──────────────────────────────────────────────
 
     private _enriquecerDocumento(doc: DocumentoFiscal): DocumentoFiscal {
-        const servicos = doc.itens?.filter(item => item.eh_servico) ?? [];
+        const servicos = doc.itens?.filter(item => item.eh_servico === true || item.produto?.tipo === 'servico') ?? [];
         const totalCreditado = doc.notasCredito?.reduce(
             (sum, nc) => nc.estado !== 'cancelado' ? sum + Number(nc.total_liquido) : sum, 0
         ) ?? 0;
@@ -1078,6 +1113,7 @@ class DocumentoFiscalService {
             total_debitos: totalDebitos,
             valor_pago: valorPago,
             saldo_disponivel: this.calcularSaldoDisponivel(doc),
+            saldo_pendente: this.calcularValorPendente(doc),
         };
     }
 }

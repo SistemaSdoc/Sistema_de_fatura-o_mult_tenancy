@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import {
     Dialog, DialogContent, DialogDescription,
-    DialogFooter, DialogHeader, DialogTitle,
+    DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { ThemeColors, RoleType } from "./ConfiguracoesComuns";
 
@@ -101,17 +101,20 @@ export function UserModal({
 
     return (
         <Dialog open={open} onOpenChange={v => { if (!v && !loading) onClose(); }}>
-            <DialogContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-                <DialogHeader>
-                    <DialogTitle style={{ color: colors.primary }}>
+            <DialogContent
+                className="sm:max-w-[480px] p-0"
+                style={{ backgroundColor: colors.card, borderColor: colors.border }}
+            >
+                <DialogHeader className="p-4 border-b" style={{ borderColor: colors.border }}>
+                    <DialogTitle className="text-base" style={{ color: colors.secondary }}>
                         {isEdit ? "Editar Utilizador" : "Novo Utilizador"}
                     </DialogTitle>
-                    <DialogDescription style={{ color: colors.textSecondary }}>
+                    <DialogDescription className="text-xs" style={{ color: colors.textSecondary }}>
                         {isEdit ? "Atualize os dados do utilizador" : "Preencha os dados para criar um novo utilizador"}
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-4 py-2">
+                <div className="p-4 space-y-4">
                     <div className="space-y-1">
                         <Label style={{ color: colors.text }}>Nome completo *</Label>
                         <Input type="text" value={form.name}
@@ -176,17 +179,20 @@ export function UserModal({
                     </div>
                 </div>
 
-                <DialogFooter>
-                    <Button type="button" variant="outline" onClick={onClose} disabled={loading}
-                        style={{ borderColor: colors.border, color: colors.text }}>
-                        Cancelar
-                    </Button>
-                    <Button type="button" onClick={() => void handleSubmit()} disabled={loading}
-                        className="gap-2 text-white" style={{ backgroundColor: colors.primary }}>
-                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                        {loading ? "Salvando..." : isEdit ? "Salvar" : "Criar"}
-                    </Button>
-                </DialogFooter>
+                <div className="p-4 pt-0">
+                    <div className="flex gap-2 pt-2 border-t" style={{ borderColor: colors.border }}>
+                        <Button type="button" variant="outline" onClick={onClose} disabled={loading}
+                            className="flex-1 h-8 text-xs"
+                            style={{ borderColor: colors.border, color: colors.textSecondary }}>
+                            Cancelar
+                        </Button>
+                        <Button type="button" onClick={() => void handleSubmit()} disabled={loading}
+                            className="flex-1 h-8 gap-1 text-white text-xs" style={{ backgroundColor: colors.primary }}>
+                            {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                            {loading ? "Salvando..." : isEdit ? "Salvar" : "Criar"}
+                        </Button>
+                    </div>
+                </div>
             </DialogContent>
         </Dialog>
     );

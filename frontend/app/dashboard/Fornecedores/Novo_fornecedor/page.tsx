@@ -18,7 +18,6 @@ import {
   RotateCcw,
   Trash,
   History,
-  X,
   Power,
 } from "lucide-react";
 import MainEmpresa from "../../../components/MainEmpresa";
@@ -29,7 +28,13 @@ import {
   getTipoLabel,
   formatarNIF,
 } from "@/services/fornecedores";
-import { useThemeColors } from "@/context/ThemeContext";
+import { useThemeColors, ThemeColors } from "@/context/ThemeContext";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 // ─── Funções de validação do NIF/BI ──────────────────────────────
 type TipoDocumento = 'NIF' | 'BI' | 'INVALIDO';
@@ -146,36 +151,22 @@ function Modal({
   children: React.ReactNode;
 }) {
   const colors = useThemeColors();
-  if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in-0 duration-200">
-      <div
-        className="shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden animate-in zoom-in-95 fade-in-0 duration-300"
-        style={{ backgroundColor: colors.card }}
+    <Dialog open={isOpen} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent
+        className="sm:max-w-2xl p-0"
+        style={{ backgroundColor: colors.card, borderColor: colors.border }}
       >
-        <div
-          className="flex items-center justify-between px-5 py-4 border-b"
-          style={{ borderColor: colors.border }}
-        >
-          <h3
-            className="text-base font-semibold"
-            style={{ color: colors.primary }}
-          >
+        <DialogHeader className="p-4 border-b" style={{ borderColor: colors.border }}>
+          <DialogTitle className="text-base" style={{ color: colors.secondary }}>
             {title}
-          </h3>
-          <button
-            onClick={onClose}
-            className="p-1.5 transition-colors hover:opacity-70"
-            style={{ color: colors.textSecondary }}
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="p-5 overflow-y-auto max-h-[calc(90vh-68px)]">
+          </DialogTitle>
+        </DialogHeader>
+        <div className="p-4 overflow-y-auto max-h-[calc(90vh-68px)]">
           {children}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -202,85 +193,51 @@ function ConfirmModal({
   type?: "warning" | "danger" | "info";
 }) {
   const colors = useThemeColors();
-  if (!isOpen) return null;
-
-  const btnColor =
-    type === "danger"
-      ? colors.danger
-      : type === "info"
-        ? colors.primary
-        : colors.warning;
-  const iconBg =
-    type === "danger"
-      ? `${colors.danger}20`
-      : type === "info"
-        ? `${colors.secondary}20`
-        : `${colors.warning}20`;
-  const iconClr =
-    type === "danger"
-      ? colors.danger
-      : type === "info"
-        ? colors.secondary
-        : colors.warning;
+  const btnColor = type === "danger" ? colors.danger : type === "info" ? colors.primary : colors.warning;
+  const iconClr = type === "danger" ? colors.danger : type === "info" ? colors.secondary : colors.warning;
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in-0 duration-200">
-      <div
-        className="shadow-2xl max-w-md w-full p-5 animate-in zoom-in-95 fade-in-0 duration-300"
-        style={{ backgroundColor: colors.card }}
+    <Dialog open={isOpen} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent
+        className="sm:max-w-[400px] p-0"
+        style={{ backgroundColor: colors.card, borderColor: colors.border }}
       >
-        <div className="flex items-center gap-3 mb-3">
-          <div className="p-2.5" style={{ backgroundColor: iconBg }}>
-            <AlertCircle className="w-5 h-5" style={{ color: iconClr }} />
-          </div>
-          <h3
-            className="text-base font-semibold"
-            style={{ color: colors.text }}
-          >
+        <DialogHeader className="p-4 border-b" style={{ borderColor: colors.border }}>
+          <DialogTitle className="flex items-center gap-2 text-sm" style={{ color: iconClr }}>
+            <AlertCircle className="w-4 h-4" />
             {title}
-          </h3>
+          </DialogTitle>
+        </DialogHeader>
+        <div className="p-4">
+          <p className="text-xs mb-4 leading-relaxed" style={{ color: colors.textSecondary }}>{message}</p>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              disabled={loading}
+              className="flex-1 px-4 py-2 text-sm font-medium disabled:opacity-50"
+              style={{ color: colors.textSecondary, border: `1px solid ${colors.border}` }}
+            >
+              {cancelText}
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={loading}
+              className="flex-1 px-4 py-2 text-white text-sm font-medium disabled:opacity-60 flex items-center justify-center gap-2"
+              style={{ backgroundColor: btnColor }}
+            >
+              {loading ? (
+                <><div className="w-4 h-4 border-2 rounded-full border-white border-t-transparent animate-spin" />Processando…</>
+              ) : confirmText}
+            </button>
+          </div>
         </div>
-        <p
-          className="text-sm mb-5 ml-[52px]"
-          style={{ color: colors.textSecondary }}
-        >
-          {message}
-        </p>
-        <div className="flex gap-3">
-          <button
-            onClick={onClose}
-            disabled={loading}
-            className="flex-1 px-4 py-2 text-sm transition-colors"
-            style={{
-              color: colors.textSecondary,
-              border: `1px solid ${colors.border}`,
-            }}
-          >
-            {cancelText}
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={loading}
-            className="flex-1 px-4 py-2 text-white text-sm flex items-center justify-center gap-2 transition-opacity disabled:opacity-60"
-            style={{ backgroundColor: btnColor }}
-          >
-            {loading ? (
-              <>
-                <div className="w-4 h-4 border-2 rounded-full border-white border-t-transparent animate-spin" />
-                Processando…
-              </>
-            ) : (
-              confirmText
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 /* ─── Loading States ─────────────────────────────────────────────── */
-function LoadingStats({ colors }: { colors: any }) {
+function LoadingStats({ colors }: { colors: ThemeColors }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       {[...Array(4)].map((_, i) => (
@@ -311,7 +268,7 @@ function LoadingStats({ colors }: { colors: any }) {
   );
 }
 
-function LoadingTabela({ colors }: { colors: any }) {
+function LoadingTabela({ colors }: { colors: ThemeColors }) {
   return (
     <div
       className="border overflow-hidden"

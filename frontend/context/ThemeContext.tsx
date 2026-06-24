@@ -14,6 +14,8 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 // Cores do Modo Claro
+export type ThemeColors = typeof LIGHT_COLORS;
+
 export const LIGHT_COLORS = {
     primary: '#123859',
     secondary: '#F9941F',

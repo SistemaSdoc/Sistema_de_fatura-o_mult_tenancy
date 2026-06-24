@@ -1,40 +1,34 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Plus,
   Search,
-  Trash2,
-  MoreVertical,
   Package,
-  Wrench,
-  CheckCircle2,
+  CheckCircle,
   XCircle,
-  AlertTriangle,
+  AlertCircle,
   LayoutGrid,
+  RotateCcw,
+  PencilLine,
+  Trash2,
+  History,
   Percent,
   Receipt,
-  RotateCcw,
-  Database,
-  PencilLine,
+  MoreVertical,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import MainEmpresa from "../../../components/MainEmpresa";
 import {
   categoriaService,
   Categoria,
   getStatusLabel,
-  getTipoLabel,
   getTaxaIVALabel,
   getTaxaIVAColor,
   getCodigoIsencaoLabel,
   CodigoIsencao,
   TaxaIVA,
 } from "@/services/categorias";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import { useThemeColors } from "@/context/ThemeContext";
 import {
   Dialog,
   DialogContent,
@@ -42,6 +36,9 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -57,26 +54,22 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { useThemeColors } from "@/context/ThemeContext";
 
-// Interface para o formulário
+/* ─── Tipos ──────────────────────────────────────────────────────── */
 interface FormCategoriaData {
   nome: string;
   descricao: string;
   status: "ativo" | "inativo";
-  tipo: "produto" | "servico";
   taxa_iva: TaxaIVA;
   sujeito_iva: boolean;
   codigo_isencao: CodigoIsencao | "";
 }
 
-const INITIAL_FORM_DATA: FormCategoriaData = {
+const INITIAL_FORM: FormCategoriaData = {
   nome: "",
   descricao: "",
   status: "ativo",
-  tipo: "produto",
   taxa_iva: 14,
   sujeito_iva: true,
   codigo_isencao: "",
@@ -94,39 +87,139 @@ type ApiError = {
 const getApiError = (error: unknown): ApiError =>
   typeof error === "object" && error !== null ? (error as ApiError) : {};
 
+/* ─── Loading States ─────────────────────────────────────────────── */
+function LoadingStats({ colors }: { colors: any }) {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {[...Array(4)].map((_, i) => (
+        <div
+          key={i}
+          className="p-4 border"
+          style={{ backgroundColor: colors.card, borderColor: colors.border }}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className="w-10 h-10"
+              style={{ backgroundColor: colors.border }}
+            />
+            <div className="space-y-1.5">
+              <div
+                className="h-5 w-10"
+                style={{ backgroundColor: colors.border }}
+              />
+              <div
+                className="h-3.5 w-14"
+                style={{ backgroundColor: colors.border }}
+              />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function LoadingTabela({ colors }: { colors: any }) {
+  return (
+    <div
+      className="border overflow-hidden"
+      style={{ backgroundColor: colors.card, borderColor: colors.border }}
+    >
+      <div className="h-11" style={{ backgroundColor: colors.primary }} />
+      <div className="divide-y" style={{ borderColor: colors.border }}>
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="flex items-center gap-4 px-5 py-3.5">
+            <div
+              className="w-9 h-9"
+              style={{ backgroundColor: colors.border }}
+            />
+            <div className="flex-1 space-y-1.5">
+              <div
+                className="h-3.5 w-36"
+                style={{ backgroundColor: colors.border }}
+              />
+              <div
+                className="h-3 w-28"
+                style={{ backgroundColor: colors.border }}
+              />
+            </div>
+            <div
+              className="w-20 h-6"
+              style={{ backgroundColor: colors.border }}
+            />
+            <div
+              className="w-20 h-6"
+              style={{ backgroundColor: colors.border }}
+            />
+            <div
+              className="w-28 h-4"
+              style={{ backgroundColor: colors.border }}
+            />
+            <div className="flex gap-1.5">
+              {[...Array(2)].map((_, j) => (
+                <div
+                  key={j}
+                  className="w-8 h-8"
+                  style={{ backgroundColor: colors.border }}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   PÁGINA PRINCIPAL
+══════════════════════════════════════════════════════════════════ */
 export default function CategoriasPage() {
   const colors = useThemeColors();
 
-  // Estados principais
   const [categorias, setCategorias] = useState<Categoria[]>([]);
-  const [categoriasDeletadas, setCategoriasDeletadas] = useState<Categoria[]>(
-    [],
-  );
-  const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<string>("ativas");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filtroStatus] = useState<string>("todos");
-  const [filtroTipo] = useState<string>("todos");
-  const [filtroIVA] = useState<string>("todos");
+  const [categoriasDeletadas, setCategoriasDeletadas] = useState<Categoria[]>([]);
+  const [categoriasFiltradas, setCategoriasFiltradas] = useState<Categoria[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busca, setBusca] = useState("");
+  const [filtroStatus, setFiltroStatus] = useState<"todos" | "ativo" | "inativo">("todos");
+  const [filtroIVA, setFiltroIVA] = useState<string>("todos");
+  const [abaAtiva, setAbaAtiva] = useState<"ativos" | "lixeira">("ativos");
 
-  // Estados do modal/formulário
+  // Estados dos modais (mantidos originais)
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
   const [isForceDeleteModalOpen, setIsForceDeleteModalOpen] = useState(false);
-  const [categoriaSelecionada, setCategoriaSelecionada] =
-    useState<Categoria | null>(null);
-  const [formData, setFormData] =
-    useState<FormCategoriaData>(INITIAL_FORM_DATA);
+  const [categoriaSelecionada, setCategoriaSelecionada] = useState<Categoria | null>(null);
+  const [formData, setFormData] = useState<FormCategoriaData>(INITIAL_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errors, setErrors] = useState<
-    Partial<Record<keyof FormCategoriaData, string>>
-  >({});
+  const [errors, setErrors] = useState<Partial<Record<keyof FormCategoriaData, string>>>({});
 
-  // Carregar categorias ativas
+  /* ── Filtro local ── */
+  useEffect(() => {
+    const lista = abaAtiva === "ativos" ? categorias : categoriasDeletadas;
+    const t = busca.toLowerCase();
+    setCategoriasFiltradas(
+      lista.filter((c) => {
+        const matchBusca =
+          c.nome.toLowerCase().includes(t) ||
+          (c.descricao && c.descricao.toLowerCase().includes(t));
+        const matchStatus =
+          filtroStatus === "todos" || c.status === filtroStatus;
+        const matchIVA =
+          filtroIVA === "todos" ||
+          (filtroIVA === "isento" && (!c.sujeito_iva || c.taxa_iva === 0)) ||
+          c.taxa_iva === Number(filtroIVA);
+        return matchBusca && matchStatus && matchIVA;
+      })
+    );
+  }, [busca, filtroStatus, filtroIVA, categorias, categoriasDeletadas, abaAtiva]);
+
+  /* ── Carregar ── */
   const carregarCategorias = useCallback(async () => {
     try {
-      setIsLoading(true);
+      setLoading(true);
       const response = await categoriaService.listarCategorias();
       setCategorias(response.categorias);
     } catch (error: unknown) {
@@ -136,11 +229,10 @@ export default function CategoriasPage() {
           apiError.response?.data?.message || "Tente novamente mais tarde",
       });
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   }, []);
 
-  // Carregar categorias deletadas
   const carregarCategoriasDeletadas = useCallback(async () => {
     try {
       const response = await categoriaService.listarCategoriasDeletadas();
@@ -150,50 +242,12 @@ export default function CategoriasPage() {
     }
   }, []);
 
-  const router = useRouter();
-
   useEffect(() => {
     carregarCategorias();
     carregarCategoriasDeletadas();
   }, [carregarCategorias, carregarCategoriasDeletadas]);
 
-  // Filtrar categorias ativas
-  const categoriasFiltradas = useMemo(() => {
-    const termo = searchTerm.trim().toLowerCase();
-    let filtradas = categorias;
-
-    if (termo) {
-      filtradas = filtradas.filter(
-        (cat) =>
-          cat.nome.toLowerCase().includes(termo) ||
-          cat.descricao?.toLowerCase().includes(termo),
-      );
-    }
-
-    if (filtroStatus !== "todos") {
-      filtradas = filtradas.filter((cat) => cat.status === filtroStatus);
-    }
-
-    if (filtroTipo !== "todos") {
-      filtradas = filtradas.filter((cat) => cat.tipo === filtroTipo);
-    }
-
-    if (filtroIVA !== "todos") {
-      if (filtroIVA === "isento") {
-        filtradas = filtradas.filter(
-          (cat) => !cat.sujeito_iva || cat.taxa_iva === 0,
-        );
-      } else {
-        filtradas = filtradas.filter(
-          (cat) => cat.taxa_iva === Number(filtroIVA),
-        );
-      }
-    }
-
-    return filtradas;
-  }, [searchTerm, filtroStatus, filtroTipo, filtroIVA, categorias]);
-
-  // Handlers do formulário
+  /* ── Handlers do formulário (mantidos originais) ── */
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
@@ -250,7 +304,7 @@ export default function CategoriasPage() {
 
   const handleNovo = () => {
     setCategoriaSelecionada(null);
-    setFormData(INITIAL_FORM_DATA);
+    setFormData(INITIAL_FORM);
     setErrors({});
     setIsModalOpen(true);
   };
@@ -261,7 +315,6 @@ export default function CategoriasPage() {
       nome: categoria.nome,
       descricao: categoria.descricao || "",
       status: categoria.status,
-      tipo: categoria.tipo,
       taxa_iva: categoria.taxa_iva as TaxaIVA,
       sujeito_iva: categoria.sujeito_iva,
       codigo_isencao: categoria.codigo_isencao || "",
@@ -282,7 +335,6 @@ export default function CategoriasPage() {
         nome: formData.nome,
         descricao: formData.descricao || undefined,
         status: formData.status,
-        tipo: formData.tipo,
         taxa_iva: formData.taxa_iva,
         sujeito_iva: formData.sujeito_iva,
       };
@@ -385,609 +437,404 @@ export default function CategoriasPage() {
     }
   };
 
-  const stats = useMemo(() => ({
-    ativas: {
-      total: categorias.length,
-      ativos: categorias.filter((c) => c.status === "ativo").length,
-      produtos: categorias.filter((c) => c.tipo === "produto").length,
-      servicos: categorias.filter((c) => c.tipo === "servico").length,
+  /* ── Estatísticas ── */
+  const stats = [
+    {
+      icon: LayoutGrid,
+      label: "Total",
+      value: categorias.length,
+      color: colors.text,
     },
-    lixeira: {
-      total: categoriasDeletadas.length,
+    {
+      icon: CheckCircle,
+      label: "Ativos",
+      value: categorias.filter((c) => c.status === "ativo").length,
+      color: colors.success,
     },
-  }), [categorias, categoriasDeletadas.length]);
+    {
+      icon: Package,
+      label: "Produtos",
+      value: categorias.length,
+      color: colors.primary,
+    },
+    {
+      icon: Trash2,
+      label: "Lixeira",
+      value: categoriasDeletadas.length,
+      color: colors.secondary,
+    },
+  ];
+
+  /* ── Lista atual ── */
+  const listaVazia =
+    abaAtiva === "ativos" ? categorias.length === 0 : categoriasDeletadas.length === 0;
 
   return (
     <MainEmpresa>
       <div
-        className="flex flex-col gap-4 p-4 transition-colors duration-300"
+        className="space-y-4 max-w-7xl mx-auto pb-6 transition-colors duration-300"
         style={{ backgroundColor: colors.background }}
       >
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        {/* ── Cabeçalho ── */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h1
-              className="text-xl font-bold"
-              style={{ color: colors.secondary }}
-            >
+            <h1 className="text-xl font-bold" style={{ color: colors.secondary }}>
               Categorias
             </h1>
-            <p className="text-xs" style={{ color: colors.textSecondary }}>
-              Gerencie categorias de produtos e serviços
+            <p className="text-sm mt-0.5" style={{ color: colors.textSecondary }}>
+              Gerencie categorias de produtos
             </p>
           </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleNovo}
-              className="flex items-center gap-2 px-4 py-2 text-white transition-colors text-sm font-medium hover:opacity-90"
-              style={{ backgroundColor: colors.secondary }}
+          <div className="flex flex-wrap gap-2">
+            {/* Abas */}
+            <div
+              className="flex border"
+              style={{ borderColor: colors.border, backgroundColor: colors.card }}
             >
-              <Plus className="w-4 h-4" />
-              Nova categoria
-            </button>
+              {(["ativos", "lixeira"] as const).map((aba) => (
+                <button
+                  key={aba}
+                  onClick={() => setAbaAtiva(aba)}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors"
+                  style={{
+                    backgroundColor: abaAtiva === aba ? colors.primary : "transparent",
+                    color: abaAtiva === aba ? "#fff" : colors.textSecondary,
+                  }}
+                >
+                  {aba === "ativos" ? (
+                    <LayoutGrid className="w-4 h-4" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                  {aba === "ativos"
+                    ? `Ativos (${categorias.length})`
+                    : `Lixeira (${categoriasDeletadas.length})`}
+                </button>
+              ))}
+            </div>
 
-            <button
-              onClick={() =>
-                router.push("/dashboard/Produtos_servicos/Stock")
-              }
-              className="flex items-center gap-2 px-4 py-2 text-white transition-colors text-sm font-medium hover:opacity-90"
-              style={{ backgroundColor: colors.primary }}
-            >
-              <Plus className="w-4 h-4" />
-              Nova produto/serviço
-            </button>
+            {/* Pesquisa */}
+            <div className="relative flex-1 min-w-[200px]">
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4"
+                style={{ color: colors.textSecondary }}
+              />
+              <input
+                type="text"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Nome, descrição…"
+                className="w-full pl-9 pr-4 py-2 border outline-none text-sm"
+                style={{
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  color: colors.text,
+                }}
+              />
+            </div>
+
+
+            {/* Novo */}
+            {abaAtiva === "ativos" && (
+              <button
+                onClick={handleNovo}
+                className="flex items-center gap-1.5 px-4 py-2 text-white text-sm font-medium"
+                style={{ backgroundColor: colors.primary }}
+              >
+                <Plus className="w-4 h-4" />
+                Nova categoria
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList
-            className="w-full justify-start border-b rounded-none h-auto p-0 bg-transparent"
-            style={{ borderColor: colors.border }}
+        {/* ── Stats ── */}
+        {loading ? (
+          <LoadingStats colors={colors} />
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {stats.map(({ icon: Icon, label, value, color }) => (
+              <div
+                key={label}
+                className="p-4 border"
+                style={{
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2" style={{ backgroundColor: `${color}18` }}>
+                    <Icon className="w-5 h-5" style={{ color }} />
+                  </div>
+                  <div>
+                    <p
+                      className="text-xl font-bold leading-none"
+                      style={{ color: colors.text }}
+                    >
+                      {value}
+                    </p>
+                    <p className="text-sm mt-0.5" style={{ color: colors.textSecondary }}>
+                      {label}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Tabela ── */}
+        {loading ? (
+          <LoadingTabela colors={colors} />
+        ) : listaVazia ? (
+          <div
+            className="border text-center py-14"
+            style={{ backgroundColor: colors.card, borderColor: colors.border }}
           >
-            <TabsTrigger
-              value="ativas"
-              className="data-[state=active]:border-b-2 rounded-none px-4 py-2 text-xs"
-              style={{
-                color:
-                  activeTab === "ativas"
-                    ? colors.primary
-                    : colors.textSecondary,
-                borderBottomColor:
-                  activeTab === "ativas" ? colors.primary : "transparent",
-              }}
-            >
-              Ativas ({stats.ativas.total})
-            </TabsTrigger>
-            <TabsTrigger
-              value="lixeira"
-              className="data-[state=active]:border-b-2 rounded-none px-4 py-2 text-xs"
-              style={{
-                color:
-                  activeTab === "lixeira"
-                    ? colors.primary
-                    : colors.textSecondary,
-                borderBottomColor:
-                  activeTab === "lixeira" ? colors.primary : "transparent",
-              }}
-            >
-              Lixeira ({stats.lixeira.total})
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Conteúdo - Categorias Ativas */}
-          <TabsContent value="ativas" className="mt-4 space-y-4">
-            {/* Filtros */}
-            <div className="flex flex-wrap gap-2">
-              <div className="relative">
-                <Search
-                  className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2"
-                  style={{ color: colors.textSecondary }}
-                />
-                <Input
-                  placeholder="Buscar..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-7 h-8 text-xs w-[180px]"
-                  style={{
-                    backgroundColor: colors.card,
-                    borderColor: colors.border,
-                    color: colors.text,
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Cards de Estatísticas */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <div
-                className="p-2 border flex items-center gap-2"
-                style={{
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                }}
+            <LayoutGrid
+              className="w-14 h-14 mx-auto mb-3"
+              style={{ color: colors.border }}
+            />
+            <p className="text-sm mb-4" style={{ color: colors.textSecondary }}>
+              {abaAtiva === "ativos"
+                ? "Nenhuma categoria encontrada."
+                : "Nenhuma categoria na lixeira."}
+            </p>
+            {abaAtiva === "ativos" && (
+              <button
+                onClick={handleNovo}
+                className="px-4 py-2 text-white text-sm"
+                style={{ backgroundColor: colors.primary }}
               >
-                <div
-                  className="p-1.5"
-                  style={{ backgroundColor: `${colors.text}15` }}
-                >
-                  <LayoutGrid
-                    className="h-3.5 w-3.5"
-                    style={{ color: colors.text }}
-                  />
-                </div>
-                <div>
-                  <div
-                    className="text-xs"
-                    style={{ color: colors.textSecondary }}
-                  >
-                    Total
-                  </div>
-                  <div
-                    className="text-sm font-bold"
-                    style={{ color: colors.text }}
-                  >
-                    {stats.ativas.total}
-                  </div>
-                </div>
-              </div>
-              <div
-                className="p-2 border flex items-center gap-2"
-                style={{
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                }}
-              >
-                <div
-                  className="p-1.5"
-                  style={{ backgroundColor: `${colors.success}15` }}
-                >
-                  <CheckCircle2
-                    className="h-3.5 w-3.5"
-                    style={{ color: colors.success }}
-                  />
-                </div>
-                <div>
-                  <div
-                    className="text-xs"
-                    style={{ color: colors.textSecondary }}
-                  >
-                    Ativos
-                  </div>
-                  <div
-                    className="text-sm font-bold"
-                    style={{ color: colors.text }}
-                  >
-                    {stats.ativas.ativos}
-                  </div>
-                </div>
-              </div>
-              <div
-                className="p-2 border flex items-center gap-2"
-                style={{
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                }}
-              >
-                <div
-                  className="p-1.5"
-                  style={{ backgroundColor: `${colors.primary}15` }}
-                >
-                  <Package
-                    className="h-3.5 w-3.5"
-                    style={{ color: colors.primary }}
-                  />
-                </div>
-                <div>
-                  <div
-                    className="text-xs"
-                    style={{ color: colors.textSecondary }}
-                  >
-                    Produtos
-                  </div>
-                  <div
-                    className="text-sm font-bold"
-                    style={{ color: colors.text }}
-                  >
-                    {stats.ativas.produtos}
-                  </div>
-                </div>
-              </div>
-              <div
-                className="p-2 border flex items-center gap-2"
-                style={{
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                }}
-              >
-                <div
-                  className="p-1.5"
-                  style={{ backgroundColor: `${colors.secondary}15` }}
-                >
-                  <Wrench
-                    className="h-3.5 w-3.5"
-                    style={{ color: colors.secondary }}
-                  />
-                </div>
-                <div>
-                  <div
-                    className="text-xs"
-                    style={{ color: colors.textSecondary }}
-                  >
-                    Serviços
-                  </div>
-                  <div
-                    className="text-sm font-bold"
-                    style={{ color: colors.text }}
-                  >
-                    {stats.ativas.servicos}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Tabela de Categorias Ativas */}
-            <div
-              className="border"
-              style={{
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-              }}
-            >
-              {isLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div
-                    className="h-6 w-6 border-2 border-t-transparent rounded-full animate-spin"
-                    style={{ borderColor: colors.primary }}
-                  />
-                </div>
-              ) : categoriasFiltradas.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <LayoutGrid
-                    className="h-8 w-8 mb-2"
-                    style={{ color: colors.border }}
-                  />
-                  <h3
-                    className="text-sm font-semibold"
-                    style={{ color: colors.text }}
-                  >
-                    Nenhuma categoria encontrada
-                  </h3>
-                  <p
-                    className="text-xs mt-1"
-                    style={{ color: colors.textSecondary }}
-                  >
-                    Clique em Nova Categoria para começar
-                  </p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead
-                      className="border-b text-xs"
+                Cadastrar primeira categoria
+              </button>
+            )}
+          </div>
+        ) : (
+          <div
+            className="border overflow-hidden shadow-sm"
+            style={{ backgroundColor: colors.card, borderColor: colors.border }}
+          >
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ backgroundColor: colors.primary }}>
+                    {["Categoria", "Status", "IVA", "Descrição", "Ações"].map(
+                      (h, i) => (
+                        <th
+                          key={h}
+                          className={`py-3 px-5 font-semibold text-white text-xs uppercase tracking-wider ${
+                            i === 4 ? "text-center" : "text-left"
+                          }`}
+                        >
+                          {h}
+                        </th>
+                      )
+                    )}
+                  </tr>
+                </thead>
+                <tbody className="divide-y" style={{ borderColor: colors.border }}>
+                  {categoriasFiltradas.map((c) => (
+                    <tr
+                      key={c.id}
+                      className="transition-colors"
                       style={{
-                        borderColor: colors.border,
-                        backgroundColor: colors.hover,
+                        backgroundColor:
+                          c.status === "inativo"
+                            ? `${colors.hover}80`
+                            : "transparent",
                       }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.backgroundColor = colors.hover)
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.backgroundColor =
+                          c.status === "inativo"
+                            ? `${colors.hover}80`
+                            : "transparent")
+                      }
                     >
-                      <tr>
-                        <th
-                          className="text-left py-2 px-3 font-medium"
-                          style={{ color: colors.text }}
-                        >
-                          Nome
-                        </th>
-                        <th
-                          className="text-left py-2 px-3 font-medium"
-                          style={{ color: colors.text }}
-                        >
-                          Tipo
-                        </th>
-                        <th
-                          className="text-left py-2 px-3 font-medium"
-                          style={{ color: colors.text }}
-                        >
-                          Status
-                        </th>
-                        <th
-                          className="text-left py-2 px-3 font-medium"
-                          style={{ color: colors.text }}
-                        >
-                          IVA
-                        </th>
-                        <th
-                          className="text-left py-2 px-3 font-medium hidden md:table-cell"
-                          style={{ color: colors.text }}
-                        >
-                          Descrição
-                        </th>
-                        <th
-                          className="text-right py-2 px-3 font-medium"
-                          style={{ color: colors.text }}
-                        >
-                          Ações
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody
-                      className="divide-y text-sm"
-                      style={{ borderColor: colors.border }}
-                    >
-                      {categoriasFiltradas.map((categoria) => (
-                        <tr
-                          key={categoria.id}
-                          className="hover:bg-opacity-50"
-                          style={{ backgroundColor: "transparent" }}
-                        >
-                          <td className="py-2 px-3">
-                            <span
-                              className="text-xs font-medium"
+                      {/* Categoria */}
+                      <td className="py-3 px-5">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-9 h-9 flex items-center justify-center flex-shrink-0"
+                            style={{
+                              backgroundColor: `${colors.primary}20`,
+                            }}
+                          >
+                            <Package
+                              className="w-4 h-4"
+                              style={{ color: colors.primary }}
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <div
+                              className="font-medium text-sm truncate"
                               style={{ color: colors.text }}
                             >
-                              {categoria.nome}
-                            </span>
-                          </td>
-                          <td className="py-2 px-3">
-                            <Badge
-                              variant="secondary"
-                              className="border-0 font-medium text-[10px] px-1.5 py-0.5"
-                              style={{
-                                backgroundColor: `${colors.secondary}15`,
-                                color: colors.text,
-                              }}
-                            >
-                              {getTipoLabel(categoria.tipo)}
-                            </Badge>
-                          </td>
-                          <td className="py-2 px-3">
-                            <Badge
-                              variant="secondary"
-                              className="border-0 font-medium text-[10px] px-1.5 py-0.5"
-                              style={{
-                                backgroundColor:
-                                  categoria.status === "ativo"
-                                    ? `${colors.success}15`
-                                    : `${colors.textSecondary}15`,
-                                color:
-                                  categoria.status === "ativo"
-                                    ? colors.success
-                                    : colors.textSecondary,
-                              }}
-                            >
-                              {categoria.status === "ativo" ? (
-                                <CheckCircle2 className="mr-1 h-2.5 w-2.5" />
-                              ) : (
-                                <XCircle className="mr-1 h-2.5 w-2.5" />
-                              )}
-                              {getStatusLabel(categoria.status)}
-                            </Badge>
-                          </td>
-                          <td className="py-2 px-3">
-                            <Badge
-                              variant="secondary"
-                              className="border-0 font-medium text-[10px] px-1.5 py-0.5"
-                              style={{
-                                backgroundColor: `${getTaxaIVAColor(categoria.taxa_iva).replace("text-", "").replace("700", "100")}15`,
-                                color: colors.text,
-                              }}
-                              title={
-                                categoria.codigo_isencao
-                                  ? getCodigoIsencaoLabel(
-                                      categoria.codigo_isencao,
-                                    ) || ""
-                                  : ""
-                              }
-                            >
-                              <Percent className="mr-1 h-2.5 w-2.5" />
-                              {getTaxaIVALabel(
-                                categoria.taxa_iva,
-                                categoria.sujeito_iva,
-                              )}
-                            </Badge>
-                          </td>
-                          <td
-                            className="py-2 px-3 text-xs hidden md:table-cell max-w-[200px]"
-                            style={{ color: colors.textSecondary }}
-                          >
-                            {categoria.descricao ? (
-                              <span className="line-clamp-1">
-                                {categoria.descricao}
-                              </span>
-                            ) : (
-                              <span className="italic">—</span>
-                            )}
-                          </td>
-                          <td className="py-2 px-3 text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 w-7 p-0"
-                                  style={{ color: colors.textSecondary }}
-                                >
-                                  <MoreVertical className="h-3.5 w-3.5" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent
-                                align="end"
-                                className="w-32 min-w-0"
-                              >
-                                <DropdownMenuItem
-                                  onClick={() => handleEditar(categoria)}
-                                  className="gap-2 cursor-pointer text-xs py-1.5"
-                                  style={{ color: colors.text }}
-                                >
-                                  <PencilLine
-                                    className="h-3 w-3"
-                                    style={{ color: colors.text }}
-                                  />
-                                  Editar
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() =>
-                                    handleConfirmarDelete(categoria)
-                                  }
-                                  className="gap-2 cursor-pointer text-xs py-1.5"
-                                  style={{ color: colors.secondary }}
-                                >
-                                  <Trash2
-                                    className="h-3 w-3"
-                                    style={{ color: colors.secondary }}
-                                  />
-                                  Excluir
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </TabsContent>
-
-          {/* Conteúdo - Lixeira */}
-          <TabsContent value="lixeira" className="mt-4">
-            <div
-              className="border"
-              style={{
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-              }}
-            >
-              {categoriasDeletadas.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <Database
-                    className="h-8 w-8 mb-2"
-                    style={{ color: colors.border }}
-                  />
-                  <h3
-                    className="text-sm font-semibold"
-                    style={{ color: colors.text }}
-                  >
-                    Lixeira vazia
-                  </h3>
-                  <p
-                    className="text-xs mt-1"
-                    style={{ color: colors.textSecondary }}
-                  >
-                    Nenhuma categoria foi excluída
-                  </p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead
-                      className="border-b text-xs"
-                      style={{
-                        borderColor: colors.border,
-                        backgroundColor: colors.hover,
-                      }}
-                    >
-                      <tr>
-                        <th
-                          className="text-left py-2 px-3 font-medium"
-                          style={{ color: colors.text }}
-                        >
-                          Nome
-                        </th>
-                        <th
-                          className="text-left py-2 px-3 font-medium"
-                          style={{ color: colors.text }}
-                        >
-                          Tipo
-                        </th>
-                        <th
-                          className="text-left py-2 px-3 font-medium"
-                          style={{ color: colors.text }}
-                        >
-                          Data exclusão
-                        </th>
-                        <th
-                          className="text-right py-2 px-3 font-medium"
-                          style={{ color: colors.text }}
-                        >
-                          Ações
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody
-                      className="divide-y text-sm"
-                      style={{ borderColor: colors.border }}
-                    >
-                      {categoriasDeletadas.map((categoria) => (
-                        <tr key={categoria.id}>
-                          <td className="py-2 px-3">
-                            <span
-                              className="text-xs font-medium"
-                              style={{ color: colors.text }}
-                            >
-                              {categoria.nome}
-                            </span>
-                          </td>
-                          <td className="py-2 px-3">
-                            <Badge
-                              variant="secondary"
-                              className="border-0 font-medium text-[10px] px-1.5 py-0.5"
-                              style={{
-                                backgroundColor: `${colors.secondary}15`,
-                                color: colors.text,
-                              }}
-                            >
-                              {getTipoLabel(categoria.tipo)}
-                            </Badge>
-                          </td>
-                          <td
-                            className="py-2 px-3 text-xs"
-                            style={{ color: colors.textSecondary }}
-                          >
-                            {categoria.deleted_at
-                              ? new Date(
-                                  categoria.deleted_at,
-                                ).toLocaleDateString("pt-AO")
-                              : "-"}
-                          </td>
-                          <td className="py-2 px-3 text-right">
-                            <div className="flex justify-end gap-1">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() =>
-                                  handleConfirmarRestore(categoria)
-                                }
-                                className="h-7 w-7 p-0"
-                                title="Restaurar"
-                                style={{ color: colors.success }}
-                              >
-                                <RotateCcw className="h-3.5 w-3.5" />
-                              </Button>
-                              {/* Botao de excluir 
-                                                            <Button
-                                                                size="sm"
-                                                                variant="ghost"
-                                                                onClick={() => handleConfirmarForceDelete(categoria)}
-                                                                className="h-7 w-7 p-0"
-                                                                title="Excluir permanentemente"
-                                                                style={{ color: colors.danger }}
-                                                            >
-                                                                <Trash2 className="h-3.5 w-3.5" />
-                                                            </Button>*/}
+                              {c.nome}
                             </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                            {c.deleted_at && (
+                              <div
+                                className="text-xs flex items-center gap-1 mt-0.5"
+                                style={{ color: colors.danger }}
+                              >
+                                <History className="w-3 h-3" />
+                                {new Date(c.deleted_at).toLocaleDateString("pt-PT")}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Status */}
+                      <td className="py-3 px-5">
+                        <span
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium"
+                          style={{
+                            backgroundColor:
+                              c.status === "ativo"
+                                ? `${colors.success}18`
+                                : `${colors.textSecondary}18`,
+                            color:
+                              c.status === "ativo"
+                                ? colors.success
+                                : colors.textSecondary,
+                          }}
+                        >
+                          {c.status === "ativo" ? (
+                            <CheckCircle className="w-3 h-3" />
+                          ) : (
+                            <XCircle className="w-3 h-3" />
+                          )}
+                          {getStatusLabel(c.status)}
+                        </span>
+                      </td>
+
+                      {/* IVA */}
+                      <td className="py-3 px-5">
+                        <span
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium"
+                          style={{
+                            backgroundColor: `${getTaxaIVAColor(c.taxa_iva).replace("text-", "").replace("700", "100")}20`,
+                            color: colors.text,
+                          }}
+                          title={
+                            c.codigo_isencao
+                              ? getCodigoIsencaoLabel(c.codigo_isencao) || ""
+                              : ""
+                          }
+                        >
+                          <Percent className="w-3 h-3" />
+                          {getTaxaIVALabel(c.taxa_iva, c.sujeito_iva)}
+                        </span>
+                      </td>
+
+                      {/* Descrição */}
+                      <td className="py-3 px-5">
+                        <span
+                          className="text-sm line-clamp-1 max-w-[200px]"
+                          style={{ color: colors.textSecondary }}
+                        >
+                          {c.descricao || <span className="italic">—</span>}
+                        </span>
+                      </td>
+
+                      {/* Ações - Menu de três pontos */}
+                      <td className="py-3 px-5">
+                        <div className="flex items-center justify-center">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                className="p-2 transition-colors hover:opacity-70"
+                                style={{ color: colors.textSecondary }}
+                                title="Ações"
+                              >
+                                <MoreVertical className="w-4 h-4" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                              align="end"
+                              className="w-36"
+                              style={{
+                                backgroundColor: colors.card,
+                                borderColor: colors.border,
+                              }}
+                            >
+                              {abaAtiva === "ativos" ? (
+                                <>
+                                  <DropdownMenuItem
+                                    onClick={() => handleEditar(c)}
+                                    className="gap-2 cursor-pointer text-xs py-2"
+                                    style={{ color: colors.text }}
+                                  >
+                                    <PencilLine className="h-3.5 w-3.5" />
+                                    Editar
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => handleConfirmarDelete(c)}
+                                    className="gap-2 cursor-pointer text-xs py-2"
+                                    style={{ color: colors.warning }}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" style={{ color: colors.warning }}/>
+                                    Mover para lixeira
+                                  </DropdownMenuItem>
+                                </>
+                              ) : (
+                                <>
+                                  <DropdownMenuItem
+                                    onClick={() => handleConfirmarRestore(c)}
+                                    className="gap-2 cursor-pointer text-xs py-2"
+                                    style={{ color: colors.success }}
+                                  >
+                                    <RotateCcw className="h-3.5 w-3.5" />
+                                    Restaurar
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => handleConfirmarForceDelete(c)}
+                                    className="gap-2 cursor-pointer text-xs py-2"
+                                    style={{ color: colors.secondary }}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                    Excluir permanentemente
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* Sem resultados na pesquisa */}
+              {categoriasFiltradas.length === 0 && busca && (
+                <div className="text-center py-12">
+                  <Search
+                    className="w-12 h-12 mx-auto mb-3"
+                    style={{ color: colors.border }}
+                  />
+                  <p className="text-sm" style={{ color: colors.textSecondary }}>
+                    Nenhuma categoria encontrada para busca
+                  </p>
+                  <button
+                    onClick={() => setBusca("")}
+                    className="mt-2 text-sm underline"
+                    style={{ color: colors.primary }}
+                  >
+                    Limpar pesquisa
+                  </button>
                 </div>
               )}
             </div>
-          </TabsContent>
-        </Tabs>
+          </div>
+        )}
       </div>
+
+      {/* ── MODAIS ORIGINAIS DE CATEGORIAS (MANTIDOS) ── */}
 
       {/* Modal de Formulário */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
@@ -1040,38 +887,6 @@ export default function CategoriasPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <Label className="text-xs" style={{ color: colors.text }}>
-                  Tipo
-                </Label>
-                <Select
-                  value={formData.tipo}
-                  onValueChange={(v) => handleSelectChange("tipo", v)}
-                >
-                  <SelectTrigger
-                    className="h-8 text-xs"
-                    style={{
-                      backgroundColor: colors.card,
-                      borderColor: colors.border,
-                    }}
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent
-                    style={{
-                      backgroundColor: colors.card,
-                      borderColor: colors.border,
-                    }}
-                  >
-                    <SelectItem value="produto" className="text-xs">
-                      Produto
-                    </SelectItem>
-                    <SelectItem value="servico" className="text-xs">
-                      Serviço
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
               <div className="space-y-1">
                 <Label className="text-xs" style={{ color: colors.text }}>
                   Status
@@ -1291,7 +1106,7 @@ export default function CategoriasPage() {
                   <div className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <>
-                    <CheckCircle2 className="h-3 w-3" />
+                    <CheckCircle className="h-3 w-3" />
                     {categoriaSelecionada ? "Atualizar" : "Criar"}
                   </>
                 )}
@@ -1313,9 +1128,9 @@ export default function CategoriasPage() {
           >
             <DialogTitle
               className="flex items-center gap-2 text-sm"
-              style={{ color: colors.danger }}
+              style={{ color: colors.secondary }}
             >
-              <AlertTriangle className="h-4 w-4" />
+              <AlertCircle className="h-4 w-4" />
               Confirmar Exclusão
             </DialogTitle>
           </DialogHeader>
@@ -1345,7 +1160,7 @@ export default function CategoriasPage() {
                 size="sm"
                 onClick={handleDeletar}
                 className="flex-1 h-8 gap-1 text-white text-xs"
-                style={{ backgroundColor: colors.danger }}
+                style={{ backgroundColor: colors.secondary }}
               >
                 <Trash2 className="h-3 w-3" />
                 Excluir
@@ -1425,7 +1240,7 @@ export default function CategoriasPage() {
               className="flex items-center gap-2 text-sm"
               style={{ color: colors.danger }}
             >
-              <AlertTriangle className="h-4 w-4" />
+              <AlertCircle className="h-4 w-4" />
               Excluir Permanentemente
             </DialogTitle>
           </DialogHeader>

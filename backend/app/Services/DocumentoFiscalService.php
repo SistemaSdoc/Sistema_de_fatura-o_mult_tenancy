@@ -97,12 +97,12 @@ class DocumentoFiscalService
         ],
         'FP' => [
             'nome'                  => 'Fatura Proforma',
-            'afeta_stock'           => false,      // NÃO afeta stock (é apenas orçamento)
-            'eh_venda'              => false,      // NÃO é uma venda real
-            'gera_recibo'           => true,       // Pode receber sinal/adiantamento
+            'afeta_stock'           => false,
+            'eh_venda'              => false,
+            'gera_recibo'           => true,
             'estado_inicial'        => 'emitido',
             'exige_cliente'         => false,
-            'aceita_pagamento'      => true,       // Pode receber pagamento (sinal)
+            'aceita_pagamento'      => true,
             'pode_ter_adiantamento' => false,
             'requer_assinatura'     => false,
         ],
@@ -190,6 +190,15 @@ class DocumentoFiscalService
             $regime     = $empresa->regime_fiscal;
 
             $this->validarDadosPorTipo($dados, $tipo, $config);
+
+            // Para NC e ND, validações adicionais
+            if ($tipo === 'NC') {
+                $this->validarNotaCredito($dados);
+            }
+
+            if ($tipo === 'ND') {
+                $this->validarNotaDebito($dados);
+            }
 
             [$numero, $numeroDocumento, $serieFiscal] = $this->gerarNumeroDocumento($tipo);
 
@@ -285,12 +294,6 @@ class DocumentoFiscalService
      | RECIBO
      | ================================================================== */
 
-    /**
-     * Gera um recibo para um documento.
-     * CORRIGIDO: FP (Proforma) agora pode receber recibos (sinal/adiantamento),
-     * mas NÃO altera o estado da Proforma para "paga" - continua "emitido"
-     * pois aguarda conversão para FT/FR.
-     */
     public function gerarRecibo(DocumentoFiscal $documentoOrigem, array $dados): DocumentoFiscal
     {
         if (! in_array($documentoOrigem->tipo_documento, ['FT', 'FA', 'FP'])) {
@@ -317,7 +320,6 @@ class DocumentoFiscalService
             $valorPago = (float) ($dados['valor'] ?? 0);
 
             if ($documentoOrigem->tipo_documento === 'FP') {
-                // Proforma: permite pagamento parcial (sinal) sem alterar estado
                 $valorPendente = (float) $documentoOrigem->total_liquido;
             } else {
                 $valorPendente = $this->calcularValorPendente($documentoOrigem);
@@ -371,7 +373,7 @@ class DocumentoFiscalService
 
             $recibo = DocumentoFiscal::create($reciboData);
 
-            // CORRIGIDO: Proformas NÃO mudam de estado ao receber pagamento
+            // Proformas NÃO mudam de estado ao receber pagamento
             if ($documentoOrigem->tipo_documento !== 'FP') {
                 $this->actualizarEstadoAposPagamento($documentoOrigem, $valorPago);
             }
@@ -411,24 +413,22 @@ class DocumentoFiscalService
             );
         }
 
-        // 3. VALIDAR SE A FATURA NÃO ESTÁ TOTALMENTE PAGA
-        //    (Impedir NC de fatura já paga - a menos que seja para devolução)
+        // 3. VALIDAR SE A FATURA NÃO ESTÁ EXPIRADA
+        if ($documentoOrigem->estado === DocumentoFiscal::ESTADO_EXPIRADO) {
+            throw new \InvalidArgumentException(
+                "Não é possível emitir Nota de Crédito para uma fatura expirada: {$documentoOrigem->numero_documento}"
+            );
+        }
+
+        // 4. VALIDAR SE A FATURA NÃO ESTÁ TOTALMENTE PAGA
         if ($documentoOrigem->estado === DocumentoFiscal::ESTADO_PAGA) {
             $valorPendente = $this->calcularValorPendente($documentoOrigem);
             if ($valorPendente <= 0.01) {
                 throw new \InvalidArgumentException(
                     "Não é possível emitir Nota de Crédito para uma fatura já totalmente paga. " .
-                    "Considere emitir uma Nota de Débito para ajustes ou contactar o suporte. " .
                     "Fatura: {$documentoOrigem->numero_documento}"
                 );
             }
-        }
-
-        // 4. VALIDAR SE A FATURA NÃO ESTÁ EXPIRADA
-        if ($documentoOrigem->estado === DocumentoFiscal::ESTADO_EXPIRADO) {
-            throw new \InvalidArgumentException(
-                "Não é possível emitir Nota de Crédito para uma fatura expirada: {$documentoOrigem->numero_documento}"
-            );
         }
 
         // 5. CALCULAR TOTAL JÁ CREDITADO
@@ -447,32 +447,29 @@ class DocumentoFiscalService
         if ($valorMaximo <= 0.01) {
             throw new \InvalidArgumentException(
                 "Esta fatura já possui créditos emitidos que cobrem todo o seu valor. " .
-                "Total da fatura: {$documentoOrigem->total_liquido} Kz, " .
-                "Créditos já emitidos: {$totalJaCreditado} Kz, " .
                 "Saldo disponível: 0.00 Kz"
             );
         }
 
-        if (($totalJaCreditado + $valorNova) > ((float) $documentoOrigem->total_liquido + 0.01)) {
+        if ($valorNova > $valorMaximo + 0.01) {
             throw new \InvalidArgumentException(
-                "Total creditado ({$totalJaCreditado}) + esta NC ({$valorNova}) " .
-                "ultrapassa o valor da fatura ({$documentoOrigem->total_liquido}). " .
-                "Valor máximo permitido: {$valorMaximo} Kz"
+                "O valor da Nota de Crédito (" . number_format($valorNova, 2) . " Kz) " .
+                "excede o saldo disponível (" . number_format($valorMaximo, 2) . " Kz). " .
+                "Total da fatura: " . number_format($documentoOrigem->total_liquido, 2) . " Kz, " .
+                "Créditos já emitidos: " . number_format($totalJaCreditado, 2) . " Kz"
             );
         }
 
         // 8. VALIDAR MOTIVO (obrigatório para NC)
         if (empty($dados['motivo'])) {
             throw new \InvalidArgumentException(
-                "O motivo da Nota de Crédito é obrigatório. " .
-                "Informe o motivo da correção (ex: devolução de mercadoria, erro de valor, etc.)"
+                "O motivo da Nota de Crédito é obrigatório."
             );
         }
 
         if (strlen($dados['motivo']) < 10) {
             throw new \InvalidArgumentException(
-                "O motivo da Nota de Crédito deve ter pelo menos 10 caracteres. " .
-                "Forneça uma descrição detalhada da correção."
+                "O motivo da Nota de Crédito deve ter pelo menos 10 caracteres."
             );
         }
 
@@ -523,7 +520,6 @@ class DocumentoFiscalService
                         'fatura_id'  => $fatura->id,
                         'descricao'  => $itemNC['descricao'] ?? 'sem descrição'
                     ]);
-                    // Não lança exceção, apenas loga - pode ser um serviço adicional
                 }
             }
 
@@ -591,9 +587,7 @@ class DocumentoFiscalService
         if (! in_array($documentoOrigem->tipo_documento, ['FT'])) {
             throw new \InvalidArgumentException(
                 "Nota de Débito só pode ser gerada a partir de Fatura (FT). " .
-                "Tipo atual: {$documentoOrigem->tipo_documento} " .
-                "Motivo: Nota de Débito serve para acrescentar serviços adicionais, " .
-                "juros ou multas a uma fatura, NÃO a uma Fatura-Recibo ou Proforma."
+                "Tipo atual: {$documentoOrigem->tipo_documento}"
             );
         }
 
@@ -614,32 +608,12 @@ class DocumentoFiscalService
         // 4. VALIDAR ITENS (obrigatório)
         if (empty($dados['itens'])) {
             throw new \InvalidArgumentException(
-                'A Nota de Débito deve conter pelo menos um item. ' .
-                'Os itens devem descrever serviços adicionais, juros ou multas.'
+                'A Nota de Débito deve conter pelo menos um item.'
             );
         }
 
-        // 5. VALIDAR SE O DÉBITO É PARA SERVIÇOS (não para produtos que já foram faturados)
-        foreach ($dados['itens'] as $item) {
-            if (! empty($item['produto_id'])) {
-                $produto = Produto::find($item['produto_id']);
-                if ($produto && $produto->tipo === 'produto') {
-                    throw new \InvalidArgumentException(
-                        "Nota de Débito não pode ser usada para produtos físicos. " .
-                        "Produto '{$produto->nome}' é um produto. " .
-                        "Use Nota de Débito apenas para serviços adicionais, juros ou multas."
-                    );
-                }
-            }
-            
-            // Verifica se a descrição é clara sobre o motivo do débito
-            if (empty($item['descricao']) || strlen($item['descricao']) < 5) {
-                throw new \InvalidArgumentException(
-                    "Cada item da Nota de Débito deve ter uma descrição detalhada " .
-                    "do serviço adicional ou motivo do débito."
-                );
-            }
-        }
+        // 5. VALIDAR SE O DÉBITO É PARA SERVIÇOS
+        $this->validarServicosNotaDebito($dados['itens']);
 
         // 6. VALIDAR PRAZO PARA DÉBITO (até 30 dias após emissão da fatura)
         $dataEmissaoFatura = Carbon::parse($documentoOrigem->data_emissao, 'Africa/Luanda');
@@ -654,32 +628,13 @@ class DocumentoFiscalService
             );
         }
 
-        // 7. VERIFICAR SE A FATURA JÁ FOI PAGA E O DÉBITO É PARA JUROS/MULTAS
+        // 7. VERIFICAR SE A FATURA JÁ FOI PAGA
         $valorPago = $this->calcularTotalPago($documentoOrigem);
         $isPaga = $documentoOrigem->estado === DocumentoFiscal::ESTADO_PAGA;
         
         if ($isPaga) {
             // Se a fatura está paga, o débito deve ser claramente para juros ou multa
-            $temJuros = false;
-            $temMulta = false;
-            
-            foreach ($dados['itens'] as $item) {
-                $descricao = strtolower($item['descricao']);
-                if (strpos($descricao, 'juro') !== false || strpos($descricao, 'juros') !== false) {
-                    $temJuros = true;
-                }
-                if (strpos($descricao, 'multa') !== false || strpos($descricao, 'penalidade') !== false) {
-                    $temMulta = true;
-                }
-            }
-            
-            if (!$temJuros && !$temMulta) {
-                throw new \InvalidArgumentException(
-                    "A fatura já está paga. Nota de Débito para fatura paga deve ser " .
-                    "exclusivamente para cobrança de juros de mora ou multas contratuais. " .
-                    "Inclua 'juros' ou 'multa' na descrição dos itens."
-                );
-            }
+            $this->validarJurosMultaFaturaPaga($dados['itens']);
             
             Log::info('Nota de Débito para fatura paga - cobrança de juros/multas', [
                 'fatura_id' => $documentoOrigem->id,
@@ -701,23 +656,142 @@ class DocumentoFiscalService
         // 10. ATUALIZAR ESTADO DA FATURA ORIGINAL
         $this->atualizarEstadoFaturaAposDebito($documentoOrigem, $nd);
 
-        // 11. CALCULAR NOVO VALOR TOTAL
-        $valorND = (float) $nd->total_liquido;
-        $novoValorFatura = (float) $documentoOrigem->total_liquido + $valorND;
-
         Log::info('Nota de Débito emitida com sucesso', [
             'nd_id'              => $nd->id,
             'nd_numero'          => $nd->numero_documento,
             'fatura_id'          => $documentoOrigem->id,
             'fatura_numero'      => $documentoOrigem->numero_documento,
-            'valor_debito'       => $valorND,
-            'valor_original'     => $documentoOrigem->total_liquido,
-            'novo_valor_total'   => $novoValorFatura,
-            'valor_pago'         => $this->calcularTotalPago($documentoOrigem),
-            'saldo_pendente'     => $this->calcularValorPendente($documentoOrigem),
+            'valor_debito'       => $nd->total_liquido,
+            'novo_valor_total'   => (float) $documentoOrigem->total_liquido + (float) $nd->total_liquido,
         ]);
 
         return $nd->load('documentoOrigem', 'itens', 'cliente');
+    }
+
+    /**
+     * Valida se os itens da Nota de Débito são serviços
+     */
+    private function validarServicosNotaDebito(array $itens): void
+    {
+        $itensInvalidos = [];
+
+        foreach ($itens as $item) {
+            // Verifica se a descrição é detalhada
+            if (empty($item['descricao']) || strlen($item['descricao']) < 5) {
+                throw new \InvalidArgumentException(
+                    "Cada item da Nota de Débito deve ter uma descrição detalhada."
+                );
+            }
+
+            // Verifica se é serviço pelo produto_id
+            if (! empty($item['produto_id'])) {
+                $produto = Produto::find($item['produto_id']);
+                if ($produto && $produto->tipo === 'produto') {
+                    $itensInvalidos[] = $item['descricao'];
+                }
+            } else {
+                // Item avulso - verifica pela descrição
+                $descricaoLower = strtolower($item['descricao']);
+                $palavrasServico = [
+                    'serviço', 'servico', 'consulta', 'consultoria', 
+                    'manutenção', 'manutencao', 'instalação', 'instalacao',
+                    'juro', 'juros', 'multa', 'penalidade', 'taxa', 
+                    'comissão', 'comissao', 'honorário', 'honorario',
+                    'assessoria', 'planejamento', 'projeto', 'engenharia',
+                    'design', 'desenvolvimento', 'programação', 'suporte',
+                    'treinamento', 'consulting'
+                ];
+                
+                $isServico = false;
+                foreach ($palavrasServico as $palavra) {
+                    if (strpos($descricaoLower, $palavra) !== false) {
+                        $isServico = true;
+                        break;
+                    }
+                }
+                
+                if (!$isServico) {
+                    $itensInvalidos[] = $item['descricao'];
+                }
+            }
+        }
+
+        if (!empty($itensInvalidos)) {
+            throw new \InvalidArgumentException(
+                "Nota de Débito só pode ser usada para serviços.\n" .
+                "Os seguintes itens não são serviços: " . implode(', ', $itensInvalidos)
+            );
+        }
+    }
+
+    /**
+     * Valida se os itens são juros ou multas para fatura paga
+     */
+    private function validarJurosMultaFaturaPaga(array $itens): void
+    {
+        $temJuros = false;
+        $temMulta = false;
+        
+        foreach ($itens as $item) {
+            $descricao = strtolower($item['descricao']);
+            if (strpos($descricao, 'juro') !== false || strpos($descricao, 'juros') !== false) {
+                $temJuros = true;
+            }
+            if (strpos($descricao, 'multa') !== false || strpos($descricao, 'penalidade') !== false) {
+                $temMulta = true;
+            }
+        }
+        
+        if (!$temJuros && !$temMulta) {
+            throw new \InvalidArgumentException(
+                "A fatura já está paga. Nota de Débito para fatura paga deve ser " .
+                "exclusivamente para cobrança de juros de mora ou multas contratuais."
+            );
+        }
+    }
+
+    /**
+     * Validação adicional para Nota de Crédito
+     */
+    private function validarNotaCredito(array $dados): void
+    {
+        // Verifica se tem fatura_id
+        if (empty($dados['fatura_id'])) {
+            throw new \InvalidArgumentException('Nota de Crédito deve referenciar uma fatura.');
+        }
+
+        // Verifica se tem motivo
+        if (empty($dados['motivo'])) {
+            throw new \InvalidArgumentException('Motivo da Nota de Crédito é obrigatório.');
+        }
+
+        if (strlen($dados['motivo']) < 10) {
+            throw new \InvalidArgumentException('Motivo da Nota de Crédito deve ter pelo menos 10 caracteres.');
+        }
+
+        // Verifica se tem itens
+        if (empty($dados['itens'])) {
+            throw new \InvalidArgumentException('Nota de Crédito deve conter pelo menos um item.');
+        }
+    }
+
+    /**
+     * Validação adicional para Nota de Débito
+     */
+    private function validarNotaDebito(array $dados): void
+    {
+        // Verifica se tem fatura_id
+        if (empty($dados['fatura_id'])) {
+            throw new \InvalidArgumentException('Nota de Débito deve referenciar uma fatura.');
+        }
+
+        // Verifica se tem itens
+        if (empty($dados['itens'])) {
+            throw new \InvalidArgumentException('Nota de Débito deve conter pelo menos um item.');
+        }
+
+        // Valida se os itens são serviços
+        $this->validarServicosNotaDebito($dados['itens']);
     }
 
     /**
@@ -944,8 +1018,6 @@ class DocumentoFiscalService
             $query->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FRt']);
         }
 
-        // CORRIGIDO: "pendentes" = apenas FT com pagamento em aberto.
-        // FP nunca é "pendente de pagamento" — é um orçamento/proforma.
         if (! empty($filtros['pendentes'])) {
             $query->where('tipo_documento', 'FT')
                 ->whereIn('estado', [
@@ -954,14 +1026,11 @@ class DocumentoFiscalService
                 ]);
         }
 
-        // CORRIGIDO: adiantamentos pendentes = FA com pagamento em aberto.
         if (! empty($filtros['adiantamentos_pendentes'])) {
             $query->where('tipo_documento', 'FA')
                 ->where('estado', DocumentoFiscal::ESTADO_EMITIDO);
         }
 
-        // CORRIGIDO: proformas_pendentes mantém o nome mas significa "em aberto/por converter",
-        // nunca misturado com pendentes de pagamento.
         if (! empty($filtros['proformas_pendentes'])) {
             $query->where('tipo_documento', 'FP')
                 ->where('estado', DocumentoFiscal::ESTADO_EMITIDO);
@@ -1019,6 +1088,92 @@ class DocumentoFiscalService
     }
 
     /**
+     * Calcula o saldo disponível para crédito em uma fatura
+     */
+    public function calcularSaldoDisponivel(DocumentoFiscal $fatura): float
+    {
+        if (! in_array($fatura->tipo_documento, ['FT', 'FR'])) {
+            return 0.0;
+        }
+
+        $totalCreditado = $fatura->notasCredito()
+            ->where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO)
+            ->sum('total_liquido');
+
+        return max(0.0, (float) $fatura->total_liquido - $totalCreditado);
+    }
+
+    /**
+     * Verifica se pode emitir Nota de Crédito para um documento
+     */
+    public function podeEmitirNotaCredito(DocumentoFiscal $documento): array
+    {
+        // 1. Tipo de documento
+        if (! in_array($documento->tipo_documento, ['FT', 'FR'])) {
+            return [
+                'pode' => false,
+                'motivo' => "Apenas Fatura (FT) ou Fatura-Recibo (FR) podem originar Nota de Crédito. Tipo atual: {$documento->tipo_documento}"
+            ];
+        }
+
+        // 2. Estado
+        if ($documento->estado === DocumentoFiscal::ESTADO_CANCELADO) {
+            return ['pode' => false, 'motivo' => 'Não é possível emitir Nota de Crédito para uma fatura cancelada.'];
+        }
+        if ($documento->estado === DocumentoFiscal::ESTADO_EXPIRADO) {
+            return ['pode' => false, 'motivo' => 'Não é possível emitir Nota de Crédito para uma fatura expirada.'];
+        }
+
+        // 3. Saldo disponível
+        $saldo = $this->calcularSaldoDisponivel($documento);
+        if ($saldo <= 0.01) {
+            return [
+                'pode' => false,
+                'motivo' => 'Esta fatura não possui saldo disponível para crédito.'
+            ];
+        }
+
+        return ['pode' => true];
+    }
+
+    /**
+     * Verifica se pode emitir Nota de Débito para um documento
+     */
+    public function podeEmitirNotaDebito(DocumentoFiscal $documento): array
+    {
+        // 1. Tipo de documento (apenas FT)
+        if ($documento->tipo_documento !== 'FT') {
+            return [
+                'pode' => false,
+                'motivo' => "Apenas Fatura (FT) pode originar Nota de Débito. Tipo atual: {$documento->tipo_documento}"
+            ];
+        }
+
+        // 2. Estado
+        if ($documento->estado === DocumentoFiscal::ESTADO_CANCELADO) {
+            return ['pode' => false, 'motivo' => 'Não é possível emitir Nota de Débito para uma fatura cancelada.'];
+        }
+        if ($documento->estado === DocumentoFiscal::ESTADO_EXPIRADO) {
+            return ['pode' => false, 'motivo' => 'Não é possível emitir Nota de Débito para uma fatura expirada.'];
+        }
+
+        // 3. Prazo de 30 dias
+        $dataEmissao = Carbon::parse($documento->data_emissao, 'Africa/Luanda');
+        $prazoMaximo = $dataEmissao->copy()->addDays(30);
+        $hoje = Carbon::now('Africa/Luanda');
+
+        if ($hoje->gt($prazoMaximo)) {
+            return [
+                'pode' => false,
+                'motivo' => "O prazo para emitir Nota de Débito é de até 30 dias após a emissão da fatura.\n" .
+                            "Prazo máximo: {$prazoMaximo->format('d/m/Y')}"
+            ];
+        }
+
+        return ['pode' => true];
+    }
+
+    /**
      * Calcula o total de créditos já emitidos para uma fatura
      */
     public function calcularTotalCreditosEmitidos(DocumentoFiscal $fatura): float
@@ -1061,21 +1216,11 @@ class DocumentoFiscalService
      | DASHBOARD
      | ================================================================== */
 
-    /**
-     * Dados para o dashboard principal.
-     *
-     * REGRA SEMÂNTICA (crítica):
-     *  - "pendente de pagamento" aplica-se APENAS a FT e FA.
-     *  - FP (Proforma) com estado 'emitido' significa "aguarda conversão em FT/FR",
-     *    NÃO é uma dívida nem um pagamento em aberto. Os campos são separados
-     *    explicitamente para evitar que o frontend os misture.
-     */
     public function dadosDashboard(): array
     {
         $hoje      = Carbon::now('Africa/Luanda');
         $inicioMes = $hoje->copy()->startOfMonth();
 
-        // ── Faturas pendentes de pagamento (apenas FT) ────────────────────
         $faturasPendentes = DocumentoFiscal::where('tipo_documento', 'FT')
             ->whereIn('estado', [
                 DocumentoFiscal::ESTADO_EMITIDO,
@@ -1093,19 +1238,14 @@ class DocumentoFiscalService
                 ->whereBetween('data_emissao', [$inicioMes->toDateString(), $hoje->toDateString()])
                 ->count(),
 
-            // ── Pendentes de PAGAMENTO (FT e FA apenas) ───────────────────
             'faturas_pendentes' => $faturasPendentes->count(),
 
             'total_pendente_cobranca' => round($totalPendenteCobranca, 2),
 
-            // CORRIGIDO: FA pendente de pagamento (separado de proformas).
             'adiantamentos_pendentes_pagamento' => DocumentoFiscal::where('tipo_documento', 'FA')
                 ->where('estado', DocumentoFiscal::ESTADO_EMITIDO)
                 ->count(),
 
-            // ── Proformas em aberto (NÃO são dívidas, NÃO são pagamentos) ─
-            // Estado 'emitido' em FP = "orçamento ainda não convertido/aceite".
-            // Nunca incluir este contador em totais de cobrança.
             'proformas_em_aberto' => DocumentoFiscal::where('tipo_documento', 'FP')
                 ->where('estado', DocumentoFiscal::ESTADO_EMITIDO)
                 ->count(),
@@ -1142,7 +1282,6 @@ class DocumentoFiscalService
                 ->where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO)
                 ->sum('total_liquido');
 
-            // CORRIGIDO: pendente de cobrança = apenas FT e FA, nunca FP.
             $totalPendente = DocumentoFiscal::whereIn('tipo_documento', ['FT', 'FA'])
                 ->whereIn('estado', [
                     DocumentoFiscal::ESTADO_EMITIDO,
@@ -1205,19 +1344,10 @@ class DocumentoFiscalService
         ];
     }
 
-    /**
-     * Alertas de documentos que requerem atenção.
-     *
-     * CORRIGIDO: FP aparece em "proformas_em_aberto" com semântica própria
-     * ("aguarda conversão"), nunca misturada com alertas de cobrança.
-     * Alertas de cobrança (vencidos, parcialmente pagos) aplicam-se
-     * exclusivamente a FT e FA.
-     */
     public function alertasPendentes(): array
     {
         $hoje = Carbon::now('Africa/Luanda');
 
-        // ── Adiantamentos FA vencidos (prazo expirou, ainda não pagos) ────
         $adiantamentosVencidos = DocumentoFiscal::where('tipo_documento', 'FA')
             ->where('estado', DocumentoFiscal::ESTADO_EMITIDO)
             ->whereNotNull('data_vencimento')
@@ -1227,7 +1357,6 @@ class DocumentoFiscalService
             ->limit(10)
             ->get();
 
-        // ── Faturas FT com adiantamentos FA ainda por utilizar ────────────
         $faturasComAdiantamentosPendentes = DocumentoFiscal::where('tipo_documento', 'FT')
             ->whereIn('estado', [
                 DocumentoFiscal::ESTADO_EMITIDO,
@@ -1249,10 +1378,6 @@ class DocumentoFiscalService
             ->limit(10)
             ->get();
 
-        // ── Proformas FP em aberto há mais de 7 dias (aguardam conversão) ─
-        // CORRIGIDO: Este alerta tem semântica de "orçamento esquecido",
-        // NÃO de "pagamento em falta". O nome do campo é "proformas_em_aberto"
-        // para evitar ambiguidade com alertas de cobrança.
         $proformasEmAberto = DocumentoFiscal::where('tipo_documento', 'FP')
             ->where('estado', DocumentoFiscal::ESTADO_EMITIDO)
             ->where('data_emissao', '<', $hoje->copy()->subDays(7)->toDateString())
@@ -1261,7 +1386,6 @@ class DocumentoFiscalService
             ->limit(10)
             ->get();
 
-        // ── Faturas FT vencidas (prazo de pagamento ultrapassado) ─────────
         $faturasVencidas = DocumentoFiscal::where('tipo_documento', 'FT')
             ->whereIn('estado', [
                 DocumentoFiscal::ESTADO_EMITIDO,
@@ -1300,8 +1424,6 @@ class DocumentoFiscalService
                 'items' => $faturasComAdiantamentosPendentes,
             ],
 
-            // CORRIGIDO: renomeado de "proformas_pendentes" para "proformas_em_aberto"
-            // para deixar claro que NÃO é um alerta de cobrança.
             'proformas_em_aberto' => [
                 'total' => DocumentoFiscal::where('tipo_documento', 'FP')
                     ->where('estado', DocumentoFiscal::ESTADO_EMITIDO)

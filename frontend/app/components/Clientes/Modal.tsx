@@ -1,6 +1,11 @@
 import React from "react";
-import { X } from "lucide-react";
 import { ThemeColors } from "./ClientesComuns";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export function Modal({
   isOpen,
@@ -15,35 +20,24 @@ export function Modal({
   children: React.ReactNode;
   colors: ThemeColors;
 }) {
-  if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in-0 duration-200">
-      <div
-        className="shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden animate-in zoom-in-95 fade-in-0 duration-300"
-        style={{ backgroundColor: colors.card }}
+    <Dialog open={isOpen} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent
+        className="sm:max-w-2xl p-0"
+        style={{ backgroundColor: colors.card, borderColor: colors.border }}
       >
-        <div
-          className="flex items-center justify-between px-5 py-4 border-b"
+        <DialogHeader
+          className="p-4 border-b"
           style={{ borderColor: colors.border }}
         >
-          <h3
-            className="text-base font-semibold"
-            style={{ color: colors.primary }}
-          >
+          <DialogTitle className="text-base" style={{ color: colors.secondary }}>
             {title}
-          </h3>
-          <button
-            onClick={onClose}
-            className="p-1.5 transition-colors hover:opacity-70"
-            style={{ color: colors.textSecondary }}
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="p-5 overflow-y-auto max-h-[calc(90vh-68px)]">
+          </DialogTitle>
+        </DialogHeader>
+        <div className="p-4 overflow-y-auto max-h-[calc(90vh-68px)]">
           {children}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
