@@ -942,8 +942,6 @@ function ModalNotaDebito({
     const itensComChave = itensOriginais.map((item, i) => ({
         ...item,
         _key: `${item.id ?? i}`,
-        // ✅ INCLUI O PRODUTO COMPLETO PARA VALIDAÇÃO
-        produto: item.produto,
     }));
 
     const totalSelecionado = itensComChave.reduce((acc, item) => {
@@ -1001,7 +999,7 @@ function ModalNotaDebito({
     };
 
     const handleGerar = async () => {
-        // 1. Validar itens selecionados
+        // 1. Validar itens
         const itensSelecionados = itensComChave
             .filter((item) => (quantidades[item._key] ?? 0) > 0)
             .map((item) => ({
@@ -1011,13 +1009,18 @@ function ModalNotaDebito({
                 preco_unitario: Number(item.preco_unitario),
                 taxa_iva: Number(item.taxa_iva),
                 taxa_retencao: item.taxa_retencao,
-                // ✅ INCLUI O PRODUTO PARA VALIDAÇÃO
-                produto: item.produto,
             }));
 
-        // ✅ CORREÇÃO FINAL: Validação usando o campo tipo do produto
+        // ✅ CORREÇÃO: Validação de serviços usando o campo tipo do produto
+        // Verifica se algum item selecionado é produto (tem produto_id e NÃO é serviço)
         const itensInvalidos = itensSelecionados.filter(
-            item => item.produto_id && item.produto?.tipo !== 'servico'
+            item => {
+                // Busca o item original para acessar o produto
+                const itemOriginal = itensComChave.find(
+                    i => i.produto_id === item.produto_id
+                );
+                return item.produto_id && itemOriginal?.produto?.tipo !== 'servico';
+            }
         );
 
         if (itensInvalidos.length > 0) {
@@ -1054,11 +1057,8 @@ function ModalNotaDebito({
             setLoading(true);
             setErro(null);
 
-            // Remove o campo produto antes de enviar para a API
-            const itensParaEnviar = todosItens.map(({ produto, ...item }) => item);
-
             const resposta = await documentoFiscalService.criarNotaDebito(documento.id, {
-                itens: itensParaEnviar,
+                itens: todosItens,
                 motivo: motivo.trim() || undefined,
             });
             onSuccess(resposta.nota_debito);
@@ -1134,6 +1134,8 @@ function ModalNotaDebito({
                             </span>
                         </div>
                     </div>
+
+
 
                     {/* Prazo para ND */}
                     {prazoMaximo && (
