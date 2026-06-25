@@ -229,13 +229,77 @@ export default function NovaFaturaProformaPage() {
                (p.codigo && p.codigo.toLowerCase().includes(buscaLower));
     });
 
-    const handleSelectItem = (produto: Produto) => {
-        setFormItem({
-            produto_id: produto.id,
-            quantidade: produto.tipo === 'produto' ? Math.min(1, produto.estoque_atual) : 1,
-        });
-        setBuscaItem(produto.nome);
+    // 🔥 FUNÇÃO PARA BUSCAR PRODUTO POR CÓDIGO
+    const buscarProdutoPorCodigo = (codigo: string) => {
+        if (!codigo.trim()) return null;
+        
+        // Busca exata por código
+        let produto = produtos.find(p => p.codigo === codigo.trim());
+        
+        // Se não encontrar, tenta buscar por código parcial (útil para scanners)
+        if (!produto) {
+            produto = produtos.find(p => p.codigo?.includes(codigo.trim()));
+        }
+        
+        return produto;
+    };
+
+    // 🔥 FUNÇÃO PARA ADICIONAR ITEM AUTOMATICAMENTE AO CARRINHO
+    const adicionarItemAutomaticamente = (produto: Produto, quantidade: number = 1) => {
+        // Verificar se o produto já está no carrinho
+        const idx = itens.findIndex(i => i.produto_id === produto.id);
+        
+        if (idx >= 0) {
+            // Se já existe, atualiza a quantidade
+            const novaQtd = itens[idx].quantidade + quantidade;
+            if (!isServico(produto) && novaQtd > produto.estoque_atual) {
+                setError(`Estoque insuficiente para ${novaQtd} unidades de ${produto.nome}.`);
+                setTimeout(() => setError(null), 3000);
+                return;
+            }
+            setItens(prev => 
+                prev.map((it, i) => i === idx ? calcularItem(produto, novaQtd, it.id) : it)
+            );
+        } else {
+            // Se não existe, adiciona novo item
+            setItens(prev => [...prev, calcularItem(produto, quantidade)]);
+        }
+        
+        // Limpar campos
+        setBuscaItem('');
+        setFormItem({ produto_id: "", quantidade: 1 });
+        setPreviewItem(null);
         setDropdownAberto(false);
+        setError(null);
+    };
+
+    // 🔥 HANDLER PARA SELECIONAR ITEM DO DROPDOWN - ADICIONA DIRETO
+    const handleSelectItem = (produto: Produto) => {
+        const qtd = produto.tipo === 'produto' ? Math.min(1, produto.estoque_atual) : 1;
+        adicionarItemAutomaticamente(produto, qtd);
+    };
+
+    // 🔥 MANIPULADOR PARA PRESSIONAR ENTER NO CAMPO DE BUSCA
+    const handleBuscaKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            
+            const codigoBusca = buscaItem.trim();
+            if (!codigoBusca) return;
+            
+            // Tenta encontrar o produto pelo código
+            const produto = buscarProdutoPorCodigo(codigoBusca);
+            
+            if (produto) {
+                // Produto encontrado - adiciona automaticamente
+                const qtd = produto.tipo === 'produto' ? Math.min(1, produto.estoque_atual) : 1;
+                adicionarItemAutomaticamente(produto, qtd);
+            } else {
+                // Produto não encontrado - mostra erro
+                setError(`❌ Produto com código "${codigoBusca}" não encontrado`);
+                setTimeout(() => setError(null), 3000);
+            }
+        }
     };
 
     /* ── Preview com taxa de retenção dinâmica ── */
@@ -303,20 +367,23 @@ export default function NovaFaturaProformaPage() {
     /* ── Adicionar ── */
     const adicionarItem = () => {
         if (!formItem.produto_id || !previewItem) { 
-            setError("Selecione um produto/serviço"); 
+            setError("Selecione um produto/serviço");
+            setTimeout(() => setError(null), 3000);
             return; 
         }
         const p = produtos.find(x => x.id === formItem.produto_id);
         if (!p) return;
         if (!isServico(p) && formItem.quantidade > p.estoque_atual) {
-            setError(`Estoque insuficiente. Disponível: ${p.estoque_atual}`); 
+            setError(`Estoque insuficiente. Disponível: ${p.estoque_atual}`);
+            setTimeout(() => setError(null), 3000);
             return;
         }
         const idx = itens.findIndex(i => i.produto_id === formItem.produto_id);
         if (idx >= 0) {
             const novaQtd = itens[idx].quantidade + formItem.quantidade;
             if (!isServico(p) && novaQtd > p.estoque_atual) {
-                setError(`Estoque insuficiente para ${novaQtd} unidades.`); 
+                setError(`Estoque insuficiente para ${novaQtd} unidades.`);
+                setTimeout(() => setError(null), 3000);
                 return;
             }
             setItens(prev => prev.map((it, i) => i === idx ? calcularItem(p, novaQtd, it.id) : it));
@@ -340,7 +407,8 @@ export default function NovaFaturaProformaPage() {
         const p = produtos.find(x => x.id === item.produto_id);
         if (!p) return;
         if (!isServico(p) && novaQtd > p.estoque_atual) {
-            setError(`Máximo disponível: ${p.estoque_atual}`); 
+            setError(`Máximo disponível: ${p.estoque_atual}`);
+            setTimeout(() => setError(null), 3000);
             return;
         }
         setItens(prev => prev.map((it, i) => i === idx ? calcularItem(p, novaQtd, item.id) : it));
@@ -589,7 +657,7 @@ export default function NovaFaturaProformaPage() {
                                             <input
                                                 ref={buscaInputRef}
                                                 type="text"
-                                                placeholder={tipoItemSelecionado === 'produto' ? "Pesquisar produto..." : "Pesquisar serviço..."}
+                                                placeholder={tipoItemSelecionado === 'produto' ? "Digite código ou nome do produto..." : "Digite código ou nome do serviço..."}
                                                 className="w-full pl-9 pr-8 py-1.5 text-sm outline-none"
                                                 style={inp}
                                                 value={buscaItem}
@@ -602,6 +670,7 @@ export default function NovaFaturaProformaPage() {
                                                     }
                                                 }}
                                                 onFocus={() => setDropdownAberto(true)}
+                                                onKeyDown={handleBuscaKeyDown}
                                             />
                                             {buscaItem && (
                                                 <button
@@ -780,7 +849,7 @@ export default function NovaFaturaProformaPage() {
                                     </span>
                                 </span>
                             </div>
-                            <button onClick={() => window.confirm("Limpar todos os itens?") && setItens([])}
+                            <button onClick={() => setItens([])}
                                 className="text-white/70 hover:text-white text-xs transition-colors">
                                 Limpar tudo
                             </button>
@@ -890,7 +959,10 @@ export default function NovaFaturaProformaPage() {
                         style={{ borderColor: colors.border }}>
                         <ShoppingCart size={28} className="mx-auto mb-2" style={{ color: colors.border }} />
                         <p className="text-sm" style={{ color: colors.textSecondary }}>
-                            Adicione produtos ou serviços para criar a proforma
+                            Use o scanner ou digite o código do produto para adicionar automaticamente
+                        </p>
+                        <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+                            Pressione ENTER para adicionar ao carrinho
                         </p>
                     </div>
                 )}

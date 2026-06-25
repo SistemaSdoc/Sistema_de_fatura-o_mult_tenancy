@@ -1002,26 +1002,23 @@ function ModalNotaDebito({
         // 1. Validar itens
         const itensSelecionados = itensComChave
             .filter((item) => (quantidades[item._key] ?? 0) > 0)
-            .map((item) => ({
-                produto_id: item.produto_id ?? undefined,
-                descricao: item.descricao,
-                quantidade: Number(quantidades[item._key]),
-                preco_unitario: Number(item.preco_unitario),
-                taxa_iva: Number(item.taxa_iva),
-                taxa_retencao: item.taxa_retencao,
-            }));
+            .map((item) => {
+                const ehServico = item.eh_servico === true || item.produto?.tipo === 'servico';
+                return {
+                    produto_id: item.produto_id ?? undefined,
+                    descricao: item.descricao,
+                    quantidade: Number(quantidades[item._key]),
+                    preco_unitario: Number(item.preco_unitario),
+                    taxa_iva: Number(item.taxa_iva),
+                    taxa_retencao: item.taxa_retencao ?? 0,
+                    eh_servico: ehServico,
+                };
+            });
 
-        // ✅ CORREÇÃO: Validação de serviços usando o campo tipo do produto
-        // Verifica se algum item selecionado é produto (tem produto_id e NÃO é serviço)
-        const itensInvalidos = itensSelecionados.filter(
-            item => {
-                // Busca o item original para acessar o produto
-                const itemOriginal = itensComChave.find(
-                    i => i.produto_id === item.produto_id
-                );
-                return item.produto_id && itemOriginal?.produto?.tipo !== 'servico';
-            }
-        );
+        const itensInvalidos = itensSelecionados.filter((item) => {
+            const isServico = item.eh_servico === true;
+            return item.produto_id && !isServico;
+        });
 
         if (itensInvalidos.length > 0) {
             const nomesInvalidos = itensInvalidos.map(i => `"${i.descricao}"`).join(', ');
@@ -1033,14 +1030,26 @@ function ModalNotaDebito({
             return;
         }
 
-        const todosItens = [...itensSelecionados, ...novosItens.map(item => ({
-            produto_id: undefined,
-            descricao: item.descricao,
-            quantidade: Number(item.quantidade),
-            preco_unitario: Number(item.preco_unitario),
-            taxa_iva: Number(item.taxa_iva),
-            taxa_retencao: 0,
-        }))];
+        const todosItens = [
+            ...itensSelecionados.map(({ produto_id, descricao, quantidade, preco_unitario, taxa_iva, taxa_retencao, eh_servico }) => ({
+                produto_id,
+                descricao,
+                quantidade,
+                preco_unitario,
+                taxa_iva,
+                taxa_retencao,
+                eh_servico,
+            })),
+            ...novosItens.map(item => ({
+                produto_id: undefined,
+                descricao: item.descricao,
+                quantidade: Number(item.quantidade),
+                preco_unitario: Number(item.preco_unitario),
+                taxa_iva: Number(item.taxa_iva),
+                taxa_retencao: 0,
+                eh_servico: true,
+            })),
+        ];
 
         if (todosItens.length === 0) {
             setErro("Adicione pelo menos um item ou serviço.");

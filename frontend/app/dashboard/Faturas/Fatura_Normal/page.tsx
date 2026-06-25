@@ -296,15 +296,86 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     );
   });
 
-  const handleSelectItem = (produto: Produto) => {
+  // 🔥 FUNÇÃO PARA ADICIONAR ITEM AUTOMATICAMENTE AO CARRINHO
+  const adicionarItemAutomaticamente = (produto: Produto, quantidade: number = 1) => {
+    // Verificar se o produto já está no carrinho
+    const idx = itens.findIndex(i => i.produto_id === produto.id);
+    
+    if (idx >= 0) {
+      // Se já existe, atualiza a quantidade
+      const novaQtd = itens[idx].quantidade + quantidade;
+      if (!isServico(produto) && novaQtd > produto.estoque_atual) {
+        setError(`Estoque insuficiente para ${novaQtd} unidades de ${produto.nome}.`);
+        setTimeout(() => setError(null), 3000);
+        return;
+      }
+      setItens((prev) =>
+        prev.map((it, i) =>
+          i === idx ? calcularItem(produto, novaQtd, it.desconto, it.id) : it,
+        ),
+      );
+    } else {
+      // Se não existe, adiciona novo item
+      setItens((prev) => [
+        ...prev,
+        calcularItem(produto, quantidade, 0),
+      ]);
+    }
+    
+    // Limpar campos
+    setBuscaItem("");
     setFormItem({
-      produto_id: produto.id,
-      quantidade:
-        produto.tipo === "produto" ? Math.min(1, produto.estoque_atual) : 1,
+      produto_id: "",
+      quantidade: 1,
       desconto: 0,
     });
-    setBuscaItem(produto.nome);
+    setPreviewItem(null);
     setDropdownAberto(false);
+    setError(null);
+  };
+
+  // 🔥 FUNÇÃO PARA BUSCAR PRODUTO POR CÓDIGO
+  const buscarProdutoPorCodigo = (codigo: string) => {
+    if (!codigo.trim()) return null;
+    
+    // Busca exata por código
+    let produto = produtos.find(p => p.codigo === codigo.trim());
+    
+    // Se não encontrar, tenta buscar por código parcial (útil para scanners)
+    if (!produto) {
+      produto = produtos.find(p => p.codigo?.includes(codigo.trim()));
+    }
+    
+    return produto;
+  };
+
+  // 🔥 HANDLER PARA SELECIONAR ITEM DO DROPDOWN - ADICIONA DIRETO
+  const handleSelectItem = (produto: Produto) => {
+    const qtd = produto.tipo === "produto" ? Math.min(1, produto.estoque_atual) : 1;
+    adicionarItemAutomaticamente(produto, qtd);
+  };
+
+  // 🔥 MANIPULADOR PARA PRESSIONAR ENTER NO CAMPO DE BUSCA
+  const handleBuscaKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      
+      const codigoBusca = buscaItem.trim();
+      if (!codigoBusca) return;
+      
+      // Tenta encontrar o produto pelo código
+      const produto = buscarProdutoPorCodigo(codigoBusca);
+      
+      if (produto) {
+        // Produto encontrado - adiciona automaticamente
+        const qtd = produto.tipo === "produto" ? Math.min(1, produto.estoque_atual) : 1;
+        adicionarItemAutomaticamente(produto, qtd);
+      } else {
+        // Produto não encontrado - mostra erro
+        setError(`❌ Produto com código "${codigoBusca}" não encontrado`);
+        setTimeout(() => setError(null), 3000);
+      }
+    }
   };
 
   // ✅ CORRIGIDO: calcularItem com taxa de retenção dinâmica
@@ -342,12 +413,14 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
   const adicionarItem = () => {
     if (!formItem.produto_id || !previewItem) {
       setError("Selecione um produto/serviço");
+      setTimeout(() => setError(null), 3000);
       return;
     }
     const p = produtos.find((x) => x.id === formItem.produto_id);
     if (!p) return;
     if (!isServico(p) && formItem.quantidade > p.estoque_atual) {
       setError(`Estoque insuficiente. Disponível: ${p.estoque_atual}`);
+      setTimeout(() => setError(null), 3000);
       return;
     }
     const idx = itens.findIndex((i) => i.produto_id === formItem.produto_id);
@@ -355,6 +428,7 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const novaQtd = itens[idx].quantidade + formItem.quantidade;
       if (!isServico(p) && novaQtd > p.estoque_atual) {
         setError(`Estoque insuficiente para ${novaQtd} unidades.`);
+        setTimeout(() => setError(null), 3000);
         return;
       }
       setItens((prev) =>
@@ -388,6 +462,7 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!p) return;
     if (!isServico(p) && novaQtd > p.estoque_atual) {
       setError(`Máximo disponível: ${p.estoque_atual}`);
+      setTimeout(() => setError(null), 3000);
       return;
     }
     setItens((prev) =>
@@ -758,8 +833,8 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
                         type="text"
                         placeholder={
                           tipoItemSelecionado === "produto"
-                            ? "Pesquisar produto..."
-                            : "Pesquisar serviço..."
+                            ? "Digite código ou nome do produto..."
+                            : "Digite código ou nome do serviço..."
                         }
                         className="w-full pl-9 pr-8 py-1.5 text-sm outline-none"
                         style={inp}
@@ -777,6 +852,7 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
                           }
                         }}
                         onFocus={() => setDropdownAberto(true)}
+                        onKeyDown={handleBuscaKeyDown}
                       />
                       {buscaItem && (
                         <button
@@ -1099,9 +1175,7 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
                 </span>
               </div>
               <button
-                onClick={() =>
-                  window.confirm("Limpar todos os itens?") && setItens([])
-                }
+                onClick={() => setItens([])}
                 className="text-white/70 hover:text-white text-xs transition-colors"
               >
                 Limpar tudo
@@ -1344,7 +1418,10 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
               style={{ color: colors.border }}
             />
             <p className="text-sm" style={{ color: colors.textSecondary }}>
-              Adicione produtos ou serviços para criar a factura
+              Use o scanner ou digite o código do produto para adicionar automaticamente
+            </p>
+            <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+              Pressione ENTER para adicionar ao carrinho
             </p>
           </div>
         )}

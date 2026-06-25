@@ -97,11 +97,11 @@ function calcularItem(
   const base = arredondar(arredondar(produto.preco_venda * qtd) - desc);
   const taxaIva = produto.taxa_iva ?? 14;
   const iva = arredondar((base * taxaIva) / 100);
-  
+
   // ✅ CORRIGIDO: Usa a taxa de retenção do produto
   const taxaRet = ehServico ? (produto.taxa_retencao || 0) : 0;
   const ret = ehServico ? arredondar((base * taxaRet) / 100) : 0;
-  
+
   return {
     id,
     produto_id: produto.id,
@@ -321,14 +321,87 @@ export default function NovaFaturaReciboPage() {
     }
   };
 
-  const handleSelectItem = (produto: Produto) => {
+  // 🔥 FUNÇÃO PARA ADICIONAR ITEM AUTOMATICAMENTE AO CARRINHO
+  const adicionarItemAutomaticamente = (produto: Produto, quantidade: number = 1) => {
+    // Verificar se o produto já está no carrinho
+    const idx = itens.findIndex(i => i.produto_id === produto.id);
+
+    if (idx >= 0) {
+      // Se já existe, atualiza a quantidade
+      const novaQtd = itens[idx].quantidade + quantidade;
+      if (!isServico(produto) && novaQtd > produto.estoque_atual) {
+        setError(`Estoque insuficiente para ${novaQtd} unidades de ${produto.nome}.`);
+        return;
+      }
+      setItens((prev) =>
+        prev.map((it, i) =>
+          i === idx ? calcularItem(produto, novaQtd, it.desconto, it.id) : it,
+        ),
+      );
+      setSucesso(`${produto.nome} adicionado (quantidade: ${novaQtd})`);
+    } else {
+      // Se não existe, adiciona novo item
+      setItens((prev) => [
+        ...prev,
+        calcularItem(produto, quantidade, 0),
+      ]);
+      setSucesso(` ${produto.nome} adicionado ao carrinho`);
+    }
+
+    // Limpar mensagem de sucesso após 3 segundos
+    setTimeout(() => setSucesso(null), 3000);
+
+    // Limpar o campo de busca
+    setBuscaItem("");
     setFormItem({
-      produto_id: produto.id,
-      quantidade: produto.tipo === "produto" ? Math.min(1, produto.estoque_atual) : 1,
+      produto_id: "",
+      quantidade: 1,
       desconto: 0,
     });
-    setBuscaItem(produto.nome);
+    setPreviewItem(null);
     setDropdownAberto(false);
+  };
+
+  // 🔥 FUNÇÃO PARA BUSCAR PRODUTO POR CÓDIGO
+  const buscarProdutoPorCodigo = (codigo: string) => {
+    if (!codigo.trim()) return null;
+
+    // Busca exata por código
+    let produto = produtos.find(p => p.codigo === codigo.trim());
+
+    // Se não encontrar, tenta buscar por código parcial (útil para scanners)
+    if (!produto) {
+      produto = produtos.find(p => p.codigo?.includes(codigo.trim()));
+    }
+
+    return produto;
+  };
+
+  const handleSelectItem = (produto: Produto) => {
+    const qtd = produto.tipo === "produto" ? Math.min(1, produto.estoque_atual) : 1;
+    adicionarItemAutomaticamente(produto, qtd);
+  };
+  // 🔥 MANIPULADOR PARA PRESSIONAR ENTER NO CAMPO DE BUSCA
+  const handleBuscaKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+
+      const codigoBusca = buscaItem.trim();
+      if (!codigoBusca) return;
+
+      // Tenta encontrar o produto pelo código
+      const produto = buscarProdutoPorCodigo(codigoBusca);
+
+      if (produto) {
+        // Produto encontrado - adiciona automaticamente
+        const qtd = produto.tipo === "produto" ? Math.min(1, produto.estoque_atual) : 1;
+        adicionarItemAutomaticamente(produto, qtd);
+      } else {
+        // Produto não encontrado - mostra erro
+        setError(`❌ Produto com código "${codigoBusca}" não encontrado`);
+        setTimeout(() => setError(null), 3000);
+      }
+    }
   };
 
   const adicionarItem = () => {
@@ -651,7 +724,7 @@ export default function NovaFaturaReciboPage() {
                       <option key={c.id} value={c.id}>
                         {c.nome}
                         {c.nif ? ` — ${formatarNIF(c.nif)}` : ""}
-                        {c.tipo === "empresa" }
+                        {c.tipo === "empresa"}
                       </option>
                     ))}
                   </select>
@@ -763,8 +836,8 @@ export default function NovaFaturaReciboPage() {
                         type="text"
                         placeholder={
                           tipoItemSelecionado === "produto"
-                            ? "Pesquisar produto..."
-                            : "Pesquisar serviço..."
+                            ? "Digite código ou nome do produto..."
+                            : "Digite código ou nome do serviço..."
                         }
                         className="w-full pl-9 pr-8 py-1.5 text-sm outline-none"
                         style={inp}
@@ -782,6 +855,7 @@ export default function NovaFaturaReciboPage() {
                           }
                         }}
                         onFocus={() => setDropdownAberto(true)}
+                        onKeyDown={handleBuscaKeyDown}
                       />
                       {buscaItem && (
                         <button
@@ -832,10 +906,10 @@ export default function NovaFaturaReciboPage() {
                                 (e.currentTarget.style.backgroundColor = `${colors.hover}`)
                               }
                               onMouseLeave={(e) =>
-                                (e.currentTarget.style.backgroundColor =
-                                  formItem.produto_id === item.id
-                                    ? `${colors.primary}10`
-                                    : "transparent")
+                              (e.currentTarget.style.backgroundColor =
+                                formItem.produto_id === item.id
+                                  ? `${colors.primary}10`
+                                  : "transparent")
                               }
                             >
                               <div className="flex-1">
@@ -1065,9 +1139,7 @@ export default function NovaFaturaReciboPage() {
                 </span>
               </div>
               <button
-                onClick={() =>
-                  window.confirm("Limpar todos os itens?") && setItens([])
-                }
+                onClick={() => setItens([])}
                 className="text-white/70 hover:text-white text-xs transition-colors"
               >
                 Limpar tudo
@@ -1418,7 +1490,10 @@ export default function NovaFaturaReciboPage() {
               style={{ color: colors.border }}
             />
             <p className="text-sm" style={{ color: colors.textSecondary }}>
-              Adicione produtos ou serviços para ver o resumo e finalizar
+              Use o scanner ou digite o código do produto para adicionar automaticamente
+            </p>
+            <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+              Pressione ENTER para adicionar ao carrinho
             </p>
           </div>
         )}

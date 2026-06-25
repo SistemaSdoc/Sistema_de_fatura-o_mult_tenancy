@@ -1,112 +1,780 @@
+<!DOCTYPE html>
+<html lang="pt" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Processo de Configuração — FaturaJá</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-<h1>1.Configuração Backend</h1>
+    /* ── TEMA LIGHT ─────────────────────────────────────── */
+    :root,
+    [data-theme="light"] {
+      --primary:        #123859;
+      --secondary:      #F9941F;
+      --bg:             #F2F2F2;
+      --surface:        #FFFFFF;
+      --surface-2:      #F2F2F2;
+      --card:           #FFFFFF;
+      --border:         #E5E7EB;
+      --border-md:      rgba(0,0,0,0.14);
+      --text-primary:   #171717;
+      --text-secondary: #4B5563;
+      --text-muted:     #9CA3AF;
+      --success:        #28a745;
+      --warning:        #ffc107;
+      --danger:         #dc3545;
+      --hover:          #F3F4F6;
 
-<h3>2.Clonar o repositorio</h3>
- <p>Git clone  <url> endereco_do_repositorio </url> </p>
-<br>
+      /* BE = primary navy */
+      --be-light:  #E8EEF4;
+      --be-mid:    #123859;
+      --be-dark:   #0d2840;
 
-<h3>3.Instalar dependências</h3>
-  <p>Composer install </p>
-  <br>
+      /* FE = secondary orange */
+      --fe-light:  #FEF0E0;
+      --fe-mid:    #F9941F;
+      --fe-dark:   #c97310;
 
-<h3>4.Configuração do ambiente (env)</h3>
-  <p>cp .env.example .env </p>
-  <br>
+      --amber-50:  #fffbeb;
+      --amber-border: #fde68a;
+      --amber-text:#92400e;
 
-  <h3>5.Chave da aplicação</h3>
-  <p>php artisan key:generate </p>
-  <br>
+      --code-bg:   #0f172a;
+      --code-text: #e2e8f0;
+      --code-cmd:  #7dd3fc;
+      --code-flag: #a5f3fc;
 
-  <h3>6.Configuração da base de dados (env)</h3>
-  <h4><p>
-  Definir as variáveis de ambiente no arquivo .env, conforme abaixo:
-  <br>
-  <ul>DB_CONNECTION=mysql</ul>
-  <ul>DB_HOST=127.0.0.1</ul>
-  <ul>DB_PORT=3306</ul>
-  <ul>DB_DATABASE=example</ul>
-  <ul>DB_USERNAME=root</ul>
-  <ul>DB_PASSWORD=opcional</ul>
-  </p></h4>
-  <br>
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
+    }
 
-  <h3>7.Criação das tabelas</h3>
-  <p>php artisan migrate </p>
-  <br>
+    /* ── TEMA DARK ──────────────────────────────────────── */
+    [data-theme="dark"] {
+      --primary:        #123859;
+      --secondary:      #D9961A;
+      --bg:             #171717;
+      --surface:        #2A2A2A;
+      --surface-2:      #333333;
+      --card:           #2A2A2A;
+      --border:         #404040;
+      --border-md:      #555555;
+      --text-primary:   #F2F2F2;
+      --text-secondary: #B3B3B3;
+      --text-muted:     #777777;
+      --success:        #28a745;
+      --warning:        #ffc107;
+      --danger:         #dc3545;
+      --hover:          #333333;
 
-  <h3>8.População da base de dados (se houver dados iniciais)</h3>
-  <p>php artisan db:seed </p>
-  <br>
+      --be-light:  #1a2a38;
+      --be-mid:    #2a6496;
+      --be-dark:   #5b9bd5;
 
-  <h3>9.Criação do link simbólico para armazenamento</h3>
-  <p>php artisan storage:link </p>
-  <br>
+      --fe-light:  #2a1f0e;
+      --fe-mid:    #D9961A;
+      --fe-dark:   #f0b040;
 
-  <h3>10.Limpeza de cache</h3>
-  <p>php artisan config:clear </p>
-  <br>
+      --amber-50:  #2a2000;
+      --amber-border: #7a5c00;
+      --amber-text:#fde68a;
 
-  <h3>11.Iniciar o servidor</h3>
-  <p>php artisan serve
-   </p>
-    <p>php artisan serve --host=0.0.0.0 --port=8000</p>
-  <br>
+      --code-bg:   #0a0f1a;
+      --code-text: #e2e8f0;
+      --code-cmd:  #7dd3fc;
+      --code-flag: #a5f3fc;
+    }
 
-  <h3>12.Configuração adicional</h3>
-  <p>Definir as variáveis de ambiente no arquivo .env, conforme abaixo:
-  <br>
-   <ul>TENANT_DB_HOST=127.0.0.1</ul>
-   <ul>TENANT_DB_PORT=3306</ul>
-   <ul>TENANT_DB_USERNAME=root</ul>
-   <ul>TENANT_DB_PASSWORD=</ul>
-  </p>
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text-primary);
+      min-height: 100vh;
+      line-height: 1.6;
+      transition: background 0.2s, color 0.2s;
+    }
 
-   <h3>13.Configuração da URL da aplicação(APP_URL)</h3>
+    /* ── HEADER ─────────────────────────────────────────── */
+    .page-header {
+      background: var(--primary);
+      border-bottom: 1px solid rgba(0,0,0,0.2);
+      padding: 20px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .page-header-left h1 {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .logo-icon {
+      width: 32px; height: 32px;
+      background: var(--secondary);
+      border-radius: var(--radius-sm);
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 16px;
+      flex-shrink: 0;
+    }
+    .page-header-left p {
+      margin-top: 4px;
+      font-size: 13px;
+      color: rgba(255,255,255,0.65);
+    }
+    .header-actions { display: flex; align-items: center; gap: 10px; }
 
-     <p>APP_URL=http://localhost:port</p> 
-     <br>
+    /* Tab buttons no header */
+    .header-tabs { display: flex; gap: 6px; }
+    .htab-btn {
+      padding: 7px 16px;
+      border-radius: var(--radius-md);
+      border: 1.5px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.08);
+      font-size: 13px;
+      font-family: var(--font);
+      cursor: pointer;
+      color: rgba(255,255,255,0.7);
+      transition: all 0.15s;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .htab-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+    .htab-btn.active-be { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.5); color: #fff; font-weight: 500; }
+    .htab-btn.active-fe { background: var(--secondary); border-color: var(--secondary); color: #fff; font-weight: 500; }
 
-  <h3>14. Lista os IPs mais comuns — o cors.php aceita todos os IPs locais automaticamente</h3>
-  <p>SANCTUM_STATEFUL_DOMAINS=localhost:3000,localhost:port,127.0.0.1:3000,127.0.0.1:8000,192.168.1.120:3000,192.168.1.120:8000</p>
-    <br>
+    /* Dark mode toggle */
+    .theme-btn {
+      width: 36px; height: 36px;
+      border-radius: var(--radius-md);
+      border: 1.5px solid rgba(255,255,255,0.25);
+      background: rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.85);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    .theme-btn:hover { background: rgba(255,255,255,0.2); color: #fff; }
 
-     <h3>15.FRONTEND</h3>
-  <p>
-    <ul>1.VITE_APP_NAME="${APP_NAME}"</ul>
-    <ul>2.VITE_APP_URL="${APP_URL}"(IP&PORT)</ul>
-    <ul>3.VITE_FRONTEND_URL="http://localhost:3000"</ul> 
-     </p>
-  <br>
+    /* ── LAYOUT ─────────────────────────────────────────── */
+    .layout {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      min-height: calc(100vh - 78px);
+    }
 
-  <h3>16. AGT - Assinatura RSA</h3>
-  <p>AGT_RSA_PRIVATE_KEY_PATH="/home/maria/Documentos/Sistema_de_fatura-o_mult_tenancy/backend/storage/keys/agt_private.pem"</p>
-    <br>
+    /* ── SIDEBAR ─────────────────────────────────────────── */
+    .sidebar {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 24px 14px;
+      position: sticky;
+      top: 0;
+      height: calc(100vh - 78px);
+      overflow-y: auto;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .sidebar-section { margin-bottom: 22px; }
+    .sidebar-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: var(--text-muted);
+      padding: 0 8px;
+      margin-bottom: 6px;
+    }
+    .sidebar-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 8px;
+      border-radius: var(--radius-sm);
+      font-size: 12.5px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+      text-decoration: none;
+    }
+    .sidebar-item:hover { background: var(--hover); color: var(--text-primary); }
+    .sidebar-item.active-be { background: var(--be-light); color: var(--be-dark); font-weight: 500; }
+    .sidebar-item.active-fe { background: var(--fe-light); color: var(--fe-dark); font-weight: 500; }
+    .sidebar-item .num {
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      font-size: 10px; font-weight: 600;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      background: var(--surface-2);
+      color: var(--text-muted);
+    }
+    .sidebar-item.active-be .num { background: var(--be-mid); color: #fff; }
+    .sidebar-item.active-fe .num { background: var(--fe-mid); color: #fff; }
+    .sidebar-item.done .num { background: var(--success); color: #fff; }
 
+    /* ── MAIN ────────────────────────────────────────────── */
+    .main { padding: 32px 40px; max-width: 800px; }
 
-<h1>Configuração Frontend</h1>
-<h3>1.Instalar dependências</h3>
-  <p>npm install </p>
-  <br>
+    .section-title-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section-title-bar .icon {
+      width: 40px; height: 40px;
+      border-radius: var(--radius-md);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; flex-shrink: 0;
+    }
+    .icon-be { background: var(--be-light); color: var(--be-mid); }
+    .icon-fe { background: var(--fe-light); color: var(--fe-mid); }
+    .section-title-bar h2 { font-size: 20px; font-weight: 600; letter-spacing: -0.2px; }
 
-  <h3>2.Criar arquirvo .env.local</h3>
- <br>
+    /* ── PROGRESS ─────────────────────────────────────────── */
+    .progress-wrap { margin-bottom: 28px; }
+    .progress-meta {
+      display: flex; justify-content: space-between;
+      font-size: 12px; color: var(--text-muted); margin-bottom: 6px;
+    }
+    .progress-track {
+      height: 5px;
+      background: var(--surface-2);
+      border-radius: 3px; overflow: hidden;
+    }
+    .progress-fill { height: 100%; border-radius: 3px; transition: width 0.35s ease; }
+    .progress-fill-be { background: var(--be-mid); }
+    .progress-fill-fe { background: var(--fe-mid); }
 
-  <h3>3.Definição das variáveis</h3>
-  <p>APP</p>
-  <ul>NEXT_PUBLIC_APP_NAME=</ul>
-  <ul>NEXT_PUBLIC_APP_ENV=local
-</ul>
-  <br>
-  <p>BACKEND (LARAVEL)</p>
-  <ul>NEXT_PUBLIC_API_URL=http://localhost:port</ul>
-  <ul>NEXT_PUBLIC_BACKEND_URL=http://localhost:port</ul>
-<br>
-   <p>AUTH / SANCTUM</p>
-  <ul>NEXT_PUBLIC_CSRF_URL=http://localhost:port/sanctum/csrf-cookie</ul>
-  <ul>NEXT_PUBLIC_AUTH_COOKIE=true</ul>
-<br>
+    /* ── STEP CARD ────────────────────────────────────────── */
+    .step-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--card);
+      margin-bottom: 10px;
+      overflow: hidden;
+      transition: border-color 0.15s, box-shadow 0.15s, background 0.2s;
+    }
+    .step-card:hover { border-color: var(--border-md); }
+    .step-card.expanded-be { border-color: var(--be-mid); box-shadow: 0 0 0 3px rgba(18,56,89,0.08); }
+    .step-card.expanded-fe { border-color: var(--fe-mid); box-shadow: 0 0 0 3px rgba(249,148,31,0.1); }
+    .step-card.done-card { opacity: 0.72; }
 
-  <h3>4.Iniciar o servidor</h3>
-  <p>npm run dev </p>
-  <br>
+    .step-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 18px;
+      cursor: pointer; user-select: none;
+    }
+    .step-num {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      font-size: 12px; font-weight: 600;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: background 0.2s, color 0.2s;
+    }
+    .num-be { background: var(--be-light); color: var(--be-mid); }
+    .num-fe { background: var(--fe-light); color: var(--fe-mid); }
+    .num-done { background: var(--success); color: #fff; }
+    .step-header-text { flex: 1; }
+    .step-title { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+    .step-subtitle { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+    .step-actions { display: flex; align-items: center; gap: 8px; }
+    .done-check {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border-md);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      font-size: 12px; color: transparent;
+      transition: all 0.15s; flex-shrink: 0;
+    }
+    .done-check:hover { border-color: var(--success); color: var(--success); }
+    .done-check.checked { background: var(--success); border-color: var(--success); color: #fff; }
+    .chevron { color: var(--text-muted); font-size: 16px; transition: transform 0.2s; flex-shrink: 0; }
+    .chevron.open { transform: rotate(180deg); }
 
+    /* ── STEP BODY ────────────────────────────────────────── */
+    .step-body { display: none; padding: 0 18px 16px 58px; border-top: 1px solid var(--border); }
+    .step-body.open { display: block; }
+    .step-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.65; margin: 12px 0 10px; }
+
+    /* ── CODE ─────────────────────────────────────────────── */
+    .code-wrap { position: relative; }
+    .code-block {
+      background: var(--code-bg);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      font-family: var(--mono); font-size: 12.5px; line-height: 1.75;
+      overflow-x: auto; color: var(--code-text);
+    }
+    .code-block .cmd { color: var(--code-cmd); }
+    .code-block .flag { color: var(--code-flag); }
+    .copy-btn {
+      position: absolute; top: 8px; right: 8px;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: var(--radius-sm);
+      padding: 4px 10px; font-size: 11px; color: #94a3b8;
+      cursor: pointer; display: flex; align-items: center; gap: 5px;
+      transition: background 0.15s, color 0.15s; font-family: var(--font);
+    }
+    .copy-btn:hover { background: rgba(255,255,255,0.18); color: #e2e8f0; }
+    .copy-btn.copied { background: rgba(34,197,94,0.2); color: #4ade80; border-color: rgba(34,197,94,0.3); }
+
+    /* ── ENV ──────────────────────────────────────────────── */
+    .env-section { margin-top: 10px; }
+    .env-group-label {
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--text-muted); margin: 14px 0 6px;
+    }
+    .env-block {
+      background: var(--code-bg);
+      border-radius: var(--radius-md);
+      padding: 12px 16px; font-family: var(--mono); font-size: 12.5px; line-height: 1.9;
+    }
+    .env-row { display: flex; }
+    .env-key { color: var(--code-cmd); white-space: nowrap; }
+    .env-eq { color: #94a3b8; }
+    .env-val { color: var(--code-flag); }
+
+    /* ── TIP ──────────────────────────────────────────────── */
+    .tip {
+      display: flex; gap: 10px;
+      background: var(--amber-50); border: 1px solid var(--amber-border);
+      border-radius: var(--radius-md); padding: 10px 14px; margin-top: 10px;
+      font-size: 12.5px; color: var(--amber-text); line-height: 1.55;
+    }
+    .tip i { flex-shrink: 0; margin-top: 1px; }
+
+    /* ── SECÇÕES ──────────────────────────────────────────── */
+    .section-block { display: none; }
+    .section-block.visible { display: block; }
+
+    /* ── BANNER TRANSIÇÃO BE→FE ───────────────────────────── */
+    .transition-banner {
+      display: none;
+      background: linear-gradient(135deg, var(--be-light) 0%, var(--fe-light) 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 20px 24px;
+      margin-bottom: 24px;
+      align-items: center; gap: 16px;
+    }
+    .transition-banner.show { display: flex; }
+    .transition-banner .tb-icon {
+      width: 44px; height: 44px; border-radius: var(--radius-md);
+      background: var(--primary); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; flex-shrink: 0;
+    }
+    .transition-banner h3 { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; }
+    .transition-banner p { font-size: 13px; color: var(--text-secondary); }
+    .tb-go-btn {
+      margin-left: auto; flex-shrink: 0;
+      padding: 9px 18px;
+      background: var(--secondary); border: none;
+      border-radius: var(--radius-md);
+      color: #fff; font-size: 13px; font-weight: 600;
+      cursor: pointer; font-family: var(--font);
+      display: flex; align-items: center; gap: 7px;
+      transition: opacity 0.15s;
+    }
+    .tb-go-btn:hover { opacity: 0.88; }
+
+    /* ── BANNER CONCLUSÃO FINAL ───────────────────────────── */
+    .done-banner {
+      display: none;
+      background: var(--card);
+      border: 2px solid var(--success);
+      border-radius: var(--radius-lg);
+      padding: 28px 32px;
+      margin-top: 28px;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 16px;
+    }
+    .done-banner.show { display: flex; }
+    .done-banner .db-icon {
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      background: #d4edda;
+      color: var(--success);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px;
+    }
+    .done-banner h3 { font-size: 20px; font-weight: 700; color: var(--text-primary); }
+    .done-banner p { font-size: 14px; color: var(--text-secondary); max-width: 480px; }
+    .done-banner .cmd-row {
+      width: 100%; max-width: 520px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .done-banner .cmd-label {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--text-muted); text-align: left;
+      margin-bottom: 2px;
+    }
+    .done-banner .code-wrap { width: 100%; }
+
+    /* ── RESPONSIVE ───────────────────────────────────────── */
+    @media (max-width: 700px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .main { padding: 20px; max-width: 100%; }
+      .page-header { padding: 16px 20px; }
+      .header-tabs { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── HEADER ──────────────────────────────────────────── -->
+<header class="page-header">
+  <div class="page-header-left">
+    <h1>
+      <span class="logo-icon"><i class="ti ti-file-invoice" aria-hidden="true"></i></span>
+      Processo de Configuração — FaturaJá
+    </h1>
+    <p>Guia passo a passo para configurar o backend (Laravel) e o frontend (Next.js).</p>
+  </div>
+  <div class="header-actions">
+    <div class="header-tabs">
+      <button class="htab-btn active-be" id="htab-be" onclick="switchSection('be')">
+        <i class="ti ti-server" aria-hidden="true"></i> Backend
+      </button>
+      <button class="htab-btn" id="htab-fe" onclick="switchSection('fe')">
+        <i class="ti ti-brand-nextjs" aria-hidden="true"></i> Frontend
+      </button>
+    </div>
+    <button class="theme-btn" id="themeBtn" title="Alternar tema" onclick="toggleTheme()">
+      <i class="ti ti-moon" id="themeIcon" aria-hidden="true"></i>
+    </button>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- ── SIDEBAR ─────────────────────────────────────────── -->
+  <nav class="sidebar" aria-label="Navegação dos passos">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Backend (Laravel)</div>
+      <div id="sidebar-be"></div>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Frontend (Next.js)</div>
+      <div id="sidebar-fe"></div>
+    </div>
+  </nav>
+
+  <!-- ── MAIN ────────────────────────────────────────────── -->
+  <main class="main">
+
+    <!-- BACKEND SECTION -->
+    <div class="section-block visible" id="section-be">
+      <div class="section-title-bar">
+        <div class="icon icon-be"><i class="ti ti-server" aria-hidden="true"></i></div>
+        <div>
+          <h2>Configuração Backend</h2>
+        </div>
+      </div>
+
+      <div class="progress-wrap">
+        <div class="progress-meta">
+          <span id="be-label">0 de 14 passos concluídos</span>
+          <span id="be-pct">0%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill progress-fill-be" id="be-bar" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div id="steps-be"></div>
+
+      <!-- Banner aparece ao concluir o back -->
+      <div class="transition-banner" id="be-done-banner">
+        <div class="tb-icon"><i class="ti ti-circle-check" aria-hidden="true"></i></div>
+        <div>
+          <h3>Backend configurado com sucesso! 🎉</h3>
+          <p>Agora é hora de configurar o frontend (Next.js). Clica no botão para continuar.</p>
+        </div>
+        <button class="tb-go-btn" onclick="switchSection('fe')">
+          Ir para o Frontend <i class="ti ti-arrow-right" aria-hidden="true"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- FRONTEND SECTION -->
+    <div class="section-block" id="section-fe">
+      <div class="section-title-bar">
+        <div class="icon icon-fe"><i class="ti ti-brand-nextjs" aria-hidden="true"></i></div>
+        <div>
+          <h2>Configuração Frontend</h2>
+        </div>
+      </div>
+
+      <div class="progress-wrap">
+        <div class="progress-meta">
+          <span id="fe-label">0 de 4 passos concluídos</span>
+          <span id="fe-pct">0%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill progress-fill-fe" id="fe-bar" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div id="steps-fe"></div>
+
+      <!-- Banner conclusão total -->
+      <div class="done-banner" id="fe-done-banner">
+        <div class="db-icon"><i class="ti ti-rocket" aria-hidden="true"></i></div>
+        <h3>FaturaJá está pronto para ser executado! 🚀</h3>
+        <p>Todos os passos foram concluídos. Abre dois terminais separados e corre os comandos abaixo para iniciar os servidores.</p>
+
+        <div class="cmd-row">
+          <div class="cmd-label"><i class="ti ti-server"></i> Terminal 1 — Backend (Laravel)</div>
+          <div class="code-wrap">
+            <pre class="code-block"><span class="cmd">php</span> <span class="flag">artisan serve --host=0.0.0.0 --port=8000</span></pre>
+            <button class="copy-btn" onclick="copyText(this, 'php artisan serve --host=0.0.0.0 --port=8000')" title="Copiar">
+              <i class="ti ti-copy" aria-hidden="true"></i> Copiar
+            </button>
+          </div>
+
+          <div class="cmd-label" style="margin-top:10px"><i class="ti ti-brand-nextjs"></i> Terminal 2 — Frontend (Next.js)</div>
+          <div class="code-wrap">
+            <pre class="code-block"><span class="cmd">npm</span> <span class="flag">run dev</span></pre>
+            <button class="copy-btn" onclick="copyText(this, 'npm run dev')" title="Copiar">
+              <i class="ti ti-copy" aria-hidden="true"></i> Copiar
+            </button>
+          </div>
+        </div>
+
+        <p style="font-size:13px; color:var(--text-muted); margin-top:4px;">
+          Acede a <strong style="color:var(--primary)">http://localhost:3000</strong> no browser para abrir o FaturaJá.
+        </p>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+/* ── DADOS ─────────────────────────────────────────────────── */
+const beSteps = [
+  { title:"Clonar o repositório", subtitle:"Git", desc:"Clone o repositório do projeto para a sua máquina local.", type:"cmd", code:"git clone <url_do_repositorio>" },
+  { title:"Instalar dependências", subtitle:"Composer", desc:"Instala todas as dependências PHP definidas no composer.json.", type:"cmd", code:"composer install" },
+  { title:"Configurar o ambiente (.env)", subtitle:"Configuração", desc:"Cria o arquivo de configuração local a partir do modelo de exemplo.", type:"cmd", code:"cp .env.example .env" },
+  { title:"Gerar a chave da aplicação", subtitle:"Segurança", desc:"Gera uma chave criptográfica única para encriptação de sessões e cookies.", type:"cmd", code:"php artisan key:generate" },
+  { title:"Configurar base de dados", subtitle:"MySQL — variáveis .env", desc:"Defina as variáveis de conexão ao banco de dados no arquivo .env:", type:"env", vars:[["DB_CONNECTION","mysql"],["DB_HOST","127.0.0.1"],["DB_PORT","3306"],["DB_DATABASE","example"],["DB_USERNAME","root"],["DB_PASSWORD",""]] },
+  { title:"Criar as tabelas", subtitle:"Migrations", desc:"Executa todas as migrations para criar a estrutura do banco de dados.", type:"cmd", code:"php artisan migrate" },
+  { title:"Popular a base de dados", subtitle:"Seeders", desc:"Insere dados iniciais (seeders), se existirem para o projeto.", type:"cmd", code:"php artisan db:seed" },
+  { title:"Criar link simbólico de storage", subtitle:"Armazenamento", desc:"Expõe a pasta storage/app/public via URL pública acessível pelo browser.", type:"cmd", code:"php artisan storage:link" },
+  { title:"Limpar cache de configuração", subtitle:"Cache", desc:"Remove configurações em cache para aplicar as novas variáveis do .env.", type:"cmd", code:"php artisan config:clear" },
+  { title:"Iniciar o servidor", subtitle:"Servidor de desenvolvimento", desc:"Inicia o servidor Laravel. Use a segunda opção para expor na rede local.", type:"cmd", code:"php artisan serve\nphp artisan serve --host=0.0.0.0 --port=8000" },
+  { title:"Configurar banco multi-tenant", subtitle:"Multi-tenancy — variáveis .env", desc:"Variáveis de conexão dedicadas para os tenants do sistema. Adicione ao .env:", type:"env", vars:[["TENANT_DB_HOST","127.0.0.1"],["TENANT_DB_PORT","3306"],["TENANT_DB_USERNAME","root"],["TENANT_DB_PASSWORD",""]] },
+  { title:"Definir APP_URL", subtitle:"URL da aplicação", desc:"URL base da aplicação Laravel. Ajuste a porta conforme o seu ambiente.", type:"cmd", code:"APP_URL=http://localhost:8000" },
+  { title:"Configurar CORS / Sanctum", subtitle:"Domínios autorizados", desc:"Lista os domínios autorizados para o Sanctum. O cors.php aceita todos os IPs locais listados automaticamente.", type:"cmd", code:"SANCTUM_STATEFUL_DOMAINS=localhost:3000,localhost:8000,127.0.0.1:3000,127.0.0.1:8000,192.168.1.120:3000,192.168.1.120:8000" },
+  { title:"Assinatura RSA — AGT", subtitle:"Fiscal / Segurança", desc:"Caminho para a chave privada RSA usada na assinatura de documentos fiscais (AGT).", type:"cmd", code:'AGT_RSA_PRIVATE_KEY_PATH="/home/maria/Documentos/Sistema_de_fatura-o_mult_tenancy/backend/storage/keys/agt_private.pem"', tip:"Certifique-se de que o arquivo .pem existe nesse caminho e tem permissões corretas (chmod 600)." }
+];
+
+const feSteps = [
+  { title:"Instalar dependências", subtitle:"npm", desc:"Instala todos os pacotes Node.js definidos no package.json.", type:"cmd", code:"npm install" },
+  { title:"Criar arquivo .env.local", subtitle:"Configuração", desc:"Crie o arquivo .env.local na raiz do projeto frontend. Este arquivo não deve ser commitado no repositório.", type:"info", tip:"Adicione .env.local ao .gitignore para evitar expor variáveis sensíveis." },
+  { title:"Definir variáveis de ambiente", subtitle:"Variáveis .env.local", desc:"Configure todas as variáveis necessárias no .env.local:", type:"env-grouped", groups:[{label:"App",vars:[["NEXT_PUBLIC_APP_NAME","Sistema de Faturação"],["NEXT_PUBLIC_APP_ENV","local"]]},{label:"Backend (Laravel)",vars:[["NEXT_PUBLIC_API_URL","http://localhost:8000"],["NEXT_PUBLIC_BACKEND_URL","http://localhost:8000"]]},{label:"Auth / Sanctum",vars:[["NEXT_PUBLIC_CSRF_URL","http://localhost:8000/sanctum/csrf-cookie"],["NEXT_PUBLIC_AUTH_COOKIE","true"]]},{label:"Vite (referência)",vars:[["VITE_APP_NAME",'"${APP_NAME}"'],["VITE_APP_URL",'"${APP_URL}"'],["VITE_FRONTEND_URL","http://localhost:3000"]]}] },
+  { title:"Iniciar o servidor de desenvolvimento", subtitle:"Next.js — porta 3000", desc:"Inicia o Next.js em modo desenvolvimento. Acesse em http://localhost:3000", type:"cmd", code:"npm run dev" }
+];
+
+/* ── ESTADO ────────────────────────────────────────────────── */
+const doneState = { be:{}, fe:{} };
+const openState  = { be:{}, fe:{} };
+
+/* ── TEMA ──────────────────────────────────────────────────── */
+function toggleTheme() {
+  const html = document.documentElement;
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  document.getElementById('themeIcon').className = isDark ? 'ti ti-moon' : 'ti ti-sun';
+}
+
+/* ── TABS ──────────────────────────────────────────────────── */
+function switchSection(type) {
+  document.querySelectorAll('.section-block').forEach(s => s.classList.remove('visible'));
+  document.getElementById(`section-${type}`).classList.add('visible');
+  ['be','fe'].forEach(t => {
+    const btn = document.getElementById(`htab-${t}`);
+    btn.classList.remove('active-be','active-fe');
+    if (t === type) btn.classList.add(`active-${type}`);
+  });
+}
+
+/* ── HELPERS HTML ───────────────────────────────────────────── */
+function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function buildCmdHTML(code) {
+  const lines = code.split('\n').map(l => {
+    const parts = l.split(' ');
+    const cmd = parts[0];
+    const rest = parts.slice(1).join(' ');
+    return `<span class="cmd">${esc(cmd)}</span>${rest ? ' <span class="flag">'+esc(rest)+'</span>' : ''}`;
+  }).join('\n');
+  return `<div class="code-wrap"><pre class="code-block">${lines}</pre><button class="copy-btn" onclick="copyText(this,${JSON.stringify(code)})" title="Copiar"><i class="ti ti-copy" aria-hidden="true"></i> Copiar</button></div>`;
+}
+
+function buildEnvHTML(vars) {
+  return `<div class="env-block">${vars.map(([k,v])=>`<div class="env-row"><span class="env-key">${esc(k)}</span><span class="env-eq">=</span><span class="env-val">${esc(v)}</span></div>`).join('')}</div>`;
+}
+
+function buildEnvGroupedHTML(groups) {
+  return groups.map(g=>`<div class="env-group-label">${g.label}</div>${buildEnvHTML(g.vars)}`).join('');
+}
+
+/* ── RENDER ─────────────────────────────────────────────────── */
+function renderSteps(steps, containerId, sidebarId, type) {
+  const container = document.getElementById(containerId);
+  const sidebar   = document.getElementById(sidebarId);
+
+  steps.forEach((step, i) => {
+    /* sidebar item */
+    const sideEl = document.createElement('button');
+    sideEl.className = 'sidebar-item';
+    sideEl.id = `side-${type}-${i}`;
+    sideEl.setAttribute('aria-label', step.title);
+    sideEl.innerHTML = `<span class="num" id="side-num-${type}-${i}">${i+1}</span><span style="font-size:12px">${step.title}</span>`;
+    sideEl.onclick = () => { openStep(type,i); document.getElementById(`${type}-card-${i}`).scrollIntoView({behavior:'smooth',block:'start'}); };
+    sidebar.appendChild(sideEl);
+
+    /* card body */
+    let body = `<p class="step-desc">${step.desc}</p>`;
+    if (step.type === 'cmd')         body += buildCmdHTML(step.code);
+    else if (step.type === 'env')    body += `<div class="env-section">${buildEnvHTML(step.vars)}</div>`;
+    else if (step.type === 'env-grouped') body += `<div class="env-section">${buildEnvGroupedHTML(step.groups)}</div>`;
+    if (step.tip) body += `<div class="tip"><i class="ti ti-info-circle"></i><span>${step.tip}</span></div>`;
+
+    const card = document.createElement('div');
+    card.className = 'step-card';
+    card.id = `${type}-card-${i}`;
+    card.innerHTML = `
+      <div class="step-header" onclick="toggleStep('${type}',${i})">
+        <div class="step-num num-${type}" id="num-${type}-${i}">${i+1}</div>
+        <div class="step-header-text">
+          <div class="step-title">${step.title}</div>
+          <div class="step-subtitle">${step.subtitle||''}</div>
+        </div>
+        <div class="step-actions">
+          <div class="done-check" id="check-${type}-${i}" title="Marcar como concluído" onclick="event.stopPropagation();toggleDone('${type}',${i})">
+            <i class="ti ti-check" aria-hidden="true"></i>
+          </div>
+          <i class="ti ti-chevron-down chevron" id="chev-${type}-${i}" aria-hidden="true"></i>
+        </div>
+      </div>
+      <div class="step-body" id="body-${type}-${i}">${body}</div>`;
+    container.appendChild(card);
+  });
+}
+
+/* ── TOGGLE / OPEN ──────────────────────────────────────────── */
+function toggleStep(type, i) {
+  const body = document.getElementById(`body-${type}-${i}`);
+  const chev = document.getElementById(`chev-${type}-${i}`);
+  const card = document.getElementById(`${type}-card-${i}`);
+  const isOpen = body.classList.contains('open');
+  body.classList.toggle('open', !isOpen);
+  chev.classList.toggle('open', !isOpen);
+  card.classList.toggle(`expanded-${type}`, !isOpen);
+  openState[type][i] = !isOpen;
+}
+
+function openStep(type, i) {
+  if (!document.getElementById(`body-${type}-${i}`).classList.contains('open')) toggleStep(type, i);
+}
+
+/* ── MARCAR CONCLUÍDO ───────────────────────────────────────── */
+function toggleDone(type, i) {
+  const check    = document.getElementById(`check-${type}-${i}`);
+  const card     = document.getElementById(`${type}-card-${i}`);
+  const sideItem = document.getElementById(`side-${type}-${i}`);
+  const sideNum  = document.getElementById(`side-num-${type}-${i}`);
+  const num      = document.getElementById(`num-${type}-${i}`);
+
+  doneState[type][i] = !doneState[type][i];
+  const done = doneState[type][i];
+
+  check.classList.toggle('checked', done);
+  card.classList.toggle('done-card', done);
+  sideItem.classList.toggle('done', done);
+
+  if (done) {
+    sideNum.innerHTML = '<i class="ti ti-check" style="font-size:10px"></i>';
+    sideNum.style.background = ''; sideNum.style.color = '';
+    num.className = 'step-num num-done';
+    num.innerHTML = '<i class="ti ti-check" style="font-size:12px"></i>';
+  } else {
+    sideNum.textContent = i + 1;
+    sideNum.style.background = ''; sideNum.style.color = '';
+    num.className = `step-num num-${type}`;
+    num.textContent = i + 1;
+  }
+
+  updateProgress(type);
+}
+
+/* ── PROGRESSO ──────────────────────────────────────────────── */
+function updateProgress(type) {
+  const steps = type === 'be' ? beSteps : feSteps;
+  const total = steps.length;
+  const done  = Object.values(doneState[type]).filter(Boolean).length;
+  const pct   = Math.round((done / total) * 100);
+
+  document.getElementById(`${type}-bar`).style.width = pct + '%';
+  document.getElementById(`${type}-label`).textContent = `${done} de ${total} passos concluídos`;
+  document.getElementById(`${type}-pct`).textContent = pct + '%';
+
+  if (type === 'be' && done === total) {
+    /* Backend 100% → mostra banner e vai para o frontend */
+    document.getElementById('be-done-banner').classList.add('show');
+    setTimeout(() => switchSection('fe'), 1200);
+  } else {
+    document.getElementById('be-done-banner').classList.remove('show');
+  }
+
+  if (type === 'fe' && done === total) {
+    /* Frontend 100% → mostra banner de conclusão */
+    document.getElementById('fe-done-banner').classList.add('show');
+    document.getElementById('fe-done-banner').scrollIntoView({behavior:'smooth', block:'start'});
+  } else {
+    document.getElementById('fe-done-banner').classList.remove('show');
+  }
+}
+
+/* ── COPY ───────────────────────────────────────────────────── */
+function copyText(btn, text) {
+  navigator.clipboard.writeText(text).then(() => {
+    btn.classList.add('copied');
+    btn.innerHTML = '<i class="ti ti-check" aria-hidden="true"></i> Copiado!';
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      btn.innerHTML = '<i class="ti ti-copy" aria-hidden="true"></i> Copiar';
+    }, 2000);
+  });
+}
+
+/* ── INIT ───────────────────────────────────────────────────── */
+renderSteps(beSteps, 'steps-be', 'sidebar-be', 'be');
+renderSteps(feSteps, 'steps-fe', 'sidebar-fe', 'fe');
+</script>
+</body>
+</html>
