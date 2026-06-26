@@ -47,6 +47,24 @@ return [
             'engine' => null,
         ],
 
+        // ============================================
+        // 2. SHARED (⭐ ADICIONAR!)
+        // ============================================
+        'shared' => [
+            'driver' => 'mysql',
+            'host' => env('DB_SHARED_HOST', '127.0.0.1'),
+            'port' => env('DB_SHARED_PORT', '3306'),
+            'database' => env('DB_SHARED_DATABASE', 'faturaja_shared'),
+            'username' => env('DB_SHARED_USERNAME', 'root'),
+            'password' => env('DB_SHARED_PASSWORD', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'strict' => true,
+            'engine' => null,
+        ],
+
+        
         // SQLite
         'sqlite' => [
             'driver' => 'sqlite',

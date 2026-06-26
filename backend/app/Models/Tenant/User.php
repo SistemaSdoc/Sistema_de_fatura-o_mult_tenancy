@@ -29,19 +29,13 @@ class User extends Authenticatable implements MustVerifyEmail  //  Extends Authe
 
     protected $fillable = [
         'id',
-        'landlord_user_id',     //  Link para LandlordUser
         'name',
         'email',
-        'pin',                  // Login rápido no caixa
         'password',
-        'role',                 // admin, operador, contablista, suporte
-        'permissoes',           // JSON
-        'caixa_aberto',
-        'caixa_id',
+        'role',        
         'ativo',
         'ultimo_login',
         'printer_ip',
-        'printer_port',
     ];
 
     protected $hidden = ['password', 'pin', 'remember_token'];
@@ -65,6 +59,21 @@ class User extends Authenticatable implements MustVerifyEmail  //  Extends Authe
         });
     }
 
+        public function getRoleNoTenant(?string $tenantId = null): ?string
+    {
+        // No modo singular, a role está diretamente no usuário
+        return $this->role ?? 'operador';
+    }
+
+    /**
+     * Verifica se o usuário tem acesso ao tenant
+     */
+    public function temAcessoAoTenant(?string $tenantId = null): bool
+    {
+        // No modo singular, o usuário pertence ao tenant atual
+        return true;
+    }
+    
     // ================= RELAÇÕES =================
 
     public function vendas()

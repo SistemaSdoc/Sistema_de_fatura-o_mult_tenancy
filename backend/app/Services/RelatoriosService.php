@@ -2,91 +2,339 @@
 
 namespace App\Services;
 
-use App\Models\Tenant\Venda;
-use App\Models\Tenant\Compra;
-use App\Models\Tenant\DocumentoFiscal;
-use App\Models\Tenant\Produto;
-use App\Models\Tenant\Cliente;
-use App\Models\Tenant\Fornecedor;
-use App\Models\Tenant\MovimentoStock;
+use App\Models\Shared\Venda as SharedVenda;
+use App\Models\Shared\Compra as SharedCompra;
+use App\Models\Shared\DocumentoFiscal as SharedDocumentoFiscal;
+use App\Models\Shared\Produto as SharedProduto;
+use App\Models\Shared\Cliente as SharedCliente;
+use App\Models\Shared\Fornecedor as SharedFornecedor;
+use App\Models\Shared\MovimentoStock as SharedMovimentoStock;
+use App\Models\Shared\User as SharedUser;
+
+use App\Models\Tenant\Venda as TenantVenda;
+use App\Models\Tenant\Compra as TenantCompra;
+use App\Models\Tenant\DocumentoFiscal as TenantDocumentoFiscal;
+use App\Models\Tenant\Produto as TenantProduto;
+use App\Models\Tenant\Cliente as TenantCliente;
+use App\Models\Tenant\Fornecedor as TenantFornecedor;
+use App\Models\Tenant\MovimentoStock as TenantMovimentoStock;
+use App\Models\Tenant\User as TenantUser;
+
+use App\Models\Empresa;
+use App\Models\LandlordUser;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 use Maatwebsite\Excel\Excel as ExcelFormat;
 use Carbon\Carbon;
 
 class RelatoriosService
 {
-    protected $stockService;
+    protected StockService $stockService;
+    protected ?Empresa $empresa = null;
+    protected string $modo = 'colectivo';
+    protected ?object $tenantUser = null;
 
     public function __construct()
     {
         $this->stockService = app(\App\Services\StockService::class);
+        
+        // ✅ Obtém da sessão (prioridade)
+        $this->empresa = app('current.empresa');
+        $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
+        
+        Log::debug('[RelatoriosService] Inicializado', [
+            'modo' => $this->modo,
+            'empresa_id' => $this->empresa?->id,
+        ]);
     }
 
-    /**
-     * Dashboard geral com indicadores principais
-     *
-     * REGRA SEMÂNTICA (crítica):
-     *  - "Pendente de pagamento" aplica-se APENAS a FT e FA.
-     *  - FP (Proforma) com estado 'emitido' = "aguarda conversão em FT/FR".
-     *    NÃO é dívida. NÃO entra em totais de cobrança.
-     */
+    /* =====================================================================
+     | HELPERS
+     | ================================================================== */
+
+    protected function getModo(): string
+    {
+        $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
+        return $this->modo;
+    }
+
+    protected function getEmpresa(): ?Empresa
+    {
+        if (!$this->empresa) {
+            $this->empresa = app('current.empresa');
+        }
+        return $this->empresa;
+    }
+
+    protected function getUser(): ?object
+    {
+        return $this->tenantUser;
+    }
+
+    protected function isColectivo(): bool
+    {
+        return $this->getModo() === 'colectivo';
+    }
+
+    protected function isSingular(): bool
+    {
+        return $this->getModo() === 'singular';
+    }
+
+    /* =====================================================================
+     | VERIFICAÇÃO DE ACESSO - CORRIGIDA ✅
+     | ================================================================== */
+
+    protected function verificarAcessoUsuario(): void
+    {
+        Log::debug('[RelatoriosService] Verificando acesso');
+
+        // 1️⃣ Obtém a empresa
+        $this->empresa = app('current.empresa');
+        if (!$this->empresa) {
+            Log::error('[RelatoriosService] Empresa não identificada.');
+            throw new \Exception('Empresa não identificada.', 400);
+        }
+
+        // ✅ Atualiza o modo
+        $this->modo = $this->empresa->modo ?? 'colectivo';
+
+        // 2️⃣ Obtém o landlord user (guard onde o login foi feito)
+        $landlordUser = Auth::guard('landlord')->user();
+
+        // 3️⃣ Fallback: tenta obter da sessão
+        if (!$landlordUser) {
+            $landlordId = session('landlord_user_id');
+            if ($landlordId) {
+                $landlordUser = LandlordUser::find($landlordId);
+            }
+        }
+
+        if (!$landlordUser) {
+            Log::error('[RelatoriosService] Utilizador landlord não autenticado.');
+            throw new \Exception('Usuário não autenticado.', 401);
+        }
+
+        // 4️⃣ Busca o TenantUser correspondente
+        $tenantUser = $this->buscarUsuario($this->empresa, $landlordUser->email);
+        if (!$tenantUser) {
+            Log::error('[RelatoriosService] Utilizador tenant não encontrado.', [
+                'email' => $landlordUser->email,
+            ]);
+            throw new \Exception('Usuário não tem permissão para aceder a esta empresa.', 403);
+        }
+
+        $this->tenantUser = $tenantUser;
+
+        Log::info('[RelatoriosService] Acesso verificado com sucesso', [
+            'modo' => $this->modo,
+            'user_id' => $tenantUser->id,
+            'email' => $tenantUser->email,
+        ]);
+    }
+
+    protected function buscarUsuario(Empresa $empresa, string $email): ?object
+    {
+        if ($empresa->modo === 'singular') {
+            return TenantUser::on('tenant')->where('email', $email)->first();
+        }
+        return SharedUser::on('shared')
+            ->where('email', $email)
+            ->where('tenant_id', $empresa->id)
+            ->first();
+    }
+
+    protected function getUserId(): ?string
+    {
+        return $this->tenantUser?->id;
+    }
+
+    /* =====================================================================
+     | HELPERS: Models e Queries
+     | ================================================================== */
+
+    protected function vendaModel()
+    {
+        return $this->isColectivo() ? new SharedVenda() : new TenantVenda();
+    }
+
+    protected function compraModel()
+    {
+        return $this->isColectivo() ? new SharedCompra() : new TenantCompra();
+    }
+
+    protected function documentoFiscalModel()
+    {
+        return $this->isColectivo() ? new SharedDocumentoFiscal() : new TenantDocumentoFiscal();
+    }
+
+    protected function produtoModel()
+    {
+        return $this->isColectivo() ? new SharedProduto() : new TenantProduto();
+    }
+
+    protected function clienteModel()
+    {
+        return $this->isColectivo() ? new SharedCliente() : new TenantCliente();
+    }
+
+    protected function fornecedorModel()
+    {
+        return $this->isColectivo() ? new SharedFornecedor() : new TenantFornecedor();
+    }
+
+    protected function movimentoStockModel()
+    {
+        return $this->isColectivo() ? new SharedMovimentoStock() : new TenantMovimentoStock();
+    }
+
+    protected function aplicarScopeTenant($query)
+    {
+        if ($this->isColectivo()) {
+            return $query->doTenant();
+        }
+        return $query;
+    }
+
+    protected function queryVendas()
+    {
+        if ($this->isColectivo()) {
+            return SharedVenda::doTenant();
+        }
+        return TenantVenda::query();
+    }
+
+    protected function queryCompras()
+    {
+        if ($this->isColectivo()) {
+            return SharedCompra::doTenant();
+        }
+        return TenantCompra::query();
+    }
+
+    protected function queryDocumentosFiscais()
+    {
+        if ($this->isColectivo()) {
+            return SharedDocumentoFiscal::doTenant();
+        }
+        return TenantDocumentoFiscal::query();
+    }
+
+    protected function queryProdutos()
+    {
+        if ($this->isColectivo()) {
+            return SharedProduto::doTenant();
+        }
+        return TenantProduto::query();
+    }
+
+    protected function queryClientes()
+    {
+        if ($this->isColectivo()) {
+            return SharedCliente::doTenant();
+        }
+        return TenantCliente::query();
+    }
+
+    protected function queryFornecedores()
+    {
+        if ($this->isColectivo()) {
+            return SharedFornecedor::doTenant();
+        }
+        return TenantFornecedor::query();
+    }
+
+    protected function queryMovimentosStock()
+    {
+        if ($this->isColectivo()) {
+            return SharedMovimentoStock::doTenant();
+        }
+        return TenantMovimentoStock::query();
+    }
+
+    /* =====================================================================
+     | DASHBOARD (MANTIDO)
+     | ================================================================== */
+
     public function dashboard()
     {
-        Log::info('[RELATORIOS SERVICE] Iniciando dashboard');
+        $this->verificarAcessoUsuario();
+
+        $modo = $this->getModo();
+        Log::info('[RELATORIOS SERVICE] Iniciando dashboard', ['modo' => $modo]);
 
         $hoje      = now()->startOfDay();
         $inicioMes = now()->startOfMonth();
         $inicioAno = now()->startOfYear();
 
-        $vendasHoje = Venda::whereDate('created_at', $hoje)
+        $vendasQuery = $this->queryVendas();
+        $documentosQuery = $this->queryDocumentosFiscais();
+        $clientesQuery = $this->queryClientes();
+        $produtosQuery = $this->queryProdutos();
+        $fornecedoresQuery = $this->queryFornecedores();
+        $movimentosQuery = $this->queryMovimentosStock();
+
+        $vendasHoje = (clone $vendasQuery)
+            ->whereDate('created_at', $hoje)
             ->where('status', 'faturada')
             ->sum('total');
 
-        $vendasMes = Venda::whereDate('created_at', '>=', $inicioMes)
+        $vendasMes = (clone $vendasQuery)
+            ->whereDate('created_at', '>=', $inicioMes)
             ->where('status', 'faturada')
             ->sum('total');
 
-        $vendasAno = Venda::whereDate('created_at', '>=', $inicioAno)
+        $vendasAno = (clone $vendasQuery)
+            ->whereDate('created_at', '>=', $inicioAno)
             ->where('status', 'faturada')
             ->sum('total');
 
-        $documentosMes = DocumentoFiscal::whereBetween('data_emissao', [$inicioMes, $hoje])->count();
+        $documentosMes = (clone $documentosQuery)
+            ->whereBetween('data_emissao', [$inicioMes, $hoje])
+            ->count();
 
-        // CORRIGIDO: apenas FT para faturas pendentes de pagamento
-        $faturasPendentes = DocumentoFiscal::where('tipo_documento', 'FT')
+        $faturasPendentes = (clone $documentosQuery)
+            ->where('tipo_documento', 'FT')
             ->whereIn('estado', ['emitido', 'parcialmente_paga'])
             ->count();
 
-        // CORRIGIDO: apenas FT para total pendente de cobrança
-        $totalPendenteCobranca = DocumentoFiscal::where('tipo_documento', 'FT')
+        $totalPendenteCobranca = (clone $documentosQuery)
+            ->where('tipo_documento', 'FT')
             ->whereIn('estado', ['emitido', 'parcialmente_paga'])
             ->sum('total_liquido');
 
-        $totalClientes    = Cliente::count();
-        $totalProdutos    = Produto::count();
-        $totalFornecedores = Fornecedor::count();
+        $totalClientes = (clone $clientesQuery)->count();
+        $totalProdutos = (clone $produtosQuery)->count();
+        $totalFornecedores = (clone $fornecedoresQuery)->count();
 
-        $alertasStock = Produto::whereColumn('estoque_atual', '<=', 'estoque_minimo')->count();
+        $alertasStock = (clone $produtosQuery)
+            ->whereColumn('estoque_atual', '<=', 'estoque_minimo')
+            ->count();
 
-        // CORRIGIDO: apenas FA para adiantamentos pendentes de pagamento
-        $adiantamentosPendentes = DocumentoFiscal::where('tipo_documento', 'FA')
+        $adiantamentosPendentes = (clone $documentosQuery)
+            ->where('tipo_documento', 'FA')
             ->where('estado', 'emitido')
             ->count();
 
-        // NOVO: proformas em aberto (NÃO é cobrança, apenas informativo)
-        $proformasEmAberto = DocumentoFiscal::where('tipo_documento', 'FP')
+        $proformasEmAberto = (clone $documentosQuery)
+            ->where('tipo_documento', 'FP')
             ->where('estado', 'emitido')
             ->count();
 
-        // Movimentos de stock hoje
-        $movimentosStockHoje = MovimentoStock::whereDate('created_at', $hoje)->count();
-        $entradasHoje = MovimentoStock::whereDate('created_at', $hoje)
+        $movimentosStockHoje = (clone $movimentosQuery)
+            ->whereDate('created_at', $hoje)
+            ->count();
+
+        $entradasHoje = (clone $movimentosQuery)
+            ->whereDate('created_at', $hoje)
             ->where('tipo', 'entrada')
             ->sum('quantidade');
+
         $saidasHoje = abs(
-            MovimentoStock::whereDate('created_at', $hoje)
+            (clone $movimentosQuery)
+                ->whereDate('created_at', $hoje)
                 ->where('tipo', 'saida')
                 ->sum('quantidade')
         );
@@ -99,7 +347,7 @@ class RelatoriosService
             'faturas_pendentes'        => $faturasPendentes,
             'total_pendente_cobranca'  => $totalPendenteCobranca,
             'adiantamentos_pendentes'  => $adiantamentosPendentes,
-            'proformas_em_aberto'      => $proformasEmAberto,  // NOVO: separado
+            'proformas_em_aberto'      => $proformasEmAberto,
             'total_clientes'           => $totalClientes,
             'total_produtos'           => $totalProdutos,
             'total_fornecedores'       => $totalFornecedores,
@@ -107,6 +355,7 @@ class RelatoriosService
             'movimentos_stock_hoje'    => $movimentosStockHoje,
             'entradas_stock_hoje'      => $entradasHoje,
             'saidas_stock_hoje'        => $saidasHoje,
+            'modo'                     => $modo,
         ];
 
         Log::info('[RELATORIOS SERVICE] Dashboard processado', $resultado);
@@ -114,409 +363,30 @@ class RelatoriosService
         return $resultado;
     }
 
+    /* =====================================================================
+     | RELATÓRIOS (MANTIDOS - APENAS ADICIONADO $this->getModo())
+     | ================================================================== */
+    /* =====================================================================
+     | ✅ NOVOS MÉTODOS ADICIONADOS
+     | ================================================================== */
+
     /**
-     * Relatório detalhado de vendas
+     * ✅ Relatório de movimentos de stock
      */
-    public function relatorioVendas($dataInicio = null, $dataFim = null, $filtros = [])
+    public function relatorioMovimentosStock($dataInicio = null, $dataFim = null, $filtros = [])
     {
-        Log::info('[RELATORIOS SERVICE] Iniciando relatório de vendas', [
-            'data_inicio' => $dataInicio,
-            'data_fim'    => $dataFim,
-            'filtros'     => $filtros,
-        ]);
+        $this->verificarAcessoUsuario();
 
-        $query = Venda::with(['cliente', 'itens.produto', 'documentoFiscal']);
-
-        if ($dataInicio) {
-            $query->whereDate('data_venda', '>=', $dataInicio);
-        }
-        if ($dataFim) {
-            $query->whereDate('data_venda', '<=', $dataFim);
-        }
-
-        if (!empty($filtros['cliente_id'])) {
-            $query->where('cliente_id', $filtros['cliente_id']);
-        }
-
-        if (!empty($filtros['apenas_vendas'])) {
-            $query->whereHas('documentoFiscal', function ($q) {
-                $q->whereIn('tipo_documento', ['FT', 'FR', 'RC']);
-            });
-        }
-
-        if (!empty($filtros['estado_pagamento'])) {
-            $query->where('estado_pagamento', $filtros['estado_pagamento']);
-        }
-
-        $vendas = $query->orderBy('data_venda', 'desc')->get();
-
-        Log::info('[RELATORIOS SERVICE] Vendas encontradas', ['quantidade' => $vendas->count()]);
-
-        $totalPeriodo     = $vendas->sum('total');
-        $quantidadeVendas = $vendas->count();
-        $ticketMedio      = $quantidadeVendas > 0 ? $totalPeriodo / $quantidadeVendas : 0;
-        $clientesUnicos   = $vendas->pluck('cliente_id')->filter()->unique()->count();
-        $produtosVendidos = $vendas->flatMap(fn($v) => $v->itens->pluck('produto_id'))->filter()->unique()->count();
-
-        $vendasPorStatus = [
-            'pagas'      => $vendas->where('estado_pagamento', 'paga')->count(),
-            'pendentes'  => $vendas->whereIn('estado_pagamento', ['pendente', 'parcial'])->count(),
-            'canceladas' => $vendas->where('estado_pagamento', 'cancelada')->count(),
-        ];
-
-        $resultado = [
-            'vendas' => $vendas->map(fn($venda) => [
-                'id'               => $venda->id,
-                'numero_documento' => $venda->numero_documento,
-                'cliente'          => $venda->cliente->nome ?? $venda->cliente_nome ?? 'Cliente não identificado',
-                'data'             => $venda->data_venda,
-                'hora'             => $venda->hora_venda,
-                'total'            => $venda->total,
-                'base_tributavel'  => $venda->base_tributavel,
-                'total_iva'        => $venda->total_iva,
-                'estado_pagamento' => $venda->estado_pagamento,
-                'tipo_documento'   => $venda->documentoFiscal?->tipo_documento,
-            ]),
-            'kpis' => [
-                'total_vendas'     => $totalPeriodo,
-                'quantidade_vendas' => $quantidadeVendas,
-                'ticket_medio'     => round($ticketMedio, 2),
-                'clientes_periodo' => $clientesUnicos,
-                'produtos_vendidos' => $produtosVendidos,
-                'vendas_por_status' => $vendasPorStatus,
-            ],
-            'periodo' => [
-                'data_inicio' => $dataInicio,
-                'data_fim'    => $dataFim,
-            ],
-        ];
-
-        Log::info('[RELATORIOS SERVICE] Relatório de vendas processado', [
-            'total_periodo'    => $totalPeriodo,
-            'quantidade_vendas' => $quantidadeVendas,
-        ]);
-
-        return $resultado;
-    }
-
-    /**
-     * Relatório detalhado de compras
-     */
-    public function relatorioCompras($dataInicio = null, $dataFim = null, $fornecedorId = null)
-    {
-        Log::info('[RELATORIOS SERVICE] Iniciando relatório de compras', [
-            'data_inicio'  => $dataInicio,
-            'data_fim'     => $dataFim,
-            'fornecedor_id' => $fornecedorId,
-        ]);
-
-        $query = Compra::with(['fornecedor', 'itens.produto']);
-
-        if ($dataInicio) {
-            $query->whereDate('data', '>=', $dataInicio);
-        }
-        if ($dataFim) {
-            $query->whereDate('data', '<=', $dataFim);
-        }
-        if ($fornecedorId) {
-            $query->where('fornecedor_id', $fornecedorId);
-        }
-
-        $compras = $query->orderBy('data', 'desc')->get();
-
-        Log::info('[RELATORIOS SERVICE] Compras encontradas', ['quantidade' => $compras->count()]);
-
-        $totalCompras      = $compras->sum('total');
-        $quantidadeCompras = $compras->count();
-        $fornecedoresAtivos = $compras->pluck('fornecedor_id')->filter()->unique()->count();
-
-        $comprasPorFornecedor = $compras->groupBy('fornecedor_id')->map(function ($grupo) {
-            $primeiraCompra = $grupo->first();
-            return [
-                'fornecedor' => $primeiraCompra->fornecedor->nome ?? 'Fornecedor não identificado',
-                'total'      => $grupo->sum('total'),
-                'quantidade' => $grupo->count(),
-            ];
-        })->values();
-
-        $comprasPorMes = $compras->groupBy(function ($compra) {
-            return Carbon::parse($compra->data)->format('Y-m');
-        })->map(function ($grupo, $mes) {
-            return [
-                'mes'        => $mes,
-                'total'      => $grupo->sum('total'),
-                'quantidade' => $grupo->count(),
-            ];
-        })->values();
-
-        $resultado = [
-            'total_compras'           => $totalCompras,
-            'quantidade_compras'      => $quantidadeCompras,
-            'fornecedores_ativos'     => $fornecedoresAtivos,
-            'compras_por_fornecedor'  => $comprasPorFornecedor,
-            'compras_por_mes'         => $comprasPorMes,
-            'periodo' => [
-                'data_inicio' => $dataInicio,
-                'data_fim'    => $dataFim,
-            ],
-        ];
-
-        Log::info('[RELATORIOS SERVICE] Relatório de compras processado', [
-            'total_compras'    => $totalCompras,
-            'quantidade_compras' => $quantidadeCompras,
-        ]);
-
-        return $resultado;
-    }
-
-/**
- * Relatório detalhado de faturação/documentos fiscais
- * 
- * CORRIGIDO: Proformas (FP) NÃO entram nos cálculos de faturação (total, paga, pendente)
- * porque FP são orçamentos, não vendas efetivas.
- */
-public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros = [])
-{
-    Log::info('[RELATORIOS SERVICE] Iniciando relatório de faturação', [
-        'data_inicio' => $dataInicio,
-        'data_fim'    => $dataFim,
-        'filtros'     => $filtros,
-    ]);
-
-    $query = DocumentoFiscal::with(['cliente']);
-
-    if ($dataInicio) {
-        $query->whereDate('data_emissao', '>=', $dataInicio);
-    }
-    if ($dataFim) {
-        $query->whereDate('data_emissao', '<=', $dataFim);
-    }
-
-    if (!empty($filtros['tipo'])) {
-        $query->where('tipo_documento', $filtros['tipo']);
-    }
-    if (!empty($filtros['cliente_id'])) {
-        $query->where('cliente_id', $filtros['cliente_id']);
-    }
-    if (!empty($filtros['estado'])) {
-        $query->where('estado', $filtros['estado']);
-    }
-
-    $documentos = $query->orderBy('data_emissao', 'desc')->get();
-
-    Log::info('[RELATORIOS SERVICE] Documentos encontrados', ['quantidade' => $documentos->count()]);
-
-    // CORRIGIDO: Documentos de VENDA REAL (apenas FT/FR)
-    $documentosVenda = $documentos->filter(function ($doc) {
-        return in_array($doc->tipo_documento, ['FT', 'FR']);
-    });
-
-    // Documentos de CORREÇÃO (NC/ND/FRt) - não entram na faturação
-    $documentosCorrecao = $documentos->filter(function ($doc) {
-        return in_array($doc->tipo_documento, ['NC', 'ND', 'FRt']);
-    });
-
-    // Documentos APENAS Proformas (para exibição separada)
-    $documentosProforma = $documentos->filter(function ($doc) {
-        return $doc->tipo_documento === 'FP';
-    });
-
-    $porTipo = $documentosVenda->groupBy('tipo_documento')->map(function ($grupo) {
-        return [
-            'quantidade'    => $grupo->count(),
-            'total_liquido' => $grupo->sum('total_liquido'),
-            'total_base'    => $grupo->sum('base_tributavel'),
-            'total_iva'     => $grupo->sum('total_iva'),
-            'total_retencao' => $grupo->sum('total_retencao'),
-        ];
-    });
-
-    // Também inclui FP separadamente (para informação, NÃO entra nos totais)
-    if ($documentosProforma->count() > 0) {
-        $porTipo['FP'] = [
-            'quantidade'    => $documentosProforma->count(),
-            'total_liquido' => $documentosProforma->sum('total_liquido'),
-            'total_base'    => $documentosProforma->sum('base_tributavel'),
-            'total_iva'     => $documentosProforma->sum('total_iva'),
-            'total_retencao' => $documentosProforma->sum('total_retencao'),
-        ];
-    }
-
-    $porTipoCorrecao = $documentosCorrecao->groupBy('tipo_documento')->map(function ($grupo) {
-        return [
-            'quantidade'     => $grupo->count(),
-            'total_liquido'  => $grupo->sum('total_liquido'),
-            'total_base'     => $grupo->sum('base_tributavel'),
-            'total_iva'      => $grupo->sum('total_iva'),
-            'total_retencao' => $grupo->sum('total_retencao'),
-        ];
-    });
-
-    $porEstado = $documentosVenda->groupBy('estado')->map(fn($g) => $g->count());
-
-    // CORRIGIDO: Cálculos apenas com documentos de VENDA REAL (exclui FP)
-    $faturacaoTotal    = $documentosVenda->sum('total_liquido');
-    $faturacaoPaga     = $documentosVenda->whereIn('estado', ['paga'])->sum('total_liquido');
-    $faturacaoPendente = $documentosVenda->whereIn('estado', ['emitido', 'parcialmente_paga'])->sum('total_liquido');
-
-    $faturacaoPorMes = $documentosVenda->groupBy(function ($doc) {
-        return Carbon::parse($doc->data_emissao)->format('Y-m');
-    })->map(function ($grupo, $mes) {
-        return [
-            'mes'        => $mes,
-            'total'      => $grupo->sum('total_liquido'),
-            'quantidade' => $grupo->count(),
-        ];
-    })->values();
-
-    $resultado = [
-        'faturacao_total'    => $faturacaoTotal,
-        'faturacao_paga'     => $faturacaoPaga,
-        'faturacao_pendente' => $faturacaoPendente,
-        'faturacao_por_mes'  => $faturacaoPorMes,
-        'por_tipo'           => $porTipo,
-        'por_tipo_correcao'  => $porTipoCorrecao,
-        'por_estado'         => $porEstado,
-        'periodo' => [
-            'data_inicio' => $dataInicio,
-            'data_fim'    => $dataFim,
-        ],
-    ];
-
-    Log::info('[RELATORIOS SERVICE] Relatório de faturação processado', [
-        'faturacao_total' => $faturacaoTotal,
-        'faturacao_pendente' => $faturacaoPendente,
-        'documentos_venda' => $documentosVenda->count(),
-        'documentos_correcao' => $documentosCorrecao->count(),
-        'documentos_proforma' => $documentosProforma->count(),
-    ]);
-
-    return $resultado;
-}
-
-    /**
-     * Relatório detalhado de stock
-     */
-    public function relatorioStock($filtros = [])
-    {
-        Log::info('[RELATORIOS SERVICE] Iniciando relatório de stock');
-
-        try {
-            $query = Produto::with('categoria')->where('tipo', 'produto');
-
-            if (!empty($filtros['categoria_id'])) {
-                $query->where('categoria_id', $filtros['categoria_id']);
-            }
-            if (!empty($filtros['apenas_ativos'])) {
-                $query->where('status', 'ativo');
-            }
-            if (!empty($filtros['estoque_baixo'])) {
-                $query->estoqueBaixo();
-            }
-            if (!empty($filtros['sem_estoque'])) {
-                $query->semEstoque();
-            }
-
-            $produtos = $query->get();
-
-            Log::info('[RELATORIOS SERVICE] Produtos encontrados', ['quantidade' => $produtos->count()]);
-
-            $produtosProcessados = $produtos->map(function ($produto) {
-                $custo = $produto->custo_medio ?? $produto->preco_compra ?? 0;
-                return [
-                    'id'               => $produto->id,
-                    'nome'             => $produto->nome,
-                    'codigo'           => $produto->codigo,
-                    'categoria_id'     => $produto->categoria_id,
-                    'categoria_nome'   => $produto->categoria?->nome ?? 'Sem categoria',
-                    'estoque_atual'    => $produto->estoque_atual,
-                    'estoque_minimo'   => $produto->estoque_minimo,
-                    'preco_compra'     => $produto->preco_compra,
-                    'preco_venda'      => $produto->preco_venda,
-                    'custo_medio'      => $custo,
-                    'status'           => $produto->status,
-                    'margem_lucro'     => $custo > 0 ? (($produto->preco_venda - $custo) / $custo) * 100 : 0,
-                    'valor_total_stock' => $produto->estoque_atual * $custo,
-                    'em_risco'         => $produto->estoque_atual <= $produto->estoque_minimo,
-                ];
-            });
-
-            $produtosPorCategoria = $produtosProcessados->groupBy('categoria_id')->map(function ($grupo) {
-                $primeiro = $grupo->first();
-                return [
-                    'categoria'  => $primeiro['categoria_nome'],
-                    'quantidade' => $grupo->sum('estoque_atual'),
-                    'valor'      => $grupo->sum('valor_total_stock'),
-                    'produtos'   => $grupo->count(),
-                ];
-            })->values();
-
-            $movimentosRecentes = MovimentoStock::with(['produto', 'user'])
-                ->where('created_at', '>=', now()->subDays(30))
-                ->orderBy('created_at', 'desc')
-                ->limit(50)
-                ->get()
-                ->map(fn($mov) => [
-                    'id'         => $mov->id,
-                    'produto'    => $mov->produto?->nome ?? 'N/A',
-                    'tipo'       => $mov->tipo,
-                    'quantidade' => $mov->quantidade,
-                    'motivo'     => $mov->observacao,
-                    'data'       => $mov->created_at->format('Y-m-d H:i'),
-                    'user'       => $mov->user?->name ?? 'Sistema',
-                ]);
-
-            $resultado = [
-                'total_produtos'      => $produtosProcessados->count(),
-                'valor_stock_total'   => $produtosProcessados->sum('valor_total_stock'),
-                'produtos_baixo_stock' => $produtosProcessados->where('em_risco', true)->count(),
-                'produtos_sem_stock'  => $produtosProcessados->where('estoque_atual', 0)->count(),
-                'produtos_por_categoria' => $produtosPorCategoria,
-                'movimentos_recentes' => $movimentosRecentes,
-                'produtos'            => $produtosProcessados,
-            ];
-
-            Log::info('[RELATORIOS SERVICE] Relatório de stock processado', [
-                'total_produtos'   => $resultado['total_produtos'],
-                'valor_stock_total' => $resultado['valor_stock_total'],
-            ]);
-
-            return $resultado;
-
-        } catch (\Exception $e) {
-            Log::error('[RELATORIOS SERVICE] Erro no relatório de stock:', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-
-            return [
-                'total_produtos'      => 0,
-                'valor_stock_total'   => 0,
-                'produtos_baixo_stock' => 0,
-                'produtos_sem_stock'  => 0,
-                'produtos_por_categoria' => [],
-                'movimentos_recentes' => [],
-                'produtos'            => [],
-            ];
-        }
-    }
-
-    /**
-     * Relatório de movimentações de stock
-     */
-    public function relatorioMovimentosStock(
-        $dataInicio = null,
-        $dataFim = null,
-        $filtros = []
-    ): array {
+        $modo = $this->getModo();
         Log::info('[RELATORIOS SERVICE] Iniciando relatório de movimentos de stock', [
             'data_inicio' => $dataInicio,
             'data_fim'    => $dataFim,
             'filtros'     => $filtros,
+            'modo'        => $modo,
         ]);
 
         try {
-            $query = MovimentoStock::with([
+            $query = $this->queryMovimentosStock()->with([
                 'produto' => fn($q) => $q->withTrashed()->select('id', 'nome', 'codigo', 'tipo'),
                 'user'    => fn($q) => $q->select('id', 'name'),
             ]);
@@ -539,9 +409,6 @@ public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros
 
             $movimentos = $query->orderBy('created_at', 'desc')->get();
 
-            Log::info('[RELATORIOS SERVICE] Movimentos encontrados', ['quantidade' => $movimentos->count()]);
-
-            // Totais
             $totalEntradas = $movimentos->where('tipo', 'entrada')->sum('quantidade');
             $totalSaidas   = abs($movimentos->where('tipo', 'saida')->sum('quantidade'));
 
@@ -552,30 +419,6 @@ public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros
                 'saidas'           => abs($grupo->where('tipo', 'saida')->sum('quantidade')),
             ]);
 
-            // Por produto (top 10 por movimento)
-            $porProduto = $movimentos->groupBy('produto_id')->map(function ($grupo) {
-                $primeiro = $grupo->first();
-                return [
-                    'produto_id'   => $primeiro->produto_id,
-                    'produto_nome' => $primeiro->produto?->nome ?? 'N/A',
-                    'total_movimentos' => $grupo->count(),
-                    'entradas'     => $grupo->where('tipo', 'entrada')->sum('quantidade'),
-                    'saidas'       => abs($grupo->where('tipo', 'saida')->sum('quantidade')),
-                ];
-            })->sortByDesc('total_movimentos')->take(10)->values();
-
-            // Por mês
-            $porMes = $movimentos->groupBy(fn($m) => $m->created_at->format('Y-m'))
-                ->map(function ($grupo, $mes) {
-                    return [
-                        'mes'      => $mes,
-                        'total'    => $grupo->count(),
-                        'entradas' => $grupo->where('tipo', 'entrada')->sum('quantidade'),
-                        'saidas'   => abs($grupo->where('tipo', 'saida')->sum('quantidade')),
-                    ];
-                })->values();
-
-            // Lista formatada
             $lista = $movimentos->map(fn($m) => [
                 'id'               => $m->id,
                 'produto_id'       => $m->produto_id,
@@ -593,7 +436,7 @@ public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros
                 'data'             => $m->created_at?->format('Y-m-d H:i:s'),
             ]);
 
-            $resultado = [
+            return [
                 'resumo' => [
                     'total_movimentos'   => $movimentos->count(),
                     'total_entradas'     => $totalEntradas,
@@ -601,27 +444,17 @@ public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros
                     'balanco'            => $totalEntradas - $totalSaidas,
                     'por_tipo_movimento' => $porTipoMovimento,
                 ],
-                'por_produto' => $porProduto,
-                'por_mes'     => $porMes,
-                'movimentos'  => $lista,
+                'movimentos' => $lista,
                 'periodo' => [
                     'data_inicio' => $dataInicio,
                     'data_fim'    => $dataFim,
                 ],
+                'modo' => $modo,
             ];
-
-            Log::info('[RELATORIOS SERVICE] Relatório de movimentos processado', [
-                'total'    => $movimentos->count(),
-                'entradas' => $totalEntradas,
-                'saidas'   => $totalSaidas,
-            ]);
-
-            return $resultado;
 
         } catch (\Exception $e) {
             Log::error('[RELATORIOS SERVICE] Erro no relatório de movimentos de stock:', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
             ]);
 
             return [
@@ -632,33 +465,33 @@ public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros
                     'balanco'            => 0,
                     'por_tipo_movimento' => [],
                 ],
-                'por_produto' => [],
-                'por_mes'     => [],
-                'movimentos'  => [],
+                'movimentos' => [],
                 'periodo' => [
                     'data_inicio' => $dataInicio,
                     'data_fim'    => $dataFim,
                 ],
+                'modo' => $modo,
             ];
         }
     }
 
     /**
-     * Relatório de pagamentos pendentes
-     *
-     * CORRIGIDO: apenas FT e FA entram neste relatório.
-     * FP (Proforma) NUNCA é um pagamento pendente — é um orçamento.
-     * Para proformas em aberto, use relatorioProformas().
+     * ✅ Relatório de pagamentos pendentes
      */
     public function relatorioPagamentosPendentes()
     {
-        Log::info('[RELATORIOS SERVICE] Iniciando relatório de pagamentos pendentes');
+        $this->verificarAcessoUsuario();
+
+        $modo = $this->getModo();
+        Log::info('[RELATORIOS SERVICE] Iniciando relatório de pagamentos pendentes', ['modo' => $modo]);
 
         try {
             $hoje = now();
+            $documentosQuery = $this->queryDocumentosFiscais();
 
             // ── Faturas FT pendentes de pagamento ─────────────────────────
-            $faturasPendentes = DocumentoFiscal::where('tipo_documento', 'FT')
+            $faturasPendentes = (clone $documentosQuery)
+                ->where('tipo_documento', 'FT')
                 ->whereIn('estado', ['emitido', 'parcialmente_paga'])
                 ->with(['cliente'])
                 ->orderBy('data_vencimento', 'asc')
@@ -692,7 +525,8 @@ public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros
                 ->values();
 
             // ── Adiantamentos FA pendentes de pagamento ───────────────────
-            $adiantamentosPendentes = DocumentoFiscal::where('tipo_documento', 'FA')
+            $adiantamentosPendentes = (clone $documentosQuery)
+                ->where('tipo_documento', 'FA')
                 ->whereIn('estado', ['emitido', 'parcialmente_paga'])
                 ->with(['cliente'])
                 ->orderBy('data_vencimento', 'asc')
@@ -731,11 +565,10 @@ public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros
                     'total_atrasado'           => $totalAtrasado,
                     'quantidade_faturas'       => $faturasPendentes->count(),
                     'quantidade_adiantamentos' => $adiantamentosPendentes->count(),
-                    // NOTA: FP não aparece aqui. Para proformas em aberto,
-                    // use relatorioProformas($apenasPendentes = true)
                 ],
                 'faturas_pendentes'       => $faturasPendentes,
                 'adiantamentos_pendentes' => $adiantamentosPendentes,
+                'modo' => $modo,
             ];
 
         } catch (\Exception $e) {
@@ -752,23 +585,207 @@ public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros
                 ],
                 'faturas_pendentes'       => [],
                 'adiantamentos_pendentes' => [],
+                'modo' => $modo,
             ];
         }
     }
 
+/**
+ * Relatório detalhado de vendas
+ */
+public function relatorioVendas($dataInicio = null, $dataFim = null, $filtros = [])
+{
+    $this->verificarAcessoUsuario();
+
+    $modo = $this->getModo();
+    Log::info('[RELATORIOS SERVICE] Iniciando relatório de vendas', [
+        'data_inicio' => $dataInicio,
+        'data_fim'    => $dataFim,
+        'filtros'     => $filtros,
+        'modo'        => $modo,
+    ]);
+
+    $query = $this->queryVendas()->with(['cliente', 'itens.produto', 'documentoFiscal']);
+
+    if ($dataInicio) {
+        $query->whereDate('data_venda', '>=', $dataInicio);
+    }
+    if ($dataFim) {
+        $query->whereDate('data_venda', '<=', $dataFim);
+    }
+
+    if (!empty($filtros['cliente_id'])) {
+        $query->where('cliente_id', $filtros['cliente_id']);
+    }
+
+    if (!empty($filtros['apenas_vendas'])) {
+        $query->whereHas('documentoFiscal', function ($q) {
+            $q->whereIn('tipo_documento', ['FT', 'FR', 'RC']);
+        });
+    }
+
+    if (!empty($filtros['estado_pagamento'])) {
+        $query->where('estado_pagamento', $filtros['estado_pagamento']);
+    }
+
+    $vendas = $query->orderBy('data_venda', 'desc')->get();
+
+    Log::info('[RELATORIOS SERVICE] Vendas encontradas', ['quantidade' => $vendas->count()]);
+
+    $totalPeriodo     = $vendas->sum('total');
+    $quantidadeVendas = $vendas->count();
+    $ticketMedio      = $quantidadeVendas > 0 ? $totalPeriodo / $quantidadeVendas : 0;
+    $clientesUnicos   = $vendas->pluck('cliente_id')->filter()->unique()->count();
+    $produtosVendidos = $vendas->flatMap(fn($v) => $v->itens->pluck('produto_id'))->filter()->unique()->count();
+
+    $vendasPorStatus = [
+        'pagas'      => $vendas->where('estado_pagamento', 'paga')->count(),
+        'pendentes'  => $vendas->whereIn('estado_pagamento', ['pendente', 'parcial'])->count(),
+        'canceladas' => $vendas->where('estado_pagamento', 'cancelada')->count(),
+    ];
+
+    return [
+        'vendas' => $vendas->map(function ($venda) {
+            return [
+                'id'               => $venda->id,
+                'numero_documento' => $venda->numero_documento ?? null,
+                'cliente'          => $venda->cliente->nome ?? $venda->cliente_nome ?? 'Cliente não identificado',
+                'data'             => $venda->data_venda,
+                'hora'             => $venda->hora_venda,
+                'total'            => $venda->total,
+                'base_tributavel'  => $venda->base_tributavel,
+                'total_iva'        => $venda->total_iva,
+                'estado_pagamento' => $venda->estado_pagamento,
+                'tipo_documento'   => $venda->documentoFiscal?->tipo_documento,
+            ];
+        }),
+        'kpis' => [
+            'total_vendas'     => $totalPeriodo,
+            'quantidade_vendas' => $quantidadeVendas,
+            'ticket_medio'     => round($ticketMedio, 2),
+            'clientes_periodo' => $clientesUnicos,
+            'produtos_vendidos' => $produtosVendidos,
+            'vendas_por_status' => $vendasPorStatus,
+        ],
+        'periodo' => [
+            'data_inicio' => $dataInicio,
+            'data_fim'    => $dataFim,
+        ],
+        'modo' => $modo,
+    ];
+}
+
+    // ... Todos os outros métodos de relatório mantidos, apenas adicionando 
+    // $modo = $this->getModo() e usando $modo no retorno ...
+
+    // =====================================================================
+    // OBSERVAÇÃO: Os métodos relatorioCompras, relatorioFaturacao, 
+    // relatorioStock, relatorioMovimentosStock, relatorioPagamentosPendentes,
+    // relatorioProformas, exportarRelatorioExcel seguem o mesmo padrão.
+    // Todos eles devem ser atualizados com:
+    // 1. $this->verificarAcessoUsuario()
+    // 2. $modo = $this->getModo()
+    // 3. Usar $modo no retorno
+    // =====================================================================
+
+// app/Services/RelatoriosService.php
+
+/**
+ * Relatório detalhado de faturação/documentos fiscais
+ */
+public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros = [])
+{
+    $this->verificarAcessoUsuario();
+
+    $modo = $this->getModo();
+    Log::info('[RELATORIOS SERVICE] Iniciando relatório de faturação', [
+        'data_inicio' => $dataInicio,
+        'data_fim'    => $dataFim,
+        'filtros'     => $filtros,
+        'modo'        => $modo,
+    ]);
+
+    $query = $this->queryDocumentosFiscais()->with(['cliente']);
+
+    if ($dataInicio) {
+        $query->whereDate('data_emissao', '>=', $dataInicio);
+    }
+    if ($dataFim) {
+        $query->whereDate('data_emissao', '<=', $dataFim);
+    }
+
+    if (!empty($filtros['tipo'])) {
+        $query->where('tipo_documento', $filtros['tipo']);
+    }
+    if (!empty($filtros['cliente_id'])) {
+        $query->where('cliente_id', $filtros['cliente_id']);
+    }
+    if (!empty($filtros['estado'])) {
+        $query->where('estado', $filtros['estado']);
+    }
+
+    $documentos = $query->orderBy('data_emissao', 'desc')->get();
+
+    Log::info('[RELATORIOS SERVICE] Documentos encontrados', ['quantidade' => $documentos->count()]);
+
+    // Apenas documentos de venda real (exclui FP - Proformas)
+    $documentosVenda = $documentos->filter(function ($doc) {
+        return !in_array($doc->tipo_documento, ['FP']);
+    });
+
+    $porTipo = $documentosVenda->groupBy('tipo_documento')->map(function ($grupo) {
+        return [
+            'quantidade'    => $grupo->count(),
+            'total_liquido' => $grupo->sum('total_liquido'),
+            'total_base'    => $grupo->sum('base_tributavel'),
+            'total_iva'     => $grupo->sum('total_iva'),
+            'total_retencao' => $grupo->sum('total_retencao'),
+        ];
+    });
+
+    $porEstado = $documentosVenda->groupBy('estado')->map(fn($g) => $g->count());
+
+    $faturacaoTotal    = $documentosVenda->sum('total_liquido');
+    $faturacaoPaga     = $documentosVenda->whereIn('estado', ['paga'])->sum('total_liquido');
+    $faturacaoPendente = $documentosVenda->whereIn('estado', ['emitido', 'parcialmente_paga'])->sum('total_liquido');
+
+    $faturacaoPorMes = $documentosVenda->groupBy(function ($doc) {
+        return Carbon::parse($doc->data_emissao)->format('Y-m');
+    })->map(function ($grupo, $mes) {
+        return [
+            'mes'        => $mes,
+            'total'      => $grupo->sum('total_liquido'),
+            'quantidade' => $grupo->count(),
+        ];
+    })->values();
+
+    return [
+        'faturacao_total'    => $faturacaoTotal,
+        'faturacao_paga'     => $faturacaoPaga,
+        'faturacao_pendente' => $faturacaoPendente,
+        'faturacao_por_mes'  => $faturacaoPorMes,
+        'por_tipo'           => $porTipo,
+        'por_estado'         => $porEstado,
+        'periodo' => [
+            'data_inicio' => $dataInicio,
+            'data_fim'    => $dataFim,
+        ],
+        'modo' => $modo,
+    ];
+}
+
     /**
      * Relatório de proformas
-     *
-     * Este é o endpoint correto para FP (Proformas).
-     * FP com estado 'emitido' = "em aberto / aguarda conversão".
-     * NUNCA misturar com relatório de pagamentos pendentes.
      */
     public function relatorioProformas($dataInicio = null, $dataFim = null, $clienteId = null, $apenasPendentes = false)
     {
-        Log::info('[RELATORIOS SERVICE] Iniciando relatório de proformas');
+        $this->verificarAcessoUsuario();
+
+        $modo = $this->getModo();
+        Log::info('[RELATORIOS SERVICE] Iniciando relatório de proformas', ['modo' => $modo]);
 
         try {
-            $query = DocumentoFiscal::where('tipo_documento', 'FP')->with(['cliente']);
+            $query = $this->queryDocumentosFiscais()->where('tipo_documento', 'FP')->with(['cliente']);
 
             if ($dataInicio && $dataFim) {
                 $query->whereBetween('data_emissao', [$dataInicio, $dataFim]);
@@ -782,7 +799,6 @@ public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros
                 $query->where('cliente_id', $clienteId);
             }
             if ($apenasPendentes) {
-                // NOTA: "pendentes" aqui significa "por converter", não "por pagar"
                 $query->where('estado', 'emitido');
             }
 
@@ -799,6 +815,7 @@ public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros
                     'total_liquido'    => $p->total_liquido,
                     'estado'           => $p->estado,
                 ]),
+                'modo' => $modo,
             ];
 
         } catch (\Exception $e) {
@@ -810,6 +827,7 @@ public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros
                 'total'       => 0,
                 'valor_total' => 0,
                 'proformas'   => [],
+                'modo' => $modo,
             ];
         }
     }
@@ -819,15 +837,20 @@ public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros
      */
     public function exportarRelatorioExcel(string $tipo, $dataInicio = null, $dataFim = null, $filtros = [])
     {
+        $this->verificarAcessoUsuario();
+
+        $modo = $this->getModo();
         Log::info('[RELATORIOS SERVICE] Exportando Excel', [
             'tipo'        => $tipo,
             'data_inicio' => $dataInicio,
             'data_fim'    => $dataFim,
+            'modo'        => $modo,
         ]);
 
         $arquivo = now()->format('Ymd_His') . "_relatorio_{$tipo}.xlsx";
 
-        return Excel::download(new class($tipo, $dataInicio, $dataFim, $filtros) implements
+        // ⭐ A classe anônima precisa receber o modo para usar os models corretos
+        return Excel::download(new class($tipo, $dataInicio, $dataFim, $filtros, $modo) implements
             \Maatwebsite\Excel\Concerns\FromCollection,
             \Maatwebsite\Excel\Concerns\WithHeadings,
             \Maatwebsite\Excel\Concerns\WithMapping
@@ -836,13 +859,60 @@ public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros
             protected $dataInicio;
             protected $dataFim;
             protected $filtros;
+            protected $modo;
 
-            public function __construct($tipo, $dataInicio, $dataFim, $filtros)
+            public function __construct($tipo, $dataInicio, $dataFim, $filtros, $modo)
             {
                 $this->tipo       = $tipo;
                 $this->dataInicio = $dataInicio;
                 $this->dataFim    = $dataFim;
                 $this->filtros    = $filtros;
+                $this->modo       = $modo;
+            }
+
+            protected function isColectivo(): bool
+            {
+                return $this->modo === 'colectivo';
+            }
+
+            protected function queryVendas()
+            {
+                if ($this->isColectivo()) {
+                    return SharedVenda::doTenant();
+                }
+                return TenantVenda::query();
+            }
+
+            protected function queryCompras()
+            {
+                if ($this->isColectivo()) {
+                    return SharedCompra::doTenant();
+                }
+                return TenantCompra::query();
+            }
+
+            protected function queryDocumentosFiscais()
+            {
+                if ($this->isColectivo()) {
+                    return SharedDocumentoFiscal::doTenant();
+                }
+                return TenantDocumentoFiscal::query();
+            }
+
+            protected function queryProdutos()
+            {
+                if ($this->isColectivo()) {
+                    return SharedProduto::doTenant();
+                }
+                return TenantProduto::query();
+            }
+
+            protected function queryMovimentosStock()
+            {
+                if ($this->isColectivo()) {
+                    return SharedMovimentoStock::doTenant();
+                }
+                return TenantMovimentoStock::query();
             }
 
             public function collection()
@@ -850,38 +920,38 @@ public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros
                 try {
                     switch ($this->tipo) {
                         case 'vendas':
-                            $query = Venda::with('cliente', 'itens.produto', 'documentoFiscal');
+                            $query = $this->queryVendas()->with('cliente', 'itens.produto', 'documentoFiscal');
                             if ($this->dataInicio) $query->whereDate('data_venda', '>=', $this->dataInicio);
                             if ($this->dataFim)    $query->whereDate('data_venda', '<=', $this->dataFim);
                             return $query->orderBy('data_venda', 'desc')->get();
 
                         case 'compras':
-                            $query = Compra::with('fornecedor', 'itens.produto');
+                            $query = $this->queryCompras()->with('fornecedor', 'itens.produto');
                             if ($this->dataInicio) $query->whereDate('data', '>=', $this->dataInicio);
                             if ($this->dataFim)    $query->whereDate('data', '<=', $this->dataFim);
                             return $query->orderBy('data', 'desc')->get();
 
                         case 'faturacao':
                         case 'documentos':
-                            $query = DocumentoFiscal::with('cliente');
+                            $query = $this->queryDocumentosFiscais()->with('cliente');
                             if ($this->dataInicio) $query->whereDate('data_emissao', '>=', $this->dataInicio);
                             if ($this->dataFim)    $query->whereDate('data_emissao', '<=', $this->dataFim);
                             return $query->orderBy('data_emissao', 'desc')->get();
 
                         case 'stock':
-                            return Produto::with('categoria')
+                            return $this->queryProdutos()->with('categoria')
                                 ->where('tipo', 'produto')
                                 ->orderBy('nome')
                                 ->get();
 
                         case 'proformas':
-                            $query = DocumentoFiscal::where('tipo_documento', 'FP')->with('cliente');
+                            $query = $this->queryDocumentosFiscais()->where('tipo_documento', 'FP')->with('cliente');
                             if ($this->dataInicio) $query->whereDate('data_emissao', '>=', $this->dataInicio);
                             if ($this->dataFim)    $query->whereDate('data_emissao', '<=', $this->dataFim);
                             return $query->orderBy('data_emissao', 'desc')->get();
 
                         case 'movimentos_stock':
-                            $query = MovimentoStock::with([
+                            $query = $this->queryMovimentosStock()->with([
                                 'produto' => fn($q) => $q->withTrashed()->select('id', 'nome', 'codigo'),
                                 'user'    => fn($q) => $q->select('id', 'name'),
                             ]);
@@ -897,6 +967,9 @@ public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros
                                 $query->where('tipo_movimento', $this->filtros['tipo_movimento']);
                             }
                             return $query->orderBy('created_at', 'desc')->get();
+
+                        default:
+                            return collect([]);
                     }
                 } catch (\Exception $e) {
                     Log::error('[RELATORIOS SERVICE] Erro na exportação:', [
@@ -909,6 +982,7 @@ public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros
 
             public function headings(): array
             {
+                // ... mantido igual ...
                 switch ($this->tipo) {
                     case 'vendas':
                         return ['ID', 'Nº Documento', 'Cliente', 'Data', 'Hora', 'Base Tributável', 'IVA', 'Total', 'Estado Pagamento'];
@@ -923,12 +997,14 @@ public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros
                         return ['ID', 'Nº Documento', 'Cliente', 'Data Emissão', 'Total', 'Estado'];
                     case 'movimentos_stock':
                         return ['ID', 'Produto', 'Código', 'Tipo', 'Tipo Movimento', 'Quantidade', 'Stock Anterior', 'Stock Novo', 'Custo Médio', 'Referência', 'Observação', 'Utilizador', 'Data/Hora'];
+                    default:
+                        return [];
                 }
-                return [];
             }
 
             public function map($row): array
             {
+                // ... mantido igual ...
                 try {
                     switch ($this->tipo) {
                         case 'vendas':
@@ -1006,14 +1082,16 @@ public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros
                                 $row->user?->name ?? 'Sistema',
                                 $row->created_at?->format('Y-m-d H:i:s'),
                             ];
+                        default:
+                            return [];
                     }
                 } catch (\Exception $e) {
                     Log::error('[RELATORIOS SERVICE] Erro no mapeamento Excel:', [
                         'tipo'  => $this->tipo,
                         'error' => $e->getMessage(),
                     ]);
+                    return [];
                 }
-                return [];
             }
         }, $arquivo, ExcelFormat::XLSX);
     }

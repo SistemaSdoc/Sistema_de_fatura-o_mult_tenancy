@@ -2,7 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Tenant\DocumentoFiscal;
+use App\Models\Shared\DocumentoFiscal as SharedDocumentoFiscal;
+use App\Models\Tenant\DocumentoFiscal as TenantDocumentoFiscal;
+use App\Models\Empresa;
+use App\Models\LandlordUser;
+use App\Models\Shared\User as SharedUser;
+use App\Models\Tenant\User as TenantUser;
 use App\Services\DocumentoFiscalService;
 use App\Services\ImpressoraTermicaService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -16,40 +21,236 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Auth;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 
 /**
  * DocumentoFiscalController
  *
- * Responsável apenas por: validação de request, autorização, chamar o service
- * e devolver resposta JSON/PDF/Excel.
- * Toda a lógica de negócio (assinatura RSA, QR Code, IVA, SAF-T) está no
- * DocumentoFiscalService.
- * 
- * ALTERAÇÃO: Proformas (FP) NÃO são consideradas em valores de faturação
- * ou pendências financeiras, pois não representam vendas efetivas.
+ * ✅ SUPORTA AMBOS OS MODOS:
+ * - 'colectivo' → Shared DB (com tenant_id)
+ * - 'singular' → Tenant DB (banco dedicado)
  */
 class DocumentoFiscalController extends Controller
 {
     protected DocumentoFiscalService $documentoService;
+    protected ?Empresa $empresa = null;
+    protected string $modo = 'colectivo';
+    protected ?object $tenantUser = null;
 
     public function __construct(DocumentoFiscalService $documentoService)
     {
         $this->documentoService = $documentoService;
+        
+        // ✅ Obtém da sessão (prioridade)
+        $this->empresa = app('current.empresa');
+        $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
+        
+        Log::debug('[DocumentoFiscalController] Inicializado', [
+            'modo' => $this->modo,
+            'empresa_id' => $this->empresa?->id,
+        ]);
     }
 
     /* =====================================================================
-     | LISTAGEM
+     | HELPERS
+     | ================================================================== */
+
+
+    protected function isColectivo(): bool
+    {
+        return $this->getModo() === 'colectivo';
+    }
+
+    protected function isSingular(): bool
+    {
+        return $this->getModo() === 'singular';
+    }
+
+    protected function documentoFiscalModel()
+    {
+        return $this->isColectivo() ? new SharedDocumentoFiscal() : new TenantDocumentoFiscal();
+    }
+
+    protected function queryDocumentosFiscais()
+    {
+        if ($this->isColectivo()) {
+            return SharedDocumentoFiscal::doTenant();
+        }
+        return TenantDocumentoFiscal::query();
+    }
+
+    protected function buscarDocumento(string $id, bool $comTrashed = false)
+    {
+        if ($this->isColectivo()) {
+            $query = SharedDocumentoFiscal::doTenant();
+            if ($comTrashed) {
+                $query = $query->withTrashed();
+            }
+            return $query->where('id', $id)->first();
+        }
+
+        if ($comTrashed) {
+            return TenantDocumentoFiscal::withTrashed()->where('id', $id)->first();
+        }
+        return TenantDocumentoFiscal::where('id', $id)->first();
+    }
+
+    protected function buscarDocumentoOrFail(string $id, bool $comTrashed = false)
+    {
+        if ($this->isColectivo()) {
+            $query = SharedDocumentoFiscal::doTenant();
+            if ($comTrashed) {
+                $query = $query->withTrashed();
+            }
+            return $query->where('id', $id)->firstOrFail();
+        }
+
+        if ($comTrashed) {
+            return TenantDocumentoFiscal::withTrashed()->where('id', $id)->firstOrFail();
+        }
+        return TenantDocumentoFiscal::where('id', $id)->firstOrFail();
+    }
+
+    protected function queryAdiantamentosPendentes()
+    {
+        if ($this->isColectivo()) {
+            return SharedDocumentoFiscal::doTenant()->adiantamentosPendentes();
+        }
+        return TenantDocumentoFiscal::adiantamentosPendentes();
+    }
+
+    protected function queryProformasPendentes()
+    {
+        if ($this->isColectivo()) {
+            return SharedDocumentoFiscal::doTenant()->proformasPendentes();
+        }
+        return TenantDocumentoFiscal::proformasPendentes();
+    }
+
+    /* =====================================================================
+     | VERIFICAÇÃO DE ACESSO - CORRIGIDA ✅
+     | ================================================================== */
+
+protected function verificarAcessoUsuario(): void
+{
+    Log::debug('[DocumentoFiscalController] Verificando acesso');
+
+    // 1️⃣ Obtém a empresa
+    $this->empresa = app('current.empresa');
+    if (!$this->empresa) {
+        Log::error('[DocumentoFiscalController] Empresa não identificada.');
+        throw new \Exception('Empresa não identificada.', 400);
+    }
+
+    // ✅ Atualiza o modo
+    $this->modo = $this->empresa->modo ?? 'colectivo';
+
+    // 2️⃣ Obtém o landlord user
+    $landlordUser = Auth::guard('landlord')->user();
+
+    // 3️⃣ Fallback
+    if (!$landlordUser) {
+        $landlordId = session('landlord_user_id');
+        if ($landlordId) {
+            $landlordUser = LandlordUser::find($landlordId);
+        }
+    }
+
+    if (!$landlordUser) {
+        Log::error('[DocumentoFiscalController] Utilizador landlord não autenticado.');
+        throw new \Exception('Usuário não autenticado.', 401);
+    }
+
+    // 4️⃣ Busca o TenantUser
+    $tenantUser = $this->buscarUsuario($this->empresa, $landlordUser->email);
+    if (!$tenantUser) {
+        Log::error('[DocumentoFiscalController] Utilizador tenant não encontrado.', [
+            'email' => $landlordUser->email,
+        ]);
+        throw new \Exception('Usuário não tem permissão para aceder a esta empresa.', 403);
+    }
+
+    $this->tenantUser = $tenantUser;
+
+    Log::info('[DocumentoFiscalController] Acesso verificado com sucesso', [
+        'modo' => $this->modo,
+        'user_id' => $tenantUser->id,
+        'email' => $tenantUser->email,
+    ]);
+}
+
+    protected function buscarUsuario(Empresa $empresa, string $email): ?object
+    {
+        if ($empresa->modo === 'singular') {
+            return TenantUser::on('tenant')->where('email', $email)->first();
+        }
+        return SharedUser::on('shared')
+            ->where('email', $email)
+            ->where('tenant_id', $empresa->id)
+            ->first();
+    }
+
+    protected function getUserId(): ?string
+    {
+        return $this->tenantUser?->id;
+    }
+
+    protected function obterEmpresaAtual(): ?array
+    {
+        if ($this->empresa) {
+            return $this->empresa->toArray();
+        }
+
+        $dbName = config('database.connections.tenant.database');
+        if ($dbName) {
+            $empresa = Empresa::on('landlord')->where('db_name', $dbName)->first();
+            if ($empresa) {
+                return $empresa->toArray();
+            }
+        }
+
+        return null;
+    }
+
+    protected function getModo(): string
+{
+    $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
+    return $this->modo;
+}
+
+/**
+ * ✅ Obtém o tenantUser, verificando se está carregado
+ */
+protected function getTenantUser(): ?object
+{
+    if (!$this->tenantUser) {
+        try {
+            $this->verificarAcessoUsuario();
+        } catch (\Exception $e) {
+            Log::warning('[DocumentoFiscalController] Não foi possível carregar tenantUser', [
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
+    }
+    return $this->tenantUser;
+}
+
+    /* =====================================================================
+     | MÉTODOS DO CONTROLLER (MANTIDOS OS NOMES)
      | ================================================================== */
 
     public function index(Request $request): JsonResponse
     {
+        $modo = $this->getModo();
+        
         try {
+            $this->verificarAcessoUsuario();
+
             $filtros = $request->validate([
                 'tipo'                    => 'nullable|in:FT,FR,FP,FA,NC,ND,RC,FRt',
                 'estado'                  => 'nullable|in:emitido,paga,parcialmente_paga,cancelado,expirado',
@@ -89,6 +290,7 @@ class DocumentoFiscalController extends Controller
                 'success' => true,
                 'message' => 'Lista de documentos carregada com sucesso',
                 'data'    => $documentos,
+                'modo'    => $modo,
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json(['success' => false, 'message' => 'Erro de validação', 'errors' => $e->errors()], 422);
@@ -97,18 +299,20 @@ class DocumentoFiscalController extends Controller
         }
     }
 
-    /* =====================================================================
-     | DETALHE
-     | ================================================================== */
-
     public function show(string $id): JsonResponse
     {
+        $modo = $this->getModo();
+        
         try {
+            $this->verificarAcessoUsuario();
+
             $documento = $this->documentoService->buscarDocumento($id);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Documento carregado com sucesso',
                 'data'    => ['documento' => $documento],
+                'modo'    => $modo,
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             return response()->json(['success' => false, 'message' => 'Documento não encontrado'], 404);
@@ -117,13 +321,13 @@ class DocumentoFiscalController extends Controller
         }
     }
 
-    /* =====================================================================
-     | EMISSÃO
-     | ================================================================== */
-
     public function emitir(Request $request): JsonResponse
     {
+        $modo = $this->getModo();
+        
         try {
+            $this->verificarAcessoUsuario();
+
             $dados = $request->validate([
                 'tipo_documento'             => 'required|in:FT,FR,FP,FA,NC,ND,RC,FRt',
                 'venda_id'                   => 'nullable|uuid|exists:vendas,id',
@@ -166,6 +370,7 @@ class DocumentoFiscalController extends Controller
                 'success' => true,
                 'message' => 'Documento emitido com sucesso',
                 'data'    => $documento,
+                'modo'    => $modo,
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json(['success' => false, 'message' => 'Erro de validação', 'errors' => $e->errors()], 422);
@@ -176,24 +381,22 @@ class DocumentoFiscalController extends Controller
         }
     }
 
-    /* =====================================================================
-     | RECIBO
-     | ================================================================== */
-
     public function gerarRecibo(Request $request, string $documentoId): JsonResponse
     {
+        $modo = $this->getModo();
+        
         try {
+            $this->verificarAcessoUsuario();
+
             $documento = $this->documentoService->buscarDocumento($documentoId);
 
-            // ALTERADO: Proformas (FP) NÃO podem mais gerar recibos diretamente
             if ($documento->tipo_documento === 'FP') {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Proformas (FP) não podem gerar recibos diretamente. Utilize o endpoint /converter-proforma/{id} para converter a Proforma em Fatura-Recibo (FR) ou Fatura (FT).',
+                    'message' => 'Proformas (FP) não podem gerar recibos diretamente.',
                 ], 422);
             }
 
-            // Apenas FT e FA podem gerar recibos
             if (!in_array($documento->tipo_documento, ['FT', 'FA'])) {
                 return response()->json([
                     'success' => false,
@@ -216,6 +419,7 @@ class DocumentoFiscalController extends Controller
                 'success' => true,
                 'message' => 'Recibo gerado com sucesso',
                 'data'    => $recibo,
+                'modo'    => $modo,
             ], 201);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             return response()->json(['success' => false, 'message' => 'Documento não encontrado'], 404);
@@ -228,13 +432,13 @@ class DocumentoFiscalController extends Controller
         }
     }
 
-    /* =====================================================================
-     | NOTA DE CRÉDITO (CORRIGIDO)
-     | ================================================================== */
-
     public function criarNotaCredito(Request $request, string $documentoId): JsonResponse
     {
+        $modo = $this->getModo();
+        
         try {
+            $this->verificarAcessoUsuario();
+
             $documento = $this->documentoService->buscarDocumento($documentoId);
 
             /**
@@ -361,6 +565,12 @@ class DocumentoFiscalController extends Controller
                 throw $e;
             }
 
+            return response()->json([
+                'success' => true,
+                'message' => 'Nota de Crédito emitida com sucesso',
+                'data'    => $nc,
+                'modo'    => $modo,
+            ], 201);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             return response()->json(['success' => false, 'message' => 'Documento de origem não encontrado'], 404);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -372,13 +582,13 @@ class DocumentoFiscalController extends Controller
         }
     }
 
-    /* =====================================================================
-     | NOTA DE DÉBITO (CORRIGIDO)
-     | ================================================================== */
-
     public function criarNotaDebito(Request $request, string $documentoId): JsonResponse
     {
+        $modo = $this->getModo();
+        
         try {
+            $this->verificarAcessoUsuario();
+
             $documento = $this->documentoService->buscarDocumento($documentoId);
 
             /**
@@ -604,6 +814,12 @@ class DocumentoFiscalController extends Controller
                 throw $e;
             }
 
+            return response()->json([
+                'success' => true,
+                'message' => 'Nota de Débito emitida com sucesso',
+                'data'    => $nd,
+                'modo'    => $modo,
+            ], 201);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             return response()->json(['success' => false, 'message' => 'Documento de origem não encontrado'], 404);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -615,13 +831,13 @@ class DocumentoFiscalController extends Controller
         }
     }
 
-    /* =====================================================================
-     | ADIANTAMENTO
-     | ================================================================== */
-
     public function vincularAdiantamento(Request $request, string $adiantamentoId): JsonResponse
     {
+        $modo = $this->getModo();
+        
         try {
+            $this->verificarAcessoUsuario();
+
             $adiantamento = $this->documentoService->buscarDocumento($adiantamentoId);
 
             $dados = $request->validate([
@@ -636,6 +852,7 @@ class DocumentoFiscalController extends Controller
                 'success' => true,
                 'message' => 'Adiantamento vinculado com sucesso',
                 'data'    => $resultado,
+                'modo'    => $modo,
             ]);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
@@ -644,13 +861,13 @@ class DocumentoFiscalController extends Controller
         }
     }
 
-    /* =====================================================================
-     | CANCELAMENTO
-     | ================================================================== */
-
     public function cancelar(Request $request, string $documentoId): JsonResponse
     {
+        $modo = $this->getModo();
+        
         try {
+            $this->verificarAcessoUsuario();
+
             $documento = $this->documentoService->buscarDocumento($documentoId);
             $dados     = $request->validate(['motivo' => 'required|string|min:10|max:500']);
             $resultado = $this->documentoService->cancelarDocumento($documento, $dados['motivo']);
@@ -659,6 +876,7 @@ class DocumentoFiscalController extends Controller
                 'success' => true,
                 'message' => 'Documento cancelado com sucesso',
                 'data'    => $resultado,
+                'modo'    => $modo,
             ]);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
@@ -667,43 +885,56 @@ class DocumentoFiscalController extends Controller
         }
     }
 
-    /* =====================================================================
-     | RECIBOS DE UM DOCUMENTO
-     | ================================================================== */
-
     public function listarRecibos(string $documentoId): JsonResponse
     {
+        $modo = $this->getModo();
+        
         try {
+            $this->verificarAcessoUsuario();
+
             $documento = $this->documentoService->buscarDocumento($documentoId);
-            $recibos   = $documento->recibos()->with('user')->get();
+            
+            if ($this->isColectivo()) {
+                $recibos = SharedDocumentoFiscal::doTenant()
+                    ->where('fatura_id', $documento->id)
+                    ->where('tipo_documento', 'RC')
+                    ->with('user')
+                    ->get();
+            } else {
+                $recibos = TenantDocumentoFiscal::where('fatura_id', $documento->id)
+                    ->where('tipo_documento', 'RC')
+                    ->with('user')
+                    ->get();
+            }
 
             return response()->json([
                 'success' => true,
                 'message' => 'Recibos carregados com sucesso',
                 'data'    => $recibos,
+                'modo'    => $modo,
             ]);
         } catch (\Exception $e) {
             return $this->erroInterno('Erro ao carregar recibos', $e);
         }
     }
 
-    /* =====================================================================
-     | ADIANTAMENTOS E PROFORMAS PENDENTES
-     | ================================================================== */
-
     public function adiantamentosPendentes(Request $request): JsonResponse
     {
+        $modo = $this->getModo();
+        
         try {
+            $this->verificarAcessoUsuario();
+
             $dados = $request->validate([
                 'cliente_id'   => 'nullable|uuid|exists:clientes,id',
                 'cliente_nome' => 'nullable|string|max:255',
             ]);
 
-            $query = DocumentoFiscal::adiantamentosPendentes()->with('cliente');
+            $query = $this->queryAdiantamentosPendentes()->with('cliente');
 
-            if (! empty($dados['cliente_id'])) {
+            if (!empty($dados['cliente_id'])) {
                 $query->where('cliente_id', $dados['cliente_id']);
-            } elseif (! empty($dados['cliente_nome'])) {
+            } elseif (!empty($dados['cliente_nome'])) {
                 $query->where('cliente_nome', 'like', '%' . $dados['cliente_nome'] . '%');
             }
 
@@ -711,6 +942,7 @@ class DocumentoFiscalController extends Controller
                 'success' => true,
                 'message' => 'Adiantamentos pendentes carregados',
                 'data'    => $query->get(),
+                'modo'    => $modo,
             ]);
         } catch (\Exception $e) {
             return $this->erroInterno('Erro ao carregar adiantamentos', $e);
@@ -719,17 +951,21 @@ class DocumentoFiscalController extends Controller
 
     public function proformasPendentes(Request $request): JsonResponse
     {
+        $modo = $this->getModo();
+        
         try {
+            $this->verificarAcessoUsuario();
+
             $dados = $request->validate([
                 'cliente_id'   => 'nullable|uuid|exists:clientes,id',
                 'cliente_nome' => 'nullable|string|max:255',
             ]);
 
-            $query = DocumentoFiscal::proformasPendentes()->with('cliente');
+            $query = $this->queryProformasPendentes()->with('cliente');
 
-            if (! empty($dados['cliente_id'])) {
+            if (!empty($dados['cliente_id'])) {
                 $query->where('cliente_id', $dados['cliente_id']);
-            } elseif (! empty($dados['cliente_nome'])) {
+            } elseif (!empty($dados['cliente_nome'])) {
                 $query->where('cliente_nome', 'like', '%' . $dados['cliente_nome'] . '%');
             }
 
@@ -737,66 +973,67 @@ class DocumentoFiscalController extends Controller
                 'success' => true,
                 'message' => 'Proformas pendentes carregadas',
                 'data'    => $query->get(),
+                'modo'    => $modo,
             ]);
         } catch (\Exception $e) {
             return $this->erroInterno('Erro ao carregar proformas', $e);
         }
     }
 
-    /* =====================================================================
-     | ALERTAS
-     | ================================================================== */
-
     public function alertas(): JsonResponse
     {
+        $modo = $this->getModo();
+        
         try {
+            $this->verificarAcessoUsuario();
+
             $alertas = $this->documentoService->alertasPendentes();
+
             return response()->json([
                 'success' => true,
                 'message' => 'Alertas de documentos fiscais',
                 'data'    => ['alertas' => $alertas],
+                'modo'    => $modo,
             ]);
         } catch (\Exception $e) {
             return $this->erroInterno('Erro ao gerar alertas', $e);
         }
     }
 
-    /* =====================================================================
-     | PROCESSAMENTO DE ADIANTAMENTOS EXPIRADOS
-     | ================================================================== */
-
     public function processarExpirados(): JsonResponse
     {
+        $modo = $this->getModo();
+        
         try {
+            $this->verificarAcessoUsuario();
+
             $count = $this->documentoService->processarAdiantamentosExpirados();
 
             return response()->json([
                 'success' => true,
                 'message' => "Processamento concluído. {$count} adiantamentos expirados.",
                 'data'    => ['expirados' => $count],
+                'modo'    => $modo,
             ]);
         } catch (\Exception $e) {
             return $this->erroInterno('Erro ao processar adiantamentos expirados', $e);
         }
     }
 
-    /* =====================================================================
-     | DASHBOARD
-     | ================================================================== */
-
-    /**
-     * Dashboard de documentos fiscais
-     * ALTERAÇÃO: Proformas (FP) NÃO são incluídas nos valores de faturação
-     * para não distorcer as métricas financeiras.
-     */
     public function dashboard(): JsonResponse
     {
+        $modo = $this->getModo();
+        
         try {
+            $this->verificarAcessoUsuario();
+
             $resumo = $this->documentoService->dadosDashboard();
+
             return response()->json([
                 'success' => true,
                 'message' => 'Dashboard carregado com sucesso',
                 'data'    => $resumo,
+                'modo'    => $modo,
             ]);
         } catch (\Exception $e) {
             return $this->erroInterno('Erro ao carregar dashboard', $e);
@@ -805,62 +1042,79 @@ class DocumentoFiscalController extends Controller
 
     public function evolucaoMensal(Request $request): JsonResponse
     {
+        $modo = $this->getModo();
+        
         try {
+            $this->verificarAcessoUsuario();
+
             $ano = (int) $request->input('ano', now()->year);
             if ($ano < 2020 || $ano > 2100) {
                 $ano = now()->year;
             }
+
             $evolucao = $this->documentoService->evolucaoMensal($ano);
 
             return response()->json([
                 'success' => true,
                 'message' => 'Evolução mensal carregada com sucesso',
                 'data'    => ['ano' => $ano, 'evolucao' => $evolucao],
+                'modo'    => $modo,
             ]);
         } catch (\Exception $e) {
             return $this->erroInterno('Erro ao carregar evolução mensal', $e);
         }
     }
 
-    /**
-     * Estatísticas de pagamentos
-     * ALTERAÇÃO: Proformas (FP) NÃO são consideradas em valores pendentes/atrasados
-     */
     public function estatisticasPagamentos(): JsonResponse
     {
+        $modo = $this->getModo();
+        
         try {
+            $this->verificarAcessoUsuario();
+
             $estatisticas = $this->documentoService->estatisticasPagamentos();
+
             return response()->json([
                 'success' => true,
                 'message' => 'Estatísticas de pagamentos carregadas com sucesso',
                 'data'    => ['estatisticas' => $estatisticas],
+                'modo'    => $modo,
             ]);
         } catch (\Exception $e) {
             return $this->erroInterno('Erro ao carregar estatísticas de pagamentos', $e);
         }
     }
 
-    /* =====================================================================
-     | IMPRESSÃO TÉRMICA DIRETA — APENAS USB (70mm)
-     | ================================================================== */
-
     public function imprimirTermica(string $id, ImpressoraTermicaService $impressoraService): JsonResponse
     {
+        $modo = $this->getModo();
+        
         try {
-            $user = Auth::guard('tenant')->user();
+            $this->verificarAcessoUsuario();
+
+            $user = Auth::guard('landlord')->user();
 
             if (!$impressoraService->testarConexao()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Impressora USB não encontrada ou sem permissão. Verifique o cabo e as permissões.',
+                    'message' => 'Impressora USB não encontrada ou sem permissão.',
                 ], 400);
             }
 
-            $documento = $this->documentoService->buscarDocumento($id);
-            $dados     = $this->documentoService->dadosParaPdf($documento);
+            if ($this->isColectivo()) {
+                $documento = SharedDocumentoFiscal::doTenant()->with(['itens.produto', 'cliente'])->where('id', $id)->firstOrFail();
+            } else {
+                $documento = TenantDocumentoFiscal::with(['itens.produto', 'cliente'])->where('id', $id)->firstOrFail();
+            }
+
+            $dados = $this->documentoService->dadosParaPdf($documento);
 
             if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
-                $docInfo = DocumentoFiscal::with(['itens.produto', 'cliente'])->find($documento->fatura_id);
+                if ($this->isColectivo()) {
+                    $docInfo = SharedDocumentoFiscal::doTenant()->with(['itens.produto', 'cliente'])->where('id', $documento->fatura_id)->first();
+                } else {
+                    $docInfo = TenantDocumentoFiscal::with(['itens.produto', 'cliente'])->where('id', $documento->fatura_id)->first();
+                }
             } else {
                 $docInfo = $documento;
             }
@@ -868,86 +1122,71 @@ class DocumentoFiscalController extends Controller
             $dados['itens']   = $docInfo->itens ?? [];
             $dados['docInfo'] = $docInfo;
 
-            Log::info('Iniciando impressão térmica via USB', [
-                'id'             => $id,
-                'tipo_documento' => $documento->tipo_documento ?? 'unknown',
-                'itens_count'    => count($dados['itens']),
-            ]);
-
             $impressoraService->imprimirDocumento($documento, $dados, $user);
 
             return response()->json([
                 'success' => true,
                 'id'      => $id,
                 'message' => 'Documento impresso com sucesso',
+                'modo'    => $modo,
             ]);
         } catch (\Exception $e) {
             return $this->erroInterno('Erro na impressão térmica', $e);
         }
     }
 
-    /* =====================================================================
-     | IMPRESSÃO A4 (HTML para impressão)
-     | ================================================================== */
-
-    /**
-     * Abre uma página HTML formatada para impressão em papel A4
-     * Rota: GET /api/documentos-fiscais/{id}/print-a4
-     */
-    public function printA4(Request $request, string $id): \Illuminate\Contracts\View\View
+    public function printA4(string $id): \Illuminate\Contracts\View\View
     {
         try {
-            Log::info('printA4 called', ['id' => $id]);
-            
-            $documento = $this->documentoService->buscarDocumento($id);
-            $dados = $this->documentoService->dadosParaPdf($documento);
-            
-            // Buscar dados completos da empresa
-            $empresa = \App\Models\Empresa::on('landlord')
-                ->where('db_name', config('database.connections.tenant.database'))
-                ->first();
-            
-            if ($empresa) {
-                $empresaArray = $empresa->toArray();
-                $empresaArray['logo_base64'] = null;
-                
-                // Tenta carregar o logo em base64
-                $logoPath = $empresaArray['logo'] ?? null;
-                if (!empty($logoPath)) {
-                    try {
-                        if (Storage::disk('public')->exists($logoPath)) {
-                            $logoConteudo = Storage::disk('public')->get($logoPath);
-                            $logoMime = Storage::disk('public')->mimeType($logoPath) ?: 'image/jpeg';
-                            $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
-                        } elseif (file_exists(public_path($logoPath))) {
-                            $logoConteudo = file_get_contents(public_path($logoPath));
-                            $logoMime = mime_content_type(public_path($logoPath)) ?: 'image/jpeg';
-                            $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
-                        }
-                    } catch (\Throwable $logoErr) {
-                        Log::warning('printA4: erro ao converter logo', ['error' => $logoErr->getMessage()]);
-                    }
-                }
-                
-                $dados['empresa'] = $empresaArray;
+            $this->verificarAcessoUsuario();
+
+            Log::info('printA4 called', ['id' => $id, 'modo' => $this->getModo()]);
+
+            if ($this->isColectivo()) {
+                $documento = SharedDocumentoFiscal::doTenant()->with(['itens.produto', 'cliente'])->where('id', $id)->firstOrFail();
             } else {
-                $dados['empresa'] = $dados['empresa'] ?? [];
+                $documento = TenantDocumentoFiscal::with(['itens.produto', 'cliente'])->where('id', $id)->firstOrFail();
             }
-            
-            // Garantir que o endereço está presente
+
+            $dados = $this->documentoService->dadosParaPdf($documento);
+
+            $empresaArray = $this->obterEmpresaAtual() ?? [];
+            $empresaArray['logo_base64'] = null;
+
+            $logoPath = $empresaArray['logo'] ?? null;
+            if (!empty($logoPath)) {
+                try {
+                    if (Storage::disk('public')->exists($logoPath)) {
+                        $logoConteudo = Storage::disk('public')->get($logoPath);
+                        $logoMime = Storage::disk('public')->mimeType($logoPath) ?: 'image/jpeg';
+                        $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
+                    } elseif (file_exists(public_path($logoPath))) {
+                        $logoConteudo = file_get_contents(public_path($logoPath));
+                        $logoMime = mime_content_type(public_path($logoPath)) ?: 'image/jpeg';
+                        $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
+                    }
+                } catch (\Throwable $logoErr) {
+                    Log::warning('printA4: erro ao converter logo', ['error' => $logoErr->getMessage()]);
+                }
+            }
+
+            $dados['empresa'] = $empresaArray;
+
             if (empty($dados['empresa']['endereco']) && !empty($dados['empresa']['morada'])) {
                 $dados['empresa']['endereco'] = $dados['empresa']['morada'];
             }
-            
-            // Buscar documento de origem para recibos
+
             $documentoOrigem = null;
             if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
-                $documentoOrigem = DocumentoFiscal::with(['itens.produto', 'cliente'])->find($documento->fatura_id);
+                if ($this->isColectivo()) {
+                    $documentoOrigem = SharedDocumentoFiscal::doTenant()->with(['itens.produto', 'cliente'])->where('id', $documento->fatura_id)->first();
+                } else {
+                    $documentoOrigem = TenantDocumentoFiscal::with(['itens.produto', 'cliente'])->where('id', $documento->fatura_id)->first();
+                }
             }
-            
+
             $docInfo = $documentoOrigem ?? $documento;
-            
-            // Gerar QR Code
+
             $qrCodeTexto = $dados['qr_code'] ?? null;
             $qrCodeImg = null;
             if ($qrCodeTexto) {
@@ -968,9 +1207,6 @@ class DocumentoFiscalController extends Controller
                     Log::warning('printA4: erro ao gerar QR Code', ['error' => $e->getMessage()]);
                 }
             }
-            
-            $proofUrl    = $this->montarUrlDeProva(request(), $id);
-            $proofQrHtml = $this->gerarQrHtml($proofUrl);
 
             return view('documentos.print-view', [
                 'empresa'         => $dados['empresa'],
@@ -987,76 +1223,60 @@ class DocumentoFiscalController extends Controller
                 'descontoGlobal'  => $dados['desconto_global'] ?? 0,
                 'troco'           => $dados['troco'] ?? 0,
                 'temDesconto'     => ($dados['desconto_global'] ?? 0) > 0,
+                'modo'            => $this->getModo(),
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             Log::error('printA4: documento não encontrado', ['id' => $id]);
             abort(404, 'Documento não encontrado');
         } catch (\Exception $e) {
-            Log::error('Erro no printA4', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            Log::error('Erro no printA4', ['error' => $e->getMessage()]);
             abort(500, 'Erro ao gerar impressão A4: ' . $e->getMessage());
         }
     }
 
-    /* =====================================================================
-     | PDF (DomPDF) - DOWNLOAD A4
-     | ================================================================== */
-
-    /**
-     * Download do PDF do documento fiscal em formato A4
-     * 
-     * @param string $id
-     * @return \Symfony\Component\HttpFoundation\BinaryFileResponse|\Illuminate\Http\JsonResponse
-     */
     public function downloadPdf(string $id)
     {
+        $modo = $this->getModo();
+        
         try {
-            $documento = $this->documentoService->buscarDocumento($id);
+            $this->verificarAcessoUsuario();
+
+            if ($this->isColectivo()) {
+                $documento = SharedDocumentoFiscal::doTenant()->with(['itens.produto', 'cliente'])->where('id', $id)->firstOrFail();
+            } else {
+                $documento = TenantDocumentoFiscal::with(['itens.produto', 'cliente'])->where('id', $id)->firstOrFail();
+            }
+
             $dados = $this->documentoService->dadosParaPdf($documento);
             $dados['qr_html'] = $this->gerarQrHtml($dados['qr_code'] ?? null);
             $dados['proof_url'] = $this->montarUrlDeProva(request(), $id);
             $dados['proof_qr_html'] = $this->gerarQrHtml($dados['proof_url']);
 
-            // Buscar os dados completos da empresa (igual ao pdfViewer)
-            $empresa = \App\Models\Empresa::on('landlord')
-                ->where('db_name', config('database.connections.tenant.database'))
-                ->first();
+            $empresaArray = $this->obterEmpresaAtual() ?? [];
+            $empresaArray['logo_base64'] = null;
 
-            if ($empresa) {
-                $empresaArray = $empresa->toArray();
-                $empresaArray['logo_base64'] = null;
-
-                // Tenta carregar o logo em base64
-                $logoPath = $empresaArray['logo'] ?? null;
-                if (!empty($logoPath)) {
-                    try {
-                        if (Storage::disk('public')->exists($logoPath)) {
-                            $logoConteudo = Storage::disk('public')->get($logoPath);
-                            $logoMime = Storage::disk('public')->mimeType($logoPath) ?: 'image/jpeg';
-                            $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
-                        } elseif (file_exists(public_path($logoPath))) {
-                            $logoConteudo = file_get_contents(public_path($logoPath));
-                            $logoMime = mime_content_type(public_path($logoPath)) ?: 'image/jpeg';
-                            $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
-                        }
-                    } catch (\Throwable $logoErr) {
-                        Log::warning('downloadPdf: erro ao converter logo', ['error' => $logoErr->getMessage()]);
+            $logoPath = $empresaArray['logo'] ?? null;
+            if (!empty($logoPath)) {
+                try {
+                    if (Storage::disk('public')->exists($logoPath)) {
+                        $logoConteudo = Storage::disk('public')->get($logoPath);
+                        $logoMime = Storage::disk('public')->mimeType($logoPath) ?: 'image/jpeg';
+                        $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
+                    } elseif (file_exists(public_path($logoPath))) {
+                        $logoConteudo = file_get_contents(public_path($logoPath));
+                        $logoMime = mime_content_type(public_path($logoPath)) ?: 'image/jpeg';
+                        $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
                     }
+                } catch (\Throwable $logoErr) {
+                    Log::warning('downloadPdf: erro ao converter logo', ['error' => $logoErr->getMessage()]);
                 }
-
-                $dados['empresa'] = $empresaArray;
-            } else {
-                $dados['empresa'] = $dados['empresa'] ?? [];
             }
 
-            // Garantir que o endereço está presente
+            $dados['empresa'] = $empresaArray;
+
             if (empty($dados['empresa']['endereco']) && !empty($dados['empresa']['morada'])) {
                 $dados['empresa']['endereco'] = $dados['empresa']['morada'];
             }
-
-            Log::info('[downloadPdf] Dados da empresa preparados', [
-                'empresa_nome' => $dados['empresa']['nome'] ?? 'N/A',
-                'empresa_endereco' => $dados['empresa']['endereco'] ?? 'N/A',
-            ]);
 
             $pdf = Pdf::loadView('documentos.pdf', $dados)
                 ->setPaper('a4', 'portrait')
@@ -1069,7 +1289,7 @@ class DocumentoFiscalController extends Controller
 
             return $pdf->download($documento->numero_documento . '.pdf');
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            Log::error('Documento não encontrado para download PDF', ['id' => $id, 'error' => $e->getMessage()]);
+            Log::error('Documento não encontrado para download PDF', ['id' => $id]);
             return response()->json([
                 'success' => false,
                 'message' => 'Documento não encontrado'
@@ -1083,21 +1303,28 @@ class DocumentoFiscalController extends Controller
         }
     }
 
-    /* =====================================================================
-     | PDF VIEWER — TALÃO TÉRMICO HTML (70mm)
-     | ================================================================== */
-
-    public function pdfViewer(Request $request, string $id): \Illuminate\Contracts\View\View
+    public function pdfViewer(string $id): \Illuminate\Contracts\View\View
     {
         try {
-            Log::info('pdfViewer called', ['id' => $id]);
-            $documento = $this->documentoService->buscarDocumento($id);
-            $dados     = $this->documentoService->dadosParaPdf($documento);
+            $this->verificarAcessoUsuario();
+
+            Log::info('pdfViewer called', ['id' => $id, 'modo' => $this->getModo()]);
+
+            if ($this->isColectivo()) {
+                $documento = SharedDocumentoFiscal::doTenant()->with(['itens.produto', 'cliente'])->where('id', $id)->firstOrFail();
+            } else {
+                $documento = TenantDocumentoFiscal::with(['itens.produto', 'cliente'])->where('id', $id)->firstOrFail();
+            }
+
+            $dados = $this->documentoService->dadosParaPdf($documento);
 
             $documentoOrigem = null;
             if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
-                $documentoOrigem = DocumentoFiscal::with(['itens.produto', 'cliente'])
-                    ->find($documento->fatura_id);
+                if ($this->isColectivo()) {
+                    $documentoOrigem = SharedDocumentoFiscal::doTenant()->with(['itens.produto', 'cliente'])->where('id', $documento->fatura_id)->first();
+                } else {
+                    $documentoOrigem = TenantDocumentoFiscal::with(['itens.produto', 'cliente'])->where('id', $documento->fatura_id)->first();
+                }
             }
 
             $docInfo = $documentoOrigem ?? $documento;
@@ -1124,31 +1351,24 @@ class DocumentoFiscalController extends Controller
                 }
             }
 
-            $empresa = \App\Models\Empresa::on('landlord')
-                ->where('db_name', config('database.connections.tenant.database'))
-                ->first();
+            $empresaArray = $this->obterEmpresaAtual() ?? [];
+            $empresaArray['logo_base64'] = null;
 
-            $empresa = $empresa ? $empresa->toArray() : [];
-            $empresa['logo_base64'] = null;
-
-            $logoPath = $empresa['logo'] ?? null;
-
+            $logoPath = $empresaArray['logo'] ?? null;
             if (!empty($logoPath)) {
                 try {
                     if (Storage::disk('public')->exists($logoPath)) {
                         $logoConteudo           = Storage::disk('public')->get($logoPath);
                         $logoMime               = Storage::disk('public')->mimeType($logoPath) ?: 'image/jpeg';
-                        $empresa['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
+                        $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
                     } elseif (Storage::disk('local')->exists($logoPath)) {
                         $logoConteudo           = Storage::disk('local')->get($logoPath);
                         $logoMime               = Storage::disk('local')->mimeType($logoPath) ?: 'image/jpeg';
-                        $empresa['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
+                        $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
                     } elseif (file_exists(public_path($logoPath))) {
                         $logoConteudo           = file_get_contents(public_path($logoPath));
                         $logoMime               = mime_content_type(public_path($logoPath)) ?: 'image/jpeg';
-                        $empresa['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
-                    } else {
-                        Log::warning('pdfViewer: logo não encontrado em nenhum disco', ['logo_path' => $logoPath]);
+                        $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
                     }
                 } catch (\Throwable $logoErr) {
                     Log::warning('pdfViewer: erro ao converter logo para base64', [
@@ -1162,7 +1382,7 @@ class DocumentoFiscalController extends Controller
             $proofQrHtml = $this->gerarQrHtml($proofUrl);
 
             return view('documentos.pdf-viewer', [
-                'empresa'         => $empresa,
+                'empresa'         => $empresaArray,
                 'documento'       => $documento,
                 'documentoOrigem' => $documentoOrigem,
                 'docInfo'         => $docInfo,
@@ -1171,9 +1391,7 @@ class DocumentoFiscalController extends Controller
                 'qr_code'         => $qrCodeTexto,
                 'qr_code_img'     => $qrCodeImg,
                 'qr_html'         => $this->gerarQrHtml($qrCodeTexto),
-                'proof_url'       => $proofUrl,
-                'proof_qr_html'   => $proofQrHtml,
-                'auto_print'      => filter_var($request->query('auto', false), FILTER_VALIDATE_BOOLEAN),
+                'modo'            => $this->getModo(),
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             abort(404, 'Documento não encontrado');
@@ -1183,81 +1401,11 @@ class DocumentoFiscalController extends Controller
         }
     }
 
-    public function publicProof(Request $request, string $id): \Illuminate\Contracts\View\View
-    {
-        try {
-            $documento = $this->documentoService->buscarDocumento($id);
-            $dados = $this->documentoService->dadosParaPdf($documento);
-
-            $documentoOrigem = null;
-            if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
-                $documentoOrigem = DocumentoFiscal::with(['itens.produto', 'cliente'])
-                    ->find($documento->fatura_id);
-            }
-
-            $docInfo = $documentoOrigem ?? $documento;
-            $proofUrl = $this->montarUrlDeProva($request, $id);
-            $proofQrHtml = $this->gerarQrHtml($proofUrl);
-
-            $empresa = \App\Models\Empresa::on('landlord')
-                ->where('db_name', config('database.connections.tenant.database'))
-                ->first();
-
-            $empresa = $empresa ? $empresa->toArray() : [];
-            $empresa['logo_base64'] = null;
-
-            $logoPath = $empresa['logo'] ?? null;
-
-            if (!empty($logoPath)) {
-                try {
-                    if (Storage::disk('public')->exists($logoPath)) {
-                        $logoConteudo           = Storage::disk('public')->get($logoPath);
-                        $logoMime               = Storage::disk('public')->mimeType($logoPath) ?: 'image/jpeg';
-                        $empresa['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
-                    } elseif (Storage::disk('local')->exists($logoPath)) {
-                        $logoConteudo           = Storage::disk('local')->get($logoPath);
-                        $logoMime               = Storage::disk('local')->mimeType($logoPath) ?: 'image/jpeg';
-                        $empresa['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
-                    } elseif (file_exists(public_path($logoPath))) {
-                        $logoConteudo           = file_get_contents(public_path($logoPath));
-                        $logoMime               = mime_content_type(public_path($logoPath)) ?: 'image/jpeg';
-                        $empresa['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
-                    }
-                } catch (\Throwable $logoErr) {
-                    Log::warning('publicProof: erro ao converter logo para base64', [
-                        'logo_path' => $logoPath,
-                        'error'     => $logoErr->getMessage(),
-                    ]);
-                }
-            }
-
-            return view('documentos.proof', [
-                'empresa'         => $empresa,
-                'documento'       => $documento,
-                'documentoOrigem' => $documentoOrigem,
-                'docInfo'         => $docInfo,
-                'itens'           => collect($docInfo->itens ?? []),
-                'cliente'         => $dados['cliente'],
-                'qr_code'         => $dados['qr_code'],
-                'qr_html'         => $this->gerarQrHtml($dados['qr_code'] ?? null),
-                'proof_url'       => $proofUrl,
-                'proof_qr_html'   => $proofQrHtml,
-            ]);
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            abort(404, 'Documento não encontrado');
-        } catch (\Exception $e) {
-            Log::error('Erro no publicProof', ['error' => $e->getMessage()]);
-            abort(500, 'Erro ao gerar comprovativo público');
-        }
-    }
-
-    /* =====================================================================
-     | EXPORTAR EXCEL
-     | ================================================================== */
-
     public function exportarExcel(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
     {
         try {
+            $this->verificarAcessoUsuario();
+
             $filtros = $request->validate([
                 'tipo'              => 'nullable|in:FT,FR,FP,FA,NC,ND,RC,FRt',
                 'estado'            => 'nullable|in:emitido,paga,parcialmente_paga,cancelado,expirado',
@@ -1268,7 +1416,7 @@ class DocumentoFiscalController extends Controller
                 'apenas_nao_vendas' => 'nullable|in:0,1,true,false',
             ]);
 
-            $dados     = $this->documentoService->dadosParaExcel($filtros);
+            $dados = $this->documentoService->dadosParaExcel($filtros);
             $cabecalho = $dados['cabecalho'];
             $linhas    = $dados['linhas'];
 
@@ -1285,7 +1433,7 @@ class DocumentoFiscalController extends Controller
                 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
             ]);
 
-            if (! empty($linhas)) {
+            if (!empty($linhas)) {
                 $sheet->fromArray($linhas, null, 'A2');
             }
 
@@ -1311,17 +1459,13 @@ class DocumentoFiscalController extends Controller
         }
     }
 
-    /* =====================================================================
-     | CONVERSÃO DE PROFORMA PARA FATURA/RECIBO
-     | ================================================================== */
-
-    /**
-     * Converte uma Proforma (FP) em Fatura (FT) ou Fatura-Recibo (FR)
-     * Este é o método correto para transformar proformas em documentos de venda efetiva
-     */
     public function converterProforma(Request $request, string $proformaId): JsonResponse
     {
+        $modo = $this->getModo();
+        
         try {
+            $this->verificarAcessoUsuario();
+
             $proforma = $this->documentoService->buscarDocumento($proformaId);
 
             if ($proforma->tipo_documento !== 'FP') {
@@ -1345,6 +1489,7 @@ class DocumentoFiscalController extends Controller
                 'success' => true,
                 'message' => 'Proforma convertida com sucesso para ' . ($dados['tipo_destino'] === 'FR' ? 'Fatura-Recibo' : 'Fatura'),
                 'data' => $documento,
+                'modo' => $modo,
             ], 201);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json(['success' => false, 'message' => 'Proforma não encontrada'], 404);
@@ -1358,7 +1503,7 @@ class DocumentoFiscalController extends Controller
     }
 
     /* =====================================================================
-     | HELPERS PRIVADOS
+     | HELPERS PRIVADOS (MANTIDOS)
      | ================================================================== */
 
     private function gerarQrHtml(?string $qrCodeTexto): string
@@ -1430,11 +1575,15 @@ class DocumentoFiscalController extends Controller
 
     private function erroInterno(string $mensagem, \Exception $e): JsonResponse
     {
-        Log::error($mensagem . ':', ['error' => $e->getMessage()]);
+        Log::error($mensagem . ':', [
+            'error' => $e->getMessage(),
+            'modo' => $this->getModo(),
+        ]);
         return response()->json([
             'success' => false,
             'message' => $mensagem,
             'error'   => $e->getMessage(),
+            'modo'    => $this->getModo(),
         ], 500);
     }
 }

@@ -13,6 +13,7 @@ export interface Empresa {
   logo?: string | null;
   db_name: string;
   regime_fiscal: "simplificado" | "geral";
+  modo: "colectivo" | "singular"; 
   sujeito_iva: boolean;
   status: "ativo" | "suspenso";
   data_registro: string;

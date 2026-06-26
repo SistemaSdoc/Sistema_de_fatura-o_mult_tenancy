@@ -2,8 +2,14 @@
 
 namespace App\Services;
 
-use App\Models\Tenant\Produto;
-use App\Models\Tenant\Categoria;
+use App\Models\Shared\Produto as SharedProduto;
+use App\Models\Shared\Categoria as SharedCategoria;
+use App\Models\Tenant\Produto as TenantProduto;
+use App\Models\Tenant\Categoria as TenantCategoria;
+use App\Models\Empresa;
+use App\Models\LandlordUser;
+use App\Models\Shared\User as SharedUser;
+use App\Models\Tenant\User as TenantUser;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -12,21 +18,9 @@ use Illuminate\Support\Facades\Log;
 /**
  * ProdutoService
  *
- * Gestão completa de produtos e serviços com suporte a:
- *  - Produtos físicos (com stock, categoria, IVA herdado da categoria)
- *  - Serviços (sem stock, com taxa de IVA e retenção próprias)
- *
- * Alterações-chave:
- *  - Para PRODUTOS FÍSICOS: taxa_iva e sujeito_iva são puxados da Categoria e salvos no produto.
- *    O IVA é herdado da categoria no momento da criação/atualização.
- *  - Para SERVIÇOS: taxa_iva e sujeito_iva mantêm-se no serviço (sem categoria).
- *  - Método obterTaxaIvaCategoria() adicionado para buscar o IVA da categoria.
- *  - Cálculos fiscais (DocumentoFiscalService, VendaService) devem usar
- *    $produto->taxa_iva_efectiva em vez de $produto->taxa_iva directamente.
- *  - user_id é sempre resolvido usando auth()->guard('tenant')->id() como fallback primário.
- *  - Todos os métodos públicos que afectam stock passam user_id correcto ao StockService.
- *
- * Taxas de retenção válidas em Angola: 2%, 5%, 6,5%, 10%, 15%
+ * ✅ SUPORTA AMBOS OS MODOS:
+ * - 'colectivo' → Shared DB (com tenant_id)
+ * - 'singular' → Tenant DB (banco dedicado)
  */
 class ProdutoService
 {
@@ -34,392 +28,199 @@ class ProdutoService
     public const TAXA_RETENCAO_DEFAULT  = 6.5;
 
     protected StockService $stockService;
+    protected ?Empresa $empresa = null;
+    protected string $modo = 'colectivo';
+    protected ?object $tenantUser = null;
 
     public function __construct(StockService $stockService)
     {
         $this->stockService = $stockService;
+        
+        // ✅ Obtém empresa e modo da sessão (prioridade)
+        $this->empresa = app('current.empresa');
+        $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
+        
+        Log::debug('[ProdutoService] Inicializado', [
+            'modo' => $this->modo,
+            'empresa_id' => $this->empresa?->id,
+        ]);
     }
 
     /* =====================================================================
-     | CRIAR PRODUTO / SERVIÇO
+     | HELPERS: Resolver Models conforme o modo
      | ================================================================== */
 
-    /**
-     * Cria um novo produto ou serviço.
-     *
-     * Dados esperados para PRODUTO:
-     *  - nome, tipo='produto'
-     *  - categoria_id (obrigatório)
-     *  - preco_compra, preco_venda (ou calcular via margem/markup)
-     *  - estoque_atual, estoque_minimo
-     *  - fornecedor_id, codigo (opcionais)
-     *
-     * Dados esperados para SERVIÇO:
-     *  - nome, tipo='servico'
-     *  - preco_venda (obrigatório)
-     *  - taxa_iva, sujeito_iva, taxa_retencao (opcionais)
-     *  - duracao_estimada, unidade_medida (opcionais)
-     *
-     * @param array $dados
-     * @return Produto
-     * @throws \Exception Se categoria não encontrada para produto
-     */
-    public function criarProduto(array $dados): Produto
+    protected function isColectivo(): bool
     {
-        return DB::transaction(function () use ($dados) {
-            $tipo = $dados['tipo'] ?? 'produto';
-
-            Log::info('[ProdutoService] Criando item', [
-                'tipo'  => $tipo,
-                'nome'  => $dados['nome'],
-            ]);
-
-            // ✅ Calcular preço de venda ANTES de usar
-            $precoVenda = $tipo === 'produto'
-                ? $this->calcularPrecoVenda($dados)
-                : ($dados['preco_venda'] ?? 0);
-
-            $dadosProduto = [
-                'id'          => Str::uuid(),
-                'user_id'     => $dados['user_id'] ?? auth()->guard('tenant')->id(),
-                'nome'        => $dados['nome'],
-                'descricao'   => $dados['descricao'] ?? null,
-                'preco_venda' => $precoVenda,
-                'tipo'        => $tipo,
-                'status'      => $dados['status'] ?? 'ativo',
-            ];
-
-            if ($tipo === 'produto') {
-                // ✅ PRODUTO: IVA vem da categoria
-                $categoria = Categoria::find($dados['categoria_id'] ?? null);
-                if (!$categoria) {
-                    throw new \Exception('Categoria não encontrada para o produto');
-                }
-
-                $taxaIva      = (float) $categoria->taxa_iva;
-                $sujeitoIva   = (bool) $categoria->sujeito_iva;
-                $codigoIsencao = $categoria->codigo_isencao;
-
-                $estoqueSolicitado = (int) ($dados['estoque_atual'] ?? 0);
-                $precoCompra       = (float) ($dados['preco_compra'] ?? 0);
-
-                $dadosProduto = array_merge($dadosProduto, [
-                    'categoria_id'     => $dados['categoria_id'],
-                    'fornecedor_id'    => $dados['fornecedor_id'] ?? null,
-                    'codigo'           => $dados['codigo'] ?? null,
-                    'preco_compra'     => $precoCompra,
-                    'custo_medio'      => $precoCompra,
-                    'estoque_atual'    => 0,
-                    'estoque_minimo'   => $dados['estoque_minimo'] ?? 5,
-                    'taxa_iva'         => $taxaIva,
-                    'sujeito_iva'      => $sujeitoIva,
-                    'codigo_isencao'   => $codigoIsencao,
-                    'taxa_retencao'    => null,
-                    'duracao_estimada' => null,
-                    'unidade_medida'   => null,
-                ]);
-
-                Log::info('[ProdutoService] Criando PRODUTO', [
-                    'nome'               => $dados['nome'],
-                    'estoque_solicitado' => $estoqueSolicitado,
-                    'preco_compra'       => $precoCompra,
-                    'taxa_iva_categoria' => $taxaIva,
-                    'sujeito_iva'        => $sujeitoIva,
-                ]);
-            } else {
-                // ✅ SERVIÇO: IVA é próprio (sem categoria)
-                $dadosProduto = array_merge($dadosProduto, [
-                    'taxa_iva'         => $dados['taxa_iva'] ?? 0,
-                    'sujeito_iva'      => $dados['sujeito_iva'] ?? false,
-                    'taxa_retencao'    => $dados['taxa_retencao'] ?? null,
-                    'codigo_isencao'   => $dados['codigo_isencao'] ?? null,
-                    'duracao_estimada' => $dados['duracao_estimada'] ?? null,
-                    'unidade_medida'   => $dados['unidade_medida'] ?? null,
-                    'categoria_id'     => null,
-                    'fornecedor_id'    => null,
-                    'codigo'           => null,
-                    'preco_compra'     => 0,
-                    'custo_medio'      => 0,
-                    'estoque_atual'    => 0,
-                    'estoque_minimo'   => 0,
-                ]);
-            }
-
-            $produto = Produto::create($dadosProduto);
-            $this->validarPreco($produto, $produto->preco_venda);
-
-            // ✅ CORREÇÃO: passar user_id correcto ao StockService
-            if ($tipo === 'produto' && isset($dados['estoque_atual']) && (int) $dados['estoque_atual'] > 0) {
-                $this->stockService->entradaCompra(
-                    $produto->id,
-                    (int) $dados['estoque_atual'],
-                    (float) $dados['preco_compra'],
-                    null,  // sem compraId
-                    $dados['user_id'] ?? auth()->guard('tenant')->id()
-                );
-            }
-
-            return $produto;
-        });
+        return $this->modo === 'colectivo';
     }
 
-    /* =====================================================================
-     | EDITAR PRODUTO / SERVIÇO
-     | ================================================================== */
-
-    /**
-     * Edita um produto ou serviço existente.
-     * Permite conversão entre tipo, com validações apropriadas.
-     *
-     * @param string $produtoId
-     * @param array $dados
-     * @return Produto
-     * @throws \Exception Se conversão inválida ou categoria não encontrada
-     */
-public function editarProduto(string $produtoId, array $dados): Produto
-{
-    return DB::transaction(function () use ($produtoId, $dados) {
-        $produto = Produto::findOrFail($produtoId);
-        $tipoOriginal = $produto->tipo;
-        $tipoNovo = $dados['tipo'] ?? $tipoOriginal;
-
-        Log::info('[ProdutoService] Editando', [
-            'id' => $produtoId,
-            'tipo_original' => $tipoOriginal,
-            'tipo_novo' => $tipoNovo,
-        ]);
-
-        Log::info('[ProdutoService] 🔍 ANTES da edição', [
-            'id' => $produtoId,
-            'categoria_id_atual' => $produto->categoria_id,
-            'taxa_iva_atual' => $produto->taxa_iva,
-            'sujeito_iva_atual' => $produto->sujeito_iva,
-            'tipo_atual' => $produto->tipo,
-        ]);
-
-        // ✅ Não permitir converter produto com stock para serviço
-        if ($tipoOriginal === 'produto' && $tipoNovo === 'servico') {
-            if ($produto->movimentosStock()->exists()) {
-                throw new \Exception(
-                    'Não é possível converter produto com histórico de movimentações para serviço. ' .
-                    'Altere o status para "inativo" se deseja descontinuar.'
-                );
-            }
-        }
-
-        // ✅ Calcular preço de venda ANTES de usar
-        $precoVenda = $tipoNovo === 'produto'
-            ? $this->calcularPrecoVenda(array_merge($produto->toArray(), $dados))
-            : ($dados['preco_venda'] ?? $produto->preco_venda);
-
-        $dadosUpdate = [
-            'nome' => $dados['nome'] ?? $produto->nome,
-            'descricao' => $dados['descricao'] ?? $produto->descricao,
-            'preco_venda' => $precoVenda,
-            'tipo' => $tipoNovo,
-            'status' => $dados['status'] ?? $produto->status,
-        ];
-
-        // ✅ Registar histórico de preços
-        if ($produto->preco_venda != $dadosUpdate['preco_venda']) {
-            DB::table('historico_precos')->insert([
-                'id' => Str::uuid(),
-                'produto_id' => $produto->id,
-                'preco_antigo' => $produto->preco_venda,
-                'preco_novo' => $dadosUpdate['preco_venda'],
-                'user_id' => $dados['user_id'] ?? auth()->guard('tenant')->id(),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-        }
-
-        $userId = $dados['user_id'] ?? auth()->guard('tenant')->id();
-
-        if ($tipoNovo === 'servico') {
-            // ✅ Configuração para SERVIÇO
-            $taxaIva = $dados['taxa_iva'] ?? $produto->taxa_iva ?? 0;
-            $sujeitoIva = $dados['sujeito_iva'] ?? $produto->sujeito_iva ?? false;
-
-            $taxaRetencao = isset($dados['taxa_retencao'])
-                ? (float) $dados['taxa_retencao']
-                : (float) ($produto->taxa_retencao ?? self::TAXA_RETENCAO_DEFAULT);
-            $taxaRetencao = $this->validarTaxaRetencao($taxaRetencao, $produto->nome);
-
-            Log::info('[ProdutoService] 📦 Configurando SERVIÇO', [
-                'produto_id' => $produtoId,
-                'taxa_iva' => $taxaIva,
-                'sujeito_iva' => $sujeitoIva,
-                'taxa_retencao' => $taxaRetencao,
-            ]);
-
-            $dadosUpdate = array_merge($dadosUpdate, [
-                'taxa_iva' => $taxaIva,
-                'sujeito_iva' => $sujeitoIva,
-                'taxa_retencao' => $taxaRetencao,
-                'codigo_isencao' => $dados['codigo_isencao'] ?? $produto->codigo_isencao ?? null,
-                'duracao_estimada' => $dados['duracao_estimada'] ?? $produto->duracao_estimada ?? '1 hora',
-                'unidade_medida' => $dados['unidade_medida'] ?? $produto->unidade_medida ?? 'hora',
-                'categoria_id' => null,
-                'fornecedor_id' => null,
-                'codigo' => null,
-                'preco_compra' => 0,
-                'custo_medio' => 0,
-                'estoque_atual' => 0,
-                'estoque_minimo' => 0,
-            ]);
-        } elseif ($tipoNovo === 'produto') {
-            // ✅ Configuração para PRODUTO
-            $novaCategoriaId = $dados['categoria_id'] ?? $produto->categoria_id;
-            
-            // 🔍 MÉTODO 1: Buscar com Query Builder para evitar qualquer problema de cast/cache
-            $categoriaData = DB::table('categorias')
-                ->where('id', $novaCategoriaId)
-                ->first();
-            
-            if (!$categoriaData) {
-                throw new \Exception('Categoria não encontrada para o produto');
-            }
-            
-            // 🔍 Log detalhado dos valores via Query Builder
-            Log::info('[ProdutoService] 📦 CATEGORIA VIA QUERY BUILDER', [
-                'produto_id' => $produtoId,
-                'categoria_id' => $novaCategoriaId,
-                'categoria_nome' => $categoriaData->nome,
-                'taxa_iva_db' => $categoriaData->taxa_iva,
-                'taxa_iva_cast' => (float) $categoriaData->taxa_iva,
-                'sujeito_iva_db' => $categoriaData->sujeito_iva,
-                'sujeito_iva_cast' => (bool) $categoriaData->sujeito_iva,
-                'codigo_isencao' => $categoriaData->codigo_isencao,
-            ]);
-            
-            // 🔍 MÉTODO 2: Buscar com Eloquent para comparar
-            $categoriaEloquent = Categoria::find($novaCategoriaId);
-            if ($categoriaEloquent) {
-                Log::info('[ProdutoService] 📦 CATEGORIA VIA ELOQUENT (para comparação)', [
-                    'categoria_id' => $novaCategoriaId,
-                    'taxa_iva_eloquent' => $categoriaEloquent->taxa_iva,
-                    'taxa_iva_raw_eloquent' => $categoriaEloquent->getRawOriginal('taxa_iva'),
-                    'sujeito_iva_eloquent' => $categoriaEloquent->sujeito_iva,
-                    'attributes' => $categoriaEloquent->getAttributes(),
-                ]);
-            }
-            
-            // ✅ Usar os valores do Query Builder que são mais confiáveis
-            $taxaIvaCategoria = (float) $categoriaData->taxa_iva;
-            $sujeitoIvaCategoria = (bool) $categoriaData->sujeito_iva;
-            
-            // ⚠️ Alerta se a categoria tiver IVA 0%
-            if ($taxaIvaCategoria == 0) {
-                Log::warning('[ProdutoService] ⚠️ ATENÇÃO: Categoria com IVA 0%', [
-                    'categoria' => $categoriaData->nome,
-                    'produto' => $produto->nome,
-                    'categoria_id' => $novaCategoriaId,
-                    'taxa_iva_no_banco' => $categoriaData->taxa_iva,
-                ]);
-            }
-            
-            $dadosUpdate = array_merge($dadosUpdate, [
-                'categoria_id' => $novaCategoriaId,
-                'fornecedor_id' => $dados['fornecedor_id'] ?? $produto->fornecedor_id,
-                'codigo' => $dados['codigo'] ?? $produto->codigo,
-                'preco_compra' => $dados['preco_compra'] ?? $produto->preco_compra,
-                'estoque_minimo' => $dados['estoque_minimo'] ?? $produto->estoque_minimo,
-                'taxa_iva' => $taxaIvaCategoria,
-                'sujeito_iva' => $sujeitoIvaCategoria,
-                'codigo_isencao' => $categoriaData->codigo_isencao,
-                'taxa_retencao' => null,
-                'duracao_estimada' => null,
-                'unidade_medida' => null,
-            ]);
-            
-            // 🔍 Log dos dados que serão salvos
-            Log::info('[ProdutoService] 📦 DADOS PREPARADOS PARA UPDATE', [
-                'produto_id' => $produtoId,
-                'taxa_iva_sera_salva' => $dadosUpdate['taxa_iva'],
-                'sujeito_iva_sera_salvo' => $dadosUpdate['sujeito_iva'],
-                'categoria_id_sera_salva' => $dadosUpdate['categoria_id'],
-            ]);
-
-            // ✅ Ajustar stock se alterado
-            if (isset($dados['estoque_atual']) && $dados['estoque_atual'] != $produto->estoque_atual) {
-                $diferenca = (int) $dados['estoque_atual'] - (int) $produto->estoque_atual;
-
-                if ($diferenca > 0) {
-                    $this->stockService->entradaCompra(
-                        $produto->id,
-                        $diferenca,
-                        (float) ($dados['preco_compra'] ?? $produto->preco_compra),
-                        null,
-                        $userId
-                    );
-                } elseif ($diferenca < 0) {
-                    $this->stockService->saidaVenda(
-                        $produto->id,
-                        abs($diferenca),
-                        null,
-                        $userId
-                    );
-                }
-
-                $dadosUpdate['estoque_atual'] = $dados['estoque_atual'];
-            }
-        }
-
-        // ✅ Executar o update
-        $produto->update($dadosUpdate);
-        
-        // ✅ Buscar o produto atualizado diretamente do banco para confirmar
-        $produtoFresh = Produto::find($produtoId);
-        
-        // 🔍 Log DEPOIS da edição com valores confirmados do banco
-        Log::info('[ProdutoService] ✅ DEPOIS da edição', [
-            'id' => $produtoId,
-            'categoria_id_final' => $produtoFresh->categoria_id,
-            'taxa_iva_final' => $produtoFresh->taxa_iva,
-            'sujeito_iva_final' => $produtoFresh->sujeito_iva,
-            'tipo_final' => $produtoFresh->tipo,
-            'confirmacao_iva_foi_salvo' => $produtoFresh->taxa_iva,
-        ]);
-        
-        // ⚠️ Alerta se o IVA não foi salvo corretamente
-        if ($produtoFresh->taxa_iva != $dadosUpdate['taxa_iva']) {
-            Log::error('[ProdutoService] ❌ ERRO CRÍTICO: IVA não foi salvo corretamente!', [
-                'produto_id' => $produtoId,
-                'iva_que_deveria_ser_salvo' => $dadosUpdate['taxa_iva'],
-                'iva_que_foi_salvo_no_banco' => $produtoFresh->taxa_iva,
-                'categoria_id' => $dadosUpdate['categoria_id'],
-            ]);
-        }
-
-        Log::info('[ProdutoService] Editado com sucesso', [
-            'id' => $produtoId,
-            'tipo_final' => $produtoFresh->tipo,
-            'taxa_iva_final_confirmada' => $produtoFresh->taxa_iva,
-        ]);
-
-        return $produtoFresh;
-    });
-}
-
-    /* =====================================================================
-     | OUTRAS OPERAÇÕES
-     | ================================================================== */
-
-    /**
-     * Altera o status de um produto (ativo/inativo/descontinuado).
-     *
-     * @param string $produtoId
-     * @param string $status
-     * @return Produto
-     */
-    public function alterarStatus(string $produtoId, string $status): Produto
+    protected function isSingular(): bool
     {
-        $produto = Produto::findOrFail($produtoId);
-        $produto->status = $status;
-        $produto->save();
-
-        return $produto;
+        return $this->modo === 'singular';
     }
+
+    protected function produtoModel()
+    {
+        return $this->isColectivo() ? new SharedProduto() : new TenantProduto();
+    }
+
+    protected function categoriaModel()
+    {
+        return $this->isColectivo() ? new SharedCategoria() : new TenantCategoria();
+    }
+
+    protected function buscarCategoria(string $categoriaId): ?object
+    {
+        if ($this->isColectivo()) {
+            return SharedCategoria::doTenant()->where('id', $categoriaId)->first();
+        }
+        return TenantCategoria::where('id', $categoriaId)->first();
+    }
+
+    protected function buscarProdutoModel(string $produtoId): ?object
+    {
+        if ($this->isColectivo()) {
+            return SharedProduto::doTenant()->where('id', $produtoId)->first();
+        }
+        return TenantProduto::where('id', $produtoId)->first();
+    }
+
+    protected function buscarProdutoOrFail(string $produtoId): object
+    {
+        if ($this->isColectivo()) {
+            return SharedProduto::doTenant()->where('id', $produtoId)->firstOrFail();
+        }
+        return TenantProduto::where('id', $produtoId)->firstOrFail();
+    }
+
+    protected function queryProdutos()
+    {
+        if ($this->isColectivo()) {
+            return SharedProduto::doTenant();
+        }
+        return TenantProduto::query();
+    }
+
+    protected function queryCategorias()
+    {
+        if ($this->isColectivo()) {
+            return SharedCategoria::doTenant();
+        }
+        return TenantCategoria::query();
+    }
+
+    protected function adicionarTenantId(array $dados): array
+    {
+        if ($this->isColectivo() && $this->empresa) {
+            $dados['tenant_id'] = $this->empresa->id;
+        }
+        return $dados;
+    }
+
+    /* =====================================================================
+     | VERIFICAÇÃO DE ACESSO - CORRIGIDA ✅
+     | ================================================================== */
+
+    /**
+     * Verifica se o usuário tem acesso ao tenant atual
+     */
+    protected function verificarAcessoUsuario(): void
+    {
+        Log::debug('[ProdutoService] Verificando acesso');
+
+        // 1️⃣ Obtém a empresa
+        $this->empresa = app('current.empresa');
+        if (!$this->empresa) {
+            Log::error('[ProdutoService] Empresa não identificada.');
+            throw new \Exception('Empresa não identificada.', 400);
+        }
+
+        // ✅ Atualiza o modo
+        $this->modo = $this->empresa->modo ?? 'colectivo';
+
+        // 2️⃣ Obtém o landlord user (guard onde o login foi feito)
+        $landlordUser = Auth::guard('landlord')->user();
+
+        // 3️⃣ Fallback: tenta obter da sessão
+        if (!$landlordUser) {
+            $landlordId = session('landlord_user_id');
+            if ($landlordId) {
+                $landlordUser = LandlordUser::find($landlordId);
+            }
+        }
+
+        if (!$landlordUser) {
+            Log::error('[ProdutoService] Utilizador landlord não autenticado.');
+            throw new \Exception('Usuário não autenticado.', 401);
+        }
+
+        // 4️⃣ Busca o TenantUser correspondente
+        $tenantUser = $this->buscarUsuario($this->empresa, $landlordUser->email);
+        if (!$tenantUser) {
+            Log::error('[ProdutoService] Utilizador tenant não encontrado.', [
+                'email' => $landlordUser->email,
+            ]);
+            throw new \Exception('Usuário não tem permissão para aceder a esta empresa.', 403);
+        }
+
+        $this->tenantUser = $tenantUser;
+
+        Log::info('[ProdutoService] Acesso verificado com sucesso', [
+            'modo' => $this->modo,
+            'user_id' => $tenantUser->id,
+            'email' => $tenantUser->email,
+        ]);
+    }
+
+    /**
+     * Busca usuário no banco correto
+     */
+    protected function buscarUsuario(Empresa $empresa, string $email): ?object
+    {
+        if ($empresa->modo === 'singular') {
+            return TenantUser::on('tenant')->where('email', $email)->first();
+        }
+        return SharedUser::on('shared')
+            ->where('email', $email)
+            ->where('tenant_id', $empresa->id)
+            ->first();
+    }
+
+    /**
+     * Obtém o user_id do tenantUser
+     */
+    protected function getUserId(array $dados = []): ?string
+    {
+        if (isset($dados['user_id']) && $dados['user_id']) {
+            return $dados['user_id'];
+        }
+
+        if ($this->tenantUser) {
+            return $this->tenantUser->id;
+        }
+
+        // Fallback
+        try {
+            $landlordUser = Auth::guard('landlord')->user();
+            if ($landlordUser && $this->empresa) {
+                $tenantUser = $this->buscarUsuario($this->empresa, $landlordUser->email);
+                if ($tenantUser) {
+                    return $tenantUser->id;
+                }
+            }
+        } catch (\Exception $e) {
+            Log::warning('[ProdutoService] Fallback getUserId falhou', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return null;
+    }
+
+    /* =====================================================================
+     | LISTAR PRODUTOS - CORRIGIDO ✅
+     | ================================================================== */
 
     /**
      * Lista produtos com filtros opcionais.
@@ -436,13 +237,25 @@ public function editarProduto(string $produtoId, array $dados): Produto
      */
     public function listarProdutos(array $filtros = [])
     {
-        $query = Produto::with('categoria');
+        // ✅ Verifica acesso
+        $this->verificarAcessoUsuario();
+
+        Log::info('[ProdutoService::listarProdutos] Listando', [
+            'modo' => $this->modo,
+            'filtros' => $filtros,
+        ]);
+
+        $query = $this->queryProdutos()->with('categoria');
 
         if (isset($filtros['tipo'])) {
             $query->where('tipo', $filtros['tipo']);
         }
 
-        $query->where('status', $filtros['status'] ?? 'ativo');
+        if (isset($filtros['status'])) {
+            $query->where('status', $filtros['status']);
+        } else {
+            $query->where('status', 'ativo');
+        }
 
         if (isset($filtros['categoria_id'])) {
             $query->where('categoria_id', $filtros['categoria_id']);
@@ -450,48 +263,270 @@ public function editarProduto(string $produtoId, array $dados): Produto
 
         if (isset($filtros['busca'])) {
             $busca = $filtros['busca'];
-            $query->where(fn ($q) => $q
-                ->where('nome', 'like', "%{$busca}%")
-                ->orWhere('codigo', 'like', "%{$busca}%")
-            );
+            $query->where(function ($q) use ($busca) {
+                $q->where('nome', 'like', "%{$busca}%")
+                  ->orWhere('codigo', 'like', "%{$busca}%");
+            });
         }
 
         if (isset($filtros['com_deletados']) && $filtros['com_deletados']) {
             $query->withTrashed();
         }
 
-        return $query->get()->map(function ($produto) {
+        $resultados = $query->get()->map(function ($produto) {
             $arr = $produto->toArray();
-            $arr['taxa_iva_efectiva'] = $produto->taxa_iva_efectiva;
+            $arr['taxa_iva_efectiva'] = $produto->taxa_iva_efectiva ?? $produto->taxa_iva ?? 0;
             return $arr;
+        });
+
+        Log::info('[ProdutoService::listarProdutos] Concluído', [
+            'total' => $resultados->count(),
+            'modo' => $this->modo,
+        ]);
+
+        return $resultados;
+    }
+
+    /* =====================================================================
+     | CRIAR PRODUTO / SERVIÇO
+     | ================================================================== */
+
+    public function criarProduto(array $dados): object
+    {
+        $this->verificarAcessoUsuario();
+
+        return DB::transaction(function () use ($dados) {
+            $tipo = $dados['tipo'] ?? 'produto';
+            $userId = $this->getUserId($dados);
+
+            Log::info('[ProdutoService] Criando item', [
+                'tipo'  => $tipo,
+                'nome'  => $dados['nome'] ?? 'Sem nome',
+                'modo'  => $this->modo,
+            ]);
+
+            $precoVenda = $tipo === 'produto'
+                ? $this->calcularPrecoVenda($dados)
+                : ($dados['preco_venda'] ?? 0);
+
+            $dadosProduto = [
+                'id'          => Str::uuid(),
+                'user_id'     => $userId,
+                'nome'        => $dados['nome'],
+                'descricao'   => $dados['descricao'] ?? null,
+                'preco_venda' => $precoVenda,
+                'tipo'        => $tipo,
+                'status'      => $dados['status'] ?? 'ativo',
+            ];
+
+            if ($tipo === 'produto') {
+                $categoria = $this->buscarCategoria($dados['categoria_id'] ?? null);
+                if (!$categoria) {
+                    throw new \Exception('Categoria não encontrada para o produto');
+                }
+
+                $dadosProduto = array_merge($dadosProduto, [
+                    'categoria_id'     => $dados['categoria_id'],
+                    'fornecedor_id'    => $dados['fornecedor_id'] ?? null,
+                    'codigo'           => $dados['codigo'] ?? null,
+                    'preco_compra'     => (float) ($dados['preco_compra'] ?? 0),
+                    'custo_medio'      => (float) ($dados['preco_compra'] ?? 0),
+                    'estoque_atual'    => 0,
+                    'estoque_minimo'   => $dados['estoque_minimo'] ?? 5,
+                    'taxa_iva'         => (float) $categoria->taxa_iva,
+                    'sujeito_iva'      => (bool) $categoria->sujeito_iva,
+                    'codigo_isencao'   => $categoria->codigo_isencao ?? null,
+                    'taxa_retencao'    => null,
+                    'duracao_estimada' => null,
+                    'unidade_medida'   => null,
+                ]);
+            } else {
+                $dadosProduto = array_merge($dadosProduto, [
+                    'taxa_iva'         => $dados['taxa_iva'] ?? 0,
+                    'sujeito_iva'      => $dados['sujeito_iva'] ?? false,
+                    'taxa_retencao'    => $this->validarTaxaRetencao($dados['taxa_retencao'] ?? null, $dados['nome']),
+                    'codigo_isencao'   => $dados['codigo_isencao'] ?? null,
+                    'duracao_estimada' => $dados['duracao_estimada'] ?? null,
+                    'unidade_medida'   => $dados['unidade_medida'] ?? null,
+                    'categoria_id'     => null,
+                    'fornecedor_id'    => null,
+                    'codigo'           => null,
+                    'preco_compra'     => 0,
+                    'custo_medio'      => 0,
+                    'estoque_atual'    => 0,
+                    'estoque_minimo'   => 0,
+                ]);
+            }
+
+            // ⭐ ADICIONAR TENANT_ID (apenas para colectivo)
+            $dadosProduto = $this->adicionarTenantId($dadosProduto);
+
+            // ⭐ USAR O MODEL CORRETO
+            $produto = $this->produtoModel()->create($dadosProduto);
+
+            // ✅ Entrada de stock inicial
+            if ($tipo === 'produto' && isset($dados['estoque_atual']) && (int) $dados['estoque_atual'] > 0) {
+                $this->stockService->entradaCompra(
+                    $produto->id,
+                    (int) $dados['estoque_atual'],
+                    (float) ($dados['preco_compra'] ?? 0),
+                    null,
+                    $userId
+                );
+            }
+
+            return $produto;
         });
     }
 
-    /**
-     * Busca um produto por ID com relações carregadas.
-     * Calcula margem de lucro e valores de IVA/retenção.
-     *
-     * @param string $produtoId
-     * @return Produto
-     */
-    public function buscarProduto(string $produtoId): Produto
-    {
-        $produto = Produto::with(['categoria', 'fornecedor'])->findOrFail($produtoId);
+    /* =====================================================================
+     | EDITAR PRODUTO / SERVIÇO
+     | ================================================================== */
 
-        // ✅ Margem de lucro (apenas para produtos físicos)
-        if ($produto->tipo === 'produto') {
-            $produto->margem_lucro = $this->calcularMargem($produto);
+    public function editarProduto(string $produtoId, array $dados): object
+    {
+        $this->verificarAcessoUsuario();
+
+        return DB::transaction(function () use ($produtoId, $dados) {
+            $produto = $this->buscarProdutoOrFail($produtoId);
+            $tipoOriginal = $produto->tipo;
+            $tipoNovo = $dados['tipo'] ?? $tipoOriginal;
+            $userId = $this->getUserId($dados);
+
+            Log::info('[ProdutoService] Editando', [
+                'id' => $produtoId,
+                'tipo_original' => $tipoOriginal,
+                'tipo_novo' => $tipoNovo,
+                'modo' => $this->modo,
+            ]);
+
+            // ✅ Não permitir converter produto com stock para serviço
+            if ($tipoOriginal === 'produto' && $tipoNovo === 'servico') {
+                if ($produto->movimentosStock()->exists()) {
+                    throw new \Exception(
+                        'Não é possível converter produto com histórico de movimentações para serviço.'
+                    );
+                }
+            }
+
+            $precoVenda = $tipoNovo === 'produto'
+                ? $this->calcularPrecoVenda(array_merge($produto->toArray(), $dados))
+                : ($dados['preco_venda'] ?? $produto->preco_venda);
+
+            $dadosUpdate = [
+                'nome' => $dados['nome'] ?? $produto->nome,
+                'descricao' => $dados['descricao'] ?? $produto->descricao,
+                'preco_venda' => $precoVenda,
+                'tipo' => $tipoNovo,
+                'status' => $dados['status'] ?? $produto->status,
+            ];
+
+            if ($tipoNovo === 'servico') {
+                $dadosUpdate = array_merge($dadosUpdate, [
+                    'taxa_iva' => $dados['taxa_iva'] ?? $produto->taxa_iva ?? 0,
+                    'sujeito_iva' => $dados['sujeito_iva'] ?? $produto->sujeito_iva ?? false,
+                    'taxa_retencao' => $this->validarTaxaRetencao(
+                        $dados['taxa_retencao'] ?? $produto->taxa_retencao ?? self::TAXA_RETENCAO_DEFAULT,
+                        $produto->nome
+                    ),
+                    'codigo_isencao' => $dados['codigo_isencao'] ?? $produto->codigo_isencao ?? null,
+                    'duracao_estimada' => $dados['duracao_estimada'] ?? $produto->duracao_estimada ?? '1 hora',
+                    'unidade_medida' => $dados['unidade_medida'] ?? $produto->unidade_medida ?? 'hora',
+                    'categoria_id' => null,
+                    'fornecedor_id' => null,
+                    'codigo' => null,
+                    'preco_compra' => 0,
+                    'custo_medio' => 0,
+                    'estoque_atual' => 0,
+                    'estoque_minimo' => 0,
+                ]);
+            } elseif ($tipoNovo === 'produto') {
+                $novaCategoriaId = $dados['categoria_id'] ?? $produto->categoria_id;
+                $categoria = $this->buscarCategoria($novaCategoriaId);
+                if (!$categoria) {
+                    throw new \Exception('Categoria não encontrada para o produto');
+                }
+
+                $dadosUpdate = array_merge($dadosUpdate, [
+                    'categoria_id' => $novaCategoriaId,
+                    'fornecedor_id' => $dados['fornecedor_id'] ?? $produto->fornecedor_id,
+                    'codigo' => $dados['codigo'] ?? $produto->codigo,
+                    'preco_compra' => $dados['preco_compra'] ?? $produto->preco_compra,
+                    'estoque_minimo' => $dados['estoque_minimo'] ?? $produto->estoque_minimo,
+                    'taxa_iva' => (float) $categoria->taxa_iva,
+                    'sujeito_iva' => (bool) $categoria->sujeito_iva,
+                    'codigo_isencao' => $categoria->codigo_isencao ?? null,
+                    'taxa_retencao' => null,
+                    'duracao_estimada' => null,
+                    'unidade_medida' => null,
+                ]);
+
+                // ✅ Ajustar stock se alterado
+                if (isset($dados['estoque_atual']) && $dados['estoque_atual'] != $produto->estoque_atual) {
+                    $diferenca = (int) $dados['estoque_atual'] - (int) $produto->estoque_atual;
+
+                    if ($diferenca > 0) {
+                        $this->stockService->entradaCompra(
+                            $produto->id,
+                            $diferenca,
+                            (float) ($dados['preco_compra'] ?? $produto->preco_compra),
+                            null,
+                            $userId
+                        );
+                    } elseif ($diferenca < 0) {
+                        $this->stockService->saidaVenda(
+                            $produto->id,
+                            abs($diferenca),
+                            null,
+                            $userId
+                        );
+                    }
+
+                    $dadosUpdate['estoque_atual'] = $dados['estoque_atual'];
+                }
+            }
+
+            $produto->update($dadosUpdate);
+            return $produto->fresh();
+        });
+    }
+
+    /* =====================================================================
+     | OUTRAS OPERAÇÕES
+     | ================================================================== */
+
+    public function alterarStatus(string $produtoId, string $status): object
+    {
+        $this->verificarAcessoUsuario();
+        $produto = $this->buscarProdutoOrFail($produtoId);
+        $produto->status = $status;
+        $produto->save();
+
+        Log::info('[ProdutoService] Status alterado', [
+            'produto_id' => $produtoId,
+            'status' => $status,
+        ]);
+
+        return $produto;
+    }
+
+    public function buscarProduto(string $produtoId): object
+    {
+        $this->verificarAcessoUsuario();
+
+        if ($this->isColectivo()) {
+            $produto = SharedProduto::doTenant()
+                ->with(['categoria', 'fornecedor'])
+                ->where('id', $produtoId)
+                ->firstOrFail();
         } else {
-            $produto->margem_lucro = null;
+            $produto = TenantProduto::with(['categoria', 'fornecedor'])
+                ->where('id', $produtoId)
+                ->firstOrFail();
         }
 
-        // ✅ Usar taxa_iva_efectiva (para produtos: da categoria; para serviços: própria)
-        $produto->valor_iva = $produto->preco_venda * ($produto->taxa_iva_efectiva / 100);
-
-        // ✅ Valor de retenção (apenas para serviços)
-        if ($produto->tipo === 'servico' && $produto->taxa_retencao > 0) {
-            $produto->valor_retencao = $produto->preco_venda * ($produto->taxa_retencao / 100);
-            $produto->valor_liquido  = $produto->preco_venda - $produto->valor_retencao;
+        if ($produto->tipo === 'produto') {
+            $produto->margem_lucro = $this->calcularMargem($produto);
         }
 
         return $produto;
@@ -501,100 +536,30 @@ public function editarProduto(string $produtoId, array $dados): Produto
      | MÉTODOS PRIVADOS
      | ================================================================== */
 
-    /**
-     * Obtém a taxa de IVA da categoria associada ao produto.
-     * Retorna 0.0 se a categoria não existir ou não tiver IVA configurado.
-     *
-     * @param string|null $categoriaId
-     * @return float
-     */
-    private function obterTaxaIvaCategoria(?string $categoriaId): float
-    {
-        if (!$categoriaId) {
-            Log::warning('[ProdutoService] Produto sem categoria — taxa IVA será 0%');
-            return 0.0;
-        }
-
-        $categoria = Categoria::withTrashed()->find($categoriaId);
-
-        if (!$categoria) {
-            Log::warning('[ProdutoService] Categoria não encontrada', ['categoria_id' => $categoriaId]);
-            return 0.0;
-        }
-
-        return (float) $categoria->taxa_iva;
-    }
-
-    /**
-     * Calcula o preço de venda baseado na estratégia escolhida.
-     *
-     * Estratégias:
-     *  - 'fixo': preco_venda fornecido directamente
-     *  - 'margem': calcula preço para margem de lucro desejada
-     *  - 'markup': calcula preço com markup sobre custo
-     *
-     * @param array $dados
-     * @return float
-     * @throws \Exception Se margem inválida
-     */
     private function calcularPrecoVenda(array $dados): float
     {
         $precoCompra = (float) ($dados['preco_compra'] ?? 0);
-        $despesas    = (float) ($dados['despesas_adicionais'] ?? 0);
-        $tipoPreco   = $dados['tipo_preco'] ?? 'fixo';
+        $tipoPreco = $dados['tipo_preco'] ?? 'fixo';
 
-        $base = $precoCompra + $despesas;
-
-        // ✅ Se não tem tipo_preco definido ou é fixo, retorna o preco_venda informado
         if ($tipoPreco === 'fixo') {
             return (float) ($dados['preco_venda'] ?? 0);
         }
 
         if ($tipoPreco === 'margem') {
-            // ✅ Verificar se margem_lucro existe
-            if (!isset($dados['margem_lucro']) && !isset($dados['margem_lucro'])) {
-                Log::warning('[ProdutoService] Margem não informada para cálculo', [
-                    'tipo_preco' => $tipoPreco,
-                    'dados' => array_keys($dados)
-                ]);
-                return (float) ($dados['preco_venda'] ?? 0);
-            }
-
             $margem = (float) ($dados['margem_lucro'] ?? 0);
-
-            // ✅ Validação da margem
             if ($margem <= 0 || $margem >= 100) {
                 throw new \Exception('Margem inválida — deve ser entre 0% e 99,99%');
             }
-
-            if ($base <= 0) {
-                Log::warning('[ProdutoService] Base de cálculo zero para margem', [
-                    'preco_compra' => $precoCompra,
-                    'despesas' => $despesas
-                ]);
+            if ($precoCompra <= 0) {
                 return (float) ($dados['preco_venda'] ?? 0);
             }
-
-            return $base / (1 - ($margem / 100));
+            return $precoCompra / (1 - ($margem / 100));
         }
 
-        if ($tipoPreco === 'markup') {
-            $markup = (float) ($dados['markup'] ?? 0);
-            return $base + ($base * $markup / 100);
-        }
-
-        // FIXO (fallback)
         return (float) ($dados['preco_venda'] ?? 0);
     }
 
-    /**
-     * Calcula a margem de lucro (%).
-     * Margem = ((Preço Venda - Preço Compra) / Preço Venda) × 100
-     *
-     * @param Produto $produto
-     * @return float
-     */
-    private function calcularMargem(Produto $produto): float
+    private function calcularMargem(object $produto): float
     {
         if ((float) $produto->preco_compra === 0.0) {
             return 0.0;
@@ -602,46 +567,19 @@ public function editarProduto(string $produtoId, array $dados): Produto
         return (($produto->preco_venda - $produto->preco_compra) / $produto->preco_venda) * 100;
     }
 
-    /**
-     * Valida se o preço está dentro dos limites configurados.
-     *
-     * @param Produto $produto
-     * @param float $preco
-     * @throws \Exception Se preço excede limites
-     */
-    private function validarPreco(Produto $produto, float $preco): void
+    private function validarTaxaRetencao(?float $taxa, string $nomeProduto): float
     {
-        if (isset($produto->preco_controlado) && $produto->preco_controlado
-            && isset($produto->preco_maximo) && $produto->preco_maximo
-            && $preco > $produto->preco_maximo) {
-            throw new \Exception('Preço acima do permitido');
+        if ($taxa === null) {
+            return self::TAXA_RETENCAO_DEFAULT;
         }
 
-        if (isset($produto->preco_minimo) && $produto->preco_minimo && $preco < $produto->preco_minimo) {
-            throw new \Exception('Preço abaixo do mínimo');
-        }
-    }
-
-    /**
-     * Valida taxa de retenção contra taxas legais em Angola.
-     * Se inválida, registra warning e retorna 6.5% (default).
-     *
-     * Taxas válidas: 2%, 5%, 6.5%, 10%, 15%
-     *
-     * @param float $taxa
-     * @param string $nomeProduto
-     * @return float
-     */
-    private function validarTaxaRetencao(float $taxa, string $nomeProduto): float
-    {
         if (in_array($taxa, self::TAXAS_RETENCAO_VALIDAS, true)) {
             return $taxa;
         }
 
         Log::warning('[ProdutoService] Taxa de retenção fora das taxas legais — usando 6,5%', [
             'taxa_informada' => $taxa,
-            'produto'        => $nomeProduto,
-            'taxas_validas'  => self::TAXAS_RETENCAO_VALIDAS,
+            'produto' => $nomeProduto,
         ]);
 
         return self::TAXA_RETENCAO_DEFAULT;

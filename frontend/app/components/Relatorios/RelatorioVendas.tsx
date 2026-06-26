@@ -31,102 +31,156 @@ export function RelatorioVendasComponent({
   relatorioVendas,
   relatorioFaturacao,
 }: RelatorioVendasProps) {
-  // Gráfico de distribuição de vendas corrigido: mostra Valor Bruto (Base + IVA) vs Retenções
-  const dadosVendasPie: PieItem[] = !relatorioVendas?.totais
-    ? []
-    : [
-        {
-          name: "Valor Bruto",
-          value: (relatorioVendas.totais.total_base_tributavel || 0) + (relatorioVendas.totais.total_iva || 0),
-          total: (relatorioVendas.totais.total_base_tributavel || 0) + (relatorioVendas.totais.total_iva || 0),
-          color: colors.primary,
-        },
-        {
-          name: "Retenções",
-          value: relatorioVendas.totais.total_retencao || 0,
-          total: relatorioVendas.totais.total_retencao || 0,
-          color: colors.secondary,
-        },
-      ].filter((d) => d.value > 0);
+  // ✅ KPIs - Usa diretamente os dados do backend
+  const kpis = relatorioVendas?.kpis;
 
-  const dadosFaturacaoECorrecaoPie: PieItem[] = !relatorioFaturacao
-    ? []
-    : [
-        {
-          name: "Factura",
-          value: relatorioFaturacao.por_tipo?.FT?.quantidade || 0,
-          total: relatorioFaturacao.por_tipo?.FT?.total_liquido || 0,
-          color: colors.primary,
-        },
-        {
-          name: "Factura-Recibo",
-          value: relatorioFaturacao.por_tipo?.FR?.quantidade || 0,
-          total: relatorioFaturacao.por_tipo?.FR?.total_liquido || 0,
-          color: colors.secondary,
-        },
-        {
-          name: "Nota de Crédito",
-          value: relatorioFaturacao.por_tipo_correcao?.NC?.quantidade || 0,
-          total: relatorioFaturacao.por_tipo_correcao?.NC?.total_liquido || 0,
-          color: colors.danger,
-        },
-        {
-          name: "Nota de Débito",
-          value: relatorioFaturacao.por_tipo_correcao?.ND?.quantidade || 0,
-          total: relatorioFaturacao.por_tipo_correcao?.ND?.total_liquido || 0,
-          color: colors.warning,
-        },
-        {
-          name: "Retificação",
-          value: relatorioFaturacao.por_tipo_correcao?.FRt?.quantidade || 0,
-          total: relatorioFaturacao.por_tipo_correcao?.FRt?.total_liquido || 0,
-          color: colors.success,
-        },
-      ].filter((d) => d.value > 0);
+  // ✅ Gráfico de distribuição de vendas
+  const dadosVendasPie = useMemo(() => {
+    if (!relatorioVendas) return [];
+    
+    // Usar dados do kpis
+    const totalVendas = kpis?.total_vendas ?? 0;
+    const result = [];
+    
+    if (totalVendas > 0) {
+      result.push({ 
+        name: "Total Vendas", 
+        value: totalVendas, 
+        color: colors.primary 
+      });
+    }
+    
+    return result;
+  }, [relatorioVendas, kpis, colors]);
 
-  // Formatação inteligente do eixo Y (evita "0k")
+  // ✅ Gráfico de distribuição de facturação
+  const dadosFaturacaoPie = useMemo(() => {
+    if (!relatorioFaturacao) return [];
+    
+    const dados = [];
+    if (relatorioFaturacao.faturacao_paga > 0) {
+      dados.push({ 
+        name: "Paga", 
+        value: relatorioFaturacao.faturacao_paga, 
+        color: "#22c55e" 
+      });
+    }
+    if (relatorioFaturacao.faturacao_pendente > 0) {
+      dados.push({ 
+        name: "Pendente", 
+        value: relatorioFaturacao.faturacao_pendente, 
+        color: "#f97316" 
+      });
+    }
+    return dados;
+  }, [relatorioFaturacao]);
+
+  // ✅ Gráfico de evolução - usa agrupado do backend
+  const dadosEvolucao = useMemo(() => {
+    if (!relatorioVendas?.agrupado) return [];
+    return relatorioVendas.agrupado.map((item: any) => ({
+      periodo: item.periodo || item.mes || item.chave,
+      total: item.total || 0,
+    }));
+  }, [relatorioVendas?.agrupado]);
+
+  // ✅ Documentos por tipo
+  const dadosPorTipo = useMemo(() => {
+    if (!relatorioFaturacao?.por_tipo) return [];
+    
+    return Object.entries(relatorioFaturacao.por_tipo).map(([tipo, dados]: [string, any]) => ({
+      tipo,
+      quantidade: dados?.quantidade ?? 0,
+      valor: dados?.total_liquido ?? 0,
+    }));
+  }, [relatorioFaturacao?.por_tipo]);
+
+  // Formatação inteligente do eixo Y
   const formatYAxis = (value: number) => {
     if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
     if (value >= 1_000) return `${(value / 1_000).toFixed(0)}k`;
     return value.toString();
   };
 
-  // Últimas vendas (slice fixo, memoizado para evitar recorte desnecessário)
-  const ultimasVendas: LinhaVenda[] = (relatorioVendas?.vendas ?? []).slice(0, 15);
+  // Últimas vendas
+  const ultimasVendas = useMemo(() => {
+    return (relatorioVendas?.vendas ?? []).slice(0, 15);
+  }, [relatorioVendas?.vendas]);
 
-  const border = `1px solid ${colors.primary}`;
+  const border = `1px solid ${colors.border}`;
 
   if (isLoading) return <CarregandoLinha colors={colors} />;
   if (!relatorioVendas || !relatorioFaturacao) return <Vazio colors={colors} />;
 
+  // ✅ Dados do backend
+  const totalVendas = kpis?.total_vendas ?? 0;
+  const quantidadeVendas = kpis?.quantidade_vendas ?? 0;
+  const ticketMedio = kpis?.ticket_medio ?? 0;
+  const clientesPeriodo = kpis?.clientes_periodo ?? 0;
+  const produtosVendidos = kpis?.produtos_vendidos ?? 0;
+  const vendasPorStatus = kpis?.vendas_por_status ?? { pagas: 0, pendentes: 0, canceladas: 0 };
+
   return (
     <>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-0 border" style={{ borderColor: colors.border }}>
-        <KpiCell label="Total Vendas" value={formatarKwanza(relatorioVendas.totais?.total_valor ?? 0)}
-          sub={`${relatorioVendas.totais?.total_vendas ?? 0} transações`} color={colors.primary} colors={colors} border={border} />
-        <KpiCell label="Base Tributável" value={formatarKwanza(relatorioVendas.totais?.total_base_tributavel ?? 0)}
-          color="#3b82f6" colors={colors} border={border} />
-        <KpiCell label="Total IVA" value={formatarKwanza(relatorioVendas.totais?.total_iva ?? 0)}
-          color={colors.secondary} colors={colors} border={border} />
-        <KpiCell label="Retenções" value={formatarKwanza(relatorioVendas.totais?.total_retencao ?? 0)}
-          color="#f97316" colors={colors} border={border} last />
+      {/* ✅ KPIS */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-0 border rounded-lg overflow-hidden" style={{ borderColor: colors.border }}>
+        <KpiCell 
+          label="Total Vendas" 
+          value={formatarKwanza(totalVendas)}
+          sub={`${quantidadeVendas} transações`} 
+          color={colors.primary} 
+          colors={colors} 
+          border={border} 
+        />
+        <KpiCell 
+          label="Ticket Médio" 
+          value={formatarKwanza(ticketMedio)}
+          sub={`${clientesPeriodo} clientes`} 
+          color="#3b82f6" 
+          colors={colors} 
+          border={border} 
+        />
+        <KpiCell 
+          label="Produtos Vendidos" 
+          value={produtosVendidos.toString()}
+          sub={`${vendasPorStatus.pagas} pagas`} 
+          color={colors.secondary} 
+          colors={colors} 
+          border={border} 
+        />
+        <KpiCell 
+          label="Status" 
+          value={`${vendasPorStatus.pendentes} pendentes`}
+          sub={`${vendasPorStatus.canceladas} canceladas`} 
+          color="#f97316" 
+          colors={colors} 
+          border={border} 
+          last 
+        />
       </div>
 
+      {/* ✅ GRÁFICOS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <SecaoGrafico titulo="Distribuição de Vendas (Bruto vs Retenções)" colors={colors}>
+        {/* Gráfico de Vendas */}
+        <SecaoGrafico titulo="Total de Vendas" colors={colors}>
           {dadosVendasPie.length > 0 ? (
             <ResponsiveContainer width="100%" height={240}>
               <PieChart>
-                <Pie data={dadosVendasPie} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={85}
-                  label={renderPieLabel} labelLine>
+                <Pie 
+                  data={dadosVendasPie} 
+                  dataKey="value" 
+                  nameKey="name" 
+                  cx="50%" 
+                  cy="50%" 
+                  outerRadius={85}
+                  label={(e: any) => `${e.name}: ${formatarKwanza(e.value)}`} 
+                  labelLine
+                >
                   {dadosVendasPie.map((e, i) => <Cell key={i} fill={e.color} />)}
                 </Pie>
-                <Tooltip
-                  formatter={(value, name, props) => [
-                    formatarQuantidadePie(value),
-                    `${String(name)} • ${formatarKwanza((props?.payload as PieItem | undefined)?.total ?? 0)}`,
-                  ]}
-                  contentStyle={tooltipStyle(colors)}
+                <Tooltip 
+                  formatter={(v: any) => formatarKwanza(Number(v))} 
+                  contentStyle={tooltipStyle(colors)} 
                 />
                 <Legend />
               </PieChart>
@@ -134,27 +188,25 @@ export function RelatorioVendasComponent({
           ) : <SemDados colors={colors} />}
         </SecaoGrafico>
 
-        <SecaoGrafico titulo="Distribuição de Facturação e Correções" colors={colors}>
-          {dadosFaturacaoECorrecaoPie.length > 0 ? (
+        {/* Gráfico de Facturação */}
+        <SecaoGrafico titulo="Distribuição de Facturação" colors={colors}>
+          {dadosFaturacaoPie.length > 0 ? (
             <ResponsiveContainer width="100%" height={240}>
               <PieChart>
-                <Pie
-                  data={dadosFaturacaoECorrecaoPie}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={52}
-                  outerRadius={88}
-                  label={renderPieLabel}>
-                  {dadosFaturacaoECorrecaoPie.map((e, i) => <Cell key={i} fill={e.color} />)}
+                <Pie 
+                  data={dadosFaturacaoPie} 
+                  dataKey="value" 
+                  nameKey="name" 
+                  cx="50%" 
+                  cy="50%" 
+                  outerRadius={85}
+                  label={(e: any) => `${e.name}: ${((e.percent ?? 0) * 100).toFixed(0)}%`}
+                >
+                  {dadosFaturacaoPie.map((e, i) => <Cell key={i} fill={e.color} />)}
                 </Pie>
-                <Tooltip
-                  formatter={(value, name, props) => [
-                    formatarQuantidadePie(value),
-                    `${String(name)} • ${formatarKwanza((props?.payload as PieItem | undefined)?.total ?? 0)}`,
-                  ]}
-                  contentStyle={tooltipStyle(colors)}
+                <Tooltip 
+                  formatter={(v: any) => formatarKwanza(Number(v))} 
+                  contentStyle={tooltipStyle(colors)} 
                 />
                 <Legend />
               </PieChart>
@@ -163,10 +215,11 @@ export function RelatorioVendasComponent({
         </SecaoGrafico>
       </div>
 
-      {(relatorioVendas.agrupado?.length ?? 0) > 0 && (
+      {/* ✅ EVOLUÇÃO DE VENDAS */}
+      {dadosEvolucao.length > 0 && (
         <SecaoGrafico titulo="Evolução de Vendas" colors={colors}>
           <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={relatorioVendas.agrupado}>
+            <AreaChart data={dadosEvolucao}>
               <defs>
                 <linearGradient id="gVendas" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor={colors.primary} stopOpacity={0.25} />
@@ -174,46 +227,90 @@ export function RelatorioVendasComponent({
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
-              <XAxis dataKey="periodo" tick={{ fontSize: 10, fill: colors.textSecondary }} />
-              <YAxis tick={{ fontSize: 10, fill: colors.textSecondary }} tickFormatter={formatYAxis} />
-              <Tooltip formatter={formatTooltip} contentStyle={tooltipStyle(colors)} />
-              <Area type="monotone" dataKey="total" stroke={colors.primary} fill="url(#gVendas)" strokeWidth={1.5} />
+              <XAxis 
+                dataKey="periodo" 
+                tick={{ fontSize: 10, fill: colors.textSecondary }} 
+              />
+              <YAxis 
+                tick={{ fontSize: 10, fill: colors.textSecondary }} 
+                tickFormatter={formatYAxis} 
+              />
+              <Tooltip 
+                formatter={(v: any) => formatarKwanza(Number(v))} 
+                contentStyle={tooltipStyle(colors)} 
+              />
+              <Area 
+                type="monotone" 
+                dataKey="total" 
+                stroke={colors.primary} 
+                fill="url(#gVendas)" 
+                strokeWidth={1.5} 
+              />
             </AreaChart>
           </ResponsiveContainer>
         </SecaoGrafico>
       )}
 
-      {Object.keys(relatorioFaturacao.por_tipo ?? {}).length > 0 && (
+      {/* ✅ DOCUMENTOS POR TIPO */}
+      {dadosPorTipo.length > 0 && (
         <SecaoGrafico titulo="Documentos por Tipo" colors={colors}>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={Object.entries(relatorioFaturacao.por_tipo ?? {}).map(([tipo, d]) => {
-              const item = d as FaturacaoTipoItem;
-              return { tipo, quantidade: item?.quantidade ?? 0, valor: item?.total_liquido ?? 0 };
-            })}>
+            <BarChart data={dadosPorTipo}>
               <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
-              <XAxis dataKey="tipo" tick={{ fontSize: 10, fill: colors.textSecondary }} />
-              <YAxis yAxisId="left" tick={{ fontSize: 10, fill: colors.textSecondary }} tickFormatter={formatYAxis} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: colors.textSecondary }} tickFormatter={formatYAxis} />
+              <XAxis 
+                dataKey="tipo" 
+                tick={{ fontSize: 10, fill: colors.textSecondary }} 
+              />
+              <YAxis 
+                yAxisId="left" 
+                tick={{ fontSize: 10, fill: colors.textSecondary }} 
+                tickFormatter={formatYAxis} 
+              />
+              <YAxis 
+                yAxisId="right" 
+                orientation="right" 
+                tick={{ fontSize: 10, fill: colors.textSecondary }} 
+                tickFormatter={formatYAxis} 
+              />
               <Tooltip contentStyle={tooltipStyle(colors)} />
               <Legend />
-              <Bar yAxisId="left" dataKey="quantidade" fill={colors.primary} name="Quantidade" radius={[2, 2, 0, 0]} />
-              <Bar yAxisId="right" dataKey="valor" fill={colors.secondary} name="Valor" radius={[2, 2, 0, 0]} />
+              <Bar 
+                yAxisId="left" 
+                dataKey="quantidade" 
+                fill={colors.primary} 
+                name="Quantidade" 
+                radius={[2, 2, 0, 0]} 
+              />
+              <Bar 
+                yAxisId="right" 
+                dataKey="valor" 
+                fill={colors.secondary} 
+                name="Valor" 
+                radius={[2, 2, 0, 0]} 
+              />
             </BarChart>
           </ResponsiveContainer>
         </SecaoGrafico>
       )}
 
+      {/* ✅ ÚLTIMAS VENDAS */}
       <SecaoGrafico titulo="Últimas Vendas" colors={colors}>
         <TabelaDados
-          headers={["Cliente", "Total", "Estado"]}
-          rows={ultimasVendas.map((v) => [
-            v.cliente,
+          headers={["Nº Documento", "Cliente", "Total", "Estado"]}
+          rows={ultimasVendas.map((v: any) => [
+            v.numero_documento || "-",
+            typeof v.cliente === "string" ? v.cliente : v.cliente?.nome ?? "-",
             formatarKwanza(Number(v.total) ?? 0),
             <EstadoBadge key="s" estado={v.estado_pagamento} colors={colors} />,
           ])}
-          aligns={["left", "right", "center"]}
+          aligns={["left", "left", "right", "center"]}
           colors={colors}
         />
+        {relatorioVendas.vendas.length > 15 && (
+          <p className="text-xs text-center mt-2" style={{ color: colors.textSecondary }}>
+            Mostrando 15 de {relatorioVendas.vendas.length} vendas
+          </p>
+        )}
       </SecaoGrafico>
     </>
   );

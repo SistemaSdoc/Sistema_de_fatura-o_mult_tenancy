@@ -22,6 +22,8 @@ Schema::create('empresas', function (Blueprint $table) {
 
     $table->string('db_name'); // nome da base do tenant
     $table->string('subdomain')->unique();
+    $table->enum('modo', ['singular', 'colectivo'])->default('colectivo');
+
     // Fiscal
     $table->enum('regime_fiscal', ['simplificado', 'geral'])->default('geral');
     $table->boolean('sujeito_iva')->default(true);

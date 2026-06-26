@@ -5,47 +5,282 @@ namespace App\Services;
 use DOMDocument;
 use DOMElement;
 use App\Models\Empresa;
-use App\Models\Tenant\Cliente;
-use App\Models\Tenant\Produto;
-use App\Models\Tenant\DocumentoFiscal;
-use App\Models\Tenant\MovimentoStock;
+use App\Models\LandlordUser;
+use App\Models\Shared\User as SharedUser;
+use App\Models\Tenant\User as TenantUser;
+
+// ⭐ MODELS SHARED (para modo colectivo)
+use App\Models\Shared\Cliente as SharedCliente;
+use App\Models\Shared\Produto as SharedProduto;
+use App\Models\Shared\DocumentoFiscal as SharedDocumentoFiscal;
+use App\Models\Shared\MovimentoStock as SharedMovimentoStock;
+use App\Models\Shared\Categoria as SharedCategoria;
+
+// ⭐ MODELS TENANT (para modo singular)
+use App\Models\Tenant\Cliente as TenantCliente;
+use App\Models\Tenant\Produto as TenantProduto;
+use App\Models\Tenant\DocumentoFiscal as TenantDocumentoFiscal;
+use App\Models\Tenant\MovimentoStock as TenantMovimentoStock;
+use App\Models\Tenant\Categoria as TenantCategoria;
+
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
+use Carbon\Carbon;
 
+/**
+ * SaftService
+ *
+ * ✅ SUPORTA AMBOS OS MODOS:
+ * - 'colectivo' → Shared DB (com tenant_id)
+ * - 'singular' → Tenant DB (banco dedicado)
+ */
 class SaftService
 {
-    /**
-     * Gera SAF-T para a empresa actual (baseado na sessão) – para uso via API.
-     */
+    protected ?Empresa $empresa = null;
+    protected string $modo = 'colectivo';
+    protected ?object $tenantUser = null;
+
+    public function __construct()
+    {
+        // ✅ Obtém da sessão (prioridade)
+        $this->empresa = app('current.empresa');
+        $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
+        
+        Log::debug('[SaftService] Inicializado', [
+            'modo' => $this->modo,
+            'empresa_id' => $this->empresa?->id,
+        ]);
+    }
+
+    /* =====================================================================
+     | HELPERS
+     | ================================================================== */
+
+    protected function getModo(): string
+    {
+        $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
+        return $this->modo;
+    }
+
+    protected function getEmpresa(): ?Empresa
+    {
+        if (!$this->empresa) {
+            $this->empresa = app('current.empresa');
+        }
+        return $this->empresa;
+    }
+
+    protected function getUser(): ?object
+    {
+        return $this->tenantUser;
+    }
+
+    protected function isColectivo(): bool
+    {
+        return $this->getModo() === 'colectivo';
+    }
+
+    protected function isSingular(): bool
+    {
+        return $this->getModo() === 'singular';
+    }
+
+    /* =====================================================================
+     | VERIFICAÇÃO DE ACESSO ✅
+     | ================================================================== */
+
+    protected function verificarAcessoUsuario(): void
+    {
+        Log::debug('[SaftService] Verificando acesso');
+
+        $this->empresa = app('current.empresa');
+        if (!$this->empresa) {
+            Log::error('[SaftService] Empresa não identificada.');
+            throw new \Exception('Empresa não identificada.', 400);
+        }
+
+        $this->modo = $this->empresa->modo ?? 'colectivo';
+
+        $landlordUser = Auth::guard('landlord')->user();
+
+        if (!$landlordUser) {
+            $landlordId = session('landlord_user_id');
+            if ($landlordId) {
+                $landlordUser = LandlordUser::find($landlordId);
+            }
+        }
+
+        if (!$landlordUser) {
+            Log::error('[SaftService] Utilizador landlord não autenticado.');
+            throw new \Exception('Usuário não autenticado.', 401);
+        }
+
+        $tenantUser = $this->buscarUsuario($this->empresa, $landlordUser->email);
+        if (!$tenantUser) {
+            Log::error('[SaftService] Utilizador tenant não encontrado.', [
+                'email' => $landlordUser->email,
+            ]);
+            throw new \Exception('Usuário não tem permissão para aceder a esta empresa.', 403);
+        }
+
+        $this->tenantUser = $tenantUser;
+
+        Log::info('[SaftService] Acesso verificado com sucesso', [
+            'modo' => $this->modo,
+            'user_id' => $tenantUser->id,
+            'email' => $tenantUser->email,
+        ]);
+    }
+
+    protected function buscarUsuario(Empresa $empresa, string $email): ?object
+    {
+        if ($empresa->modo === 'singular') {
+            return TenantUser::on('tenant')->where('email', $email)->first();
+        }
+        return SharedUser::on('shared')
+            ->where('email', $email)
+            ->where('tenant_id', $empresa->id)
+            ->first();
+    }
+
+    protected function getUserId(): ?string
+    {
+        return $this->tenantUser?->id;
+    }
+
+    /* =====================================================================
+     | HELPERS: Models e Queries
+     | ================================================================== */
+
+    protected function clienteModel()
+    {
+        return $this->isColectivo() ? new SharedCliente() : new TenantCliente();
+    }
+
+    protected function produtoModel()
+    {
+        return $this->isColectivo() ? new SharedProduto() : new TenantProduto();
+    }
+
+    protected function documentoFiscalModel()
+    {
+        return $this->isColectivo() ? new SharedDocumentoFiscal() : new TenantDocumentoFiscal();
+    }
+
+    protected function movimentoStockModel()
+    {
+        return $this->isColectivo() ? new SharedMovimentoStock() : new TenantMovimentoStock();
+    }
+
+    protected function queryDocumentosFiscais()
+    {
+        if ($this->isColectivo()) {
+            return SharedDocumentoFiscal::doTenant();
+        }
+        return TenantDocumentoFiscal::query();
+    }
+
+    protected function queryClientes()
+    {
+        if ($this->isColectivo()) {
+            return SharedCliente::doTenant();
+        }
+        return TenantCliente::query();
+    }
+
+    protected function queryProdutos()
+    {
+        if ($this->isColectivo()) {
+            return SharedProduto::doTenant();
+        }
+        return TenantProduto::query();
+    }
+
+    protected function queryMovimentosStock()
+    {
+        if ($this->isColectivo()) {
+            return SharedMovimentoStock::doTenant();
+        }
+        return TenantMovimentoStock::query();
+    }
+
+    protected function obterEmpresa(): Empresa
+    {
+        if ($this->empresa) {
+            return $this->empresa;
+        }
+
+        $tenantId = Session::get('tenant_id');
+        if ($tenantId) {
+            $empresa = Empresa::on('landlord')->find($tenantId);
+            if ($empresa) {
+                $this->empresa = $empresa;
+                $this->modo = $empresa->modo ?? 'colectivo';
+                return $empresa;
+            }
+        }
+
+        throw new \Exception('Nenhum tenant identificado.');
+    }
+
+    /* =====================================================================
+     | MÉTODOS PÚBLICOS
+     | ================================================================== */
+
     public function generateFull(int $year, int $month): string
     {
-        $empresa = $this->getCurrentEmpresa();
+        $this->verificarAcessoUsuario();
+        $empresa = $this->obterEmpresa();
+        
+        Log::info('[SAFT Service] Iniciando geração SAF-T', [
+            'empresa_id' => $empresa->id,
+            'ano' => $year,
+            'mes' => $month,
+            'modo' => $this->getModo(),
+        ]);
+
         return $this->generateFullInternal($year, $month, $empresa);
     }
 
-    /**
-     * Gera SAF-T para uma empresa específica (útil para comandos/filas).
-     */
     public function generateForEmpresa(Empresa $empresa, int $year, int $month): string
     {
-        config(['database.connections.tenant.database' => $empresa->db_name]);
-        DB::purge('tenant');
-        DB::reconnect('tenant');
-        config(['database.default' => 'tenant']);
+        if ($empresa->modo === 'singular') {
+            config(['database.connections.tenant.database' => $empresa->db_name]);
+            DB::purge('tenant');
+            DB::reconnect('tenant');
+            config(['database.default' => 'tenant']);
+        } else {
+            config(['database.default' => 'shared']);
+            DB::purge('shared');
+            DB::reconnect('shared');
+        }
+
+        $this->empresa = $empresa;
+        $this->modo = $empresa->modo;
+
+        Log::info('[SAFT Service] Gerando SAF-T para empresa específica', [
+            'empresa_id' => $empresa->id,
+            'ano' => $year,
+            'mes' => $month,
+            'modo' => $this->getModo(),
+        ]);
 
         return $this->generateFullInternal($year, $month, $empresa);
     }
 
-    /**
-     * Lógica principal de geração do SAF-T (versão angolana AO_1.01_01).
-     */
+    /* =====================================================================
+     | LÓGICA PRINCIPAL
+     | ================================================================== */
+
     private function generateFullInternal(int $year, int $month, Empresa $empresa): string
     {
         $dom = new DOMDocument('1.0', 'UTF-8');
         $dom->formatOutput = true;
 
-        // Forçar versão angolana
         $root = $dom->createElement('AuditFile');
         $root->setAttribute('xmlns', 'urn:OECD:StandardAuditFile-Tax:AO_1.01_01');
         $root->setAttribute('xmlns:xsi', 'http://www.w3.org/2001/XMLSchema-instance');
@@ -71,17 +306,6 @@ class SaftService
         return $this->saveXml($dom, $year, $month, $empresa);
     }
 
-    // ==================== HELPERS ====================
-
-    protected function getCurrentEmpresa(): Empresa
-    {
-        $tenantId = Session::get('tenant_id');
-        if (!$tenantId) throw new \Exception('Nenhum tenant identificado na sessão.');
-        $empresa = Empresa::on('landlord')->find($tenantId);
-        if (!$empresa) throw new \Exception('Empresa não encontrada.');
-        return $empresa;
-    }
-
     private function saveXml(DOMDocument $dom, int $year, int $month, Empresa $empresa): string
     {
         $subdomain = $empresa->subdomain ?? $empresa->id;
@@ -90,10 +314,18 @@ class SaftService
         Storage::disk('local')->makeDirectory($directory);
         $path = Storage::disk('local')->path("{$directory}/{$filename}");
         $dom->save($path);
+        
+        Log::info('[SAFT Service] XML salvo', [
+            'path' => $path,
+            'modo' => $this->getModo(),
+        ]);
+        
         return $path;
     }
 
-    // ==================== HEADER ====================
+    /* =====================================================================
+     | HEADER
+     | ================================================================== */
 
     private function addHeader(DOMDocument $dom, DOMElement $root, int $year, int $month, Empresa $empresa): void
     {
@@ -113,7 +345,6 @@ class SaftService
         $header->appendChild($dom->createElement('CompanyName', $empresa->nome));
         $header->appendChild($dom->createElement('BusinessName', $empresa->nome));
 
-        // Endereço estruturado
         $companyAddr = $dom->createElement('CompanyAddress');
         $companyAddr->appendChild($dom->createElement('AddressDetail', $empresa->endereco ?? 'Desconhecido'));
         $companyAddr->appendChild($dom->createElement('City', $empresa->cidade ?? 'Luanda'));
@@ -124,7 +355,7 @@ class SaftService
         $endDate = date('Y-m-t', strtotime($startDate));
         $header->appendChild($dom->createElement('StartDate', $startDate));
         $header->appendChild($dom->createElement('EndDate', $endDate));
-        $header->appendChild($dom->createElement('CurrencyCode', $empresa->moeda ?? 'AOA'));
+        $header->appendChild($dom->createElement('CurrencyCode', 'AOA'));
         $header->appendChild($dom->createElement('DateCreated', now()->format('Y-m-d\TH:i:s')));
 
         $software = $dom->createElement('Software');
@@ -138,21 +369,24 @@ class SaftService
         $header->appendChild($dom->createElement('Website', $empresa->website ?? ''));
     }
 
-    // ==================== MASTER FILES ====================
+    /* =====================================================================
+     | MASTER FILES
+     | ================================================================== */
 
     private function addCustomers(DOMDocument $dom, DOMElement $masterFiles): void
     {
         $customersNode = $dom->createElement('Customer');
         $masterFiles->appendChild($customersNode);
 
-        $clientes = Cliente::where('status', 'ativo')->get();
+        $clientes = $this->queryClientes()->where('status', 'ativo')->get();
+
         foreach ($clientes as $cliente) {
             $customer = $dom->createElement('Customer');
             $customersNode->appendChild($customer);
 
             $customer->appendChild($dom->createElement('CustomerID', (string) $cliente->id));
             $customer->appendChild($dom->createElement('AccountID', 'Desconhecido'));
-            $customer->appendChild($dom->createElement('CustomerTaxID', $cliente->nif ?? ($cliente->nif === '999999990' ? '999999990' : '')));
+            $customer->appendChild($dom->createElement('CustomerTaxID', $cliente->nif ?? ''));
 
             $billing = $dom->createElement('BillingAddress');
             $billing->appendChild($dom->createElement('BuildingNumber', ''));
@@ -175,25 +409,50 @@ class SaftService
         $productsNode = $dom->createElement('Product');
         $masterFiles->appendChild($productsNode);
 
-        $produtos = Produto::where('status', 'ativo')->get();
+        $produtos = $this->queryProdutos()->where('status', 'ativo')->get();
+
         foreach ($produtos as $produto) {
             $product = $dom->createElement('Product');
             $productsNode->appendChild($product);
 
-            // Usar código amigável se disponível, senão ID
             $productCode = !empty($produto->codigo) ? $produto->codigo : substr($produto->id, 0, 20);
             $product->appendChild($dom->createElement('ProductCode', $productCode));
             $product->appendChild($dom->createElement('ProductDescription', $produto->nome));
             $product->appendChild($dom->createElement('ProductType', $produto->tipo === 'servico' ? 'S' : 'P'));
             $product->appendChild($dom->createElement('UnitPrice', number_format($produto->preco_venda, 4, '.', '')));
+            
+            // Buscar código de IVA
             $taxCode = $this->getTaxCodeForProduct($produto);
             if ($taxCode) {
                 $product->appendChild($dom->createElement('TaxCode', $taxCode));
             }
             if ($produto->categoria_id) {
-                $product->appendChild($dom->createElement('ProductGroup', $produto->categoria->nome ?? 'Geral'));
+                $categoria = $this->isColectivo() 
+                    ? SharedCategoria::doTenant()->find($produto->categoria_id)
+                    : TenantCategoria::find($produto->categoria_id);
+                $product->appendChild($dom->createElement('ProductGroup', $categoria->nome ?? 'Geral'));
             }
         }
+    }
+
+    private function getTaxCodeForProduct($produto): string
+    {
+        $taxa = 0;
+        
+        if ($produto->tipo === 'servico') {
+            $taxa = (float) $produto->taxa_iva;
+        } elseif ($produto->categoria_id) {
+            $categoria = $this->isColectivo() 
+                ? SharedCategoria::doTenant()->find($produto->categoria_id)
+                : TenantCategoria::find($produto->categoria_id);
+            $taxa = $categoria ? (float) $categoria->taxa_iva : 14;
+        }
+        
+        if ($taxa == 0) return 'ISE';
+        if ($taxa == 5) return 'RED5';
+        if ($taxa == 7) return 'RED7';
+        if ($taxa == 14) return 'NOR';
+        return 'NOR';
     }
 
     private function addTaxTable(DOMDocument $dom, DOMElement $masterFiles): void
@@ -201,7 +460,6 @@ class SaftService
         $taxTable = $dom->createElement('TaxTable');
         $masterFiles->appendChild($taxTable);
 
-        // Taxas padrão Angola: 0%, 5%, 7%, 14%
         $taxas = [0, 5, 7, 14];
 
         foreach ($taxas as $taxa) {
@@ -215,7 +473,6 @@ class SaftService
             $entry->appendChild($dom->createElement('TaxAmount', number_format($taxa, 2, '.', '')));
         }
 
-        // Entrada NS (não sujeito)
         $entryNs = $dom->createElement('TaxTableEntry');
         $taxTable->appendChild($entryNs);
         $entryNs->appendChild($dom->createElement('TaxType', 'NS'));
@@ -224,23 +481,9 @@ class SaftService
         $entryNs->appendChild($dom->createElement('TaxAmount', '0'));
     }
 
-    private function getTaxCodeForProduct(Produto $produto): string
-    {
-        if ($produto->tipo === 'servico') {
-            $taxa = (float) $produto->taxa_iva;
-            if ($taxa == 0) return 'ISE';
-            return ((int) $taxa === 14) ? 'NOR' : 'RED' . (int) $taxa;
-        }
-        $categoria = $produto->categoria;
-        if ($categoria) {
-            $taxa = (float) $categoria->taxa_iva;
-            if ($taxa == 0) return 'ISE';
-            return ((int) $taxa === 14) ? 'NOR' : 'RED' . (int) $taxa;
-        }
-        return 'ISE';
-    }
-
-    // ==================== SOURCE DOCUMENTS ====================
+    /* =====================================================================
+     | SOURCE DOCUMENTS
+     | ================================================================== */
 
     private function addSalesInvoices(DOMDocument $dom, DOMElement $sourceDocs, int $year, int $month, Empresa $empresa): void
     {
@@ -250,18 +493,16 @@ class SaftService
         $startDate = sprintf('%04d-%02d-01', $year, $month);
         $endDate = date('Y-m-t', strtotime($startDate));
 
-        $documentos = DocumentoFiscal::whereIn('tipo_documento', [
-            DocumentoFiscal::TIPO_FATURA,
-            DocumentoFiscal::TIPO_FATURA_RECIBO,
-            DocumentoFiscal::TIPO_NOTA_CREDITO,
-            DocumentoFiscal::TIPO_NOTA_DEBITO,
-        ])
+        // Tipos de documentos SAF-T
+        $tiposDocumento = ['FT', 'FR', 'NC', 'ND'];
+        
+        $documentos = $this->queryDocumentosFiscais()
+            ->whereIn('tipo_documento', $tiposDocumento)
             ->whereBetween('data_emissao', [$startDate, $endDate])
-            ->where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO)
+            ->where('estado', '!=', 'cancelado')
             ->with(['itens.produto', 'cliente'])
             ->get();
 
-        // Totais agregados (CORRIGIDO)
         $numeroEntradas = $documentos->count();
         $totalBase = 0;
         $totalTax = 0;
@@ -274,8 +515,7 @@ class SaftService
             $totalTax += (float) $doc->total_iva;
             $totalPayable += (float) $doc->total_liquido;
 
-            // Débito para faturas de venda, Crédito para NC/ND
-            if (in_array($doc->tipo_documento, [DocumentoFiscal::TIPO_NOTA_CREDITO, DocumentoFiscal::TIPO_NOTA_DEBITO])) {
+            if (in_array($doc->tipo_documento, ['NC', 'ND'])) {
                 $totalCredit += (float) $doc->total_liquido;
             } else {
                 $totalDebit += (float) $doc->total_liquido;
@@ -289,7 +529,6 @@ class SaftService
         $invoicesNode->appendChild($dom->createElement('TotalDebit', number_format($totalDebit, 2, '.', '')));
         $invoicesNode->appendChild($dom->createElement('TotalCredit', number_format($totalCredit, 2, '.', '')));
 
-        // Cada documento
         foreach ($documentos as $doc) {
             $invoice = $dom->createElement('Invoice');
             $invoicesNode->appendChild($invoice);
@@ -298,7 +537,6 @@ class SaftService
             $invoice->appendChild($dom->createElement('InvoiceDate', $doc->data_emissao->format('Y-m-d')));
             $invoice->appendChild($dom->createElement('InvoiceType', $doc->tipo_documento));
 
-            // DocumentStatus
             $docStatus = $dom->createElement('DocumentStatus');
             $docStatus->appendChild($dom->createElement('InvoiceStatus', 'N'));
             $docStatus->appendChild($dom->createElement('InvoiceStatusDate', $doc->created_at->format('Y-m-d\TH:i:s')));
@@ -306,15 +544,12 @@ class SaftService
             $docStatus->appendChild($dom->createElement('SourceBilling', 'P'));
             $invoice->appendChild($docStatus);
 
-            // Hash e HashControl
             $hash = $doc->hash_fiscal ?? hash('sha256', $doc->numero_documento . $doc->data_emissao);
             $invoice->appendChild($dom->createElement('Hash', $hash));
-            $invoice->appendChild($dom->createElement('HashControl', (string) strlen($hash))); // CORRIGIDO
+            $invoice->appendChild($dom->createElement('HashControl', (string) strlen($hash)));
 
-            // Period
             $invoice->appendChild($dom->createElement('Period', (string) $month));
 
-            // SpecialRegimes
             $special = $dom->createElement('SpecialRegimes');
             $special->appendChild($dom->createElement('SelfBillingIndicator', '0'));
             $special->appendChild($dom->createElement('CashVATSchemeIndicator', '0'));
@@ -324,12 +559,11 @@ class SaftService
             $invoice->appendChild($dom->createElement('SourceID', '1'));
             $invoice->appendChild($dom->createElement('SystemEntryDate', $doc->created_at->format('Y-m-d\TH:i:s')));
 
-            // Cliente (CORRIGIDO para consumidor final)
+            // Cliente
             if ($doc->cliente_id && $doc->cliente) {
                 $customerId = (string) $doc->cliente_id;
                 $customerTaxID = $doc->cliente->nif ?? '';
                 $customerName  = $doc->cliente->nome ?? '';
-                // Se NIF for vazio ou inválido, usar consumidor final
                 if (empty($customerTaxID)) {
                     $customerTaxID = '999999990';
                 }
@@ -352,10 +586,10 @@ class SaftService
                     $produto = $item->produto;
                     if (!$produto) continue;
 
-                    $taxaIva = $produto->taxa_iva_efectiva ?? $item->taxa_iva ?? 5;
+                    $taxaIva = $item->taxa_iva ?? $produto->taxa_iva ?? 14;
                     $taxCode = $this->getTaxCodeForProduct($produto);
                     $isIsento = ($taxaIva == 0);
-                    $isNotaCredito = in_array($doc->tipo_documento, [DocumentoFiscal::TIPO_NOTA_CREDITO, DocumentoFiscal::TIPO_NOTA_DEBITO]);
+                    $isNotaCredito = in_array($doc->tipo_documento, ['NC', 'ND']);
 
                     $lineNode = $dom->createElement('Line');
                     $invoice->appendChild($lineNode);
@@ -372,7 +606,6 @@ class SaftService
                     $lineNode->appendChild($dom->createElement('Description', $produto->nome));
                     $lineNode->appendChild($dom->createElement('TaxBase', number_format($item->base_tributavel, 4, '.', '')));
 
-                    // Tax
                     $taxNode = $dom->createElement('Tax');
                     $taxNode->appendChild($dom->createElement('TaxType', 'IVA'));
                     $taxNode->appendChild($dom->createElement('TaxCountryRegion', 'AO'));
@@ -385,28 +618,14 @@ class SaftService
                         $lineNode->appendChild($dom->createElement('TaxExemptionCode', $item->codigo_isencao));
                     }
 
-                    // Valor: DebitAmount para NC/ND, CreditAmount para os restantes
                     if ($isNotaCredito) {
                         $lineNode->appendChild($dom->createElement('DebitAmount', number_format($item->total_linha, 2, '.', '')));
                     } else {
                         $lineNode->appendChild($dom->createElement('CreditAmount', number_format($item->total_linha, 2, '.', '')));
                     }
-
-                    // Referência ao documento original (para notas de crédito/débito)
-                    if ($doc->tipo_documento == DocumentoFiscal::TIPO_NOTA_CREDITO || $doc->tipo_documento == DocumentoFiscal::TIPO_NOTA_DEBITO) {
-                        if (!empty($doc->documento_origem_numero)) {
-                            $references = $dom->createElement('References');
-                            $ref = $dom->createElement('Reference', $doc->documento_origem_numero);
-                            $references->appendChild($ref);
-                            if (!empty($doc->motivo)) {
-                                $references->appendChild($dom->createElement('Reason', $doc->motivo));
-                            }
-                            $lineNode->appendChild($references);
-                        }
-                    }
                 }
             } else {
-                // Linha genérica de segurança (caso não haja itens)
+                // Linha genérica
                 $lineNode = $dom->createElement('Line');
                 $invoice->appendChild($lineNode);
                 $lineNode->appendChild($dom->createElement('LineNumber', '1'));
@@ -427,7 +646,6 @@ class SaftService
                 $lineNode->appendChild($dom->createElement('CreditAmount', number_format($doc->total_liquido, 2, '.', '')));
             }
 
-            // DocumentTotals
             $docTotals = $dom->createElement('DocumentTotals');
             $invoice->appendChild($docTotals);
 
@@ -435,7 +653,6 @@ class SaftService
             $docTotals->appendChild($dom->createElement('NetTotal', number_format($doc->base_tributavel, 2, '.', '')));
             $docTotals->appendChild($dom->createElement('GrossTotal', number_format($doc->total_liquido, 2, '.', '')));
 
-            // Para factura-recibo, incluir pagamento
             if (in_array($doc->tipo_documento, ['FR', 'RC']) && $doc->metodo_pagamento) {
                 $payment = $dom->createElement('Payment');
                 $payment->appendChild($dom->createElement('PaymentMechanism', $this->mapPaymentMethod($doc->metodo_pagamento)));
@@ -446,19 +663,18 @@ class SaftService
         }
     }
 
-    private function addShipAddress(DOMDocument $dom, DOMElement $invoice, DocumentoFiscal $doc, Empresa $empresa): void
+    private function addShipAddress(DOMDocument $dom, DOMElement $invoice, $doc, Empresa $empresa): void
     {
-        // ShipTo (endereço de entrega)
-        
+        // ShipTo
         $shipTo = $dom->createElement('ShipTo');
         $shipToAddr = $dom->createElement('Address');
-        $shipToAddr->appendChild($dom->createElement('AddressDetail', $doc->cliente_endereco ?? 'Desconhecido'));
-        $shipToAddr->appendChild($dom->createElement('City', $doc->cliente_cidade ?? 'Luanda'));
-        $shipToAddr->appendChild($dom->createElement('Country', $doc->cliente_pais ?? 'AO'));
+        $shipToAddr->appendChild($dom->createElement('AddressDetail', $doc->cliente_endereco ?? $doc->cliente?->endereco ?? 'Desconhecido'));
+        $shipToAddr->appendChild($dom->createElement('City', $doc->cliente_cidade ?? $doc->cliente?->cidade ?? 'Luanda'));
+        $shipToAddr->appendChild($dom->createElement('Country', $doc->cliente_pais ?? $doc->cliente?->pais ?? 'AO'));
         $shipTo->appendChild($shipToAddr);
         $invoice->appendChild($shipTo);
 
-        // ShipFrom (endereço da empresa)
+        // ShipFrom
         $shipFrom = $dom->createElement('ShipFrom');
         $shipFromAddr = $dom->createElement('Address');
         $shipFromAddr->appendChild($dom->createElement('AddressDetail', $empresa->endereco ?? 'Desconhecido'));
@@ -476,9 +692,10 @@ class SaftService
         $startDate = sprintf('%04d-%02d-01', $year, $month);
         $endDate = date('Y-m-t', strtotime($startDate));
 
-        $recibos = DocumentoFiscal::where('tipo_documento', DocumentoFiscal::TIPO_RECIBO)
+        $recibos = $this->queryDocumentosFiscais()
+            ->where('tipo_documento', 'RC')
             ->whereBetween('data_emissao', [$startDate, $endDate])
-            ->where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO)
+            ->where('estado', '!=', 'cancelado')
             ->with('documentoOrigem')
             ->get();
 
@@ -496,7 +713,6 @@ class SaftService
             $customerId = $recibo->cliente_id ? (string) $recibo->cliente_id : '0';
             $payment->appendChild($dom->createElement('CustomerID', $customerId));
 
-            // DocumentStatus
             $docStatus = $dom->createElement('DocumentStatus');
             $docStatus->appendChild($dom->createElement('PaymentStatus', 'N'));
             $docStatus->appendChild($dom->createElement('PaymentStatusDate', $recibo->created_at->format('Y-m-d\TH:i:s')));
@@ -504,7 +720,6 @@ class SaftService
             $docStatus->appendChild($dom->createElement('SourcePayment', 'P'));
             $payment->appendChild($docStatus);
 
-            // PaymentMethod
             $paymentMethod = $dom->createElement('PaymentMethod');
             $paymentMethod->appendChild($dom->createElement('PaymentMechanism', $this->mapPaymentMethod($recibo->metodo_pagamento)));
             $paymentMethod->appendChild($dom->createElement('PaymentAmount', number_format($recibo->total_liquido, 2, '.', '')));
@@ -514,7 +729,6 @@ class SaftService
             $payment->appendChild($dom->createElement('SourceID', '1'));
             $payment->appendChild($dom->createElement('SystemEntryDate', $recibo->created_at->format('Y-m-d\TH:i:s')));
 
-            // Linha com referência à fatura original
             if ($recibo->documentoOrigem) {
                 $line = $dom->createElement('Line');
                 $line->appendChild($dom->createElement('LineNumber', '1'));
@@ -538,14 +752,12 @@ class SaftService
                 $payment->appendChild($line);
             }
 
-            // DocumentTotals
             $totals = $dom->createElement('DocumentTotals');
             $totals->appendChild($dom->createElement('TaxPayable', '0.00'));
             $totals->appendChild($dom->createElement('NetTotal', number_format($recibo->total_liquido, 2, '.', '')));
             $totals->appendChild($dom->createElement('GrossTotal', number_format($recibo->total_liquido, 2, '.', '')));
             $payment->appendChild($totals);
 
-            // Settlement
             $settlement = $dom->createElement('Settlement');
             $settlement->appendChild($dom->createElement('SettlementAmount', '0.00'));
             $payment->appendChild($settlement);
@@ -560,7 +772,8 @@ class SaftService
         $startDate = sprintf('%04d-%02d-01', $year, $month);
         $endDate = date('Y-m-t', strtotime($startDate));
 
-        $movimentos = MovimentoStock::whereBetween('created_at', [$startDate, $endDate])
+        $movimentos = $this->queryMovimentosStock()
+            ->whereBetween('created_at', [$startDate, $endDate])
             ->with('produto')
             ->get();
 
@@ -568,13 +781,9 @@ class SaftService
             $produto = $mov->produto;
             $productCode = $produto ? ($produto->codigo ?? $produto->id) : $mov->produto_id;
 
-            // Preço unitário: usar custo_medio se disponível
             $unitPrice = $mov->custo_medio ?? $produto->preco_venda ?? $produto->preco_compra ?? 0;
+            $taxaIva = $produto->taxa_iva ?? 14;
 
-            // Taxa IVA do produto
-            $taxaIva = $produto->taxa_iva_efectiva ?? ($produto->categoria->taxa_iva ?? 5);
-
-            // Valor base (custo do produto * quantidade)
             $quantidade = abs($mov->quantidade);
             $taxBase = $unitPrice * $quantidade;
             $settlementAmount = $taxBase * (1 + ($taxaIva / 100));
@@ -582,7 +791,6 @@ class SaftService
             $stockMovement = $dom->createElement('StockMovement');
             $movNode->appendChild($stockMovement);
 
-            // DocumentNumber: usar referência do movimento ou número do documento associado
             $docNumber = !empty($mov->referencia) ? $mov->referencia : 'MOV-' . $mov->id;
             $stockMovement->appendChild($dom->createElement('DocumentNumber', $docNumber));
             $stockMovement->appendChild($dom->createElement('Date', $mov->created_at->format('Y-m-d')));
