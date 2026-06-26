@@ -8,27 +8,314 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use App\Models\Tenant\Produto;
-use App\Models\Tenant\Categoria;
-use App\Models\Tenant\Fornecedor;
+use App\Models\Shared\Produto as SharedProduto;
+use App\Models\Shared\Categoria as SharedCategoria;
+use App\Models\Shared\Fornecedor as SharedFornecedor;
+use App\Models\Shared\Venda as SharedVenda;
+use App\Models\Shared\ItemVenda as SharedItemVenda;
+use App\Models\Tenant\Produto as TenantProduto;
+use App\Models\Tenant\Categoria as TenantCategoria;
+use App\Models\Tenant\Fornecedor as TenantFornecedor;
+use App\Models\Tenant\Venda as TenantVenda;
+use App\Models\Tenant\ItemVenda as TenantItemVenda;
+use App\Models\Empresa;
+use App\Models\LandlordUser;
+use App\Models\Shared\User as SharedUser;
+use App\Models\Tenant\User as TenantUser;
 use App\Services\ProdutoService;
 use Carbon\Carbon;
 use Throwable;
 
-/**
- * ProdutoController
- *
- * Alterações:
- *  - Para PRODUTOS FÍSICOS: taxa_iva e sujeito_iva removidos da validação.
- *    O IVA é herdado automaticamente da Categoria.
- *  - Para SERVIÇOS: taxa_iva e sujeito_iva mantêm-se (serviços não têm categoria).
- *  - show() retorna agora taxa_iva_efectiva calculada (para produtos, vem da categoria).
- *
- * Taxas de retenção válidas (Angola): 2%, 5%, 6,5%, 10%, 15%
- */
 class ProdutoController extends Controller
 {
-    public function __construct(protected ProdutoService $produtoService) {}
+    protected ProdutoService $produtoService;
+    protected ?Empresa $empresa = null;
+    protected string $modo = 'colectivo';
+    protected ?object $tenantUser = null;
+
+    public function __construct(ProdutoService $produtoService)
+    {
+        $this->produtoService = $produtoService;
+        
+        // ✅ Obtém da sessão (prioridade máxima)
+        $this->empresa = app('current.empresa');
+        $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
+        
+        Log::debug('[ProdutoController] Inicializado', [
+            'modo' => $this->modo,
+            'empresa_id' => $this->empresa?->id,
+        ]);
+    }
+
+    /* =====================================================================
+     | HELPERS DE MODO
+     | ================================================================== */
+
+    protected function getModo(): string
+    {
+        // ✅ Atualiza da sessão a cada chamada
+        $this->modo = session('tenant_modo', 'colectivo');
+        return $this->modo;
+    }
+
+    protected function isColectivo(): bool
+    {
+        return $this->getModo() === 'colectivo';
+    }
+
+    protected function isSingular(): bool
+    {
+        return $this->getModo() === 'singular';
+    }
+
+    /* =====================================================================
+     | HELPERS DE MODEL (com suporte a ambos os modos)
+     | ================================================================== */
+
+    protected function produtoModel()
+    {
+        return $this->isColectivo() ? new SharedProduto() : new TenantProduto();
+    }
+
+    protected function categoriaModel()
+    {
+        return $this->isColectivo() ? new SharedCategoria() : new TenantCategoria();
+    }
+
+    protected function fornecedorModel()
+    {
+        return $this->isColectivo() ? new SharedFornecedor() : new TenantFornecedor();
+    }
+
+    protected function vendaModel()
+    {
+        return $this->isColectivo() ? new SharedVenda() : new TenantVenda();
+    }
+
+    protected function itemVendaModel()
+    {
+        return $this->isColectivo() ? new SharedItemVenda() : new TenantItemVenda();
+    }
+
+    /* =====================================================================
+     | HELPERS DE QUERY (com scope do tenant)
+     | ================================================================== */
+
+    protected function queryProdutos(bool $comTrashed = false)
+    {
+        if ($this->isColectivo()) {
+            $query = SharedProduto::doTenant();
+            if ($comTrashed) {
+                $query = $query->withTrashed();
+            }
+            return $query;
+        }
+
+        if ($comTrashed) {
+            return TenantProduto::withTrashed();
+        }
+        return TenantProduto::query();
+    }
+
+    protected function queryProdutosDeletados()
+    {
+        if ($this->isColectivo()) {
+            return SharedProduto::doTenant()->onlyTrashed();
+        }
+        return TenantProduto::onlyTrashed();
+    }
+
+    protected function queryCategorias(bool $comTrashed = false)
+    {
+        if ($this->isColectivo()) {
+            $query = SharedCategoria::doTenant();
+            if ($comTrashed) {
+                $query = $query->withTrashed();
+            }
+            return $query;
+        }
+
+        if ($comTrashed) {
+            return TenantCategoria::withTrashed();
+        }
+        return TenantCategoria::query();
+    }
+
+    protected function queryFornecedores(bool $comTrashed = false)
+    {
+        if ($this->isColectivo()) {
+            $query = SharedFornecedor::doTenant();
+            if ($comTrashed) {
+                $query = $query->withTrashed();
+            }
+            return $query;
+        }
+
+        if ($comTrashed) {
+            return TenantFornecedor::withTrashed();
+        }
+        return TenantFornecedor::query();
+    }
+
+    /* =====================================================================
+     | HELPERS DE BUSCA (com scope do tenant)
+     | ================================================================== */
+
+    protected function buscarProduto(string $id, bool $comTrashed = false)
+    {
+        if ($this->isColectivo()) {
+            $query = SharedProduto::doTenant();
+            if ($comTrashed) {
+                $query = $query->withTrashed();
+            }
+            return $query->where('id', $id)->first();
+        }
+
+        if ($comTrashed) {
+            return TenantProduto::withTrashed()->where('id', $id)->first();
+        }
+        return TenantProduto::where('id', $id)->first();
+    }
+
+    protected function buscarProdutoOrFail(string $id, bool $comTrashed = false)
+    {
+        if ($this->isColectivo()) {
+            $query = SharedProduto::doTenant();
+            if ($comTrashed) {
+                $query = $query->withTrashed();
+            }
+            return $query->where('id', $id)->firstOrFail();
+        }
+
+        if ($comTrashed) {
+            return TenantProduto::withTrashed()->where('id', $id)->firstOrFail();
+        }
+        return TenantProduto::where('id', $id)->firstOrFail();
+    }
+
+    /* =====================================================================
+     | VERIFICAÇÃO DE ACESSO - CORRIGIDA ✅
+     | ================================================================== */
+
+    /**
+     * Verifica se o usuário tem acesso ao tenant atual
+     */
+    protected function verificarAcessoUsuario(): void
+    {
+        Log::debug('[ProdutoController] Verificando acesso');
+
+        // 1️⃣ Obtém a empresa
+        $this->empresa = app('current.empresa');
+        if (!$this->empresa) {
+            Log::error('[ProdutoController] Empresa não identificada.');
+            throw new \Exception('Empresa não identificada.', 400);
+        }
+
+        // ✅ Atualiza o modo
+        $this->modo = $this->empresa->modo ?? 'colectivo';
+
+        // 2️⃣ Obtém o landlord user (guard onde o login foi feito)
+        $landlordUser = Auth::guard('landlord')->user();
+
+        // 3️⃣ Fallback: tenta obter da sessão
+        if (!$landlordUser) {
+            $landlordId = session('landlord_user_id');
+            if ($landlordId) {
+                $landlordUser = LandlordUser::find($landlordId);
+            }
+        }
+
+        if (!$landlordUser) {
+            Log::error('[ProdutoController] Utilizador landlord não autenticado.');
+            throw new \Exception('Usuário não autenticado.', 401);
+        }
+
+        // 4️⃣ Busca o TenantUser correspondente
+        $tenantUser = $this->buscarUsuario($this->empresa, $landlordUser->email);
+        if (!$tenantUser) {
+            Log::error('[ProdutoController] Utilizador tenant não encontrado.', [
+                'email' => $landlordUser->email,
+            ]);
+            throw new \Exception('Usuário não tem permissão para aceder a esta empresa.', 403);
+        }
+
+        $this->tenantUser = $tenantUser;
+
+        Log::info('[ProdutoController] Acesso verificado com sucesso', [
+            'modo' => $this->modo,
+            'user_id' => $tenantUser->id,
+            'email' => $tenantUser->email,
+        ]);
+    }
+
+    /**
+     * Busca usuário no banco correto
+     */
+    protected function buscarUsuario(Empresa $empresa, string $email): ?object
+    {
+        if ($empresa->modo === 'singular') {
+            return TenantUser::on('tenant')->where('email', $email)->first();
+        }
+        return SharedUser::on('shared')
+            ->where('email', $email)
+            ->where('tenant_id', $empresa->id)
+            ->first();
+    }
+
+    /**
+     * Verifica se o usuário tem role permitida
+     */
+    protected function hasRole(array $roles): bool
+    {
+        if (!$this->tenantUser) {
+            return false;
+        }
+
+        $userRole = $this->tenantUser->role ?? 'operador';
+        return in_array($userRole, $roles);
+    }
+
+    /**
+     * Obtém o user_id do tenantUser
+     */
+    protected function getUserId(): ?string
+    {
+        return $this->tenantUser?->id;
+    }
+
+    /**
+     * Adiciona tenant_id (apenas para colectivo)
+     */
+    protected function adicionarTenantId(array $dados): array
+    {
+        if ($this->isColectivo() && $this->empresa) {
+            $dados['tenant_id'] = $this->empresa->id;
+        }
+        return $dados;
+    }
+
+    /* =====================================================================
+     | VERIFICAÇÕES DE EXISTÊNCIA
+     | ================================================================== */
+
+    protected function categoriaExiste(string $id, bool $comTrashed = false): bool
+    {
+        return $this->queryCategorias($comTrashed)->where('id', $id)->exists();
+    }
+
+    protected function fornecedorExiste(string $id, bool $comTrashed = false): bool
+    {
+        return $this->queryFornecedores($comTrashed)->where('id', $id)->exists();
+    }
+
+    protected function codigoExisteNoTenant(string $codigo, ?string $excluirId = null): bool
+    {
+        $query = $this->queryProdutos()->where('codigo', $codigo);
+        if ($excluirId) {
+            $query->where('id', '!=', $excluirId);
+        }
+        return $query->exists();
+    }
 
     /* =====================================================================
      | LISTAGEM
@@ -36,54 +323,50 @@ class ProdutoController extends Controller
 
     public function index(Request $request)
     {
-        DB::connection('tenant')->getPdo();
-        Log::info('[ProdutoController] user tenant check', [
-            'user' => auth()->guard('tenant')->user(),
-            'role' => auth()->guard('tenant')->user()?->role,
+        $modo = $this->getModo();
+        Log::info('[ProdutoController::index] Listando produtos', [
+            'modo' => $modo,
         ]);
 
-        Log::info('[ProdutoController] Verificação de autenticação', [
-            'tenant_check' => Auth::guard('tenant')->check(),
-            'landlord_check' => Auth::guard('landlord')->check(),
-            'tenant_user_id' => Auth::guard('tenant')->id(),
-            'landlord_user_id' => Auth::guard('landlord')->id(),
-            'session_id' => session()->getId(),
-            'session_tenant_id' => session('tenant_id'),
-        ]);
+        try {
+            $this->verificarAcessoUsuario();
 
-        $user = Auth::guard('tenant')->user();
+            $filtros = $this->extrairFiltros($request);
+            $produtos = $this->produtoService->listarProdutos($filtros);
 
-        Log::info('[ProdutoController] Utilizador autenticado (tenant)', [
-            'user_id' => $user?->id ?? 'null',
-            'user_email' => $user?->email ?? 'null',
-            'user_role' => $user?->role ?? 'indefinido',
-            'user_nome' => $user?->nome ?? $user?->name ?? 'null',
-            'tenant_db' => config('database.connections.tenant.database'),
-        ]);
+            return response()->json([
+                'message'  => 'Lista de produtos carregada com sucesso',
+                'produtos' => $produtos,
+                'modo' => $modo,
+            ]);
 
-        $filtros  = $this->extrairFiltros($request);
-        $produtos = $this->produtoService->listarProdutos($filtros);
-      
-        
-        return response()->json([
-            'message'  => 'Lista de produtos carregada com sucesso',
-            'produtos' => $produtos,
-        ]);
+        } catch (\Exception $e) {
+            Log::error('[ProdutoController::index] Erro', [
+                'error' => $e->getMessage(),
+                'modo' => $modo,
+            ]);
+            return response()->json([
+                'message' => 'Erro ao listar produtos',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
-    /**
-     * GET /api/produtos/todos
-     * Lista TODOS os produtos (incluindo inativos, mas excluindo deletados)
-     */
     public function todos(Request $request)
     {
+        $modo = $this->getModo();
+        Log::info('[ProdutoController::todos] Listando todos os produtos', [
+            'modo' => $modo,
+        ]);
+
         try {
-            $user = Auth::guard('tenant')->user();
-            if (!$user || !in_array($user->role, ['admin', 'operador', 'gestor', 'contabilista'])) {
+            $this->verificarAcessoUsuario();
+
+            if (!$this->hasRole(['admin', 'operador', 'gestor', 'contabilista'])) {
                 return response()->json(['error' => 'Não autorizado'], 403);
             }
 
-            $query = Produto::query();
+            $query = $this->queryProdutos()->with(['categoria', 'fornecedor']);
 
             if ($request->filled('busca')) {
                 $busca = $request->busca;
@@ -105,33 +388,39 @@ class ProdutoController extends Controller
                 $query->where('status', $request->status);
             }
 
-            $produtos = $query->with(['categoria', 'fornecedor'])->get();
+            $produtos = $query->get();
 
-              Log::info('Produtos ja esta' ,$produtos);
             return response()->json([
                 'message'   => 'Lista de todos os produtos carregada com sucesso',
                 'produtos'  => $produtos,
                 'total'     => $produtos->count(),
+                'modo' => $modo,
             ]);
+
         } catch (\Exception $e) {
-            Log::error('[ProdutoController] TODOS ERROR', ['error' => $e->getMessage()]);
+            Log::error('[ProdutoController::todos] Erro', [
+                'error' => $e->getMessage(),
+                'modo' => $modo,
+            ]);
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
-    /**
-     * GET /api/produtos/trashed
-     * Lista produtos na lixeira (soft delete)
-     */
     public function trashed(Request $request)
     {
+        $modo = $this->getModo();
+        Log::info('[ProdutoController::trashed] Listando produtos deletados', [
+            'modo' => $modo,
+        ]);
+
         try {
-            $user = Auth::guard('tenant')->user();
-            if (!$user || !in_array($user->role, ['admin', 'operador', 'gestor', 'contabilista'])) {
+            $this->verificarAcessoUsuario();
+
+            if (!$this->hasRole(['admin', 'operador', 'gestor', 'contabilista'])) {
                 return response()->json(['error' => 'Não autorizado'], 403);
             }
 
-            $query = Produto::onlyTrashed()->with(['categoria', 'fornecedor']);
+            $query = $this->queryProdutosDeletados()->with(['categoria', 'fornecedor']);
 
             if ($request->filled('busca')) {
                 $busca = $request->busca;
@@ -167,58 +456,97 @@ class ProdutoController extends Controller
                 'total_deletados' => $produtos instanceof \Illuminate\Pagination\LengthAwarePaginator
                     ? $produtos->total()
                     : $produtos->count(),
+                'modo' => $modo,
             ]);
+
         } catch (\Exception $e) {
-            Log::error('[ProdutoController] TRASHED ERROR', ['error' => $e->getMessage()]);
+            Log::error('[ProdutoController::trashed] Erro', [
+                'error' => $e->getMessage(),
+                'modo' => $modo,
+            ]);
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
     public function indexWithTrashed(Request $request)
     {
-        $filtros  = array_merge($this->extrairFiltros($request), ['com_deletados' => true]);
-        $produtos = $this->produtoService->listarProdutos($filtros);
-
-        return response()->json([
-            'message'          => 'Lista completa de produtos',
-            'produtos'         => $produtos,
-            'total'            => $produtos->count(),
-            'ativos'           => $produtos->whereNull('deleted_at')->count(),
-            'deletados'        => $produtos->whereNotNull('deleted_at')->count(),
-            'produtos_fisicos' => $produtos->where('tipo', 'produto')->count(),
-            'servicos'         => $produtos->where('tipo', 'servico')->count(),
+        $modo = $this->getModo();
+        Log::info('[ProdutoController::indexWithTrashed] Listando com deletados', [
+            'modo' => $modo,
         ]);
+
+        try {
+            $this->verificarAcessoUsuario();
+
+            $filtros = array_merge($this->extrairFiltros($request), ['com_deletados' => true]);
+            $produtos = $this->produtoService->listarProdutos($filtros);
+
+            return response()->json([
+                'message'          => 'Lista completa de produtos',
+                'produtos'         => $produtos,
+                'total'            => $produtos->count(),
+                'ativos'           => $produtos->whereNull('deleted_at')->count(),
+                'deletados'        => $produtos->whereNotNull('deleted_at')->count(),
+                'produtos_fisicos' => $produtos->where('tipo', 'produto')->count(),
+                'servicos'         => $produtos->where('tipo', 'servico')->count(),
+                'modo' => $modo,
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('[ProdutoController::indexWithTrashed] Erro', [
+                'error' => $e->getMessage(),
+                'modo' => $modo,
+            ]);
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 
     public function indexOnlyTrashed(Request $request)
     {
-        $query = Produto::onlyTrashed();
-
-        if ($request->filled('busca')) {
-            $busca = $request->busca;
-            $query->where(fn ($q) => $q->where('nome', 'like', "%{$busca}%")->orWhere('codigo', 'like', "%{$busca}%"));
-        }
-        if ($request->filled('tipo')) {
-            $query->where('tipo', $request->tipo);
-        }
-        if ($request->filled('data_inicio')) {
-            $query->whereDate('deleted_at', '>=', Carbon::parse($request->data_inicio));
-        }
-        if ($request->filled('data_fim')) {
-            $query->whereDate('deleted_at', '<=', Carbon::parse($request->data_fim));
-        }
-
-        $produtos = $request->boolean('paginar')
-            ? $query->paginate($request->get('per_page', 15))
-            : $query->get();
-
-        return response()->json([
-            'message'         => 'Produtos na lixeira',
-            'produtos'        => $produtos,
-            'total_deletados' => $produtos instanceof \Illuminate\Pagination\LengthAwarePaginator
-                ? $produtos->total()
-                : $produtos->count(),
+        $modo = $this->getModo();
+        Log::info('[ProdutoController::indexOnlyTrashed] Listando apenas deletados', [
+            'modo' => $modo,
         ]);
+
+        try {
+            $this->verificarAcessoUsuario();
+
+            $query = $this->queryProdutosDeletados();
+
+            if ($request->filled('busca')) {
+                $busca = $request->busca;
+                $query->where(fn ($q) => $q->where('nome', 'like', "%{$busca}%")->orWhere('codigo', 'like', "%{$busca}%"));
+            }
+            if ($request->filled('tipo')) {
+                $query->where('tipo', $request->tipo);
+            }
+            if ($request->filled('data_inicio')) {
+                $query->whereDate('deleted_at', '>=', Carbon::parse($request->data_inicio));
+            }
+            if ($request->filled('data_fim')) {
+                $query->whereDate('deleted_at', '<=', Carbon::parse($request->data_fim));
+            }
+
+            $produtos = $request->boolean('paginar')
+                ? $query->paginate($request->get('per_page', 15))
+                : $query->get();
+
+            return response()->json([
+                'message'         => 'Produtos na lixeira',
+                'produtos'        => $produtos,
+                'total_deletados' => $produtos instanceof \Illuminate\Pagination\LengthAwarePaginator
+                    ? $produtos->total()
+                    : $produtos->count(),
+                'modo' => $modo,
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('[ProdutoController::indexOnlyTrashed] Erro', [
+                'error' => $e->getMessage(),
+                'modo' => $modo,
+            ]);
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 
     /* =====================================================================
@@ -227,35 +555,40 @@ class ProdutoController extends Controller
 
     public function show(string $id)
     {
-        $produto = Produto::withTrashed()
-            ->with(['categoria', 'fornecedor', 'movimentosStock' => fn ($q) => $q->limit(10)])
-            ->findOrFail($id);
-
-        // Adicionar informação de IVA efectivo na resposta
-        $produtoArray = $produto->toArray();
-        $produtoArray['taxa_iva_efectiva']   = $produto->taxa_iva_efectiva;
-        $produtoArray['sujeito_iva_efetivo'] = $produto->sujeito_iva_efetivo;
-        $produtoArray['codigo_isencao_efetivo'] = $produto->codigo_isencao_efetivo;
-        $produtoArray['valor_iva']           = $produto->valor_iva;
-
-        // Para produtos, mostrar de onde vem o IVA
-        if ($produto->tipo === 'produto' && $produto->categoria) {
-            $produtoArray['iva_origem'] = 'categoria';
-            $produtoArray['iva_categoria'] = [
-                'id'             => $produto->categoria->id,
-                'nome'           => $produto->categoria->nome,
-                'taxa_iva'       => $produto->categoria->taxa_iva,
-                'sujeito_iva'    => $produto->categoria->sujeito_iva,
-                'codigo_isencao' => $produto->categoria->codigo_isencao,
-            ];
-        } else {
-            $produtoArray['iva_origem'] = 'servico';
-        }
-
-        return response()->json([
-            'message' => 'Produto carregado com sucesso',
-            'produto' => $produtoArray,
+        $modo = $this->getModo();
+        Log::info('[ProdutoController::show] Buscando produto', [
+            'produto_id' => $id,
+            'modo' => $modo,
         ]);
+
+        try {
+            $this->verificarAcessoUsuario();
+
+            $produto = $this->buscarProdutoOrFail($id, true);
+            $produto->load(['categoria', 'fornecedor', 'movimentosStock' => fn ($q) => $q->limit(10)]);
+
+            $produtoArray = $produto->toArray();
+            $produtoArray['taxa_iva_efectiva'] = $produto->taxa_iva_efectiva ?? $produto->taxa_iva ?? 0;
+
+            return response()->json([
+                'message' => 'Produto carregado com sucesso',
+                'produto' => $produtoArray,
+                'modo' => $modo,
+            ]);
+
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'message' => 'Produto não encontrado',
+                'error' => 'not_found'
+            ], 404);
+        } catch (\Exception $e) {
+            Log::error('[ProdutoController::show] Erro', [
+                'produto_id' => $id,
+                'error' => $e->getMessage(),
+                'modo' => $modo,
+            ]);
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 
     /* =====================================================================
@@ -264,41 +597,50 @@ class ProdutoController extends Controller
 
     public function store(Request $request)
     {
-        Log::info('[ProdutoController] Dados recebidos para validação:', $request->all());
+        $modo = $this->getModo();
+        Log::info('[ProdutoController::store] Criando produto', [
+            'modo' => $modo,
+        ]);
 
         try {
-            $dados = $request->validate($this->regrasValidacao($request->tipo ?? 'produto'));
-            $dados['user_id'] = Auth::guard('tenant')->id();
-            Log::info('[ProdutoController] Dados validados com sucesso:', $dados);
+            $this->verificarAcessoUsuario();
+
+            $tipo = $request->input('tipo', 'produto');
+            $dados = $request->validate($this->regrasValidacao($tipo));
+
+            $dados['user_id'] = $this->getUserId();
+
+            // ⭐ ADICIONAR TENANT_ID (apenas para colectivo)
+            if ($this->isColectivo()) {
+                $dados['tenant_id'] = $this->empresa->id;
+            }
+
+            $produto = $this->produtoService->criarProduto($dados);
+            $produto->load('categoria');
+
+            $resposta = $produto->toArray();
+            $resposta['taxa_iva_efectiva'] = $produto->taxa_iva_efectiva ?? $produto->taxa_iva ?? 0;
+
+            return response()->json([
+                'message' => $tipo === 'servico' ? 'Serviço criado com sucesso' : 'Produto criado com sucesso',
+                'produto' => $resposta,
+                'modo' => $modo,
+            ], 201);
+
         } catch (\Illuminate\Validation\ValidationException $e) {
-            Log::error('[ProdutoController] ERRO DE VALIDAÇÃO:', [
-                'errors' => $e->errors(),
-                'data'   => $request->all(),
-            ]);
             return response()->json([
                 'message' => 'Erro de validação',
                 'errors'  => $e->errors(),
             ], 422);
-        }
-
-        try {
-            $dados['user_id'] = Auth::guard('tenant')->id();
-            $produto = $this->produtoService->criarProduto($dados);
-
-            // Carregar categoria para retornar IVA efectivo na resposta
-            $produto->load('categoria');
-
-            $resposta = $produto->fresh(['categoria', 'fornecedor'])->toArray();
-            $resposta['taxa_iva_efectiva'] = $produto->taxa_iva_efectiva;
-
-            return response()->json([
-                'message' => $dados['tipo'] === 'servico' ? 'Serviço criado com sucesso' : 'Produto criado com sucesso',
-                'produto' => $resposta,
-            ], 201);
-
         } catch (\Exception $e) {
-            Log::error('[PRODUTO STORE ERROR]', ['error' => $e->getMessage()]);
-            return response()->json(['message' => 'Erro ao criar produto', 'error' => $e->getMessage()], 500);
+            Log::error('[ProdutoController::store] Erro', [
+                'error' => $e->getMessage(),
+                'modo' => $modo,
+            ]);
+            return response()->json([
+                'message' => 'Erro ao criar produto',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 
@@ -308,71 +650,49 @@ class ProdutoController extends Controller
 
     public function update(Request $request, string $id)
     {
-        Log::info('[ProdutoController] UPDATE - Dados recebidos:', [
-            'id'           => $id,
-            'all_data'     => $request->all(),
-            'method'       => $request->method(),
-            'content_type' => $request->header('Content-Type'),
+        $modo = $this->getModo();
+        Log::info('[ProdutoController::update] Atualizando produto', [
+            'produto_id' => $id,
+            'modo' => $modo,
         ]);
 
         try {
-            $produto = Produto::findOrFail($id);
+            $this->verificarAcessoUsuario();
+
+            $produto = $this->buscarProdutoOrFail($id);
 
             $tipo = $request->input('tipo', $produto->tipo);
-            if (! in_array($tipo, ['produto', 'servico'])) {
+            if (!in_array($tipo, ['produto', 'servico'])) {
                 $tipo = $produto->tipo;
             }
 
             $regras = $this->regrasValidacaoUpdate($tipo, $id);
-
-            try {
-                $dados = $request->validate($regras);
-            } catch (\Illuminate\Validation\ValidationException $e) {
-                Log::error('[ProdutoController] UPDATE - Erro de validação:', [
-                    'errors'       => $e->errors(),
-                    'data'         => $request->all(),
-                    'regras_usadas' => $regras,
-                ]);
-                return response()->json([
-                    'message' => 'Erro de validação',
-                    'errors'  => $e->errors(),
-                ], 422);
-            }
-
-            // ✅ CORREÇÃO DA MARGEM: Converter se vier como string com %
-            if (isset($dados['margem_lucro'])) {
-                $margem = $dados['margem_lucro'];
-                if (is_string($margem) && str_ends_with($margem, '%')) {
-                    $margem = (float) str_replace('%', '', $margem);
-                    $dados['margem_lucro'] = $margem;
-                }
-                // Validar margem
-                if ($dados['margem_lucro'] < 0 || $dados['margem_lucro'] > 99.99) {
-                    return response()->json([
-                        'message' => 'Margem inválida — deve ser entre 0% e 99,99%',
-                        'error' => 'margem_invalida'
-                    ], 422);
-                }
-            }
+            $dados = $request->validate($regras);
 
             $produto = $this->produtoService->editarProduto($id, $dados);
             $produto->load('categoria');
 
             $resposta = $produto->toArray();
-            $resposta['taxa_iva_efectiva'] = $produto->taxa_iva_efectiva;
+            $resposta['taxa_iva_efectiva'] = $produto->taxa_iva_efectiva ?? $produto->taxa_iva ?? 0;
 
             return response()->json([
                 'message' => 'Produto actualizado com sucesso',
                 'produto' => $resposta,
+                'modo' => $modo,
             ]);
 
         } catch (ModelNotFoundException $e) {
             return response()->json(['message' => 'Produto não encontrado'], 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'message' => 'Erro de validação',
+                'errors'  => $e->errors(),
+            ], 422);
         } catch (\Exception $e) {
-            Log::error('[PRODUTO UPDATE ERROR]', [
+            Log::error('[ProdutoController::update] Erro', [
                 'produto_id' => $id,
-                'error'      => $e->getMessage(),
-                'trace'      => $e->getTraceAsString(),
+                'error' => $e->getMessage(),
+                'modo' => $modo,
             ]);
             return response()->json([
                 'message' => 'Erro ao actualizar produto',
@@ -387,15 +707,36 @@ class ProdutoController extends Controller
 
     public function alterarStatus(string $id, Request $request)
     {
-        $produto = Produto::findOrFail($id);
-
-        $status  = $request->validate(['status' => 'required|in:ativo,inativo'])['status'];
-        $produto = $this->produtoService->alterarStatus($id, $status);
-
-        return response()->json([
-            'message' => 'Status actualizado',
-            'produto' => $produto,
+        $modo = $this->getModo();
+        Log::info('[ProdutoController::alterarStatus] Alterando status', [
+            'produto_id' => $id,
+            'modo' => $modo,
         ]);
+
+        try {
+            $this->verificarAcessoUsuario();
+
+            $this->buscarProdutoOrFail($id);
+
+            $status = $request->validate(['status' => 'required|in:ativo,inativo'])['status'];
+            $produto = $this->produtoService->alterarStatus($id, $status);
+
+            return response()->json([
+                'message' => 'Status actualizado',
+                'produto' => $produto,
+                'modo' => $modo,
+            ]);
+
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['message' => 'Produto não encontrado'], 404);
+        } catch (\Exception $e) {
+            Log::error('[ProdutoController::alterarStatus] Erro', [
+                'produto_id' => $id,
+                'error' => $e->getMessage(),
+                'modo' => $modo,
+            ]);
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 
     /* =====================================================================
@@ -404,16 +745,32 @@ class ProdutoController extends Controller
 
     public function destroy(string $id)
     {
+        $modo = $this->getModo();
+        Log::info('[ProdutoController::destroy] Deletando produto', [
+            'produto_id' => $id,
+            'modo' => $modo,
+        ]);
+
         try {
-            $produto = Produto::withTrashed()->findOrFail($id);
+            $this->verificarAcessoUsuario();
+
+            $produto = $this->buscarProdutoOrFail($id, true);
 
             if ($produto->trashed()) {
                 return response()->json(['message' => 'Produto já está na lixeira'], 400);
             }
 
-            $vendasPendentes = $produto->itensVenda()
-                ->whereHas('venda', fn ($q) => $q->where('status', 'pendente'))
-                ->exists();
+            // Verificar vendas pendentes
+            if ($this->isColectivo()) {
+                $vendasPendentes = SharedItemVenda::doTenant()
+                    ->where('produto_id', $id)
+                    ->whereHas('venda', fn ($q) => $q->where('status', 'pendente'))
+                    ->exists();
+            } else {
+                $vendasPendentes = TenantItemVenda::where('produto_id', $id)
+                    ->whereHas('venda', fn ($q) => $q->where('status', 'pendente'))
+                    ->exists();
+            }
 
             if ($vendasPendentes) {
                 return response()->json(['message' => 'Não é possível apagar produto com vendas pendentes'], 409);
@@ -426,19 +783,25 @@ class ProdutoController extends Controller
                 'soft_deleted' => true,
                 'id'           => $produto->id,
                 'deleted_at'   => $produto->deleted_at,
+                'modo' => $modo,
             ]);
 
         } catch (QueryException $e) {
             if ($e->getCode() == 23000 || str_contains($e->getMessage(), 'foreign key constraint')) {
                 return response()->json([
-                    'message' => 'Não é possível remover — existem registos vinculados. Considere inactivar o produto.',
+                    'message' => 'Não é possível remover — existem registos vinculados.',
                     'error'   => 'constraint_violation',
                 ], 409);
             }
             return response()->json(['message' => 'Erro de base de dados', 'error' => $e->getMessage()], 500);
-
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['message' => 'Produto não encontrado'], 404);
         } catch (Throwable $e) {
-            Log::error('[PRODUTO DELETE ERROR]', ['produto_id' => $id, 'error' => $e->getMessage()]);
+            Log::error('[ProdutoController::destroy] Erro', [
+                'produto_id' => $id,
+                'error' => $e->getMessage(),
+                'modo' => $modo,
+            ]);
             return response()->json(['message' => 'Erro ao remover produto', 'error' => $e->getMessage()], 500);
         }
     }
@@ -449,20 +812,34 @@ class ProdutoController extends Controller
 
     public function restore(string $id)
     {
-        try {
-            $produto = Produto::withTrashed()->findOrFail($id);
+        $modo = $this->getModo();
+        Log::info('[ProdutoController::restore] Restaurando produto', [
+            'produto_id' => $id,
+            'modo' => $modo,
+        ]);
 
-            if (! $produto->trashed()) {
+        try {
+            $this->verificarAcessoUsuario();
+
+            if ($this->isColectivo()) {
+                $produto = SharedProduto::doTenant()->onlyTrashed()->where('id', $id)->firstOrFail();
+            } else {
+                $produto = TenantProduto::onlyTrashed()->where('id', $id)->firstOrFail();
+            }
+
+            if (!$produto->trashed()) {
                 return response()->json(['message' => 'Produto não está na lixeira'], 400);
             }
 
-            if ($produto->categoria_id && ! Categoria::withTrashed()->where('id', $produto->categoria_id)->exists()) {
+            // Verificar se categoria existe
+            if ($produto->categoria_id && !$this->categoriaExiste($produto->categoria_id, true)) {
                 return response()->json([
                     'message' => 'Não é possível restaurar: a categoria foi removida permanentemente.',
                 ], 422);
             }
 
-            if ($produto->fornecedor_id && ! Fornecedor::withTrashed()->where('id', $produto->fornecedor_id)->exists()) {
+            // Verificar se fornecedor existe
+            if ($produto->fornecedor_id && !$this->fornecedorExiste($produto->fornecedor_id, true)) {
                 return response()->json([
                     'message' => 'Não é possível restaurar: o fornecedor foi removido permanentemente.',
                 ], 422);
@@ -473,12 +850,17 @@ class ProdutoController extends Controller
             return response()->json([
                 'message' => 'Produto restaurado com sucesso',
                 'produto' => $produto->fresh(['categoria', 'fornecedor']),
+                'modo' => $modo,
             ]);
 
         } catch (ModelNotFoundException $e) {
-            return response()->json(['message' => 'Produto não encontrado'], 404);
+            return response()->json(['message' => 'Produto não encontrado na lixeira'], 404);
         } catch (Throwable $e) {
-            Log::error('[PRODUTO RESTORE ERROR]', ['produto_id' => $id, 'error' => $e->getMessage()]);
+            Log::error('[ProdutoController::restore] Erro', [
+                'produto_id' => $id,
+                'error' => $e->getMessage(),
+                'modo' => $modo,
+            ]);
             return response()->json(['message' => 'Erro ao restaurar produto', 'error' => $e->getMessage()], 500);
         }
     }
@@ -489,16 +871,60 @@ class ProdutoController extends Controller
 
     public function forceDelete(string $id)
     {
-        try {
-            $produto = Produto::withTrashed()->findOrFail($id);
+        $modo = $this->getModo();
+        Log::info('[ProdutoController::forceDelete] Removendo permanentemente', [
+            'produto_id' => $id,
+            'modo' => $modo,
+        ]);
 
-            if ($produto->itensVenda()->exists() || $produto->itensCompra()->exists()) {
+        try {
+            $this->verificarAcessoUsuario();
+
+            // ⭐ BUSCAR COM SCOPE
+            if ($this->isColectivo()) {
+                $produto = SharedProduto::doTenant()->onlyTrashed()->where('id', $id)->firstOrFail();
+            } else {
+                $produto = TenantProduto::onlyTrashed()->where('id', $id)->firstOrFail();
+            }
+
+            // Verificar vendas associadas
+            if ($this->isColectivo()) {
+                $hasVendas = SharedItemVenda::doTenant()->where('produto_id', $id)->exists();
+            } else {
+                $hasVendas = TenantItemVenda::where('produto_id', $id)->exists();
+            }
+
+            if ($hasVendas) {
                 return response()->json([
-                    'message' => 'Não é possível remover permanentemente um produto com vendas/compras associadas.',
+                    'message' => 'Não é possível remover permanentemente um produto com vendas associadas.',
                 ], 409);
             }
 
-            if ($produto->movimentosStock()->exists()) {
+            // Verificar compras associadas (se existir o model)
+            try {
+                if ($this->isColectivo()) {
+                    $hasCompras = \App\Models\Shared\ItemCompra::doTenant()->where('produto_id', $id)->exists();
+                } else {
+                    $hasCompras = \App\Models\Tenant\ItemCompra::where('produto_id', $id)->exists();
+                }
+
+                if ($hasCompras) {
+                    return response()->json([
+                        'message' => 'Não é possível remover permanentemente um produto com compras associadas.',
+                    ], 409);
+                }
+            } catch (\Exception $e) {
+                // Model não existe, ignorar
+            }
+
+            // Verificar movimentos de stock
+            if ($this->isColectivo()) {
+                $hasMovimentos = \App\Models\Shared\MovimentoStock::doTenant()->where('produto_id', $id)->exists();
+            } else {
+                $hasMovimentos = \App\Models\Tenant\MovimentoStock::where('produto_id', $id)->exists();
+            }
+
+            if ($hasMovimentos) {
                 return response()->json([
                     'message' => 'Não é possível remover permanentemente um produto com movimentações de stock.',
                 ], 409);
@@ -507,15 +933,20 @@ class ProdutoController extends Controller
             $nome = $produto->nome;
             $produto->forceDelete();
 
-            Log::info('[PRODUTO FORCE DELETE]', ['id' => $id, 'nome' => $nome]);
-
             return response()->json([
                 'message' => "Produto \"{$nome}\" removido permanentemente",
                 'id'      => $id,
+                'modo' => $modo,
             ]);
 
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['message' => 'Produto não encontrado na lixeira'], 404);
         } catch (Throwable $e) {
-            Log::error('[PRODUTO FORCE DELETE ERROR]', ['produto_id' => $id, 'error' => $e->getMessage()]);
+            Log::error('[ProdutoController::forceDelete] Erro', [
+                'produto_id' => $id,
+                'error' => $e->getMessage(),
+                'modo' => $modo,
+            ]);
             return response()->json(['message' => 'Erro ao remover produto', 'error' => $e->getMessage()], 500);
         }
     }
@@ -526,18 +957,33 @@ class ProdutoController extends Controller
 
     public function estatisticas(Request $request)
     {
+        $modo = $this->getModo();
+        Log::info('[ProdutoController::estatisticas] Gerando estatísticas', [
+            'modo' => $modo,
+        ]);
+
         try {
+            $this->verificarAcessoUsuario();
+
             $dataInicio = $request->data_inicio;
             $dataFim    = $request->data_fim;
 
-            $queryBase = fn ($q) => $q
+            // ⭐ QUERY COM FILTRO DE TENANT
+            $query = DB::table('itens_venda')
                 ->join('produtos', 'itens_venda.produto_id', '=', 'produtos.id')
                 ->join('vendas', 'itens_venda.venda_id', '=', 'vendas.id')
                 ->where('vendas.status', '!=', 'cancelada')
                 ->when($dataInicio, fn ($q) => $q->whereDate('vendas.data_venda', '>=', $dataInicio))
                 ->when($dataFim,    fn ($q) => $q->whereDate('vendas.data_venda', '<=', $dataFim));
 
-            $maisVendidos = DB::table('itens_venda')->tap($queryBase)
+            // ⭐ FILTRO DE TENANT (apenas para colectivo)
+            if ($this->isColectivo() && $this->empresa) {
+                $query->where('produtos.tenant_id', $this->empresa->id)
+                      ->where('itens_venda.tenant_id', $this->empresa->id)
+                      ->where('vendas.tenant_id', $this->empresa->id);
+            }
+
+            $maisVendidos = (clone $query)
                 ->select(
                     'produtos.id', 'produtos.nome', 'produtos.codigo', 'produtos.tipo',
                     DB::raw('SUM(itens_venda.quantidade) as total_quantidade'),
@@ -556,40 +1002,25 @@ class ProdutoController extends Controller
                     'valor_total' => round($i->total_vendas, 2),
                 ]);
 
-            $servicosMaisVendidos = DB::table('itens_venda')->tap($queryBase)
-                ->where('produtos.tipo', 'servico')
-                ->select(
-                    'produtos.id', 'produtos.nome', 'produtos.codigo',
-                    DB::raw('SUM(itens_venda.quantidade) as total_quantidade'),
-                    DB::raw('SUM(itens_venda.subtotal) as total_receita'),
-                    DB::raw('SUM(itens_venda.valor_retencao) as total_retencao')
-                )
-                ->groupBy('produtos.id', 'produtos.nome', 'produtos.codigo')
-                ->orderByDesc('total_receita')
-                ->limit(10)
-                ->get()
-                ->map(fn ($i) => [
-                    'id'         => $i->id,
-                    'nome'       => $i->nome,
-                    'codigo'     => $i->codigo,
-                    'quantidade' => (int) $i->total_quantidade,
-                    'receita'    => round($i->total_receita, 2),
-                    'retencao'   => round($i->total_retencao, 2),
-                ]);
+            // ⭐ QUERY COM SCOPE PARA TOTAIS
+            $produtosQuery = $this->queryProdutos();
 
             return response()->json([
                 'success' => true,
                 'data'    => [
                     'produtos_mais_vendidos'      => $maisVendidos,
-                    'servicos_mais_vendidos'      => $servicosMaisVendidos,
-                    'total_produtos_ativos'       => Produto::where('tipo', 'produto')->where('status', 'ativo')->count(),
-                    'total_servicos_ativos'       => Produto::where('tipo', 'servico')->where('status', 'ativo')->count(),
-                    'total_servicos_com_retencao' => Produto::where('tipo', 'servico')->where('taxa_retencao', '>', 0)->count(),
+                    'total_produtos_ativos'       => (clone $produtosQuery)->where('tipo', 'produto')->where('status', 'ativo')->count(),
+                    'total_servicos_ativos'       => (clone $produtosQuery)->where('tipo', 'servico')->where('status', 'ativo')->count(),
+                    'total_servicos_com_retencao' => (clone $produtosQuery)->where('tipo', 'servico')->where('taxa_retencao', '>', 0)->count(),
                 ],
+                'modo' => $modo,
             ]);
 
         } catch (\Exception $e) {
-            Log::error('[PRODUTO ESTATISTICAS ERROR]', ['error' => $e->getMessage()]);
+            Log::error('[ProdutoController::estatisticas] Erro', [
+                'error' => $e->getMessage(),
+                'modo' => $modo,
+            ]);
             return response()->json([
                 'success' => false,
                 'message' => 'Erro ao carregar estatísticas',
@@ -599,15 +1030,9 @@ class ProdutoController extends Controller
     }
 
     /* =====================================================================
-     | HELPERS PRIVADOS
+     | HELPERS PRIVADOS (VALIDAÇÃO)
      | ================================================================== */
 
-    /**
-     * Regras de validação para CRIAR.
-     *
-     * PRODUTO FÍSICO: sem taxa_iva — herdada da categoria.
-     * SERVIÇO: mantém taxa_iva próprio (sem categoria).
-     */
     private function regrasValidacao(string $tipo): array
     {
         $base = [
@@ -616,7 +1041,6 @@ class ProdutoController extends Controller
             'descricao'   => 'nullable|string',
             'preco_venda' => 'required|numeric|min:0',
             'status'      => 'nullable|in:ativo,inativo',
-            // Campos de cálculo de preço
             'tipo_preco'          => 'nullable|in:fixo,margem,markup',
             'despesas_adicionais' => 'nullable|numeric|min:0',
             'margem_lucro'        => 'nullable|numeric|min:0|max:99.99',
@@ -625,9 +1049,9 @@ class ProdutoController extends Controller
 
         if ($tipo === 'produto') {
             return array_merge($base, [
-                'categoria_id'   => 'required|uuid|exists:categorias,id',
-                'fornecedor_id'  => 'nullable|uuid|exists:fornecedores,id',
-                'codigo'         => 'nullable|string|max:50|unique:produtos,codigo',
+                'categoria_id'   => 'required|uuid',
+                'fornecedor_id'  => 'nullable|uuid',
+                'codigo'         => 'nullable|string|max:50',
                 'preco_compra'   => 'required|numeric|min:0',
                 'custo_medio'    => 'nullable|numeric|min:0',
                 'estoque_atual'  => 'nullable|integer|min:0',
@@ -635,7 +1059,6 @@ class ProdutoController extends Controller
             ]);
         }
 
-        // SERVIÇO: mantém taxa_iva próprio
         return array_merge($base, [
             'taxa_iva'         => 'nullable|numeric|min:0|max:100',
             'sujeito_iva'      => 'nullable|boolean',
@@ -646,9 +1069,6 @@ class ProdutoController extends Controller
         ]);
     }
 
-    /**
-     * Regras de validação para ACTUALIZAR.
-     */
     private function regrasValidacaoUpdate(string $tipo, string $id): array
     {
         $base = [
@@ -665,9 +1085,9 @@ class ProdutoController extends Controller
 
         if ($tipo === 'produto') {
             return array_merge($base, [
-                'categoria_id'   => 'sometimes|uuid|exists:categorias,id',
-                'fornecedor_id'  => 'nullable|uuid|exists:fornecedores,id',
-                'codigo'         => 'nullable|string|max:50|unique:produtos,codigo,' . $id,
+                'categoria_id'   => 'sometimes|uuid',
+                'fornecedor_id'  => 'nullable|uuid',
+                'codigo'         => 'nullable|string|max:50',
                 'preco_compra'   => 'sometimes|numeric|min:0',
                 'custo_medio'    => 'nullable|numeric|min:0',
                 'estoque_atual'  => 'nullable|integer|min:0',
@@ -675,7 +1095,6 @@ class ProdutoController extends Controller
             ]);
         }
 
-        // SERVIÇO: mantém taxa_iva próprio
         return array_merge($base, [
             'taxa_iva'         => 'nullable|numeric|min:0|max:100',
             'sujeito_iva'      => 'nullable|boolean',
@@ -686,7 +1105,6 @@ class ProdutoController extends Controller
         ]);
     }
 
-    /** Extrai filtros de listagem do request */
     private function extrairFiltros(Request $request): array
     {
         return array_filter([
@@ -694,6 +1112,6 @@ class ProdutoController extends Controller
             'status'       => $request->status,
             'categoria_id' => $request->categoria_id,
             'busca'        => $request->busca,
-        ], fn ($v) => ! is_null($v) && $v !== '');
+        ], fn ($v) => !is_null($v) && $v !== '');
     }
 }

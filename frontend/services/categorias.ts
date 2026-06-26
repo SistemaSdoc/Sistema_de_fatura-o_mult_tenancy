@@ -1,4 +1,5 @@
 // src/services/categorias.ts
+
 import api from "./axios";
 
 export type StatusCategoria = "ativo" | "inativo";
@@ -111,6 +112,7 @@ const API_PREFIX = "/api";
 export const categoriaService = {
     /**
      * Listar categorias ativas (padrão)
+     * ✅ CORRIGIDO: Mapeia response.data.data para categorias
      */
     async listarCategorias(filtros?: FiltrosCategoria): Promise<ListarCategoriasResponse> {
         const params = new URLSearchParams();
@@ -119,12 +121,25 @@ export const categoriaService = {
         if (filtros?.busca) params.append("busca", filtros.busca);
 
         const url = `${API_PREFIX}/categorias${params.toString() ? `?${params.toString()}` : ""}`;
-        const response = await api.get<ListarCategoriasResponse>(url);
-        return response.data;
+        const response = await api.get<{
+            success: boolean;
+            message: string;
+            data: Categoria[];
+            resumo?: ResumoCategorias;
+            modo?: string;
+        }>(url);
+        
+        return {
+            message: response.data.message || "Lista de categorias carregada com sucesso",
+            categorias: response.data.data || [],
+            resumo: response.data.resumo,
+            total: response.data.data?.length || 0,
+        };
     },
 
     /**
      * Listar TODAS as categorias (incluindo inativas)
+     * ✅ CORRIGIDO
      */
     async listarTodasCategorias(filtros?: FiltrosCategoria): Promise<ListarCategoriasResponse> {
         const params = new URLSearchParams();
@@ -133,12 +148,24 @@ export const categoriaService = {
         if (filtros?.busca) params.append("busca", filtros.busca);
 
         const url = `${API_PREFIX}/categorias/todas${params.toString() ? `?${params.toString()}` : ""}`;
-        const response = await api.get<ListarCategoriasResponse>(url);
-        return response.data;
+        const response = await api.get<{
+            success: boolean;
+            message: string;
+            data: Categoria[];
+            total?: number;
+            modo?: string;
+        }>(url);
+        
+        return {
+            message: response.data.message || "Lista de todas as categorias carregada com sucesso",
+            categorias: response.data.data || [],
+            total: response.data.total || response.data.data?.length || 0,
+        };
     },
 
     /**
      * Listar categorias deletadas (soft delete)
+     * ✅ CORRIGIDO
      */
     async listarCategoriasDeletadas(filtros?: Omit<FiltrosCategoria, 'status'>): Promise<ListarCategoriasResponse> {
         const params = new URLSearchParams();
@@ -146,28 +173,60 @@ export const categoriaService = {
         if (filtros?.busca) params.append("busca", filtros.busca);
 
         const url = `${API_PREFIX}/categorias/deletadas${params.toString() ? `?${params.toString()}` : ""}`;
-        const response = await api.get<ListarCategoriasResponse>(url);
-        return response.data;
+        const response = await api.get<{
+            success: boolean;
+            message: string;
+            data: Categoria[];
+            total?: number;
+            modo?: string;
+        }>(url);
+        
+        return {
+            message: response.data.message || "Lista de categorias deletadas carregada com sucesso",
+            categorias: response.data.data || [],
+            total: response.data.total || response.data.data?.length || 0,
+        };
     },
 
     /**
      * Listar categorias para dropdown/select
+     * ✅ CORRIGIDO
      */
     async paraSelectProdutos(): Promise<ParaSelectProdutosResponse> {
-        const response = await api.get<ParaSelectProdutosResponse>(`${API_PREFIX}/categorias/select`);
-        return response.data;
+        const response = await api.get<{
+            success: boolean;
+            message: string;
+            data: CategoriaSelect[];
+            modo?: string;
+        }>(`${API_PREFIX}/categorias/select`);
+        
+        return {
+            message: response.data.message || "Categorias para selecção",
+            categorias: response.data.data || [],
+        };
     },
 
     /**
      * Buscar categoria específica
+     * ✅ CORRIGIDO
      */
     async buscarCategoria(id: string): Promise<DetalheCategoriaResponse> {
-        const response = await api.get<DetalheCategoriaResponse>(`${API_PREFIX}/categorias/${id}`);
-        return response.data;
+        const response = await api.get<{
+            success: boolean;
+            message: string;
+            data: Categoria;
+            modo?: string;
+        }>(`${API_PREFIX}/categorias/${id}`);
+        
+        return {
+            message: response.data.message || "Categoria carregada com sucesso",
+            categoria: response.data.data,
+        };
     },
 
     /**
      * Criar nova categoria
+     * ✅ CORRIGIDO
      */
     async criarCategoria(dados: CriarCategoriaInput): Promise<CriarCategoriaResponse> {
         const dadosParaEnviar = { ...dados };
@@ -175,20 +234,38 @@ export const categoriaService = {
             delete dadosParaEnviar.codigo_isencao;
         }
 
-        const response = await api.post<CriarCategoriaResponse>(`${API_PREFIX}/categorias`, dadosParaEnviar);
-        return response.data;
+        const response = await api.post<{
+            success: boolean;
+            message: string;
+            data: Categoria;
+            modo?: string;
+        }>(`${API_PREFIX}/categorias`, dadosParaEnviar);
+        
+        return {
+            message: response.data.message || "Categoria criada com sucesso",
+            categoria: response.data.data,
+        };
     },
 
     /**
-     * Atualizar categoria - VERSÃO SIMPLES SEM A VISO
+     * Atualizar categoria
+     * ✅ CORRIGIDO
      */
     async atualizarCategoria(
         id: string, 
         dados: AtualizarCategoriaInput
     ): Promise<AtualizarCategoriaResponse> {
-        const url = `${API_PREFIX}/categorias/${id}`;
-        const response = await api.put<AtualizarCategoriaResponse>(url, dados);
-        return response.data;
+        const response = await api.put<{
+            success: boolean;
+            message: string;
+            data: Categoria;
+            modo?: string;
+        }>(`${API_PREFIX}/categorias/${id}`, dados);
+        
+        return {
+            message: response.data.message || "Categoria atualizada com sucesso",
+            categoria: response.data.data,
+        };
     },
 
     /**
@@ -196,8 +273,17 @@ export const categoriaService = {
      */
     async deletarCategoria(id: string): Promise<DeletarCategoriaResponse> {
         try {
-            const response = await api.delete<DeletarCategoriaResponse>(`${API_PREFIX}/categorias/${id}`);
-            return response.data;
+            const response = await api.delete<{
+                success: boolean;
+                message: string;
+                deleted?: boolean;
+                modo?: string;
+            }>(`${API_PREFIX}/categorias/${id}`);
+            
+            return {
+                message: response.data.message || "Categoria eliminada com sucesso",
+                deleted: response.data.deleted ?? true,
+            };
         } catch (error: unknown) {
             const err = error as { 
                 response?: { 
@@ -215,18 +301,36 @@ export const categoriaService = {
 
     /**
      * Restaurar categoria deletada
+     * ✅ CORRIGIDO
      */
     async restaurarCategoria(id: string): Promise<RestaurarCategoriaResponse> {
-        const response = await api.post<RestaurarCategoriaResponse>(`${API_PREFIX}/categorias/${id}/restore`);
-        return response.data;
+        const response = await api.post<{
+            success: boolean;
+            message: string;
+            data: Categoria;
+            modo?: string;
+        }>(`${API_PREFIX}/categorias/${id}/restore`);
+        
+        return {
+            message: response.data.message || "Categoria restaurada com sucesso",
+            categoria: response.data.data,
+        };
     },
 
     /**
      * Forçar delete permanente
+     * ✅ CORRIGIDO
      */
     async forcarDeleteCategoria(id: string): Promise<{ message: string }> {
-        const response = await api.delete<{ message: string }>(`${API_PREFIX}/categorias/${id}/force`);
-        return response.data;
+        const response = await api.delete<{
+            success: boolean;
+            message: string;
+            modo?: string;
+        }>(`${API_PREFIX}/categorias/${id}/force`);
+        
+        return {
+            message: response.data.message || "Categoria eliminada permanentemente",
+        };
     },
 };
 
@@ -265,6 +369,12 @@ export function getTaxaIVALabel(taxa: number, sujeitoIVA: boolean = true): strin
     if (!sujeitoIVA || taxa === 0) return "Isento (0%)";
     if (taxa === 5) return "5% (Cesta Básica)";
     return `${taxa}%`;
+}
+
+export function getTaxaIVATexto(taxa: number, sujeitoIVA: boolean = true): string {
+    if (!sujeitoIVA || taxa === 0) return "Isento";
+    if (taxa === 5) return "5% - Cesta Básica";
+    return `${taxa}% - Taxa Geral`;
 }
 
 export function computeCategoriaProps(categoria: Categoria): CategoriaComputed {
@@ -352,6 +462,26 @@ export function filtrarCategoriasFrontend(
     }
     
     return resultado;
+}
+
+export function groupCategoriasByTipo(categorias: Categoria[]): {
+    produtos: Categoria[];
+    servicos: Categoria[];
+} {
+    return {
+        produtos: categorias.filter(c => c.tipo === "produto"),
+        servicos: categorias.filter(c => c.tipo === "servico"),
+    };
+}
+
+export function groupCategoriasByStatus(categorias: Categoria[]): {
+    ativos: Categoria[];
+    inativos: Categoria[];
+} {
+    return {
+        ativos: categorias.filter(c => c.status === "ativo"),
+        inativos: categorias.filter(c => c.status === "inativo"),
+    };
 }
 
 export default categoriaService;

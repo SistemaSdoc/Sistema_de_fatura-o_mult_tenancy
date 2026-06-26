@@ -85,12 +85,16 @@ export interface DashboardGeral {
     stock: DashboardStock;
     alertas: DashboardAlertas;
     periodo: DashboardPeriodo;
+    modo?: string;
 }
+
+
 
 export interface DashboardResponse {
     success: boolean;
     message: string;
-    dashboard: DashboardGeral;
+    dashboard: DashboardGeral;  // ← É "dashboard", não "data"
+    modo?: string;
 }
 
 /* ==================== TIPOS PARA RELATÓRIO DE VENDAS ==================== */
@@ -113,41 +117,51 @@ export interface VendaRelatorioItem {
     } | null;
 }
 
-export interface VendasAgrupado {
-    periodo: string;
-    quantidade: number;
-    total: number;
-    base_tributavel: number;
-    total_iva: number;
-    total_retencao: number;
-}
 
-export interface VendasTotais {
+export interface VendasKPIs {
     total_vendas: number;
-    total_valor: number;
-    total_base_tributavel: number;
-    total_iva: number;
-    total_retencao: number;
-    total_servicos: number;
-    total_retencao_servicos: number;
-    percentual_retencao_media: number;
+    quantidade_vendas: number;
+    ticket_medio: number;
+    clientes_periodo: number;
+    produtos_vendidos: number;
+    vendas_por_status: {
+        pagas: number;
+        pendentes: number;
+        canceladas: number;
+    };
 }
 
+// ✅ CORRETO - O backend não tem "totais" separado
 export interface RelatorioVendas {
+    vendas: VendaRelatorioItem[];
+    kpis: VendasKPIs;        // ← TODOS OS TOTAIS ESTÃO AQUI
     periodo: {
         data_inicio: string;
         data_fim: string;
     };
-    filtros: Record<string, any>;
-    totais: VendasTotais;
-    vendas: VendaRelatorioItem[];
-    agrupado: VendasAgrupado[];
+    modo?: string;
+}
+
+
+// Onde VendasTotais é:
+export interface VendasTotais {
+    total_vendas: number;
+    quantidade_vendas: number;
+    ticket_medio: number;
+    clientes_periodo: number;
+    produtos_vendidos: number;
+    vendas_por_status: {
+        pagas: number;
+        pendentes: number;
+        canceladas: number;
+    };
 }
 
 export interface VendasResponse {
     success: boolean;
     message: string;
     data: RelatorioVendas;
+    modo?: string;
 }
 
 /* ==================== TIPOS PARA RELATÓRIO DE COMPRAS ==================== */
@@ -174,12 +188,14 @@ export interface RelatorioCompras {
         data_inicio: string | null;
         data_fim: string | null;
     };
+    modo?: string;
 }
 
 export interface ComprasResponse {
     success: boolean;
     message: string;
-    relatorio: RelatorioCompras;
+    data: RelatorioCompras;
+    modo?: string;
 }
 
 /* ==================== TIPOS PARA RELATÓRIO DE FATURAÇÃO ==================== */
@@ -205,6 +221,7 @@ export interface FaturacaoPorTipo {
         total_liquido: number;
         total_base: number;
         total_iva: number;
+        total_retencao?: number;
     };
 }
 
@@ -226,12 +243,14 @@ export interface RelatorioFaturacao {
         data_inicio: string | null;
         data_fim: string | null;
     };
+    modo?: string;
 }
 
 export interface FaturacaoResponse {
     success: boolean;
     message: string;
-    relatorio: RelatorioFaturacao;
+    data: RelatorioFaturacao;
+    modo?: string;
 }
 
 /* ==================== TIPOS PARA RELATÓRIO DE STOCK ==================== */
@@ -268,12 +287,14 @@ export interface RelatorioStock {
     resumo: StockResumo;
     por_categoria: Record<string, StockPorCategoria>;
     produtos: ProdutoStockItem[];
+    modo?: string;
 }
 
 export interface StockResponse {
     success: boolean;
     message: string;
     data: RelatorioStock;
+    modo?: string;
 }
 
 /* ==================== TIPOS PARA MOVIMENTOS DE STOCK ==================== */
@@ -325,14 +346,6 @@ export interface MovimentosPorMes {
     saidas: number;
 }
 
-export interface MovimentosAgrupado {
-    chave: string;
-    label: string;
-    entradas: number;
-    saidas: number;
-    total: number;
-}
-
 export interface ResumoMovimentosStock {
     total_movimentos: number;
     total_entradas: number;
@@ -346,98 +359,26 @@ export interface RelatorioMovimentosStock {
         data_inicio: string;
         data_fim: string;
     };
-    filtros: Record<string, any>;
+    filtros?: Record<string, any>;
     resumo: ResumoMovimentosStock;
-    agrupado: MovimentosAgrupado[];
+    agrupado?: MovimentosAgrupado[];
     movimentos: MovimentoStockItem[];
+    modo?: string;
+}
+
+export interface MovimentosAgrupado {
+    chave: string;
+    label: string;
+    entradas: number;
+    saidas: number;
+    total: number;
 }
 
 export interface MovimentosStockResponse {
     success: boolean;
     message: string;
     data: RelatorioMovimentosStock;
-}
-
-/* ==================== TIPOS PARA RELATÓRIO DE SERVIÇOS ==================== */
-
-export interface ServicoItem {
-    id: string;
-    nome: string;
-    unidade_medida: string;
-    taxa_retencao: number | null;
-    quantidade: number;
-    vendas: number;
-    receita: number;
-    receita_formatada: string;
-    retencao: number;
-    retencao_formatada: string;
-    percentual_retencao_real: number;
-}
-
-export interface ServicosTotais {
-    total_servicos_vendidos: number;
-    total_receita: number;
-    total_retencao: number;
-    total_quantidade: number;
-    percentual_retencao_media: number;
-}
-
-export interface RelatorioServicos {
-    periodo: {
-        data_inicio: string;
-        data_fim: string;
-    };
-    totais: ServicosTotais;
-    servicos: ServicoItem[];
-}
-
-export interface ServicosResponse {
-    success: boolean;
-    message: string;
-    data: RelatorioServicos;
-}
-
-/* ==================== TIPOS PARA RELATÓRIO DE RETENÇÕES ==================== */
-
-export interface RetencaoPorCliente {
-    cliente: string;
-    total_documentos: number;
-    total_base: number;
-    total_retencao: number;
-}
-
-export interface RetencaoDocumento {
-    id: string;
-    numero: string;
-    data: string;
-    cliente: string;
-    base: number;
-    retencao: number;
-    percentual: number;
-    servicos: number;
-}
-
-export interface RetencoesResumo {
-    total_documentos: number;
-    total_base: number;
-    total_retencao: number;
-    percentual_medio: number;
-}
-
-export interface RelatorioRetencoes {
-    periodo: {
-        data_inicio: string;
-        data_fim: string;
-    };
-    resumo: RetencoesResumo;
-    por_cliente: RetencaoPorCliente[];
-    documentos: RetencaoDocumento[];
-}
-
-export interface RetencoesResponse {
-    success: boolean;
-    message: string;
-    data: RelatorioRetencoes;
+    modo?: string;
 }
 
 /* ==================== TIPOS PARA DOCUMENTOS FISCAIS ==================== */
@@ -478,12 +419,14 @@ export interface RelatorioDocumentosFiscais {
     filtros: Record<string, any>;
     estatisticas: DocumentoFiscalEstatisticas;
     documentos: DocumentoFiscalItem[];
+    modo?: string;
 }
 
 export interface DocumentosFiscaisResponse {
     success: boolean;
     message: string;
     data: RelatorioDocumentosFiscais;
+    modo?: string;
 }
 
 /* ==================== TIPOS PARA PAGAMENTOS PENDENTES ==================== */
@@ -513,12 +456,14 @@ export interface RelatorioPagamentosPendentes {
     resumo: ResumoPagamentosPendentes;
     faturas_pendentes: PagamentoPendente[];
     adiantamentos_pendentes: PagamentoPendente[];
+    modo?: string;
 }
 
 export interface PagamentosPendentesResponse {
     success: boolean;
     message: string;
     data: RelatorioPagamentosPendentes;
+    modo?: string;
 }
 
 /* ==================== TIPOS PARA PROFORMAS ==================== */
@@ -540,12 +485,59 @@ export interface RelatorioProformas {
     total: number;
     valor_total: number;
     proformas: ProformaItem[];
+    modo?: string;
 }
 
 export interface ProformasResponse {
     success: boolean;
     message: string;
     data: RelatorioProformas;
+    modo?: string;
+}
+
+/* ==================== TIPOS PARA RETENÇÕES ==================== */
+
+export interface RetencaoPorCliente {
+    cliente: string;
+    total_documentos: number;
+    total_base: number;
+    total_retencao: number;
+}
+
+export interface RetencaoDocumento {
+    id: string;
+    numero: string;
+    data: string;
+    cliente: string;
+    base: number;
+    retencao: number;
+    percentual: number;
+    servicos: number;
+}
+
+export interface RetencoesResumo {
+    total_documentos: number;
+    total_base: number;
+    total_retencao: number;
+    percentual_medio: number;
+}
+
+export interface RelatorioRetencoes {
+    periodo: {
+        data_inicio: string;
+        data_fim: string;
+    };
+    resumo: RetencoesResumo;
+    por_cliente: RetencaoPorCliente[];
+    documentos: RetencaoDocumento[];
+    modo?: string;
+}
+
+export interface RetencoesResponse {
+    success: boolean;
+    message: string;
+    data: RelatorioRetencoes;
+    modo?: string;
 }
 
 /* ==================== CONSTANTES ==================== */
@@ -557,31 +549,34 @@ const API_PREFIX = "/api/relatorios";
 export const relatoriosService = {
     /**
      * Dashboard geral com indicadores principais
+     * GET /api/relatorios/dashboard
      */
     async getDashboard(): Promise<DashboardGeral> {
         const response = await api.get<DashboardResponse>(`${API_PREFIX}/dashboard`);
+        // ✅ Retorna response.data.data (estrutura do backend)
         return response.data.dashboard;
     },
 
     /**
      * Relatório detalhado de vendas
+     * GET /api/relatorios/vendas
      */
     async getRelatorioVendas(params?: {
         data_inicio?: string;
         data_fim?: string;
         apenas_vendas?: boolean;
         cliente_id?: string;
-        tipo_documento?: "FT" | "FR" | "FP" | "FA" | "NC" | "ND" | "RC" | "FRt";
         estado_pagamento?: "paga" | "pendente" | "parcial" | "cancelada";
         agrupar_por?: "dia" | "mes" | "ano";
-        incluir_servicos?: boolean;
     }): Promise<RelatorioVendas> {
         const response = await api.get<VendasResponse>(`${API_PREFIX}/vendas`, { params });
+        // ✅ Retorna response.data.data
         return response.data.data;
     },
 
     /**
      * Relatório detalhado de compras
+     * GET /api/relatorios/compras
      */
     async getRelatorioCompras(params?: {
         data_inicio?: string;
@@ -589,11 +584,12 @@ export const relatoriosService = {
         fornecedor_id?: string;
     }): Promise<RelatorioCompras> {
         const response = await api.get<ComprasResponse>(`${API_PREFIX}/compras`, { params });
-        return response.data.relatorio;
+        return response.data.data;
     },
 
     /**
      * Relatório de faturação/documentos fiscais
+     * GET /api/relatorios/faturacao
      */
     async getRelatorioFaturacao(params?: {
         data_inicio?: string;
@@ -603,11 +599,12 @@ export const relatoriosService = {
         incluir_retencoes?: boolean;
     }): Promise<RelatorioFaturacao> {
         const response = await api.get<FaturacaoResponse>(`${API_PREFIX}/faturacao`, { params });
-        return response.data.relatorio;
+        return response.data.data;
     },
 
     /**
      * Relatório de stock (produtos)
+     * GET /api/relatorios/stock
      */
     async getRelatorioStock(params?: {
         estoque_baixo?: boolean;
@@ -620,7 +617,7 @@ export const relatoriosService = {
     },
 
     /**
-     * ✅ Relatório de movimentos de stock (entradas, saídas, ajustes)
+     * Relatório de movimentos de stock
      * GET /api/relatorios/movimentos-stock
      */
     async getRelatorioMovimentosStock(params?: {
@@ -641,32 +638,8 @@ export const relatoriosService = {
     },
 
     /**
-     * Relatório específico de serviços
-     */
-    async getRelatorioServicos(params?: {
-        data_inicio?: string;
-        data_fim?: string;
-        apenas_ativos?: boolean;
-        agrupar_por?: "servico" | "categoria";
-    }): Promise<RelatorioServicos> {
-        const response = await api.get<ServicosResponse>(`${API_PREFIX}/servicos`, { params });
-        return response.data.data;
-    },
-
-    /**
-     * Relatório de retenções
-     */
-    async getRelatorioRetencoes(params?: {
-        data_inicio?: string;
-        data_fim?: string;
-        cliente_id?: string;
-    }): Promise<RelatorioRetencoes> {
-        const response = await api.get<RetencoesResponse>(`${API_PREFIX}/retencoes`, { params });
-        return response.data.data;
-    },
-
-    /**
      * Relatório de documentos fiscais (detalhado)
+     * GET /api/relatorios/documentos-fiscais
      */
     async getRelatorioDocumentosFiscais(params?: {
         data_inicio?: string;
@@ -685,6 +658,7 @@ export const relatoriosService = {
 
     /**
      * Relatório de pagamentos pendentes
+     * GET /api/relatorios/pagamentos-pendentes
      */
     async getRelatorioPagamentosPendentes(): Promise<RelatorioPagamentosPendentes> {
         const response = await api.get<PagamentosPendentesResponse>(`${API_PREFIX}/pagamentos-pendentes`);
@@ -693,6 +667,7 @@ export const relatoriosService = {
 
     /**
      * Relatório de proformas
+     * GET /api/relatorios/proformas
      */
     async getRelatorioProformas(params?: {
         data_inicio?: string;
@@ -701,6 +676,19 @@ export const relatoriosService = {
         pendentes?: boolean;
     }): Promise<RelatorioProformas> {
         const response = await api.get<ProformasResponse>(`${API_PREFIX}/proformas`, { params });
+        return response.data.data;
+    },
+
+    /**
+     * Relatório de retenções
+     * GET /api/relatorios/retencoes
+     */
+    async getRelatorioRetencoes(params?: {
+        data_inicio?: string;
+        data_fim?: string;
+        cliente_id?: string;
+    }): Promise<RelatorioRetencoes> {
+        const response = await api.get<RetencoesResponse>(`${API_PREFIX}/retencoes`, { params });
         return response.data.data;
     },
 };
@@ -821,11 +809,10 @@ export const useRelatorios = () => ({
     faturacao: relatoriosService.getRelatorioFaturacao,
     stock: relatoriosService.getRelatorioStock,
     movimentosStock: relatoriosService.getRelatorioMovimentosStock,
-    servicos: relatoriosService.getRelatorioServicos,
-    retencoes: relatoriosService.getRelatorioRetencoes,
     documentosFiscais: relatoriosService.getRelatorioDocumentosFiscais,
     pagamentosPendentes: relatoriosService.getRelatorioPagamentosPendentes,
     proformas: relatoriosService.getRelatorioProformas,
+    retencoes: relatoriosService.getRelatorioRetencoes,
 });
 
 export default relatoriosService;

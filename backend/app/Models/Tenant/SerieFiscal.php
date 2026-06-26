@@ -2,38 +2,25 @@
 
 namespace App\Models\Tenant;
 
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 /**
- * Model SerieFiscal
- *
- * Representa uma série de numeração para um tipo de documento fiscal.
- * O campo ultimo_numero é actualizado pelo DocumentoFiscalService::gerarNumeroDocumento()
- * com lockForUpdate() dentro de transacção — nunca deve ser modificado directamente.
- *
- * Formato do número_documento gerado:
- *   {serie}-{ultimo_numero padded com digitos}
- *   Exemplo: serie='B', digitos=5, ultimo_numero=42 → 'B-00042'
- *
- * @property string   $id
- * @property string|null $user_id
- * @property string   $tipo_documento   FT|FR|FP|FA|NC|ND|RC|FRt
- * @property string   $serie
- * @property string|null $descricao
- * @property int|null $ano
- * @property int      $ultimo_numero
- * @property int      $digitos
- * @property bool     $ativa
- * @property bool     $padrao
- * @property bool     $valida_agt
- * @property string|null $observacoes
+ * SerieFiscal - Model para séries fiscais (modo singular)
+ * 
+ * Banco: tenant (empresa_xxxxx)
+ * Tabela: series_fiscais
+ * 
+ * Formato do número: {TIPO} {SERIE}/{ANO}/{NUMERO}
+ * Exemplo: FR LOJA1/2026/0542
  */
-class SerieFiscal extends TenantModel
+class SerieFiscal extends Model
 {
+    protected $connection = 'tenant';
     protected $table = 'series_fiscais';
 
     public $incrementing = false;
-    protected $keyType   = 'string';
+    protected $keyType = 'string';
 
     protected $fillable = [
         'id',
@@ -51,127 +38,105 @@ class SerieFiscal extends TenantModel
     ];
 
     protected $casts = [
+        'ativa' => 'boolean',
+        'padrao' => 'boolean',
+        'valida_agt' => 'boolean',
         'ultimo_numero' => 'integer',
-        'digitos'       => 'integer',
-        'ativa'         => 'boolean',
-        'padrao'        => 'boolean',
-        'valida_agt'    => 'boolean',
-        'ano'           => 'integer',
+        'digitos' => 'integer',
+        'ano' => 'integer',
     ];
-
-    /* =====================================================================
-     | BOOT
-     | ================================================================== */
 
     protected static function boot(): void
     {
         parent::boot();
 
         static::creating(function ($model) {
-            if (! $model->id) {
+            if (!$model->id) {
                 $model->id = (string) Str::uuid();
             }
         });
     }
 
-    /* =====================================================================
-     | RELAÇÕES
-     | ================================================================== */
-
-    public function user()
-    {
-        return $this->belongsTo(User::class);
-    }
-
-    /* =====================================================================
-     | SCOPES
-     | ================================================================== */
-
-    /** Séries activas */
+    /**
+     * Scope para séries ativas
+     */
     public function scopeAtivas($query)
     {
         return $query->where('ativa', true);
     }
 
-    /** Série padrão para um tipo — usada pelo DocumentoFiscalService */
+    /**
+     * Scope para séries padrão
+     */
     public function scopePadrao($query)
     {
         return $query->where('padrao', true);
     }
 
-    /** Filtra por tipo de documento */
-    public function scopeDoTipo($query, string $tipo)
+    /**
+     * Scope para um tipo de documento específico
+     */
+    public function scopePorTipo($query, string $tipo)
     {
         return $query->where('tipo_documento', $tipo);
     }
 
-    /** Filtra por ano fiscal (ou sem ano definido) */
-    public function scopeDoAno($query, ?int $ano = null)
-    {
-        $ano = $ano ?? now()->year;
-        return $query->where(fn ($q) => $q->whereNull('ano')->orWhere('ano', $ano));
-    }
-
-    /* =====================================================================
-     | ACESSORES
-     | ================================================================== */
-
     /**
-     * Formata o próximo número de documento sem incrementar.
-     * O incremento real é feito pelo DocumentoFiscalService com lockForUpdate().
+     * Scope para um ano específico
      */
-    public function getProximoNumeroDocumentoAttribute(): string
+    public function scopePorAno($query, int $ano)
     {
-        return $this->serie . '-' . str_pad(
-            $this->ultimo_numero + 1,
-            $this->digitos,
-            '0',
-            STR_PAD_LEFT
-        );
+        return $query->where('ano', $ano);
     }
 
     /**
-     * Formata o último número emitido.
+     * Gera o próximo número da série
      */
-    public function getUltimoNumeroDocumentoAttribute(): string
+    public function getProximoNumero(): int
     {
-        if ($this->ultimo_numero === 0) {
-            return 'Nenhum emitido';
+        return $this->ultimo_numero + 1;
+    }
+
+    /**
+     * Gera o número do documento formatado
+     * Exemplo: FR LOJA1/2026/0001
+     */
+    public function gerarNumeroDocumento(): string
+    {
+        $proximo = $this->getProximoNumero();
+        $ano = $this->ano ?? date('Y');
+        $digitos = $this->digitos ?? 4;
+        $numeroFormatado = str_pad($proximo, $digitos, '0', STR_PAD_LEFT);
+        
+        return $this->tipo_documento . ' ' . $this->serie . '/' . $ano . '/' . $numeroFormatado;
+    }
+
+    /**
+     * Incrementa e retorna o próximo número
+     */
+    public function incrementarNumero(): int
+    {
+        $this->ultimo_numero = $this->ultimo_numero + 1;
+        $this->save();
+        return $this->ultimo_numero;
+    }
+
+    /**
+     * Relação com o utilizador que criou
+     */
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /**
+     * Verifica se a série é válida para o ano atual
+     */
+    public function isValidaParaAno(int $ano): bool
+    {
+        if ($this->ano === null) {
+            return true;
         }
-
-        return $this->serie . '-' . str_pad(
-            $this->ultimo_numero,
-            $this->digitos,
-            '0',
-            STR_PAD_LEFT
-        );
-    }
-
-    /**
-     * Indica se a série requer assinatura RSA (AGT).
-     * FP e RC são isentos conforme a especificação AGT.
-     */
-    public function getRequerAssinaturaAttribute(): bool
-    {
-        return $this->valida_agt;
-    }
-
-    /* =====================================================================
-     | MÉTODOS DE VERIFICAÇÃO
-     | ================================================================== */
-
-    public function estaActiva(): bool
-    {
-        return $this->ativa;
-    }
-
-    public function ehPadrao(): bool
-    {
-        return $this->padrao;
-    }
-
-    public function validaAgt(): bool
-    {
-        return $this->valida_agt;
+        return $this->ano === $ano;
     }
 }

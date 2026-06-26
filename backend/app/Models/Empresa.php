@@ -31,6 +31,7 @@ class Empresa extends Model
         'numero_conta',
         'iban',
         'logo', 
+        'modo',
         'subdomain',
         'status', 
         'data_registro',

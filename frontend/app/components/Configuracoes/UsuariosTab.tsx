@@ -59,6 +59,7 @@ export function UsuariosTab({
   colors: ThemeColors;
   currentUser: UserType | null;
 }) {
+  // ✅ Inicializa com array vazio
   const [users, setUsers] = useState<UserType[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -74,7 +75,8 @@ export function UsuariosTab({
     setLoadError(null);
     try {
       const data = await fetchUsers();
-      setUsers(data);
+      // ✅ Garantir que é um array
+      setUsers(Array.isArray(data) ? data : []);
     } catch (err: unknown) {
       const errObj = err as {
         response?: { data?: { message?: string }; status?: number };
@@ -91,6 +93,8 @@ export function UsuariosTab({
               "Erro ao carregar utilizadores");
       setLoadError(msg);
       toast.error(msg);
+      // ✅ Garantir que users fica como array vazio em caso de erro
+      setUsers([]);
     } finally {
       setLoading(false);
     }
@@ -100,10 +104,11 @@ export function UsuariosTab({
     void loadUsers();
   }, [loadUsers]);
 
-  const filtered = users.filter((u) => {
+  // ✅ Garantir que users é sempre um array antes de filter
+  const filtered = (users || []).filter((u) => {
     const matchSearch =
-      u.name.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase());
+      u.name?.toLowerCase().includes(search.toLowerCase()) ||
+      u.email?.toLowerCase().includes(search.toLowerCase());
     const matchRole = roleFilter === "todos" || u.role === roleFilter;
     return matchSearch && matchRole;
   });
@@ -253,7 +258,7 @@ export function UsuariosTab({
             >
               <User className="w-12 h-12 mx-auto mb-3 opacity-30" />
               <p>
-                {users.length === 0
+                {(users || []).length === 0
                   ? "Nenhum utilizador registado"
                   : "Nenhum utilizador encontrado"}
               </p>
@@ -390,7 +395,7 @@ export function UsuariosTab({
               className="text-xs text-right"
               style={{ color: colors.textSecondary }}
             >
-              {filtered.length} de {users.length} utilizador(es)
+              {filtered.length} de {(users || []).length} utilizador(es)
             </p>
           )}
         </CardContent>

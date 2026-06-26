@@ -3,454 +3,624 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
-use App\Models\Tenant\MovimentoStock;
-use App\Models\Tenant\Produto;
+use App\Models\Shared\MovimentoStock as SharedMovimentoStock;
+use App\Models\Shared\Produto as SharedProduto;
+use App\Models\Tenant\MovimentoStock as TenantMovimentoStock;
+use App\Models\Tenant\Produto as TenantProduto;
 use App\Services\StockService;
 
 /**
  * MovimentoStockController
  *
- * Toda a lógica de movimentação está no StockService.
- * O controller apenas valida o request, chama o service e formata a resposta.
+ * ✅ SUPORTA AMBOS OS MODOS:
+ * - 'colectivo' → Shared DB (com tenant_id)
+ * - 'singular' → Tenant DB (banco dedicado)
  */
 class MovimentoStockController extends Controller
 {
- public function __construct(protected StockService $stockService) {}
+    protected StockService $stockService;
 
- /* =====================================================================
- | LISTAGEM
- | ================================================================== */
+    public function __construct(StockService $stockService)
+    {
+        $this->stockService = $stockService;
+        
+        // ✅ CORRETO - Obtém o modo do service
+        Log::info('[MovimentoStockController] Inicializado', [
+            'modo' => $this->stockService->getModo(),
+        ]);
+    }
 
- public function index(Request $request)
- {
- $query = MovimentoStock::with([
- 'produto' => fn ($q) => $q->withTrashed()->select('id', 'nome', 'codigo', 'tipo'),
- 'user' => fn ($q) => $q->select('id', 'name'),
- ])->orderBy('created_at', 'desc');
+    /* =====================================================================
+     | HELPERS (obtêm dados do service dinamicamente)
+     | ================================================================== */
 
- if ($request->filled('produto_id')) {
- $query->where('produto_id', $request->produto_id);
- }
- if ($request->filled('tipo')) {
- $query->where('tipo', $request->tipo);
- }
- if ($request->filled('tipo_movimento')) {
- $query->where('tipo_movimento', $request->tipo_movimento);
- }
- if ($request->filled('data_inicio')) {
- $query->whereDate('created_at', '>=', $request->data_inicio);
- }
- if ($request->filled('data_fim')) {
- $query->whereDate('created_at', '<=', $request->data_fim);
- }
+    protected function getModo(): string
+    {
+        return $this->stockService->getModo();
+    }
 
- $movimentos = $request->boolean('paginar')
- ? $query->paginate($request->get('per_page', 20))
- : $query->get();
+    protected function isColectivo(): bool
+    {
+        return $this->getModo() === 'colectivo';
+    }
 
- return response()->json([
- 'message' => 'Movimentos de stock carregados com sucesso',
- 'movimentos' => $movimentos,
- ]);
- }
+    protected function isSingular(): bool
+    {
+        return $this->getModo() === 'singular';
+    }
 
- /* =====================================================================
- | RESUMO (DASHBOARD)
- | ================================================================== */
+    protected function getEmpresa()
+    {
+        return $this->stockService->getEmpresa();
+    }
 
-public function resumo()
-{
- Log::info('[DASHBOARD] Verificação de autenticação', [
- 'tenant_check' => Auth::guard('tenant')->check(),
- 'landlord_check' => Auth::guard('landlord')->check(),
- 'tenant_user_id' => Auth::guard('tenant')->id(),
- 'landlord_user_id' => Auth::guard('landlord')->id(),
- 'session_id' => session()->getId(),
- 'session_tenant_id' => session('tenant_id'),
- ]);
+    protected function getUserId(): ?string
+    {
+        $user = $this->stockService->getUser();
+        return $user?->id ?? null;
+    }
 
- $user = Auth::guard('tenant')->user();
- 
- // LOG 2: Dados do utilizador do tenant (se existir)
- Log::info('[DASHBOARD] Utilizador autenticado (tenant)', [
- 'user_id' => $user?->id ?? 'null',
- 'user_email' => $user?->email ?? 'null',
- 'user_role' => $user?->role ?? 'indefinido',
- 'user_nome' => $user?->nome ?? $user?->name ?? 'null',
- 'tenant_db' => config('database.connections.tenant.database'),
- ]);
- 
- $hoje = now()->toDateString();
+    /**
+     * Query com scope para movimentos de stock (apenas colectivo)
+     */
+    protected function queryMovimentosStock()
+    {
+        if ($this->isColectivo()) {
+            return SharedMovimentoStock::doTenant();
+        }
+        return TenantMovimentoStock::query();
+    }
 
- // =========================
- // PRODUTOS (APENAS SQL)
- // =========================
- $totalProdutos = Produto::apenasProdutos()->count();
+    /**
+     * Query com scope para produtos (apenas colectivo)
+     */
+    protected function queryProdutos()
+    {
+        if ($this->isColectivo()) {
+            return SharedProduto::doTenant();
+        }
+        return TenantProduto::query();
+    }
 
- $produtosAtivos = Produto::apenasProdutos()
- ->where('status', 'ativo')
- ->count();
+    /**
+     * Query com scope para produtos (apenas produtos físicos)
+     */
+    protected function queryProdutosFisicos()
+    {
+        if ($this->isColectivo()) {
+            return SharedProduto::doTenant()->where('tipo', 'produto');
+        }
+        return TenantProduto::where('tipo', 'produto');
+    }
 
- $produtosEstoqueBaixo = Produto::apenasProdutos()
- ->where('status', 'ativo')
- ->whereColumn('estoque_atual', '<=', 'estoque_minimo')
- ->count();
+    /**
+     * Busca produto com scope
+     */
+    protected function buscarProduto(string $id, bool $comTrashed = false)
+    {
+        if ($this->isColectivo()) {
+            $query = SharedProduto::doTenant();
+            if ($comTrashed) {
+                $query = $query->withTrashed();
+            }
+            return $query->where('id', $id)->first();
+        }
 
- $produtosSemEstoque = Produto::apenasProdutos()
- ->where('status', 'ativo')
- ->where('estoque_atual', 0)
- ->count();
+        if ($comTrashed) {
+            return TenantProduto::withTrashed()->where('id', $id)->first();
+        }
+        return TenantProduto::where('id', $id)->first();
+    }
 
- // =========================
- // VALOR TOTAL (SQL direto)
- // =========================
- $valorTotal = Produto::apenasProdutos()
- ->where('status', 'ativo')
- ->selectRaw('SUM(estoque_atual * COALESCE(custo_medio, preco_compra, 0)) as total')
- ->value('total');
+    /**
+     * Busca produto com scope e lança exceção
+     */
+    protected function buscarProdutoOrFail(string $id, bool $comTrashed = false)
+    {
+        if ($this->isColectivo()) {
+            $query = SharedProduto::doTenant();
+            if ($comTrashed) {
+                $query = $query->withTrashed();
+            }
+            return $query->where('id', $id)->firstOrFail();
+        }
 
- // =========================
- // MOVIMENTOS HOJE (1 QUERY BASE)
- // =========================
- $movimentosBase = MovimentoStock::whereDate('created_at', $hoje);
+        if ($comTrashed) {
+            return TenantProduto::withTrashed()->where('id', $id)->firstOrFail();
+        }
+        return TenantProduto::where('id', $id)->firstOrFail();
+    }
 
- $movimentacoesHoje = (clone $movimentosBase)->count();
+    /* =====================================================================
+     | MÉTODOS DO CONTROLLER
+     | ================================================================== */
 
- $entradasHoje = (clone $movimentosBase)
- ->where('tipo', 'entrada')
- ->sum('quantidade');
+    public function index(Request $request)
+    {
+        $modo = $this->getModo();
+        Log::info('[MovimentoStockController::index] Listando movimentos', [
+            'modo' => $modo,
+        ]);
 
- $saidasHoje = (clone $movimentosBase)
- ->where('tipo', 'saida')
- ->sum(DB::raw('ABS(quantidade)'));
+        try {
+            $query = $this->queryMovimentosStock()->with([
+                'produto' => fn ($q) => $q->withTrashed()->select('id', 'nome', 'codigo', 'tipo'),
+                'user'    => fn ($q) => $q->select('id', 'name'),
+            ])->orderBy('created_at', 'desc');
 
- $saidasPorDocFiscal = (clone $movimentosBase)
- ->where('tipo', 'saida')
- ->whereIn('tipo_movimento', ['venda', 'nota_credito'])
- ->count();
+            if ($request->filled('produto_id')) {
+                $query->where('produto_id', $request->produto_id);
+            }
+            if ($request->filled('tipo')) {
+                $query->where('tipo', $request->tipo);
+            }
+            if ($request->filled('tipo_movimento')) {
+                $query->where('tipo_movimento', $request->tipo_movimento);
+            }
+            if ($request->filled('data_inicio')) {
+                $query->whereDate('created_at', '>=', $request->data_inicio);
+            }
+            if ($request->filled('data_fim')) {
+                $query->whereDate('created_at', '<=', $request->data_fim);
+            }
 
- // =========================
- // PRODUTOS CRÍTICOS (LIMITADO)
- // =========================
- $produtosCriticos = Produto::apenasProdutos()
- ->where('status', 'ativo')
- ->whereColumn('estoque_atual', '<=', 'estoque_minimo')
- ->select('id', 'nome', 'estoque_atual', 'estoque_minimo')
- ->limit(20)
- ->get();
+            $movimentos = $request->boolean('paginar')
+                ? $query->paginate($request->get('per_page', 20))
+                : $query->get();
 
- return response()->json([
- 'totalProdutos' => $totalProdutos,
- 'produtosAtivos' => $produtosAtivos,
- 'produtosEstoqueBaixo' => $produtosEstoqueBaixo,
- 'produtosSemEstoque' => $produtosSemEstoque,
- 'valorTotalEstoque' => round($valorTotal ?? 0, 2),
+            return response()->json([
+                'message'    => 'Movimentos de stock carregados com sucesso',
+                'movimentos' => $movimentos,
+                'modo'       => $modo,
+            ]);
 
- 'movimentacoesHoje' => $movimentacoesHoje,
- 'entradasHoje' => $entradasHoje,
- 'saidasHoje' => $saidasHoje,
- 'saidasPorDocumentoFiscal' => $saidasPorDocFiscal,
+        } catch (\Exception $e) {
+            Log::error('[MovimentoStockController::index] Erro', [
+                'error' => $e->getMessage(),
+                'modo' => $modo,
+            ]);
+            return response()->json([
+                'message' => 'Erro ao listar movimentos',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 
- 'produtos_criticos' => $produtosCriticos,
- ]);
-}
+    public function resumo()
+    {
+        $modo = $this->getModo();
+        Log::info('[MovimentoStockController::resumo] Gerando resumo', [
+            'modo' => $modo,
+        ]);
 
- /* =====================================================================
- | HISTÓRICO DE UM PRODUTO
- | ================================================================== */
+        try {
+            // ✅ O service já cuida da verificação de acesso
+            $dados = $this->stockService->dashboard();
 
- public function historicoProduto(string $produtoId)
- {
- $produto = Produto::withTrashed()->findOrFail($produtoId);
- $movimentos = $produto->movimentosStock()
- ->with(['user' => fn ($q) => $q->select('id', 'name')])
- ->paginate(20);
+            return response()->json([
+                'message' => 'Resumo de stock carregado com sucesso',
+                'data'    => $dados,
+                'modo'    => $modo,
+            ]);
+        } catch (\Exception $e) {
+            $code = $e->getCode() ?: 500;
+            if ($code < 100 || $code >= 600) {
+                $code = 500;
+            }
+            Log::error('[MovimentoStockController::resumo] Erro', [
+                'error' => $e->getMessage(),
+                'modo' => $modo,
+                'code' => $code,
+            ]);
+            return response()->json([
+                'message' => 'Erro ao gerar resumo',
+                'error' => $e->getMessage()
+            ], $code);
+        }
+    }
 
- return response()->json([
- 'message' => 'Histórico de movimentos carregado',
- 'produto' => [
- 'id' => $produto->id,
- 'nome' => $produto->nome,
- 'estoque_atual' => $produto->estoque_atual,
- ],
- 'movimentos' => $movimentos,
- ]);
- }
+    public function historicoProduto(string $produtoId)
+    {
+        $modo = $this->getModo();
+        Log::info('[MovimentoStockController::historicoProduto] Buscando histórico', [
+            'produto_id' => $produtoId,
+            'modo' => $modo,
+        ]);
 
- /* =====================================================================
- | CRIAR MOVIMENTO MANUAL
- | ================================================================== */
+        try {
+            $produto = $this->buscarProdutoOrFail($produtoId, true);
 
- public function store(Request $request)
- {
- $dados = $request->validate([
- 'produto_id' => 'required|uuid|exists:produtos,id',
- 'tipo' => 'required|in:entrada,saida',
- 'tipo_movimento' => 'required|in:compra,venda,ajuste,nota_credito,devolucao',
- 'quantidade' => 'required|integer|min:1',
- 'motivo' => 'required|string|max:255',
- 'referencia' => 'nullable|string|max:100',
- 'custo_unitario' => 'nullable|numeric|min:0',
- ]);
+            $movimentos = $this->queryMovimentosStock()
+                ->where('produto_id', $produtoId)
+                ->with(['user' => fn ($q) => $q->select('id', 'name')])
+                ->paginate(20);
 
- try {
- $produto = Produto::findOrFail($dados['produto_id']);
+            return response()->json([
+                'message'   => 'Histórico de movimentos carregado',
+                'produto'   => [
+                    'id'           => $produto->id,
+                    'nome'         => $produto->nome,
+                    'estoque_atual' => $produto->estoque_atual,
+                ],
+                'movimentos' => $movimentos,
+                'modo'       => $modo,
+            ]);
 
- if ($produto->isServico()) {
- return response()->json(['message' => 'Serviços não possuem controlo de stock'], 422);
- }
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'message' => 'Produto não encontrado',
+                'error' => 'not_found'
+            ], 404);
+        } catch (\Exception $e) {
+            Log::error('[MovimentoStockController::historicoProduto] Erro', [
+                'produto_id' => $produtoId,
+                'error' => $e->getMessage(),
+                'modo' => $modo,
+            ]);
+            return response()->json([
+                'message' => 'Erro ao buscar histórico',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 
- // Entradas de compra usam o método dedicado (actualiza custo médio)
- if ($dados['tipo'] === 'entrada' && $dados['tipo_movimento'] === 'compra' && isset($dados['custo_unitario'])) {
- $movimento = $this->stockService->entradaCompra(
- $dados['produto_id'],
- $dados['quantidade'],
- (float) $dados['custo_unitario'],
- $dados['referencia'] ?? null
- );
- } else {
- $movimento = $this->stockService->movimentar(
- $dados['produto_id'],
- $dados['quantidade'],
- $dados['tipo'],
- $dados['tipo_movimento'],
- $dados['referencia'] ?? null,
- $dados['motivo']
- );
- }
+    public function store(Request $request)
+    {
+        $modo = $this->getModo();
+        Log::info('[MovimentoStockController::store] Criando movimento manual', [
+            'modo' => $modo,
+        ]);
 
- if (! $movimento) {
- return response()->json(['message' => 'Movimento não registado'], 422);
- }
+        try {
+            $dados = $request->validate([
+                'produto_id'    => 'required|uuid|exists:produtos,id',
+                'tipo'          => 'required|in:entrada,saida',
+                'tipo_movimento' => 'required|in:compra,venda,ajuste,nota_credito,devolucao',
+                'quantidade'    => 'required|integer|min:1',
+                'motivo'        => 'required|string|max:255',
+                'referencia'    => 'nullable|string|max:100',
+                'custo_unitario' => 'nullable|numeric|min:0',
+            ]);
+
+            $produto = $this->buscarProdutoOrFail($dados['produto_id']);
+
+            if ($produto->tipo === 'servico') {
+                return response()->json(['message' => 'Serviços não possuem controlo de stock'], 422);
+            }
+
+            $userId = $this->getUserId();
+
+            if ($dados['tipo'] === 'entrada' && $dados['tipo_movimento'] === 'compra' && isset($dados['custo_unitario'])) {
+                $movimento = $this->stockService->entradaCompra(
+                    $dados['produto_id'],
+                    $dados['quantidade'],
+                    (float) $dados['custo_unitario'],
+                    $dados['referencia'] ?? null,
+                    $userId
+                );
+            } else {
+                $movimento = $this->stockService->movimentar(
+                    $dados['produto_id'],
+                    $dados['quantidade'],
+                    $dados['tipo'],
+                    $dados['tipo_movimento'],
+                    $dados['referencia'] ?? null,
+                    $dados['motivo'],
+                    $userId
+                );
+            }
+
+            if (!$movimento) {
+                return response()->json(['message' => 'Movimento não registado'], 422);
+            }
 
  $produto->refresh();
 
- return response()->json([
- 'message' => 'Movimento registado com sucesso',
- 'movimento' => $movimento->load(['produto:id,nome,codigo', 'user:id,name']),
- 'estoque_atualizado' => [
- 'anterior' => $movimento->estoque_anterior,
- 'atual' => $movimento->estoque_novo,
- 'diferenca' => $movimento->quantidade,
- ],
- ], 201);
+            return response()->json([
+                'message'            => 'Movimento registado com sucesso',
+                'movimento'          => $movimento->load(['produto:id,nome,codigo', 'user:id,name']),
+                'estoque_atualizado' => [
+                    'anterior' => $movimento->estoque_anterior,
+                    'atual'    => $movimento->estoque_novo,
+                    'diferenca' => $movimento->quantidade,
+                ],
+                'modo' => $modo,
+            ], 201);
 
- } catch (\Exception $e) {
- Log::error('[MOVIMENTO STOCK ERROR]', [
- 'error' => $e->getMessage(),
- 'dados' => $dados,
- 'user_id' => Auth::id(),
- ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'message' => 'Erro de validação',
+                'errors'  => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('[MovimentoStockController::store] Erro', [
+                'error' => $e->getMessage(),
+                'dados' => $dados ?? [],
+                'modo' => $modo,
+            ]);
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
 
- return response()->json(['message' => $e->getMessage()], 422);
- }
- }
+    public function ajuste(Request $request)
+    {
+        $modo = $this->getModo();
+        Log::info('[MovimentoStockController::ajuste] Realizando ajuste', [
+            'modo' => $modo,
+        ]);
 
- /* =====================================================================
- | AJUSTE MANUAL (INVENTÁRIO)
- | ================================================================== */
+        try {
+            $dados = $request->validate([
+                'produto_id' => 'required|uuid|exists:produtos,id',
+                'quantidade' => 'required|integer|min:0',
+                'motivo'     => 'required|string|max:255',
+                'custo_medio' => 'nullable|numeric|min:0',
+            ]);
 
- public function ajuste(Request $request)
- {
- $dados = $request->validate([
- 'produto_id' => 'required|uuid|exists:produtos,id',
- 'quantidade' => 'required|integer|min:0',
- 'motivo' => 'required|string|max:255',
- 'custo_medio' => 'nullable|numeric|min:0',
- ]);
+            $produto = $this->buscarProdutoOrFail($dados['produto_id']);
 
- try {
- $produto = Produto::findOrFail($dados['produto_id']);
-
- if ($produto->isServico()) {
- return response()->json(['message' => 'Serviços não possuem controlo de stock'], 422);
- }
+            if ($produto->tipo === 'servico') {
+                return response()->json(['message' => 'Serviços não possuem controlo de stock'], 422);
+            }
 
  $anterior = $produto->estoque_atual;
  $novo = $dados['quantidade'];
  $diferenca = $novo - $anterior;
 
- $movimento = null;
+            $movimento = null;
+            $userId = $this->getUserId();
 
- if ($diferenca !== 0) {
- $tipo = $diferenca > 0 ? 'entrada' : 'saida';
- $movimento = $this->stockService->ajusteManual(
- $dados['produto_id'],
- abs($diferenca),
- $tipo,
- null,
- $dados['motivo']
- );
+            if ($diferenca !== 0) {
+                $tipo = $diferenca > 0 ? 'entrada' : 'saida';
+                $movimento = $this->stockService->ajusteManual(
+                    $dados['produto_id'],
+                    abs($diferenca),
+                    $tipo,
+                    null,
+                    $dados['motivo'],
+                    $userId
+                );
 
- // Actualizar custo médio se fornecido
- if (isset($dados['custo_medio'])) {
- $produto->update(['custo_medio' => $dados['custo_medio']]);
- }
- }
+                if (isset($dados['custo_medio'])) {
+                    $produto->update(['custo_medio' => $dados['custo_medio']]);
+                }
+            }
 
- return response()->json([
- 'message' => 'Ajuste realizado com sucesso',
- 'movimento' => $movimento?->load(['produto:id,nome', 'user:id,name']),
- 'ajuste' => [
- 'anterior' => $anterior,
- 'novo' => $novo,
- 'diferenca' => $diferenca,
- ],
- ], 201);
+            return response()->json([
+                'message'  => 'Ajuste realizado com sucesso',
+                'movimento' => $movimento?->load(['produto:id,nome', 'user:id,name']),
+                'ajuste'   => [
+                    'anterior'  => $anterior,
+                    'novo'      => $novo,
+                    'diferenca' => $diferenca,
+                ],
+                'modo' => $modo,
+            ], 201);
 
- } catch (\Exception $e) {
- Log::error('[AJUSTE STOCK ERROR]', ['error' => $e->getMessage(), 'dados' => $dados]);
- return response()->json(['message' => $e->getMessage()], 422);
- }
- }
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'message' => 'Erro de validação',
+                'errors'  => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('[MovimentoStockController::ajuste] Erro', [
+                'error' => $e->getMessage(),
+                'dados' => $dados ?? [],
+                'modo' => $modo,
+            ]);
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
 
- /* =====================================================================
- | TRANSFERÊNCIA ENTRE PRODUTOS
- | ================================================================== */
+    public function transferencia(Request $request)
+    {
+        $modo = $this->getModo();
+        Log::info('[MovimentoStockController::transferencia] Realizando transferência', [
+            'modo' => $modo,
+        ]);
 
- public function transferencia(Request $request)
- {
- $dados = $request->validate([
- 'produto_origem_id' => 'required|uuid|exists:produtos,id',
- 'produto_destino_id' => 'required|uuid|exists:produtos,id|different:produto_origem_id',
- 'quantidade' => 'required|integer|min:1',
- 'motivo' => 'required|string|max:255',
- ]);
+        try {
+            $dados = $request->validate([
+                'produto_origem_id'  => 'required|uuid|exists:produtos,id',
+                'produto_destino_id' => 'required|uuid|exists:produtos,id|different:produto_origem_id',
+                'quantidade'         => 'required|integer|min:1',
+                'motivo'             => 'required|string|max:255',
+            ]);
 
- try {
- $origem = Produto::findOrFail($dados['produto_origem_id']);
- $destino = Produto::findOrFail($dados['produto_destino_id']);
+            $origem = $this->buscarProdutoOrFail($dados['produto_origem_id']);
+            $destino = $this->buscarProdutoOrFail($dados['produto_destino_id']);
 
- if ($origem->isServico() || $destino->isServico()) {
- return response()->json(['message' => 'Transferência permitida apenas entre produtos físicos'], 422);
- }
+            if ($origem->tipo === 'servico' || $destino->tipo === 'servico') {
+                return response()->json(['message' => 'Transferência permitida apenas entre produtos físicos'], 422);
+            }
 
- if (! $this->stockService->verificarDisponibilidade($dados['produto_origem_id'], $dados['quantidade'])) {
- return response()->json([
- 'message' => 'Stock insuficiente na origem',
- 'estoque_disponivel' => $origem->estoque_atual,
- ], 422);
- }
+            if (!$this->stockService->verificarDisponibilidade($dados['produto_origem_id'], $dados['quantidade'])) {
+                return response()->json([
+                    'message'             => 'Stock insuficiente na origem',
+                    'estoque_disponivel'  => $origem->estoque_atual,
+                ], 422);
+            }
 
- $estoqueOrigemAnt = $origem->estoque_atual;
- $estoqueDestinoAnt = $destino->estoque_atual;
+            $userId = $this->getUserId();
+            $estoqueOrigemAnt = $origem->estoque_atual;
+            $estoqueDestinoAnt = $destino->estoque_atual;
 
- // Saída na origem
- $this->stockService->ajusteManual(
- $origem->id,
- $dados['quantidade'],
- 'saida',
- null,
- 'Transferência para: ' . $destino->nome . ' — ' . $dados['motivo']
- );
+            $this->stockService->ajusteManual(
+                $origem->id,
+                $dados['quantidade'],
+                'saida',
+                null,
+                'Transferência para: ' . $destino->nome . ' — ' . $dados['motivo'],
+                $userId
+            );
 
- // Entrada no destino
- $this->stockService->ajusteManual(
- $destino->id,
- $dados['quantidade'],
- 'entrada',
- null,
- 'Transferência de: ' . $origem->nome . ' — ' . $dados['motivo']
- );
+            $this->stockService->ajusteManual(
+                $destino->id,
+                $dados['quantidade'],
+                'entrada',
+                null,
+                'Transferência de: ' . $origem->nome . ' — ' . $dados['motivo'],
+                $userId
+            );
 
- return response()->json([
- 'message' => 'Transferência realizada com sucesso',
- 'transferencia' => [
- 'origem' => [
- 'id' => $origem->id,
- 'nome' => $origem->nome,
- 'estoque_anterior' => $estoqueOrigemAnt,
- 'estoque_novo' => $origem->fresh()->estoque_atual,
- ],
- 'destino' => [
- 'id' => $destino->id,
- 'nome' => $destino->nome,
- 'estoque_anterior' => $estoqueDestinoAnt,
- 'estoque_novo' => $destino->fresh()->estoque_atual,
- ],
- 'quantidade' => $dados['quantidade'],
- ],
- ], 201);
+            return response()->json([
+                'message'       => 'Transferência realizada com sucesso',
+                'transferencia' => [
+                    'origem'  => [
+                        'id'               => $origem->id,
+                        'nome'             => $origem->nome,
+                        'estoque_anterior' => $estoqueOrigemAnt,
+                        'estoque_novo'     => $origem->fresh()->estoque_atual,
+                    ],
+                    'destino' => [
+                        'id'               => $destino->id,
+                        'nome'             => $destino->nome,
+                        'estoque_anterior' => $estoqueDestinoAnt,
+                        'estoque_novo'     => $destino->fresh()->estoque_atual,
+                    ],
+                    'quantidade' => $dados['quantidade'],
+                ],
+                'modo' => $modo,
+            ], 201);
 
- } catch (\Exception $e) {
- Log::error('[TRANSFERENCIA STOCK ERROR]', ['error' => $e->getMessage(), 'dados' => $dados]);
- return response()->json(['message' => $e->getMessage()], 422);
- }
- }
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'message' => 'Erro de validação',
+                'errors'  => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('[MovimentoStockController::transferencia] Erro', [
+                'error' => $e->getMessage(),
+                'dados' => $dados ?? [],
+                'modo' => $modo,
+            ]);
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
 
- /* =====================================================================
- | DETALHE DE UM MOVIMENTO
- | ================================================================== */
+    public function show(string $id)
+    {
+        $modo = $this->getModo();
+        Log::info('[MovimentoStockController::show] Buscando movimento', [
+            'movimento_id' => $id,
+            'modo' => $modo,
+        ]);
 
- public function show(string $id)
- {
- $movimento = MovimentoStock::with([
- 'produto' => fn ($q) => $q->withTrashed()->select('id', 'nome', 'codigo', 'custo_medio'),
- 'user' => fn ($q) => $q->select('id', 'name', 'email'),
- ])->findOrFail($id);
+        try {
+            if ($this->isColectivo()) {
+                $movimento = SharedMovimentoStock::doTenant()
+                    ->with([
+                        'produto' => fn ($q) => $q->withTrashed()->select('id', 'nome', 'codigo', 'custo_medio'),
+                        'user'    => fn ($q) => $q->select('id', 'name', 'email'),
+                    ])
+                    ->where('id', $id)
+                    ->firstOrFail();
+            } else {
+                $movimento = TenantMovimentoStock::with([
+                    'produto' => fn ($q) => $q->withTrashed()->select('id', 'nome', 'codigo', 'custo_medio'),
+                    'user'    => fn ($q) => $q->select('id', 'name', 'email'),
+                ])->where('id', $id)->firstOrFail();
+            }
 
- return response()->json([
- 'message' => 'Movimento carregado com sucesso',
- 'movimento' => $movimento,
- ]);
- }
+            return response()->json([
+                'message'   => 'Movimento carregado com sucesso',
+                'movimento' => $movimento,
+                'modo'      => $modo,
+            ]);
 
- /* =====================================================================
- | ESTATÍSTICAS (RELATÓRIO)
- | ================================================================== */
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'message' => 'Movimento não encontrado',
+                'error' => 'not_found'
+            ], 404);
+        } catch (\Exception $e) {
+            Log::error('[MovimentoStockController::show] Erro', [
+                'movimento_id' => $id,
+                'error' => $e->getMessage(),
+                'modo' => $modo,
+            ]);
+            return response()->json([
+                'message' => 'Erro ao buscar movimento',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 
- public function estatisticas(Request $request)
- {
- $dataInicio = $request->data_inicio ?? now()->subMonth()->toDateString();
- $dataFim = $request->data_fim ?? now()->toDateString();
+    public function estatisticas(Request $request)
+    {
+        $modo = $this->getModo();
+        Log::info('[MovimentoStockController::estatisticas] Gerando estatísticas', [
+            'modo' => $modo,
+        ]);
 
- $base = MovimentoStock::query();
+        try {
+            $dataInicio = $request->data_inicio ?? now()->subMonth()->toDateString();
+            $dataFim    = $request->data_fim    ?? now()->toDateString();
 
- if ($request->filled('data_inicio')) {
- $base->whereDate('created_at', '>=', $request->data_inicio);
- }
- if ($request->filled('data_fim')) {
- $base->whereDate('created_at', '<=', $request->data_fim);
- }
- if ($request->filled('produto_id')) {
- $base->where('produto_id', $request->produto_id);
- }
+            $query = $this->queryMovimentosStock();
 
- return response()->json([
- 'message' => 'Estatísticas carregadas',
- 'estatisticas' => [
- 'total_movimentos' => (clone $base)->count(),
- 'total_entradas' => (clone $base)->where('tipo', 'entrada')->sum('quantidade'),
- 'total_saidas' => abs((clone $base)->where('tipo', 'saida')->sum('quantidade')),
+            if ($request->filled('data_inicio')) {
+                $query->whereDate('created_at', '>=', $request->data_inicio);
+            }
+            if ($request->filled('data_fim')) {
+                $query->whereDate('created_at', '<=', $request->data_fim);
+            }
+            if ($request->filled('produto_id')) {
+                $query->where('produto_id', $request->produto_id);
+            }
 
- 'por_tipo' => MovimentoStock::selectRaw('tipo_movimento, count(*) as total')
- ->whereBetween('created_at', [$dataInicio, $dataFim])
- ->groupBy('tipo_movimento')
- ->get(),
+            $porTipo = (clone $query)
+                ->selectRaw('tipo_movimento, count(*) as total')
+                ->whereBetween('created_at', [$dataInicio, $dataFim])
+                ->groupBy('tipo_movimento')
+                ->get();
 
- 'por_mes' => MovimentoStock::selectRaw(
- 'DATE_FORMAT(created_at, "%Y-%m") as mes,
- SUM(CASE WHEN tipo = "entrada" THEN quantidade ELSE 0 END) as entradas,
- ABS(SUM(CASE WHEN tipo = "saida" THEN quantidade ELSE 0 END)) as saidas'
- )
- ->whereBetween('created_at', [$request->data_inicio ?? now()->subMonths(6), $dataFim])
- ->groupBy('mes')
- ->orderBy('mes')
- ->get(),
+            $porMes = (clone $query)
+                ->selectRaw(
+                    'DATE_FORMAT(created_at, "%Y-%m") as mes,
+                     SUM(CASE WHEN tipo = "entrada" THEN quantidade ELSE 0 END) as entradas,
+                     ABS(SUM(CASE WHEN tipo = "saida" THEN quantidade ELSE 0 END)) as saidas'
+                )
+                ->whereBetween('created_at', [$request->data_inicio ?? now()->subMonths(6), $dataFim])
+                ->groupBy('mes')
+                ->orderBy('mes')
+                ->get();
 
- 'por_documento_fiscal' => MovimentoStock::selectRaw(
- 'tipo_movimento,
- count(*) as total,
- ABS(SUM(CASE WHEN tipo = "saida" THEN quantidade ELSE 0 END)) as quantidade_saida'
- )
- ->whereIn('tipo_movimento', ['venda', 'nota_credito'])
- ->whereBetween('created_at', [$dataInicio, $dataFim])
- ->groupBy('tipo_movimento')
- ->get(),
- ],
- ]);
- }
+            $porDocumentoFiscal = (clone $query)
+                ->selectRaw(
+                    'tipo_movimento,
+                     count(*) as total,
+                     ABS(SUM(CASE WHEN tipo = "saida" THEN quantidade ELSE 0 END)) as quantidade_saida'
+                )
+                ->whereIn('tipo_movimento', ['venda', 'nota_credito'])
+                ->whereBetween('created_at', [$dataInicio, $dataFim])
+                ->groupBy('tipo_movimento')
+                ->get();
+
+            return response()->json([
+                'message'      => 'Estatísticas carregadas',
+                'estatisticas' => [
+                    'total_movimentos' => (clone $query)->count(),
+                    'total_entradas'   => (clone $query)->where('tipo', 'entrada')->sum('quantidade'),
+                    'total_saidas'     => abs((clone $query)->where('tipo', 'saida')->sum('quantidade')),
+                    'por_tipo'         => $porTipo,
+                    'por_mes'          => $porMes,
+                    'por_documento_fiscal' => $porDocumentoFiscal,
+                ],
+                'modo' => $modo,
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('[MovimentoStockController::estatisticas] Erro', [
+                'error' => $e->getMessage(),
+                'modo' => $modo,
+            ]);
+            return response()->json([
+                'message' => 'Erro ao gerar estatísticas',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

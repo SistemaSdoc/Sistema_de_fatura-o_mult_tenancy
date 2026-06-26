@@ -1,0 +1,48 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::connection('shared')->create('clientes', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('tenant_id');
+            $table->uuid('user_id')->nullable()->index();
+
+
+            $table->string('nome');
+            $table->string('nif', 14)->nullable()->unique();
+            $table->enum('tipo', ['consumidor_final', 'empresa'])->default('consumidor_final');
+
+            // Campo status para ativar/inativar sem deletar
+            $table->enum('status', ['ativo', 'inativo'])->default('ativo');
+
+            $table->date('data_registro');
+            $table->string('telefone')->nullable();
+            $table->string('email')->nullable()->unique();
+            $table->text('endereco')->nullable();
+
+            $table->string('cidade')->nullable();
+            $table->string('codigo_postal')->nullable();
+            $table->string('pais', 2)->default('AO');
+
+            $table->timestamps(); // created_at e updated_at
+            $table->softDeletes(); // deleted_at para soft delete
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::connection('shared')->dropIfExists('clientes');
+    }
+};

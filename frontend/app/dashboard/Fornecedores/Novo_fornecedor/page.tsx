@@ -84,24 +84,19 @@ function validarNIF(nif: string): {
 }
 
 function aplicarMascaraNIF(valor: string): string {
-  // Remove tudo que não é alfanumérico
   let clean = valor.replace(/[^a-zA-Z0-9]/g, '');
   
-  // Limita o tamanho máximo (14 caracteres)
   if (clean.length > 14) {
     clean = clean.slice(0, 14);
   }
   
-  // Se for apenas números e tem até 10 dígitos, aplica máscara de NIF
   if (/^[0-9]+$/.test(clean) && clean.length <= 10) {
     if (clean.length <= 3) return clean;
     if (clean.length <= 6) return clean.replace(/(\d{3})(\d+)/, '$1 $2');
     if (clean.length <= 10) return clean.replace(/(\d{3})(\d{3})(\d+)/, '$1 $2 $3');
   }
   
-  // Se tem letras, provavelmente é BI
   if (/[A-Za-z]/.test(clean)) {
-    // BI: 123 456 789 AB 123
     const match = clean.match(/^(\d{0,3})(\d{0,3})(\d{0,3})([A-Za-z]{0,2})(\d{0,3})/);
     if (match) {
       let resultado = '';
@@ -348,7 +343,6 @@ function FormFornecedor({
         email: fornecedor.email || "",
         endereco: fornecedor.endereco || "",
       });
-      // Valida o NIF existente
       if (fornecedor.nif) {
         const validacao = validarNIF(fornecedor.nif);
         if (validacao.valido) {
@@ -375,7 +369,6 @@ function FormFornecedor({
     setField(name, value);
   };
 
-  // Handler específico para NIF com máscara e validação
   const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const valor = e.target.value;
     const mascara = aplicarMascaraNIF(valor);
@@ -383,14 +376,12 @@ function FormFornecedor({
     setForm((p) => ({ ...p, nif: mascara }));
     if (errors.nif) setErrors((p) => ({ ...p, nif: "" }));
     
-    // Validação em tempo real
     if (mascara.length > 0) {
       const validacao = validarNIF(mascara);
       if (validacao.valido) {
         setNifTipo(validacao.tipo || null);
         setErrors((p) => ({ ...p, nif: "" }));
       } else if (mascara.replace(/[^a-zA-Z0-9]/g, '').length >= 10) {
-        // Só mostra erro se tiver digitado pelo menos 10 caracteres
         setNifTipo(null);
         setErrors((p) => ({ ...p, nif: validacao.mensagem || 'Formato inválido' }));
       } else {
@@ -406,7 +397,6 @@ function FormFornecedor({
     const e: Record<string, string> = {};
     if (!form.nome?.trim()) e.nome = "Nome é obrigatório";
     
-    // Validação do NIF/BI
     if (!form.nif?.trim()) {
       e.nif = "NIF/BI é obrigatório";
     } else {
@@ -436,7 +426,6 @@ function FormFornecedor({
       onSubmit={(e) => {
         e.preventDefault();
         if (validate()) {
-          // Limpa o NIF antes de enviar (remove espaços)
           const dadosLimpos = {
             ...form,
             nif: form.nif.replace(/[^a-zA-Z0-9]/g, '')
@@ -754,14 +743,19 @@ export default function FornecedoresPage() {
   const carregar = useCallback(async () => {
     setLoading(true);
     try {
-      const [ativos, deletados] = await Promise.all([
+      // ✅ CORREÇÃO: O service agora retorna { fornecedores: [...] }
+      const [ativosResponse, deletadosResponse] = await Promise.all([
         fornecedorService.listarFornecedores(),
         fornecedorService.listarFornecedoresDeletados(),
       ]);
-      setFornecedores(ativos);
-      setFornecedoresDeletados(deletados);
-    } catch {
-      /* silencioso */
+      
+      // ✅ Extrair os arrays da resposta
+      setFornecedores(ativosResponse.fornecedores || []);
+      setFornecedoresDeletados(deletadosResponse.fornecedores || []);
+    } catch (error) {
+      console.error('Erro ao carregar fornecedores:', error);
+      setFornecedores([]);
+      setFornecedoresDeletados([]);
     } finally {
       setLoading(false);
     }
@@ -796,9 +790,11 @@ export default function FornecedoresPage() {
               ? "internacional"
               : dados.tipo,
       };
-      if (selecao)
+      if (selecao) {
         await fornecedorService.atualizarFornecedor(selecao.id, dadosNormalizados);
-      else await fornecedorService.criarFornecedor(dadosNormalizados);
+      } else {
+        await fornecedorService.criarFornecedor(dadosNormalizados);
+      }
       fecharForm();
       await carregar();
     } catch (err: any) {

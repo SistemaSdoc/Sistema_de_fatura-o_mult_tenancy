@@ -2,10 +2,18 @@
 
 namespace App\Services;
 
-use App\Models\Tenant\Venda;
-use App\Models\Tenant\ItemVenda;
-use App\Models\Tenant\Produto;
+use App\Models\Shared\Venda as SharedVenda;
+use App\Models\Shared\ItemVenda as SharedItemVenda;
+use App\Models\Shared\Produto as SharedProduto;
+
+use App\Models\Tenant\Venda as TenantVenda;
+use App\Models\Tenant\ItemVenda as TenantItemVenda;
+use App\Models\Tenant\Produto as TenantProduto;
+
 use App\Models\Empresa;
+use App\Models\LandlordUser;
+use App\Models\Shared\User as SharedUser;
+use App\Models\Tenant\User as TenantUser;
 use App\Services\StockService;
 use App\Services\DocumentoFiscalService;
 use Illuminate\Support\Str;
@@ -17,119 +25,267 @@ use Carbon\Carbon;
 /**
  * VendaService
  *
- * Correcções:
- *  - 'tipo_documento' REMOVIDO do Venda::create() — coluna não existe na tabela.
- *    O tipo fica em 'tipo_documento_fiscal'.
- *  - Numeração fiscal gerida pelo DocumentoFiscalService.
- *  - IVA 0%, 5%, 14% suportados; retenção lida do produto.
- *  - Adicionado suporte a desconto global e troco.
- *  - Logs detalhados para diagnóstico do IVA = 0.
- *  - Corrigida selecção da empresa: agora obtém a empresa do tenant actual
- *    (via header X-Empresa-ID ou subdomínio) em vez de Empresa::firstOrFail().
+ * ✅ SUPORTA AMBOS OS MODOS:
+ * - 'colectivo' → Shared DB (com tenant_id)
+ * - 'singular' → Tenant DB (banco dedicado)
  */
 class VendaService
 {
     protected StockService $stockService;
     protected DocumentoFiscalService $documentoFiscalService;
+    protected ?Empresa $empresa = null;
+    protected string $modo = 'colectivo';
+    protected ?object $tenantUser = null;
 
     public function __construct(
         StockService $stockService,
         DocumentoFiscalService $documentoFiscalService
     ) {
-        $this->stockService           = $stockService;
+        $this->stockService = $stockService;
         $this->documentoFiscalService = $documentoFiscalService;
+        
+        // ✅ Obtém da sessão (prioridade)
+        $this->empresa = app('current.empresa');
+        $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
+        
+        Log::debug('[VendaService] Inicializado', [
+            'modo' => $this->modo,
+            'empresa_id' => $this->empresa?->id,
+        ]);
     }
 
     /* =====================================================================
-     | MÉTODO AUXILIAR: OBTÉM A EMPRESA DO TENANT ACTUAL
+     | HELPERS: Modo e Models
+     | ================================================================== */
+
+    protected function getModo(): string
+    {
+        $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
+        return $this->modo;
+    }
+
+    protected function isColectivo(): bool
+    {
+        return $this->getModo() === 'colectivo';
+    }
+
+    protected function isSingular(): bool
+    {
+        return $this->getModo() === 'singular';
+    }
+
+    protected function vendaModel()
+    {
+        return $this->isColectivo() ? new SharedVenda() : new TenantVenda();
+    }
+
+    protected function itemVendaModel()
+    {
+        return $this->isColectivo() ? new SharedItemVenda() : new TenantItemVenda();
+    }
+
+    protected function produtoModel()
+    {
+        return $this->isColectivo() ? new SharedProduto() : new TenantProduto();
+    }
+
+    /* =====================================================================
+     | VERIFICAÇÃO DE ACESSO - CORRIGIDA ✅
      | ================================================================== */
 
     /**
-     * Obtém a empresa do tenant actual a partir do header X-Empresa-ID ou do subdomínio.
-     *
-     * @throws \RuntimeException
+     * Verifica se o usuário tem acesso ao tenant atual
+     */
+    protected function verificarAcessoUsuario(): void
+    {
+        Log::debug('[VendaService] Verificando acesso');
+
+        // 1️⃣ Obtém a empresa
+        $this->empresa = app('current.empresa');
+        if (!$this->empresa) {
+            Log::error('[VendaService] Empresa não identificada.');
+            throw new \Exception('Empresa não identificada.', 400);
+        }
+
+        // ✅ Atualiza o modo
+        $this->modo = $this->empresa->modo ?? 'colectivo';
+
+        // 2️⃣ Obtém o landlord user (guard onde o login foi feito)
+        $landlordUser = Auth::guard('landlord')->user();
+
+        // 3️⃣ Fallback: tenta obter da sessão
+        if (!$landlordUser) {
+            $landlordId = session('landlord_user_id');
+            if ($landlordId) {
+                $landlordUser = LandlordUser::find($landlordId);
+            }
+        }
+
+        if (!$landlordUser) {
+            Log::error('[VendaService] Utilizador landlord não autenticado.');
+            throw new \Exception('Usuário não autenticado.', 401);
+        }
+
+        // 4️⃣ Busca o TenantUser correspondente
+        $tenantUser = $this->buscarUsuario($this->empresa, $landlordUser->email);
+        if (!$tenantUser) {
+            Log::error('[VendaService] Utilizador tenant não encontrado.', [
+                'email' => $landlordUser->email,
+            ]);
+            throw new \Exception('Usuário não tem permissão para aceder a esta empresa.', 403);
+        }
+
+        $this->tenantUser = $tenantUser;
+
+        Log::info('[VendaService] Acesso verificado com sucesso', [
+            'modo' => $this->modo,
+            'user_id' => $tenantUser->id,
+            'email' => $tenantUser->email,
+        ]);
+    }
+
+    /**
+     * Busca usuário no banco correto
+     */
+    protected function buscarUsuario(Empresa $empresa, string $email): ?object
+    {
+        if ($empresa->modo === 'singular') {
+            return TenantUser::on('tenant')->where('email', $email)->first();
+        }
+        return SharedUser::on('shared')
+            ->where('email', $email)
+            ->where('tenant_id', $empresa->id)
+            ->first();
+    }
+
+    /**
+     * Obtém o user_id do tenantUser
+     */
+    protected function getUserId(): ?string
+    {
+        if ($this->tenantUser) {
+            return $this->tenantUser->id;
+        }
+
+        // Fallback
+        try {
+            $landlordUser = Auth::guard('landlord')->user();
+            if ($landlordUser && $this->empresa) {
+                $tenantUser = $this->buscarUsuario($this->empresa, $landlordUser->email);
+                if ($tenantUser) {
+                    return $tenantUser->id;
+                }
+            }
+        } catch (\Exception $e) {
+            Log::warning('[VendaService] Fallback getUserId falhou', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return null;
+    }
+
+    /**
+     * Obtém a empresa do tenant actual (do contexto)
      */
     private function obterEmpresaAtual(): Empresa
     {
-        // 1ª tentativa: header X-Empresa-ID (enviado pelas APIs do tenant)
-        $empresaId = request()->header('X-Empresa-ID') ?? request()->header('X-Tenant-ID');
+        if ($this->empresa) {
+            Log::debug('[VendaService] Empresa obtida do contexto', [
+                'id' => $this->empresa->id,
+                'nome' => $this->empresa->nome,
+                'modo' => $this->modo,
+            ]);
+            return $this->empresa;
+        }
 
-        if ($empresaId) {
-            $empresa = Empresa::on('landlord')->find($empresaId);
+        // Fallback: tentar da sessão
+        $tenantId = session('tenant_id');
+        if ($tenantId) {
+            $empresa = Empresa::on('landlord')->find($tenantId);
             if ($empresa) {
-                Log::debug('[VendaService] Empresa obtida por header', [
-                    'id'   => $empresa->id,
+                Log::debug('[VendaService] Empresa obtida da sessão', [
+                    'id' => $empresa->id,
                     'nome' => $empresa->nome,
                 ]);
                 return $empresa;
             }
         }
 
-        // 2ª tentativa: subdomínio (ex: chiquito.faturaja.sdoca.it.com)
-        $host = request()->getHost();
-        $partes = explode('.', $host);
-        $subdominio = $partes[0] ?? null;
-
-        // Ignorar 'www' se presente
-        if ($subdominio === 'www' && count($partes) > 2) {
-            $subdominio = $partes[1];
-        }
-
-        if ($subdominio && !in_array($subdominio, ['localhost', 'faturaja', 'sdoca', 'api'])) {
-            $empresa = Empresa::on('landlord')->where('subdomain', $subdominio)->first();
-            if ($empresa) {
-                Log::debug('[VendaService] Empresa obtida por subdomínio', [
-                    'subdomain' => $subdominio,
-                    'id'        => $empresa->id,
-                ]);
-                return $empresa;
-            }
-        }
-
-        // Fallback (nunca deveria acontecer em requisições de tenant válidas)
         throw new \RuntimeException('Não foi possível identificar a empresa do tenant actual.');
+    }
+
+    /* =====================================================================
+     | HELPERS: Query e Model
+     | ================================================================== */
+
+    protected function buscarProduto(string $produtoId): object
+    {
+        if ($this->isColectivo()) {
+            return SharedProduto::doTenant()->where('id', $produtoId)->firstOrFail();
+        }
+        return TenantProduto::where('id', $produtoId)->firstOrFail();
+    }
+
+    protected function queryVendas()
+    {
+        if ($this->isColectivo()) {
+            return SharedVenda::doTenant();
+        }
+        return TenantVenda::query();
+    }
+
+    protected function queryProdutos()
+    {
+        if ($this->isColectivo()) {
+            return SharedProduto::doTenant();
+        }
+        return TenantProduto::query();
+    }
+
+    protected function adicionarTenantId(array $dados): array
+    {
+        if ($this->isColectivo() && $this->empresa) {
+            $dados['tenant_id'] = $this->empresa->id;
+        }
+        return $dados;
     }
 
     /* =====================================================================
      | CRIAR VENDA
      | ================================================================== */
 
-    public function criarVenda(array $dados, bool $faturar = false, string $tipoDocumento = 'FT'): Venda
+    public function criarVenda(array $dados, bool $faturar = false, string $tipoDocumento = 'FT'): object
     {
+        $this->verificarAcessoUsuario();
+
         return DB::transaction(function () use ($dados, $faturar, $tipoDocumento) {
             Log::info('=== Iniciando criação de venda ===', [
                 'tipo_documento'  => $tipoDocumento,
                 'faturar'         => $faturar,
-                'cliente_tipo'    => isset($dados['cliente_id']) ? 'cadastrado' : 'avulso',
-                'desconto_global' => $dados['desconto_global'] ?? 0,
-                'troco'           => $dados['troco'] ?? 0,
+                'modo'            => $this->getModo(),
+                'empresa_id'      => $this->empresa?->id,
             ]);
 
             $this->validarTipoDocumento($tipoDocumento);
 
-            // 🔥 CORREÇÃO: obter a empresa do tenant actual (e não a primeira da tabela)
-            $empresa   = $this->obterEmpresaAtual();
+            // ⭐ OBTER EMPRESA DO CONTEXTO
+            $empresa = $this->obterEmpresaAtual();
             $aplicaIva = $empresa->sujeito_iva;
-            $regime    = $empresa->regime_fiscal;
-
-            Log::info('Dados da empresa para cálculo de IVA', [
-                'sujeito_iva'    => $aplicaIva,
-                'regime_fiscal'  => $regime,
-                'empresa_id'     => $empresa->id,
-                'nome'           => $empresa->nome_fantasia ?? $empresa->nome,
-            ]);
+            $regime = $empresa->regime_fiscal;
 
             $agoraAngola = Carbon::now('Africa/Luanda');
+            $userId = $this->getUserId();
 
-            $numeroVenda         = $this->gerarNumeroVendaInterno();
+            $numeroVenda = $this->gerarNumeroVendaInterno();
             $numeroVendaFormatado = 'VD-' . str_pad($numeroVenda, 6, '0', STR_PAD_LEFT);
 
-            $venda = Venda::create([
+            $dadosVenda = [
                 'id'                    => Str::uuid(),
                 'cliente_id'            => $dados['cliente_id'] ?? null,
                 'cliente_nome'          => $dados['cliente_nome'] ?? null,
                 'cliente_nif'           => $dados['cliente_nif'] ?? null,
-                'user_id'               => auth('tenant')->id(),
+                'user_id'               => $userId,
                 'documento_fiscal_id'   => null,
                 'numero'                => $numeroVenda,
                 'numero_documento'      => $numeroVendaFormatado,
@@ -146,32 +302,31 @@ class VendaService
                 'observacoes'           => $dados['observacoes'] ?? null,
                 'desconto_global'       => (float) ($dados['desconto_global'] ?? 0),
                 'troco'                 => (float) ($dados['troco'] ?? 0),
-            ]);
+            ];
+
+            // ⭐ ADICIONAR TENANT_ID (apenas para colectivo)
+            if ($this->isColectivo()) {
+                $dadosVenda['tenant_id'] = $this->empresa->id;
+            }
+
+            // ⭐ USAR O MODEL CORRETO
+            if ($this->isColectivo()) {
+                $venda = SharedVenda::create($dadosVenda);
+            } else {
+                $venda = TenantVenda::create($dadosVenda);
+            }
 
             // Processar itens e calcular totais
             $totais = $this->processarItens($venda, $dados['itens'], $aplicaIva, $regime);
-            
+
             // Aplicar desconto global se existir
             $descontoGlobal = (float) ($dados['desconto_global'] ?? 0);
             if ($descontoGlobal > 0) {
                 $totais = $this->aplicarDescontoGlobal($totais, $descontoGlobal);
-                Log::info('Desconto global aplicado', [
-                    'desconto_global' => $descontoGlobal,
-                    'novo_total'      => $totais['total']
-                ]);
             }
 
             $venda->update($totais);
-
-            // LOG de confirmação dos valores salvos
             $venda->refresh();
-            Log::info('Venda salva (após update)', [
-                'base_tributavel' => $venda->base_tributavel,
-                'total_iva'       => $venda->total_iva,
-                'total_retencao'  => $venda->total_retencao,
-                'total_pagar'     => $venda->total_pagar,
-                'total'           => $venda->total,
-            ]);
 
             // Emitir documento fiscal se pedido
             if ($faturar) {
@@ -185,52 +340,27 @@ class VendaService
                     'status'              => $novoStatus,
                     'estado_pagamento'    => $novoEstadoPagamento,
                 ]);
-
-                Log::info('Documento fiscal emitido', [
-                    'venda_id'     => $venda->id,
-                    'documento_id' => $documento->id,
-                    'tipo'         => $documento->tipo_documento,
-                ]);
             }
 
             return $venda->load('itens.produto', 'cliente', 'user', 'documentoFiscal');
         });
     }
 
-    /**
-     * Aplicar desconto global proporcionalmente aos itens
-     */
-    private function aplicarDescontoGlobal(array $totais, float $descontoGlobal): array
-    {
-        $totalOriginal = $totais['total_pagar'];
-        
-        if ($totalOriginal <= 0 || $descontoGlobal <= 0) {
-            return $totais;
-        }
-        
-        $novoTotal = max(0, $totalOriginal - $descontoGlobal);
-        $proporcao = $novoTotal / $totalOriginal;
-        $novaBase  = round($totais['base_tributavel'] * $proporcao, 2);
-        $novoIva   = round($totais['total_iva'] * $proporcao, 2);
-        $novaRetencao = $totais['total_retencao']; // retenção não afetada
-        
-        return [
-            'base_tributavel' => $novaBase,
-            'total_iva'       => $novoIva,
-            'total_retencao'  => $novaRetencao,
-            'total_pagar'     => $novoTotal,
-            'total'           => $novoTotal,
-        ];
-    }
-
     /* =====================================================================
      | CANCELAR VENDA
      | ================================================================== */
 
-    public function cancelarVenda(string $vendaId, string $motivo): Venda
+    public function cancelarVenda(string $vendaId, string $motivo): object
     {
+        $this->verificarAcessoUsuario();
+
         return DB::transaction(function () use ($vendaId, $motivo) {
-            $venda = Venda::with('itens.produto', 'documentoFiscal')->findOrFail($vendaId);
+            // ⭐ BUSCAR VENDA COM SCOPE
+            if ($this->isColectivo()) {
+                $venda = SharedVenda::doTenant()->with('itens.produto', 'documentoFiscal')->where('id', $vendaId)->firstOrFail();
+            } else {
+                $venda = TenantVenda::with('itens.produto', 'documentoFiscal')->where('id', $vendaId)->firstOrFail();
+            }
 
             if ($venda->status === 'cancelada') {
                 throw new \Exception('Venda já cancelada.');
@@ -270,7 +400,10 @@ class VendaService
                 'estado_pagamento' => 'cancelada',
             ]);
 
-            Log::info('Venda cancelada', ['venda_id' => $vendaId]);
+            Log::info('Venda cancelada', [
+                'venda_id' => $vendaId,
+                'modo'     => $this->getModo(),
+            ]);
 
             return $venda;
         });
@@ -282,14 +415,21 @@ class VendaService
 
     public function processarPagamento(string $vendaId, array $dadosPagamento): array
     {
-        return DB::transaction(function () use ($vendaId, $dadosPagamento) {
-            $venda = Venda::with('documentoFiscal')->findOrFail($vendaId);
+        $this->verificarAcessoUsuario();
 
-            if (! $venda->documentoFiscal) {
+        return DB::transaction(function () use ($vendaId, $dadosPagamento) {
+            // ⭐ BUSCAR VENDA COM SCOPE
+            if ($this->isColectivo()) {
+                $venda = SharedVenda::doTenant()->with('documentoFiscal')->where('id', $vendaId)->firstOrFail();
+            } else {
+                $venda = TenantVenda::with('documentoFiscal')->where('id', $vendaId)->firstOrFail();
+            }
+
+            if (!$venda->documentoFiscal) {
                 throw new \Exception('Venda não possui documento fiscal.');
             }
 
-            if (! in_array($venda->documentoFiscal->tipo_documento, ['FT', 'FA'])) {
+            if (!in_array($venda->documentoFiscal->tipo_documento, ['FT', 'FA'])) {
                 throw new \Exception('Apenas Faturas (FT) e Faturas de Adiantamento (FA) podem receber pagamento.');
             }
 
@@ -308,17 +448,10 @@ class VendaService
             $novoEstado = match (true) {
                 $valorPendente <= 0 => 'paga',
                 $valorPendente < (float) $venda->documentoFiscal->total_liquido => 'parcial',
-                default             => 'pendente',
+                default => 'pendente',
             };
 
             $venda->update(['estado_pagamento' => $novoEstado]);
-
-            Log::info('Pagamento processado', [
-                'venda_id'    => $vendaId,
-                'recibo_id'   => $recibo->id,
-                'valor'       => $dadosPagamento['valor'],
-                'novo_estado' => $novoEstado,
-            ]);
 
             return [
                 'venda'            => $venda->fresh(),
@@ -329,36 +462,86 @@ class VendaService
     }
 
     /* =====================================================================
-     | MÉTODOS PRIVADOS
+     | CONSULTAS
+     | ================================================================== */
+
+    public function listarVendas(array $filtros = [])
+    {
+        $this->verificarAcessoUsuario();
+
+        $query = $this->queryVendas()->with(['cliente', 'itens.produto', 'documentoFiscal']);
+
+        if (!empty($filtros['status'])) {
+            $query->where('status', $filtros['status']);
+        }
+
+        if (!empty($filtros['estado_pagamento'])) {
+            $query->where('estado_pagamento', $filtros['estado_pagamento']);
+        }
+
+        if (!empty($filtros['cliente_id'])) {
+            $query->where('cliente_id', $filtros['cliente_id']);
+        }
+
+        if (!empty($filtros['data_inicio'])) {
+            $query->whereDate('data_venda', '>=', $filtros['data_inicio']);
+        }
+
+        if (!empty($filtros['data_fim'])) {
+            $query->whereDate('data_venda', '<=', $filtros['data_fim']);
+        }
+
+        return $query->orderBy('data_venda', 'desc')->orderBy('hora_venda', 'desc')->get();
+    }
+
+    public function buscarVenda(string $vendaId): object
+    {
+        $this->verificarAcessoUsuario();
+
+        if ($this->isColectivo()) {
+            return SharedVenda::doTenant()
+                ->with(['cliente', 'itens.produto', 'documentoFiscal', 'user'])
+                ->where('id', $vendaId)
+                ->firstOrFail();
+        }
+
+        return TenantVenda::with(['cliente', 'itens.produto', 'documentoFiscal', 'user'])
+            ->where('id', $vendaId)
+            ->firstOrFail();
+    }
+
+    /* =====================================================================
+     | MÉTODOS PRIVADOS (MANTIDOS)
      | ================================================================== */
 
     private function gerarNumeroVendaInterno(): int
     {
-        $ultimo = Venda::lockForUpdate()->max('numero') ?? 0;
+        $query = $this->queryVendas();
+        $ultimo = (clone $query)->lockForUpdate()->max('numero') ?? 0;
         return $ultimo + 1;
     }
 
     private function validarTipoDocumento(string $tipoDocumento): void
     {
         $tiposPermitidos = ['FT', 'FR', 'FP', 'FA'];
-        if (! in_array($tipoDocumento, $tiposPermitidos)) {
+        if (!in_array($tipoDocumento, $tiposPermitidos)) {
             throw new \Exception(
                 "Tipo de documento {$tipoDocumento} não é válido para criação de venda. Use FT, FR, FP ou FA."
             );
         }
     }
 
-    private function processarItens(Venda $venda, array $itens, bool $aplicaIva, string $regime): array
+    private function processarItens(object $venda, array $itens, bool $aplicaIva, string $regime): array
     {
-        $totalBase     = 0.0;
-        $totalIva      = 0.0;
+        $totalBase = 0.0;
+        $totalIva = 0.0;
         $totalRetencao = 0.0;
 
         foreach ($itens as $item) {
-            $produto   = Produto::findOrFail($item['produto_id']);
+            $produto = $this->buscarProduto($item['produto_id']);
             $resultado = $this->processarItem($produto, $item, $aplicaIva, $regime);
 
-            ItemVenda::create(array_merge($resultado, [
+            $dadosItem = array_merge($resultado, [
                 'id'             => Str::uuid(),
                 'venda_id'       => $venda->id,
                 'produto_id'     => $produto->id,
@@ -369,7 +552,17 @@ class VendaService
                     : ($produto->unidade ?? 'UN'),
                 'codigo_isencao' => $resultado['codigo_isencao'],
                 'motivo_isencao' => $resultado['motivo_isencao'],
-            ]));
+            ]);
+
+            if ($this->isColectivo()) {
+                $dadosItem['tenant_id'] = $this->empresa->id;
+            }
+
+            if ($this->isColectivo()) {
+                SharedItemVenda::create($dadosItem);
+            } else {
+                TenantItemVenda::create($dadosItem);
+            }
 
             if ($produto->tipo !== 'servico') {
                 $this->stockService->saidaVenda(
@@ -379,21 +572,12 @@ class VendaService
                 );
             }
 
-            $totalBase     += $resultado['base_tributavel'];
-            $totalIva      += $resultado['valor_iva'];
+            $totalBase += $resultado['base_tributavel'];
+            $totalIva += $resultado['valor_iva'];
             $totalRetencao += $resultado['valor_retencao'];
         }
 
         $totalPagar = round($totalBase + $totalIva - $totalRetencao, 2);
-
-        Log::info('Totais após processar itens', [
-            'venda_id'          => $venda->id,
-            'total_base'        => $totalBase,
-            'total_iva'         => $totalIva,
-            'total_retencao'    => $totalRetencao,
-            'total_pagar'       => $totalPagar,
-            'quantidade_itens'  => count($itens),
-        ]);
 
         return [
             'base_tributavel' => round($totalBase, 2),
@@ -405,89 +589,49 @@ class VendaService
     }
 
     private function processarItem(
-        Produto $produto,
+        object $produto,
         array $item,
         bool $aplicaIva,
         string $regime
     ): array {
         $quantidade = (int) $item['quantidade'];
-        $preco      = (float) $item['preco_venda'];
-        $desconto   = (float) ($item['desconto'] ?? 0);
-        $subtotal   = ($preco * $quantidade) - $desconto;
+        $preco = (float) $item['preco_venda'];
+        $desconto = (float) ($item['desconto'] ?? 0);
+        $subtotal = ($preco * $quantidade) - $desconto;
 
         // ── IVA ──────────────────────────────────────────────────────────
-        $taxaIva       = 0.0;
+        $taxaIva = 0.0;
         $codigoIsencao = null;
         $motivoIsencao = null;
 
-        Log::debug('Cálculo IVA do item - estado inicial', [
-            'produto_id'        => $produto->id,
-            'produto_nome'      => $produto->nome,
-            'aplicaIva'         => $aplicaIva,
-            'regime'            => $regime,
-            'taxa_iva_produto'  => $produto->taxa_iva,
-            'taxa_iva_item'     => $item['taxa_iva'] ?? null,
-            'subtotal'          => $subtotal,
-        ]);
-
         if ($aplicaIva && $regime === 'geral') {
             $taxaIva = (float) ($item['taxa_iva'] ?? $produto->taxa_iva ?? DocumentoFiscalService::IVA_GERAL);
-            
-            Log::debug('Regime geral - taxa IVA definida', [
-                'taxaIva_final' => $taxaIva,
-                'constante_IVA_GERAL' => DocumentoFiscalService::IVA_GERAL,
-            ]);
 
             if ($taxaIva === 0.0) {
                 $codigoIsencao = $item['codigo_isencao'] ?? $produto->codigo_isencao ?? 'M00';
                 $motivoIsencao = DocumentoFiscalService::MOTIVOS_ISENCAO[$codigoIsencao] ?? 'Isento';
-                Log::info('Item isento de IVA (taxa 0%)', [
-                    'produto'        => $produto->nome,
-                    'codigo_isencao' => $codigoIsencao,
-                ]);
             }
         } elseif ($aplicaIva && $regime === 'simplificado') {
-            $taxaIva       = 0.0;
+            $taxaIva = 0.0;
             $codigoIsencao = 'M01';
             $motivoIsencao = DocumentoFiscalService::MOTIVOS_ISENCAO['M01'];
-            Log::info('Regime simplificado - IVA zerado por força de lei', [
-                'produto' => $produto->nome,
-            ]);
         } else {
-            // Empresa não sujeita a IVA
             $codigoIsencao = 'M06';
             $motivoIsencao = DocumentoFiscalService::MOTIVOS_ISENCAO['M06'];
-            Log::info('Empresa não sujeita a IVA', [
-                'produto' => $produto->nome,
-                'sujeito_iva' => $aplicaIva,
-            ]);
         }
 
         $valorIva = round(($subtotal * $taxaIva) / 100, 2);
 
         // ── Retenção ──────────────────────────────────────────────────────
         $valorRetencao = 0.0;
-        $taxaRetencao  = 0.0;
+        $taxaRetencao = 0.0;
 
         if ($produto->tipo === 'servico' && $aplicaIva) {
-            $taxaRetencao  = (float) ($item['taxa_retencao'] ?? $produto->taxa_retencao ?? ProdutoService::TAXA_RETENCAO_DEFAULT);
+            $taxaRetencao = (float) ($item['taxa_retencao'] ?? $produto->taxa_retencao ?? ProdutoService::TAXA_RETENCAO_DEFAULT);
             $valorRetencao = round(($subtotal * $taxaRetencao) / 100, 2);
         }
 
         $baseTributavel = round($subtotal, 2);
-        $subtotalFinal  = $baseTributavel + $valorIva - $valorRetencao;
-
-        Log::info('Item processado (resumo)', [
-            'produto'       => $produto->nome,
-            'tipo'          => $produto->tipo,
-            'subtotal'      => $subtotal,
-            'desconto_item' => $desconto,
-            'taxa_iva'      => $taxaIva,
-            'valor_iva'     => $valorIva,
-            'taxa_retencao' => $taxaRetencao,
-            'valor_retencao'=> $valorRetencao,
-            'final'         => $subtotalFinal,
-        ]);
 
         return [
             'quantidade'      => $quantidade,
@@ -500,11 +644,33 @@ class VendaService
             'motivo_isencao'  => $motivoIsencao,
             'valor_retencao'  => $valorRetencao,
             'taxa_retencao'   => $taxaRetencao,
-            'subtotal'        => round($subtotalFinal, 2),
+            'subtotal'        => round($baseTributavel + $valorIva - $valorRetencao, 2),
         ];
     }
 
-    private function emitirDocumentoFiscal(Venda $venda, array $dados, string $tipoDocumento)
+    private function aplicarDescontoGlobal(array $totais, float $descontoGlobal): array
+    {
+        $totalOriginal = $totais['total_pagar'];
+
+        if ($totalOriginal <= 0 || $descontoGlobal <= 0) {
+            return $totais;
+        }
+
+        $novoTotal = max(0, $totalOriginal - $descontoGlobal);
+        $proporcao = $novoTotal / $totalOriginal;
+        $novaBase = round($totais['base_tributavel'] * $proporcao, 2);
+        $novoIva = round($totais['total_iva'] * $proporcao, 2);
+
+        return [
+            'base_tributavel' => $novaBase,
+            'total_iva'       => $novoIva,
+            'total_retencao'  => $totais['total_retencao'],
+            'total_pagar'     => $novoTotal,
+            'total'           => $novoTotal,
+        ];
+    }
+
+    private function emitirDocumentoFiscal(object $venda, array $dados, string $tipoDocumento)
     {
         if ($tipoDocumento === 'FR') {
             $this->validarFR($dados, (float) $venda->total);
@@ -527,16 +693,16 @@ class VendaService
             })->toArray(),
         ];
 
-        if (! empty($dados['cliente_id'])) {
+        if (!empty($dados['cliente_id'])) {
             $payload['cliente_id'] = $dados['cliente_id'];
-        } elseif (! empty($dados['cliente_nome'])) {
+        } elseif (!empty($dados['cliente_nome'])) {
             $payload['cliente_nome'] = $dados['cliente_nome'];
-            if (! empty($dados['cliente_nif'])) {
+            if (!empty($dados['cliente_nif'])) {
                 $payload['cliente_nif'] = $dados['cliente_nif'];
             }
         }
 
-        if ($tipoDocumento === 'FR' && ! empty($dados['dados_pagamento'])) {
+        if ($tipoDocumento === 'FR' && !empty($dados['dados_pagamento'])) {
             $payload['dados_pagamento'] = [
                 'metodo'     => $dados['dados_pagamento']['metodo'],
                 'valor'      => (float) $dados['dados_pagamento']['valor'],
@@ -556,7 +722,7 @@ class VendaService
         }
 
         $valorPagamento = (float) $dados['dados_pagamento']['valor'];
-        
+
         if ($valorPagamento < $totalVenda - 0.01) {
             throw new \Exception(
                 'Valor do pagamento (' . number_format($valorPagamento, 2, ',', '.') .
@@ -564,21 +730,11 @@ class VendaService
                 number_format($totalVenda, 2, ',', '.') . ' para FR.'
             );
         }
-        
-        if ($valorPagamento > $totalVenda + 0.01) {
-            $troco = $valorPagamento - $totalVenda;
-            Log::info('Troco gerado para FR', [
-                'venda_total' => $totalVenda,
-                'pago'        => $valorPagamento,
-                'troco'       => $troco
-            ]);
-        }
     }
 
     private function determinarEstadoPagamentoInicial(string $tipoDocumento, bool $faturar): string
     {
-        if (! $faturar) return 'pendente';
-
+        if (!$faturar) return 'pendente';
         return match ($tipoDocumento) {
             'FR', 'RC' => 'paga',
             default    => 'pendente',
