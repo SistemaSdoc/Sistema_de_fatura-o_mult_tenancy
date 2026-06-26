@@ -1,6 +1,6 @@
 // src/services/Dashboard.ts
 
-import api from "./axios";
+import api, { getTenant } from "./axios";
 import { AxiosError } from "axios";
 
 /* ================== HELPERS ================== */
@@ -12,6 +12,11 @@ function handleAxiosError(err: unknown, prefix: string): void {
         console.error(`${prefix}:`, err);
     }
 }
+
+const DASHBOARD_CACHE_TTL = 60_000;
+
+let dashboardCache: { at: number; tenant: string | null; data: DashboardData } | null = null;
+let dashboardFetchPromise: Promise<DashboardData | null> | null = null;
 
 /* ================== TIPOS ================== */
 
@@ -349,16 +354,39 @@ export interface EvolucaoMensal {
 export const dashboardService = {
 
     async fetch(): Promise<DashboardData | null> {
-        try {
-            const { data } = await api.get<{ success: boolean; message: string; data: DashboardData }>(
-                '/api/dashboard'
-            );
-            if (!data.success) throw new Error(data.message);
-            return data.data;
-        } catch (err) {
-            handleAxiosError(err, "[DASHBOARD] Erro ao carregar dashboard");
-            return null;
+        const agora = Date.now();
+
+        const tenantKey = getTenant();
+
+        if (
+            dashboardCache &&
+            dashboardCache.tenant === tenantKey &&
+            agora - dashboardCache.at < DASHBOARD_CACHE_TTL
+        ) {
+            return dashboardCache.data;
         }
+
+        if (dashboardFetchPromise) {
+            return dashboardFetchPromise;
+        }
+
+        dashboardFetchPromise = (async () => {
+            try {
+                const { data } = await api.get<{ success: boolean; message: string; data: DashboardData }>(
+                    '/api/dashboard'
+                );
+                if (!data.success) throw new Error(data.message);
+                dashboardCache = { at: Date.now(), tenant: tenantKey, data: data.data };
+                return data.data;
+            } catch (err) {
+                handleAxiosError(err, "[DASHBOARD] Erro ao carregar dashboard");
+                return null;
+            } finally {
+                dashboardFetchPromise = null;
+            }
+        })();
+
+        return dashboardFetchPromise;
     },
 
     async resumoDocumentosFiscais(): Promise<ResumoDocumentosFiscais | null> {
@@ -465,19 +493,25 @@ export const dashboardService = {
         const documentosPorEstado: Array<{ tipo: string; estado: string; quantidade: number; valor: number; retencao?: number }> = [];
         const porEstadoRaw = d.documentos_fiscais?.por_estado;
         if (porEstadoRaw) {
-            const arr: any[] = Array.isArray(porEstadoRaw) ? porEstadoRaw : Object.values(porEstadoRaw);
-            arr.forEach((info: any) => {
-                if (info?.por_estado) {
-                    Object.entries(info.por_estado as Record<string, any>).forEach(([estado, dados]: [string, any]) => {
-                        documentosPorEstado.push({
-                            tipo:       info.tipo,
-                            estado,
-                            quantidade: dados.quantidade ?? 0,
-                            valor:      dados.valor ?? 0,
-                            retencao:   dados.retencao || 0,
-                        });
+            type EstadoDetalhe = { quantidade?: number; valor?: number; retencao?: number };
+            type PorEstadoInfo = { tipo?: string; por_estado?: Record<string, EstadoDetalhe> };
+
+            const arr: PorEstadoInfo[] = Array.isArray(porEstadoRaw)
+                ? (porEstadoRaw as PorEstadoInfo[])
+                : Object.values(porEstadoRaw as Record<string, unknown>) as PorEstadoInfo[];
+
+            arr.forEach((info) => {
+                if (!info?.por_estado) return;
+
+                Object.entries(info.por_estado).forEach(([estado, dados]) => {
+                    documentosPorEstado.push({
+                        tipo: info.tipo || "",
+                        estado,
+                        quantidade: dados.quantidade ?? 0,
+                        valor: dados.valor ?? 0,
+                        retencao: dados.retencao || 0,
                     });
-                }
+                });
             });
         }
 

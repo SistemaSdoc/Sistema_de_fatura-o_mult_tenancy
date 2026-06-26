@@ -59,12 +59,22 @@ export interface RestaurarFornecedorResponse {
 const API_PREFIX = "/api";
 
 // Helper para log detalhado
-const logError = (context: string, error: any) => {
+type ApiErrorLike = {
+    response?: {
+        status?: number;
+        statusText?: string;
+        data?: unknown;
+    };
+    message?: string;
+};
+
+const logError = (context: string, error: unknown) => {
+    const err = error as ApiErrorLike;
     console.error(`[FORNECEDOR SERVICE] ${context} - ERRO:`, {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        message: error.message,
+        status: err.response?.status,
+        statusText: err.response?.statusText,
+        data: err.response?.data,
+        message: err.message,
     });
 };
 
@@ -81,13 +91,12 @@ export const fornecedorService = {
     async listarFornecedores(): Promise<ListarFornecedoresResponse> {
         console.log('[FORNECEDOR SERVICE] Listar fornecedores - Iniciando...');
         try {
-            const timestamp = new Date().getTime();
             const response = await api.get<{
                 success: boolean;
                 message: string;
                 data: Fornecedor[];
                 modo?: string;
-            }>(`${API_PREFIX}/fornecedores?_t=${timestamp}`);
+            }>(`${API_PREFIX}/fornecedores`);
             
             console.log('[FORNECEDOR SERVICE] Listar fornecedores - Sucesso:', response.data);
             
@@ -102,7 +111,7 @@ export const fornecedorService = {
                 fornecedores: ativos,
                 total: ativos.length,
             };
-        } catch (error: any) {
+        } catch (error: unknown) {
             logError('Listar fornecedores', error);
             throw error;
         }
@@ -115,13 +124,12 @@ export const fornecedorService = {
     async listarTodosFornecedores(): Promise<ListarFornecedoresResponse> {
         console.log('[FORNECEDOR SERVICE] Listar todos fornecedores...');
         try {
-            const timestamp = new Date().getTime();
             const response = await api.get<{
                 success: boolean;
                 message: string;
                 data: Fornecedor[];
                 modo?: string;
-            }>(`${API_PREFIX}/fornecedores/todos?_t=${timestamp}`);
+            }>(`${API_PREFIX}/fornecedores/todos`);
             
             const fornecedores = response.data.data || [];
             
@@ -130,7 +138,7 @@ export const fornecedorService = {
                 fornecedores: fornecedores,
                 total: fornecedores.length,
             };
-        } catch (error: any) {
+        } catch (error: unknown) {
             logError('Listar todos fornecedores', error);
             throw error;
         }
@@ -143,13 +151,12 @@ export const fornecedorService = {
     async listarFornecedoresDeletados(): Promise<ListarFornecedoresResponse> {
         console.log('[FORNECEDOR SERVICE] Listar fornecedores deletados...');
         try {
-            const timestamp = new Date().getTime();
             const response = await api.get<{
                 success: boolean;
                 message: string;
                 data: Fornecedor[];
                 modo?: string;
-            }>(`${API_PREFIX}/fornecedores/deletados?_t=${timestamp}`);
+            }>(`${API_PREFIX}/fornecedores/deletados`);
             
             const fornecedores = response.data.data || [];
             console.log('[FORNECEDOR SERVICE] Deletados recebidos:', fornecedores.length);
@@ -159,7 +166,7 @@ export const fornecedorService = {
                 fornecedores: fornecedores,
                 total: fornecedores.length,
             };
-        } catch (error: any) {
+        } catch (error: unknown) {
             logError('Listar fornecedores deletados', error);
             throw error;
         }
@@ -190,7 +197,7 @@ export const fornecedorService = {
                 message: response.data.message || "Fornecedor carregado com sucesso",
                 fornecedor: response.data.data,
             };
-        } catch (error: any) {
+        } catch (error: unknown) {
             logError('Buscar fornecedor', error);
             throw error;
         }
@@ -216,7 +223,7 @@ export const fornecedorService = {
                 message: response.data.message || "Fornecedor criado com sucesso",
                 fornecedor: response.data.data,
             };
-        } catch (error: any) {
+        } catch (error: unknown) {
             logError('Criar fornecedor', error);
             throw error;
         }
@@ -253,7 +260,7 @@ export const fornecedorService = {
                 message: response.data.message || "Fornecedor atualizado com sucesso",
                 fornecedor: response.data.data,
             };
-        } catch (error: any) {
+        } catch (error: unknown) {
             logError('Atualizar fornecedor', error);
             throw error;
         }
@@ -285,7 +292,7 @@ export const fornecedorService = {
                 fornecedor: response.data.data,
                 deleted: response.data.deleted ?? true,
             };
-        } catch (error: any) {
+        } catch (error: unknown) {
             logError('Soft delete fornecedor', error);
             throw error;
         }
@@ -314,7 +321,7 @@ export const fornecedorService = {
                 message: response.data.message || "Fornecedor restaurado com sucesso",
                 fornecedor: response.data.data,
             };
-        } catch (error: any) {
+        } catch (error: unknown) {
             logError('Restaurar fornecedor', error);
             throw error;
         }
@@ -340,7 +347,7 @@ export const fornecedorService = {
             return {
                 message: response.data.message || "Fornecedor removido permanentemente",
             };
-        } catch (error: any) {
+        } catch (error: unknown) {
             logError('Force delete fornecedor', error);
             throw error;
         }
@@ -376,7 +383,7 @@ export function getStatusBadgeVariant(status: StatusFornecedor): "success" | "de
 }
 
 export function getTipoBadgeVariant(tipo: TipoFornecedor): "default" | "secondary" {
-    return tipo === "Nacional" ? "default" : "secondary";
+    return tipo === "nacional" ? "default" : "secondary";
 }
 
 /**
@@ -476,8 +483,8 @@ export function groupFornecedoresByTipo(fornecedores: Fornecedor[]): {
     internacional: Fornecedor[];
 } {
     return {
-        nacional: fornecedores.filter(f => f.tipo === "Nacional"),
-        internacional: fornecedores.filter(f => f.tipo === "Internacional"),
+        nacional: fornecedores.filter(f => f.tipo === "nacional"),
+        internacional: fornecedores.filter(f => f.tipo === "internacional"),
     };
 }
 

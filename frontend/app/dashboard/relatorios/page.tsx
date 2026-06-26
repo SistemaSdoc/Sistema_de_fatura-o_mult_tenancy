@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
+import dynamic from "next/dynamic";
 import MainEmpresa from "../../components/MainEmpresa";
 import {
    Download, FileSpreadsheet, SlidersHorizontal,
@@ -17,14 +18,40 @@ import { useAuth } from "@/context/authprovider";
 import { toast } from "sonner";
 import { api } from "@/services/axios";
 
-// Componentes de relatórios
-import { RelatorioVendasComponent } from "@/app/components/Relatorios/RelatorioVendas";
-import { RelatorioDocumentosComponent } from "@/app/components/Relatorios/RelatorioDocumentos";
-import { RelatorioPagamentosComponent } from "@/app/components/Relatorios/RelatorioPagamentos";
-import { RelatorioMovimentosStockComponent } from "@/app/components/Relatorios/RelatorioMovimentosStock";
-
 // Funções de exportação
 import { exportarPDF, exportarExcel } from "./utils/relatorioExport";
+
+const RelatorioVendasComponent = dynamic(
+  () => import("@/app/components/Relatorios/RelatorioVendas").then((m) => m.RelatorioVendasComponent),
+  {
+    ssr: false,
+    loading: () => <div className="h-64 animate-pulse rounded border" />,
+  },
+);
+
+const RelatorioDocumentosComponent = dynamic(
+  () => import("@/app/components/Relatorios/RelatorioDocumentos").then((m) => m.RelatorioDocumentosComponent),
+  {
+    ssr: false,
+    loading: () => <div className="h-64 animate-pulse rounded border" />,
+  },
+);
+
+const RelatorioPagamentosComponent = dynamic(
+  () => import("@/app/components/Relatorios/RelatorioPagamentos").then((m) => m.RelatorioPagamentosComponent),
+  {
+    ssr: false,
+    loading: () => <div className="h-64 animate-pulse rounded border" />,
+  },
+);
+
+const RelatorioMovimentosStockComponent = dynamic(
+  () => import("@/app/components/Relatorios/RelatorioMovimentosStock").then((m) => m.RelatorioMovimentosStockComponent),
+  {
+    ssr: false,
+    loading: () => <div className="h-64 animate-pulse rounded border" />,
+  },
+);
 
 /* ═══════════════════════════════════════════════════════════
    TIPOS

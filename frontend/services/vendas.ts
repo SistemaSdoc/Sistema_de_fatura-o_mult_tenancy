@@ -1,4 +1,4 @@
-import api from "./axios";
+import api, { getTenant } from "./axios";
 import { AxiosError } from "axios";
 
 /* ================== HELPERS ================== */
@@ -10,6 +10,10 @@ function handleAxiosError(err: unknown, prefix: string): void {
  console.error(`${prefix}:`, err);
  }
 }
+
+const DASHBOARD_CACHE_TTL = 60_000;
+let dashboardCache: { at: number; tenant: string | null; data: DashboardResponse } | null = null;
+let dashboardFetchPromise: Promise<DashboardResponse | null> | null = null;
 
 /* ================== TIPOS BASE ================== */
 
@@ -576,10 +580,6 @@ function criarPayloadDocumentoFiscal(payload: CriarDocumentoFiscalPayload): Reco
 
 const API = "/api";
 
-const noCache = {
- headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache', 'Expires': '0' },
-};
-
 /* -------- Vendas -------- */
 export const vendaService = {
  async obterDadosNovaVenda(): Promise<{ clientes: Cliente[]; produtos: Produto[]; estatisticas?: { total_produtos: number; total_servicos: number } }> {
@@ -844,22 +844,22 @@ export const documentoFiscalService = {
 /* -------- Clientes -------- */
 export const clienteService = {
  async listar(params?: { status?: 'ativo' | 'inativo' | 'todos' }): Promise<Cliente[]> {
- const q = new URLSearchParams({ t: String(Date.now()) });
+ const q = new URLSearchParams();
  if (params?.status && params.status !== 'todos') q.append('status', params.status);
- const { data } = await api.get(`${API}/clientes?${q}`, noCache);
+ const { data } = await api.get(`${API}/clientes${q.toString() ? `?${q}` : ''}`);
  return data.clientes || [];
  },
 
  async listarAtivos(): Promise<Cliente[]> { return this.listar({ status: 'ativo' }); },
 
  async listarTodos(): Promise<Cliente[]> {
- const { data } = await api.get(`${API}/clientes/todos?t=${Date.now()}`, noCache);
+ const { data } = await api.get(`${API}/clientes/todos`);
  return data.clientes || [];
  },
 
  async buscar(id: string): Promise<Cliente | null> {
  try {
- const { data } = await api.get(`${API}/clientes/${id}?t=${Date.now()}`, noCache);
+ const { data } = await api.get(`${API}/clientes/${id}`);
  return data.cliente;
  } catch (err) { handleAxiosError(err, "[CLIENTE] buscar"); return null; }
  },
@@ -1119,8 +1119,31 @@ export const stockService = {
 /* -------- Dashboard -------- */
 export const dashboardService = {
  async fetch(): Promise<DashboardResponse | null> {
- try { const { data } = await api.get<{ success: boolean; data: DashboardResponse }>(`${API}/dashboard`); return data.data; }
- catch (err) { handleAxiosError(err, "[DASHBOARD] fetch"); return null; }
+ const agora = Date.now();
+ const tenantKey = getTenant();
+ if (
+ dashboardCache &&
+ dashboardCache.tenant === tenantKey &&
+ agora - dashboardCache.at < DASHBOARD_CACHE_TTL
+ ) {
+ return dashboardCache.data;
+ }
+ if (dashboardFetchPromise) {
+ return dashboardFetchPromise;
+ }
+ dashboardFetchPromise = (async () => {
+ try {
+ const { data } = await api.get<{ success: boolean; data: DashboardResponse }>(`${API}/dashboard`);
+ dashboardCache = { at: Date.now(), tenant: tenantKey, data: data.data };
+ return data.data;
+ } catch (err) {
+ handleAxiosError(err, "[DASHBOARD] fetch");
+ return null;
+ } finally {
+ dashboardFetchPromise = null;
+ }
+ })();
+ return dashboardFetchPromise;
  },
  async resumoDocumentosFiscais(): Promise<ResumoDocumentosFiscais | null> {
  try { const { data } = await api.get(`${API}/dashboard/resumo-documentos-fiscais`); return data.data?.resumo ?? null; }

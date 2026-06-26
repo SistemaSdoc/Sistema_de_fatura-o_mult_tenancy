@@ -105,6 +105,11 @@ export default function MainEmpresa({
 
     // Refs para controlar chamadas concorrentes
     const fetchingNotificacoesRef = useRef(false);
+    const notificacoesCacheRef = useRef<{
+        at: number;
+        baixo: Produto[];
+        zero: Produto[];
+    } | null>(null);
     const notificacoesRef = useRef<HTMLDivElement>(null);
     const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -185,9 +190,20 @@ export default function MainEmpresa({
     }, []);
 
 // ==================== NOTIFICAÇÕES DE ESTOQUE ====================
-const buscarNotificacoesEstoque = useCallback(async () => {
+const buscarNotificacoesEstoque = useCallback(async (force = false) => {
   if (!user || userLoading) return;
   if (fetchingNotificacoesRef.current) return;
+
+  const cache = notificacoesCacheRef.current;
+  const agora = Date.now();
+  const cacheValido = cache && agora - cache.at < 60_000;
+
+  if (!force && cacheValido) {
+    setProdutosEstoqueBaixo(cache.baixo);
+    setProdutosSemEstoque(cache.zero);
+    setUltimaAtualizacao(new Date(cache.at));
+    return;
+  }
 
   // Apenas roles que realmente têm permissão no backend
   const rolesComPermissaoEstoque = ["admin", "operador", "gestor"];
@@ -206,6 +222,8 @@ const buscarNotificacoesEstoque = useCallback(async () => {
   try {
     const resumo = await estoqueService.obterResumo();
     const produtosCriticos = resumo.produtos_criticos || [];
+    let produtosSemStock: Produto[] = [];
+    let zero: Produto[] = [];
     
     const baixo = produtosCriticos.filter(
       (p: Produto) => p.estoque_atual > 0 && p.estoque_atual <= p.estoque_minimo
@@ -220,17 +238,22 @@ const buscarNotificacoesEstoque = useCallback(async () => {
         paginar: false,
       });
 
-      const produtosSemStock = Array.isArray(responseSemEstoque.produtos)
+      produtosSemStock = Array.isArray(responseSemEstoque.produtos)
         ? responseSemEstoque.produtos
         : responseSemEstoque.produtos?.data || [];
 
-      const zero = produtosSemStock.filter((p: Produto) => p.estoque_atual === 0);
+      zero = produtosSemStock.filter((p: Produto) => p.estoque_atual === 0);
       setProdutosSemEstoque(zero);
     } else {
       setProdutosSemEstoque([]);
     }
 
     setUltimaAtualizacao(new Date());
+    notificacoesCacheRef.current = {
+      at: Date.now(),
+      baixo,
+      zero: userRole === 'admin' || userRole === 'operador' ? zero : [],
+    };
   } catch (error: unknown) {
     const apiError = getApiError(error);
     console.error("[MainEmpresa] Erro ao buscar notificações:", error);
@@ -1016,7 +1039,7 @@ const buscarNotificacoesEstoque = useCallback(async () => {
                                                     style={{ borderColor: colors.border }}
                                                 >
                                                     <button
-                                                        onClick={buscarNotificacoesEstoque}
+                                                        onClick={() => buscarNotificacoesEstoque(true)}
                                                         disabled={loadingNotificacoes}
                                                         className="text-xs font-medium transition-all hover:scale-105 disabled:opacity-50 px-2 py-1"
                                                         style={{ color: colors.primary }}

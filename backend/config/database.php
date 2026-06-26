@@ -56,7 +56,7 @@ return [
             'port' => env('DB_SHARED_PORT', '3306'),
             'database' => env('DB_SHARED_DATABASE', 'faturaja_shared'),
             'username' => env('DB_SHARED_USERNAME', 'root'),
-            'password' => env('DB_SHARED_PASSWORD', ''),
+            'password' => env('DB_SHARED_PASSWORD', 'Sdocadb@2026'),
             'charset' => 'utf8mb4',
             'collation' => 'utf8mb4_unicode_ci',
             'prefix' => '',

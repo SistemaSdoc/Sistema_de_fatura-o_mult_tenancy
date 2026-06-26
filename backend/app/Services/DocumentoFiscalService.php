@@ -2446,7 +2446,7 @@ class DocumentoFiscalService
     private function executarAcoesPosCriacao($documento, array $dados, string $tipo): void
     {
         if ($this->configuracoesTipo[$tipo]['afeta_stock']) {
-            $this->movimentarStock($documento);
+            $this->movimentarStock($documento, $tipo);
         }
 
         if (in_array($tipo, ['FT', 'FR']) && !empty($dados['venda_id'])) {

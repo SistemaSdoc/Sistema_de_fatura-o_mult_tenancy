@@ -549,12 +549,14 @@ class CategoriaController extends Controller
 public function update(Request $request, $id)
 {
     try {
-        $user = Auth::guard('tenant')->user();
-        if (!$user || !in_array($user->role, ['admin', 'operador', 'gestor', 'contabilista'])) {
+        $modo = $this->getModo();
+        $this->verificarAcessoUsuario();
+
+        if (!$this->hasRole(['admin', 'operador', 'gestor', 'contabilista'])) {
             return response()->json(['error' => 'Não autorizado'], 403);
         }
 
-        $categoria = Categoria::find($id);
+        $categoria = $this->buscarCategoria($id);
 
         if (!$categoria) {
             return response()->json(['error' => 'Categoria não encontrada'], 404);
@@ -582,6 +584,27 @@ public function update(Request $request, $id)
         // 🔥 Forçar update mesmo com campos vazios
         if (!empty($dados) || array_key_exists('descricao', $dados)) {
             $categoria->update($dados);
+
+            $camposIva = ['taxa_iva', 'sujeito_iva', 'codigo_isencao'];
+            $ivaAlterado = count(array_intersect(array_keys($dados), $camposIva)) > 0;
+
+            if ($ivaAlterado) {
+                $produtosAfetados = $categoria->produtos()
+                    ->where('tipo', 'produto')
+                    ->update([
+                        'taxa_iva' => (float) $categoria->taxa_iva,
+                        'sujeito_iva' => (bool) $categoria->sujeito_iva,
+                        'codigo_isencao' => $categoria->codigo_isencao,
+                    ]);
+
+                Log::info('[UPDATE] IVA propagado para produtos da categoria', [
+                    'categoria_id' => $categoria->id,
+                    'produtos_afetados' => $produtosAfetados,
+                    'taxa_iva' => (float) $categoria->taxa_iva,
+                    'sujeito_iva' => (bool) $categoria->sujeito_iva,
+                    'codigo_isencao' => $categoria->codigo_isencao,
+                ]);
+            }
         }
 
         // Recarregar a categoria
@@ -595,8 +618,11 @@ public function update(Request $request, $id)
         ]);
 
         return response()->json([
+            'success'   => true,
             'message'   => 'Categoria actualizada com sucesso',
+            'data'      => $categoria,
             'categoria' => $categoria,
+            'modo'      => $modo,
         ]);
     } catch (\Exception $e) {
         Log::error('[CategoriaController] UPDATE ERROR', [

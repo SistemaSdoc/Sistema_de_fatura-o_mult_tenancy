@@ -21,7 +21,7 @@ import {
 interface ModalEdicaoProps {
     isOpen: boolean;
     item: Produto | null;
-    onSave: (dados: any) => Promise<{ success: boolean; error?: any }>;
+    onSave: (dados: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>;
     onClose: () => void;
     categorias: Categoria[];
 }
@@ -44,6 +44,17 @@ interface FormData {
 }
 
 interface FormErrors { [key: string]: string; }
+
+type SavePayload = Record<string, unknown>;
+
+type AxiosLikeError = {
+    response?: {
+        data?: {
+            message?: string;
+        };
+    };
+    message?: string;
+};
 
 export function ModalEdicao({ isOpen, item, onSave, onClose, categorias }: ModalEdicaoProps) {
     const colors = useThemeColors();
@@ -132,10 +143,9 @@ export function ModalEdicao({ isOpen, item, onSave, onClose, categorias }: Modal
         setLoading(true);
         setError(null);
         try {
-            const dados: any = {
+            const dados: SavePayload = {
                 tipo: formData.tipo, nome: formData.nome.trim(),
                 preco_venda: parseFloat(formData.preco_venda), status: formData.status,
-                taxa_iva: parseFloat(formData.taxa_iva) || 0, sujeito_iva: formData.sujeito_iva,
                 descricao: formData.descricao?.trim() || null,
             };
             if (!isServico) {
@@ -144,6 +154,8 @@ export function ModalEdicao({ isOpen, item, onSave, onClose, categorias }: Modal
                 dados.preco_compra = parseFloat(formData.preco_compra) || 0;
                 dados.estoque_minimo = parseInt(formData.estoque_minimo) || 0;
             } else {
+                dados.taxa_iva = parseFloat(formData.taxa_iva) || 0;
+                dados.sujeito_iva = formData.sujeito_iva;
                 dados.taxa_retencao = parseFloat(formData.taxa_retencao) || 0;
                 dados.duracao_estimada = `${formData.duracao_estimada} ${formData.unidade_medida}`;
                 dados.unidade_medida = formData.unidade_medida;
@@ -151,8 +163,9 @@ export function ModalEdicao({ isOpen, item, onSave, onClose, categorias }: Modal
             const result = await onSave(dados);
             if (result.success) onClose();
             else setError(result.error || "Erro ao salvar");
-        } catch (err: any) {
-            setError(err.response?.data?.message || err.message || "Erro ao salvar alterações");
+        } catch (err: unknown) {
+            const apiError = err as AxiosLikeError;
+            setError(apiError.response?.data?.message || apiError.message || "Erro ao salvar alterações");
         } finally {
             setLoading(false);
         }
@@ -273,15 +286,31 @@ export function ModalEdicao({ isOpen, item, onSave, onClose, categorias }: Modal
                             <div className="p-2 border" style={{ borderColor: colors.border }}>
                                 <div className="flex flex-wrap items-center gap-3">
                                     <label className="flex items-center gap-1 cursor-pointer">
-                                        <input type="checkbox" name="sujeito_iva" checked={formData.sujeito_iva} onChange={handleChange}
+                                        <input
+                                            type="checkbox"
+                                            name="sujeito_iva"
+                                            checked={formData.sujeito_iva}
+                                            onChange={handleChange}
+                                            disabled={!isServico}
                                             className="w-3 h-3" style={{ accentColor: colors.primary }} />
-                                        <span className="text-xs" style={{ color: colors.text }}>IVA</span>
+                                        <span className="text-xs" style={{ color: colors.text }}>
+                                            IVA {!isServico ? "(herdado da categoria)" : ""}
+                                        </span>
                                     </label>
                                     {formData.sujeito_iva && (
                                         <div className="flex items-center gap-1">
-                                            <input type="number" name="taxa_iva" value={formData.taxa_iva} onChange={handleChange}
+                                            <input
+                                                type="number"
+                                                name="taxa_iva"
+                                                value={formData.taxa_iva}
+                                                onChange={handleChange}
+                                                disabled={!isServico}
                                                 min="0" max="100" className="w-12 px-1 py-0.5 border text-xs outline-none"
-                                                style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text }} />
+                                                style={{
+                                                    backgroundColor: !isServico ? `${colors.textSecondary}10` : colors.card,
+                                                    borderColor: colors.border,
+                                                    color: !isServico ? colors.textSecondary : colors.text,
+                                                }} />
                                             <span className="text-xs" style={{ color: colors.textSecondary }}>%</span>
                                         </div>
                                     )}
