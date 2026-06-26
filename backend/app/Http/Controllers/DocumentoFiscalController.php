@@ -8,8 +8,9 @@ use App\Services\ImpressoraTermicaService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Endroid\QrCode\QrCode;
 use Endroid\QrCode\Writer\PngWriter;
+use Endroid\QrCode\Writer\SvgWriter;
 use Endroid\QrCode\Encoding\Encoding;
-use Endroid\QrCode\ErrorCorrectionLevel\ErrorCorrectionLevel;
+use Endroid\QrCode\ErrorCorrectionLevel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -450,6 +451,7 @@ class DocumentoFiscalController extends Controller
                 'itens.*.preco_unitario' => 'required|numeric|min:0',
                 'itens.*.taxa_iva'       => 'required|numeric|in:0,5,14',
                 'itens.*.codigo_isencao' => 'nullable|string|in:M00,M01,M02,M03,M04,M05,M06,M99',
+                'itens.*.eh_servico'     => 'nullable|boolean',
                 'motivo'                 => 'nullable|string|max:500',
             ]);
 
@@ -462,30 +464,36 @@ class DocumentoFiscalController extends Controller
             $itensInvalidos = [];
 
             foreach ($dados['itens'] as $item) {
+                $isServicoMarcado = filter_var($item['eh_servico'] ?? null, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+                $isServicoDescricao = false;
+
+                $descricaoLower = strtolower($item['descricao']);
+                $palavrasServico = [
+                    'serviço', 'servico', 'consulta', 'consultoria',
+                    'manutenção', 'manutencao', 'instalação', 'instalacao',
+                    'juro', 'multa', 'penalidade', 'taxa', 'comissão', 'comissao'
+                ];
+                foreach ($palavrasServico as $palavra) {
+                    if (strpos($descricaoLower, $palavra) !== false) {
+                        $isServicoDescricao = true;
+                        break;
+                    }
+                }
+
+                $produto = null;
                 // Verifica se é serviço pelo produto_id
                 if (!empty($item['produto_id'])) {
                     $produto = \App\Models\Tenant\Produto::find($item['produto_id']);
                     if ($produto && $produto->tipo !== 'servico') {
                         $itensInvalidos[] = $item['descricao'];
-                    } else if ($produto && $produto->tipo === 'servico') {
+                    } elseif ($produto && $produto->tipo === 'servico') {
+                        $temServico = true;
+                    } elseif ($isServicoMarcado === true || $isServicoDescricao) {
                         $temServico = true;
                     }
                 } else {
                     // Item avulso - verifica pela descrição
-                    $descricaoLower = strtolower($item['descricao']);
-                    $palavrasServico = [
-                        'serviço', 'servico', 'consulta', 'consultoria', 
-                        'manutenção', 'manutencao', 'instalação', 'instalacao',
-                        'juro', 'multa', 'penalidade', 'taxa', 'comissão', 'comissao'
-                    ];
-                    $isServico = false;
-                    foreach ($palavrasServico as $palavra) {
-                        if (strpos($descricaoLower, $palavra) !== false) {
-                            $isServico = true;
-                            break;
-                        }
-                    }
-                    if ($isServico) {
+                    if ($isServicoMarcado === true || $isServicoDescricao) {
                         $temServico = true;
                     } else {
                         $itensInvalidos[] = $item['descricao'];
@@ -493,7 +501,6 @@ class DocumentoFiscalController extends Controller
                 }
 
                 // Verifica se é juros ou multa (para fatura paga)
-                $descricaoLower = strtolower($item['descricao']);
                 if (strpos($descricaoLower, 'juro') !== false || 
                     strpos($descricaoLower, 'juros') !== false ||
                     strpos($descricaoLower, 'multa') !== false ||
@@ -887,7 +894,7 @@ class DocumentoFiscalController extends Controller
      * Abre uma página HTML formatada para impressão em papel A4
      * Rota: GET /api/documentos-fiscais/{id}/print-a4
      */
-    public function printA4(string $id): \Illuminate\Contracts\View\View
+    public function printA4(Request $request, string $id): \Illuminate\Contracts\View\View
     {
         try {
             Log::info('printA4 called', ['id' => $id]);
@@ -945,16 +952,26 @@ class DocumentoFiscalController extends Controller
             $qrCodeImg = null;
             if ($qrCodeTexto) {
                 try {
-                    $qr = new QrCode($qrCodeTexto);
-                    $qr->setSize(150);
-                    $writer = new PngWriter();
-                    $result = $writer->write($qr);
-                    $qrCodeImg = base64_encode($result->getString());
+                    $qr = new QrCode(
+                        $qrCodeTexto,
+                        new Encoding('UTF-8'),
+                        ErrorCorrectionLevel::Medium,
+                        220,
+                        6
+                    );
+                    $writer = new SvgWriter();
+                    $result = $writer->write($qr, null, null, [
+                        SvgWriter::WRITER_OPTION_EXCLUDE_XML_DECLARATION => true,
+                    ]);
+                    $qrCodeImg = $result->getDataUri();
                 } catch (\Throwable $e) {
                     Log::warning('printA4: erro ao gerar QR Code', ['error' => $e->getMessage()]);
                 }
             }
             
+            $proofUrl    = $this->montarUrlDeProva(request(), $id);
+            $proofQrHtml = $this->gerarQrHtml($proofUrl);
+
             return view('documentos.print-view', [
                 'empresa'         => $dados['empresa'],
                 'documento'       => $documento,
@@ -965,6 +982,8 @@ class DocumentoFiscalController extends Controller
                 'qr_code'         => $qrCodeTexto,
                 'qr_code_img'     => $qrCodeImg,
                 'qr_html'         => $this->gerarQrHtml($qrCodeTexto),
+                'proof_url'       => $proofUrl,
+                'proof_qr_html'   => $proofQrHtml,
                 'descontoGlobal'  => $dados['desconto_global'] ?? 0,
                 'troco'           => $dados['troco'] ?? 0,
                 'temDesconto'     => ($dados['desconto_global'] ?? 0) > 0,
@@ -994,6 +1013,8 @@ class DocumentoFiscalController extends Controller
             $documento = $this->documentoService->buscarDocumento($id);
             $dados = $this->documentoService->dadosParaPdf($documento);
             $dados['qr_html'] = $this->gerarQrHtml($dados['qr_code'] ?? null);
+            $dados['proof_url'] = $this->montarUrlDeProva(request(), $id);
+            $dados['proof_qr_html'] = $this->gerarQrHtml($dados['proof_url']);
 
             // Buscar os dados completos da empresa (igual ao pdfViewer)
             $empresa = \App\Models\Empresa::on('landlord')
@@ -1066,7 +1087,7 @@ class DocumentoFiscalController extends Controller
      | PDF VIEWER — TALÃO TÉRMICO HTML (70mm)
      | ================================================================== */
 
-    public function pdfViewer(string $id): \Illuminate\Contracts\View\View
+    public function pdfViewer(Request $request, string $id): \Illuminate\Contracts\View\View
     {
         try {
             Log::info('pdfViewer called', ['id' => $id]);
@@ -1086,27 +1107,20 @@ class DocumentoFiscalController extends Controller
 
             if ($qrCodeTexto && class_exists(QrCode::class)) {
                 try {
-                    $qrCode = new QrCode($qrCodeTexto);
-                    $qrCode->setEncoding(new Encoding('UTF-8'));
-                    $qrCode->setErrorCorrectionLevel(ErrorCorrectionLevel::Medium);
-                    $qrCode->setSize(200);
-                    $qrCode->setMargin(6);
-
-                    $writer    = new PngWriter();
-                    $result    = $writer->write($qrCode);
-                    $qrCodeImg = base64_encode($result->getString());
+                    $qrCode = new QrCode(
+                        $qrCodeTexto,
+                        new Encoding('UTF-8'),
+                        ErrorCorrectionLevel::Medium,
+                        220,
+                        6
+                    );
+                    $writer    = new SvgWriter();
+                    $result    = $writer->write($qrCode, null, null, [
+                        SvgWriter::WRITER_OPTION_EXCLUDE_XML_DECLARATION => true,
+                    ]);
+                    $qrCodeImg = $result->getDataUri();
                 } catch (\Throwable $e) {
-                    try {
-                        $qrCode = new QrCode($qrCodeTexto);
-                        $qrCode->setWriterByName('png');
-                        $qrCode->setSize(200);
-                        $qrCode->setMargin(6);
-                        $qrCode->setEncoding('UTF-8');
-                        $qrCode->setErrorCorrectionLevel(ErrorCorrectionLevel::High);
-                        $qrCodeImg = base64_encode($qrCode->writeString());
-                    } catch (\Throwable $e2) {
-                        Log::warning('QR Code generation failed', ['error' => $e2->getMessage()]);
-                    }
+                    Log::warning('QR Code generation failed', ['error' => $e->getMessage()]);
                 }
             }
 
@@ -1144,6 +1158,9 @@ class DocumentoFiscalController extends Controller
                 }
             }
 
+            $proofUrl    = $this->montarUrlDeProva($request, $id);
+            $proofQrHtml = $this->gerarQrHtml($proofUrl);
+
             return view('documentos.pdf-viewer', [
                 'empresa'         => $empresa,
                 'documento'       => $documento,
@@ -1154,12 +1171,83 @@ class DocumentoFiscalController extends Controller
                 'qr_code'         => $qrCodeTexto,
                 'qr_code_img'     => $qrCodeImg,
                 'qr_html'         => $this->gerarQrHtml($qrCodeTexto),
+                'proof_url'       => $proofUrl,
+                'proof_qr_html'   => $proofQrHtml,
+                'auto_print'      => filter_var($request->query('auto', false), FILTER_VALIDATE_BOOLEAN),
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             abort(404, 'Documento não encontrado');
         } catch (\Exception $e) {
             Log::error('Erro no pdfViewer', ['error' => $e->getMessage()]);
             abort(500, 'Erro ao gerar visualização do PDF');
+        }
+    }
+
+    public function publicProof(Request $request, string $id): \Illuminate\Contracts\View\View
+    {
+        try {
+            $documento = $this->documentoService->buscarDocumento($id);
+            $dados = $this->documentoService->dadosParaPdf($documento);
+
+            $documentoOrigem = null;
+            if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
+                $documentoOrigem = DocumentoFiscal::with(['itens.produto', 'cliente'])
+                    ->find($documento->fatura_id);
+            }
+
+            $docInfo = $documentoOrigem ?? $documento;
+            $proofUrl = $this->montarUrlDeProva($request, $id);
+            $proofQrHtml = $this->gerarQrHtml($proofUrl);
+
+            $empresa = \App\Models\Empresa::on('landlord')
+                ->where('db_name', config('database.connections.tenant.database'))
+                ->first();
+
+            $empresa = $empresa ? $empresa->toArray() : [];
+            $empresa['logo_base64'] = null;
+
+            $logoPath = $empresa['logo'] ?? null;
+
+            if (!empty($logoPath)) {
+                try {
+                    if (Storage::disk('public')->exists($logoPath)) {
+                        $logoConteudo           = Storage::disk('public')->get($logoPath);
+                        $logoMime               = Storage::disk('public')->mimeType($logoPath) ?: 'image/jpeg';
+                        $empresa['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
+                    } elseif (Storage::disk('local')->exists($logoPath)) {
+                        $logoConteudo           = Storage::disk('local')->get($logoPath);
+                        $logoMime               = Storage::disk('local')->mimeType($logoPath) ?: 'image/jpeg';
+                        $empresa['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
+                    } elseif (file_exists(public_path($logoPath))) {
+                        $logoConteudo           = file_get_contents(public_path($logoPath));
+                        $logoMime               = mime_content_type(public_path($logoPath)) ?: 'image/jpeg';
+                        $empresa['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
+                    }
+                } catch (\Throwable $logoErr) {
+                    Log::warning('publicProof: erro ao converter logo para base64', [
+                        'logo_path' => $logoPath,
+                        'error'     => $logoErr->getMessage(),
+                    ]);
+                }
+            }
+
+            return view('documentos.proof', [
+                'empresa'         => $empresa,
+                'documento'       => $documento,
+                'documentoOrigem' => $documentoOrigem,
+                'docInfo'         => $docInfo,
+                'itens'           => collect($docInfo->itens ?? []),
+                'cliente'         => $dados['cliente'],
+                'qr_code'         => $dados['qr_code'],
+                'qr_html'         => $this->gerarQrHtml($dados['qr_code'] ?? null),
+                'proof_url'       => $proofUrl,
+                'proof_qr_html'   => $proofQrHtml,
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            abort(404, 'Documento não encontrado');
+        } catch (\Exception $e) {
+            Log::error('Erro no publicProof', ['error' => $e->getMessage()]);
+            abort(500, 'Erro ao gerar comprovativo público');
         }
     }
 
@@ -1280,15 +1368,64 @@ class DocumentoFiscalController extends Controller
         }
 
         try {
-            $qr     = new QrCode($qrCodeTexto);
-            $qr->setSize(200);
+            $qr = new QrCode(
+                $qrCodeTexto,
+                new Encoding('UTF-8'),
+                ErrorCorrectionLevel::Medium,
+                220,
+                6
+            );
+
             $writer = new PngWriter();
             $result = $writer->write($qr);
+
             return '<img src="data:image/png;base64,' . base64_encode($result->getString()) . '" alt="QR Code">';
         } catch (\Throwable $e) {
-            Log::warning('Falha ao gerar QR Code', ['error' => $e->getMessage()]);
-            return '';
+            Log::warning('Falha ao gerar QR Code em PNG, tentando SVG', ['error' => $e->getMessage()]);
+            try {
+                $qr = new QrCode(
+                    $qrCodeTexto,
+                    new Encoding('UTF-8'),
+                    ErrorCorrectionLevel::Medium,
+                    220,
+                    6
+                );
+
+                $writer = new SvgWriter();
+                $result = $writer->write($qr, null, null, [
+                    SvgWriter::WRITER_OPTION_EXCLUDE_XML_DECLARATION => true,
+                ]);
+
+                return '<img src="' . $result->getDataUri() . '" alt="QR Code">';
+            } catch (\Throwable $e2) {
+                Log::warning('Falha ao gerar QR Code em SVG', ['error' => $e2->getMessage()]);
+                return '';
+            }
         }
+    }
+
+    private function montarUrlDeProva(Request $request, string $id): string
+    {
+        $frontendUrl = env('APP_FRONTEND_URL');
+        if (empty($frontendUrl)) {
+            $scheme = $request->getScheme();
+            $host = preg_replace('/:\d+$/', '', $request->getHost());
+            $frontendUrl = sprintf('%s://%s:3000', $scheme, $host);
+        }
+
+        $empresaId = null;
+        if ($request->attributes->has('current_tenant')) {
+            $empresaId = $request->attributes->get('current_tenant')->id ?? null;
+        } elseif ($request->attributes->has('current_empresa')) {
+            $empresaId = $request->attributes->get('current_empresa')->id ?? null;
+        }
+
+        $url = rtrim($frontendUrl, '/') . '/' . ltrim($id, '/');
+        if ($empresaId) {
+            $url .= '?empresa=' . urlencode($empresaId);
+        }
+
+        return $url;
     }
 
     private function erroInterno(string $mensagem, \Exception $e): JsonResponse

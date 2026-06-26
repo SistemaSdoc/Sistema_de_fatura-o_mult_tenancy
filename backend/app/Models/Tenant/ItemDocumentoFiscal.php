@@ -56,6 +56,10 @@ class ItemDocumentoFiscal extends TenantModel
         'updated_at' => 'datetime',
     ];
 
+    protected $appends = [
+        'eh_servico',
+    ];
+
     protected static function boot(): void
     {
         parent::boot();

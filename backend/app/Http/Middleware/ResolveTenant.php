@@ -193,14 +193,19 @@ class ResolveTenant
      */
     protected function verificarRedirecionamento(Request $request, Empresa $empresa): ?Response
     {
-            if (app()->environment('local')) {
-        return null;
-    }
+        if (app()->environment('local')) {
+            return null;
+        }
 
-    // Se for localhost ou IP, também não redireciona
-    if (in_array($request->getHost(), ['localhost', '127.0.0.1']) || $this->isIP($request->getHost())) {
-        return null;
-    }   
+        // Se for localhost ou IP, também não redireciona
+        if (in_array($request->getHost(), ['localhost', '127.0.0.1']) || $this->isIP($request->getHost())) {
+            return null;
+        }
+
+        if ($this->isProofPath($request)) {
+            return null;
+        }
+
         $hostAtual = $request->getHost();
         $hostEsperado = $this->montarHost($empresa->subdomain);
 
@@ -232,6 +237,11 @@ class ResolveTenant
         }
 
         return null;
+    }
+
+    protected function isProofPath(Request $request): bool
+    {
+        return $request->is('api/documentos-fiscais/*/prova');
     }
 
     protected function montarUrl(Request $request, string $subdomain): string

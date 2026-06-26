@@ -165,7 +165,7 @@ export const clienteService = {
      */
     async listarClientesAtivos(): Promise<Cliente[]> {
         console.log('[CLIENTE SERVICE] Listar clientes ativos - Iniciando...');
-        const response = await this.listar({ status: 'ativo', per_page: 999 });
+        const response = await this.listar({ status: 'ativo', per_page: 15 });
         return response.data || [];
     },
 
@@ -174,7 +174,7 @@ export const clienteService = {
      */
     async listarClientesInativos(): Promise<Cliente[]> {
         console.log('[CLIENTE SERVICE] Listar clientes inativos - Iniciando...');
-        const response = await this.listar({ status: 'inativo', per_page: 999 });
+        const response = await this.listar({ status: 'inativo', per_page: 15 });
         return response.data || [];
     },
 
@@ -183,7 +183,7 @@ export const clienteService = {
      */
     async listarTodosClientes(): Promise<Cliente[]> {
         console.log('[CLIENTE SERVICE] Listar todos clientes - Iniciando...');
-        const response = await this.listar({ status: 'todos', per_page: 999 });
+        const response = await this.listar({ status: 'todos', per_page: 15 });
         return response.data || [];
     },
 

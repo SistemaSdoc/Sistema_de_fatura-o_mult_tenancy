@@ -306,9 +306,14 @@ public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros
 
     Log::info('[RELATORIOS SERVICE] Documentos encontrados', ['quantidade' => $documentos->count()]);
 
-    // CORRIGIDO: Documentos de VENDA REAL (exclui FP)
+    // CORRIGIDO: Documentos de VENDA REAL (apenas FT/FR)
     $documentosVenda = $documentos->filter(function ($doc) {
-        return !in_array($doc->tipo_documento, ['FP']); // Exclui Proformas
+        return in_array($doc->tipo_documento, ['FT', 'FR']);
+    });
+
+    // Documentos de CORREÇÃO (NC/ND/FRt) - não entram na faturação
+    $documentosCorrecao = $documentos->filter(function ($doc) {
+        return in_array($doc->tipo_documento, ['NC', 'ND', 'FRt']);
     });
 
     // Documentos APENAS Proformas (para exibição separada)
@@ -337,6 +342,16 @@ public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros
         ];
     }
 
+    $porTipoCorrecao = $documentosCorrecao->groupBy('tipo_documento')->map(function ($grupo) {
+        return [
+            'quantidade'     => $grupo->count(),
+            'total_liquido'  => $grupo->sum('total_liquido'),
+            'total_base'     => $grupo->sum('base_tributavel'),
+            'total_iva'      => $grupo->sum('total_iva'),
+            'total_retencao' => $grupo->sum('total_retencao'),
+        ];
+    });
+
     $porEstado = $documentosVenda->groupBy('estado')->map(fn($g) => $g->count());
 
     // CORRIGIDO: Cálculos apenas com documentos de VENDA REAL (exclui FP)
@@ -360,6 +375,7 @@ public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros
         'faturacao_pendente' => $faturacaoPendente,
         'faturacao_por_mes'  => $faturacaoPorMes,
         'por_tipo'           => $porTipo,
+        'por_tipo_correcao'  => $porTipoCorrecao,
         'por_estado'         => $porEstado,
         'periodo' => [
             'data_inicio' => $dataInicio,
@@ -371,6 +387,7 @@ public function relatorioFaturacao($dataInicio = null, $dataFim = null, $filtros
         'faturacao_total' => $faturacaoTotal,
         'faturacao_pendente' => $faturacaoPendente,
         'documentos_venda' => $documentosVenda->count(),
+        'documentos_correcao' => $documentosCorrecao->count(),
         'documentos_proforma' => $documentosProforma->count(),
     ]);
 

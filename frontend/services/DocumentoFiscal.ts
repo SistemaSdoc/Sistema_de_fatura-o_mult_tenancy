@@ -666,7 +666,6 @@ class DocumentoFiscalService {
         }
 
         // 7. Validar se a fatura já foi paga - então precisa ser juros/multa
-        const valorPago = this.calcularValorPago(fatura);
         if (fatura.estado === 'paga' && !temJurosOuMulta) {
             throw new Error(
                 `A fatura já está paga. Nota de Débito para fatura paga deve ser ` +

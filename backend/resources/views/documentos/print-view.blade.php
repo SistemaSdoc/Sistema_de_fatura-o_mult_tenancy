@@ -3,43 +3,23 @@ if (!isset($documento) || !$documento) {
     die('Documento não encontrado');
 }
 
-// Dados DINÂMICOS da empresa (vindos do controller via $empresa)
-$empresaMorada = 'Endereço não registrado';
-
-// Tenta obter o endereço de diferentes formas
-if (is_array($empresa)) {
-    if (isset($empresa['endereco']) && !empty($empresa['endereco'])) {
-        $empresaMorada = $empresa['endereco'];
-    } elseif (isset($empresa['morada']) && !empty($empresa['morada'])) {
-        $empresaMorada = $empresa['morada'];
-    }
-} elseif (is_object($empresa)) {
-    if (!empty($empresa->endereco)) {
-        $empresaMorada = $empresa->endereco;
-    } elseif (!empty($empresa->morada)) {
-        $empresaMorada = $empresa->morada;
-    }
-}
-
-$empresaTelefone = $empresa['telefone'] ?? 'Telefone não registrado';
-$empresaEmail = $empresa['email'] ?? 'Email não registrado';
-$empresaNome = $empresa['nome'] ?? 'EMPRESA';
-$empresaNif = $empresa['nif'] ?? '0000000000';
-
-// ✅ ADICIONAR DADOS BANCÁRIOS
-$empresaBanco = $empresa['nome_banco'] ?? null;
-$empresaConta = $empresa['numero_conta'] ?? null;
-$empresaIban = $empresa['iban'] ?? null;
-
-// ✅ CRIAR A VARIÁVEL QUE FALTAVA
+$empresaMorada = data_get($empresa, 'endereco')
+    ?? data_get($empresa, 'morada')
+    ?? 'Endereço não registrado';
+$empresaTelefone = data_get($empresa, 'telefone') ?? 'Telefone não registrado';
+$empresaEmail = data_get($empresa, 'email') ?? 'Email não registrado';
+$empresaNome = data_get($empresa, 'nome') ?? 'EMPRESA';
+$empresaNif = data_get($empresa, 'nif') ?? '0000000000';
+$empresaBanco = data_get($empresa, 'nome_banco');
+$empresaConta = data_get($empresa, 'numero_conta');
+$empresaIban = data_get($empresa, 'iban');
 $temDadosBancarios = !empty($empresaBanco) || !empty($empresaConta) || !empty($empresaIban);
 
-// Logo DINÂMICO
 $empresaLogo = asset('images/default-logo.png');
-if (!empty($empresa['logo_base64'])) {
-    $empresaLogo = $empresa['logo_base64'];
-} elseif (!empty($empresa['logo'])) {
-    $logoPath = ltrim($empresa['logo'], '/');
+if (!empty(data_get($empresa, 'logo_base64'))) {
+    $empresaLogo = data_get($empresa, 'logo_base64');
+} elseif (!empty(data_get($empresa, 'logo'))) {
+    $logoPath = ltrim((string) data_get($empresa, 'logo'), '/');
     $logoPath = str_replace('public/', '', $logoPath);
     if (Storage::disk('public')->exists($logoPath)) {
         $logoConteudo = Storage::disk('public')->get($logoPath);
@@ -56,16 +36,16 @@ $tiposDocumento = [
     'NC' => 'Nota de Crédito',
     'ND' => 'Nota de Débito',
     'RC' => 'Recibo',
-    'FRt' => 'Fact. Retificação'
+    'FRt' => 'Fact. Retificação',
 ];
 
-$estadoLabel = match($documento->estado ?? '') {
+$estadoLabel = match ($documento->estado ?? '') {
     'emitido' => 'Emitido',
     'paga' => 'Pago',
     'parcialmente_paga' => 'Pag. Parcial',
     'cancelado' => 'Cancelado',
     'expirado' => 'Expirado',
-    default => ($documento->estado ?? '')
+    default => (string) ($documento->estado ?? ''),
 };
 
 $metodosPagamento = [
@@ -73,12 +53,11 @@ $metodosPagamento = [
     'multibanco' => 'Multibanco',
     'dinheiro' => 'Dinheiro',
     'cheque' => 'Cheque',
-    'cartao' => 'Cartão'
+    'cartao' => 'Cartão',
 ];
 
-// PARA RECIBOS: Buscar dados da factura de origem
 $documentoOrigemInfo = null;
-$itensParaExibir = $itens;
+$itensParaExibir = $itens ?? collect();
 $docParaTotais = $documento;
 
 if ($documento->tipo_documento === 'RC') {
@@ -90,12 +69,13 @@ if ($documento->tipo_documento === 'RC') {
         $documentoOrigemInfo = \App\Models\Tenant\DocumentoFiscal::with(['itens', 'cliente', 'venda'])
             ->find($documento->fatura_id);
     }
-    
+
     if ($documentoOrigemInfo) {
         $docParaTotais = $documentoOrigemInfo;
         if (isset($documentoOrigemInfo->itens) && count($documentoOrigemInfo->itens) > 0) {
             $itensParaExibir = $documentoOrigemInfo->itens;
         }
+
         if (empty($cliente) || (isset($cliente['nome']) && $cliente['nome'] === 'Consumidor Final')) {
             if ($documentoOrigemInfo->cliente_id && isset($documentoOrigemInfo->cliente)) {
                 $cliente = [
@@ -107,6 +87,7 @@ if ($documento->tipo_documento === 'RC') {
                 $cliente = [
                     'nome' => $documentoOrigemInfo->cliente_nome,
                     'nif' => $documentoOrigemInfo->cliente_nif ?? null,
+                    'morada' => null,
                 ];
             }
         }
@@ -117,8 +98,7 @@ $descontoGlobal = 0;
 $troco = 0;
 
 if ($docParaTotais->venda_id && isset($docParaTotais->venda)) {
-    $venda = $docParaTotais->venda;
-    $descontoGlobal = (float) ($venda->desconto_global ?? 0);
+    $descontoGlobal = (float) ($docParaTotais->venda->desconto_global ?? 0);
     $troco = (float) ($documento->troco ?? 0);
 } else {
     $descontoGlobal = (float) ($docParaTotais->desconto_global ?? 0);
@@ -127,7 +107,6 @@ if ($docParaTotais->venda_id && isset($docParaTotais->venda)) {
 
 $percentualDesconto = 0;
 $temDesconto = false;
-
 if ($descontoGlobal > 0 && ($docParaTotais->base_tributavel ?? 0) > 0) {
     $temDesconto = true;
     $subtotalBruto = $docParaTotais->base_tributavel + $descontoGlobal;
@@ -139,570 +118,669 @@ $temTroco = $troco > 0;
 
 <!DOCTYPE html>
 <html lang="pt">
-
 <head>
     <meta charset="UTF-8" />
     <title>{{ $documento->numero_documento }}</title>
     <style>
+        @page {
+            size: A4 portrait;
+            margin: 12mm;
+        }
+
         * {
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
         }
 
         body {
             font-family: 'DejaVu Sans', sans-serif;
-            font-size: 12px;
-            color: #000000;
+            font-size: 11px;
+            color: #111827;
+            background: #f3f4f6;
+            line-height: 1.45;
+        }
+
+        .sheet {
+            max-width: 190mm;
+            margin: 0 auto;
             background: #fff;
-            line-height: 1.3;
+            padding: 14mm;
         }
 
-        .page {
-            padding: 15px 20px;
-            height: 100%;
-            min-height: 100vh;
-        }
-
-        /* CABEÇALHO */
         .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            border-bottom: 2px solid #000;
+            display: table;
+            width: 100%;
+            border-bottom: 2px solid #123859;
             padding-bottom: 10px;
             margin-bottom: 12px;
         }
 
-        .header-left {
-            flex: 1;
-        }
-
-        .logo-empresa-wrapper {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .logo-img {
-            max-width: 60px;
-            max-height: 60px;
-            width: auto;
-            height: auto;
-        }
-
-        .empresa-nome {
-            font-size: 16px;
-            font-weight: bold;
-            margin-bottom: 3px;
-        }
-
-        .empresa-info {
-            font-size: 9px;
-            color: #333;
-            line-height: 1.3;
-        }
-
+        .header-left,
         .header-right {
-            text-align: right;
-        }
-
-        .doc-tipo {
-            font-size: 14px;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-
-        .doc-numero {
-            font-size: 12px;
-            font-weight: bold;
-        }
-
-        .doc-estado {
-            display: inline-block;
-            padding: 2px 8px;
-            font-size: 9px;
-            font-weight: bold;
-            border: 1px solid #000;
-            margin-top: 4px;
-        }
-
-        /* ORIGEM */
-        .origem-box {
-            background: #f5f5f5;
-            padding: 6px 10px;
-            margin-bottom: 12px;
-            font-size: 10px;
-            border: 1px solid #ccc;
-        }
-
-        /* INFO ROWS */
-        .info-row {
-            display: flex;
-            gap: 20px;
-            margin-bottom: 12px;
-        }
-
-        .info-box {
-            flex: 1;
-            background: #f9f9f9;
-            padding: 8px 12px;
-            border: 1px solid #ddd;
-        }
-
-        .info-box-title {
-            font-size: 10px;
-            font-weight: bold;
-            text-transform: uppercase;
-            border-bottom: 1px solid #ccc;
-            padding-bottom: 4px;
-            margin-bottom: 6px;
-        }
-
-        .info-line {
-            font-size: 10px;
-            margin-bottom: 3px;
-        }
-
-        .info-label {
-            color: #555;
-        }
-
-        .info-value {
-            font-weight: bold;
-        }
-
-        /* TABELA DE ITENS */
-        table.items {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 12px;
-            font-size: 9px;
-        }
-
-        table.items thead th {
-            background: #f0f0f0;
-            padding: 5px 4px;
-            font-size: 9px;
-            font-weight: bold;
-            text-align: left;
-            border-bottom: 2px solid #000;
-        }
-
-        table.items thead th.r {
-            text-align: right;
-        }
-
-        table.items thead th.c {
-            text-align: center;
-        }
-
-        table.items tbody td {
-            padding: 5px 4px;
-            border-bottom: 1px solid #ddd;
+            display: table-cell;
             vertical-align: top;
         }
 
-        table.items tbody td.r {
+        .header-left {
+            width: 64%;
+        }
+
+        .header-right {
+            width: 36%;
             text-align: right;
         }
 
-        table.items tbody td.c {
+        .logo-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+        }
+
+        .logo-img {
+            max-width: 58px;
+            max-height: 58px;
+            object-fit: contain;
+            flex-shrink: 0;
+        }
+
+        .company-name {
+            font-size: 18px;
+            font-weight: 700;
+            color: #123859;
+            margin-bottom: 4px;
+        }
+
+        .company-info {
+            font-size: 9.5px;
+            color: #374151;
+        }
+
+        .doc-type {
+            font-size: 18px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #123859;
+        }
+
+        .doc-number {
+            font-size: 13px;
+            font-weight: 700;
+            margin-top: 2px;
+        }
+
+        .doc-state {
+            display: inline-block;
+            margin-top: 6px;
+            padding: 3px 9px;
+            border: 1px solid #111827;
+            border-radius: 999px;
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .origin-box,
+        .info-box,
+        .bank-box,
+        .totals-box,
+        .footer-box,
+        .note-box {
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            background: #fafafa;
+        }
+
+        .origin-box {
+            padding: 10px 12px;
+            margin-bottom: 12px;
+            background: #f8fafc;
+            font-size: 10px;
+        }
+
+        .grid-2 {
+            display: table;
+            width: 100%;
+            table-layout: fixed;
+            margin-bottom: 12px;
+        }
+
+        .grid-col {
+            display: table-cell;
+            vertical-align: top;
+            width: 50%;
+        }
+
+        .grid-col:first-child {
+            padding-right: 6px;
+        }
+
+        .grid-col:last-child {
+            padding-left: 6px;
+        }
+
+        .info-box {
+            padding: 12px;
+            min-height: 92px;
+            background: #fff;
+        }
+
+        .section-title {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #123859;
+            margin-bottom: 8px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .line {
+            margin-bottom: 4px;
+        }
+
+        .label {
+            color: #6b7280;
+        }
+
+        .value {
+            font-weight: 700;
+            color: #111827;
+        }
+
+        table.items {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0;
+        }
+
+        table.items thead th {
+            background: #123859;
+            color: #fff;
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding: 8px 6px;
+            text-align: left;
+        }
+
+        table.items tbody td {
+            border-bottom: 1px solid #e5e7eb;
+            padding: 9px 6px;
+            vertical-align: top;
+            font-size: 10px;
+        }
+
+        .r {
+            text-align: right;
+        }
+
+        .c {
             text-align: center;
         }
 
-        .item-nome {
-            font-weight: bold;
-            font-size: 9px;
+        .item-name {
+            font-weight: 700;
         }
 
         .item-sub {
             font-size: 8px;
-            color: #666;
+            color: #6b7280;
+            margin-top: 2px;
         }
 
-        /* TOTAIS */
-        .totals-wrapper {
-            display: flex;
-            justify-content: flex-end;
-            margin-bottom: 12px;
+        .badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 999px;
+            background: #e5eef8;
+            color: #123859;
+            font-size: 8px;
+            font-weight: 700;
+        }
+
+        .totals-wrap {
+            display: table;
+            width: 100%;
+            margin-top: 6px;
+        }
+
+        .totals-spacer,
+        .totals-box {
+            display: table-cell;
+            vertical-align: top;
+        }
+
+        .totals-spacer {
+            width: 48%;
         }
 
         .totals-box {
-            width: 45%;
+            width: 52%;
+            padding: 12px;
+            background: #fff;
         }
 
         table.totals {
             width: 100%;
             border-collapse: collapse;
-            font-size: 10px;
         }
 
         table.totals td {
-            padding: 4px 6px;
+            padding: 5px 0;
+            border-bottom: 1px solid #f3f4f6;
         }
 
         table.totals td:last-child {
             text-align: right;
-            font-weight: bold;
+            font-weight: 700;
         }
 
-        table.totals .total-final {
-            border-top: 2px solid #000;
-            border-bottom: 2px solid #000;
-            font-size: 11px;
+        table.totals .grand td {
+            border-top: 2px solid #111827;
+            border-bottom: 2px solid #111827;
+            padding-top: 8px;
+            padding-bottom: 8px;
+            font-size: 12px;
         }
 
-        /* QR CODE */
+        .bank-box {
+            margin-top: 12px;
+            padding: 12px;
+            background: #f8fbff;
+            border-color: #cbd5e1;
+        }
+
+        .bank-grid {
+            display: table;
+            width: 100%;
+            margin-top: 6px;
+        }
+
+        .bank-row {
+            display: table-row;
+        }
+
+        .bank-label,
+        .bank-value {
+            display: table-cell;
+            padding: 3px 0;
+        }
+
+        .bank-label {
+            width: 95px;
+            font-weight: 700;
+            color: #374151;
+        }
+
+        .bank-value {
+            color: #111827;
+        }
+
+        .iban {
+            font-family: 'DejaVu Sans Mono', monospace;
+            letter-spacing: 0.8px;
+        }
+
         .fiscal-block {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 12px;
+            display: table;
+            width: 100%;
+            margin-top: 12px;
+        }
+
+        .fiscal-left,
+        .fiscal-right {
+            display: table-cell;
+            vertical-align: top;
         }
 
         .fiscal-left {
-            flex: 2;
+            width: 68%;
+            padding-right: 8px;
         }
 
         .fiscal-right {
-            flex: 1;
+            width: 32%;
             text-align: center;
         }
 
         .hash-box {
-            background: #f5f5f5;
-            padding: 8px 10px;
-            border: 1px solid #ddd;
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+            border-radius: 8px;
+            padding: 10px 12px;
             word-break: break-all;
         }
 
         .hash-title {
-            font-size: 9px;
-            font-weight: bold;
-            margin-bottom: 3px;
+            font-size: 10px;
+            font-weight: 700;
+            margin-bottom: 4px;
+            color: #123859;
         }
 
-        .hash-val {
-            font-family: monospace;
-            font-size: 8px;
+        .hash-value {
+            font-family: 'DejaVu Sans Mono', monospace;
+            font-size: 9px;
+            color: #374151;
         }
 
         .qr-label {
-            font-size: 8px;
+            font-size: 9px;
+            font-weight: 700;
             text-transform: uppercase;
-            margin-bottom: 3px;
+            margin-bottom: 6px;
+            color: #123859;
         }
 
         .qr-svg-wrap img,
         .qr-svg-wrap svg {
-            width: 60px;
-            height: 60px;
+            width: 86px;
+            height: 86px;
+            margin: 0 auto;
         }
 
-        /* Dados Bancários */
-        .bank-box {
-            background: #f0f5ff;
-            border: 1px solid #cccccc;
-            border-radius: 5px;
-            padding: 10px 14px;
-            margin-bottom: 12px;
+        .qr-note {
+            margin-top: 6px;
             font-size: 10px;
+            line-height: 1.25;
+            color: #4b5563;
         }
 
-        .bank-box .bank-title {
-            font-weight: bold;
-            font-size: 11px;
-            color: #000000;
-            margin-bottom: 6px;
-        }
-
-        .bank-box .bank-row {
-            display: table-row;
-        }
-
-        .bank-box .bank-label {
-            display: table-cell;
-            padding: 2px 8px 2px 0;
-            font-weight: bold;
-            width: 80px;
-        }
-
-        .bank-box .bank-value {
-            display: table-cell;
-            padding: 2px 0;
-        }
-
-        .bank-box .iban-value {
-            font-family: 'DejaVu Sans Mono', monospace;
-            letter-spacing: 1px;
-        }
-
-        /* RODAPÉ */
-        .footer-thanks {
+        .footer-box {
+            margin-top: 14px;
+            padding: 12px;
+            background: #fff;
             text-align: center;
+        }
+
+        .footer-title {
             font-size: 11px;
-            font-weight: bold;
-            margin-bottom: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #123859;
+            margin-bottom: 4px;
         }
 
-        .footer {
-            display: flex;
-            justify-content: space-between;
-            font-size: 8px;
-            color: #666;
-            border-top: 1px solid #ccc;
-            padding-top: 8px;
-            margin-top: 8px;
-        }
-
-        .footer-left,
-        .footer-right {
-            flex: 1;
-        }
-
-        .footer-right {
-            text-align: right;
+        .footer-msg {
+            font-size: 9.5px;
+            color: #374151;
+            margin-bottom: 2px;
         }
 
         .footer-bank {
-            font-size: 8px;
-            border-top: 1px dashed #ccc;
-            padding-top: 6px;
-            margin-top: 4px;
-            color: #333;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px dashed #d1d5db;
+            font-size: 9px;
+            color: #374151;
         }
 
-        .footer-bank strong {
-            color: #000;
+        .meta-line {
+            margin-top: 6px;
+            font-size: 9px;
+            color: #6b7280;
         }
 
         @media print {
             body {
-                padding: 0;
-                margin: 0;
+                background: #fff;
             }
-            
-            .page {
-                padding: 10px 15px;
+
+            .sheet {
+                box-shadow: none;
+                margin: 0;
+                padding: 0;
+                max-width: none;
             }
         }
     </style>
 </head>
-
 <body onload="window.print()">
-    <div class="page">
-
-        {{-- CABEÇALHO --}}
+    <div class="sheet">
         <div class="header">
             <div class="header-left">
-                <div class="logo-empresa-wrapper">
+                <div class="logo-row">
                     @if(!empty($empresaLogo) && $empresaLogo !== asset('images/default-logo.png'))
-                    <img src="{{ $empresaLogo }}" class="logo-img" alt="Logo">
+                        <img src="{{ $empresaLogo }}" class="logo-img" alt="Logo">
                     @endif
                     <div>
-                        <div class="empresa-nome">{{ $empresaNome }}</div>
-                        <div class="empresa-info">
+                        <div class="company-name">{{ $empresaNome }}</div>
+                        <div class="company-info">
                             NIF: {{ $empresaNif }}<br>
-                            @if(!empty($empresaEmail)){{ $empresaEmail }}<br>@endif
-                            @if(!empty($empresaTelefone))Tel: {{ $empresaTelefone }}<br>@endif
-                            @if(!empty($empresaMorada)){{ $empresaMorada }}@endif
+                            @if(!empty($empresaEmail) && $empresaEmail !== 'Email não registrado'){{ $empresaEmail }}<br>@endif
+                            @if(!empty($empresaTelefone) && $empresaTelefone !== 'Telefone não registrado')Tel: {{ $empresaTelefone }}<br>@endif
+                            @if(!empty($empresaMorada) && $empresaMorada !== 'Endereço não registrado'){{ $empresaMorada }}@endif
                         </div>
                     </div>
                 </div>
             </div>
             <div class="header-right">
-                <div class="doc-tipo">{{ $tiposDocumento[$documento->tipo_documento] ?? $documento->tipo_documento }}</div>
-                <div class="doc-numero">Nº: {{ $documento->numero_documento }}</div>
-                <div class="doc-estado">{{ $estadoLabel }}</div>
+                <div class="doc-type">{{ $tiposDocumento[$documento->tipo_documento] ?? $documento->tipo_documento }}</div>
+                <div class="doc-number">{{ $documento->numero_documento }}</div>
+                <div class="doc-state">{{ $estadoLabel }}</div>
             </div>
         </div>
 
-        {{-- ORIGEM (se for recibo) --}}
         @if($documento->tipo_documento === 'RC' && $documentoOrigemInfo)
-        <div class="origem-box">
-            <strong>Documento de Origem:</strong> {{ $tiposDocumento[$documentoOrigemInfo->tipo_documento] ?? $documentoOrigemInfo->tipo_documento }}
-            Nº {{ $documentoOrigemInfo->numero_documento }} — {{ \Carbon\Carbon::parse($documentoOrigemInfo->data_emissao)->format('d/m/Y') }}
-        </div>
+            <div class="origin-box">
+                <strong>Documento de Origem:</strong><br>
+                {{ $tiposDocumento[$documentoOrigemInfo->tipo_documento] ?? $documentoOrigemInfo->tipo_documento }}
+                Nº {{ $documentoOrigemInfo->numero_documento }}
+                — emitido em {{ \Carbon\Carbon::parse($documentoOrigemInfo->data_emissao)->format('d/m/Y') }}
+                @if($documentoOrigemInfo->data_vencimento)
+                    <br><strong>Vencimento original:</strong> {{ \Carbon\Carbon::parse($documentoOrigemInfo->data_vencimento)->format('d/m/Y') }}
+                @endif
+            </div>
         @endif
 
-        {{-- INFO DOC + CLIENTE --}}
-        <div class="info-row">
-            <div class="info-box">
-                <div class="info-box-title">Dados do Documento</div>
-                <div class="info-line"><span class="info-label">Série:</span> <span class="info-value">{{ $documento->serie ?? 'A' }}</span></div>
-                <div class="info-line"><span class="info-label">Data:</span> <span class="info-value">{{ \Carbon\Carbon::parse($documento->data_emissao)->format('d/m/Y') }}</span></div>
-                <div class="info-line"><span class="info-label">Operador:</span> <span class="info-value">{{ $documento->user->name ?? 'Sistema' }}</span></div>
+        <div class="grid-2">
+            <div class="grid-col">
+                <div class="info-box">
+                    <div class="section-title">Dados do Documento</div>
+                    <div class="line"><span class="label">Série:</span> <span class="value">{{ $documento->serie ?? 'A' }}</span></div>
+                    <div class="line">
+                        <span class="label">Data de Emissão:</span>
+                        <span class="value">
+                            {{ \Carbon\Carbon::parse($documento->data_emissao)->format('d/m/Y') }}
+                            {{ $documento->hora_emissao ? ' às ' . substr($documento->hora_emissao, 0, 5) : '' }}
+                        </span>
+                    </div>
+                    @if($documento->data_vencimento)
+                        <div class="line"><span class="label">Vencimento:</span> <span class="value">{{ \Carbon\Carbon::parse($documento->data_vencimento)->format('d/m/Y') }}</span></div>
+                    @endif
+                    <div class="line"><span class="label">Operador:</span> <span class="value">{{ $documento->user->name ?? 'Sistema' }}</span></div>
+                </div>
             </div>
-            <div class="info-box">
-                <div class="info-box-title">Cliente</div>
-                <div class="info-line"><span class="info-label">Nome:</span> <span class="info-value">{{ $cliente['nome'] ?? 'Consumidor Final' }}</span></div>
-                @if(!empty($cliente['nif']))<div class="info-line"><span class="info-label">NIF:</span> <span class="info-value">{{ $cliente['nif'] }}</span></div>@endif
+            <div class="grid-col">
+                <div class="info-box">
+                    <div class="section-title">Cliente</div>
+                    <div class="line"><span class="label">Nome:</span> <span class="value">{{ $cliente['nome'] ?? 'Consumidor Final' }}</span></div>
+                    @if(!empty($cliente['nif']))<div class="line"><span class="label">NIF:</span> <span class="value">{{ $cliente['nif'] }}</span></div>@endif
+                    @if(!empty($cliente['morada']))<div class="line"><span class="label">Morada:</span> <span class="value">{{ $cliente['morada'] }}</span></div>@endif
+                </div>
             </div>
         </div>
 
-        {{-- ITENS --}}
         @if(!empty($itensParaExibir) && count($itensParaExibir) > 0)
-        <table class="items">
-            <thead>
-                <tr>
-                    <th>Descrição</th>
-                    <th class="c" style="width:8%">Qtd</th>
-                    <th class="r" style="width:15%">Preço Unit.</th>
-                    <th class="c" style="width:8%">IVA</th>
-                    <th class="r" style="width:15%">Total</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach($itensParaExibir as $item)
-                <tr>
-                    <td>
-                        <div class="item-nome">{{ $item->descricao ?? $item->nome_produto ?? '' }}</div>
-                        @if(!empty($item->codigo_produto))<div class="item-sub">Ref: {{ $item->codigo_produto }}</div>@endif
-                    </td>
-                    <td class="c">{{ number_format((float)($item->quantidade ?? 0), 2, ',', '.') }}</td>
-                    <td class="r">{{ number_format((float)($item->preco_unitario ?? 0), 2, ',', '.') }} Kz</td>
-                    <td class="c">
-                        @if(($item->taxa_iva ?? 0) > 0)
-                        {{ number_format((float)$item->taxa_iva, 0, ',', '.') }}%
-                        @else
-                        —
-                        @endif
-                    </td>
-                    <td class="r"><strong>{{ number_format((float)($item->total_linha ?? 0), 2, ',', '.') }} Kz</strong></td>
-                </tr>
-                @endforeach
-            </tbody>
-        </table>
+            <table class="items">
+                <thead>
+                    <tr>
+                        <th style="width:40%;">Descrição</th>
+                        <th class="c" style="width:8%;">Qtd</th>
+                        <th class="r" style="width:14%;">Preço Unit.</th>
+                        <th class="c" style="width:8%;">IVA</th>
+                        <th class="c" style="width:8%;">Ret.</th>
+                        <th class="r" style="width:22%;">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($itensParaExibir as $item)
+                        <tr>
+                            <td>
+                                <div class="item-name">{{ $item->descricao ?? $item->nome_produto ?? '' }}</div>
+                                @if(!empty($item->codigo_produto))
+                                    <div class="item-sub">Ref: {{ $item->codigo_produto }}</div>
+                                @endif
+                            </td>
+                            <td class="c">{{ number_format((float)($item->quantidade ?? 0), 2, ',', '.') }}</td>
+                            <td class="r">{{ number_format((float)($item->preco_unitario ?? 0), 2, ',', '.') }} Kz</td>
+                            <td class="c">
+                                @if(($item->taxa_iva ?? 0) > 0)
+                                    <span class="badge">{{ number_format((float)$item->taxa_iva, 1, ',', '.') }}%</span>
+                                @else
+                                    —
+                                @endif
+                            </td>
+                            <td class="c">
+                                @if(!empty($item->taxa_retencao) && (float)$item->taxa_retencao > 0)
+                                    <span class="badge">{{ number_format((float)$item->taxa_retencao, 1, ',', '.') }}%</span>
+                                @else
+                                    —
+                                @endif
+                            </td>
+                            <td class="r"><strong>{{ number_format((float)($item->total_linha ?? 0), 2, ',', '.') }} Kz</strong></td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        @else
+            <div class="note-box" style="padding:12px; text-align:center; background:#fff7ed; border-color:#fed7aa;">
+                Documento sem itens detalhados
+            </div>
         @endif
 
-        {{-- TOTAIS --}}
-        <div class="totals-wrapper">
+        <div class="totals-wrap">
+            <div class="totals-spacer"></div>
             <div class="totals-box">
                 <table class="totals">
                     @if($temDesconto)
-                    <tr>
-                        <td>Subtotal Bruto:</td>
-                        <td>{{ number_format($docParaTotais->base_tributavel + $descontoGlobal, 2, ',', '.') }} Kz</td>
-                    </tr>
-                    <tr>
-                        <td>Desconto ({{ number_format($percentualDesconto, 2, ',', '.') }}%):</td>
-                        <td>- {{ number_format($descontoGlobal, 2, ',', '.') }} Kz</td>
-                    </tr>
+                        <tr>
+                            <td>Subtotal Bruto</td>
+                            <td>{{ number_format($docParaTotais->base_tributavel + $descontoGlobal, 2, ',', '.') }} Kz</td>
+                        </tr>
+                        <tr>
+                            <td>Desconto ({{ number_format($percentualDesconto, 2, ',', '.') }}%)</td>
+                            <td>- {{ number_format($descontoGlobal, 2, ',', '.') }} Kz</td>
+                        </tr>
                     @endif
                     <tr>
-                        <td>Base Tributável:</td>
+                        <td>Base Tributável</td>
                         <td>{{ number_format($docParaTotais->base_tributavel ?? 0, 2, ',', '.') }} Kz</td>
                     </tr>
                     <tr>
-                        <td>Total IVA:</td>
+                        <td>Total IVA</td>
                         <td>{{ number_format($docParaTotais->total_iva ?? 0, 2, ',', '.') }} Kz</td>
                     </tr>
                     @if(($docParaTotais->total_retencao ?? 0) > 0)
-                    <tr>
-                        <td>Retenção:</td>
-                        <td>- {{ number_format((float)$docParaTotais->total_retencao, 2, ',', '.') }} Kz</td>
-                    </tr>
+                        <tr>
+                            <td>Retenção</td>
+                            <td>- {{ number_format((float)$docParaTotais->total_retencao, 2, ',', '.') }} Kz</td>
+                        </tr>
                     @endif
                     @if($temTroco)
-                    <tr>
-                        <td>Troco:</td>
-                        <td>{{ number_format($troco, 2, ',', '.') }} Kz</td>
-                    </tr>
+                        <tr>
+                            <td>Troco</td>
+                            <td>{{ number_format($troco, 2, ',', '.') }} Kz</td>
+                        </tr>
                     @endif
-                    <tr class="total-final">
-                        <td><strong>TOTAL:</strong></td>
-                        <td><strong>{{ number_format((float)($documento->total_liquido ?? 0), 2, ',', '.') }} Kz</strong></td>
+                    <tr class="grand">
+                        <td>TOTAL</td>
+                        <td>{{ number_format((float)($documento->total_liquido ?? 0), 2, ',', '.') }} Kz</td>
                     </tr>
                 </table>
             </div>
         </div>
 
-        {{-- HASH FISCAL + QR CODE --}}
-        @if(!empty($documento->hash_fiscal) || !empty($qr_html))
-        <div class="fiscal-block">
-            @if(!empty($documento->hash_fiscal))
-            <div class="fiscal-left">
-                <div class="hash-box">
-                    <div class="hash-title">Autenticação Fiscal</div>
-                    <div class="hash-val">{{ $documento->hash_fiscal }}</div>
-                </div>
-            </div>
-            @endif
-            @if(!empty($qr_html))
-            <div class="fiscal-right">
-                <div class="qr-label">QR Code — DP 71/25</div>
-                <div class="qr-svg-wrap">{!! $qr_html !!}</div>
-            </div>
-            @endif
-        </div>
-        @endif
-
-        {{-- DADOS BANCÁRIOS (Se houver) --}}
         @if($temDadosBancarios)
-        <div class="bank-box">
-            <div class="bank-title"> Dados Bancários para Pagamento</div>
-            <div style="display: table; width: 100%;">
-                @if(!empty($empresaBanco))
-                <div class="bank-row">
-                    <span class="bank-label">Banco:</span>
-                    <span class="bank-value">{{ $empresaBanco }}</span>
+            <div class="bank-box">
+                <div class="section-title">Dados Bancários para Pagamento</div>
+                <div class="bank-grid">
+                    @if(!empty($empresaBanco))
+                        <div class="bank-row">
+                            <span class="bank-label">Banco:</span>
+                            <span class="bank-value">{{ $empresaBanco }}</span>
+                        </div>
+                    @endif
+                    @if(!empty($empresaConta))
+                        <div class="bank-row">
+                            <span class="bank-label">Nº Conta:</span>
+                            <span class="bank-value">{{ $empresaConta }}</span>
+                        </div>
+                    @endif
+                    @if(!empty($empresaIban))
+                        <div class="bank-row">
+                            <span class="bank-label">IBAN:</span>
+                            <span class="bank-value iban">{{ $empresaIban }}</span>
+                        </div>
+                    @endif
                 </div>
-                @endif
-                @if(!empty($empresaConta))
-                <div class="bank-row">
-                    <span class="bank-label">Nº Conta:</span>
-                    <span class="bank-value">{{ $empresaConta }}</span>
-                </div>
-                @endif
-                @if(!empty($empresaIban))
-                <div class="bank-row">
-                    <span class="bank-label">IBAN:</span>
-                    <span class="bank-value iban-value">{{ $empresaIban }}</span>
-                </div>
-                @endif
             </div>
-        </div>
         @endif
 
-        {{-- RODAPÉ --}}
-        <div class="footer-thanks">Obrigado pela preferência!</div>
-        <div class="footer">
-            <div class="footer-left">
-                <strong>{{ $empresaNome }}</strong> | NIF: {{ $empresaNif }}<br>
-                {{ $empresaMorada }} | Tel: {{ $empresaTelefone }}
-                
-                {{-- DADOS BANCÁRIOS NO RODAPÉ (opcional) --}}
-                @if($temDadosBancarios)
-                <div class="footer-bank">
-                    <strong>Banco:</strong> {{ $empresaBanco }} 
-                    @if(!empty($empresaConta))| <strong>Conta:</strong> {{ $empresaConta }} @endif
-                    @if(!empty($empresaIban))| <strong>IBAN:</strong> {{ $empresaIban }} @endif
-                </div>
+        @if(!empty($documento->hash_fiscal) || !empty($qr_html) || !empty($proof_qr_html))
+            <div class="fiscal-block">
+                @if(!empty($documento->hash_fiscal))
+                    <div class="fiscal-left">
+                        <div class="hash-box">
+                            <div class="hash-title">Autenticação Fiscal</div>
+                            <div class="hash-value">{{ $documento->hash_fiscal }}</div>
+                        </div>
+                    </div>
                 @endif
+                <div class="fiscal-right">
+                    @if(!empty($proof_qr_html) || !empty($proof_url))
+                        <div class="qr-box proof-box">
+                            <div class="qr-label">Comprovativo Público</div>
+                            <div class="qr-svg-wrap">{!! $proof_qr_html !!}</div>
+                            <div class="qr-note">Leia este código para abrir o comprovativo público.</div>
+                        </div>
+                    @elseif(!empty($qr_html))
+                        <div class="qr-box">
+                            <div class="qr-label">QR Code — DP 71/25</div>
+                            <div class="qr-svg-wrap">{!! $qr_html !!}</div>
+                        </div>
+                    @endif
+                </div>
             </div>
-            <div class="footer-right">
-                Documento gerado em {{ now()->format('d/m/Y H:i') }}<br>
-                {{ $empresaEmail }}
-            </div>
-        </div>
+        @endif
 
+        <div class="footer-box">
+            <div class="footer-title">Obrigado pela preferência!</div>
+            <div class="footer-msg">Volte sempre.</div>
+            <div class="footer-msg">Processado pelo sistema de facturação.</div>
+            <div class="meta-line">
+                {{ now()->format('d/m/Y H:i:s') }}
+            </div>
+            <div class="meta-line">
+                {{ $empresaNome }} | NIF: {{ $empresaNif }} | {{ $empresaEmail }}
+            </div>
+            @if($temDadosBancarios)
+                <div class="footer-bank">
+                    @if(!empty($empresaBanco))<strong>Banco:</strong> {{ $empresaBanco }} @endif
+                    @if(!empty($empresaConta)) @if(!empty($empresaBanco)) | @endif <strong>Conta:</strong> {{ $empresaConta }} @endif
+                    @if(!empty($empresaIban)) @if(!empty($empresaBanco) || !empty($empresaConta)) | @endif <strong>IBAN:</strong> {{ $empresaIban }} @endif
+                </div>
+            @endif
+        </div>
     </div>
 
     <script>
-        window.onload = function() {
-            setTimeout(function() {
+        window.onload = function () {
+            setTimeout(function () {
                 window.print();
             }, 100);
         };
-        
-        window.onafterprint = function() {
+
+        window.onafterprint = function () {
             window.close();
         };
-        
-        setTimeout(function() {
+
+        setTimeout(function () {
             window.close();
         }, 60000);
     </script>
 </body>
-
 </html>

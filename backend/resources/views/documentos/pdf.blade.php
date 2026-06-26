@@ -147,6 +147,11 @@ $temTroco = $troco > 0;
     <meta charset="UTF-8" />
     <title>{{ $documento->numero_documento }}</title>
     <style>
+        @page {
+            size: A4 portrait;
+            margin: 12mm;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -155,31 +160,34 @@ $temTroco = $troco > 0;
 
         body {
             font-family: 'DejaVu Sans', sans-serif;
-            font-size: 16px;
+            font-size: 12px;
             color: #000000;
             background: #fff;
-            line-height: 1.6;
+            line-height: 1.4;
         }
 
         .page {
-            padding: 28px 32px;
+            max-width: 190mm;
+            margin: 0 auto;
+            padding: 0;
         }
 
 /* Dados Bancários */
 .bank-box {
-    background: #f0f5ff;
-    border: 1px solid #cccccc;
-    border-radius: 5px;
-    padding: 14px 16px;
+    background: #f8fbff;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 12px 14px;
     margin-bottom: 18px;
-    font-size: 14px;
+    font-size: 11px;
 }
 
 .bank-box .bank-title {
     font-weight: bold;
-    font-size: 15px;
-    color: #000000;
+    font-size: 11px;
+    color: #123859;
     margin-bottom: 8px;
+    text-transform: uppercase;
 }
 
 .bank-box .bank-row {
@@ -188,19 +196,20 @@ $temTroco = $troco > 0;
 
 .bank-box .bank-label {
     display: table-cell;
-    padding: 4px 8px 4px 0;
+    padding: 3px 8px 3px 0;
     font-weight: bold;
-    width: 120px;
+    width: 95px;
+    color: #374151;
 }
 
 .bank-box .bank-value {
     display: table-cell;
-    padding: 4px 0;
+    padding: 3px 0;
 }
 
 .bank-box .iban-value {
     font-family: 'DejaVu Sans Mono', monospace;
-    letter-spacing: 1px;
+    letter-spacing: 0.8px;
 }
         .clearfix::after {
             content: "";
@@ -580,6 +589,13 @@ $temTroco = $troco > 0;
             line-height: 1.2;
         }
 
+        .qr-note {
+            margin-top: 4px;
+            font-size: 9px;
+            color: #666666;
+            line-height: 1.25;
+        }
+
         .sig-line {
             border-top: 1px solid #999999;
             margin-bottom: 6px;
@@ -814,7 +830,7 @@ $temTroco = $troco > 0;
         </div>
 
         {{-- HASH FISCAL + QR CODE --}}
-        @if(!empty($documento->hash_fiscal) || !empty($qr_html))
+        @if(!empty($documento->hash_fiscal) || !empty($proof_qr_html) || !empty($proof_url) || !empty($qr_html))
         <div class="fiscal-block clearfix">
             @if(!empty($documento->hash_fiscal))
             <div class="fiscal-left">
@@ -824,36 +840,56 @@ $temTroco = $troco > 0;
                 </div>
             </div>
             @endif
-            @if(!empty($qr_html))
             <div class="fiscal-right">
-                <div class="qr-box">
-                    <div class="qr-label">Código QR — DP 71/25</div>
-                    <div class="qr-svg-wrap">{!! $qr_html !!}</div>
-                    @if(!empty($qr_code))
-                    <div class="qr-texto-pdf">{{ $qr_code }}</div>
-                    @endif
-                </div>
+                @if(!empty($proof_qr_html) || !empty($proof_url))
+                    <div class="qr-box proof-box">
+                        <div class="qr-label">Comprovativo Público</div>
+                        <div class="qr-svg-wrap">{!! $proof_qr_html !!}</div>
+                        <div class="qr-note">Leia este código para abrir o comprovativo público.</div>
+                    </div>
+                @elseif(!empty($qr_html))
+                    <div class="qr-box">
+                        <div class="qr-label">QR Code — DP 71/25</div>
+                        <div class="qr-svg-wrap">{!! $qr_html !!}</div>
+                    </div>
+                @endif
             </div>
-            @endif
         </div>
         @endif
 
-        {{-- RODAPÉ COM DADOS BANCÁRIOS --}}
+        {{-- DADOS BANCÁRIOS --}}
+        @if($temDadosBancarios)
+        <div class="bank-box">
+            <div class="bank-title">Dados Bancários para Pagamento</div>
+            <div style="display: table; width: 100%;">
+                @if(!empty($empresaBanco))
+                <div class="bank-row">
+                    <span class="bank-label">Banco:</span>
+                    <span class="bank-value">{{ $empresaBanco }}</span>
+                </div>
+                @endif
+                @if(!empty($empresaConta))
+                <div class="bank-row">
+                    <span class="bank-label">Nº Conta:</span>
+                    <span class="bank-value">{{ $empresaConta }}</span>
+                </div>
+                @endif
+                @if(!empty($empresaIban))
+                <div class="bank-row">
+                    <span class="bank-label">IBAN:</span>
+                    <span class="bank-value iban-value">{{ $empresaIban }}</span>
+                </div>
+                @endif
+            </div>
+        </div>
+        @endif
+
+        {{-- RODAPÉ --}}
 <div class="footer-thanks">Obrigado pela preferência!</div>
 <div class="footer clearfix">
     <div class="footer-left">
         <strong>{{ $empresaNome }}</strong> &nbsp;|&nbsp; NIF: {{ $empresaNif }}<br>
         {{ $empresaMorada }} &nbsp;|&nbsp; Tel: {{ $empresaTelefone }}
-        
-        @if($temDadosBancarios)
-        <br><br>
-        <div style="font-size: 13px; border-top: 1px dashed #ccc; padding-top: 8px; margin-top: 4px;">
-            <strong>Referncias Bancárias :</strong><br>
-            @if(!empty($empresaBanco))<strong>Banco:</strong> {{ $empresaBanco }}<br>@endif
-            @if(!empty($empresaConta))<strong>Nº Conta:</strong> {{ $empresaConta }}<br>@endif
-            @if(!empty($empresaIban))<strong>IBAN:</strong> {{ $empresaIban }}<br>@endif
-        </div>
-        @endif
     </div>
     <div class="footer-right">
         Documento gerado em {{ now()->format('d/m/Y') }} às {{ now()->format('H:i') }}<br>

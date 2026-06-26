@@ -146,7 +146,7 @@ export default function NovaFaturaProformaPage() {
                 // 1. Carregar clientes ativos
                 const clientesResponse = await clienteService.listar({
                     status: 'ativo',
-                    per_page: 999,
+                    per_page: 10,
                 });
                 console.log('✅ Clientes carregados:', clientesResponse);
                 

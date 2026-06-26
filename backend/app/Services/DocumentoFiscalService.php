@@ -1714,8 +1714,8 @@ class DocumentoFiscalService
             $valorRetencao     = 0.0;
             $taxaRetencaoUsada = 0.0;
 
-            $isProdutoServico = $produto?->tipo === 'servico';
-            $temRetencao      = $isProdutoServico && $aplicaIva;
+            $isServicoItem    = (($item['eh_servico'] ?? null) === true) || $produto?->tipo === 'servico';
+            $temRetencao      = $isServicoItem && $aplicaIva;
 
             if ($temRetencao) {
                 $taxaRetencaoUsada = (float) (
@@ -1961,11 +1961,7 @@ class DocumentoFiscalService
     private function executarAcoesPosCriacao(DocumentoFiscal $documento, array $dados, string $tipo): void
     {
         if ($this->configuracoesTipo[$tipo]['afeta_stock']) {
-            $this->movimentarStock($documento, 'saida');
-        }
-
-        if ($tipo === 'NC') {
-            $this->movimentarStock($documento, 'entrada');
+            $this->movimentarStock($documento);
         }
 
         if (in_array($tipo, ['FT', 'FR']) && ! empty($dados['venda_id'])) {
@@ -1979,6 +1975,14 @@ class DocumentoFiscalService
             ->where('tipo_documento', 'RC')
             ->where('estado', '!=', DocumentoFiscal::ESTADO_CANCELADO)
             ->sum('total_liquido');
+    }
+
+    /**
+     * Alias público para controllers e outros consumers.
+     */
+    public function calcularValorPago(DocumentoFiscal $documento): float
+    {
+        return $this->calcularTotalPago($documento);
     }
 
     private function actualizarEstadoAposPagamento(DocumentoFiscal $documentoOrigem, float $valorPago): void
@@ -2039,20 +2043,24 @@ class DocumentoFiscalService
         }
     }
 
-    private function movimentarStock(DocumentoFiscal $documento, string $tipoMovimento): void
+    private function movimentarStock(DocumentoFiscal $documento): void
     {
-        Log::info("Movimentação de stock: {$tipoMovimento}", [
+        Log::info('Movimentação de stock', [
             'documento' => $documento->numero_documento,
             'tipo'      => $documento->tipo_documento,
         ]);
 
-        // TODO: app(StockService::class)->processarDocumentoFiscal($documento);
+        app(StockService::class)->processarDocumentoFiscal($documento);
     }
 
     private function reverterStock(DocumentoFiscal $documento): void
     {
-        $tipoReversao = $documento->tipo_documento === 'NC' ? 'saida' : 'entrada';
-        $this->movimentarStock($documento, $tipoReversao);
+        Log::info("Reversão de stock", [
+            'documento' => $documento->numero_documento,
+            'tipo'      => $documento->tipo_documento,
+        ]);
+
+        app(StockService::class)->reverterDocumentoFiscal($documento);
     }
 
     private function atualizarVenda(string $vendaId, DocumentoFiscal $documento): void

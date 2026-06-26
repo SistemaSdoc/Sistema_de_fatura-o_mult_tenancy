@@ -1,14 +1,21 @@
 import React, { useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from "recharts";
-import { RelatorioMovimentosStock, LABELS_TIPO_MOVIMENTO, COR_TIPO_MOVIMENTO } from "@/services/relatorios";
+import { RelatorioMovimentosStock, LABELS_TIPO_MOVIMENTO, COR_TIPO_MOVIMENTO, TipoMovimento } from "@/services/relatorios";
 import { KpiCell, SecaoGrafico, TabelaDados, TipoBadge, MovimentoBadge, CarregandoLinha, Vazio, SemDados, tooltipStyle } from "./RelatorioComuns";
+import { ThemeColors } from "@/context/ThemeContext";
 
 interface RelatorioMovimentosStockProps {
-  colors: any;
+  colors: ThemeColors;
   isLoading: boolean;
   relatorioMovimentos: RelatorioMovimentosStock | null;
-  onCarregar: () => void;
+  onCarregar: (params?: {
+    data_inicio?: string;
+    data_fim?: string;
+    tipo?: "entrada" | "saida";
+    tipo_movimento?: TipoMovimento;
+    agrupar_por?: "dia" | "mes" | "produto" | "tipo_movimento" | null;
+  }) => void;
 }
 
 export function RelatorioMovimentosStockComponent({
@@ -19,16 +26,19 @@ export function RelatorioMovimentosStockComponent({
 }: RelatorioMovimentosStockProps) {
   const border = `1px solid ${colors.primary}`;
   const [filtroTipoMov, setFiltroTipoMov] = useState<"" | "entrada" | "saida">("");
-  const [filtroTipoMovimento, setFiltroTipoMovimento] = useState<string>("");
+  const [filtroTipoMovimento, setFiltroTipoMovimento] = useState<"" | TipoMovimento>("");
   const [filtroAgrupamento, setFiltroAgrupamento] = useState<"" | "dia" | "mes" | "produto" | "tipo_movimento">("");
 
   const dadosMovPorTipo = useMemo(() => {
     if (!relatorioMovimentos?.resumo?.por_tipo_movimento) return [];
-    return Object.entries(relatorioMovimentos.resumo.por_tipo_movimento).map(([tipo, d]: any) => ({
-      tipo: LABELS_TIPO_MOVIMENTO[tipo] ?? tipo,
-      registos: d?.total ?? 0,
-      quantidade: d?.quantidade_total ?? 0,
-    }));
+    return Object.entries(relatorioMovimentos.resumo.por_tipo_movimento).map(([tipo, d]) => {
+      const dado = d as { total?: number; quantidade_total?: number };
+      return {
+        tipo: LABELS_TIPO_MOVIMENTO[tipo] ?? tipo,
+        registos: dado?.total ?? 0,
+        quantidade: dado?.quantidade_total ?? 0,
+      };
+    });
   }, [relatorioMovimentos]);
 
   const dadosMovAgrupado = useMemo(() => {
@@ -36,9 +46,11 @@ export function RelatorioMovimentosStockComponent({
   }, [relatorioMovimentos]);
 
   const handleAplicarFiltros = () => {
-    // Os filtros seriam aplicados via props ou contexto
-    // Por enquanto apenas chama o onCarregar
-    onCarregar();
+    onCarregar({
+      tipo: filtroTipoMov || undefined,
+      tipo_movimento: filtroTipoMovimento || undefined,
+      agrupar_por: filtroAgrupamento || null,
+    });
   };
 
   if (isLoading) return <CarregandoLinha colors={colors} />;
@@ -56,7 +68,7 @@ export function RelatorioMovimentosStockComponent({
           </label>
           <select
             value={filtroTipoMov}
-            onChange={e => setFiltroTipoMov(e.target.value as any)}
+            onChange={(e) => setFiltroTipoMov(e.target.value as "" | "entrada" | "saida")}
             className="px-2.5 py-1.5 text-xs border outline-none"
             style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text, borderRadius: 3, minWidth: 120 }}
           >
@@ -72,7 +84,7 @@ export function RelatorioMovimentosStockComponent({
           </label>
           <select
             value={filtroTipoMovimento}
-            onChange={e => setFiltroTipoMovimento(e.target.value)}
+            onChange={(e) => setFiltroTipoMovimento(e.target.value as "" | TipoMovimento)}
             className="px-2.5 py-1.5 text-xs border outline-none"
             style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text, borderRadius: 3, minWidth: 160 }}
           >
@@ -89,7 +101,7 @@ export function RelatorioMovimentosStockComponent({
           </label>
           <select
             value={filtroAgrupamento}
-            onChange={e => setFiltroAgrupamento(e.target.value as any)}
+            onChange={(e) => setFiltroAgrupamento(e.target.value as "" | "dia" | "mes" | "produto" | "tipo_movimento")}
             className="px-2.5 py-1.5 text-xs border outline-none"
             style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text, borderRadius: 3, minWidth: 140 }}
           >
@@ -177,7 +189,7 @@ export function RelatorioMovimentosStockComponent({
         {(relatorioMovimentos.movimentos?.length ?? 0) > 0 ? (
           <TabelaDados
             headers={["Produto", "Tipo", "Movimento", "Qtd", "Ant.", "Novo", "Utilizador", "Data"]}
-            rows={(relatorioMovimentos.movimentos ?? []).slice(0, 50).map((m: any) => [
+            rows={(relatorioMovimentos.movimentos ?? []).slice(0, 50).map((m) => [
               <span key="p" className="font-medium">{m.produto_nome}</span>,
               <TipoBadge key="t" tipo={m.tipo} />,
               <MovimentoBadge 

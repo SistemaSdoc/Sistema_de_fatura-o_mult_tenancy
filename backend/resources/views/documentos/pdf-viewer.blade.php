@@ -126,6 +126,11 @@ $temTroco = $troco > 0;
             line-height: 1.35;
         }
 
+        .receipt {
+            margin: 0 auto;
+            display: block;
+        }
+
         /* Dados Bancários */
 .bank-box {
     background: #f0f5ff;
@@ -168,10 +173,12 @@ $temTroco = $troco > 0;
         .receipt {
             background: white;
             width: 70mm;
+            max-width: 70mm;
             min-height: 70vh;
+            margin: 0 auto;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
             color: #000;
-        }        
+        }
         .header {
             text-align: center;
             margin-bottom: 7px;
@@ -354,12 +361,26 @@ $temTroco = $troco > 0;
         }
 
         /* QR Section */
-        .qr-section {
-            text-align: center;
+        .qr-section-wrap {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
             margin: 10px 0;
             padding: 8px 0;
             border-top: 2px dashed #000;
             border-bottom: 2px dashed #000;
+        }
+
+        .qr-section {
+            text-align: center;
+            padding: 8px 0;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #fafafa;
+        }
+
+        .proof-section {
+            background: #fff8d9;
         }
 
         .qr-title {
@@ -382,6 +403,13 @@ $temTroco = $troco > 0;
             word-break: break-all;
             font-family: monospace;
             text-align: left;
+        }
+
+        .proof-link {
+            margin-top: 5px;
+            font-size: 8.5px;
+            word-break: break-word;
+            color: #111;
         }
 
         .hash-label {
@@ -517,7 +545,7 @@ $temTroco = $troco > 0;
             .receipt {
                 box-shadow: none;
                 width: 100%;
-                max-width: 70mm;
+                max-width: 80mm;
                 padding: 0;
                 margin: 0 auto;
             }
@@ -530,7 +558,7 @@ $temTroco = $troco > 0;
 
         @page {
             margin: 0;
-            size: 70mm auto;
+            size: 80mm auto;
         }
     </style>
 </head>
@@ -695,24 +723,28 @@ $temTroco = $troco > 0;
         </div>
 
         <!-- QR Code e Hash Fiscal -->
-        @if(!empty($qr_code_img))
-        <div class="qr-section">
-            <div class="qr-title">QR Code AGT (DP 71/25)</div>
-            <img src="data:image/png;base64,{{ $qr_code_img }}"
-                alt="QR Code"
-                class="qr-image">
-
-            @if(!empty($documento->hash_fiscal))
-            <div class="hash-section">
-                <div class="hash-label">Hash Fiscal:</div>
-                {{ $documento->hash_fiscal }}
+        @if(!empty($proof_qr_html) || !empty($proof_url) || !empty($qr_code_img) || !empty($qr_html) || !empty($documento->hash_fiscal))
+        <div class="qr-section-wrap">
+            @if(!empty($proof_qr_html) || !empty($proof_url))
+            <div class="qr-section proof-section">
+                <div class="qr-title">Comprovativo Público</div>
+                {!! $proof_qr_html !!}
+                <div class="proof-link" style="margin-top: 8px; font-size: 11px; color: #374151;">
+                    Leia este código para abrir o comprovativo público.
+                </div>
+            </div>
+            @elseif(!empty($qr_code_img) || !empty($qr_html))
+            <div class="qr-section proof-section">
+                <div class="qr-title">QR Code AGT (DP 71/25)</div>
+                @if(!empty($qr_code_img))
+                    <img src="{{ $qr_code_img }}" alt="QR Code" class="qr-image">
+                @else
+                    {!! $qr_html !!}
+                @endif
+                <div class="proof-link" style="margin-top: 8px; font-size: 11px; color: #374151;">
+                    Leia este código para abrir o comprovativo público.</div>
             </div>
             @endif
-        </div>
-        @elseif(!empty($qr_html))
-        <div class="qr-section">
-            <div class="qr-title">QR Code AGT (DP 71/25)</div>
-            {!! $qr_html !!}
 
             @if(!empty($documento->hash_fiscal))
             <div class="hash-section">

@@ -9,7 +9,7 @@ import {
   relatoriosService,
   RelatorioVendas, RelatorioFaturacao,
   RelatorioPagamentosPendentes, RelatorioDocumentosFiscais,
-  RelatorioProformas, RelatorioMovimentosStock,
+  RelatorioProformas, RelatorioMovimentosStock, TipoMovimento,
   getPeriodoPredefinido,
 } from "@/services/relatorios";
 import { useThemeColors } from "@/context/ThemeContext";
@@ -37,6 +37,12 @@ interface PeriodoConfig {
   data_inicio: string;
   data_fim: string;
 }
+
+const getErroStatus = (error: unknown): number | undefined => {
+  if (typeof error !== "object" || error === null) return undefined;
+  const response = (error as { response?: { status?: number } }).response;
+  return response?.status;
+};
 
 /* ═══════════════════════════════════════════════════════════
    PÁGINA PRINCIPAL
@@ -103,8 +109,8 @@ export default function RelatoriosPage() {
       ]);
       setRelatorioVendas(vendas);
       setRelatorioFaturacao(faturacao);
-    } catch (error: any) {
-      if (error.response?.status !== 403) {
+    } catch (error: unknown) {
+      if (getErroStatus(error) !== 403) {
         toast.error("Erro ao carregar vendas e facturação");
       }
     } finally {
@@ -118,8 +124,8 @@ export default function RelatoriosPage() {
     try {
       const data = await relatoriosService.getRelatorioPagamentosPendentes();
       setRelatorioPagamentos(data);
-    } catch (error: any) {
-      if (error.response?.status !== 403) {
+    } catch (error: unknown) {
+      if (getErroStatus(error) !== 403) {
         toast.error("Erro ao carregar pagamentos pendentes");
       }
     } finally {
@@ -143,8 +149,8 @@ export default function RelatoriosPage() {
       ]);
       setRelatorioDocumentos(documentos);
       setRelatorioProformas(proformas);
-    } catch (error: any) {
-      if (error.response?.status !== 403) {
+    } catch (error: unknown) {
+      if (getErroStatus(error) !== 403) {
         toast.error("Erro ao carregar documentos");
       }
     } finally {
@@ -152,17 +158,34 @@ export default function RelatoriosPage() {
     }
   }, [periodoDocumentos, podeVerDocumentos]);
 
-  const carregarMovimentos = useCallback(async () => {
+  const carregarMovimentos = useCallback(async (params?: {
+    tipo?: "entrada" | "saida";
+    tipo_movimento?: TipoMovimento;
+    agrupar_por?: "dia" | "mes" | "produto" | "tipo_movimento" | null;
+  }) => {
     if (!podeVerMovimentosStock) return;
     setLoading(p => ({ ...p, movimentos_stock: true }));
     try {
+      const temFiltrosExplícitos = params !== undefined;
+      const queryParams = temFiltrosExplícitos
+        ? {
+            data_inicio: periodoMovimentos.data_inicio,
+            data_fim: periodoMovimentos.data_fim,
+            ...(params?.tipo ? { tipo: params.tipo } : {}),
+            ...(params?.tipo_movimento ? { tipo_movimento: params.tipo_movimento } : {}),
+            ...(params?.agrupar_por ? { agrupar_por: params.agrupar_por } : {}),
+          }
+        : {
+            data_inicio: periodoMovimentos.data_inicio,
+            data_fim: periodoMovimentos.data_fim,
+            agrupar_por: "dia" as const,
+          };
       const data = await relatoriosService.getRelatorioMovimentosStock({
-        data_inicio: periodoMovimentos.data_inicio,
-        data_fim: periodoMovimentos.data_fim,
+        ...queryParams,
       });
       setRelatorioMovimentos(data);
-    } catch (error: any) {
-      if (error.response?.status !== 403) {
+    } catch (error: unknown) {
+      if (getErroStatus(error) !== 403) {
         toast.error("Erro ao carregar movimentos de stock");
       }
     } finally {

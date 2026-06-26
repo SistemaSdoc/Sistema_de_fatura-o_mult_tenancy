@@ -169,7 +169,7 @@ export default function NovaFaturaNormalPage() {
         // 1. Carregar clientes
         const clientesResponse = await clienteService.listar({
           status: 'ativo',
-          per_page: 999,
+          per_page: 12,
         });
         console.log('✅ Clientes carregados:', clientesResponse);
         
@@ -233,7 +233,7 @@ export default function NovaFaturaNormalPage() {
     const ehServico = isServico(p);
     const qtd = Math.min(
       formItem.quantidade,
-      ehServico ? 9999 : p.estoque_atual,
+      ehServico ? 12 : p.estoque_atual,
     );
     const base = arredondar(
       arredondar(p.preco_venda * qtd) - formItem.desconto,
@@ -1005,7 +1005,7 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
                         );
                         if (p) {
                           const maxQtd =
-                            p.tipo === "servico" ? 9999 : p.estoque_atual;
+                            p.tipo === "servico" ? 12 : p.estoque_atual;
                           setFormItem((prev) => ({
                             ...prev,
                             quantidade: Math.max(

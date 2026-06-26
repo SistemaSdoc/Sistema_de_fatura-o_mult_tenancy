@@ -73,24 +73,24 @@ export default function ClientesPage() {
         // Buscar todos (ativos + inativos)
         const ativos = await clienteService.listar({ 
           status: 'ativo', 
-          per_page: 999 
+          per_page: 12 
         });
         const inativos = await clienteService.listar({ 
           status: 'inativo', 
-          per_page: 999 
+          per_page: 12 
         });
         // Combinar os resultados
         data = [...(ativos.data || []), ...(inativos.data || [])];
       } else if (filtroStatus === "ativos") {
         const response = await clienteService.listar({ 
           status: 'ativo', 
-          per_page: 999 
+          per_page: 12 
         });
         data = response.data || [];
       } else {
         const response = await clienteService.listar({ 
           status: 'inativo', 
-          per_page: 999 
+          per_page: 12    
         });
         data = response.data || [];
       }

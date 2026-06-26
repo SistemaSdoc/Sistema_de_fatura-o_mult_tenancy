@@ -138,7 +138,7 @@ export interface RelatorioVendas {
         data_inicio: string;
         data_fim: string;
     };
-    filtros: Record<string, any>;
+    filtros: Record<string, unknown>;
     totais: VendasTotais;
     vendas: VendaRelatorioItem[];
     agrupado: VendasAgrupado[];
@@ -220,6 +220,7 @@ export interface RelatorioFaturacao {
     faturacao_pendente: number;
     faturacao_por_mes: FaturacaoPorMes[];
     por_tipo: FaturacaoPorTipo;
+    por_tipo_correcao?: FaturacaoPorTipo;
     por_estado: Record<string, number>;
     retencoes?: FaturacaoRetencoes;
     periodo: {
@@ -346,7 +347,7 @@ export interface RelatorioMovimentosStock {
         data_inicio: string;
         data_fim: string;
     };
-    filtros: Record<string, any>;
+    filtros: Record<string, unknown>;
     resumo: ResumoMovimentosStock;
     agrupado: MovimentosAgrupado[];
     movimentos: MovimentoStockItem[];
@@ -467,7 +468,7 @@ export interface DocumentoFiscalItem {
     total_liquido: number;
     total_retencao?: number;
     estado: string;
-    resumo?: any;
+    resumo?: Record<string, unknown>;
 }
 
 export interface RelatorioDocumentosFiscais {
@@ -475,7 +476,7 @@ export interface RelatorioDocumentosFiscais {
         data_inicio: string;
         data_fim: string;
     };
-    filtros: Record<string, any>;
+    filtros: Record<string, unknown>;
     estatisticas: DocumentoFiscalEstatisticas;
     documentos: DocumentoFiscalItem[];
 }

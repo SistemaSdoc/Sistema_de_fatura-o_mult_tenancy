@@ -74,6 +74,9 @@ const fmtData = (d?: string | null) =>
 const fmtHora = (h?: string | null) =>
     h ? String(h).substring(0, 5) : "—";
 
+const ehServicoItem = (item: ItemDocumento): boolean =>
+    item.eh_servico === true || item.produto?.tipo === "servico";
+
 /* ── Badge ───────────────────────────────────────────── */
 function Badge({ estado, colors }: { estado: string; colors: typeof LIGHT_COLORS }) {
     const map: Record<string, { bg: string; text: string; border: string }> = {
@@ -270,7 +273,7 @@ function ItensTable({
                                         Ref: {item.codigo_produto}
                                     </div>
                                 )}
-                                {item.produto?.tipo === 'servico' && (
+                                {ehServicoItem(item) && (
                                     <span
                                         className="text-xs"
                                         style={{ color: colors.secondary }}
@@ -278,7 +281,7 @@ function ItensTable({
                                         Serviço
                                     </span>
                                 )}
-                                {isND && item.produto?.tipo === 'produto' && (
+                                {isND && item.produto_id && !ehServicoItem(item) && (
                                     <span
                                         className="text-xs"
                                         style={{ color: colors.danger }}
@@ -532,6 +535,7 @@ function ModalNotaCredito({
                 preco_unitario: Number(item.preco_unitario),
                 taxa_iva: Number(item.taxa_iva),
                 taxa_retencao: item.taxa_retencao,
+                eh_servico: ehServicoItem(item),
             }));
 
         if (itens.length === 0) {
@@ -564,10 +568,6 @@ function ModalNotaCredito({
             setLoading(false);
         }
     };
-
-    const saldoRestante = saldoDisponivel !== null
-        ? saldoDisponivel - totalSelecionado
-        : null;
 
     return (
         <div
@@ -745,7 +745,7 @@ function ModalNotaCredito({
                                                 >
                                                     {fmtKz(item.preco_unitario)} ·
                                                     IVA {item.taxa_iva}%
-                                                    {item.produto?.tipo === 'servico' && (
+                                                    {ehServicoItem(item) && (
                                                         <span className="ml-1" style={{ color: colors.secondary }}>
                                                             · Serviço
                                                         </span>
@@ -1003,7 +1003,7 @@ function ModalNotaDebito({
         const itensSelecionados = itensComChave
             .filter((item) => (quantidades[item._key] ?? 0) > 0)
             .map((item) => {
-                const ehServico = item.eh_servico === true || item.produto?.tipo === 'servico';
+                const ehServico = ehServicoItem(item);
                 return {
                     produto_id: item.produto_id ?? undefined,
                     descricao: item.descricao,
@@ -1016,8 +1016,7 @@ function ModalNotaDebito({
             });
 
         const itensInvalidos = itensSelecionados.filter((item) => {
-            const isServico = item.eh_servico === true;
-            return item.produto_id && !isServico;
+            return item.produto_id && !ehServicoItem(item);
         });
 
         if (itensInvalidos.length > 0) {
@@ -1223,7 +1222,7 @@ function ModalNotaDebito({
                                 </p>
                             ) : (
                                 itensComChave.map((item) => {
-                                    const isServico = item.produto?.tipo === 'servico';
+                                    const isServico = ehServicoItem(item);
                                     const isProduto = item.produto_id && !isServico;
                                     const maxQtd = Number(item.quantidade ?? 0);
 
@@ -1282,13 +1281,13 @@ function ModalNotaDebito({
                                                 <input
                                                     type="number"
                                                     min={0}
-                                                    max={isProduto ? 0 : 9999}
+                                                    max={isProduto ? 0 : maxQtd}
                                                     value={quantidades[item._key] ?? 0}
                                                     onChange={(e) =>
                                                         setQtd((q) => ({
                                                             ...q,
                                                             [item._key]: Math.min(
-                                                                isProduto ? 0 : 9999,
+                                                                isProduto ? 0 : maxQtd,
                                                                 Math.max(0, Number(e.target.value))
                                                             ),
                                                         }))
@@ -1305,7 +1304,7 @@ function ModalNotaDebito({
                                                         setQtd((q) => ({
                                                             ...q,
                                                             [item._key]: Math.min(
-                                                                isProduto ? 0 : 9999,
+                                                                isProduto ? 0 : maxQtd,
                                                                 (q[item._key] ?? 0) + 1
                                                             ),
                                                         }))
@@ -1332,7 +1331,7 @@ function ModalNotaDebito({
                                 })
                             )}
                         </div>
-                        {itensComChave.some(item => item.produto_id && item.produto?.tipo !== 'servico') && (
+                        {itensComChave.some(item => item.produto_id && !ehServicoItem(item)) && (
                             <p className="text-xs mt-1" style={{ color: colors.danger }}>
                                 ⚠️ Itens marcados como Produto não podem ser selecionados para ND.
                             </p>
@@ -1593,9 +1592,7 @@ export default function VisualizarNotaPage() {
     const handleNotaGerada = (notaGerada: DocumentoFiscal) => {
         setModalTipo(null);
         if (notaGerada?.id) {
-            router.push(
-                `/dashboard/Faturas/Faturas/${notaGerada.id}/Ver_NC_ND`
-            );
+            router.push("/dashboard/Faturas/DC");
         } else {
             toast.error("Erro ao redirecionar para a nota gerada.");
             router.push("/dashboard/Faturas/Faturas");

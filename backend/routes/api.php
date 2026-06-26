@@ -50,6 +50,13 @@ Route::withoutMiddleware(['resolve.tenant', 'auth.tenant'])->group(function () {
     Route::post('/empresas', [EmpresaController::class, 'store'])->name('empresas.store');
 });
 
+// ==================== ROTAS TENANT SEM AUTENTICAÇÃO ====================
+Route::middleware(['resolve.tenant'])->group(function () use ($uuidPattern) {
+    Route::get('/documentos-fiscais/{id}/prova', [DocumentoFiscalController::class, 'publicProof'])
+        ->where('id', $uuidPattern)
+        ->name('documentos.public-proof');
+});
+
 // ==================== ROTAS PROTEGIDAS (Tenant) ====================
 Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uuidPattern) {
 
