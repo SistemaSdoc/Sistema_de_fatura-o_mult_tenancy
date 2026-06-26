@@ -180,14 +180,22 @@ export const categoriaService = {
     },
 
     /**
-     * Atualizar categoria - VERSÃO SIMPLES SEM A VISO
+     * Atualizar categoria - COM FILTRO DE CAMPOS UNDEFINED
+     * 
+     * 🔧 MELHORIA: Filtra campos undefined para não sobrecarregar a requisição
+     * e permite que campos com null ou vazio sejam enviados para remoção
      */
     async atualizarCategoria(
         id: string, 
         dados: AtualizarCategoriaInput
     ): Promise<AtualizarCategoriaResponse> {
+        // Remove apenas `undefined`, mantendo `null`, `false` e strings vazias.
+        const dadosLimpos = Object.fromEntries(
+            Object.entries(dados).filter(([, value]) => value !== undefined),
+        ) as AtualizarCategoriaInput;
+
         const url = `${API_PREFIX}/categorias/${id}`;
-        const response = await api.put<AtualizarCategoriaResponse>(url, dados);
+        const response = await api.put<AtualizarCategoriaResponse>(url, dadosLimpos);
         return response.data;
     },
 

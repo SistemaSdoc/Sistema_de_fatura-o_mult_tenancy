@@ -220,47 +220,66 @@ class CategoriaController extends Controller
     /**
      * PUT /api/categorias/{categoria}
      */
-    public function update(Request $request, $id)
-    {
-        try {
-            $user = Auth::guard('tenant')->user();
-            if (!$user || !in_array($user->role, ['admin', 'operador', 'gestor', 'contabilista'])) {
-                return response()->json(['error' => 'Não autorizado'], 403);
-            }
-
-            $categoria = Categoria::find($id);
-
-            if (!$categoria) {
-                return response()->json(['error' => 'Categoria não encontrada'], 404);
-            }
-
-            $dados = $request->validate([
-                'nome'           => 'sometimes|string|max:255',
-                'descricao'      => 'nullable|string',
-                'taxa_iva'       => 'nullable|numeric|in:0,5,14',
-                'sujeito_iva'    => 'nullable|boolean',
-                'status'         => 'nullable|in:ativo,inativo',
-                'tipo'           => 'nullable|in:produto,servico',
-            ]);
-
-            if (!empty($dados)) {
-                $categoria->update($dados);
-            }
-
-            // Recarregar a categoria para garantir dados atualizados
-            $categoria->refresh();
-            $categoria->loadCount('produtos');
-
-                Log::info('Categoria ja esta' ,$dados);
-            return response()->json([
-                'message'   => 'Categoria actualizada com sucesso',
-                'categoria' => $categoria,
-            ]);
-        } catch (\Exception $e) {
-            Log::error('[CategoriaController] UPDATE ERROR', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
-            return response()->json(['error' => $e->getMessage()], 500);
+public function update(Request $request, $id)
+{
+    try {
+        $user = Auth::guard('tenant')->user();
+        if (!$user || !in_array($user->role, ['admin', 'operador', 'gestor', 'contabilista'])) {
+            return response()->json(['error' => 'Não autorizado'], 403);
         }
+
+        $categoria = Categoria::find($id);
+
+        if (!$categoria) {
+            return response()->json(['error' => 'Categoria não encontrada'], 404);
+        }
+
+        // 🔥 LOG PARA DEBUG
+        Log::info('[UPDATE] Dados recebidos:', [
+            'todos_dados' => $request->all(),
+            'descricao' => $request->input('descricao'),
+            'raw' => $request->getContent()
+        ]);
+
+        $dados = $request->validate([
+            'nome'           => 'sometimes|string|max:255',
+            'descricao'      => 'nullable|string', // ← PERMITE NULL
+            'taxa_iva'       => 'nullable|numeric|in:0,5,14',
+            'sujeito_iva'    => 'nullable|boolean',
+            'status'         => 'nullable|in:ativo,inativo',
+            'tipo'           => 'nullable|in:produto,servico',
+        ]);
+
+        // 🔥 LOG DOS DADOS VALIDADOS
+        Log::info('[UPDATE] Dados validados:', $dados);
+
+        // 🔥 Forçar update mesmo com campos vazios
+        if (!empty($dados) || array_key_exists('descricao', $dados)) {
+            $categoria->update($dados);
+        }
+
+        // Recarregar a categoria
+        $categoria->refresh();
+        $categoria->loadCount('produtos');
+
+        Log::info('[UPDATE] Categoria atualizada:', [
+            'id' => $categoria->id,
+            'nome' => $categoria->nome,
+            'descricao' => $categoria->descricao
+        ]);
+
+        return response()->json([
+            'message'   => 'Categoria actualizada com sucesso',
+            'categoria' => $categoria,
+        ]);
+    } catch (\Exception $e) {
+        Log::error('[CategoriaController] UPDATE ERROR', [
+            'error' => $e->getMessage(), 
+            'trace' => $e->getTraceAsString()
+        ]);
+        return response()->json(['error' => $e->getMessage()], 500);
     }
+}
 
     /**
      * DELETE /api/categorias/{categoria} (Soft Delete)

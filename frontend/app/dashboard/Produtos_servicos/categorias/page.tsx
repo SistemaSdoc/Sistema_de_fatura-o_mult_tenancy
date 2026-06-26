@@ -21,14 +21,14 @@ import MainEmpresa from "../../../components/MainEmpresa";
 import {
   categoriaService,
   Categoria,
+  CriarCategoriaInput,
   getStatusLabel,
   getTaxaIVALabel,
-  getTaxaIVAColor,
   getCodigoIsencaoLabel,
   CodigoIsencao,
   TaxaIVA,
 } from "@/services/categorias";
-import { useThemeColors } from "@/context/ThemeContext";
+import { ThemeColors, useThemeColors } from "@/context/ThemeContext";
 import {
   Dialog,
   DialogContent,
@@ -88,7 +88,7 @@ const getApiError = (error: unknown): ApiError =>
   typeof error === "object" && error !== null ? (error as ApiError) : {};
 
 /* ─── Loading States ─────────────────────────────────────────────── */
-function LoadingStats({ colors }: { colors: any }) {
+function LoadingStats({ colors }: { colors: ThemeColors }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       {[...Array(4)].map((_, i) => (
@@ -119,7 +119,7 @@ function LoadingStats({ colors }: { colors: any }) {
   );
 }
 
-function LoadingTabela({ colors }: { colors: any }) {
+function LoadingTabela({ colors }: { colors: ThemeColors }) {
   return (
     <div
       className="border overflow-hidden"
@@ -182,8 +182,8 @@ export default function CategoriasPage() {
   const [categoriasFiltradas, setCategoriasFiltradas] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
-  const [filtroStatus, setFiltroStatus] = useState<"todos" | "ativo" | "inativo">("todos");
-  const [filtroIVA, setFiltroIVA] = useState<string>("todos");
+  const [filtroStatus] = useState<"todos" | "ativo" | "inativo">("todos");
+  const [filtroIVA] = useState<string>("todos");
   const [abaAtiva, setAbaAtiva] = useState<"ativos" | "lixeira">("ativos");
 
   // Estados dos modais (mantidos originais)
@@ -302,6 +302,27 @@ export default function CategoriasPage() {
     return Object.keys(novosErrors).length === 0;
   };
 
+  const getTaxaIVABadgeStyle = (taxa: TaxaIVA, sujeitoIVA: boolean) => {
+    if (!sujeitoIVA || taxa === 0) {
+      return {
+        backgroundColor: `${colors.textSecondary}18`,
+        color: colors.textSecondary,
+      };
+    }
+
+    if (taxa === 5) {
+      return {
+        backgroundColor: `${colors.warning}18`,
+        color: colors.warning,
+      };
+    }
+
+    return {
+      backgroundColor: `${colors.primary}18`,
+      color: colors.primary,
+    };
+  };
+
   const handleNovo = () => {
     setCategoriaSelecionada(null);
     setFormData(INITIAL_FORM);
@@ -331,37 +352,42 @@ export default function CategoriasPage() {
     setIsSubmitting(true);
 
     try {
-      const dadosParaEnviar = {
-        nome: formData.nome,
-        descricao: formData.descricao || undefined,
-        status: formData.status,
-        taxa_iva: formData.taxa_iva,
-        sujeito_iva: formData.sujeito_iva,
-      };
+        const dadosParaEnviar: CriarCategoriaInput = {
+            nome: formData.nome,
+            status: formData.status,
+            taxa_iva: formData.taxa_iva,
+            sujeito_iva: formData.sujeito_iva,
+            descricao: formData.descricao,
+        };
 
-      if (categoriaSelecionada) {
-        await categoriaService.atualizarCategoria(
-          categoriaSelecionada.id,
-          dadosParaEnviar,
-        );
-        toast.success("Categoria atualizada com sucesso!");
-      } else {
-        await categoriaService.criarCategoria(dadosParaEnviar);
-        toast.success("Categoria criada com sucesso!");
-      }
+        if (!formData.sujeito_iva && formData.codigo_isencao) {
+          dadosParaEnviar.codigo_isencao = formData.codigo_isencao;
+        }
 
-      setIsModalOpen(false);
-      await carregarCategorias();
-      await carregarCategoriasDeletadas();
+        if (categoriaSelecionada) {
+            await categoriaService.atualizarCategoria(
+                categoriaSelecionada.id,
+                dadosParaEnviar,
+            );
+            toast.success("Categoria atualizada com sucesso!");
+        } else {
+            await categoriaService.criarCategoria(dadosParaEnviar);
+            toast.success("Categoria criada com sucesso!");
+        }
+
+        setIsModalOpen(false);
+        await carregarCategorias();
+        await carregarCategoriasDeletadas();
     } catch (error: unknown) {
-      const apiError = getApiError(error);
-      const message =
-        apiError.response?.data?.message || "Erro ao salvar categoria";
-      toast.error("Erro ao salvar", { description: message });
+        console.error('❌ Erro ao salvar:', error);
+        const apiError = getApiError(error);
+        const message =
+            apiError.response?.data?.message || "Erro ao salvar categoria";
+        toast.error("Erro ao salvar", { description: message });
     } finally {
-      setIsSubmitting(false);
+        setIsSubmitting(false);
     }
-  };
+};
 
   const handleConfirmarDelete = (categoria: Categoria) => {
     setCategoriaSelecionada(categoria);
@@ -717,8 +743,7 @@ export default function CategoriasPage() {
                         <span
                           className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium"
                           style={{
-                            backgroundColor: `${getTaxaIVAColor(c.taxa_iva).replace("text-", "").replace("700", "100")}20`,
-                            color: colors.text,
+                            ...getTaxaIVABadgeStyle(c.taxa_iva as TaxaIVA, c.sujeito_iva),
                           }}
                           title={
                             c.codigo_isencao
