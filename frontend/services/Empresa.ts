@@ -15,6 +15,7 @@ export interface Empresa {
   regime_fiscal: "simplificado" | "geral";
   modo: "colectivo" | "singular"; 
   sujeito_iva: boolean;
+  iva_padrao?: number;
   status: "ativo" | "suspenso";
   data_registro: string;
   created_at?: string;
@@ -32,6 +33,7 @@ export interface UpdateEmpresaData {
   iban?: string | null;
   regime_fiscal?: "simplificado" | "geral";
   sujeito_iva?: boolean;
+  iva_padrao?: number;
 }
 
 // ----------------- FUNÇÕES -----------------
@@ -103,16 +105,13 @@ export const uploadLogo = async (
  */
 export interface ConfiguracoesFiscais {
   serie_padrao_fatura: string;
-  iva_padrao: number;
   regime_fiscal: "simplificado" | "geral";
   sujeito_iva: boolean;
 }
 
-export const fetchConfiguracoesFiscais = async (
-  empresaId: string
-): Promise<ConfiguracoesFiscais> => {
+export const fetchConfiguracoesFiscais = async (): Promise<ConfiguracoesFiscais> => {
   const response = await api.get<{ success: boolean; configuracoes: ConfiguracoesFiscais }>(
-    `/empresas/${empresaId}/configuracoes-fiscais`
+    "/api/empresa/configuracoes-fiscais"
   );
   if (!response.data.success) throw new Error("Falha ao buscar configurações fiscais");
   return response.data.configuracoes;
@@ -122,11 +121,10 @@ export const fetchConfiguracoesFiscais = async (
  * Atualizar configurações fiscais da empresa
  */
 export const updateConfiguracoesFiscais = async (
-  empresaId: string,
   data: Partial<ConfiguracoesFiscais>
 ): Promise<ConfiguracoesFiscais> => {
   const response = await api.put<{ success: boolean; configuracoes: ConfiguracoesFiscais }>(
-    `/empresas/${empresaId}/configuracoes-fiscais`,
+    "/api/empresa/configuracoes-fiscais",
     data
   );
   if (!response.data.success) throw new Error("Falha ao atualizar configurações fiscais");

@@ -74,6 +74,11 @@ class SaftService
         return $this->empresa;
     }
 
+    protected function taxaIvaVigente(): float
+    {
+        return $this->getEmpresa()?->taxaIvaVigente() ?? 14.0;
+    }
+
     protected function getUser(): ?object
     {
         return $this->tenantUser;
@@ -445,7 +450,7 @@ class SaftService
             $categoria = $this->isColectivo() 
                 ? SharedCategoria::doTenant()->find($produto->categoria_id)
                 : TenantCategoria::find($produto->categoria_id);
-            $taxa = $categoria ? (float) $categoria->taxa_iva : 14;
+            $taxa = $categoria ? (float) $categoria->taxa_iva : $this->taxaIvaVigente();
         }
         
         if ($taxa == 0) return 'ISE';
@@ -586,7 +591,7 @@ class SaftService
                     $produto = $item->produto;
                     if (!$produto) continue;
 
-                    $taxaIva = $item->taxa_iva ?? $produto->taxa_iva ?? 14;
+                    $taxaIva = $item->taxa_iva ?? $produto->taxa_iva ?? $this->taxaIvaVigente();
                     $taxCode = $this->getTaxCodeForProduct($produto);
                     $isIsento = ($taxaIva == 0);
                     $isNotaCredito = in_array($doc->tipo_documento, ['NC', 'ND']);
@@ -782,7 +787,7 @@ class SaftService
             $productCode = $produto ? ($produto->codigo ?? $produto->id) : $mov->produto_id;
 
             $unitPrice = $mov->custo_medio ?? $produto->preco_venda ?? $produto->preco_compra ?? 0;
-            $taxaIva = $produto->taxa_iva ?? 14;
+            $taxaIva = $produto->taxa_iva ?? $this->taxaIvaVigente();
 
             $quantidade = abs($mov->quantidade);
             $taxBase = $unitPrice * $quantidade;

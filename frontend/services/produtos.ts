@@ -10,8 +10,7 @@ export type UnidadeMedida = "hora" | "dia" | "semana" | "mes";
 export type TipoPreco = "fixo" | "margem" | "markup";
 export type CodigoIsencao = "M00" | "M01" | "M02" | "M03" | "M04" | "M05" | "M06" | "M99";
 
-//  NOVO: Taxas de IVA válidas em Angola
-export type TaxaIVA = 0 | 5 | 14;
+export type TaxaIVA = number;
 
 // ===== INTERFACES =====
 

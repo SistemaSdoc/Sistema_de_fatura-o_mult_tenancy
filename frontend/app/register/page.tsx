@@ -106,7 +106,7 @@ const InputField: React.FC<InputFieldProps> = ({
             <Icon
                 size={18}
                 className="absolute left-3 top-1/2 -translate-y-1/2"
-                style={{ color: isFocused ? colors.primary : colors.textSecondary }}
+                style={{ color: isFocused ? colors.secondary : colors.textSecondary }}
             />
             {prefix && (
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: colors.textSecondary }}>
@@ -125,7 +125,7 @@ const InputField: React.FC<InputFieldProps> = ({
                     className="w-full pl-10 pr-4 py-3 border outline-none text-sm transition-colors appearance-none"
                     style={{
                         backgroundColor: disabled ? `${colors.border}40` : colors.card,
-                        borderColor: isFocused ? colors.primary : colors.border,
+                        borderColor: isFocused ? colors.secondary : colors.border,
                         color: colors.text,
                         cursor: disabled ? 'not-allowed' : 'default',
                     }}
@@ -149,7 +149,7 @@ const InputField: React.FC<InputFieldProps> = ({
                     className="w-full pl-10 pr-4 py-3 border outline-none text-sm transition-colors"
                     style={{
                         backgroundColor: disabled ? `${colors.border}40` : colors.card,
-                        borderColor: isFocused ? colors.primary : colors.border,
+                        borderColor: isFocused ? colors.secondary : colors.border,
                         color: colors.text,
                         cursor: disabled ? 'not-allowed' : 'default',
                     }}
@@ -169,10 +169,10 @@ interface ModoInfoProps {
 const ModoInfo: React.FC<ModoInfoProps> = ({ modo, colors }) => {
     if (modo === "colectivo") {
         return (
-            <div className="flex items-start gap-3 p-4 rounded-lg mt-2" style={{ backgroundColor: `${colors.primary}10`, border: `1px solid ${colors.primary}30` }}>
-                <Users size={20} style={{ color: colors.primary }} />
+            <div className="flex items-start gap-3 p-4 rounded-lg mt-2" style={{ backgroundColor: `${colors.secondary}10`, border: `1px solid ${colors.secondary}30` }}>
+                <Users size={20} style={{ color: colors.secondary }} />
                 <div>
-                    <p className="text-sm font-medium" style={{ color: colors.primary }}>Modo Colectivo (Multi-Tenant)</p>
+                    <p className="text-sm font-medium" style={{ color: colors.secondary }}>Modo Colectivo (Multi-Tenant)</p>
                     <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
                         Todas as empresas partilham a mesma base de dados. Os dados são isolados por <strong>tenant_id</strong>.
                         Ideal para empresas que pretendem uma gestão centralizada com custos reduzidos.
@@ -552,7 +552,7 @@ export default function RegisterCompanyPage() {
                                     {/*    SELEÇÃO DO MODO */}
                                     <div className="mt-6">
                                         <label className="block text-sm font-medium mb-2" style={{ color: colors.text }}>
-                                            <Database size={16} className="inline mr-2" style={{ color: colors.primary }} />
+                                            <Database size={16} className="inline mr-2" style={{ color: colors.textSecondary }} />
                                             Modo de Funcionamento *
                                         </label>
                                         <InputField 

@@ -64,6 +64,8 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
         Route::get('/', [EmpresaController::class, 'showSelf']);           // Opcional: ver dados
         Route::put('/', [EmpresaController::class, 'updateTenant']);       // ← Correto
         Route::post('/logo', [EmpresaController::class, 'uploadLogo']);    // Upload separado
+        Route::get('/configuracoes-fiscais', [EmpresaController::class, 'configuracoesFiscais']);
+        Route::put('/configuracoes-fiscais', [EmpresaController::class, 'atualizarConfiguracoesFiscais']);
     });
 
     Route::get('/me', [UserController::class, 'me']);

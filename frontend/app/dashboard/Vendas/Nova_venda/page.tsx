@@ -95,7 +95,7 @@ function calcularItem(
 ): ItemVendaUI {
   const ehServico = isServico(produto);
   const base = arredondar(arredondar(produto.preco_venda * qtd) - desc);
-  const taxaIva = produto.taxa_iva ?? 14;
+  const taxaIva = produto.taxa_iva ?? 0;
   const iva = arredondar((base * taxaIva) / 100);
 
   // ✅ CORRIGIDO: Usa a taxa de retenção do produto

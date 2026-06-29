@@ -326,8 +326,8 @@ const PricingCard: React.FC<PricingCardProps> = ({ plan, index, colors }) => {
 
 // DADOS
 const allFeaturesData = [
-  { title: "Emissão de Facturas", description: "Crie facturas, notas de crédito e recibos rapidamente, associe clientes, produtos e impostos, e envie por email." },
-  { title: "Gestão de Clientes", description: "Cadastre e administre os seus clientes, consulte o histórico de facturas e contactos de forma organizada e segura." },
+  { title: "Emissão de Facturas", description: "Crie facturas, notas de crédito e recibos rapidamente, associe clientes, produtos e impostos." },
+  { title: "Gestão de Clientes", description: "Cadastre e administre os seus clientes, de forma simples e rápida." },
   { title: "Controle de Produtos", description: "Gerencie produtos e serviços, preços e stock em tempo real, directamente ligados às facturas." },
   { title: "Relatórios Financeiros", description: "Visualize relatórios detalhados sobre vendas, facturamento e desempenho financeiro da sua empresa." },
   { title: "Gestão de Utilizadores", description: "Adicione membros da equipa com permissões diferentes, garantindo controlo e colaboração eficiente." },
@@ -342,7 +342,6 @@ const processSteps = [
 const faqData = [
   { q: "O que torna o Factura Já diferente de outras plataformas?", a: "O FaturaJá foca-se na simplicidade e rapidez. Pode criar uma factura profissional em menos de 60 segundos, com ênfase na conformidade legal angolana e num design limpo e moderno." },
   { q: "Posso cancelar o meu plano a qualquer momento?", a: "Sim, todos os planos podem ser cancelados a qualquer momento, sem taxas de rescisão. Caso cancele, mantém o acesso até ao final do ciclo de facturação." },
-  { q: "Como é que a segurança dos meus dados é garantida?", a: "Utilizamos encriptação SSL de 256 bits para todas as comunicações, e os seus dados são armazenados em servidores seguros, cumprindo a legislação angolana de protecção de dados pessoais. A privacidade é a nossa prioridade." },
   { q: "O Factura Já é compatível com telemóveis?", a: "Absolutamente! A plataforma é 100% responsiva, funcionando perfeitamente em dispositivos móveis, tablets e desktops." },
   { q: "Posso adicionar vários utilizadores à minha conta?", a: "Sim, dependendo do plano, pode adicionar vários utilizadores com diferentes permissões para gerir clientes, produtos e facturas de forma colaborativa." },
   { q: "Quais métodos de pagamento estão disponíveis para os clientes finais?", a: "Pode aceitar pagamentos por transferência bancária, Multicaixa ou cartões de débito/crédito, e acompanhar o estado das facturas (pendente, pago, cancelado)." },
@@ -356,35 +355,28 @@ const pricingPlans = [
     price: "0 KZ",
     interval: "/mês",
     isPopular: false,
-    features: ["Até 5 facturas/mês", "1 utilizador", "Suporte comunitário", "Armazenamento de 100MB", "Design padrão", "Sem relatórios"]
+    features: ["Facturação ilimitada", "Acesso a todo tipo de utilizador", "Gestáo de usuários", " Exportação de Saf-t", "Com relatórios"]
   },
   {
     name: "Essencial",
     price: "19.000 KZ",
     interval: "/mês",
     isPopular: true,
-    features: ["Facturação ilimitada", "Até 3 utilizadores", "Suporte prioritário", "Armazenamento ilimitado", "Gestão de clientes avançada", "Relatórios detalhados (trimestrais)"]
+    features: ["Facturação ilimitada", "Até 3 utilizadores", "Suporte prioritário",  "Gestão de clientes avançada", "Relatórios detalhados (trimestrais)"]
   },
   {
     name: "Pro",
     price: "39.000 KZ",
     interval: "/mês",
     isPopular: false,
-    features: ["Tudo no Essencial", "Até 5 utilizadores", "API de integração", "Automação simples de pagamentos", "Monitorização de pagamentos", "Relatórios avançados (personalizáveis)"]
-  },
-  {
-    name: "Premium",
-    price: "79.000 KZ",
-    interval: "/mês",
-    isPopular: false,
-    features: ["Tudo no Pro", "Até 10 utilizadores", "Gestão multi-moeda", "Gestão de stocks", "Consultor dedicado", "Suporte 24/7"]
+    features: ["Tudo no Essencial", "Até 5 utilizadores", "Monitorização de pagamentos", "Relatórios avançados "]
   },
   {
     name: "Empresa",
     price: "149.000 KZ",
     interval: "/mês",
     isPopular: false,
-    features: ["Tudo no Premium", "Utilizadores ilimitados", "Servidor dedicado", "Formação personalizada", "Onboarding VIP", "Conformidade internacional"]
+    features: ["Tudo no Premium", "Utilizadores ilimitados", "Formação personalizada"]
   }
 ];
 
@@ -531,7 +523,7 @@ export default function App() {
                 <AnimatedSection animation="fade-up" delay={200}>
                   <p className="text-xl md:text-2xl mb-8 max-w-lg mx-auto lg:mx-0" style={{ color: colors.textSecondary }}>
                     Gere facturas profissionais em segundos, sem complicações.
-                    A ferramenta ideal para pequenos negócios e freelancers.
+                    A ferramenta ideal para pequenos negócios e profissionais que trabalham por conta própria.
                   </p>
                 </AnimatedSection>
                 <AnimatedSection animation="fade-up" delay={400}>

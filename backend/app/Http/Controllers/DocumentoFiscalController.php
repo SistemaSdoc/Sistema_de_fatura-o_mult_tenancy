@@ -12,7 +12,6 @@ use App\Services\DocumentoFiscalService;
 use App\Services\ImpressoraTermicaService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Endroid\QrCode\QrCode;
-use Endroid\QrCode\Writer\PngWriter;
 use Endroid\QrCode\Writer\SvgWriter;
 use Endroid\QrCode\Encoding\Encoding;
 use Endroid\QrCode\ErrorCorrectionLevel;
@@ -340,7 +339,7 @@ protected function getTenantUser(): ?object
                 'itens.*.descricao'          => 'required_with:itens|string',
                 'itens.*.quantidade'         => 'required_with:itens|numeric|min:0.01',
                 'itens.*.preco_unitario'     => 'required_with:itens|numeric|min:0',
-                'itens.*.taxa_iva'           => 'required_with:itens|numeric|in:0,5,14',
+                'itens.*.taxa_iva'           => 'required_with:itens|numeric|min:0|max:100',
                 'itens.*.desconto'           => 'nullable|numeric|min:0',
                 'itens.*.codigo_isencao'     => 'nullable|string|in:M00,M01,M02,M03,M04,M05,M06,M99',
                 'itens.*.taxa_retencao'      => 'nullable|numeric|in:0,2,5,6.5,10,15',
@@ -498,7 +497,7 @@ protected function getTenantUser(): ?object
                 'itens.*.descricao'      => 'required|string',
                 'itens.*.quantidade'     => 'required|numeric|min:0.01',
                 'itens.*.preco_unitario' => 'required|numeric|min:0',
-                'itens.*.taxa_iva'       => 'required|numeric|in:0,5,14',
+                'itens.*.taxa_iva'       => 'required|numeric|min:0|max:100',
                 'itens.*.codigo_isencao' => 'nullable|string|in:M00,M01,M02,M03,M04,M05,M06,M99',
                 'motivo'                 => 'required|string|min:10|max:500', // Motivo obrigatório
             ]);
@@ -659,7 +658,7 @@ protected function getTenantUser(): ?object
                 'itens.*.descricao'      => 'required|string|min:5', // Descrição detalhada
                 'itens.*.quantidade'     => 'required|numeric|min:0.01',
                 'itens.*.preco_unitario' => 'required|numeric|min:0',
-                'itens.*.taxa_iva'       => 'required|numeric|in:0,5,14',
+                'itens.*.taxa_iva'       => 'required|numeric|min:0|max:100',
                 'itens.*.codigo_isencao' => 'nullable|string|in:M00,M01,M02,M03,M04,M05,M06,M99',
                 'itens.*.eh_servico'     => 'nullable|boolean',
                 'motivo'                 => 'nullable|string|max:500',
@@ -1135,7 +1134,7 @@ protected function getTenantUser(): ?object
         }
     }
 
-    public function printA4(string $id): \Illuminate\Contracts\View\View
+    public function printA4(Request $request, string $id): \Illuminate\Contracts\View\View
     {
         try {
             $this->verificarAcessoUsuario();
@@ -1154,7 +1153,10 @@ protected function getTenantUser(): ?object
             $empresaArray['logo_base64'] = null;
 
             $logoPath = $empresaArray['logo'] ?? null;
-            if (!empty($logoPath)) {
+            if (!extension_loaded('gd')) {
+                $empresaArray['logo'] = null;
+                Log::info('downloadPdf: logo ignorado porque a extensão PHP GD não está instalada');
+            } elseif (!empty($logoPath)) {
                 try {
                     if (Storage::disk('public')->exists($logoPath)) {
                         $logoConteudo = Storage::disk('public')->get($logoPath);
@@ -1208,6 +1210,11 @@ protected function getTenantUser(): ?object
                 }
             }
 
+            $proofUrl = $this->montarUrlDeProva($request, $id);
+            $proofQrHtml = $documento->tipo_documento === 'FP'
+                ? ''
+                : $this->gerarQrHtml($proofUrl);
+
             return view('documentos.print-view', [
                 'empresa'         => $dados['empresa'],
                 'documento'       => $documento,
@@ -1253,23 +1260,29 @@ protected function getTenantUser(): ?object
             $dados['proof_qr_html'] = $this->gerarQrHtml($dados['proof_url']);
 
             $empresaArray = $this->obterEmpresaAtual() ?? [];
+            $usaImagens = extension_loaded('gd');
             $empresaArray['logo_base64'] = null;
 
-            $logoPath = $empresaArray['logo'] ?? null;
-            if (!empty($logoPath)) {
-                try {
-                    if (Storage::disk('public')->exists($logoPath)) {
-                        $logoConteudo = Storage::disk('public')->get($logoPath);
-                        $logoMime = Storage::disk('public')->mimeType($logoPath) ?: 'image/jpeg';
-                        $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
-                    } elseif (file_exists(public_path($logoPath))) {
-                        $logoConteudo = file_get_contents(public_path($logoPath));
-                        $logoMime = mime_content_type(public_path($logoPath)) ?: 'image/jpeg';
-                        $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
+            if ($usaImagens) {
+                $logoPath = $empresaArray['logo'] ?? null;
+                if (!empty($logoPath)) {
+                    try {
+                        if (Storage::disk('public')->exists($logoPath)) {
+                            $logoConteudo = Storage::disk('public')->get($logoPath);
+                            $logoMime = Storage::disk('public')->mimeType($logoPath) ?: 'image/jpeg';
+                            $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
+                        } elseif (file_exists(public_path($logoPath))) {
+                            $logoConteudo = file_get_contents(public_path($logoPath));
+                            $logoMime = mime_content_type(public_path($logoPath)) ?: 'image/jpeg';
+                            $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
+                        }
+                    } catch (\Throwable $logoErr) {
+                        Log::warning('downloadPdf: erro ao converter logo', ['error' => $logoErr->getMessage()]);
                     }
-                } catch (\Throwable $logoErr) {
-                    Log::warning('downloadPdf: erro ao converter logo', ['error' => $logoErr->getMessage()]);
                 }
+            } else {
+                // Sem GD, evitamos qualquer imagem no template para não quebrar o PDF.
+                $empresaArray['logo'] = null;
             }
 
             $dados['empresa'] = $empresaArray;
@@ -1287,7 +1300,7 @@ protected function getTenantUser(): ?object
                     'dpi'                  => 150,
                 ]);
 
-            return $pdf->download($documento->numero_documento . '.pdf');
+            return $pdf->download($this->nomePdfSeguro($documento->numero_documento));
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             Log::error('Documento não encontrado para download PDF', ['id' => $id]);
             return response()->json([
@@ -1303,7 +1316,92 @@ protected function getTenantUser(): ?object
         }
     }
 
-    public function pdfViewer(string $id): \Illuminate\Contracts\View\View
+    public function publicProof(Request $request, string $id): \Illuminate\Contracts\View\View
+    {
+        try {
+            $this->empresa = app('current.empresa');
+            $this->modo = $this->empresa?->modo ?? session('tenant_modo', 'colectivo');
+
+            $empresaArray = $this->obterEmpresaAtual();
+            if (!$empresaArray) {
+                abort(404, 'Empresa não identificada');
+            }
+
+            $empresaArray['logo_base64'] = null;
+            $logoPath = $empresaArray['logo'] ?? null;
+            if (!empty($logoPath)) {
+                try {
+                    if (Storage::disk('public')->exists($logoPath)) {
+                        $logoConteudo = Storage::disk('public')->get($logoPath);
+                        $logoMime = Storage::disk('public')->mimeType($logoPath) ?: 'image/jpeg';
+                        $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
+                    } elseif (Storage::disk('local')->exists($logoPath)) {
+                        $logoConteudo = Storage::disk('local')->get($logoPath);
+                        $logoMime = Storage::disk('local')->mimeType($logoPath) ?: 'image/jpeg';
+                        $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
+                    } elseif (file_exists(public_path($logoPath))) {
+                        $logoConteudo = file_get_contents(public_path($logoPath));
+                        $logoMime = mime_content_type(public_path($logoPath)) ?: 'image/jpeg';
+                        $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
+                    }
+                } catch (\Throwable $logoErr) {
+                    Log::warning('publicProof: erro ao converter logo', ['error' => $logoErr->getMessage()]);
+                }
+            }
+
+            if ($this->modo === 'colectivo') {
+                $documento = SharedDocumentoFiscal::doTenant()
+                    ->with(['itens.produto', 'cliente', 'documentoOrigem', 'user'])
+                    ->where('id', $id)
+                    ->firstOrFail();
+            } else {
+                $documento = TenantDocumentoFiscal::with(['itens.produto', 'cliente', 'documentoOrigem', 'user'])
+                    ->where('id', $id)
+                    ->firstOrFail();
+            }
+
+            $documentoOrigem = null;
+            if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
+                if ($this->modo === 'colectivo') {
+                    $documentoOrigem = SharedDocumentoFiscal::doTenant()
+                        ->with(['itens.produto', 'cliente', 'user'])
+                        ->where('id', $documento->fatura_id)
+                        ->first();
+                } else {
+                    $documentoOrigem = TenantDocumentoFiscal::with(['itens.produto', 'cliente', 'user'])
+                        ->where('id', $documento->fatura_id)
+                        ->first();
+                }
+            }
+
+            $docInfo = $documentoOrigem ?? $documento;
+            $cliente = [
+                'nome' => $docInfo->cliente_nome ?? $docInfo->cliente?->nome ?? 'Consumidor Final',
+                'nif' => $docInfo->cliente_nif ?? $docInfo->cliente?->nif ?? null,
+                'morada' => $docInfo->cliente?->endereco ?? $docInfo->cliente?->morada ?? null,
+            ];
+
+            $proofUrl = $request->fullUrl();
+
+            return view('documentos.proof', [
+                'empresa' => $empresaArray,
+                'documento' => $documento,
+                'documentoOrigem' => $documentoOrigem,
+                'docInfo' => $docInfo,
+                'itens' => collect($docInfo->itens ?? []),
+                'cliente' => $cliente,
+                'proof_url' => $proofUrl,
+                'proof_qr_html' => $this->gerarQrHtml($proofUrl),
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            abort(404, 'Documento não encontrado');
+        } catch (\Throwable $e) {
+            Log::error('Erro no publicProof', ['id' => $id, 'error' => $e->getMessage()]);
+            abort(500, 'Erro ao gerar comprovativo público');
+        }
+    }
+
+    public function pdfViewer(Request $request, string $id): \Illuminate\Contracts\View\View
     {
         try {
             $this->verificarAcessoUsuario();
@@ -1374,9 +1472,9 @@ protected function getTenantUser(): ?object
                     Log::warning('pdfViewer: erro ao converter logo para base64', [
                         'logo_path' => $logoPath,
                         'error'     => $logoErr->getMessage(),
-                    ]);
-                }
-            }
+            ]);
+        }
+    }
 
             $proofUrl    = $this->montarUrlDeProva($request, $id);
             $proofQrHtml = $this->gerarQrHtml($proofUrl);
@@ -1391,6 +1489,8 @@ protected function getTenantUser(): ?object
                 'qr_code'         => $qrCodeTexto,
                 'qr_code_img'     => $qrCodeImg,
                 'qr_html'         => $this->gerarQrHtml($qrCodeTexto),
+                'proof_url'       => $proofUrl,
+                'proof_qr_html'   => $proofQrHtml,
                 'modo'            => $this->getModo(),
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
@@ -1521,12 +1621,14 @@ protected function getTenantUser(): ?object
                 6
             );
 
-            $writer = new PngWriter();
-            $result = $writer->write($qr);
+            $writer = new SvgWriter();
+            $result = $writer->write($qr, null, null, [
+                SvgWriter::WRITER_OPTION_EXCLUDE_XML_DECLARATION => true,
+            ]);
 
-            return '<img src="data:image/png;base64,' . base64_encode($result->getString()) . '" alt="QR Code">';
+            return $result->getString();
         } catch (\Throwable $e) {
-            Log::warning('Falha ao gerar QR Code em PNG, tentando SVG', ['error' => $e->getMessage()]);
+            Log::warning('Falha ao gerar QR Code em SVG', ['error' => $e->getMessage()]);
             try {
                 $qr = new QrCode(
                     $qrCodeTexto,
@@ -1541,7 +1643,7 @@ protected function getTenantUser(): ?object
                     SvgWriter::WRITER_OPTION_EXCLUDE_XML_DECLARATION => true,
                 ]);
 
-                return '<img src="' . $result->getDataUri() . '" alt="QR Code">';
+                return $result->getString();
             } catch (\Throwable $e2) {
                 Log::warning('Falha ao gerar QR Code em SVG', ['error' => $e2->getMessage()]);
                 return '';
@@ -1571,6 +1673,21 @@ protected function getTenantUser(): ?object
         }
 
         return $url;
+    }
+
+    private function nomePdfSeguro(?string $nomeDocumento): string
+    {
+        $nomeDocumento = trim((string) $nomeDocumento);
+
+        if ($nomeDocumento === '') {
+            return 'documento.pdf';
+        }
+
+        $nomeDocumento = preg_replace('/[\\\\\\/]+/', '-', $nomeDocumento);
+        $nomeDocumento = preg_replace('/[[:cntrl:]]+/', '', $nomeDocumento);
+        $nomeDocumento = trim($nomeDocumento);
+
+        return ($nomeDocumento ?: 'documento') . '.pdf';
     }
 
     private function erroInterno(string $mensagem, \Exception $e): JsonResponse

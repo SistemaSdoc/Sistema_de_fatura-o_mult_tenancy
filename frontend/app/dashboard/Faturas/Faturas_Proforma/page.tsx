@@ -316,7 +316,7 @@ export default function NovaFaturaProformaPage() {
         const ehServico = isServico(p);
         const qtd = Math.min(formItem.quantidade, ehServico ? 9999 : p.estoque_atual);
         const base = arredondar(p.preco_venda * qtd);
-        const taxaIva = p.taxa_iva ?? 14;
+        const taxaIva = p.taxa_iva ?? 0;
         const iva = arredondar(base * taxaIva / 100);
         
         // ✅ CORRIGIDO: Usa a taxa de retenção do produto
@@ -342,7 +342,7 @@ export default function NovaFaturaProformaPage() {
     const calcularItem = (p: Produto, qtd: number, id = uuidv4()): ItemDocumentoUI => {
         const ehServico = isServico(p);
         const base = arredondar(p.preco_venda * qtd);
-        const taxaIva = p.taxa_iva ?? 14;
+        const taxaIva = p.taxa_iva ?? 0;
         const iva = arredondar(base * taxaIva / 100);
         
         // ✅ CORRIGIDO: Usa a taxa de retenção do produto

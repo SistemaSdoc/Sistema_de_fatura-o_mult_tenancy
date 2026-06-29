@@ -8,10 +8,44 @@ $empresaNif = $empresa['nif'] ?? '0000000000';
 $empresaMorada = $empresa['endereco'] ?? $empresa['morada'] ?? null;
 $empresaTelefone = $empresa['telefone'] ?? null;
 $empresaEmail = $empresa['email'] ?? null;
+$empresaLogo = asset('images/default-logo.png');
+if (!empty($empresa['logo_base64'])) {
+    $empresaLogo = $empresa['logo_base64'];
+} elseif (!empty($empresa['logo'])) {
+    $logoPath = ltrim((string) $empresa['logo'], '/');
+    $logoPath = str_replace('public/', '', $logoPath);
+    if (Storage::disk('public')->exists($logoPath)) {
+        $logoConteudo = Storage::disk('public')->get($logoPath);
+        $logoMime = Storage::disk('public')->mimeType($logoPath) ?: 'image/png';
+        $empresaLogo = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
+    } else {
+        $empresaLogo = asset('storage/' . $logoPath);
+    }
+}
 $clienteNome = $cliente['nome'] ?? 'Consumidor Final';
 $clienteNif = $cliente['nif'] ?? null;
 $clienteMorada = $cliente['morada'] ?? null;
 $tipoDocumento = $documento->tipo_documento_nome ?? 'Documento Fiscal';
+
+$estadoLabel = match($documento->estado ?? '') {
+    'emitido' => 'Emitido',
+    'paga' => 'Pago',
+    'parcialmente_paga' => 'Pago Parcialmente',
+    'cancelado' => 'Cancelado',
+    'expirado' => 'Expirado',
+    default => ucfirst((string) ($documento->estado ?? '')),
+};
+
+$estadoClasse = match($documento->estado ?? '') {
+    'emitido' => 'state-emitido',
+    'paga' => 'state-pago',
+    'parcialmente_paga' => 'state-parcial',
+    'cancelado' => 'state-cancelado',
+    'expirado' => 'state-expirado',
+    default => 'state-emitido',
+};
+
+$mostrarQr = ($documento->tipo_documento ?? null) !== 'FP';
 @endphp
 
 <!DOCTYPE html>
@@ -21,38 +55,123 @@ $tipoDocumento = $documento->tipo_documento_nome ?? 'Documento Fiscal';
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Comprovativo Público - {{ $tipoDocumento }} {{ $documento->numero_documento }}</title>
     <style>
+        :root {
+            --fj-primary: #123859;
+            --fj-accent: #F9941F;
+            --fj-bg: #F2F2F2;
+            --fj-card: #FFFFFF;
+            --fj-text: #171717;
+            --fj-text-soft: #4B5563;
+            --fj-border: #E5E7EB;
+            --fj-muted: #F9FAFB;
+            --fj-soft-accent: #FFF4E6;
+            --fj-soft-primary: #EAF1F7;
+            --fj-success: #28a745;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             font-family: Arial, Helvetica, sans-serif;
             margin: 0;
             padding: 20px;
-            background: #f3f5f8;
-            color: #222;
+            min-height: 100vh;
+            background:
+                radial-gradient(circle at top left, rgba(18, 56, 89, 0.10), transparent 30%),
+                radial-gradient(circle at top right, rgba(249, 148, 31, 0.14), transparent 24%),
+                linear-gradient(180deg, #F7F8FA 0%, var(--fj-bg) 100%);
+            color: var(--fj-text);
         }
         .container {
             max-width: 900px;
             margin: 0 auto;
-            background: #fff;
-            border-radius: 12px;
-            box-shadow: 0 18px 40px rgba(0,0,0,0.08);
+            background: var(--fj-card);
+            border: 1px solid rgba(18, 56, 89, 0.08);
+            border-radius: 20px;
+            box-shadow: 0 24px 70px rgba(18, 56, 89, 0.10);
             overflow: hidden;
         }
         .header {
-            padding: 24px;
-            background: #1f2937;
+            padding: 28px 28px 24px;
+            background:
+                linear-gradient(135deg, var(--fj-primary) 0%, #1a4a73 100%);
             color: #fff;
+            position: relative;
+        }
+        .header::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 5px;
+            background: linear-gradient(90deg, var(--fj-accent) 0%, #ffb14d 100%);
         }
         .header h1 {
             margin: 0;
-            font-size: 22px;
+            font-size: 24px;
+            letter-spacing: -0.02em;
         }
         .header p {
-            margin: 6px 0 0;
-            color: #d1d5db;
+            margin: 8px 0 0;
+            color: rgba(255, 255, 255, 0.86);
             font-size: 14px;
+            max-width: 56ch;
         }
+        .brand-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 10px;
+        }
+        .brand-logo {
+            width: 68px;
+            height: 68px;
+            border-radius: 16px;
+            object-fit: contain;
+            background: rgba(255, 255, 255, 0.18);
+            padding: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            flex-shrink: 0;
+        }
+        .header-badges {
+            margin-top: 14px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 12px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+        .pill-primary {
+            background: rgba(255, 255, 255, 0.16);
+            border: 1px solid rgba(255, 255, 255, 0.22);
+        }
+        .pill-state {
+            background: #fff;
+            color: var(--fj-primary);
+        }
+        .state-emitido { background: #eaf1f7; color: var(--fj-primary); }
+        .state-pago { background: #e8f7ee; color: var(--fj-success); }
+        .state-parcial { background: #fff4e6; color: #c46a00; }
+        .state-cancelado { background: #fdecec; color: #b91c1c; }
+        .state-expirado { background: #f1f5f9; color: #475569; }
         .section {
-            padding: 24px;
-            border-bottom: 1px solid #e5e7eb;
+            padding: 24px 28px;
+            border-bottom: 1px solid var(--fj-border);
+            background: linear-gradient(180deg, #fff 0%, #fff 100%);
+        }
+        .section:last-of-type {
+            border-bottom: 0;
         }
         .section-title {
             font-size: 14px;
@@ -60,7 +179,18 @@ $tipoDocumento = $documento->tipo_documento_nome ?? 'Documento Fiscal';
             margin-bottom: 14px;
             text-transform: uppercase;
             letter-spacing: 0.04em;
-            color: #111827;
+            color: var(--fj-primary);
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .section-title::before {
+            content: "";
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            background: var(--fj-accent);
+            box-shadow: 0 0 0 4px rgba(249, 148, 31, 0.16);
         }
         .grid {
             display: grid;
@@ -68,19 +198,21 @@ $tipoDocumento = $documento->tipo_documento_nome ?? 'Documento Fiscal';
             gap: 16px;
         }
         .box {
-            background: #f9fafb;
-            border: 1px solid #e5e7eb;
-            border-radius: 10px;
+            background: linear-gradient(180deg, var(--fj-muted) 0%, #fff 100%);
+            border: 1px solid var(--fj-border);
+            border-radius: 14px;
             padding: 16px;
         }
         .box p {
             margin: 4px 0;
             font-size: 14px;
+            color: var(--fj-text-soft);
+            line-height: 1.55;
         }
         .box strong {
             display: inline-block;
             width: 120px;
-            color: #111827;
+            color: var(--fj-text);
         }
         .items-table {
             width: 100%;
@@ -91,12 +223,15 @@ $tipoDocumento = $documento->tipo_documento_nome ?? 'Documento Fiscal';
         .items-table th,
         .items-table td {
             padding: 12px 10px;
-            border: 1px solid #e5e7eb;
+            border: 1px solid var(--fj-border);
             text-align: left;
         }
         .items-table th {
-            background: #f3f4f6;
-            color: #111827;
+            background: linear-gradient(180deg, var(--fj-soft-primary) 0%, #fff 100%);
+            color: var(--fj-primary);
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
         }
         .totals {
             margin-top: 16px;
@@ -112,26 +247,27 @@ $tipoDocumento = $documento->tipo_documento_nome ?? 'Documento Fiscal';
             gap: 12px;
             font-size: 14px;
             padding: 8px 12px;
-            border-radius: 8px;
-            background: #f9fafb;
-            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            background: var(--fj-muted);
+            border: 1px solid var(--fj-border);
         }
         .total-line strong {
-            color: #111827;
+            color: var(--fj-primary);
         }
         .alert {
             margin-top: 20px;
             padding: 16px;
-            background: #fef3c7;
-            border: 1px solid #fde68a;
-            border-radius: 10px;
-            color: #92400e;
+            background: var(--fj-soft-accent);
+            border: 1px solid rgba(249, 148, 31, 0.28);
+            border-radius: 12px;
+            color: #8A4B00;
         }
         .qr-card {
             display: grid;
             grid-template-columns: 1fr 300px;
             gap: 20px;
             align-items: center;
+            padding: 2px 0 0;
         }
         .qr-info {
             display: grid;
@@ -141,13 +277,15 @@ $tipoDocumento = $documento->tipo_documento_nome ?? 'Documento Fiscal';
             margin: 0;
             font-size: 14px;
             line-height: 1.5;
+            color: var(--fj-text-soft);
         }
         .qr-box {
-            border: 1px solid #e5e7eb;
+            border: 1px solid rgba(18, 56, 89, 0.12);
             padding: 16px;
-            border-radius: 12px;
-            background: #fafafa;
+            border-radius: 16px;
+            background: linear-gradient(180deg, #fff 0%, var(--fj-muted) 100%);
             text-align: center;
+            box-shadow: 0 14px 30px rgba(18, 56, 89, 0.08);
         }
         .qr-box .title {
             font-weight: bold;
@@ -155,12 +293,17 @@ $tipoDocumento = $documento->tipo_documento_nome ?? 'Documento Fiscal';
             text-transform: uppercase;
             letter-spacing: 0.04em;
             font-size: 12px;
-            color: #111827;
+            color: var(--fj-primary);
         }
         .qr-box img,
         .qr-box svg {
             max-width: 100%;
             height: auto;
+        }
+        .qr-note-muted {
+            margin-top: 10px;
+            font-size: 12px;
+            color: var(--fj-text-soft);
         }
         .footer {
             padding: 24px;
@@ -170,23 +313,66 @@ $tipoDocumento = $documento->tipo_documento_nome ?? 'Documento Fiscal';
             gap: 20px;
             flex-wrap: wrap;
             font-size: 13px;
-            color: #6b7280;
+            color: var(--fj-text-soft);
+            background: linear-gradient(180deg, #fff 0%, var(--fj-muted) 100%);
         }
         .footer strong {
-            color: #111827;
+            color: var(--fj-primary);
         }
         .proof-url {
             word-break: break-all;
-            color: #111827;
+            color: var(--fj-primary);
             font-size: 13px;
+            background: #fff;
+            border: 1px dashed rgba(18, 56, 89, 0.22);
+            border-radius: 12px;
+            padding: 12px 14px;
+        }
+        .totals {
+            max-width: 520px;
+            margin-left: auto;
+        }
+        @media (max-width: 720px) {
+            body {
+                padding: 12px;
+            }
+            .header,
+            .section,
+            .footer {
+                padding-left: 16px;
+                padding-right: 16px;
+            }
+            .grid,
+            .qr-card {
+                grid-template-columns: 1fr;
+            }
+            .box strong {
+                width: 96px;
+            }
+            .header h1 {
+                font-size: 20px;
+            }
+            .totals {
+                max-width: 100%;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>{{ $tipoDocumento }} — Prova Pública</h1>
-            <p>Documento fiscal validado e disponível para consulta pública através do QR ou URL abaixo.</p>
+            <div class="brand-row">
+                <img src="{{ $empresaLogo }}" alt="Logo da empresa" class="brand-logo">
+                <div>
+                    <h1>{{ $tipoDocumento }} — Prova Pública</h1>
+                    <p>Documento fiscal validado e disponível para consulta pública através do QR ou URL abaixo.</p>
+                </div>
+            </div>
+            <div class="header-badges">
+                <span class="pill pill-primary">FaturaJá</span>
+                <span class="pill pill-state {{ $estadoClasse }}">{{ $estadoLabel }}</span>
+                <span class="pill pill-primary">{{ $documento->numero_documento ?? '' }}</span>
+            </div>
         </div>
 
         <div class="section">
@@ -256,25 +442,11 @@ $tipoDocumento = $documento->tipo_documento_nome ?? 'Documento Fiscal';
 
             <div class="totals">
                 <div class="total-line"><span>Sub-total</span><strong>{{ number_format($documento->base_tributavel ?? 0, 2, ',', '.') }} Kz</strong></div>
-                <div class="total-line"><span>Total IVA</span><strong>{{ number_format(($documento->iva_montante ?? 0), 2, ',', '.') }} Kz</strong></div>
+                <div class="total-line"><span>Total IVA</span><strong>{{ number_format(($documento->total_iva ?? 0), 2, ',', '.') }} Kz</strong></div>
                 <div class="total-line"><span>Total Líquido</span><strong>{{ number_format($documento->total_liquido ?? 0, 2, ',', '.') }} Kz</strong></div>
             </div>
         </div>
 
-        <div class="section">
-            <div class="section-title">Comprovativo Público</div>
-            <div class="qr-card">
-                <div class="qr-info">
-                    <p><strong>URL público de consulta:</strong></p>
-                    <p class="proof-url">{{ $proof_url }}</p>
-                    <p>Use o código QR ao lado para abrir esta página de prova em qualquer dispositivo.</p>
-                </div>
-                <div class="qr-box">
-                    <div class="title">QR de Prova</div>
-                    {!! $proof_qr_html !!}
-                </div>
-            </div>
-        </div>
 
         <div class="footer">
             <div><strong>Hash Fiscal:</strong> {{ $documento->hash_fiscal ?? 'N/A' }}</div>

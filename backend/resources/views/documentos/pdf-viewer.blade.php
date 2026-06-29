@@ -360,22 +360,22 @@ $temTroco = $troco > 0;
             border-top: 1px dashed #000;
         }
 
-        /* QR Section */
+        /* QR Section - TAMANHO 140px */
         .qr-section-wrap {
             display: grid;
             grid-template-columns: 1fr;
-            gap: 10px;
-            margin: 10px 0;
-            padding: 8px 0;
+            gap: 15px;
+            margin: 15px 0;
+            padding: 12px 0;
             border-top: 2px dashed #000;
             border-bottom: 2px dashed #000;
         }
 
         .qr-section {
             text-align: center;
-            padding: 8px 0;
+            padding: 12px 0;
             border: 1px solid #ddd;
-            border-radius: 6px;
+            border-radius: 5px;
             background: #fafafa;
         }
 
@@ -384,57 +384,77 @@ $temTroco = $troco > 0;
         }
 
         .qr-title {
-            font-size: 9.5px;
+            font-size: 12px;
             font-weight: bold;
-            margin-bottom: 5px;
+            margin-bottom: 8px;
             text-transform: uppercase;
         }
 
+        /* QR Code - 140px */
         .qr-image {
-            width: 80px;
-            height: 80px;
+            width: 140px !important;
+            height: 140px !important;
+            max-width: 140px !important;
+            max-height: 140px !important;
             margin: 0 auto;
             display: block;
         }
+        
+        /* Para SVG QR Code */
+        .qr-section svg {
+            width: 140px !important;
+            height: 140px !important;
+            max-width: 140px !important;
+            max-height: 140px !important;
+        }
+        
+        /* Para qualquer imagem dentro da section QR */
+        .qr-section img {
+            width: 140px !important;
+            height: 140px !important;
+            max-width: 140px !important;
+            max-height: 140px !important;
+        }
 
         .hash-section {
-            margin-top: 7px;
-            font-size: 8.5px;
+            margin-top: 1px;
+            font-size: 9px;
+            text-align: center;
+            align-items: center;
             word-break: break-all;
             font-family: monospace;
-            text-align: left;
+            text-align: center;
         }
 
         .proof-link {
-            margin-top: 5px;
-            font-size: 8.5px;
+            margin-top: 8px;
+            font-size: 10px;
             word-break: break-word;
             color: #111;
         }
 
         .hash-label {
             font-weight: bold;
-            margin-bottom: 3px;
             text-align: center;
+            font-size: 9px;
         }
 
         /* Footer */
         .footer {
             text-align: center;
-            margin-top: 10px;
-            padding-top: 7px;
+
             font-size: 9.5px;
         }
 
         .footer-title {
             font-weight: bold;
             font-size: 11px;
-            margin-bottom: 4px;
+            margin-bottom: 1px;
             text-transform: uppercase;
         }
 
         .footer-msg {
-            margin-bottom: 2px;
+            margin-bottom: 1px;
         }
 
         .software-info {
@@ -553,6 +573,28 @@ $temTroco = $troco > 0;
             * {
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
+            }
+            
+            /* FORÇAR tamanho também na impressão */
+            .qr-image {
+                width: 140px !important;
+                height: 140px !important;
+                max-width: 140px !important;
+                max-height: 140px !important;
+            }
+            
+            .qr-section svg {
+                width: 140px !important;
+                height: 140px !important;
+                max-width: 140px !important;
+                max-height: 140px !important;
+            }
+            
+            .qr-section img {
+                width: 140px !important;
+                height: 140px !important;
+                max-width: 140px !important;
+                max-height: 140px !important;
             }
         }
 
@@ -727,11 +769,7 @@ $temTroco = $troco > 0;
         <div class="qr-section-wrap">
             @if(!empty($proof_qr_html) || !empty($proof_url))
             <div class="qr-section proof-section">
-                <div class="qr-title">Comprovativo Público</div>
                 {!! $proof_qr_html !!}
-                <div class="proof-link" style="margin-top: 8px; font-size: 11px; color: #374151;">
-                    Leia este código para abrir o comprovativo público.
-                </div>
             </div>
             @elseif(!empty($qr_code_img) || !empty($qr_html))
             <div class="qr-section proof-section">
@@ -741,8 +779,6 @@ $temTroco = $troco > 0;
                 @else
                     {!! $qr_html !!}
                 @endif
-                <div class="proof-link" style="margin-top: 8px; font-size: 11px; color: #374151;">
-                    Leia este código para abrir o comprovativo público.</div>
             </div>
             @endif
 
@@ -754,14 +790,11 @@ $temTroco = $troco > 0;
             @endif
         </div>
         @endif
-
-                {{-- RODAPÉ COM DADOS BANCÁRIOS --}}
- <!-- 
+ 
 <div class="footer clearfix">
     <div class="footer-left">
- 
-        <br><br>
-        <div style="font-size: 13px; border-top: 1px dashed #ccc; padding-top: 8px; margin-top: 4px;">
+        
+        <div style="font-size: 13px; border-top: 1px dashed #ccc; ">
             <strong>Referências Bancárias :</strong><br>
             <strong>Banco:</strong> {{ $empresaBanco }}<br>
             <strong>Nº Conta:</strong> {{ $empresaConta }}<br>
@@ -769,7 +802,7 @@ $temTroco = $troco > 0;
         </div>
 
     </div>
-</div>-->
+</div>
 
         <!-- Rodapé -->
         <div class="footer">

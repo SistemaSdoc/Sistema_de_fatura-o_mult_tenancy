@@ -74,6 +74,11 @@ class VendaService
         return $this->getModo() === 'singular';
     }
 
+    protected function taxaIvaVigente(): float
+    {
+        return $this->empresa?->taxaIvaVigente() ?? DocumentoFiscalService::IVA_GERAL;
+    }
+
     protected function vendaModel()
     {
         return $this->isColectivo() ? new SharedVenda() : new TenantVenda();
@@ -605,7 +610,7 @@ class VendaService
         $motivoIsencao = null;
 
         if ($aplicaIva && $regime === 'geral') {
-            $taxaIva = (float) ($item['taxa_iva'] ?? $produto->taxa_iva ?? DocumentoFiscalService::IVA_GERAL);
+            $taxaIva = (float) ($item['taxa_iva'] ?? $produto->taxa_iva ?? $this->taxaIvaVigente());
 
             if ($taxaIva === 0.0) {
                 $codigoIsencao = $item['codigo_isencao'] ?? $produto->codigo_isencao ?? 'M00';

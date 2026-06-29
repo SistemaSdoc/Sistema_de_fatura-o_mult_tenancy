@@ -1,14 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Building2, Hash, AtSign, Phone, MapPin, Globe, AlertCircle, Loader2, Camera, Upload, ImageIcon } from "lucide-react";
+import { Building2, Hash, AtSign, Phone, MapPin, Globe, Loader2, Camera, Upload, ImageIcon } from "lucide-react";
 import { useAuth } from "@/context/authprovider";
 
 import { toast } from "sonner";
 import { api } from "@/services/axios";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
 import {
@@ -212,7 +211,7 @@ export function EmpresaTab({ colors }: { colors: ThemeColors }) {
                 iban: form.iban,
                 numero_conta: form.numero_conta,
                 nome_banco: form.nome_banco,
-                sujeito_iva: form.sujeito_iva,
+                sujeito_iva: form.regime_fiscal === "geral",
             });
 
             if (response.data.success) {
@@ -221,9 +220,10 @@ export function EmpresaTab({ colors }: { colors: ThemeColors }) {
             } else {
                 toast.error("Resposta inválida do servidor");
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const apiError = error as { response?: { data?: { message?: string } } };
             console.error(error);
-            toast.error(error.response?.data?.message || "Erro ao atualizar empresa");
+            toast.error(apiError.response?.data?.message || "Erro ao atualizar empresa");
         } finally {
             setLoading(false);
         }
@@ -333,9 +333,9 @@ export function EmpresaTab({ colors }: { colors: ThemeColors }) {
                             <ReadonlyField label="Subdomínio" colors={colors} icon={Globe}
                                 value={empresa.subdomain} />
                         )}
-                        {(empresa as any)?.created_at && (
+                        {empresa?.created_at && (
                             <ReadonlyField label="Data de registro" colors={colors}
-                                value={new Date((empresa as any).created_at).toLocaleDateString("pt-PT")} />
+                                value={new Date(empresa.created_at).toLocaleDateString("pt-PT")} />
                         )}
                         {empresa?.nif && (
                             <ReadonlyField label="NIF" colors={colors} icon={Hash}
@@ -433,7 +433,9 @@ export function EmpresaTab({ colors }: { colors: ThemeColors }) {
                                 value={form.regime_fiscal}
                                 disabled={isSuspended}
                                 onValueChange={v => setForm(p => ({
-                                    ...p, regime_fiscal: v as "simplificado" | "geral",
+                                    ...p,
+                                    regime_fiscal: v as "simplificado" | "geral",
+                                    sujeito_iva: v === "geral",
                                 }))}>
                                 <SelectTrigger style={{
                                     backgroundColor: isSuspended ? colors.hover : colors.card,
@@ -451,23 +453,26 @@ export function EmpresaTab({ colors }: { colors: ThemeColors }) {
                         </div>
 
                         <div className="space-y-2">
-                            <Label style={{ color: colors.text }}>Sujeito a IVA</Label>
+                            <Label style={{ color: colors.text }}>IVA</Label>
                             <div className="flex items-center gap-3 h-10 px-3 border rounded-md"
                                 style={{
                                     borderColor: colors.border,
                                     backgroundColor: isSuspended ? colors.hover : colors.card,
                                 }}>
-                                <Switch
-                                    checked={form.sujeito_iva === true}
-                                    disabled={isSuspended}
-                                    onCheckedChange={v => setForm(p => ({ ...p, sujeito_iva: v }))}
-                                />
                                 <span className="text-sm" style={{ color: colors.textSecondary }}>
-                                    {form.sujeito_iva === true ? "Sim" : "Não"}
+                                    {form.regime_fiscal === "simplificado"
+                                        ? "0% - Regime simplificado não liquida IVA"
+                                        : "Taxa definida nas categorias"}
                                 </span>
                             </div>
                         </div>
                     </div>
+                    {form.regime_fiscal === "simplificado" && (
+                        <div className="rounded-md border px-3 py-2 text-xs"
+                            style={{ borderColor: colors.border, color: colors.textSecondary, backgroundColor: colors.hover }}>
+                            Regime simplificado: os documentos e vendas não liquidam IVA. No regime geral, a taxa aplicada vem da categoria do produto ou da taxa configurada no serviço.
+                        </div>
+                    )}
                 </CardContent>
                 <CardFooter className="flex justify-end border-t pt-6"
                     style={{ borderColor: colors.border }}>

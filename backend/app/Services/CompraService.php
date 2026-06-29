@@ -80,6 +80,11 @@ class CompraService
         return $this->empresa;
     }
 
+    protected function taxaIvaVigente(): float
+    {
+        return $this->getEmpresa()?->taxaIvaVigente() ?? DocumentoFiscalService::IVA_GERAL;
+    }
+
     /**
      * Obtém o usuário tenant atual
      */
@@ -364,7 +369,7 @@ class CompraService
                 $subtotal = $item['quantidade'] * $item['preco_compra'];
 
                 // Cálculo fiscal do item
-                $taxaIva = $produto->taxa_iva ?? 14.00;
+                $taxaIva = $produto->taxa_iva ?? $this->taxaIvaVigente();
                 $base_tributavel_item = round($subtotal / (1 + ($taxaIva / 100)), 2);
                 $valor_iva_item = round($subtotal - $base_tributavel_item, 2);
 

@@ -985,38 +985,24 @@ export default function CategoriasPage() {
                 <Label className="text-xs" style={{ color: colors.text }}>
                   Taxa de IVA
                 </Label>
-                <Select
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.01"
                   value={String(formData.taxa_iva)}
-                  onValueChange={handleTaxaIVAChange}
+                  onChange={(event) => handleTaxaIVAChange(event.target.value)}
                   disabled={!formData.sujeito_iva}
-                >
-                  <SelectTrigger
-                    className="h-8 text-xs"
-                    style={{
-                      backgroundColor: colors.card,
-                      borderColor: colors.border,
-                      opacity: !formData.sujeito_iva ? 0.5 : 1,
-                    }}
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent
-                    style={{
-                      backgroundColor: colors.card,
-                      borderColor: colors.border,
-                    }}
-                  >
-                    <SelectItem value="14" className="text-xs">
-                      14% - Taxa Geral
-                    </SelectItem>
-                    <SelectItem value="5" className="text-xs">
-                      5% - Cesta Básica
-                    </SelectItem>
-                    <SelectItem value="0" className="text-xs">
-                      0% - Isento
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                  className="h-8 text-xs"
+                  style={{
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    opacity: formData.sujeito_iva ? 1 : 0.7,
+                  }}
+                />
+                <p className="text-[11px]" style={{ color: colors.textSecondary }}>
+                  Esta taxa será aplicada aos produtos desta categoria.
+                </p>
               </div>
 
               {!formData.sujeito_iva && (

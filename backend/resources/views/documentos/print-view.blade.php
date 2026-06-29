@@ -731,7 +731,7 @@ $temTroco = $troco > 0;
                     </div>
                 @endif
                 <div class="fiscal-right">
-                    @if(!empty($proof_qr_html) || !empty($proof_url))
+                    @if(!empty($proof_qr_html))
                         <div class="qr-box proof-box">
                             <div class="qr-label">Comprovativo Público</div>
                             <div class="qr-svg-wrap">{!! $proof_qr_html !!}</div>

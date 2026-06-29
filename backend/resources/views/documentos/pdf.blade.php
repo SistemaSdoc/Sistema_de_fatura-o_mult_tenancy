@@ -830,7 +830,7 @@ $temTroco = $troco > 0;
         </div>
 
         {{-- HASH FISCAL + QR CODE --}}
-        @if(!empty($documento->hash_fiscal) || !empty($proof_qr_html) || !empty($proof_url) || !empty($qr_html))
+        @if(!empty($documento->hash_fiscal) || !empty($proof_qr_html) || !empty($qr_html))
         <div class="fiscal-block clearfix">
             @if(!empty($documento->hash_fiscal))
             <div class="fiscal-left">
@@ -841,7 +841,7 @@ $temTroco = $troco > 0;
             </div>
             @endif
             <div class="fiscal-right">
-                @if(!empty($proof_qr_html) || !empty($proof_url))
+                @if(!empty($proof_qr_html))
                     <div class="qr-box proof-box">
                         <div class="qr-label">Comprovativo Público</div>
                         <div class="qr-svg-wrap">{!! $proof_qr_html !!}</div>

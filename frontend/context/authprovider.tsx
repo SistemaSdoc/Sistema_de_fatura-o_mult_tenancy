@@ -29,7 +29,9 @@ export interface Empresa {
     endereco: string | null;
     regime_fiscal?: string | null;
     sujeito_iva?: boolean;
+    iva_padrao?: number;
     status?: string;
+    created_at?: string | null;
 }
 
 export interface User {

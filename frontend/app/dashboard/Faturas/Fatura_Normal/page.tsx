@@ -238,7 +238,7 @@ export default function NovaFaturaNormalPage() {
     const base = arredondar(
       arredondar(p.preco_venda * qtd) - formItem.desconto,
     );
-    const taxaIva = p.taxa_iva ?? 14;
+    const taxaIva = p.taxa_iva ?? 0;
     const iva = arredondar((base * taxaIva) / 100);
     
     // ✅ CORRIGIDO: Usa a taxa de retenção do produto
@@ -387,7 +387,7 @@ const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
   ): ItemVendaUI => {
     const ehServico = isServico(p);
     const base = arredondar(arredondar(p.preco_venda * qtd) - desc);
-    const taxaIva = p.taxa_iva ?? 14;
+    const taxaIva = p.taxa_iva ?? 0;
     const iva = arredondar((base * taxaIva) / 100);
     
     // ✅ CORRIGIDO: Usa a taxa de retenção do produto

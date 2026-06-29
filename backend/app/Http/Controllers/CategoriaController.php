@@ -492,7 +492,7 @@ class CategoriaController extends Controller
             $dados = $request->validate([
                 'nome' => 'required|string|max:255',
                 'descricao' => 'nullable|string',
-                'taxa_iva' => 'nullable|numeric|in:0,5,14',
+                'taxa_iva' => 'nullable|numeric|min:0|max:100',
                 'sujeito_iva' => 'nullable|boolean',
                 'status' => 'nullable|in:ativo,inativo',
                 'tipo' => 'nullable|in:produto,servico',
@@ -500,8 +500,8 @@ class CategoriaController extends Controller
 
             $dados['user_id'] = $this->getUserId();
             $dados['status'] = $dados['status'] ?? 'ativo';
-            $dados['taxa_iva'] = $dados['taxa_iva'] ?? 14.00;
-            $dados['sujeito_iva'] = $dados['sujeito_iva'] ?? true;
+            $dados['taxa_iva'] = (float) ($dados['taxa_iva'] ?? 14.00);
+            $dados['sujeito_iva'] = $dados['sujeito_iva'] ?? ($dados['taxa_iva'] > 0);
 
             // ⭐ ADICIONAR TENANT_ID (apenas para colectivo)
             if ($this->isColectivo()) {
@@ -572,7 +572,7 @@ public function update(Request $request, $id)
         $dados = $request->validate([
             'nome'           => 'sometimes|string|max:255',
             'descricao'      => 'nullable|string', // ← PERMITE NULL
-            'taxa_iva'       => 'nullable|numeric|in:0,5,14',
+            'taxa_iva'       => 'nullable|numeric|min:0|max:100',
             'sujeito_iva'    => 'nullable|boolean',
             'status'         => 'nullable|in:ativo,inativo',
             'tipo'           => 'nullable|in:produto,servico',

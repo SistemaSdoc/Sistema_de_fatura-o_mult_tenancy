@@ -8,8 +8,7 @@ export type TipoCategoria = "produto" | "servico";
 // Códigos de isenção SAF-T válidos em Angola
 export type CodigoIsencao = "M00" | "M01" | "M02" | "M03" | "M04" | "M05" | "M06" | "M99";
 
-// Taxas de IVA válidas em Angola (AGT)
-export type TaxaIVA = 0 | 5 | 14;
+export type TaxaIVA = number;
 
 export interface Categoria {
     id: string;
@@ -431,14 +430,13 @@ export function validarIVA(
         if (codigoIsencao) {
             return "Categoria sujeita a IVA não pode ter código de isenção";
         }
-        if (taxaIVA !== 5 && taxaIVA !== 14) {
-            return "Categoria sujeita a IVA deve ter taxa de 5% ou 14%";
+        if (taxaIVA <= 0 || taxaIVA > 100) {
+            return "Categoria sujeita a IVA deve ter uma taxa entre 0% e 100%";
         }
     }
     
-    const taxasValidas: TaxaIVA[] = [0, 5, 14];
-    if (!taxasValidas.includes(taxaIVA as TaxaIVA)) {
-        return "Taxa de IVA inválida. Valores permitidos: 0%, 5% ou 14%";
+    if (taxaIVA < 0 || taxaIVA > 100) {
+        return "Taxa de IVA inválida. Use um valor entre 0% e 100%";
     }
     
     return null;

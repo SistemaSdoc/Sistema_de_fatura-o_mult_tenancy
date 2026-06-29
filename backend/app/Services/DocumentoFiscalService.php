@@ -167,8 +167,6 @@ class DocumentoFiscalService
             'empresa_id' => $this->empresa?->id,
         ]);
 
-        // ✅ Criar séries padrão se não existirem
-        $this->criarSeriesPadrao();
     }
 
     /* =====================================================================
@@ -303,6 +301,11 @@ class DocumentoFiscalService
         return Empresa::firstOrFail();
     }
 
+    protected function taxaIvaVigente(): float
+    {
+        return $this->obterEmpresa()->taxaIvaVigente();
+    }
+
     /* =====================================================================
      | EMISSÃO DE DOCUMENTOS
      | ================================================================== */
@@ -310,6 +313,7 @@ class DocumentoFiscalService
     public function emitirDocumento(array $dados)
     {
         $this->verificarAcessoUsuario();
+        $this->criarSeriesPadrao();
 
         $tipo = $dados['tipo_documento'];
 
@@ -1889,13 +1893,7 @@ class DocumentoFiscalService
 
             if ($aplicaIva) {
                 if ($regime === 'geral') {
-                    $taxaExplicita = $item['taxa_iva'] ?? $produto?->taxa_iva ?? null;
-
-                    if ($taxaExplicita !== null) {
-                        $taxaIva = (float) $taxaExplicita;
-                    } else {
-                        $taxaIva = self::IVA_GERAL;
-                    }
+                    $taxaIva = (float) ($item['taxa_iva'] ?? $produto?->taxa_iva ?? $this->taxaIvaVigente());
 
                     if ($taxaIva === 0.0 || $taxaIva === self::IVA_ZERO) {
                         $codigoIsencao = $item['codigo_isencao'] ?? $produto?->codigo_isencao ?? 'M00';

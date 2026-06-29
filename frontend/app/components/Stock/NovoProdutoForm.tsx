@@ -118,7 +118,7 @@ export function NovoProdutoForm({
     preco_venda: "",
 
     // Apenas para serviços
-    taxa_iva: "14",
+    taxa_iva: "0",
     sujeito_iva: true,
 
     estoque_atual: "0",
@@ -298,7 +298,7 @@ export function NovoProdutoForm({
       taxa_retencao: tipo === "produto" ? "0" : prev.taxa_retencao,
       tipo_preco: tipo === "servico" ? "fixo" : prev.tipo_preco,
       // Reset IVA para padrão de serviço
-      taxa_iva: tipo === "servico" ? "14" : "0",
+      taxa_iva: "0",
       sujeito_iva: tipo === "servico" ? true : false,
       // Reset código de isenção
       codigo_isencao: tipo === "servico" ? "" : "",

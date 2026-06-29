@@ -214,7 +214,7 @@ export default function LoginPage(): React.ReactElement {
     colors={colors}
   />
 
-  {/* Forgot password link - aligned right */}
+  {/* Forgot password link - aligned right 
   <div className="flex justify-end">
     <Link
       href="/forgot-password"
@@ -223,7 +223,7 @@ export default function LoginPage(): React.ReactElement {
     >
       Esqueceu a senha?
     </Link>
-  </div>
+  </div>*/}
 
   {/* Submit button */}
   <button

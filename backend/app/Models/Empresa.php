@@ -27,6 +27,7 @@ class Empresa extends Model
         'db_name', 
         'regime_fiscal', 
         'sujeito_iva', 
+        'iva_padrao',
         'nome_banco',
         'numero_conta',
         'iban',
@@ -41,6 +42,7 @@ class Empresa extends Model
 
     protected $casts = [
         'sujeito_iva' => 'boolean',
+        'iva_padrao' => 'decimal:2',
         'data_registro' => 'date',
         'data_ativacao' => 'date',
         'data_desativacao' => 'date',
@@ -66,6 +68,20 @@ class Empresa extends Model
         default => 'FT',
     };
 }
+
+    public function taxaIvaVigente(): float
+    {
+        if (($this->regime_fiscal ?? 'geral') === 'simplificado') {
+            return 0.0;
+        }
+
+        return (float) ($this->iva_padrao ?? 14.0);
+    }
+
+    public function getTaxaIvaVigenteAttribute(): float
+    {
+        return $this->taxaIvaVigente();
+    }
 
     // 🔗 Scope: Apenas ativas
     public function scopeAtivas($query)

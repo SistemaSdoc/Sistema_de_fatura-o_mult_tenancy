@@ -14,6 +14,8 @@ use Illuminate\Support\Facades\Storage;
 
 class EmpresaController extends Controller
 {
+    private const IVA_PADRAO_DEFAULT = 14.0;
+
     // ------------------------------------------------------------
     // LOGS VISUAIS (emojis + formatação)
     // ------------------------------------------------------------
@@ -196,6 +198,7 @@ public function store(Request $request)
         'endereco'       => 'required|string|max:500',
         'regime_fiscal'  => 'required|in:simplificado,geral',
         'sujeito_iva'    => 'required|boolean',
+        'iva_padrao'     => 'nullable|numeric|min:0|max:100',
         'nome_banco'     => 'nullable|string|max:255',
         'numero_conta'   => 'nullable|string|max:50|unique:landlord.empresas,numero_conta',
         'iban'           => 'nullable|string|max:34|unique:landlord.empresas,iban',
@@ -237,6 +240,9 @@ public function store(Request $request)
         'modo'          => $request->modo,
         'regime_fiscal' => $request->regime_fiscal,
         'sujeito_iva'   => $request->sujeito_iva,
+        'iva_padrao'    => $request->regime_fiscal === 'simplificado'
+            ? 0.0
+            : (float) ($request->iva_padrao ?? self::IVA_PADRAO_DEFAULT),
         'nome_banco'    => $request->nome_banco,
         'numero_conta'  => $request->numero_conta,
         'iban'          => $request->iban,
@@ -436,6 +442,67 @@ public function store(Request $request)
         ], 200);
     }
 
+    public function configuracoesFiscais(Request $request)
+    {
+        $empresa = $request->attributes->get('current_empresa');
+
+        if (!$empresa) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Empresa não identificada.'
+            ], 400);
+        }
+
+        return response()->json([
+            'success' => true,
+            'configuracoes' => [
+                'serie_padrao_fatura' => 'FT',
+                'regime_fiscal' => $empresa->regime_fiscal ?? 'simplificado',
+                'sujeito_iva' => (bool) $empresa->sujeito_iva,
+            ],
+        ], 200);
+    }
+
+    public function atualizarConfiguracoesFiscais(Request $request)
+    {
+        $empresa = $request->attributes->get('current_empresa');
+
+        if (!$empresa) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Empresa não identificada.'
+            ], 400);
+        }
+
+        $validated = $request->validate([
+            'regime_fiscal' => 'sometimes|in:simplificado,geral',
+            'sujeito_iva' => 'sometimes|boolean',
+        ]);
+
+        if (array_key_exists('regime_fiscal', $validated)) {
+            $empresa->regime_fiscal = $validated['regime_fiscal'];
+        }
+
+        if (($empresa->regime_fiscal ?? 'geral') === 'simplificado') {
+            $empresa->sujeito_iva = false;
+            $empresa->iva_padrao = 0.0;
+        } else {
+            $empresa->sujeito_iva = true;
+        }
+
+        $empresa->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Configurações fiscais atualizadas com sucesso.',
+            'configuracoes' => [
+                'serie_padrao_fatura' => 'FT',
+                'regime_fiscal' => $empresa->regime_fiscal ?? 'simplificado',
+                'sujeito_iva' => (bool) $empresa->sujeito_iva,
+            ],
+        ], 200);
+    }
+
     // ============================================================
     // 7. UPLOAD DE LOGO (tenant autenticado)
     // ============================================================
@@ -517,6 +584,15 @@ public function store(Request $request)
             'regime_fiscal', 'sujeito_iva', 'modo'
         ]));
 
+        if (($empresa->regime_fiscal ?? 'geral') === 'simplificado') {
+            $empresa->update([
+                'sujeito_iva' => false,
+                'iva_padrao' => 0.0,
+            ]);
+        } elseif (!$empresa->iva_padrao) {
+            $empresa->update(['iva_padrao' => self::IVA_PADRAO_DEFAULT]);
+        }
+
         Log::info('[EMPRESA] Dados atualizados pelo tenant', [
             'empresa_id' => $empresa->id,
             'modo' => $empresa->modo,
@@ -546,13 +622,24 @@ public function store(Request $request)
             'status'       => 'sometimes|in:ativo,suspenso',
             'subdomain'    => 'sometimes|string|unique:landlord.empresas,subdomain,' . $empresa->id,
             'modo'         => 'sometimes|in:colectivo,singular',
+            'regime_fiscal'=> 'sometimes|in:simplificado,geral',
+            'sujeito_iva'  => 'sometimes|boolean',
         ]);
 
         $empresa->update($request->only([
             'nome', 'email', 'telefone', 'endereco', 'status', 
             'nome_banco', 'numero_conta', 'iban', 'logo', 
-            'subdomain', 'modo'
+            'subdomain', 'modo', 'regime_fiscal', 'sujeito_iva'
         ]));
+
+        if (($empresa->regime_fiscal ?? 'geral') === 'simplificado') {
+            $empresa->update([
+                'sujeito_iva' => false,
+                'iva_padrao' => 0.0,
+            ]);
+        } elseif (!$empresa->iva_padrao) {
+            $empresa->update(['iva_padrao' => self::IVA_PADRAO_DEFAULT]);
+        }
 
         Log::info('[LANDLORD] Empresa atualizada', [
             'empresa_id' => $empresa->id,
