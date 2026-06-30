@@ -77,23 +77,26 @@ export function RelatorioVendasComponent({
 
   // ✅ Gráfico de evolução - usa agrupado do backend
   const dadosEvolucao = useMemo(() => {
-    if (!relatorioVendas?.agrupado) return [];
-    return relatorioVendas.agrupado.map((item: any) => ({
+    // agrupado may not be declared on the typed interface, use a safe runtime check
+    const agrupado = (relatorioVendas as any)?.agrupado;
+    if (!agrupado) return [];
+    return (agrupado as Array<Record<string, any>>).map((item) => ({
       periodo: item.periodo || item.mes || item.chave,
       total: item.total || 0,
     }));
-  }, [relatorioVendas?.agrupado]);
+  }, [relatorioVendas]);
 
   // ✅ Documentos por tipo
   const dadosPorTipo = useMemo(() => {
-    if (!relatorioFaturacao?.por_tipo) return [];
-    
-    return Object.entries(relatorioFaturacao.por_tipo).map(([tipo, dados]: [string, any]) => ({
+    const porTipo = relatorioFaturacao?.por_tipo;
+    if (!porTipo) return [];
+
+    return Object.entries(porTipo).map(([tipo, item]) => ({
       tipo,
-      quantidade: dados?.quantidade ?? 0,
-      valor: dados?.total_liquido ?? 0,
+      quantidade: item?.quantidade ?? 0,
+      valor: item?.total_liquido ?? 0,
     }));
-  }, [relatorioFaturacao?.por_tipo]);
+  }, [relatorioFaturacao]);
 
   // Formatação inteligente do eixo Y
   const formatYAxis = (value: number) => {

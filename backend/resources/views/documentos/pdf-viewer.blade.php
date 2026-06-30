@@ -12,7 +12,6 @@ $empresaTelefone = $empresa['telefone'] ?? 'Telefone não registrado';
 $empresaEmail = $empresa['email'] ?? 'Email não registrado';
 $empresaNome = $empresa['nome'] ?? 'EMPRESA';
 $empresaNif = $empresa['nif'] ?? '0000000000';
-// ✅ ADICIONAR DADOS BANCÁRIOS
 $empresaBanco = $empresa['nome_banco'] ?? null;
 $empresaConta = $empresa['numero_conta'] ?? null;
 $empresaIban = $empresa['iban'] ?? null;

@@ -42,7 +42,8 @@ type EstadoDocumentoItem = {
 };
 
 type ChartValue = number | string | null | undefined;
-type ChartFormatter = (value: ChartValue) => [string, string];
+// use any for formatter input to match Recharts flexible Formatter signature
+type ChartFormatter = (value: any) => [string, string];
 
 interface DashboardChartsProps {
   colors: ThemeColors;
@@ -99,7 +100,7 @@ export function DashboardCharts({
                   <YAxis type="category" dataKey="nome" width={84} tick={tickStyle} stroke={colors.border} />
                   <Tooltip
                     contentStyle={tooltipStyle}
-                    formatter={(value: ChartValue, name: string | number | undefined) => {
+                    formatter={(value: any, name: string | number | undefined) => {
                       if (name === "quantidade") return formatterQuantidade(value);
                       return formatterValor(value);
                     }}
@@ -143,7 +144,7 @@ export function DashboardCharts({
                   <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
                   <XAxis dataKey="mes" tick={tickStyle} stroke={colors.border} />
                   <YAxis tickFormatter={formatCompact} width={48} tick={tickStyle} stroke={colors.border} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(value: ChartValue) => formatterTotal(value)} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(value: any) => formatterTotal(value)} />
                   <Area type="monotone" dataKey="total" stroke={colors.secondary} fill="url(#colorTotal)" strokeWidth={2} />
                 </AreaChart>
               </ResponsiveContainer>
@@ -183,7 +184,7 @@ export function DashboardCharts({
                   <YAxis yAxisId="right" orientation="right" stroke={colors.secondary} tick={tickStyle} width={36} />
                   <Tooltip
                     contentStyle={tooltipStyle}
-                    formatter={(value: ChartValue, name: string | number | undefined) => {
+                    formatter={(value: any, name: string | number | undefined) => {
                       if (name === "quantidade" || name === "Qtd") {
                         return formatterDocsQuantidade(value);
                       }
@@ -233,7 +234,7 @@ export function DashboardCharts({
                       <Cell key={i} fill={pieColors[i % pieColors.length]} />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={tooltipStyle} formatter={(value: ChartValue) => formatterDocsQuantidade(value)} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(value: any) => formatterDocsQuantidade(value)} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>

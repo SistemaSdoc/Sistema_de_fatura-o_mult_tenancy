@@ -22,6 +22,7 @@ import {
     Phone,
     MapPin,
     Upload,
+    Banknote,
     X,
     ChevronLeft,
     UserPlus,
@@ -30,7 +31,6 @@ import {
     Landmark,
     CreditCard,
     Database,
-    Info,
     Server,
     Users,
 } from "lucide-react";
@@ -46,6 +46,7 @@ interface ThemeColors {
     border: string;
     danger: string;
     hover?: string;
+    success: string;
 }
 
 // --- Tipagem do formulário ---
@@ -62,7 +63,7 @@ interface FormData {
     iban?: string | null;
     logo: string;
     subdomain: string;
-    modo: "colectivo" | "singular"; //    NOVO CAMPO
+    modo: "colectivo" | "singular";
     admin_name: string;
     admin_email: string;
     admin_password: string;
@@ -160,42 +161,6 @@ const InputField: React.FC<InputFieldProps> = ({
     );
 };
 
-// --- Componente de informação do modo ---
-interface ModoInfoProps {
-    modo: "colectivo" | "singular";
-    colors: ThemeColors;
-}
-
-const ModoInfo: React.FC<ModoInfoProps> = ({ modo, colors }) => {
-    if (modo === "colectivo") {
-        return (
-            <div className="flex items-start gap-3 p-4 rounded-lg mt-2" style={{ backgroundColor: `${colors.secondary}10`, border: `1px solid ${colors.secondary}30` }}>
-                <Users size={20} style={{ color: colors.secondary }} />
-                <div>
-                    <p className="text-sm font-medium" style={{ color: colors.secondary }}>Modo Colectivo (Multi-Tenant)</p>
-                    <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
-                        Todas as empresas partilham a mesma base de dados. Os dados são isolados por <strong>tenant_id</strong>.
-                        Ideal para empresas que pretendem uma gestão centralizada com custos reduzidos.
-                    </p>
-                </div>
-            </div>
-        );
-    }
-
-    return (
-        <div className="flex items-start gap-3 p-4 rounded-lg mt-2" style={{ backgroundColor: `${colors.secondary}10`, border: `1px solid ${colors.secondary}30` }}>
-            <Server size={20} style={{ color: colors.secondary }} />
-            <div>
-                <p className="text-sm font-medium" style={{ color: colors.secondary }}>Modo Singular (Single-Tenant)</p>
-                <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
-                    Cada empresa tem a sua própria base de dados dedicada. Isolamento total e maior performance.
-                    Ideal para empresas que necessitam de isolamento rigoroso de dados.
-                </p>
-            </div>
-        </div>
-    );
-};
-
 export default function RegisterCompanyPage() {
     const router = useRouter();
     const colors = useThemeColors() as ThemeColors;
@@ -207,14 +172,14 @@ export default function RegisterCompanyPage() {
         email: "",
         telefone: "",
         endereco: "",
-        regime_fiscal: "geral",
-        sujeito_iva: true,
+        regime_fiscal: "simplificado", // ALTERADO: começa como simplificado
+        sujeito_iva: false, // ALTERADO: começa como não clicado (false)
         nome_banco: "",
         numero_conta: "",
         iban: "",
         logo: "",
         subdomain: "",
-        modo: "colectivo", //    VALOR PADRÃO
+        modo: "colectivo",
         admin_name: "",
         admin_email: "",
         admin_password: "",
@@ -235,6 +200,30 @@ export default function RegisterCompanyPage() {
                 ? (e.target as HTMLInputElement).checked
                 : e.target.value;
         setForm({ ...form, [e.target.name]: value });
+    };
+
+    // Função para lidar com a mudança do checkbox de IVA
+    const handleIvaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const isChecked = e.target.checked;
+        setForm({
+            ...form,
+            sujeito_iva: isChecked,
+            // Se estiver sujeito a IVA, define como regime geral
+            // Se não estiver sujeito a IVA, define como regime simplificado
+            regime_fiscal: isChecked ? "geral" : "simplificado"
+        });
+    };
+
+    // Função para lidar com a mudança do select de regime fiscal
+    const handleRegimeChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        const value = e.target.value as "simplificado" | "geral";
+        setForm({
+            ...form,
+            regime_fiscal: value,
+            // Se selecionar regime geral, automaticamente marca como sujeito a IVA
+            // Se selecionar regime simplificado, automaticamente desmarca
+            sujeito_iva: value === "geral"
+        });
     };
 
     const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -280,28 +269,6 @@ export default function RegisterCompanyPage() {
         throw new Error(response.data.message || "Falha no upload");
     };
 
-    //    VALIDAÇÃO DO NIF (apenas 10 dígitos numéricos)
-    const validateNIF = (nif: string): boolean => {
-        // Remove espaços e caracteres especiais
-        const clean = nif.replace(/\D/g, '');
-        // Verifica se tem exatamente 10 dígitos
-        if (clean.length !== 10) {
-            setError("NIF deve ter exatamente 10 dígitos numéricos.");
-            return false;
-        }
-        return true;
-    };
-
-    //    VALIDAÇÃO DO SUBDOMÍNIO
-    const validateSubdomain = (subdomain: string): boolean => {
-        const regex = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
-        if (!regex.test(subdomain)) {
-            setError("Subdomínio inválido. Use apenas letras minúsculas, números e hífen (não pode começar ou terminar com hífen).");
-            return false;
-        }
-        return true;
-    };
-
     const validateStep1 = (): boolean => {
         setError("");
 
@@ -310,7 +277,6 @@ export default function RegisterCompanyPage() {
             return false;
         }
 
-        //    VALIDAÇÃO DO NIF
         if (!form.nif.trim()) {
             setError("NIF é obrigatório");
             return false;
@@ -338,7 +304,6 @@ export default function RegisterCompanyPage() {
             return false;
         }
 
-        //    VALIDAÇÃO DO SUBDOMÍNIO
         const subdomainRegex = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
         if (!subdomainRegex.test(form.subdomain)) {
             setError("Subdomínio inválido. Use apenas letras minúsculas, números e hífen (não pode começar ou terminar com hífen).");
@@ -355,6 +320,10 @@ export default function RegisterCompanyPage() {
     const handlePrevStep = () => {
         setStep(1);
         setError("");
+    };
+
+    const toggleModo = (modo: "colectivo" | "singular") => {
+        setForm({ ...form, modo });
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -391,7 +360,7 @@ export default function RegisterCompanyPage() {
 
             const submitData = {
                 nome: form.nome,
-                nif: form.nif.replace(/\D/g, ''), //    Garante apenas números
+                nif: form.nif.replace(/\D/g, ''),
                 email: form.email,
                 telefone: form.telefone,
                 endereco: form.endereco,
@@ -401,8 +370,8 @@ export default function RegisterCompanyPage() {
                 numero_conta: form.numero_conta,
                 iban: form.iban,
                 logo: logoUrl || "images/3.png",
-                subdomain: form.subdomain.toLowerCase().trim(), //    Garante minúsculo
-                modo: form.modo, //    NOVO CAMPO
+                subdomain: form.subdomain.toLowerCase().trim(),
+                modo: form.modo,
                 admin_name: form.admin_name,
                 admin_email: form.admin_email,
                 admin_password: form.admin_password,
@@ -430,12 +399,6 @@ export default function RegisterCompanyPage() {
         { value: "geral", label: "Regime Geral" },
     ];
 
-    //    OPÇÕES PARA O MODO
-    const modoOptions = [
-        { value: "colectivo", label: "Colectivo (Multi-Tenant um banco de dados)" },
-        { value: "singular", label: "Singular (Single-Tenant empresa banco )" },
-    ];
-
     return (
         <div className="min-h-screen py-12 px-4" style={{ backgroundColor: colors.background }}>
             <div className="max-w-4xl mx-auto">
@@ -455,7 +418,7 @@ export default function RegisterCompanyPage() {
                     </div>
                 </div>
 
-                {/*    STEP INDICATOR */}
+                {/* STEP INDICATOR */}
                 <div className="flex mb-8 border-b" style={{ borderColor: colors.border }}>
                     <div className="flex-1 py-3 text-center">
                         <div className={`inline-flex items-center gap-2 text-sm font-medium ${step === 1 ? "opacity-100" : "opacity-50"}`} style={{ color: step === 1 ? colors.primary : colors.text }}>
@@ -485,15 +448,15 @@ export default function RegisterCompanyPage() {
                                 </div>
                             )}
                             {success && (
-                                <div className="flex items-center gap-3 p-4 mb-6 border-l-4" style={{ backgroundColor: `${colors.primary}10`, borderColor: colors.primary }}>
-                                    <CheckCircle size={20} style={{ color: colors.primary }} />
-                                    <span className="text-sm" style={{ color: colors.primary }}>Empresa criada com sucesso! Redirecionando para o login...</span>
+                                <div className="flex items-center gap-3 p-4 mb-6 border-l-4" style={{ backgroundColor: `${colors.success}10`, borderColor: colors.success }}>
+                                    <CheckCircle size={20} style={{ color: colors.success }} />
+                                    <span className="text-sm" style={{ color: colors.success }}>Empresa criada com sucesso! Redirecionando para o login...</span>
                                 </div>
                             )}
 
                             {step === 1 && (
                                 <div className="space-y-6">
-                                    {/*    LOGO */}
+                                    {/* LOGO */}
                                     <div>
                                         <label className="block text-sm font-medium mb-2" style={{ color: colors.text }}>Logo da Empresa</label>
                                         <div className="flex items-center gap-4">
@@ -518,64 +481,108 @@ export default function RegisterCompanyPage() {
                                         </div>
                                     </div>
 
-                                    {/*    CAMPOS DA EMPRESA */}
+                                    {/* CAMPOS DA EMPRESA */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                        <InputField name="nome" icon={Building2} placeholder="Nome da empresa *" value={form.nome} onChange={handleChange} colors={colors} required />
-                                        
-                                        {/*    NIF COM VALIDAÇÃO DE 10 DÍGITOS */}
-                                        <InputField 
-                                            name="nif" 
-                                            icon={FileText} 
-                                            placeholder="NIF (10 dígitos) *" 
-                                            value={form.nif} 
-                                            onChange={(e) => {
-                                                const raw = e.target.value.replace(/\D/g, '').slice(0, 10);
-                                                setForm({ ...form, nif: raw });
-                                            }} 
-                                            colors={colors} 
-                                            required 
-                                            maxLength={10}
-                                        />
-                                        
+                                        <InputField  name="nome" icon={Building2} placeholder="Nome da empresa *" value={form.nome} onChange={handleChange} colors={colors} required />
+                                        <InputField name="nif" icon={FileText} placeholder="NIF (10 dígitos) *" value={form.nif} onChange={(e) => {const raw = e.target.value.replace(/\D/g, '').slice(0, 10);setForm({ ...form, nif: raw });}} colors={colors} required maxLength={10}/>
                                         <InputField name="email" icon={Mail} type="email" placeholder="Email da empresa *" value={form.email} onChange={handleChange} colors={colors} required />
-                                        <InputField name="telefone" icon={Phone} placeholder="Telefone *" value={form.telefone} onChange={handleChange} colors={colors} required />
-                                        
+                                        <InputField name="telefone" icon={Phone} placeholder="Telefone *" value={form.telefone} onChange={handleChange} colors={colors} maxLength={9} required />
                                         <InputField name="nome_banco" icon={Landmark} placeholder="Nome do Banco" value={form.nome_banco ?? ""} onChange={handleChange} colors={colors} />
                                         <InputField name="numero_conta" icon={CreditCard} placeholder="Número da Conta" value={form.numero_conta ?? ""} onChange={(e) => {  const raw = e.target.value.replace(/\D/g, '').slice(0, 11); setForm({ ...form, numero_conta: raw });}} colors={colors}  maxLength={11}/>
-                                        <InputField name="iban" icon={Globe} placeholder="Digite os 21 dígitos do IBAN" value={form.iban?.replace(/^AO06/, "") ?? ""} onChange={(e) => { const raw = e.target.value.replace(/\D/g, '').slice(0, 21); setForm({ ...form, iban: `AO06${raw}` }); }} colors={colors} maxLength={21} />
+                                        <InputField name="iban" icon={Banknote} placeholder="Digite os 21 dígitos do IBAN" value={form.iban?.replace(/^AO06/, "") ?? ""} onChange={(e) => { const raw = e.target.value.replace(/\D/g, '').slice(0, 21); setForm({ ...form, iban: `AO06${raw}` }); }} colors={colors} maxLength={21} />
                                         <InputField name="subdomain" icon={Globe} placeholder="Subdomínio * (ex: minhaempresa)" value={form.subdomain} onChange={handleChange} colors={colors} required />
                                         <div className="md:col-span-2">
-                                            <InputField name="endereco" icon={MapPin} placeholder="Endereço completo *" value={form.endereco} onChange={handleChange} colors={colors} required />
+                                        <InputField name="endereco" icon={MapPin} placeholder="Endereço completo *" value={form.endereco} onChange={handleChange} colors={colors} required />
                                         </div>
                                     </div>
 
-                                    {/*    SELEÇÃO DO MODO */}
+                                    {/* SELEÇÃO DO MODO */}
                                     <div className="mt-6">
-                                        <label className="block text-sm font-medium mb-2" style={{ color: colors.text }}>
+                                        <label className="block text-sm font-medium mb-3" style={{ color: colors.text }}>
                                             <Database size={16} className="inline mr-2" style={{ color: colors.textSecondary }} />
                                             Modo de Funcionamento *
                                         </label>
-                                        <InputField 
-                                            name="modo" 
-                                            icon={Database} 
-                                            placeholder="Selecione o modo" 
-                                            value={form.modo} 
-                                            onChange={handleChange} 
-                                            colors={colors} 
-                                            isSelect 
-                                            options={modoOptions} 
-                                            required 
-                                        />
                                         
-                                        {/*    INFORMAÇÃO DO MODO SELECIONADO */}
-                                        <ModoInfo modo={form.modo} colors={colors} />
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {/* Opção Colectivo */}
+                                            <div 
+                                                onClick={() => toggleModo("colectivo")}
+                                            >
+                                                <div className="flex items-start gap-3">
+                                                    <div className="flex-shrink-0 mt-1">
+                                                        <input
+                                                            type="radio"
+                                                            title="Todas as empresas partilham a mesma base de dados. Ideal para empresas que pretendem uma gestão centralizada com custos reduzidos."
+                                                            name="modo_radio"
+                                                            value="colectivo"
+                                                            checked={form.modo === "colectivo"}
+                                                            onChange={() => toggleModo("colectivo")}
+                                                            className="w-4 h-4 mt-1"
+                                                            style={{ accentColor: colors.primary }}
+                                                        />
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <Users size={18} style={{ color: form.modo === "colectivo" ? colors.secondary : colors.textSecondary }} />
+                                                            <span className="font-medium" style={{ color: form.modo === "colectivo" ? colors.secondary : colors.text }}>
+                                                                Colectivo
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Opção Singular */}
+                                            <div 
+                                                onClick={() => toggleModo("singular")}
+                                            >
+                                                <div className="flex items-start gap-3">
+                                                    <div className="flex-shrink-0 mt-1">
+                                                        <input
+                                                            type="radio"
+                                                            title="Cada empresa tem a sua própria base de dados dedicada. Ideal para empresas que necessitam de isolamento rigoroso de dados."
+                                                            name="modo_radio"
+                                                            value="singular"
+                                                            checked={form.modo === "singular"}
+                                                            onChange={() => toggleModo("singular")}
+                                                            className="w-4 h-4 mt-1"
+                                                            style={{ accentColor: colors.primary }}
+                                                        />
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <Server size={18} style={{ color: form.modo === "singular" ? colors.secondary : colors.textSecondary }} />
+                                                            <span className="font-medium" style={{ color: form.modo === "singular" ? colors.secondary : colors.text }}>
+                                                                Singular
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>                        
                                     </div>
 
-                                    {/*    REGIME FISCAL E IVA */}
+                                    {/* REGIME FISCAL E IVA */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-4">
-                                        <InputField name="regime_fiscal" icon={Briefcase} placeholder="Regime Fiscal" value={form.regime_fiscal} onChange={handleChange} colors={colors} isSelect options={regimeOptions} />
+                                        <InputField 
+                                            name="regime_fiscal" 
+                                            icon={Briefcase} 
+                                            placeholder="Regime Fiscal" 
+                                            value={form.regime_fiscal} 
+                                            onChange={handleRegimeChange} 
+                                            colors={colors} 
+                                            isSelect 
+                                            options={regimeOptions} 
+                                        />
                                         <label className="flex items-center gap-3 py-3">
-                                            <input type="checkbox" name="sujeito_iva" checked={form.sujeito_iva} onChange={handleChange} className="w-5 h-5" style={{ accentColor: colors.primary }} />
+                                            <input 
+                                                type="checkbox" 
+                                                name="sujeito_iva" 
+                                                checked={form.sujeito_iva} 
+                                                onChange={handleIvaChange} 
+                                                className="w-4 h-4" 
+                                                style={{ accentColor: colors.primary }} 
+                                            />
                                             <span className="text-sm" style={{ color: colors.text }}>Sujeito a IVA</span>
                                         </label>
                                     </div>

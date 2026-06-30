@@ -464,7 +464,7 @@ class FornecedorController extends Controller
                 'telefone' => 'nullable|string|max:20',
                 'email'    => 'nullable|email|max:255',
                 'endereco' => 'nullable|string',
-                'tipo'     => 'nullable|in:Nacional,Internacional',
+                'tipo'     => 'nullable|in:nacional,internacional',
                 'status'   => 'nullable|in:ativo,inativo',
             ], [
                 'nif.required' => 'O NIF/BI é obrigatório',
@@ -492,7 +492,7 @@ class FornecedorController extends Controller
             }
 
             $dados['user_id'] = $this->getUserId();
-            $dados['tipo']    = $dados['tipo'] ?? 'Nacional';
+            $dados['tipo']    = $dados['tipo'] ?? 'nacional';
             $dados['status']  = $dados['status'] ?? 'ativo';
 
             // ⭐ ADICIONAR TENANT_ID (apenas para colectivo)
@@ -576,7 +576,7 @@ class FornecedorController extends Controller
                 'telefone' => 'nullable|string|max:30',
                 'email'    => 'nullable|email|max:255',
                 'endereco' => 'nullable|string',
-                'tipo'     => 'nullable|in:Nacional,Internacional',
+                'tipo'     => 'nullable|in:nacional,internacional',
                 'status'   => 'nullable|in:ativo,inativo',
             ]);
 

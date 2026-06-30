@@ -34,7 +34,11 @@ interface ThemeColors {
   textSecondary: string;
   border: string;
   danger: string;
+  success: string;
+  warning: string;
+  error: string;
   hover?: string;
+  fp: string;
 }
 
 // Re-exportar o tipo do serviço para consistência
@@ -303,19 +307,23 @@ export default function DashboardPage() {
 
   // ✅ Formatters com assinatura correta para Recharts
   const formatterQuantidade = (value: number | string | null | undefined): [string, string] => {
-    return [`${formatNumber(value ?? 0)} unid.`, "Quantidade"];
+    const num = Number(value ?? 0);
+    return [`${formatNumber(num)} unid.`, "Quantidade"];
   };
   
   const formatterValor = (value: number | string | null | undefined): [string, string] => {
-    return [formatKz(value ?? 0), "Valor"];
+    const num = Number(value ?? 0);
+    return [formatKz(num), "Valor"];
   };
   
   const formatterDocsQuantidade = (value: number | string | null | undefined): [string, string] => {
-    return [`${formatNumber(value ?? 0)} docs`, "Quantidade"];
+    const num = Number(value ?? 0);
+    return [`${formatNumber(num)} docs`, "Quantidade"];
   };
   
   const formatterTotal = (value: number | string | null | undefined): [string, string] => {
-    return [formatKz(value ?? 0), "Total"];
+    const num = Number(value ?? 0);
+    return [formatKz(num), "Total"];
   };
 
   const gridStroke = theme === "dark" ? "#404040" : "#E5E7EB";
@@ -423,7 +431,7 @@ export default function DashboardPage() {
         </div>
 
         <DashboardCharts
-          colors={colors}
+          colors={{ ...colors, hover: colors.hover ?? colors.primary }}
           produtosData={produtosData}
           evolucaoData={evolucaoData}
           documentosPorTipo={documentosPorTipo}
