@@ -214,16 +214,17 @@ export default function LoginPage(): React.ReactElement {
     colors={colors}
   />
 
-  {/* Forgot password link - aligned right 
-  <div className="flex justify-end">
-    <Link
-      href="/forgot-password"
-      className="text-xs font-medium transition-colors"
-      style={{ color: colors.secondary }}
-    >
-      Esqueceu a senha?
-    </Link>
-  </div>*/}
+
+  {/* Forgot password link - aligned right */}
+<div className="flex justify-end -mt-2">
+  <Link
+    href="/forgot-password"
+    className="text-xs font-medium transition-colors hover:underline"
+    style={{ color: colors.secondary }}
+  >
+    Esqueceu a senha?
+  </Link>
+</div>
 
   {/* Submit button */}
   <button
@@ -254,6 +255,20 @@ export default function LoginPage(): React.ReactElement {
               <span className="px-4" style={{ backgroundColor: colors.card, color: colors.textSecondary }}>ou</span>
             </div>
           </div>
+
+           {/* Dentro do bloco onde está o link "Não tem conta? Cadastre-se" */}
+
+<div className="text-center mt-4">
+  <Link
+    href="/login-email-only"
+    className="inline-flex items-center gap-2 text-sm font-medium transition-colors hover:underline"
+    style={{ color: colors.secondary }}
+  >
+    <Mail size={16} />
+    Entrar apenas com email
+  </Link>
+</div>
+
 
           {/* Link Cadastro */}
           <div className="text-center">

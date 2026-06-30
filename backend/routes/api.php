@@ -15,11 +15,16 @@ use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\RelatoriosController;
 use App\Http\Controllers\LandlordAuthController;
 use App\Http\Controllers\EmpresaController;
+use App\Http\Controllers\PasswordResetController;
 
 $uuidPattern = '[0-9a-fA-F-]{36}';
 
 
 
+
+
+Route::post('/password/email', [PasswordResetController::class, 'sendResetLink'])
+    ->middleware('throttle:5,10'); // 5 tentativas a cada 10 minutos
 
 // ==================== ROTAS DO LANDLORD ====================
 Route::prefix('landlord')->group(function () {

@@ -15,6 +15,9 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use App\Http\Controllers\Controller;
+use App\Rules\ValidPhoneNumber;
+use libphonenumber\PhoneNumberUtil;
+use libphonenumber\PhoneNumberFormat;
 
 class ClienteController extends Controller
 {
@@ -225,6 +228,29 @@ class ClienteController extends Controller
     }
 
     /**
+ * Normaliza o número de telefone para o formato E.164 (+244923456789)
+ */
+private function normalizarTelefone(?string $telefone, ?string $isoPais): ?string
+{
+    if (empty($telefone) || empty($isoPais)) {
+        return $telefone; // ou null, dependendo do seu caso
+    }
+
+    try {
+        $phoneUtil = PhoneNumberUtil::getInstance();
+        $numeroProto = $phoneUtil->parse($telefone, $isoPais);
+        return $phoneUtil->format($numeroProto, PhoneNumberFormat::E164);
+    } catch (\Exception $e) {
+        Log::warning('[ClienteController] Falha ao normalizar telefone', [
+            'telefone' => $telefone,
+            'iso' => $isoPais,
+            'error' => $e->getMessage()
+        ]);
+        return $telefone; // fallback
+    }
+}
+
+    /**
      * Valida e normaliza o NIF/BI
      */
     private function validarENormalizarNIF(?string $nif, string $tipo): ?string
@@ -375,11 +401,10 @@ class ClienteController extends Controller
     /**
      * Criar novo cliente
      */
-    public function store(Request $request)
+   public function store(Request $request)
     {
         $modo = $this->getModo();
-        
-        Log::info('[ClienteController::store] Iniciando criação de cliente', [
+        Log::info('[ClienteController::store] Iniciando criação', [
             'user_id' => $this->getUserId(),
             'modo' => $modo,
             'dados' => $request->except(['password', 'password_confirmation'])
@@ -388,15 +413,21 @@ class ClienteController extends Controller
         try {
             $this->verificarAcessoUsuario();
 
-            $dados = $request->validate([
+            $validated = $request->validate([
                 'nome' => 'required|string|max:255',
                 'tipo' => 'required|in:consumidor_final,empresa',
                 'nif' => 'nullable|string|max:20|unique:clientes,nif',
                 'status' => 'nullable|in:ativo,inativo',
-                'telefone' => 'nullable|string|max:20',
+                'telefone' => [
+                    'nullable',
+                    'string',
+                    'max:20',
+                    new ValidPhoneNumber($request->iso_pais ?? 'AO'),
+                ],
                 'email' => 'nullable|email|max:255|unique:clientes,email',
                 'endereco' => 'nullable|string',
                 'data_registro' => 'nullable|date',
+                'iso_pais' => 'required_with:telefone|string|size:2|in:AO,PT,BR,CV,MZ,GW,ST,US,GB,FR,DE,ES',
             ], [
                 'nome.required' => 'O nome é obrigatório',
                 'nome.max' => 'O nome não pode ter mais que 255 caracteres',
@@ -407,34 +438,32 @@ class ClienteController extends Controller
                 'email.unique' => 'Este email já está cadastrado',
                 'status.in' => 'O status deve ser ativo ou inativo',
                 'data_registro.date' => 'A data de registro deve ser uma data válida',
+                'iso_pais.in' => 'Código do país inválido',
             ]);
 
-            Log::info('[ClienteController::store] Validação passou', [
-                'dados_validados' => $dados
-            ]);
+            // Normaliza telefone
+     if ($request->filled('telefone') && $request->filled('iso_pais')) {
+        $validated['telefone'] = $this->normalizarTelefone($request->telefone, $request->iso_pais);
+    }
+    unset($validated['iso_pais']); // não salvar
 
-            // Normaliza e valida NIF
-            if (isset($dados['nif'])) {
-                $dados['nif'] = $this->validarENormalizarNIF($dados['nif'], $dados['tipo']);
-                Log::info('[ClienteController::store] NIF normalizado', [
-                    'nif_normalizado' => $dados['nif']
-                ]);
+            // Normaliza NIF
+            if (isset($validated['nif'])) {
+                $validated['nif'] = $this->validarENormalizarNIF($validated['nif'], $validated['tipo']);
             }
 
             // Valores padrão
-            $dados['data_registro'] = $dados['data_registro'] ?? now();
-            $dados['status'] = $dados['status'] ?? 'ativo';
+            $validated['data_registro'] = $validated['data_registro'] ?? now();
+            $validated['status'] = $validated['status'] ?? 'ativo';
 
-            // ⭐ ADICIONAR TENANT_ID (apenas para colectivo)
             if ($this->isColectivo()) {
-                $dados['tenant_id'] = $this->empresa->id;
+                $validated['tenant_id'] = $this->empresa->id;
             }
 
-            // ⭐ USAR O MODEL CORRETO
             if ($this->isColectivo()) {
-                $cliente = SharedCliente::create($dados);
+                $cliente = SharedCliente::create($validated);
             } else {
-                $cliente = TenantCliente::create($dados);
+                $cliente = TenantCliente::create($validated);
             }
 
             Log::info('[ClienteController::store] Cliente criado com sucesso', [
@@ -452,24 +481,14 @@ class ClienteController extends Controller
             ], 201);
 
         } catch (ValidationException $e) {
-            Log::warning('[ClienteController::store] Erro de validação', [
-                'errors' => $e->errors(),
-                'dados' => $request->all()
-            ]);
-
+            Log::warning('[ClienteController::store] Erro de validação', ['errors' => $e->errors()]);
             return response()->json([
                 'success' => false,
                 'message' => 'Erro de validação',
                 'errors' => $e->errors()
             ], 422);
         } catch (\Exception $e) {
-            Log::error('[ClienteController::store] Erro ao criar cliente', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'data' => $request->all(),
-                'modo' => $modo,
-            ]);
-
+            Log::error('[ClienteController::store] Erro', ['error' => $e->getMessage()]);
             return response()->json([
                 'success' => false,
                 'message' => 'Erro ao criar cliente',
@@ -539,7 +558,6 @@ class ClienteController extends Controller
     public function update(Request $request, $id)
     {
         $modo = $this->getModo();
-        
         Log::info('[ClienteController::update] Iniciando atualização', [
             'cliente_id' => $id,
             'user_id' => $this->getUserId(),
@@ -548,19 +566,23 @@ class ClienteController extends Controller
 
         try {
             $this->verificarAcessoUsuario();
-
             $cliente = $this->buscarClienteOrFail($id);
 
-            // 🔥 PASSO 1: Validação básica (sem unique para NIF ainda)
-            $dados = $request->validate([
+            $validated = $request->validate([
                 'nome' => 'sometimes|required|string|max:255',
                 'tipo' => 'nullable|in:consumidor_final,empresa',
                 'nif' => 'nullable|string|max:20',
                 'status' => 'nullable|in:ativo,inativo',
-                'telefone' => 'nullable|string|max:20',
+                'telefone' => [
+                    'nullable',
+                    'string',
+                    'max:20',
+                    new ValidPhoneNumber($request->iso_pais ?? 'AO'),
+                ],
                 'email' => 'nullable|email|max:255|unique:clientes,email,' . $cliente->id,
                 'endereco' => 'nullable|string',
                 'data_registro' => 'nullable|date',
+                'iso_pais' => 'required_with:telefone|string|size:2|in:AO,PT,BR,CV,MZ,GW,ST,US,GB,FR,DE,ES',
             ], [
                 'nome.required' => 'O nome é obrigatório',
                 'nome.max' => 'O nome não pode ter mais que 255 caracteres',
@@ -569,37 +591,38 @@ class ClienteController extends Controller
                 'email.unique' => 'Este email já está cadastrado',
                 'status.in' => 'O status deve ser ativo ou inativo',
                 'data_registro.date' => 'A data de registro deve ser uma data válida',
+                'iso_pais.in' => 'Código do país inválido',
             ]);
 
-            // 🔥 PASSO 2: Determina o tipo e normaliza o NIF
-            $tipo = $dados['tipo'] ?? $cliente->tipo;
+    if ($request->filled('telefone') && $request->filled('iso_pais')) {
+        $validated['telefone'] = $this->normalizarTelefone($request->telefone, $request->iso_pais);
+    }
+    unset($validated['iso_pais']);
 
-            if (isset($dados['nif'])) {
-                $nifNormalizado = $this->validarENormalizarNIF($dados['nif'], $tipo);
-                $dados['nif'] = $nifNormalizado;
-
-                // 🔥 PASSO 3: Verifica unicidade após normalização
+            // Normaliza NIF
+            $tipo = $validated['tipo'] ?? $cliente->tipo;
+            if (isset($validated['nif'])) {
+                $nifNormalizado = $this->validarENormalizarNIF($validated['nif'], $tipo);
+                $validated['nif'] = $nifNormalizado;
                 if ($nifNormalizado !== null) {
                     $exists = $this->queryClientes()
                         ->where('nif', $nifNormalizado)
                         ->where('id', '!=', $cliente->id)
                         ->exists();
-
                     if ($exists) {
                         throw ValidationException::withMessages([
                             'nif' => 'Este NIF já está cadastrado'
                         ]);
                     }
                 }
-            } elseif (isset($dados['tipo']) && $dados['tipo'] !== $cliente->tipo) {
-                $nifValidado = $this->validarENormalizarNIF($cliente->nif, $dados['tipo']);
+            } elseif (isset($validated['tipo']) && $validated['tipo'] !== $cliente->tipo) {
+                $nifValidado = $this->validarENormalizarNIF($cliente->nif, $validated['tipo']);
                 if ($nifValidado !== null) {
-                    $dados['nif'] = $nifValidado;
+                    $validated['nif'] = $nifValidado;
                 }
             }
 
-            // 🔥 PASSO 4: Atualiza o cliente
-            $cliente->update($dados);
+            $cliente->update($validated);
             $cliente->refresh();
 
             Log::info('[ClienteController::update] Cliente atualizado com sucesso', [
@@ -617,35 +640,16 @@ class ClienteController extends Controller
             ]);
 
         } catch (ValidationException $e) {
-            Log::warning('[ClienteController::update] Erro de validação', [
-                'cliente_id' => $id,
-                'errors' => $e->errors()
-            ]);
-
+            Log::warning('[ClienteController::update] Erro de validação', ['errors' => $e->errors()]);
             return response()->json([
                 'success' => false,
                 'message' => 'Erro de validação',
                 'errors' => $e->errors()
             ], 422);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            Log::warning('[ClienteController::update] Cliente não encontrado', [
-                'cliente_id' => $id,
-                'modo' => $modo,
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Cliente não encontrado',
-            ], 404);
+            return response()->json(['success' => false, 'message' => 'Cliente não encontrado'], 404);
         } catch (\Exception $e) {
-            Log::error('[ClienteController::update] Erro ao atualizar cliente', [
-                'cliente_id' => $id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'data' => $request->all(),
-                'modo' => $modo,
-            ]);
-
+            Log::error('[ClienteController::update] Erro', ['error' => $e->getMessage()]);
             return response()->json([
                 'success' => false,
                 'message' => 'Erro ao atualizar cliente',
@@ -653,6 +657,7 @@ class ClienteController extends Controller
             ], 500);
         }
     }
+
 
     /**
      * Soft delete (arquivar)

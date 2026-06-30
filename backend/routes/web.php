@@ -42,3 +42,8 @@ Route::fallback(function () {
         'message' => 'Rota não encontrada.'
     ], 404);
 });
+
+
+
+// Rotas públicas (sem tenant obrigatório)
+Route::post('/login/email-only', [WebAuthController::class, 'loginWithEmailOnly']);

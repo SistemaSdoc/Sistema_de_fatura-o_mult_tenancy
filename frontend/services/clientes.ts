@@ -31,10 +31,11 @@ export interface CriarClienteInput {
     nif?: string;
     tipo?: TipoCliente;
     status?: StatusCliente;
-    telefone?: string;
+    telefone?: string;  
     email?: string;
     endereco?: string;
     data_registro?: string;
+    iso_pais?: string;        // ← adicionado
 }
 
 export interface AtualizarClienteInput extends Partial<CriarClienteInput> { }

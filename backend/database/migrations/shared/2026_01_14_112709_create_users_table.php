@@ -27,6 +27,9 @@ return new class extends Migration
 
             $table->timestamps(); // já está aqui dentro do create
         });
+
+
+        
     }
 
     /**

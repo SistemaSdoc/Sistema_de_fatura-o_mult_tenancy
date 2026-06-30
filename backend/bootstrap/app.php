@@ -31,7 +31,6 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Web: tenant primeiro, sessão depois
         $middleware->prependToGroup('web', [
-            'resolve.tenant',
             EncryptCookies::class,
             AddQueuedCookiesToResponse::class,
             StartSession::class,
@@ -39,7 +38,6 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // API: tenant primeiro, depois Sanctum
     $middleware->prependToGroup('api', [
-        'resolve.tenant',
         EncryptCookies::class,
         AddQueuedCookiesToResponse::class,
         StartSession::class,

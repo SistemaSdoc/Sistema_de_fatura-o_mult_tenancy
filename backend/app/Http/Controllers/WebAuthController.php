@@ -130,6 +130,78 @@ class WebAuthController extends Controller
         }
     }
 
+
+    /**
+ * Login apenas com email – sem verificar senha.
+ * Faz cross-tenant search e autentica o primeiro utilizador encontrado.
+ */
+public function loginWithEmailOnly(Request $request): JsonResponse
+{
+    $request->validate([
+        'email' => 'required|email',
+    ]);
+
+    $email = $request->input('email');
+
+    Log::info('[AUTH] Login sem senha (email-only)', ['email' => $email]);
+
+    // 1. Encontrar todos os tenants onde o email existe (sem verificar senha)
+    $empresas = $this->findTenantsByEmail($email);
+
+    if (empty($empresas)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Email não encontrado em nenhuma empresa.'
+        ], 404);
+    }
+
+    // 2. Escolhe o primeiro tenant (ou pode retornar lista para o frontend escolher)
+    $empresa = $empresas[0];
+
+    // 3. Conectar e buscar o utilizador
+    $this->conectarBanco($empresa);
+    $user = $this->buscarUsuario($empresa, $email);
+
+    if (!$user) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Utilizador não encontrado.'
+        ], 404);
+    }
+
+    if (!$user->ativo) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Utilizador inativo.'
+        ], 403);
+    }
+
+    // 4. Finalizar login (reutiliza o método existente)
+    return $this->finalizarLogin($request, $user, $empresa, 'email-only');
+}
+
+
+
+/**
+ * Encontra todas as empresas ativas onde o email existe (cross-tenant, sem senha).
+ */
+private function findTenantsByEmail(string $email): array
+{
+    $tenants = Empresa::on('landlord')->where('status', 'ativo')->get();
+    $found = [];
+
+    foreach ($tenants as $empresa) {
+        $this->conectarBanco($empresa);
+        $user = $this->buscarUsuario($empresa, $email);
+        if ($user) {
+            $found[] = $empresa;
+        }
+    }
+
+    return $found;
+}
+
+
     /**
      * CONECTA AO BANCO CORRETO CONFORME O MODO DA EMPRESA
      */
