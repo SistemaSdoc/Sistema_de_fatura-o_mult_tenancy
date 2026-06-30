@@ -75,9 +75,9 @@ const POR_PAGINA = 10;
 /* ─── Badge Tipo ──────────────────────────────────────────────────────────── */
 function TipoBadge({ tipo, colors }: { tipo: TipoDocumento; colors: ColorsTheme }) {
   const palette: Partial<Record<TipoDocumento, { bg: string; text: string }>> = {
-    FP: { bg: `${colors.warning}1a`, text: colors.warning },
-    FA: { bg: `${colors.warning}1a`, text: colors.warning },
-    NC: { bg: `${colors.warning}1a`, text: colors.warning },
+    FP: { bg: `${colors.warning}1a`, text: colors.secondary },
+    FA: { bg: `${colors.warning}1a`, text: colors.secondary },
+    NC: { bg: `${colors.warning}1a`, text: colors.primary },
     ND: { bg: `${colors.secondary}1a`, text: colors.secondary },
     FRt: { bg: `${colors.primary}1a`, text: colors.primary },
   };
@@ -95,10 +95,10 @@ function TipoBadge({ tipo, colors }: { tipo: TipoDocumento; colors: ColorsTheme 
 /* ─── Badge Estado ────────────────────────────────────────────────────────── */
 function EstadoBadge({ estado, colors }: { estado: string; colors: ColorsTheme }) {
   const map: Record<string, { bg: string; text: string }> = {
-    paga: { bg: `${colors.success}1a`, text: colors.success },
-    parcialmente_paga: { bg: `${colors.warning}1a`, text: colors.warning },
-    emitido: { bg: `${colors.warning}1a`, text: colors.warning },
-    cancelado: { bg: `${colors.danger}1a`, text: colors.danger },
+    paga: { bg: `${colors.secondary}1a`, text: colors.success },
+    parcialmente_paga: { bg: `${colors.secondary}1a`, text: colors.warning },
+    emitido: { bg: `${colors.secondary}1a`, text: colors.warning },
+    cancelado: { bg: `${colors.text}1a`, text: colors.danger },
     expirado: { bg: `${colors.textSecondary}1a`, text: colors.textSecondary },
   };
   const s = map[estado] ?? { bg: colors.hover, text: colors.textSecondary };

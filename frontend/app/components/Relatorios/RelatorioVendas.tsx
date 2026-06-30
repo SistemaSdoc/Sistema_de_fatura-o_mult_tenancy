@@ -31,10 +31,10 @@ export function RelatorioVendasComponent({
   relatorioVendas,
   relatorioFaturacao,
 }: RelatorioVendasProps) {
-  // ✅ KPIs - Usa diretamente os dados do backend
+  // KPIs - Usa diretamente os dados do backend
   const kpis = relatorioVendas?.kpis;
 
-  // ✅ Gráfico de distribuição de vendas
+  // Gráfico de distribuição de vendas
   const dadosVendasPie = useMemo(() => {
     if (!relatorioVendas) return [];
     
@@ -53,7 +53,7 @@ export function RelatorioVendasComponent({
     return result;
   }, [relatorioVendas, kpis, colors]);
 
-  // ✅ Gráfico de distribuição de facturação
+  // Gráfico de distribuição de facturação
   const dadosFaturacaoPie = useMemo(() => {
     if (!relatorioFaturacao) return [];
     
@@ -62,20 +62,20 @@ export function RelatorioVendasComponent({
       dados.push({ 
         name: "Paga", 
         value: relatorioFaturacao.faturacao_paga, 
-        color: "#22c55e" 
+        color: colors.secondary 
       });
     }
     if (relatorioFaturacao.faturacao_pendente > 0) {
       dados.push({ 
         name: "Pendente", 
         value: relatorioFaturacao.faturacao_pendente, 
-        color: "#f97316" 
+        color: colors.primary
       });
     }
     return dados;
-  }, [relatorioFaturacao]);
+  }, [relatorioFaturacao, colors]);
 
-  // ✅ Gráfico de evolução - usa agrupado do backend
+  // Gráfico de evolução - usa agrupado do backend
   const dadosEvolucao = useMemo(() => {
     // agrupado may not be declared on the typed interface, use a safe runtime check
     const agrupado = (relatorioVendas as any)?.agrupado;
@@ -115,7 +115,7 @@ export function RelatorioVendasComponent({
   if (isLoading) return <CarregandoLinha colors={colors} />;
   if (!relatorioVendas || !relatorioFaturacao) return <Vazio colors={colors} />;
 
-  // ✅ Dados do backend
+  // Dados do backend
   const totalVendas = kpis?.total_vendas ?? 0;
   const quantidadeVendas = kpis?.quantidade_vendas ?? 0;
   const ticketMedio = kpis?.ticket_medio ?? 0;
@@ -125,7 +125,7 @@ export function RelatorioVendasComponent({
 
   return (
     <>
-      {/* ✅ KPIS */}
+      {/* KPIS */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-0 border rounded-lg overflow-hidden" style={{ borderColor: colors.border }}>
         <KpiCell 
           label="Total Vendas" 
@@ -139,7 +139,7 @@ export function RelatorioVendasComponent({
           label="Ticket Médio" 
           value={formatarKwanza(ticketMedio)}
           sub={`${clientesPeriodo} clientes`} 
-          color="#3b82f6" 
+          color={colors.secondary} 
           colors={colors} 
           border={border} 
         />
@@ -147,7 +147,7 @@ export function RelatorioVendasComponent({
           label="Produtos Vendidos" 
           value={produtosVendidos.toString()}
           sub={`${vendasPorStatus.pagas} pagas`} 
-          color={colors.secondary} 
+          color={colors.primary} 
           colors={colors} 
           border={border} 
         />
@@ -155,14 +155,14 @@ export function RelatorioVendasComponent({
           label="Status" 
           value={`${vendasPorStatus.pendentes} pendentes`}
           sub={`${vendasPorStatus.canceladas} canceladas`} 
-          color="#f97316" 
+          color={colors.secondary} 
           colors={colors} 
           border={border} 
           last 
         />
       </div>
 
-      {/* ✅ GRÁFICOS */}
+      {/* GRÁFICOS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Gráfico de Vendas */}
         <SecaoGrafico titulo="Total de Vendas" colors={colors}>
@@ -218,7 +218,7 @@ export function RelatorioVendasComponent({
         </SecaoGrafico>
       </div>
 
-      {/* ✅ EVOLUÇÃO DE VENDAS */}
+      {/* EVOLUÇÃO DE VENDAS */}
       {dadosEvolucao.length > 0 && (
         <SecaoGrafico titulo="Evolução de Vendas" colors={colors}>
           <ResponsiveContainer width="100%" height={220}>
@@ -254,7 +254,7 @@ export function RelatorioVendasComponent({
         </SecaoGrafico>
       )}
 
-      {/* ✅ DOCUMENTOS POR TIPO */}
+      {/* DOCUMENTOS POR TIPO */}
       {dadosPorTipo.length > 0 && (
         <SecaoGrafico titulo="Documentos por Tipo" colors={colors}>
           <ResponsiveContainer width="100%" height={220}>
@@ -296,7 +296,7 @@ export function RelatorioVendasComponent({
         </SecaoGrafico>
       )}
 
-      {/* ✅ ÚLTIMAS VENDAS */}
+      {/* ÚLTIMAS VENDAS */}
       <SecaoGrafico titulo="Últimas Vendas" colors={colors}>
         <TabelaDados
           headers={["Nº Documento", "Cliente", "Total", "Estado"]}

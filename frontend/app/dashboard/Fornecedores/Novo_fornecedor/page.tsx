@@ -536,7 +536,7 @@ function FormFornecedor({
           <div className="grid grid-cols-2 gap-2">
             {(["ativo", "inativo"] as const).map((s) => {
               const active = form.status === s;
-              const clr = s === "ativo" ? colors.success : colors.textSecondary;
+              const clr = s === "ativo" ? colors.secondary : colors.textSecondary;
               return (
                 <label
                   key={s}
@@ -861,7 +861,7 @@ export default function FornecedoresPage() {
       icon: CheckCircle,
       label: "Ativos",
       value: fornecedores.filter((f) => f.status === "ativo").length,
-      color: colors.success,
+      color: colors.secondary,
     },
     {
       icon: XCircle,
@@ -1166,11 +1166,11 @@ export default function FornecedoresPage() {
                             style={{
                               backgroundColor:
                                 f.status === "ativo"
-                                  ? `${colors.success}18`
+                                  ? `${colors.secondary}18`
                                   : `${colors.textSecondary}18`,
                               color:
                                 f.status === "ativo"
-                                  ? colors.success
+                                  ? colors.secondary
                                   : colors.textSecondary,
                             }}
                           >
@@ -1256,7 +1256,7 @@ export default function FornecedoresPage() {
                                 <button
                                   onClick={() => abrirRestaurar(f)}
                                   className="p-2 transition-colors hover:opacity-70"
-                                  style={{ color: colors.success }}
+                                  style={{ color: colors.secondary }}
                                   title="Restaurar"
                                 >
                                   <RotateCcw className="w-4 h-4" />

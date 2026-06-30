@@ -71,11 +71,11 @@ type TabAtiva = "fr" | "ft";
 /* ── Badge Tipo ── */
 function TipoBadge({ tipo, colors }: { tipo: TipoDocumento; colors: ColorsTheme }) {
   const palette: Partial<Record<TipoDocumento, { bg: string; text: string }>> = {
-    FT: { bg: `${colors.textSecondary}1a`, text: colors.secondary },
-    FR: { bg: `${colors.success}1a`, text: colors.success },
-    RC: { bg: `${colors.teal ?? colors.success}1a`, text: colors.teal ?? colors.success },
-    FP: { bg: `${colors.warning}1a`, text: colors.warning },
-    NC: { bg: `${colors.danger}1a`, text: colors.danger },
+    FT: { bg: `${colors.border}1a`, text: colors.text },
+    FR: { bg: `${colors.border}1a`, text: colors.secondary },
+    RC: { bg: `${colors.border}1a`, text: colors.textSecondary },
+    FP: { bg: `${colors.warning}1a`, text: colors.secondary },
+    NC: { bg: `${colors.danger}1a`, text: colors.secondary },
     ND: { bg: `${colors.secondary}1a`, text: colors.secondary },
   };
   const s = palette[tipo] ?? { bg: colors.hover, text: colors.textSecondary };

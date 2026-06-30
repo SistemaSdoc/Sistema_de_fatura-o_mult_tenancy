@@ -14,7 +14,7 @@ import {
   Trash2,
   History,
   Percent,
-  Receipt,
+
   MoreVertical,
 } from "lucide-react";
 import MainEmpresa from "../../../components/MainEmpresa";
@@ -475,13 +475,13 @@ export default function CategoriasPage() {
       icon: CheckCircle,
       label: "Ativos",
       value: categorias.filter((c) => c.status === "ativo").length,
-      color: colors.success,
+      color: colors.secondary,
     },
     {
       icon: Package,
       label: "Produtos",
       value: categorias.length,
-      color: colors.primary,
+      color: colors.textSecondary,
     },
     {
       icon: Trash2,
@@ -686,12 +686,12 @@ export default function CategoriasPage() {
                           <div
                             className="w-9 h-9 flex items-center justify-center flex-shrink-0"
                             style={{
-                              backgroundColor: `${colors.primary}20`,
+                              backgroundColor: `${colors.textSecondary}20`,
                             }}
                           >
                             <Package
                               className="w-4 h-4"
-                              style={{ color: colors.primary }}
+                              style={{ color: colors.textSecondary }}
                             />
                           </div>
                           <div className="min-w-0">
@@ -721,11 +721,11 @@ export default function CategoriasPage() {
                           style={{
                             backgroundColor:
                               c.status === "ativo"
-                                ? `${colors.success}18`
+                                ? `${colors.secondary}18`
                                 : `${colors.textSecondary}18`,
                             color:
                               c.status === "ativo"
-                                ? colors.success
+                                ? colors.secondary
                                 : colors.textSecondary,
                           }}
                         >
@@ -811,7 +811,7 @@ export default function CategoriasPage() {
                                   <DropdownMenuItem
                                     onClick={() => handleConfirmarRestore(c)}
                                     className="gap-2 cursor-pointer text-xs py-2"
-                                    style={{ color: colors.success }}
+                                    style={{ color: colors.secondary }}
                                   >
                                     <RotateCcw className="h-3.5 w-3.5" />
                                     Restaurar
@@ -956,10 +956,7 @@ export default function CategoriasPage() {
                   className="text-xs font-medium flex items-center gap-1"
                   style={{ color: colors.text }}
                 >
-                  <Receipt
-                    className="h-3.5 w-3.5"
-                    style={{ color: colors.primary }}
-                  />
+
                   Configuração de IVA
                 </Label>
                 <div className="flex items-center gap-2">
@@ -1193,7 +1190,7 @@ export default function CategoriasPage() {
           >
             <DialogTitle
               className="flex items-center gap-2 text-sm"
-              style={{ color: colors.success }}
+              style={{ color: colors.secondary }}
             >
               <RotateCcw className="h-4 w-4" />
               Restaurar Categoria
@@ -1224,8 +1221,8 @@ export default function CategoriasPage() {
                 size="sm"
                 onClick={handleRestaurar}
                 className="flex-1 h-8 gap-1 text-white text-xs"
-                style={{ backgroundColor: colors.success }}
-              >
+                style={{ backgroundColor: colors.secondary }}
+              > 
                 <RotateCcw className="h-3 w-3" />
                 Restaurar
               </Button>

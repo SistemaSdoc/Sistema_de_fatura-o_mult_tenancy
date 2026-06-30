@@ -1,4 +1,3 @@
-// src/app/(empresa)/estoque/utils/statusUtils.ts
 import { Produto, isServico, estaSemEstoque, estaEstoqueBaixo } from "@/services/produtos";
 
 export interface StatusEstoque {
@@ -11,7 +10,7 @@ export function getStatusEstoque(item: Produto): StatusEstoque {
     if (isServico(item)) {
         return {
             label: "Serviço",
-            cor: "bg-gray-100 text-gray-600",
+            cor: "bg-[#E5E7EB] text-[#4B5563]",
             icone: "Wrench",
         };
     }
@@ -31,7 +30,7 @@ export function getStatusEstoque(item: Produto): StatusEstoque {
     }
     return {
         label: "OK",
-        cor: "bg-green-100 text-green-700",
+       cor: "bg-[#28A745]/10 text-[#28A745]",
         icone: "CheckCircle2",
     };
 }

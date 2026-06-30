@@ -68,7 +68,7 @@ export default function ClientesPage() {
     try {
       let data;
       
-      // ✅ CORRIGIDO: Usar listar() com parâmetros
+      // CORRIGIDO: Usar listar() com parâmetros
       if (filtroStatus === "todos") {
         // Buscar todos (ativos + inativos)
         const ativos = await clienteService.listar({ 
@@ -202,7 +202,7 @@ export default function ClientesPage() {
       icon: CheckCircle,
       label: "Ativos",
       value: clientes.filter((c) => c.status === "ativo").length,
-      color: colors.success,
+      color: colors.secondary,
     },
     {
       icon: XCircle,
@@ -440,11 +440,11 @@ export default function ClientesPage() {
                     style={{
                       backgroundColor:
                         selecao.status === "ativo"
-                          ? `${colors.success}18`
+                          ? `${colors.secondary}18`
                           : `${colors.textSecondary}18`,
                       color:
                         selecao.status === "ativo"
-                          ? colors.success
+                          ? colors.secondary
                           : colors.textSecondary,
                     }}
                   >

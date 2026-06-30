@@ -149,7 +149,7 @@ $temTroco = $troco > 0;
     <style>
         @page {
             size: A4 portrait;
-            margin: 12mm;
+            margin: 40mm;
         }
 
         * {
@@ -178,7 +178,7 @@ $temTroco = $troco > 0;
     border: 1px solid #cbd5e1;
     border-radius: 8px;
     padding: 12px 14px;
-    margin-bottom: 18px;
+    margin-bottom: 30px;
     font-size: 11px;
 }
 

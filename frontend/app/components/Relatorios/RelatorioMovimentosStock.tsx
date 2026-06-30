@@ -136,13 +136,13 @@ export function RelatorioMovimentosStockComponent({
           label="Total Entradas"
           value={String(relatorioMovimentos.resumo?.total_entradas ?? 0)}
           sub="unidades"
-          color="#22c55e" colors={colors} border={border}
+          color={colors.secondary} colors={colors} border={border}
         />
         <KpiCell
           label="Total Saídas"
           value={String(relatorioMovimentos.resumo?.total_saidas ?? 0)}
           sub="unidades"
-          color="#ef4444" colors={colors} border={border}
+          color={colors.primary} colors={colors} border={border}
         />
         <KpiCell
           label="Balanço"
@@ -178,8 +178,8 @@ export function RelatorioMovimentosStockComponent({
               <YAxis tick={{ fontSize: 10, fill: colors.textSecondary }} />
               <Tooltip contentStyle={tooltipStyle(colors)} />
               <Legend />
-              <Bar dataKey="entradas" fill="#22c55e" name="Entradas" radius={[2, 2, 0, 0]} />
-              <Bar dataKey="saidas" fill="#ef4444" name="Saídas" radius={[2, 2, 0, 0]} />
+              <Bar dataKey="entradas" fill={colors.secondary} name="Entradas" radius={[2, 2, 0, 0]} />
+              <Bar dataKey="saidas" fill={colors.primary} name="Saídas" radius={[2, 2, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </SecaoGrafico>

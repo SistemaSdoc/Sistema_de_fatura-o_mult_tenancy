@@ -1,6 +1,6 @@
 import React from "react";
 import { RelatorioPagamentosPendentes, formatarKwanza } from "@/services/relatorios";
-import { KpiCell, SecaoGrafico, TabelaDados, EstadoBadge, CarregandoLinha, Vazio, SemDados } from "./RelatorioComuns";
+import { KpiCell, SecaoGrafico, TabelaDados, EstadoBadge, CarregandoLinha, Vazio } from "./RelatorioComuns";
 
 interface RelatorioPagamentosProps {
   colors: any;
@@ -24,11 +24,11 @@ export function RelatorioPagamentosComponent({
         <KpiCell label="Total Pendente" value={formatarKwanza(relatorioPagamentos.resumo?.total_pendente ?? 0)}
           color={colors.primary} colors={colors} border={border} alerta={(relatorioPagamentos.resumo?.total_pendente ?? 0) > 0} />
         <KpiCell label="Total em Atraso" value={formatarKwanza(relatorioPagamentos.resumo?.total_atrasado ?? 0)}
-          color="#dc2626" colors={colors} border={border} alerta={(relatorioPagamentos.resumo?.total_atrasado ?? 0) > 0} />
+          color={colors.secondary} colors={colors} border={border} alerta={(relatorioPagamentos.resumo?.total_atrasado ?? 0) > 0} />
         <KpiCell label="Facturas Pendentes" value={String(relatorioPagamentos.resumo?.quantidade_faturas ?? 0)}
-          color={colors.secondary} colors={colors} border={border} />
+          color={colors.primary} colors={colors} border={border} />
         <KpiCell label="Retenção Pendente" value={formatarKwanza(relatorioPagamentos.resumo?.retencao_pendente ?? 0)}
-          color="#f97316" colors={colors} border={border} last />
+          color={colors.secondary} colors={colors} border={border} last />
       </div>
 
       <SecaoGrafico titulo="Facturas Pendentes" colors={colors}>

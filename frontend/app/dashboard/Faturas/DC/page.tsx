@@ -122,7 +122,7 @@ export default function OutrosDocumentosPage() {
     carregarDocumentos();
   }, [carregarDocumentos]);
 
-  /* ── 🆕 Imprimir A4 (nova rota print-a4) ── */
+  /* ── Imprimir A4 (nova rota print-a4) ── */
   const imprimirA4 = useCallback(
     async (documento: DocumentoFiscal) => {
       if (!documento.id) return;

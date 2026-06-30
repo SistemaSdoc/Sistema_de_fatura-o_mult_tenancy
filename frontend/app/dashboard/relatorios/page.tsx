@@ -378,7 +378,7 @@ export default function RelatoriosPage() {
               onClick={handleExportExcel}
               disabled={exportLoading || !getDadosAtivos()}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 transition-all"
-              style={{ backgroundColor: "#16a34a", borderRadius: 4 }}
+              style={{ backgroundColor: colors.secondary, borderRadius: 4 }}
             >
               <FileSpreadsheet size={12} />
               Excel
@@ -419,7 +419,7 @@ export default function RelatoriosPage() {
           {/* FILTRO */}
           {hasPeriodoFiltro && periodoAtivo && (
             <div className="border-b" style={{ borderColor: colors.border }}>
-              {/* ... seu código de filtro permanece igual ... */}
+              
               <div className="flex items-center gap-3 px-4 py-2" style={{ backgroundColor: colors.hover }}>
                 <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>Período</span>
                 <span className="text-[11px] px-2 py-0.5 font-mono" style={{ backgroundColor: colors.card, border, color: colors.text, borderRadius: 3 }}>
