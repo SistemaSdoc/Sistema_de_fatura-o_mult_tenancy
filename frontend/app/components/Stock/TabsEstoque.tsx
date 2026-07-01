@@ -1,6 +1,6 @@
 // src/app/(empresa)/estoque/components/TabsEstoque.tsx
 import React from "react";
-import { Layers,Trash2,ArrowRightLeft } from "lucide-react";
+import { Layers, Trash2, ArrowRightLeft } from "lucide-react";
 import { useThemeColors } from "@/context/ThemeContext";
 
 interface TabsEstoqueProps {
@@ -17,56 +17,59 @@ export function TabsEstoque({ abaAtiva, onAbaChange, totalItens, totalDeletados,
 
     return (
         <div className="border-b" style={{ borderColor: colors.border }}>
-            <nav className="flex gap-1 px-4" aria-label="Tabs">
+            <nav
+                className="flex gap-1 px-2 sm:px-4 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                aria-label="Tabs"
+            >
                 <button
                     onClick={() => onAbaChange("itens")}
-                    className="px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2"
+                    className="shrink-0 px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 sm:gap-2"
                     style={{
                         borderColor: abaAtiva === "itens" ? colors.primary : 'transparent',
                         color: abaAtiva === "itens" ? colors.text : colors.textSecondary
                     }}
                 >
-                    <Layers className="w-4 h-4" />
-                    Todos os Itens
-                    <span 
+                    <Layers className="w-4 h-4 shrink-0" />
+                    <span>Todos os Itens</span>
+                    <span
                         className="ml-1 px-2 py-0.5 text-xs"
-                        style={{ 
-                            backgroundColor: colors.hover, 
-                            color: colors.textSecondary 
+                        style={{
+                            backgroundColor: colors.hover,
+                            color: colors.textSecondary
                         }}
                     >
                         {totalItens}
                     </span>
                 </button>
-                
+
                 <button
                     onClick={() => onAbaChange("movimentacoes")}
-                    className="px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2"
+                    className="shrink-0 px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 sm:gap-2"
                     style={{
                         borderColor: abaAtiva === "movimentacoes" ? colors.primary : 'transparent',
                         color: abaAtiva === "movimentacoes" ? colors.text : colors.textSecondary
                     }}
                 >
-                    <ArrowRightLeft className="w-4 h-4" />
-                    Movimentações
+                    <ArrowRightLeft className="w-4 h-4 shrink-0" />
+                    <span>Movimentações</span>
                 </button>
-                
+
                 <button
                     onClick={() => onAbaChange("deletados")}
-                    className="px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2"
+                    className="shrink-0 px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 sm:gap-2"
                     style={{
                         borderColor: abaAtiva === "deletados" ? colors.primary : 'transparent',
                         color: abaAtiva === "deletados" ? colors.text : colors.textSecondary
                     }}
                 >
-                    <Trash2 className="w-4 h-4" />
-                    Lixeira
+                    <Trash2 className="w-4 h-4 shrink-0" />
+                    <span>Lixeira</span>
                     {totalDeletados > 0 && (
-                        <span 
+                        <span
                             className="px-2 py-0.5 text-xs"
-                            style={{ 
-                                backgroundColor: `${colors.warning}20`, 
-                                color: colors.warning 
+                            style={{
+                                backgroundColor: `${colors.warning}20`,
+                                color: colors.warning
                             }}
                         >
                             {totalDeletados}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useThemeColors } from "@/context/ThemeContext";
@@ -161,6 +161,83 @@ const InputField: React.FC<InputFieldProps> = ({
     );
 };
 
+// --- Componente de Notificação Toast ---
+interface ToastNotificationProps {
+    message: string;
+    type: 'success' | 'error' | 'warning' | 'info';
+    onClose: () => void;
+    colors: ThemeColors;
+}
+
+const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, onClose, colors }) => {
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            onClose();
+        }, 5000);
+
+        return () => clearTimeout(timer);
+    }, [onClose]);
+
+    const getIcon = () => {
+        switch (type) {
+            case 'success':
+                return <CheckCircle size={24} style={{ color: colors.success }} />;
+            case 'error':
+                return <AlertCircle size={24} style={{ color: colors.danger }} />;
+            case 'warning':
+                return <AlertCircle size={24} style={{ color: colors.secondary }} />;
+            case 'info':
+                return <CheckCircle size={24} style={{ color: colors.primary }} />;
+            default:
+                return <CheckCircle size={24} style={{ color: colors.success }} />;
+        }
+    };
+
+    const getBorderColor = () => {
+        switch (type) {
+            case 'success':
+                return colors.success;
+            case 'error':
+                return colors.danger;
+            case 'warning':
+                return colors.secondary;
+            case 'info':
+                return colors.primary;
+            default:
+                return colors.success;
+        }
+    };
+
+    return (
+        <div 
+            className="fixed top-6 right-6 z-50 max-w-md animate-slide-in-right"
+            style={{ 
+                backgroundColor: colors.card,
+                borderLeft: `4px solid ${getBorderColor()}`,
+                boxShadow: '0 10px 40px rgba(0,0,0,0.15)'
+            }}
+        >
+            <div className="flex items-center gap-4 p-4">
+                <div className="flex-shrink-0">
+                    {getIcon()}
+                </div>
+                <div className="flex-1">
+                    <p className="text-sm font-medium" style={{ color: colors.text }}>
+                        {message}
+                    </p>
+                </div>
+                <button
+                    onClick={onClose}
+                    className="flex-shrink-0 transition-opacity hover:opacity-70"
+                    style={{ color: colors.textSecondary }}
+                >
+                    <X size={18} />
+                </button>
+            </div>
+        </div>
+    );
+};
+
 export default function RegisterCompanyPage() {
     const router = useRouter();
     const colors = useThemeColors() as ThemeColors;
@@ -172,8 +249,8 @@ export default function RegisterCompanyPage() {
         email: "",
         telefone: "",
         endereco: "",
-        regime_fiscal: "simplificado", // ALTERADO: começa como simplificado
-        sujeito_iva: false, // ALTERADO: começa como não clicado (false)
+        regime_fiscal: "simplificado",
+        sujeito_iva: false,
         nome_banco: "",
         numero_conta: "",
         iban: "",
@@ -189,8 +266,11 @@ export default function RegisterCompanyPage() {
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
     const [uploadingLogo, setUploadingLogo] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState("");
-    const [success, setSuccess] = useState(false);
+    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' | 'info' } | null>(null);
+
+    const showToast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
+        setToast({ message, type });
+    };
 
     const handleChange = (
         e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
@@ -202,26 +282,20 @@ export default function RegisterCompanyPage() {
         setForm({ ...form, [e.target.name]: value });
     };
 
-    // Função para lidar com a mudança do checkbox de IVA
     const handleIvaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const isChecked = e.target.checked;
         setForm({
             ...form,
             sujeito_iva: isChecked,
-            // Se estiver sujeito a IVA, define como regime geral
-            // Se não estiver sujeito a IVA, define como regime simplificado
             regime_fiscal: isChecked ? "geral" : "simplificado"
         });
     };
 
-    // Função para lidar com a mudança do select de regime fiscal
     const handleRegimeChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const value = e.target.value as "simplificado" | "geral";
         setForm({
             ...form,
             regime_fiscal: value,
-            // Se selecionar regime geral, automaticamente marca como sujeito a IVA
-            // Se selecionar regime simplificado, automaticamente desmarca
             sujeito_iva: value === "geral"
         });
     };
@@ -230,11 +304,11 @@ export default function RegisterCompanyPage() {
         const file = e.target.files?.[0];
         if (!file) return;
         if (!file.type.startsWith("image/")) {
-            setError("Por favor, selecione um arquivo de imagem válido.");
+            showToast("Por favor, selecione um arquivo de imagem válido.", "error");
             return;
         }
         if (file.size > 2 * 1024 * 1024) {
-            setError("A imagem deve ter no máximo 2MB.");
+            showToast("A imagem deve ter no máximo 2MB.", "error");
             return;
         }
         setLogoFile(file);
@@ -270,43 +344,41 @@ export default function RegisterCompanyPage() {
     };
 
     const validateStep1 = (): boolean => {
-        setError("");
-
         if (!form.nome.trim()) {
-            setError("Nome da empresa é obrigatório");
+            showToast("Nome da empresa é obrigatório", "error");
             return false;
         }
 
         if (!form.nif.trim()) {
-            setError("NIF é obrigatório");
+            showToast("NIF é obrigatório", "error");
             return false;
         }
         const nifClean = form.nif.replace(/\D/g, '');
         if (nifClean.length !== 10) {
-            setError("NIF deve ter exatamente 10 dígitos numéricos.");
+            showToast("NIF deve ter exatamente 10 dígitos numéricos.", "error");
             return false;
         }
 
         if (!form.email.trim()) {
-            setError("Email da empresa é obrigatório");
+            showToast("Email da empresa é obrigatório", "error");
             return false;
         }
         if (!form.telefone.trim()) {
-            setError("Telefone é obrigatório");
+            showToast("Telefone é obrigatório", "error");
             return false;
         }
         if (!form.endereco.trim()) {
-            setError("Endereço é obrigatório");
+            showToast("Endereço é obrigatório", "error");
             return false;
         }
         if (!form.subdomain.trim()) {
-            setError("Subdomínio é obrigatório");
+            showToast("Subdomínio é obrigatório", "error");
             return false;
         }
 
         const subdomainRegex = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
         if (!subdomainRegex.test(form.subdomain)) {
-            setError("Subdomínio inválido. Use apenas letras minúsculas, números e hífen (não pode começar ou terminar com hífen).");
+            showToast("Subdomínio inválido. Use apenas letras minúsculas, números e hífen (não pode começar ou terminar com hífen).", "error");
             return false;
         }
 
@@ -319,7 +391,6 @@ export default function RegisterCompanyPage() {
 
     const handlePrevStep = () => {
         setStep(1);
-        setError("");
     };
 
     const toggleModo = (modo: "colectivo" | "singular") => {
@@ -329,24 +400,20 @@ export default function RegisterCompanyPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        setError("");
-
         if (!form.admin_name.trim()) {
-            setError("Nome do administrador é obrigatório");
+            showToast("Nome do administrador é obrigatório", "error");
             return;
         }
         if (!form.admin_email.trim()) {
-            setError("Email do administrador é obrigatório");
+            showToast("Email do administrador é obrigatório", "error");
             return;
         }
         if (!form.admin_password || form.admin_password.length < 8) {
-            setError("Senha deve ter no mínimo 8 caracteres");
+            showToast("Senha deve ter no mínimo 8 caracteres", "error");
             return;
         }
 
         setLoading(true);
-        setError("");
-        setSuccess(false);
 
         try {
             await refreshCsrf();
@@ -378,8 +445,10 @@ export default function RegisterCompanyPage() {
             };
 
             await api.post("/api/empresas", submitData);
-            setSuccess(true);
-            setTimeout(() => router.push("/login"), 2000);
+            
+            showToast(" Empresa criada com sucesso! Redirecionando para o login...", "success");
+            
+            setTimeout(() => router.push("/login"), 3000);
         } catch (err: unknown) {
             let errorMessage = "Erro ao criar empresa. Verifique os dados e tente novamente.";
             if (err instanceof AxiosError && err.response?.data?.message) {
@@ -387,7 +456,7 @@ export default function RegisterCompanyPage() {
             } else if (err instanceof Error) {
                 errorMessage = err.message;
             }
-            setError(errorMessage);
+            showToast(` ${errorMessage}`, "error");
         } finally {
             setLoading(false);
             setUploadingLogo(false);
@@ -400,18 +469,28 @@ export default function RegisterCompanyPage() {
     ];
 
     return (
-        <div className="min-h-screen py-12 px-4" style={{ backgroundColor: colors.background }}>
-            <div className="max-w-4xl mx-auto">
-                <div className="flex items-center justify-between mb-8">
+        <div className="min-h-screen px-3 py-6 sm:px-4 sm:py-12" style={{ backgroundColor: colors.background }}>
+            {/* Toast Notification */}
+            {toast && (
+                <ToastNotification
+                    message={toast.message}
+                    type={toast.type}
+                    onClose={() => setToast(null)}
+                    colors={colors}
+                />
+            )}
+
+            <div className="mx-auto w-full max-w-5xl">
+                <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex items-center gap-4">
                         <button onClick={() => router.back()} className="p-2 transition-opacity hover:opacity-70" style={{ color: colors.primary }}>
                             <ArrowLeft size={24} />
                         </button>
                         <div>
-                            <h1 className="text-3xl font-bold" style={{ color: colors.secondary }}>
+                            <h1 className="text-2xl font-bold sm:text-3xl" style={{ color: colors.secondary }}>
                                 Criar nova empresa
                             </h1>
-                            <p className="text-base mt-2" style={{ color: colors.textSecondary }}>
+                            <p className="mt-2 text-sm sm:text-base" style={{ color: colors.textSecondary }}>
                                 Preencha os dados abaixo para começar a usar o FaturaJá
                             </p>
                         </div>
@@ -419,7 +498,7 @@ export default function RegisterCompanyPage() {
                 </div>
 
                 {/* STEP INDICATOR */}
-                <div className="flex mb-8 border-b" style={{ borderColor: colors.border }}>
+                <div className="mb-6 flex flex-col border-b sm:mb-8 sm:flex-row" style={{ borderColor: colors.border }}>
                     <div className="flex-1 py-3 text-center">
                         <div className={`inline-flex items-center gap-2 text-sm font-medium ${step === 1 ? "opacity-100" : "opacity-50"}`} style={{ color: step === 1 ? colors.primary : colors.text }}>
                             <span className="w-6 h-6 flex items-center justify-center text-xs rounded-full" style={{ backgroundColor: step === 1 ? colors.primary : colors.border, color: step === 1 ? "white" : colors.text }}>
@@ -439,21 +518,8 @@ export default function RegisterCompanyPage() {
                 </div>
 
                 <div className="border shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-                    <form onSubmit={handleSubmit}>
-                        <div className="p-8">
-                            {error && (
-                                <div className="flex items-center gap-3 p-4 mb-6 border-l-4" style={{ backgroundColor: `${colors.danger}10`, borderColor: colors.danger }}>
-                                    <AlertCircle size={20} style={{ color: colors.danger }} />
-                                    <span className="text-sm" style={{ color: colors.danger }}>{error}</span>
-                                </div>
-                            )}
-                            {success && (
-                                <div className="flex items-center gap-3 p-4 mb-6 border-l-4" style={{ backgroundColor: `${colors.success}10`, borderColor: colors.success }}>
-                                    <CheckCircle size={20} style={{ color: colors.success }} />
-                                    <span className="text-sm" style={{ color: colors.success }}>Empresa criada com sucesso! Redirecionando para o login...</span>
-                                </div>
-                            )}
-
+                    <form onSubmit={handleSubmit} noValidate>
+                        <div className="p-4 sm:p-8">
                             {step === 1 && (
                                 <div className="space-y-6">
                                     {/* LOGO */}
@@ -600,22 +666,22 @@ export default function RegisterCompanyPage() {
                             )}
                         </div>
 
-                        <div className="flex justify-between items-center p-6 border-t" style={{ borderColor: colors.border }}>
+                        <div className="flex flex-col gap-3 border-t p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6" style={{ borderColor: colors.border }}>
                             <Link href="/login" className="group inline-flex items-center gap-2 transition-colors font-medium text-sm" style={{ color: colors.secondary }}>
                                 <UserPlus size={18} /> Já tenho conta <ArrowRight size={16} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                             </Link>
-                            <div className="flex gap-4">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
                                 {step === 2 && (
-                                    <button type="button" onClick={handlePrevStep} className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium transition-opacity hover:opacity-70" style={{ color: colors.textSecondary }}>
+                                    <button type="button" onClick={handlePrevStep} className="flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-medium transition-opacity hover:opacity-70" style={{ color: colors.textSecondary }}>
                                         <ChevronLeft size={18} /> Voltar
                                     </button>
                                 )}
                                 {step === 1 ? (
-                                    <button type="button" onClick={handleNextStep} className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-80" style={{ backgroundColor: colors.primary }}>
+                                    <button type="button" onClick={handleNextStep} className="flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-80" style={{ backgroundColor: colors.primary }}>
                                         Próximo <ChevronRight size={18} />
                                     </button>
                                 ) : (
-                                    <button type="submit" disabled={loading || uploadingLogo} className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-80 disabled:opacity-50" style={{ backgroundColor: colors.primary }}>
+                                    <button type="submit" disabled={loading || uploadingLogo} className="flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-80 disabled:opacity-50" style={{ backgroundColor: colors.primary }}>
                                         {loading && <Loader2 size={18} className="animate-spin" />}
                                         {loading ? "Criando empresa..." : "Criar empresa"}
                                     </button>

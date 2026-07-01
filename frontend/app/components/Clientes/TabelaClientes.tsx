@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Building2,
   User,
@@ -14,6 +14,8 @@ import {
   Trash2,
   AlertCircle,
   Info,
+  X,
+  MoreVertical,
 } from "lucide-react";
 import type { Cliente } from "@/services/clientes";
 import {
@@ -23,6 +25,235 @@ import {
   getClienteBadgeStatus
 } from "@/services/clientes";
 import { ThemeColors } from "./ClientesComuns";
+
+// ─── Animação Slide In Right ──────────────────────────────────────
+const slideInRight = {
+  enter: "animate-slide-in-right",
+  exit: "animate-slide-out-right",
+};
+
+// ─── Componente Toast Notification ──────────────────────────────────
+interface ToastNotificationProps {
+  message: string;
+  type: 'success' | 'error' | 'warning' | 'info';
+  onClose: () => void;
+  colors: ThemeColors;
+}
+
+const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, onClose, colors }) => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const getIcon = () => {
+    switch (type) {
+      case 'success':
+        return <CheckCircle size={24} style={{ color: colors.success }} />;
+      case 'error':
+        return <AlertCircle size={24} style={{ color: colors.danger }} />;
+      case 'warning':
+        return <AlertCircle size={24} style={{ color: colors.warning }} />;
+      case 'info':
+        return <Info size={24} style={{ color: colors.primary }} />;
+      default:
+        return <CheckCircle size={24} style={{ color: colors.success }} />;
+    }
+  };
+
+  const getBorderColor = () => {
+    switch (type) {
+      case 'success':
+        return colors.success;
+      case 'error':
+        return colors.danger;
+      case 'warning':
+        return colors.warning;
+      case 'info':
+        return colors.primary;
+      default:
+        return colors.success;
+    }
+  };
+
+  return (
+    <div 
+      className="fixed top-6 right-6 z-50 max-w-md"
+      style={{ 
+        backgroundColor: colors.card,
+        borderLeft: `4px solid ${getBorderColor()}`,
+        boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
+        animation: 'slideInRight 0.3s ease-out forwards'
+      }}
+    >
+      <div className="flex items-center gap-4 p-4">
+        <div className="flex-shrink-0">
+          {getIcon()}
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-medium" style={{ color: colors.text }}>
+            {message}
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="flex-shrink-0 transition-opacity hover:opacity-70"
+          style={{ color: colors.textSecondary }}
+        >
+          <X size={18} />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ─── Menu de Ações com Três Pontos ──────────────────────────────────
+interface ActionMenuProps {
+  cliente: Cliente;
+  mostrarLixeira: boolean;
+  colors: ThemeColors;
+  onVerDetalhes: (cliente: Cliente) => void;
+  onEditar: (cliente: Cliente) => void;
+  onStatus: (cliente: Cliente) => void;
+  onArquivar?: (cliente: Cliente) => void;
+  onRestaurar?: (cliente: Cliente) => void;
+  onExcluirPermanente?: (cliente: Cliente) => void;
+}
+
+function ActionMenu({
+  cliente,
+  mostrarLixeira,
+  colors,
+  onVerDetalhes,
+  onEditar,
+  onStatus,
+  onArquivar,
+  onRestaurar,
+  onExcluirPermanente,
+}: ActionMenuProps) {
+  const [menuAberto, setMenuAberto] = useState(false);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.action-menu-container')) {
+        setMenuAberto(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className=" action-menu-container">
+      <button
+        onClick={() => setMenuAberto(!menuAberto)}
+        className="p-2 transition-colors hover:opacity-70"
+        style={{ color: colors.textSecondary }}
+        title="Ações"
+      >
+        <MoreVertical className="w-4 h-4" />
+      </button>
+
+      {menuAberto && (
+        <div
+          className="absolute right-0 mt-1 w-48 border shadow-lg z-10 py-1"
+          style={{
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+          }}
+        >
+          {mostrarLixeira ? (
+            // Ações da lixeira
+            <>
+              {onRestaurar && (
+                <button
+                  onClick={() => {
+                    setMenuAberto(false);
+                    onRestaurar(cliente);
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:opacity-70"
+                  style={{ color: colors.success }}
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Restaurar
+                </button>
+              )}
+              {onExcluirPermanente && (
+                <button
+                  onClick={() => {
+                    setMenuAberto(false);
+                    onExcluirPermanente(cliente);
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:opacity-70"
+                  style={{ color: colors.danger }}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Excluir permanentemente
+                </button>
+              )}
+            </>
+          ) : (
+            // Ações normais
+            <>
+              <button
+                onClick={() => {
+                  setMenuAberto(false);
+                  onVerDetalhes(cliente);
+                }}
+                className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:opacity-70"
+                style={{ color: colors.text }}
+              >
+                <Eye className="w-3.5 h-3.5" />
+                Ver detalhes
+              </button>
+              <button
+                onClick={() => {
+                  setMenuAberto(false);
+                  onEditar(cliente);
+                }}
+                className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:opacity-70"
+                style={{ color: colors.secondary }}
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+                Editar
+              </button>
+              <button
+                onClick={() => {
+                  setMenuAberto(false);
+                  onStatus(cliente);
+                }}
+                className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:opacity-70"
+                style={{
+                  color: cliente.status === "ativo" ? colors.warning : colors.success,
+                }}
+              >
+                <Power className="w-3.5 h-3.5" />
+                {cliente.status === "ativo" ? "Inativar" : "Ativar"}
+              </button>
+              {onArquivar && (
+                <button
+                  onClick={() => {
+                    setMenuAberto(false);
+                    onArquivar(cliente);
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:opacity-70"
+                  style={{ color: colors.textSecondary }}
+                >
+                  <Archive className="w-3.5 h-3.5" />
+                  Arquivar
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Modal de Confirmação ──────────────────────────────────────────
 function ConfirmModal({
@@ -133,9 +364,10 @@ interface TabelaClientesProps {
   onExcluirPermanente?: (cliente: Cliente) => void;
   onLimparBusca: () => void;
   mostrarLixeira?: boolean;
+  onToast?: (message: string, type: 'success' | 'error' | 'warning' | 'info') => void;
 }
 
-// ✅ Definir o tipo do modal config
+// Definir o tipo do modal config
 type ModalConfig = {
   title: string;
   message: string;
@@ -157,6 +389,7 @@ export function TabelaClientes({
   onExcluirPermanente,
   onLimparBusca,
   mostrarLixeira = false,
+  onToast,
 }: TabelaClientesProps) {
   // ── Estado para modais de confirmação ──
   const [modalConfirm, setModalConfirm] = useState<{
@@ -241,7 +474,7 @@ export function TabelaClientes({
     }
   };
 
-  // ✅ CORRIGIDO: Configuração do modal com tipo explícito
+  // Configuração do modal com tipo explícito
   const getModalConfig = (): ModalConfig | null => {
     const cliente = modalConfirm.cliente;
     if (!cliente) return null;
@@ -386,12 +619,12 @@ export function TabelaClientes({
           <table className="w-full text-sm">
             <thead>
               <tr style={{ backgroundColor: colors.primary }}>
-                {["Cliente", "Tipo", "Status", "Contacto", "NIF/BI", "Ações"].map(
+                {["Cliente", "Tipo", "Status", "Contacto", "NIF/BI", ""].map(
                   (h, i) => (
                     <th
                       key={h}
                       className={`py-3 px-5 font-semibold text-white text-xs uppercase tracking-wider ${
-                        i === 5 ? "text-center" : "text-left"
+                        i === 5 ? "text-center w-12" : "text-left"
                       }`}
                     >
                       {h}
@@ -480,7 +713,7 @@ export function TabelaClientes({
                               className="text-xs flex items-center gap-1 mt-0.5"
                               style={{ color: colors.textSecondary }}
                             >
-                              <span>🗑️</span>
+                              <Trash2 className="w-3 h-3" />  
                               {new Date(c.deleted_at).toLocaleDateString(
                                 "pt-PT"
                               )}
@@ -578,78 +811,19 @@ export function TabelaClientes({
                       )}
                     </td>
 
-                    {/* Ações */}
-                    <td className="py-3 px-5">
-                      <div className="flex items-center justify-center gap-1">
-                        {mostrarLixeira ? (
-                          // Ações da lixeira
-                          <>
-                            {onRestaurar && (
-                              <button
-                                onClick={() => handleRestaurarClick(c)}
-                                className="p-2 transition-colors hover:opacity-70"
-                                style={{ color: colors.success }}
-                                title="Restaurar"
-                              >
-                                <RotateCcw className="w-4 h-4" />
-                              </button>
-                            )}
-                            {onExcluirPermanente && (
-                              <button
-                                onClick={() => handleExcluirClick(c)}
-                                className="p-2 transition-colors hover:opacity-70"
-                                style={{ color: colors.danger }}
-                                title="Excluir permanentemente"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
-                          </>
-                        ) : (
-                          // Ações normais
-                          <>
-                            <button
-                              onClick={() => onVerDetalhes(c)}
-                              className="p-2 transition-colors hover:opacity-70"
-                              style={{ color: colors.text }}
-                              title="Ver detalhes"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => onEditar(c)}
-                              className="p-2 transition-colors hover:opacity-70"
-                              style={{ color: colors.secondary }}
-                              title="Editar"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleStatusClick(c)}
-                              className="p-2 transition-colors hover:opacity-70"
-                              style={{
-                                color:
-                                  c.status === "ativo"
-                                    ? colors.warning
-                                    : colors.success,
-                              }}
-                              title={c.status === "ativo" ? "Inativar" : "Ativar"}
-                            >
-                              <Power className="w-4 h-4" />
-                            </button>
-                            {onArquivar && (
-                              <button
-                                onClick={() => handleArquivarClick(c)}
-                                className="p-2 transition-colors hover:opacity-70"
-                                style={{ color: colors.textSecondary }}
-                                title="Arquivar"
-                              >
-                                <Archive className="w-4 h-4" />
-                              </button>
-                            )}
-                          </>
-                        )}
-                      </div>
+                    {/* Ações - Menu de Três Pontos */}
+                    <td className="py-3 px-2">
+                      <ActionMenu
+                        cliente={c}
+                        mostrarLixeira={mostrarLixeira}
+                        colors={colors}
+                        onVerDetalhes={onVerDetalhes}
+                        onEditar={onEditar}
+                        onStatus={handleStatusClick}
+                        onArquivar={onArquivar}
+                        onRestaurar={onRestaurar}
+                        onExcluirPermanente={onExcluirPermanente}
+                      />
                     </td>
                   </tr>
                 );

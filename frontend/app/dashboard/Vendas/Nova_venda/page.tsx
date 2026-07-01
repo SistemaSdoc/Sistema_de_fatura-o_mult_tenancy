@@ -36,7 +36,7 @@ import type {
   TipoDocumentoFiscal,
 } from "@/services/vendas";
 
-// 🔥 Importação do serviço de clientes
+//  Importação do serviço de clientes
 import {
   clienteService,
   formatarNIF,
@@ -86,7 +86,7 @@ interface ThemeColors {
   hover: string;
 }
 
-// ✅ CORRIGIDO: Função calcularItem com taxa de retenção dinâmica
+// CORRIGIDO: Função calcularItem com taxa de retenção dinâmica
 function calcularItem(
   produto: Produto,
   qtd: number,
@@ -98,7 +98,7 @@ function calcularItem(
   const taxaIva = produto.taxa_iva ?? 0;
   const iva = arredondar((base * taxaIva) / 100);
 
-  // ✅ CORRIGIDO: Usa a taxa de retenção do produto
+  // CORRIGIDO: Usa a taxa de retenção do produto
   const taxaRet = ehServico ? (produto.taxa_retencao || 0) : 0;
   const ret = ehServico ? arredondar((base * taxaRet) / 100) : 0;
 
@@ -151,6 +151,83 @@ function LinhaFiscal({
   );
 }
 
+// --- Componente de Notificação Toast ---
+interface ToastNotificationProps {
+  message: string;
+  type: 'success' | 'error' | 'warning' | 'info';
+  onClose: () => void;
+  colors: ThemeColors;
+}
+
+const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, onClose, colors }) => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const getIcon = () => {
+    switch (type) {
+      case 'success':
+        return <CheckCircle2 size={24} style={{ color: colors.success }} />;
+      case 'error':
+        return <AlertTriangle size={24} style={{ color: colors.danger }} />;
+      case 'warning':
+        return <AlertTriangle size={24} style={{ color: colors.warning }} />;
+      case 'info':
+        return <CheckCircle2 size={24} style={{ color: colors.primary }} />;
+      default:
+        return <CheckCircle2 size={24} style={{ color: colors.success }} />;
+    }
+  };
+
+  const getBorderColor = () => {
+    switch (type) {
+      case 'success':
+        return colors.success;
+      case 'error':
+        return colors.danger;
+      case 'warning':
+        return colors.warning;
+      case 'info':
+        return colors.primary;
+      default:
+        return colors.success;
+    }
+  };
+
+  return (
+    <div
+      className="fixed top-6 right-6 z-50 max-w-md animate-slide-in-right"
+      style={{
+        backgroundColor: colors.card,
+        borderLeft: `4px solid ${getBorderColor()}`,
+        boxShadow: '0 10px 40px rgba(0,0,0,0.15)'
+      }}
+    >
+      <div className="flex items-center gap-4 p-4">
+        <div className="flex-shrink-0">
+          {getIcon()}
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-medium" style={{ color: colors.text }}>
+            {message}
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="flex-shrink-0 transition-opacity hover:opacity-70"
+          style={{ color: colors.textSecondary }}
+        >
+          <X size={18} />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export default function NovaFaturaReciboPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
@@ -171,8 +248,7 @@ export default function NovaFaturaReciboPage() {
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
   const [itens, setItens] = useState<ItemVendaUI[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [sucesso, setSucesso] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' | 'info' } | null>(null);
   const [modoCliente, setModoCliente] = useState<ModoCliente>("cadastrado");
   const [clienteAvulso, setClienteAvulso] = useState("");
   const [clienteAvulsoNif, setClienteAvulsoNif] = useState("");
@@ -199,6 +275,10 @@ export default function NovaFaturaReciboPage() {
   const buscaInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  const showToast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
+    setToast({ message, type });
+  };
+
   // ─── EFFECTS ─────────────────────────────────────────────────────────
 
   // Verificar autenticação
@@ -212,26 +292,26 @@ export default function NovaFaturaReciboPage() {
 
     const carregarDadosIniciais = async () => {
       try {
-        console.log('🔄 Carregando dados iniciais...');
+        console.log(' Carregando dados iniciais...');
 
         // 1. Carregar clientes ativos
         const clientesResponse = await clienteService.listar({
           status: 'ativo',
           per_page: 10,
         });
-        console.log('✅ Clientes carregados:', clientesResponse);
+        console.log(' Clientes carregados:', clientesResponse);
 
         // Extrair os dados da resposta paginada
         const clientesData = clientesResponse.data || [];
         setClientes(clientesData);
-        console.log(`📋 ${clientesData.length} clientes ativos carregados`);
+        console.log(` ${clientesData.length} clientes ativos carregados`);
 
         // 2. Carregar produtos
         const produtosData = await produtoService
           .listar({ status: "ativo", paginar: false })
           .then((r) => (Array.isArray(r.produtos) ? r.produtos : []));
         setProdutos(produtosData);
-        console.log(`📦 ${produtosData.length} produtos carregados`);
+        console.log(` ${produtosData.length} produtos carregados`);
 
         // 3. Verificar estoque baixo
         const fisicos = produtosData.filter((p) => !isServico(p));
@@ -241,12 +321,13 @@ export default function NovaFaturaReciboPage() {
         setProdutosEstoqueBaixo(estoqueBaixo);
 
         if (estoqueBaixo.length > 0) {
-          console.warn(`⚠️ ${estoqueBaixo.length} produtos com estoque baixo`);
+          console.warn(` ${estoqueBaixo.length} produtos com estoque baixo`);
+          showToast(` ${estoqueBaixo.length} produtos com estoque baixo`, 'warning');
         }
 
       } catch (error) {
-        console.error('❌ Erro ao carregar dados:', error);
-        setError("Erro ao carregar dados");
+        console.error(' Erro ao carregar dados:', error);
+        showToast(' Erro ao carregar dados', 'error');
       }
     };
 
@@ -321,7 +402,7 @@ export default function NovaFaturaReciboPage() {
     }
   };
 
-  // 🔥 FUNÇÃO PARA ADICIONAR ITEM AUTOMATICAMENTE AO CARRINHO
+  //  FUNÇÃO PARA ADICIONAR ITEM AUTOMATICAMENTE AO CARRINHO
   const adicionarItemAutomaticamente = (produto: Produto, quantidade: number = 1) => {
     // Verificar se o produto já está no carrinho
     const idx = itens.findIndex(i => i.produto_id === produto.id);
@@ -330,7 +411,7 @@ export default function NovaFaturaReciboPage() {
       // Se já existe, atualiza a quantidade
       const novaQtd = itens[idx].quantidade + quantidade;
       if (!isServico(produto) && novaQtd > produto.estoque_atual) {
-        setError(`Estoque insuficiente para ${novaQtd} unidades de ${produto.nome}.`);
+        showToast(` Estoque insuficiente para ${novaQtd} unidades de ${produto.nome}.`, 'error');
         return;
       }
       setItens((prev) =>
@@ -338,18 +419,18 @@ export default function NovaFaturaReciboPage() {
           i === idx ? calcularItem(produto, novaQtd, it.desconto, it.id) : it,
         ),
       );
-      setSucesso(`${produto.nome} adicionado (quantidade: ${novaQtd})`);
+      showToast(` ${produto.nome} adicionado (quantidade: ${novaQtd})`, 'success');
     } else {
       // Se não existe, adiciona novo item
       setItens((prev) => [
         ...prev,
         calcularItem(produto, quantidade, 0),
       ]);
-      setSucesso(` ${produto.nome} adicionado ao carrinho`);
+      showToast(`${produto.nome} adicionado ao carrinho`, 'success');
     }
 
     // Limpar mensagem de sucesso após 3 segundos
-    setTimeout(() => setSucesso(null), 3000);
+    setTimeout(() => setToast(null), 3000);
 
     // Limpar o campo de busca
     setBuscaItem("");
@@ -381,7 +462,7 @@ export default function NovaFaturaReciboPage() {
     const qtd = produto.tipo === "produto" ? Math.min(1, produto.estoque_atual) : 1;
     adicionarItemAutomaticamente(produto, qtd);
   };
-  // 🔥 MANIPULADOR PARA PRESSIONAR ENTER NO CAMPO DE BUSCA
+  // MANIPULADOR PARA PRESSIONAR ENTER NO CAMPO DE BUSCA
   const handleBuscaKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -398,28 +479,28 @@ export default function NovaFaturaReciboPage() {
         adicionarItemAutomaticamente(produto, qtd);
       } else {
         // Produto não encontrado - mostra erro
-        setError(`❌ Produto com código "${codigoBusca}" não encontrado`);
-        setTimeout(() => setError(null), 3000);
+        showToast(` Produto com código "${codigoBusca}" não encontrado`, 'error');
+        setTimeout(() => setToast(null), 3000);
       }
     }
   };
 
   const adicionarItem = () => {
     if (!formItem.produto_id || !previewItem) {
-      setError("Selecione um produto/serviço");
+      showToast(' Selecione um produto/serviço', 'error');
       return;
     }
     const p = produtos.find((x) => x.id === formItem.produto_id);
     if (!p) return;
     if (!isServico(p) && formItem.quantidade > p.estoque_atual) {
-      setError(`Estoque insuficiente. Disponível: ${p.estoque_atual}`);
+      showToast(` Estoque insuficiente. Disponível: ${p.estoque_atual}`, 'error');
       return;
     }
     const idx = itens.findIndex((i) => i.produto_id === formItem.produto_id);
     if (idx >= 0) {
       const novaQtd = itens[idx].quantidade + formItem.quantidade;
       if (!isServico(p) && novaQtd > p.estoque_atual) {
-        setError(`Estoque insuficiente para ${novaQtd} unidades.`);
+        showToast(` Estoque insuficiente para ${novaQtd} unidades.`, 'error');
         return;
       }
       setItens((prev) =>
@@ -433,10 +514,11 @@ export default function NovaFaturaReciboPage() {
         calcularItem(p, formItem.quantidade, formItem.desconto),
       ]);
     }
+    showToast(`${p.nome} adicionado ao carrinho`, 'success');
+    setTimeout(() => setToast(null), 3000);
     setFormItem({ produto_id: "", quantidade: 1, desconto: 0 });
     setBuscaItem("");
     setPreviewItem(null);
-    setError(null);
   };
 
   const atualizarQtd = (itemId: string, novaQtd: number) => {
@@ -450,7 +532,7 @@ export default function NovaFaturaReciboPage() {
     const p = produtos.find((x) => x.id === item.produto_id);
     if (!p) return;
     if (!isServico(p) && novaQtd > p.estoque_atual) {
-      setError(`Máximo disponível: ${p.estoque_atual}`);
+      showToast(` Máximo disponível: ${p.estoque_atual}`, 'error');
       return;
     }
     setItens((prev) =>
@@ -504,8 +586,6 @@ export default function NovaFaturaReciboPage() {
   const finalizarVenda = async () => {
     if (!podeFinalizar()) return;
     setLoading(true);
-    setError(null);
-    setSucesso(null);
     try {
       const payload: CriarVendaPayload = {
         itens: itens.map((it) => ({
@@ -543,17 +623,18 @@ export default function NovaFaturaReciboPage() {
 
       const erroVal = validarPayloadVenda(payload);
       if (erroVal) {
-        setError(erroVal);
+        showToast(` ${erroVal}`, 'error');
         return;
       }
       await vendaService.criar(payload);
-      setSucesso("Venda criada com sucesso! Redirecionando...");
+      showToast(' Venda criada com sucesso! Redirecionando...', 'success');
       setTimeout(() => router.push("/dashboard/Faturas/Faturas"), 1500);
     } catch (err: unknown) {
-      setError(
+      showToast(
         err instanceof AxiosError
-          ? err.response?.data?.message || "Erro ao salvar"
-          : "Erro ao salvar",
+          ? ` ${err.response?.data?.message || "Erro ao salvar"}`
+          : " Erro ao salvar",
+        'error'
       );
     } finally {
       setLoading(false);
@@ -581,6 +662,16 @@ export default function NovaFaturaReciboPage() {
         className="space-y-3 pb-8 px-2 sm:px-4 max-w-5xl mx-auto"
         style={{ backgroundColor: colors.background }}
       >
+        {/* Toast Notification */}
+        {toast && (
+          <ToastNotification
+            message={toast.message}
+            type={toast.type}
+            onClose={() => setToast(null)}
+            colors={colors}
+          />
+        )}
+
         {/* ── Header ── */}
         <div className="flex items-center gap-2 mt-2">
           <button
@@ -594,63 +685,6 @@ export default function NovaFaturaReciboPage() {
             Nova Venda
           </h1>
         </div>
-
-        {/* ── Alertas ── */}
-        {error && (
-          <div
-            className="p-3 border text-sm flex items-center gap-2"
-            style={{
-              backgroundColor: `${colors.danger}15`,
-              borderColor: colors.danger,
-              color: colors.danger,
-            }}
-          >
-            <AlertTriangle size={15} className="shrink-0" />
-            <span className="flex-1">{error}</span>
-            <button
-              onClick={() => setError(null)}
-              className="opacity-60 hover:opacity-100"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-        {sucesso && (
-          <div
-            className="p-3 border text-sm flex items-center gap-2"
-            style={{
-              backgroundColor: `${colors.success}15`,
-              borderColor: colors.success,
-              color: colors.success,
-            }}
-          >
-            <CheckCircle2 size={15} className="shrink-0" />
-            <span>{sucesso}</span>
-          </div>
-        )}
-        {produtosEstoqueBaixo.length > 0 && (
-          <div
-            className="p-3 border text-sm flex items-start gap-2"
-            style={{
-              backgroundColor: `${colors.warning}12`,
-              borderColor: `${colors.warning}50`,
-            }}
-          >
-            <AlertTriangle
-              size={15}
-              className="shrink-0 mt-0.5"
-              style={{ color: colors.warning }}
-            />
-            <span style={{ color: colors.warning }}>
-              <strong>Estoque baixo: </strong>
-              <span style={{ color: colors.textSecondary }}>
-                {produtosEstoqueBaixo
-                  .map((p) => `${p.nome} (${p.estoque_atual})`)
-                  .join(" · ")}
-              </span>
-            </span>
-          </div>
-        )}
 
         {/* ════════════════════════════════════════════════════════════════
             CARD 1 — Dados da Venda
@@ -1145,7 +1179,6 @@ export default function NovaFaturaReciboPage() {
                 Limpar tudo
               </button>
             </div>
-
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead style={{ backgroundColor: colors.hover }}>
@@ -1164,6 +1197,12 @@ export default function NovaFaturaReciboPage() {
                       style={{ color: colors.textSecondary }}
                     >
                       Qtd.
+                    </th>
+                    <th
+                      className="py-2.5 px-3 text-center font-semibold text-xs"
+                      style={{ color: colors.textSecondary }}
+                    >
+                      Desconto
                     </th>
                     <th
                       className="py-2.5 px-3 text-right font-semibold text-xs hidden sm:table-cell"
@@ -1214,6 +1253,7 @@ export default function NovaFaturaReciboPage() {
                             {item.descricao}
                           </span>
                         </td>
+
                         <td className="px-3 py-2.5">
                           <div className="flex items-center justify-center gap-0.5">
                             <button
@@ -1226,12 +1266,35 @@ export default function NovaFaturaReciboPage() {
                             >
                               <Minus size={11} style={{ color: colors.text }} />
                             </button>
-                            <span
-                              className="w-7 text-center text-sm font-medium"
-                              style={{ color: colors.text }}
-                            >
-                              {item.quantidade}
-                            </span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={maxEst}
+                              value={item.quantidade}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                if (!isNaN(val) && val >= 1) {
+                                  const p = produtos.find((x) => x.id === item.produto_id);
+                                  if (p) {
+                                    const maxQtd = isServico(p) ? 9999 : p.estoque_atual;
+                                    const novaQtd = Math.min(Math.max(1, val), maxQtd);
+                                    atualizarQtd(item.id, novaQtd);
+                                  }
+                                }
+                              }}
+                              onBlur={(e) => {
+                                const val = parseInt(e.target.value);
+                                if (isNaN(val) || val < 1) {
+                                  atualizarQtd(item.id, 1);
+                                }
+                              }}
+                              className="w-12 text-center text-sm font-medium outline-none border rounded"
+                              style={{
+                                backgroundColor: colors.card,
+                                color: colors.text,
+                                borderColor: colors.border,
+                              }}
+                            />
                             <button
                               onClick={() =>
                                 atualizarQtd(item.id, item.quantidade + 1)
@@ -1244,6 +1307,63 @@ export default function NovaFaturaReciboPage() {
                             </button>
                           </div>
                         </td>
+
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center justify-center">
+                            <input
+                              type="number"
+                              min={0}
+                              step={1}
+                              value={item.desconto}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value);
+                                if (!isNaN(val) && val >= 0) {
+                                  const p = produtos.find((x) => x.id === item.produto_id);
+                                  if (p) {
+                                    const novoItem = calcularItem(
+                                      p,
+                                      item.quantidade,
+                                      val,
+                                      item.id
+                                    );
+                                    setItens((prev) =>
+                                      prev.map((it) =>
+                                        it.id === item.id ? novoItem : it
+                                      )
+                                    );
+                                  }
+                                }
+                              }}
+                              onBlur={(e) => {
+                                const val = parseFloat(e.target.value);
+                                if (isNaN(val) || val < 0) {
+                                  const p = produtos.find((x) => x.id === item.produto_id);
+                                  if (p) {
+                                    const novoItem = calcularItem(
+                                      p,
+                                      item.quantidade,
+                                      0,
+                                      item.id
+                                    );
+                                    setItens((prev) =>
+                                      prev.map((it) =>
+                                        it.id === item.id ? novoItem : it
+                                      )
+                                    );
+                                  }
+                                }
+                              }}
+                              className="w-20 text-center text-sm font-medium outline-none border rounded px-2"
+                              style={{
+                                backgroundColor: colors.card,
+                                color: colors.text,
+                                borderColor: colors.border,
+                              }}
+                              placeholder="0"
+                            />
+                          </div>
+                        </td>
+
                         <td
                           className="px-3 py-2.5 text-right hidden sm:table-cell"
                           style={{ color: colors.textSecondary }}

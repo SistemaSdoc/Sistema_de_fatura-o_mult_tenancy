@@ -16,9 +16,10 @@ import {
   Truck,
   Archive,
   RotateCcw,
-  Trash,
+  Trash2,
   History,
-  Power,
+  X,
+  MoreVertical,
 } from "lucide-react";
 import MainEmpresa from "../../../components/MainEmpresa";
 import {
@@ -36,18 +37,93 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-// ─── Funções de validação do NIF/BI ──────────────────────────────
+// --- Componente de Notificacao Toast ---
+interface ToastNotificationProps {
+  message: string;
+  type: 'success' | 'error' | 'warning' | 'info';
+  onClose: () => void;
+  colors: ThemeColors;
+}
+
+const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, onClose, colors }) => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const getIcon = () => {
+    switch (type) {
+      case 'success':
+        return <CheckCircle size={24} style={{ color: colors.success }} />;
+      case 'error':
+        return <AlertCircle size={24} style={{ color: colors.danger }} />;
+      case 'warning':
+        return <AlertCircle size={24} style={{ color: colors.warning }} />;
+      case 'info':
+        return <CheckCircle size={24} style={{ color: colors.primary }} />;
+      default:
+        return <CheckCircle size={24} style={{ color: colors.success }} />;
+    }
+  };
+
+  const getBorderColor = () => {
+    switch (type) {
+      case 'success':
+        return colors.success;
+      case 'error':
+        return colors.danger;
+      case 'warning':
+        return colors.warning;
+      case 'info':
+        return colors.primary;
+      default:
+        return colors.success;
+    }
+  };
+
+  return (
+    <div 
+      className="fixed top-6 right-6 z-50 max-w-md animate-slide-in-right"
+      style={{ 
+        backgroundColor: colors.card,
+        borderLeft: `4px solid ${getBorderColor()}`,
+        boxShadow: '0 10px 40px rgba(0,0,0,0.15)'
+      }}
+    >
+      <div className="flex items-center gap-4 p-4">
+        <div className="flex-shrink-0">
+          {getIcon()}
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-medium" style={{ color: colors.text }}>
+            {message}
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="flex-shrink-0 transition-opacity hover:opacity-70"
+          style={{ color: colors.textSecondary }}
+        >
+          <X size={18} />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// --- Funcoes de validacao do NIF/BI ---
 type TipoDocumento = 'NIF' | 'BI' | 'INVALIDO';
 
 function identificarDocumento(valor: string): TipoDocumento {
   const clean = valor.replace(/[^a-zA-Z0-9]/g, '');
   
-  // NIF: 10 dígitos
   if (/^[0-9]{10}$/.test(clean)) {
     return 'NIF';
   }
   
-  // BI: 9 números + 2 letras + 3 números
   if (/^[0-9]{9}[A-Za-z]{2}[0-9]{3}$/.test(clean)) {
     return 'BI';
   }
@@ -112,7 +188,7 @@ function aplicarMascaraNIF(valor: string): string {
   return clean;
 }
 
-/* ─── Tipos ──────────────────────────────────────────────────────── */
+/* --- Tipos --- */
 interface FormFornecedorData {
   nome: string;
   nif: string;
@@ -133,7 +209,7 @@ const INITIAL_FORM: FormFornecedorData = {
   status: "ativo",
 };
 
-/* ─── Modal genérico ─────────────────────────────────────────────── */
+/* --- Modal generico --- */
 function Modal({
   isOpen,
   onClose,
@@ -165,7 +241,7 @@ function Modal({
   );
 }
 
-/* ─── Modal de confirmação ───────────────────────────────────────── */
+/* --- Modal de confirmacao --- */
 function ConfirmModal({
   isOpen,
   onClose,
@@ -231,7 +307,114 @@ function ConfirmModal({
   );
 }
 
-/* ─── Loading States ─────────────────────────────────────────────── */
+/* --- Menu de acoes com tres pontos --- */
+function ActionMenu({
+  fornecedor,
+  onEdit,
+  onArchive,
+  onRestore,
+  onDelete,
+  abaAtiva,
+  colors,
+}: {
+  fornecedor: Fornecedor;
+  onEdit: () => void;
+  onArchive: () => void;
+  onRestore: () => void;
+  onDelete: () => void;
+  abaAtiva: "ativos" | "lixeira";
+  colors: ThemeColors;
+}) {
+  const [menuAberto, setMenuAberto] = useState(false);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.action-menu-container')) {
+        setMenuAberto(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className=" action-menu-container">
+      <button
+        onClick={() => setMenuAberto(!menuAberto)}
+        className="p-2 transition-colors hover:opacity-70"
+        style={{ color: colors.textSecondary }}
+        title="Acoes"
+      >
+        <MoreVertical className="w-4 h-4" />
+      </button>
+
+      {menuAberto && (
+        <div
+          className="absolute right-0 mt-1 w-48 border shadow-lg z-10 py-1"
+          style={{
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+          }}
+        >
+          {abaAtiva === "ativos" ? (
+            <>
+              <button
+                onClick={() => {
+                  setMenuAberto(false);
+                  onEdit();
+                }}
+                className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:opacity-70"
+                style={{ color: colors.text }}
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+                Editar
+              </button>
+              <button
+                onClick={() => {
+                  setMenuAberto(false);
+                  onArchive();
+                }}
+                className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:opacity-70"
+                style={{ color: colors.warning }}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Mover para lixeira
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => {
+                  setMenuAberto(false);
+                  onRestore();
+                }}
+                className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:opacity-70"
+                style={{ color: colors.secondary }}
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Restaurar
+              </button>
+              <button
+                onClick={() => {
+                  setMenuAberto(false);
+                  onDelete();
+                }}
+                className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:opacity-70"
+                style={{ color: colors.danger }}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Excluir permanentemente
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* --- Loading States --- */
 function LoadingStats({ colors }: { colors: ThemeColors }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -315,7 +498,7 @@ function LoadingTabela({ colors }: { colors: ThemeColors }) {
   );
 }
 
-/* ─── Formulário de fornecedor ───────────────────────────────────── */
+/* --- Formulario de fornecedor --- */
 function FormFornecedor({
   fornecedor,
   onSubmit,
@@ -435,7 +618,6 @@ function FormFornecedor({
       }}
       className="space-y-4"
     >
-      {/* Tipo */}
       <div className="grid grid-cols-2 gap-3">
         {(["nacional", "internacional"] as const).map((t) => {
           const active = form.tipo === t;
@@ -479,7 +661,6 @@ function FormFornecedor({
         })}
       </div>
 
-      {/* Nome + Email */}
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className={labelCls} style={{ color: colors.text }}>
@@ -527,7 +708,6 @@ function FormFornecedor({
         </div>
       </div>
 
-      {/* Status + NIF */}
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className={labelCls} style={{ color: colors.text }}>
@@ -613,12 +793,11 @@ function FormFornecedor({
             </p>
           )}
           <small className="text-xs block mt-1" style={{ color: colors.textSecondary }}>
-            NIF: 10 números | BI: 9 números + 2 letras + 3 números
+            NIF: 10 numeros | BI: 9 numeros + 2 letras + 3 numeros
           </small>
         </div>
       </div>
 
-      {/* Telefone */}
       <div>
         <label className={labelCls} style={{ color: colors.text }}>
           Telefone
@@ -640,10 +819,9 @@ function FormFornecedor({
         </div>
       </div>
 
-      {/* Endereço */}
       <div>
         <label className={labelCls} style={{ color: colors.text }}>
-          Endereço
+          Endereco
         </label>
         <div className="relative">
           <MapPin
@@ -655,14 +833,13 @@ function FormFornecedor({
             value={form.endereco}
             onChange={handleChange}
             rows={2}
-            placeholder="Rua, número, bairro, cidade…"
+            placeholder="Rua, numero, bairro, cidade…"
             className={`${inputCls} pl-7 resize-none text-xs`}
             style={inputStyle()}
           />
         </div>
       </div>
 
-      {/* Botões */}
       <div
         className="flex gap-2 pt-2 border-t"
         style={{ borderColor: colors.border }}
@@ -698,9 +875,7 @@ function FormFornecedor({
   );
 }
 
-/* ══════════════════════════════════════════════════════════════════
-   PÁGINA PRINCIPAL
-══════════════════════════════════════════════════════════════════ */
+/* PAGINA PRINCIPAL */
 export default function FornecedoresPage() {
   const colors = useThemeColors();
 
@@ -712,6 +887,7 @@ export default function FornecedoresPage() {
   const [filtroStatus, setFiltroStatus] = useState<"todos" | "ativo" | "inativo">("todos");
   const [filtroTipo, setFiltroTipo] = useState<"todos" | "nacional" | "internacional">("todos");
   const [abaAtiva, setAbaAtiva] = useState<"ativos" | "lixeira">("ativos");
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' | 'info' } | null>(null);
 
   const [modalForm, setModalForm] = useState(false);
   const [modalArquivar, setModalArquivar] = useState(false);
@@ -720,7 +896,10 @@ export default function FornecedoresPage() {
   const [selecao, setSelecao] = useState<Fornecedor | null>(null);
   const [loadingAcao, setLoadingAcao] = useState(false);
 
-  /* ── Filtro local ── */
+  const showToast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
+    setToast({ message, type });
+  };
+
   useEffect(() => {
     const lista = abaAtiva === "ativos" ? fornecedores : fornecedoresDeletados;
     const t = busca.toLowerCase();
@@ -739,23 +918,21 @@ export default function FornecedoresPage() {
     );
   }, [busca, filtroStatus, filtroTipo, fornecedores, fornecedoresDeletados, abaAtiva]);
 
-  /* ── Carregar ── */
   const carregar = useCallback(async () => {
     setLoading(true);
     try {
-      // ✅ CORREÇÃO: O service agora retorna { fornecedores: [...] }
       const [ativosResponse, deletadosResponse] = await Promise.all([
         fornecedorService.listarFornecedores(),
         fornecedorService.listarFornecedoresDeletados(),
       ]);
       
-      // ✅ Extrair os arrays da resposta
       setFornecedores(ativosResponse.fornecedores || []);
       setFornecedoresDeletados(deletadosResponse.fornecedores || []);
     } catch (error) {
       console.error('Erro ao carregar fornecedores:', error);
       setFornecedores([]);
       setFornecedoresDeletados([]);
+      showToast('Erro ao carregar fornecedores', 'error');
     } finally {
       setLoading(false);
     }
@@ -765,7 +942,6 @@ export default function FornecedoresPage() {
     carregar();
   }, [carregar]);
 
-  /* ── Handlers de modal ── */
   const abrirCriar = () => { setSelecao(null); setModalForm(true); };
   const abrirEditar = (f: Fornecedor) => { setSelecao(f); setModalForm(true); };
   const abrirArquivar = (f: Fornecedor) => { setSelecao(f); setModalArquivar(true); };
@@ -777,79 +953,74 @@ export default function FornecedoresPage() {
   const fecharRestaurar = () => { setModalRestaurar(false); setSelecao(null); };
   const fecharExcluir = () => { setModalExcluir(false); setSelecao(null); };
 
-  /* ── Submeter formulário ── */
   const handleSubmit = async (dados: FormFornecedorData) => {
     setLoadingAcao(true);
     try {
       const dadosNormalizados = {
         ...dados,
-        tipo:
-          dados.tipo === ("nacional" as any)
-            ? "nacional"
-            : dados.tipo === ("internacional" as any)
-              ? "internacional"
-              : dados.tipo,
+        tipo: dados.tipo,
       };
       if (selecao) {
         await fornecedorService.atualizarFornecedor(selecao.id, dadosNormalizados);
+        showToast(`Fornecedor "${dados.nome}" atualizado com sucesso`, 'success');
       } else {
         await fornecedorService.criarFornecedor(dadosNormalizados);
+        showToast(`Fornecedor "${dados.nome}" criado com sucesso`, 'success');
       }
       fecharForm();
       await carregar();
     } catch (err: any) {
-      alert(err.response?.data?.message || "Erro ao guardar fornecedor");
+      showToast(err.response?.data?.message || "Erro ao guardar fornecedor", 'error');
     } finally {
       setLoadingAcao(false);
     }
   };
 
-  /* ── Arquivar (soft delete) ── */
   const handleArquivar = async () => {
     if (!selecao) return;
     setLoadingAcao(true);
     try {
       await fornecedorService.deletarFornecedor(selecao.id);
+      showToast(`Fornecedor "${selecao.nome}" movido para a lixeira`, 'success');
       fecharArquivar();
       await carregar();
     } catch (err: any) {
-      alert(err.response?.data?.message || "Erro ao arquivar fornecedor");
+      showToast(err.response?.data?.message || "Erro ao arquivar fornecedor", 'error');
     } finally {
       setLoadingAcao(false);
     }
   };
 
-  /* ── Restaurar ── */
   const handleRestaurar = async () => {
     if (!selecao) return;
     setLoadingAcao(true);
     try {
       await fornecedorService.restaurarFornecedor(selecao.id);
+      showToast(`Fornecedor "${selecao.nome}" restaurado com sucesso`, 'success');
       fecharRestaurar();
       await carregar();
     } catch (err: any) {
-      alert(err.response?.data?.message || "Erro ao restaurar fornecedor");
+      showToast(err.response?.data?.message || "Erro ao restaurar fornecedor", 'error');
     } finally {
       setLoadingAcao(false);
     }
   };
 
-  /* ── Excluir permanentemente ── */
   const handleExcluir = async () => {
     if (!selecao) return;
     setLoadingAcao(true);
     try {
       await fornecedorService.deletarFornecedorPermanente(selecao.id);
+      showToast(`Fornecedor "${selecao.nome}" excluído permanentemente`, 'success');
       fecharExcluir();
       await carregar();
     } catch (err: any) {
-      alert(err.response?.data?.message || "Erro ao excluir fornecedor");
+      showToast(err.response?.data?.message || "Erro ao excluir fornecedor", 'error');
     } finally {
       setLoadingAcao(false);
     }
   };
 
-  /* ── Estatísticas ── */
   const stats = [
     {
       icon: Truck,
@@ -877,7 +1048,6 @@ export default function FornecedoresPage() {
     },
   ];
 
-  /* ── Lista atual ── */
   const listaVazia =
     abaAtiva === "ativos" ? fornecedores.length === 0 : fornecedoresDeletados.length === 0;
 
@@ -887,7 +1057,17 @@ export default function FornecedoresPage() {
         className="space-y-4 max-w-7xl mx-auto pb-6 transition-colors duration-300"
         style={{ backgroundColor: colors.background }}
       >
-        {/* ── Cabeçalho ── */}
+        {/* Toast Notification */}
+        {toast && (
+          <ToastNotification
+            message={toast.message}
+            type={toast.type}
+            onClose={() => setToast(null)}
+            colors={colors}
+          />
+        )}
+
+        {/* Cabecalho */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <h1 className="text-xl font-bold" style={{ color: colors.secondary }}>
@@ -898,7 +1078,6 @@ export default function FornecedoresPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {/* Abas */}
             <div
               className="flex border"
               style={{ borderColor: colors.border, backgroundColor: colors.card }}
@@ -925,7 +1104,6 @@ export default function FornecedoresPage() {
               ))}
             </div>
 
-            {/* Pesquisa */}
             <div className="relative flex-1 min-w-[200px]">
               <Search
                 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4"
@@ -945,7 +1123,6 @@ export default function FornecedoresPage() {
               />
             </div>
 
-            {/* Filtro tipo */}
             <select
               value={filtroTipo}
               onChange={(e) => setFiltroTipo(e.target.value as any)}
@@ -961,7 +1138,6 @@ export default function FornecedoresPage() {
               <option value="internacional">Internacional</option>
             </select>
 
-            {/* Novo */}
             {abaAtiva === "ativos" && (
               <button
                 onClick={abrirCriar}
@@ -975,7 +1151,7 @@ export default function FornecedoresPage() {
           </div>
         </div>
 
-        {/* ── Stats ── */}
+        {/* Stats */}
         {loading ? (
           <LoadingStats colors={colors} />
         ) : (
@@ -1010,7 +1186,7 @@ export default function FornecedoresPage() {
           </div>
         )}
 
-        {/* ── Tabela ── */}
+        {/* Tabela */}
         {loading ? (
           <LoadingTabela colors={colors} />
         ) : listaVazia ? (
@@ -1046,12 +1222,12 @@ export default function FornecedoresPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ backgroundColor: colors.primary }}>
-                    {["Fornecedor", "Tipo", "Status", "Contacto", "NIF/BI", "Ações"].map(
+                    {["Fornecedor", "Tipo", "Status", "Contacto", "NIF/BI", ""].map(
                       (h, i) => (
                         <th
                           key={h}
                           className={`py-3 px-5 font-semibold text-white text-xs uppercase tracking-wider ${
-                            i === 5 ? "text-center" : "text-left"
+                            i === 5 ? "text-center w-12" : "text-left"
                           }`}
                         >
                           {h}
@@ -1083,7 +1259,6 @@ export default function FornecedoresPage() {
                               : "transparent")
                         }
                       >
-                        {/* Fornecedor */}
                         <td className="py-3 px-5">
                           <div className="flex items-center gap-3">
                             <div
@@ -1135,7 +1310,6 @@ export default function FornecedoresPage() {
                           </div>
                         </td>
 
-                        {/* Tipo */}
                         <td className="py-3 px-5">
                           <span
                             className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium"
@@ -1159,7 +1333,6 @@ export default function FornecedoresPage() {
                           </span>
                         </td>
 
-                        {/* Status */}
                         <td className="py-3 px-5">
                           <span
                             className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium"
@@ -1183,7 +1356,6 @@ export default function FornecedoresPage() {
                           </span>
                         </td>
 
-                        {/* Contacto */}
                         <td className="py-3 px-5">
                           {f.telefone ? (
                             <div
@@ -1198,7 +1370,6 @@ export default function FornecedoresPage() {
                           )}
                         </td>
 
-                        {/* NIF/BI */}
                         <td className="py-3 px-5">
                           {f.nif ? (
                             <div className="flex items-center gap-2">
@@ -1229,49 +1400,16 @@ export default function FornecedoresPage() {
                           )}
                         </td>
 
-                        {/* Ações */}
-                        <td className="py-3 px-5">
-                          <div className="flex items-center justify-center gap-1">
-                            {abaAtiva === "ativos" ? (
-                              <>
-                                <button
-                                  onClick={() => abrirEditar(f)}
-                                  className="p-2 transition-colors hover:opacity-70"
-                                  style={{ color: colors.secondary }}
-                                  title="Editar"
-                                >
-                                  <Edit2 className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => abrirArquivar(f)}
-                                  className="p-2 transition-colors hover:opacity-70"
-                                  style={{ color: colors.warning }}
-                                  title="Mover para lixeira"
-                                >
-                                  <Archive className="w-4 h-4" />
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={() => abrirRestaurar(f)}
-                                  className="p-2 transition-colors hover:opacity-70"
-                                  style={{ color: colors.secondary }}
-                                  title="Restaurar"
-                                >
-                                  <RotateCcw className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => abrirExcluir(f)}
-                                  className="p-2 transition-colors hover:opacity-70"
-                                  style={{ color: colors.secondary }}
-                                  title="Excluir permanentemente"
-                                >
-                                  <Trash className="w-4 h-4" />
-                                </button>
-                              </>
-                            )}
-                          </div>
+                        <td className="py-3 px-2">
+                          <ActionMenu
+                            fornecedor={f}
+                            onEdit={() => abrirEditar(f)}
+                            onArchive={() => abrirArquivar(f)}
+                            onRestore={() => abrirRestaurar(f)}
+                            onDelete={() => abrirExcluir(f)}
+                            abaAtiva={abaAtiva}
+                            colors={colors}
+                          />
                         </td>
                       </tr>
                     );
@@ -1279,7 +1417,6 @@ export default function FornecedoresPage() {
                 </tbody>
               </table>
 
-              {/* Sem resultados na pesquisa */}
               {fornecedoresFiltrados.length === 0 && busca && (
                 <div className="text-center py-12">
                   <Search
@@ -1287,7 +1424,7 @@ export default function FornecedoresPage() {
                     style={{ color: colors.border }}
                   />
                   <p className="text-sm" style={{ color: colors.textSecondary }}>
-                    Nenhum fornecedor encontrado para "{busca}"
+                    Nenhum fornecedor encontrado para busca
                   </p>
                   <button
                     onClick={() => setBusca("")}
@@ -1303,7 +1440,7 @@ export default function FornecedoresPage() {
         )}
       </div>
 
-      {/* ── Modal Formulário ── */}
+      {/* Modals */}
       <Modal
         isOpen={modalForm}
         onClose={fecharForm}
@@ -1317,7 +1454,6 @@ export default function FornecedoresPage() {
         />
       </Modal>
 
-      {/* ── Modal Arquivar ── */}
       <ConfirmModal
         isOpen={modalArquivar}
         onClose={fecharArquivar}
@@ -1329,7 +1465,6 @@ export default function FornecedoresPage() {
         loading={loadingAcao}
       />
 
-      {/* ── Modal Restaurar ── */}
       <ConfirmModal
         isOpen={modalRestaurar}
         onClose={fecharRestaurar}
@@ -1341,13 +1476,12 @@ export default function FornecedoresPage() {
         loading={loadingAcao}
       />
 
-      {/* ── Modal Excluir Permanentemente ── */}
       <ConfirmModal
         isOpen={modalExcluir}
         onClose={fecharExcluir}
         onConfirm={handleExcluir}
         title="Excluir Permanentemente"
-        message={`Tem a certeza que deseja excluir "${selecao?.nome}" permanentemente? Esta ação não pode ser desfeita!`}
+        message={`Tem a certeza que deseja excluir "${selecao?.nome}" permanentemente? Esta acção não pode ser desfeita!`}
         confirmText="Excluir"
         type="danger"
         loading={loadingAcao}

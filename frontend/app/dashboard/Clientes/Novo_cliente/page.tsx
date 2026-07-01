@@ -20,6 +20,8 @@ import {
   CheckCircle,
   XCircle,
   Building2,
+  X,
+  AlertCircle,
 } from "lucide-react";
 import { useThemeColors } from "@/context/ThemeContext";
 import { Modal } from "@/app/components/Clientes/Modal";
@@ -27,6 +29,84 @@ import { ConfirmModal } from "@/app/components/Clientes/ConfirmModal";
 import { FormCliente } from "@/app/components/Clientes/FormCliente";
 import { LoadingStats, LoadingTabela } from "@/app/components/Clientes/LoadingStates";
 import { TabelaClientes } from "@/app/components/Clientes/TabelaClientes";
+
+// --- Componente de Notificação Toast com Animação ---
+interface ToastNotificationProps {
+  message: string;
+  type: 'success' | 'error' | 'warning' | 'info';
+  onClose: () => void;
+  colors: any;
+}
+
+const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, onClose, colors }) => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const getIcon = () => {
+    switch (type) {
+      case 'success':
+        return <CheckCircle size={24} style={{ color: colors.success }} />;
+      case 'error':
+        return <AlertCircle size={24} style={{ color: colors.danger }} />;
+      case 'warning':
+        return <AlertCircle size={24} style={{ color: colors.warning }} />;
+      case 'info':
+        return <CheckCircle size={24} style={{ color: colors.primary }} />;
+      default:
+        return <CheckCircle size={24} style={{ color: colors.success }} />;
+    }
+  };
+
+  const getBorderColor = () => {
+    switch (type) {
+      case 'success':
+        return colors.success;
+      case 'error':
+        return colors.danger;
+      case 'warning':
+        return colors.warning;
+      case 'info':
+        return colors.primary;
+      default:
+        return colors.success;
+    }
+  };
+
+  return (
+    <div 
+      className="fixed top-6 right-6 z-50 max-w-md"
+      style={{ 
+        backgroundColor: colors.card,
+        borderLeft: `4px solid ${getBorderColor()}`,
+        boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
+        animation: 'slideInRight 0.3s ease-out forwards'
+      }}
+    >
+      <div className="flex items-center gap-4 p-4">
+        <div className="flex-shrink-0">
+          {getIcon()}
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-medium" style={{ color: colors.text }}>
+            {message}
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="flex-shrink-0 transition-opacity hover:opacity-70"
+          style={{ color: colors.textSecondary }}
+        >
+          <X size={18} />
+        </button>
+      </div>
+    </div>
+  );
+};
 
 /* ══════════════════════════════════════════════════════════════════
    PÁGINA PRINCIPAL
@@ -41,12 +121,17 @@ export default function ClientesPage() {
   const [filtroStatus, setFiltroStatus] = useState<
     "todos" | "ativos" | "inativos"
   >("ativos");
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' | 'info' } | null>(null);
 
   const [modalForm, setModalForm] = useState(false);
   const [modalDetalhes, setModalDetalhes] = useState(false);
   const [modalStatus, setModalStatus] = useState(false);
   const [selecao, setSelecao] = useState<Cliente | null>(null);
   const [loadingAcao, setLoadingAcao] = useState(false);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
+    setToast({ message, type });
+  };
 
   /* ── Filtro local ── */
   useEffect(() => {
@@ -68,9 +153,7 @@ export default function ClientesPage() {
     try {
       let data;
       
-      // CORRIGIDO: Usar listar() com parâmetros
       if (filtroStatus === "todos") {
-        // Buscar todos (ativos + inativos)
         const ativos = await clienteService.listar({ 
           status: 'ativo', 
           per_page: 12 
@@ -79,7 +162,6 @@ export default function ClientesPage() {
           status: 'inativo', 
           per_page: 12 
         });
-        // Combinar os resultados
         data = [...(ativos.data || []), ...(inativos.data || [])];
       } else if (filtroStatus === "ativos") {
         const response = await clienteService.listar({ 
@@ -163,16 +245,20 @@ export default function ClientesPage() {
   ) => {
     setLoadingAcao(true);
     try {
-      if (selecao)
+      if (selecao) {
         await clienteService.atualizarCliente(
           selecao.id,
           dados as AtualizarClienteInput,
         );
-      else await clienteService.criarCliente(dados as CriarClienteInput);
+        showToast(`Cliente "${dados.nome}" atualizado com sucesso`, 'success');
+      } else {
+        await clienteService.criarCliente(dados as CriarClienteInput);
+        showToast(`Cliente "${dados.nome}" criado com sucesso`, 'success');
+      }
       fecharForm();
       await carregar();
     } catch (err: unknown) {
-      alert(getErrorMessage(err, "Erro ao guardar cliente"));
+      showToast(getErrorMessage(err, "Erro ao guardar cliente"), 'error');
     } finally {
       setLoadingAcao(false);
     }
@@ -183,13 +269,17 @@ export default function ClientesPage() {
     if (!selecao) return;
     setLoadingAcao(true);
     try {
-      if (selecao.status === "ativo")
+      if (selecao.status === "ativo") {
         await clienteService.inativarCliente(selecao.id);
-      else await clienteService.ativarCliente(selecao.id);
+        showToast(`Cliente "${selecao.nome}" inativado com sucesso`, 'success');
+      } else {
+        await clienteService.ativarCliente(selecao.id);
+        showToast(`Cliente "${selecao.nome}" ativado com sucesso`, 'success');
+      }
       fecharStatus();
       await carregar();
     } catch (err: unknown) {
-      alert(getErrorMessage(err, "Erro ao alterar status"));
+      showToast(getErrorMessage(err, "Erro ao alterar status"), 'error');
     } finally {
       setLoadingAcao(false);
     }
@@ -224,6 +314,16 @@ export default function ClientesPage() {
         className="space-y-4 max-w-7xl mx-auto pb-6 transition-colors duration-300"
         style={{ backgroundColor: colors.background }}
       >
+        {/* Toast Notification */}
+        {toast && (
+          <ToastNotification
+            message={toast.message}
+            type={toast.type}
+            onClose={() => setToast(null)}
+            colors={colors}
+          />
+        )}
+
         {/* ── Cabeçalho ── */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
@@ -279,7 +379,7 @@ export default function ClientesPage() {
               <option value="inativos">Inativos</option>
               <option value="todos">Todos</option>
             </select>
-            {/* Novo - BOTÃO DE ATUALIZAR REMOVIDO */}
+            {/* Novo */}
             <button
               onClick={abrirCriar}
               className="flex items-center gap-1.5 px-4 py-2 text-white text-sm font-medium"
@@ -291,7 +391,7 @@ export default function ClientesPage() {
           </div>
         </div>
 
-        {/* ── Stats (SEM ROUNDED) ── */}
+        {/* ── Stats ── */}
         {loading ? (
           <LoadingStats colors={colors} />
         ) : (
@@ -368,6 +468,7 @@ export default function ClientesPage() {
             onEditar={abrirEditar}
             onStatus={abrirStatus}
             onLimparBusca={() => setBusca("")}
+            onToast={showToast}
           />
         )}
       </div>
@@ -459,14 +560,10 @@ export default function ClientesPage() {
               </div>
             </div>
 
-            {/* Grid de detalhes - MAIS COMPACTO */}
+            {/* Grid de detalhes */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {[
-                {
-                  icon: "Phone",
-                  label: "Telefone",
-                  value: selecao.telefone || "—",
-                },
+                { icon: "Phone", label: "Telefone", value: selecao.telefone || "—" },
                 { icon: "Mail", label: "Email", value: selecao.email || "—" },
                 {
                   icon: "Calendar",
@@ -490,7 +587,7 @@ export default function ClientesPage() {
                     className="w-4 h-4 mt-0.5 flex-shrink-0"
                     style={{ color: colors.textSecondary }}
                   >
-                    {/* Placeholder para ícone - mantido o texto original */}
+                    {/* Placeholder para ícone */}
                   </div>
                   <div>
                     <p

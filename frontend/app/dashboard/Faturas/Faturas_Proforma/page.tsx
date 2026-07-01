@@ -21,7 +21,7 @@ import {
     formatarPreco,
 } from "@/services/vendas";
 
-// 🔥 Importação do serviço de clientes
+// Importacao do servico de clientes
 import {
     clienteService,
     formatarNIF,
@@ -32,45 +32,122 @@ const ESTOQUE_MINIMO = 5;
 const arredondar = (v: number) => Math.round(v * 100) / 100;
 
 interface ItemDocumentoUI {
-    id: string; 
-    produto_id: string; 
+    id: string;
+    produto_id: string;
     descricao: string;
-    quantidade: number; 
+    quantidade: number;
     preco_unitario: number;
-    base_tributavel: number; 
-    valor_iva: number; 
+    base_tributavel: number;
+    valor_iva: number;
     valor_retencao: number;
-    subtotal: number; 
-    taxa_iva?: number; 
+    subtotal: number;
+    taxa_iva?: number;
     codigo_produto?: string;
 }
-interface FormItemState { 
-    produto_id: string; 
-    quantidade: number; 
+interface FormItemState {
+    produto_id: string;
+    quantidade: number;
 }
 type ModoCliente = 'cadastrado' | 'avulso';
 type TipoItem = 'produto' | 'servico';
 
 interface ThemeColors {
-    background: string; 
-    card: string; 
-    border: string; 
+    background: string;
+    card: string;
+    border: string;
     text: string;
-    textSecondary: string; 
-    primary: string; 
+    textSecondary: string;
+    primary: string;
     secondary: string;
-    danger: string; 
-    success: string; 
-    warning: string; 
+    danger: string;
+    success: string;
+    warning: string;
     hover: string;
 }
 
-/* ── Linha fiscal ───────────────────────────────────────────── */
+// --- Componente de Notificacao Toast ---
+interface ToastNotificationProps {
+    message: string;
+    type: 'success' | 'error' | 'warning' | 'info';
+    onClose: () => void;
+    colors: ThemeColors;
+}
+
+const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, onClose, colors }) => {
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            onClose();
+        }, 5000);
+
+        return () => clearTimeout(timer);
+    }, [onClose]);
+
+    const getIcon = () => {
+        switch (type) {
+            case 'success':
+                return <CheckCircle2 size={24} style={{ color: colors.success }} />;
+            case 'error':
+                return <AlertTriangle size={24} style={{ color: colors.danger }} />;
+            case 'warning':
+                return <AlertTriangle size={24} style={{ color: colors.warning }} />;
+            case 'info':
+                return <CheckCircle2 size={24} style={{ color: colors.primary }} />;
+            default:
+                return <CheckCircle2 size={24} style={{ color: colors.success }} />;
+        }
+    };
+
+    const getBorderColor = () => {
+        switch (type) {
+            case 'success':
+                return colors.success;
+            case 'error':
+                return colors.danger;
+            case 'warning':
+                return colors.warning;
+            case 'info':
+                return colors.primary;
+            default:
+                return colors.success;
+        }
+    };
+
+    return (
+        <div
+            className="fixed top-6 right-6 z-50 max-w-md animate-slide-in-right"
+            style={{
+                backgroundColor: colors.card,
+                borderLeft: `4px solid ${getBorderColor()}`,
+                boxShadow: '0 10px 40px rgba(0,0,0,0.15)'
+            }}
+        >
+            <div className="flex items-center gap-4 p-4">
+                <div className="flex-shrink-0">
+                    {getIcon()}
+                </div>
+                <div className="flex-1">
+                    <p className="text-sm font-medium" style={{ color: colors.text }}>
+                        {message}
+                    </p>
+                </div>
+                <button
+                    onClick={onClose}
+                    className="flex-shrink-0 transition-opacity hover:opacity-70"
+                    style={{ color: colors.textSecondary }}
+                >
+                    <X size={18} />
+                </button>
+            </div>
+        </div>
+    );
+};
+
+/* Linha fiscal */
 function LinhaFiscal({ label, valor, cor, negrito, colors }: {
-    label: string; 
-    valor: string; 
-    cor?: string; 
-    negrito?: boolean; 
+    label: string;
+    valor: string;
+    cor?: string;
+    negrito?: boolean;
     colors: ThemeColors;
 }) {
     return (
@@ -91,9 +168,7 @@ function LinhaFiscal({ label, valor, cor, negrito, colors }: {
     );
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   PÁGINA
-═══════════════════════════════════════════════════════════════ */
+/* Pagina */
 export default function NovaFaturaProformaPage() {
     const router = useRouter();
     const { user, loading: authLoading } = useAuth();
@@ -113,8 +188,7 @@ export default function NovaFaturaProformaPage() {
     const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
     const [itens, setItens] = useState<ItemDocumentoUI[]>([]);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [sucesso, setSucesso] = useState<string | null>(null);
+    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' | 'info' } | null>(null);
     const [modoCliente, setModoCliente] = useState<ModoCliente>('cadastrado');
     const [clienteAvulso, setClienteAvulso] = useState('');
     const [clienteAvulsoNif, setClienteAvulsoNif] = useState('');
@@ -122,63 +196,61 @@ export default function NovaFaturaProformaPage() {
     const [formItem, setFormItem] = useState<FormItemState>({ produto_id: "", quantidade: 1 });
     const [previewItem, setPreviewItem] = useState<ItemDocumentoUI | null>(null);
     const [observacoes, setObservacoes] = useState('');
-    
+
     // Estados para o novo componente de busca
     const [tipoItemSelecionado, setTipoItemSelecionado] = useState<TipoItem>('produto');
     const [buscaItem, setBuscaItem] = useState('');
     const [dropdownAberto, setDropdownAberto] = useState(false);
-    
+
     const buscaInputRef = useRef<HTMLInputElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
+
+    const showToast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
+        setToast({ message, type });
+    };
 
     useEffect(() => {
         if (!authLoading && !user) router.push("/login");
     }, [authLoading, user, router]);
 
-    // 🔥 CORREÇÃO: Carregar dados iniciais
+    // Carregar dados iniciais
     useEffect(() => {
         if (!user) return;
-        
+
         const carregarDados = async () => {
             try {
-                console.log('🔄 Carregando dados iniciais...');
-                
                 // 1. Carregar clientes ativos
                 const clientesResponse = await clienteService.listar({
                     status: 'ativo',
                     per_page: 10,
                 });
-                console.log('✅ Clientes carregados:', clientesResponse);
-                
-                // Extrair os dados da resposta paginada
+
                 const clientesData = clientesResponse.data || [];
                 setClientes(clientesData);
-                console.log(`📋 ${clientesData.length} clientes ativos carregados`);
-                
+
                 // 2. Carregar produtos
                 const produtosData = await produtoService
                     .listar({ status: "ativo", paginar: false })
                     .then(r => Array.isArray(r.produtos) ? r.produtos : []);
                 setProdutos(produtosData);
-                console.log(`📦 ${produtosData.length} produtos carregados`);
-                
+
                 // 3. Verificar estoque baixo
                 const fisicos = produtosData.filter(p => !isServico(p));
                 const estoqueBaixo = fisicos.filter(
                     p => p.estoque_atual > 0 && p.estoque_atual <= ESTOQUE_MINIMO
                 );
                 setProdutosEstoqueBaixo(estoqueBaixo);
-                
+
                 if (estoqueBaixo.length > 0) {
-                    console.warn(`⚠️ ${estoqueBaixo.length} produtos com estoque baixo`);
+                    showToast(`${estoqueBaixo.length} produtos com estoque baixo`, 'warning');
                 }
-                
+
             } catch (error) {
-                console.error('❌ Erro ao carregar dados:', error);
-                setError("Erro ao carregar dados iniciais");
+                console.error('Erro ao carregar dados:', error);
+                showToast('Erro ao carregar dados iniciais', 'error');
             }
         };
-        
+
         carregarDados();
     }, [user]);
 
@@ -193,7 +265,7 @@ export default function NovaFaturaProformaPage() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    /* ── NIF ── */
+    /* NIF */
     const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value.toUpperCase();
         const clean = value.replace(/[^A-Z0-9]/g, "");
@@ -202,20 +274,19 @@ export default function NovaFaturaProformaPage() {
             setClienteAvulsoNif(clean);
 
             if (clean.length > 0 && clean.length < 10) {
-                setNifError("NIF/BI demasiado curto (mínimo 10 caracteres)");
+                setNifError("NIF/BI demasiado curto (minimo 10 caracteres)");
             } else if (clean.length > 10 && clean.length < 14) {
-                setNifError("BI deve ter 14 caracteres (9 números + 2 letras + 3 números)");
+                setNifError("BI deve ter 14 caracteres (9 numeros + 2 letras + 3 numeros)");
             } else {
                 setNifError(null);
             }
         }
     };
 
-    // 🔥 Handler para seleção de cliente
+    // Handler para selecao de cliente
     const handleClienteChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const cliente = clientes.find(c => c.id === e.target.value);
         setClienteSelecionado(cliente || null);
-        console.log('Cliente selecionado:', cliente);
     };
 
     // Filtrar itens baseado no tipo selecionado e na busca
@@ -225,224 +296,205 @@ export default function NovaFaturaProformaPage() {
         if (tipoItemSelecionado === 'servico' && p.tipo !== 'servico') return false;
         if (buscaItem.trim() === '') return true;
         const buscaLower = buscaItem.toLowerCase();
-        return p.nome.toLowerCase().includes(buscaLower) || 
-               (p.codigo && p.codigo.toLowerCase().includes(buscaLower));
+        return p.nome.toLowerCase().includes(buscaLower) ||
+            (p.codigo && p.codigo.toLowerCase().includes(buscaLower));
     });
 
-    // 🔥 FUNÇÃO PARA BUSCAR PRODUTO POR CÓDIGO
+    // Funcao para buscar produto por codigo
     const buscarProdutoPorCodigo = (codigo: string) => {
         if (!codigo.trim()) return null;
-        
-        // Busca exata por código
+
         let produto = produtos.find(p => p.codigo === codigo.trim());
-        
-        // Se não encontrar, tenta buscar por código parcial (útil para scanners)
+
         if (!produto) {
             produto = produtos.find(p => p.codigo?.includes(codigo.trim()));
         }
-        
+
         return produto;
     };
 
-    // 🔥 FUNÇÃO PARA ADICIONAR ITEM AUTOMATICAMENTE AO CARRINHO
+    // Funcao para adicionar item automaticamente ao carrinho
     const adicionarItemAutomaticamente = (produto: Produto, quantidade: number = 1) => {
-        // Verificar se o produto já está no carrinho
         const idx = itens.findIndex(i => i.produto_id === produto.id);
-        
+
         if (idx >= 0) {
-            // Se já existe, atualiza a quantidade
             const novaQtd = itens[idx].quantidade + quantidade;
             if (!isServico(produto) && novaQtd > produto.estoque_atual) {
-                setError(`Estoque insuficiente para ${novaQtd} unidades de ${produto.nome}.`);
-                setTimeout(() => setError(null), 3000);
+                showToast(`Estoque insuficiente para ${novaQtd} unidades de ${produto.nome}.`, 'error');
                 return;
             }
-            setItens(prev => 
+            setItens(prev =>
                 prev.map((it, i) => i === idx ? calcularItem(produto, novaQtd, it.id) : it)
             );
+            showToast(` ${produto.nome} adicionado (quantidade: ${novaQtd})`, 'success');
         } else {
-            // Se não existe, adiciona novo item
             setItens(prev => [...prev, calcularItem(produto, quantidade)]);
         }
-        
-        // Limpar campos
+        showToast(`${produto.nome} adicionado ao carrinho`, 'success');
         setBuscaItem('');
         setFormItem({ produto_id: "", quantidade: 1 });
         setPreviewItem(null);
         setDropdownAberto(false);
-        setError(null);
     };
 
-    // 🔥 HANDLER PARA SELECIONAR ITEM DO DROPDOWN - ADICIONA DIRETO
+    // Handler para selecionar item do dropdown
     const handleSelectItem = (produto: Produto) => {
         const qtd = produto.tipo === 'produto' ? Math.min(1, produto.estoque_atual) : 1;
         adicionarItemAutomaticamente(produto, qtd);
     };
 
-    // 🔥 MANIPULADOR PARA PRESSIONAR ENTER NO CAMPO DE BUSCA
+    // Manipulador para pressionar ENTER no campo de busca
     const handleBuscaKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            
+
             const codigoBusca = buscaItem.trim();
             if (!codigoBusca) return;
-            
-            // Tenta encontrar o produto pelo código
+
             const produto = buscarProdutoPorCodigo(codigoBusca);
-            
+
             if (produto) {
-                // Produto encontrado - adiciona automaticamente
                 const qtd = produto.tipo === 'produto' ? Math.min(1, produto.estoque_atual) : 1;
                 adicionarItemAutomaticamente(produto, qtd);
             } else {
-                // Produto não encontrado - mostra erro
-                setError(`❌ Produto com código "${codigoBusca}" não encontrado`);
-                setTimeout(() => setError(null), 3000);
+                showToast(`Produto com codigo "${codigoBusca}" nao encontrado`, 'error');
             }
         }
     };
 
-    /* ── Preview com taxa de retenção dinâmica ── */
+    /* Preview com taxa de retencao dinamica */
     useEffect(() => {
-        if (!formItem.produto_id) { 
-            setPreviewItem(null); 
-            return; 
+        if (!formItem.produto_id) {
+            setPreviewItem(null);
+            return;
         }
         const p = produtos.find(x => x.id === formItem.produto_id);
-        if (!p) { 
-            setPreviewItem(null); 
-            return; 
+        if (!p) {
+            setPreviewItem(null);
+            return;
         }
         const ehServico = isServico(p);
         const qtd = Math.min(formItem.quantidade, ehServico ? 9999 : p.estoque_atual);
         const base = arredondar(p.preco_venda * qtd);
         const taxaIva = p.taxa_iva ?? 0;
         const iva = arredondar(base * taxaIva / 100);
-        
-        // ✅ CORRIGIDO: Usa a taxa de retenção do produto
+
         const taxaRetencao = ehServico ? (p.taxa_retencao || 0) : 0;
         const ret = ehServico ? arredondar((base * taxaRetencao) / 100) : 0;
-        
+
         setPreviewItem({
-            id: "preview", 
-            produto_id: p.id, 
+            id: "preview",
+            produto_id: p.id,
             descricao: p.nome,
-            quantidade: qtd, 
+            quantidade: qtd,
             preco_unitario: p.preco_venda,
-            base_tributavel: base, 
-            valor_iva: iva, 
+            base_tributavel: base,
+            valor_iva: iva,
             valor_retencao: ret,
-            subtotal: arredondar(base + iva - ret), 
+            subtotal: arredondar(base + iva - ret),
             taxa_iva: taxaIva,
             codigo_produto: p.codigo || undefined,
         });
     }, [formItem, produtos]);
 
-    /* ── Calcular item com taxa de retenção dinâmica ── */
+    /* Calcular item com taxa de retencao dinamica */
     const calcularItem = (p: Produto, qtd: number, id = uuidv4()): ItemDocumentoUI => {
         const ehServico = isServico(p);
         const base = arredondar(p.preco_venda * qtd);
         const taxaIva = p.taxa_iva ?? 0;
         const iva = arredondar(base * taxaIva / 100);
-        
-        // ✅ CORRIGIDO: Usa a taxa de retenção do produto
+
         const taxaRetencao = ehServico ? (p.taxa_retencao || 0) : 0;
         const ret = ehServico ? arredondar((base * taxaRetencao) / 100) : 0;
-        
+
         return {
-            id, 
-            produto_id: p.id, 
-            descricao: p.nome, 
+            id,
+            produto_id: p.id,
+            descricao: p.nome,
             quantidade: qtd,
             preco_unitario: p.preco_venda,
-            base_tributavel: base, 
-            valor_iva: iva, 
+            base_tributavel: base,
+            valor_iva: iva,
             valor_retencao: ret,
             subtotal: arredondar(base + iva - ret),
-            taxa_iva: taxaIva, 
+            taxa_iva: taxaIva,
             codigo_produto: p.codigo || undefined,
         };
     };
 
-    /* ── Adicionar ── */
+    /* Adicionar */
     const adicionarItem = () => {
-        if (!formItem.produto_id || !previewItem) { 
-            setError("Selecione um produto/serviço");
-            setTimeout(() => setError(null), 3000);
-            return; 
+        if (!formItem.produto_id || !previewItem) {
+            showToast("Selecione um produto/servico", 'error');
+            return;
         }
         const p = produtos.find(x => x.id === formItem.produto_id);
         if (!p) return;
         if (!isServico(p) && formItem.quantidade > p.estoque_atual) {
-            setError(`Estoque insuficiente. Disponível: ${p.estoque_atual}`);
-            setTimeout(() => setError(null), 3000);
+            showToast(`Estoque insuficiente. Disponivel: ${p.estoque_atual}`, 'error');
             return;
         }
         const idx = itens.findIndex(i => i.produto_id === formItem.produto_id);
         if (idx >= 0) {
             const novaQtd = itens[idx].quantidade + formItem.quantidade;
             if (!isServico(p) && novaQtd > p.estoque_atual) {
-                setError(`Estoque insuficiente para ${novaQtd} unidades.`);
-                setTimeout(() => setError(null), 3000);
+                showToast(`Estoque insuficiente para ${novaQtd} unidades.`, 'error');
                 return;
             }
             setItens(prev => prev.map((it, i) => i === idx ? calcularItem(p, novaQtd, it.id) : it));
         } else {
             setItens(prev => [...prev, calcularItem(p, formItem.quantidade)]);
         }
+        showToast(`${p.nome} adicionado ao carrinho`, 'success');
+        setTimeout(() => setToast(null), 3000);
         setFormItem({ produto_id: "", quantidade: 1 });
         setBuscaItem('');
         setPreviewItem(null);
-        setError(null);
     };
 
     const atualizarQtd = (itemId: string, novaQtd: number) => {
         const idx = itens.findIndex(i => i.id === itemId);
         if (idx < 0) return;
-        if (novaQtd < 1) { 
-            setItens(p => p.filter(i => i.id !== itemId)); 
-            return; 
+        if (novaQtd < 1) {
+            setItens(p => p.filter(i => i.id !== itemId));
+            return;
         }
         const item = itens[idx];
         const p = produtos.find(x => x.id === item.produto_id);
         if (!p) return;
         if (!isServico(p) && novaQtd > p.estoque_atual) {
-            setError(`Máximo disponível: ${p.estoque_atual}`);
-            setTimeout(() => setError(null), 3000);
+            showToast(`Maximo disponivel: ${p.estoque_atual}`, 'error');
             return;
         }
         setItens(prev => prev.map((it, i) => i === idx ? calcularItem(p, novaQtd, item.id) : it));
-        setError(null);
     };
 
     const removerItem = (id: string) => setItens(p => p.filter(i => i.id !== id));
 
-    /* ── Totais ── */
+    /* Totais */
     const totalBase = arredondar(itens.reduce((a, i) => a + i.base_tributavel, 0));
     const totalIva = arredondar(itens.reduce((a, i) => a + i.valor_iva, 0));
     const totalRetencao = arredondar(itens.reduce((a, i) => a + i.valor_retencao, 0));
     const totalLiquido = arredondar(totalBase + totalIva - totalRetencao);
 
-    /* ── Validação ── */
+    /* Validacao */
     const podeFinalizar = () => {
         if (itens.length === 0) return false;
         if (modoCliente === 'cadastrado' && !clienteSelecionado) return false;
         return true;
     };
 
-    /* ── Finalizar ── */
+    /* Finalizar */
     const finalizarProforma = async () => {
         if (!podeFinalizar()) return;
-        setLoading(true); 
-        setError(null); 
-        setSucesso(null);
+        setLoading(true);
         try {
             const payload: CriarDocumentoFiscalPayload = {
                 tipo_documento: 'FP',
                 itens: itens.map(item => ({
-                    produto_id: item.produto_id, 
+                    produto_id: item.produto_id,
                     descricao: item.descricao,
-                    quantidade: item.quantidade, 
+                    quantidade: item.quantidade,
                     preco_unitario: arredondar(item.preco_unitario),
                     taxa_iva: item.taxa_iva,
                 })),
@@ -457,7 +509,6 @@ export default function NovaFaturaProformaPage() {
                     payload.cliente_nome = "Consumidor Final";
                 }
 
-                // 🔥 CORREÇÃO: NIF para consumidor final
                 if (clienteAvulsoNif.trim() && clienteAvulsoNif.length >= 10) {
                     payload.cliente_nif = clienteAvulsoNif.trim();
                 } else {
@@ -467,13 +518,14 @@ export default function NovaFaturaProformaPage() {
 
             if (observacoes.trim()) payload.motivo = observacoes.trim();
             await emitirDocumentoFiscal(payload);
-            setSucesso("Proforma criada com sucesso! Redirecionando...");
+            showToast('Proforma criada com sucesso! Redirecionando...', 'success');
             setTimeout(() => router.push("/dashboard/Faturas/DC"), 1500);
         } catch (err: unknown) {
-            setError(
-                err instanceof AxiosError 
-                    ? err.response?.data?.message || "Erro ao salvar proforma" 
-                    : "Erro ao salvar proforma"
+            showToast(
+                err instanceof AxiosError
+                    ? err.response?.data?.message || "Erro ao salvar proforma"
+                    : "Erro ao salvar proforma",
+                'error'
             );
         } finally {
             setLoading(false);
@@ -482,15 +534,23 @@ export default function NovaFaturaProformaPage() {
 
     const produtoSel = produtos.find(p => p.id === formItem.produto_id);
 
-    /* ══════════════════════════════════════════════════════════════════
-       RENDER
-    ══════════════════════════════════════════════════════════════════ */
+    /* RENDER */
     return (
         <MainEmpresa>
             <div className="space-y-3 pb-8 px-2 sm:px-4 max-w-5xl mx-auto"
                 style={{ backgroundColor: colors.background }}>
 
-                {/* ── Header ── */}
+                {/* Toast Notification */}
+                {toast && (
+                    <ToastNotification
+                        message={toast.message}
+                        type={toast.type}
+                        onClose={() => setToast(null)}
+                        colors={colors}
+                    />
+                )}
+
+                {/* Header */}
                 <div className="flex items-center gap-2 mt-2">
                     <button onClick={() => router.back()}
                         className="p-1.5 hover:opacity-70 transition-opacity shrink-0"
@@ -502,21 +562,7 @@ export default function NovaFaturaProformaPage() {
                     </div>
                 </div>
 
-                {/* ── Alertas ── */}
-                {error && (
-                    <div className="p-3 border text-sm flex items-center gap-2"
-                        style={{ backgroundColor: `${colors.danger}15`, borderColor: colors.danger, color: colors.danger }}>
-                        <AlertTriangle size={15} className="shrink-0" />
-                        <span className="flex-1">{error}</span>
-                        <button onClick={() => setError(null)} className="opacity-60 hover:opacity-100">✕</button>
-                    </div>
-                )}
-                {sucesso && (
-                    <div className="p-3 border text-sm flex items-center gap-2"
-                        style={{ backgroundColor: `${colors.success}15`, borderColor: colors.success, color: colors.success }}>
-                        <CheckCircle2 size={15} className="shrink-0" /><span>{sucesso}</span>
-                    </div>
-                )}
+                {/* Alerta de estoque baixo */}
                 {produtosEstoqueBaixo.length > 0 && (
                     <div className="p-3 border text-sm flex items-start gap-2"
                         style={{ backgroundColor: `${colors.warning}12`, borderColor: `${colors.warning}50` }}>
@@ -530,9 +576,7 @@ export default function NovaFaturaProformaPage() {
                     </div>
                 )}
 
-                {/* ══════════════════════════════════════════════════════
-                    CARD 1 — Dados da Proforma
-                ══════════════════════════════════════════════════════ */}
+                {/* CARD 1 — Dados da Proforma */}
                 <div className="border shadow-sm"
                     style={{ backgroundColor: colors.card, borderColor: colors.border }}>
 
@@ -544,7 +588,7 @@ export default function NovaFaturaProformaPage() {
 
                     <div className="divide-y" style={{ borderColor: colors.border }}>
 
-                        {/* ── Cliente — numa única linha ── */}
+                        {/* Cliente */}
                         <div className="flex min-h-[44px]" style={{ borderColor: colors.border }}>
                             <div className="flex items-center gap-1.5 px-3 py-2.5 w-24 sm:w-28 shrink-0"
                                 style={{ backgroundColor: colors.hover }}>
@@ -568,7 +612,7 @@ export default function NovaFaturaProformaPage() {
                                                 backgroundColor: modoCliente === modo ? colors.primary : 'transparent',
                                                 color: modoCliente === modo ? 'white' : colors.textSecondary,
                                             }}>
-                                            {modo === 'cadastrado' ? 'Cadastrado' : 'Não cadastrado'}
+                                            {modo === 'cadastrado' ? 'Cadastrado' : 'Nao cadastrado'}
                                         </button>
                                     ))}
                                 </div>
@@ -619,7 +663,7 @@ export default function NovaFaturaProformaPage() {
                             </div>
                         </div>
 
-                        {/* ── Produto e Serviço ── */}
+                        {/* Produto e Servico */}
                         <div className="flex min-h-[44px]" style={{ borderColor: colors.border }}>
                             <div className="flex items-center gap-1.5 px-3 py-2.5 w-24 sm:w-28 shrink-0"
                                 style={{ backgroundColor: colors.hover }}>
@@ -628,8 +672,8 @@ export default function NovaFaturaProformaPage() {
                             </div>
                             <div className="flex-1 px-3 py-2.5 min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
-                                    
-                                    {/* Seletor de tipo (Produto/Serviço) */}
+
+                                    {/* Seletor de tipo */}
                                     <div className="inline-flex border overflow-hidden shrink-0" style={{ borderColor: colors.border }}>
                                         {(['produto', 'servico'] as TipoItem[]).map(tipo => (
                                             <button key={tipo} type="button"
@@ -641,11 +685,11 @@ export default function NovaFaturaProformaPage() {
                                                     setDropdownAberto(false);
                                                 }}
                                                 className="px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap"
-                                                style={{ 
-                                                    backgroundColor: tipoItemSelecionado === tipo ? colors.primary : 'transparent', 
-                                                    color: tipoItemSelecionado === tipo ? 'white' : colors.textSecondary 
+                                                style={{
+                                                    backgroundColor: tipoItemSelecionado === tipo ? colors.primary : 'transparent',
+                                                    color: tipoItemSelecionado === tipo ? 'white' : colors.textSecondary
                                                 }}>
-                                                {tipo === 'produto' ? 'Produto' : 'Serviço'}
+                                                {tipo === 'produto' ? 'Produto' : 'Servico'}
                                             </button>
                                         ))}
                                     </div>
@@ -657,7 +701,7 @@ export default function NovaFaturaProformaPage() {
                                             <input
                                                 ref={buscaInputRef}
                                                 type="text"
-                                                placeholder={tipoItemSelecionado === 'produto' ? "Digite código ou nome do produto..." : "Digite código ou nome do serviço..."}
+                                                placeholder={tipoItemSelecionado === 'produto' ? "Digite codigo ou nome do produto..." : "Digite codigo ou nome do servico..."}
                                                 className="w-full pl-9 pr-8 py-1.5 text-sm outline-none"
                                                 style={inp}
                                                 value={buscaItem}
@@ -698,7 +742,7 @@ export default function NovaFaturaProformaPage() {
                                                             type="button"
                                                             onClick={() => handleSelectItem(item)}
                                                             className="w-full px-3 py-2 text-left text-sm hover:transition-colors flex justify-between items-center border-b last:border-0"
-                                                            style={{ 
+                                                            style={{
                                                                 backgroundColor: formItem.produto_id === item.id ? `${colors.primary}10` : 'transparent',
                                                                 borderColor: colors.border
                                                             }}
@@ -730,7 +774,7 @@ export default function NovaFaturaProformaPage() {
                                                     ))
                                                 ) : (
                                                     <div className="p-3 text-center text-sm" style={{ color: colors.textSecondary }}>
-                                                        Nenhum {tipoItemSelecionado === 'produto' ? 'produto' : 'serviço'} encontrado
+                                                        Nenhum {tipoItemSelecionado === 'produto' ? 'produto' : 'servico'} encontrado
                                                     </div>
                                                 )}
                                             </div>
@@ -774,7 +818,7 @@ export default function NovaFaturaProformaPage() {
                                         </button>
                                     </div>
 
-                                    {/* Botão Adicionar */}
+                                    {/* Botao Adicionar */}
                                     <button type="button" onClick={adicionarItem}
                                         disabled={!formItem.produto_id}
                                         className="shrink-0 flex items-center gap-1.5 px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40 transition-opacity"
@@ -782,7 +826,7 @@ export default function NovaFaturaProformaPage() {
                                         <Plus size={13} />Adicionar
                                     </button>
 
-                                    {/* Indicador de estoque (apenas para produtos) */}
+                                    {/* Indicador de estoque */}
                                     {produtoSel && produtoSel.tipo === 'produto' && (
                                         <span className="text-xs shrink-0" style={{ color: colors.textSecondary }}>
                                             disp.: {produtoSel.estoque_atual}
@@ -790,7 +834,7 @@ export default function NovaFaturaProformaPage() {
                                     )}
                                 </div>
 
-                                {/* Preview cálculo */}
+                                {/* Preview calculo */}
                                 {previewItem && (
                                     <div className="mt-2 px-3 py-2 flex flex-wrap gap-x-4 gap-y-1 text-sm"
                                         style={{ backgroundColor: colors.hover }}>
@@ -811,7 +855,7 @@ export default function NovaFaturaProformaPage() {
                             </div>
                         </div>
 
-                        {/* ── Observações ── */}
+                        {/* Observacoes */}
                         <div className="flex min-h-[44px]">
                             <div className="flex items-center gap-1.5 px-3 py-2.5 w-24 sm:w-28 shrink-0"
                                 style={{ backgroundColor: colors.hover }}>
@@ -819,7 +863,7 @@ export default function NovaFaturaProformaPage() {
                                 <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>Obs.</span>
                             </div>
                             <div className="flex-1 px-3 py-2.5">
-                                <input type="text" placeholder="Observações adicionais (opcional)"
+                                <input type="text" placeholder="Observacoes adicionais (opcional)"
                                     className="w-full px-3 py-1.5 text-sm outline-none"
                                     style={inp}
                                     value={observacoes}
@@ -830,9 +874,7 @@ export default function NovaFaturaProformaPage() {
                     </div>
                 </div>
 
-                {/* ══════════════════════════════════════════════════════════════
-                    CARD 2 — Itens + Resumo Fiscal
-                ══════════════════════════════════════════════════════════════ */}
+                {/* CARD 2 — Itens + Resumo Fiscal */}
                 {itens.length > 0 ? (
                     <div className="border shadow-sm overflow-hidden"
                         style={{ backgroundColor: colors.card, borderColor: colors.border }}>
@@ -860,9 +902,9 @@ export default function NovaFaturaProformaPage() {
                             <table className="w-full text-sm">
                                 <thead style={{ backgroundColor: colors.hover }}>
                                     <tr className="border-b" style={{ borderColor: colors.border }}>
-                                        <th className="py-2.5 px-3 text-left font-semibold text-xs" style={{ color: colors.textSecondary }}>Produto/Serviço</th>
+                                        <th className="py-2.5 px-3 text-left font-semibold text-xs" style={{ color: colors.textSecondary }}>Produto/Servico</th>
                                         <th className="py-2.5 px-3 text-center font-semibold text-xs" style={{ color: colors.textSecondary }}>Qtd.</th>
-                                        <th className="py-2.5 px-3 text-right font-semibold text-xs hidden sm:table-cell" style={{ color: colors.textSecondary }}>Preço unit.</th>
+                                        <th className="py-2.5 px-3 text-right font-semibold text-xs hidden sm:table-cell" style={{ color: colors.textSecondary }}>Preco unit.</th>
                                         <th className="py-2.5 px-3 text-right font-semibold text-xs hidden md:table-cell" style={{ color: colors.textSecondary }}>IVA</th>
                                         <th className="py-2.5 px-3 text-right font-semibold text-xs hidden lg:table-cell" style={{ color: colors.textSecondary }}>Ret.</th>
                                         <th className="py-2.5 px-3 text-right font-semibold text-xs" style={{ color: colors.textSecondary }}>Subtotal</th>
@@ -894,18 +936,53 @@ export default function NovaFaturaProformaPage() {
                                                 </td>
                                                 <td className="px-3 py-2.5">
                                                     <div className="flex items-center justify-center gap-0.5">
-                                                        <button onClick={() => atualizarQtd(item.id, item.quantidade - 1)}
+                                                        <button
+                                                            onClick={() =>
+                                                                atualizarQtd(item.id, item.quantidade - 1)
+                                                            }
                                                             className="w-6 h-6 flex items-center justify-center disabled:opacity-30"
                                                             style={{ backgroundColor: colors.hover }}
-                                                            disabled={item.quantidade <= 1}>
+                                                            disabled={item.quantidade <= 1}
+                                                        >
                                                             <Minus size={11} style={{ color: colors.text }} />
                                                         </button>
-                                                        <span className="w-7 text-center text-sm font-medium"
-                                                            style={{ color: colors.text }}>{item.quantidade}</span>
-                                                        <button onClick={() => atualizarQtd(item.id, item.quantidade + 1)}
+                                                        <input
+                                                            type="number"
+                                                            min={1}
+                                                            max={maxEst}
+                                                            value={item.quantidade}
+                                                            onChange={(e) => {
+                                                                const val = parseInt(e.target.value);
+                                                                if (!isNaN(val) && val >= 1) {
+                                                                    const p = produtos.find((x) => x.id === item.produto_id);
+                                                                    if (p) {
+                                                                        const maxQtd = isServico(p) ? 9999 : p.estoque_atual;
+                                                                        const novaQtd = Math.min(Math.max(1, val), maxQtd);
+                                                                        atualizarQtd(item.id, novaQtd);
+                                                                    }
+                                                                }
+                                                            }}
+                                                            onBlur={(e) => {
+                                                                const val = parseInt(e.target.value);
+                                                                if (isNaN(val) || val < 1) {
+                                                                    atualizarQtd(item.id, 1);
+                                                                }
+                                                            }}
+                                                            className="w-12 text-center text-sm font-medium outline-none border rounded"
+                                                            style={{
+                                                                backgroundColor: colors.card,
+                                                                color: colors.text,
+                                                                borderColor: colors.border,
+                                                            }}
+                                                        />
+                                                        <button
+                                                            onClick={() =>
+                                                                atualizarQtd(item.id, item.quantidade + 1)
+                                                            }
                                                             className="w-6 h-6 flex items-center justify-center disabled:opacity-30"
                                                             style={{ backgroundColor: colors.hover }}
-                                                            disabled={item.quantidade >= maxEst}>
+                                                            disabled={item.quantidade >= maxEst}
+                                                        >
                                                             <Plus size={11} style={{ color: colors.text }} />
                                                         </button>
                                                     </div>
@@ -916,7 +993,7 @@ export default function NovaFaturaProformaPage() {
                                                     style={{ color: colors.text }}>{formatarPreco(item.valor_iva)}</td>
                                                 <td className="px-3 py-2.5 text-right hidden lg:table-cell"
                                                     style={{ color: item.valor_retencao > 0 ? colors.danger : colors.textSecondary }}>
-                                                    {item.valor_retencao > 0 ? `−${formatarPreco(item.valor_retencao)}` : '—'}
+                                                    {item.valor_retencao > 0 ? `-${formatarPreco(item.valor_retencao)}` : '—'}
                                                 </td>
                                                 <td className="px-3 py-2.5 text-right font-bold"
                                                     style={{ color: colors.secondary }}>{formatarPreco(item.subtotal)}</td>
@@ -934,18 +1011,18 @@ export default function NovaFaturaProformaPage() {
                             </table>
                         </div>
 
-                        {/* ── Resumo Fiscal — 2 colunas com divisor vertical ── */}
+                        {/* Resumo Fiscal */}
                         <div className="border-t" style={{ borderColor: colors.border }}>
                             <div className="flex flex-col sm:flex-row">
                                 <div className="flex-1 px-4 py-3 border-b sm:border-b-0 sm:border-r" style={{ borderColor: colors.border }}>
                                     <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: colors.textSecondary }}>Base</p>
                                     <LinhaFiscal label="Subtotal" valor={formatarPreco(totalBase)} colors={colors} />
-                                    <LinhaFiscal label="Base tributável" valor={formatarPreco(totalBase)} colors={colors} />
+                                    <LinhaFiscal label="Base tributavel" valor={formatarPreco(totalBase)} colors={colors} />
                                 </div>
                                 <div className="flex-1 px-4 py-3">
                                     <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: colors.textSecondary }}>Impostos</p>
                                     <LinhaFiscal label="IVA" valor={formatarPreco(totalIva)} colors={colors} />
-                                    <LinhaFiscal label="Retenção" valor={`−${formatarPreco(totalRetencao)}`} cor={colors.textSecondary} colors={colors} />
+                                    <LinhaFiscal label="Retencao" valor={`-${formatarPreco(totalRetencao)}`} cor={colors.textSecondary} colors={colors} />
                                     <div className="mt-2 pt-2 border-t" style={{ borderColor: colors.border }}>
                                         <LinhaFiscal label="Total" valor={formatarPreco(totalLiquido)} cor={colors.secondary} negrito colors={colors} />
                                     </div>
@@ -959,7 +1036,7 @@ export default function NovaFaturaProformaPage() {
                         style={{ borderColor: colors.border }}>
                         <ShoppingCart size={28} className="mx-auto mb-2" style={{ color: colors.border }} />
                         <p className="text-sm" style={{ color: colors.textSecondary }}>
-                            Use o scanner ou digite o código do produto para adicionar automaticamente
+                            Use o scanner ou digite o codigo do produto para adicionar automaticamente
                         </p>
                         <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
                             Pressione ENTER para adicionar ao carrinho
@@ -967,7 +1044,7 @@ export default function NovaFaturaProformaPage() {
                     </div>
                 )}
 
-                {/* ── Botão Finalizar ── */}
+                {/* Botao Finalizar */}
                 {itens.length > 0 && (
                     <div className="flex justify-end">
                         <button type="button" onClick={finalizarProforma}

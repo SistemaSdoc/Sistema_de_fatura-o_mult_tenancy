@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/authprovider";
 import { useThemeColors } from "@/context/ThemeContext";
 import { AxiosError } from "axios";
-import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Loader2, UserPlus } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Loader2, UserPlus, X, CheckCircle } from "lucide-react";
 import styles from "./login.module.css";
 
 /* ---------------- TYPES ---------------- */
@@ -20,6 +20,7 @@ interface ThemeColors {
   textSecondary: string;
   border: string;
   danger: string;
+  success: string;
 }
 
 interface InputFieldProps {
@@ -31,6 +32,9 @@ interface InputFieldProps {
   showPasswordToggle?: boolean;
   onTogglePassword?: () => void;
   colors: ThemeColors;
+  autoComplete?: string;
+  id?: string;
+  label?: string;
 }
 
 /* ---------------- COMPONENTS ---------------- */
@@ -43,8 +47,12 @@ const InputField: React.FC<InputFieldProps> = ({
   showPasswordToggle = false,
   onTogglePassword,
   colors,
+  autoComplete,
+  id,
+  label,
 }) => {
   const [isFocused, setIsFocused] = useState<boolean>(false);
+  const paddingClass = showPasswordToggle ? "pr-12" : "pr-4";
 
   return (
     <div
@@ -64,6 +72,7 @@ const InputField: React.FC<InputFieldProps> = ({
       </div>
 
       <input
+        id={id}
         type={type}
         placeholder={placeholder}
         value={value}
@@ -71,7 +80,9 @@ const InputField: React.FC<InputFieldProps> = ({
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
         required
-        className={`w-full pl-10 pr-${showPasswordToggle ? '12' : '4'} py-3  border-2 outline-none transition-all duration-300`}
+        aria-label={label || placeholder}
+        autoComplete={autoComplete}
+        className={`w-full pl-10 ${paddingClass} py-3 border-2 outline-none transition-all duration-300 min-h-12`}
         style={{
           backgroundColor: isFocused ? colors.card : `${colors.card}80`,
           borderColor: isFocused ? colors.secondary : colors.border,
@@ -94,6 +105,57 @@ const InputField: React.FC<InputFieldProps> = ({
   );
 };
 
+/* ---------------- COMPONENTE TOAST ---------------- */
+interface ToastNotificationProps {
+  message: string;
+  type: 'success' | 'error';
+  onClose: () => void;
+  colors: ThemeColors;
+}
+
+const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, onClose, colors }) => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div 
+      className="fixed top-3 right-2 left-2 z-50 max-w-[calc(100vw-1rem)] animate-slide-in-right sm:right-6 sm:left-auto sm:max-w-md"
+      style={{ 
+        backgroundColor: colors.card,
+        borderLeft: `4px solid ${type === 'success' ? colors.success : colors.danger}`,
+        boxShadow: '0 10px 40px rgba(0,0,0,0.15)'
+      }}
+    >
+      <div className="flex items-center gap-4 p-4">
+        <div className="shrink-0">
+          {type === 'success' ? (
+            <CheckCircle size={24} style={{ color: colors.success }} />
+          ) : (
+            <AlertCircle size={24} style={{ color: colors.danger }} />
+          )}
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-medium" style={{ color: colors.text }}>
+            {message}
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="shrink-0 transition-opacity hover:opacity-70"
+          style={{ color: colors.textSecondary }}
+        >
+          <X size={18} />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 /* ---------------- MAIN PAGE ---------------- */
 export default function LoginPage(): React.ReactElement {
   const router = useRouter();
@@ -103,12 +165,21 @@ export default function LoginPage(): React.ReactElement {
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [showPassword, setShowPassword] = useState<boolean>(false);
-  const [error, setError] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+  };
 
   useEffect(() => {
-    if (error) setError("");
-  }, [email, password, error]);
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   useEffect(() => {
     if (!user) return;
@@ -120,21 +191,25 @@ export default function LoginPage(): React.ReactElement {
       gestor: "/dashboard/Produtos_servicos/Stock",
     };
     const destination = redirectMap[user.role] || "/login";
-    setTimeout(() => router.push(destination), 500);
+    
+    // Mostrar toast de boas-vindas
+    showToast(` Bem-vindo, ${user.name || 'usuário'}! Redirecionando...`, 'success');
+    
+    setTimeout(() => router.push(destination), 1500);
   }, [user, router]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
-    setError("");
     setIsSubmitting(true);
 
     try {
       await login(email, password);
+      // O toast de sucesso será mostrado no useEffect acima
     } catch (err: unknown) {
       let errorMessage = "Ocorreu um erro desconhecido";
       if (err instanceof AxiosError) errorMessage = err.response?.data?.message ?? err.message;
       else if (err instanceof Error) errorMessage = err.message;
-      setError(errorMessage);
+      showToast(` ${errorMessage}`, 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -143,10 +218,24 @@ export default function LoginPage(): React.ReactElement {
   const isLoading = isSubmitting || authLoading;
 
   return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden transition-colors duration-300"
+    <main
+      className="min-h-screen flex flex-col items-center justify-center p-3 sm:p-4 relative overflow-hidden transition-colors duration-300"
       style={{ backgroundColor: colors.background }}
+      aria-labelledby="login-title"
     >
+      <a href="#login-form" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:shadow-lg">
+        Saltar para o formulário de login
+      </a>
+      {/* Toast Notification */}
+      {toast && (
+        <ToastNotification
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+          colors={colors}
+        />
+      )}
+
       {/* Grid */}
       <div
         className="absolute inset-0 opacity-[0.03]"
@@ -156,9 +245,9 @@ export default function LoginPage(): React.ReactElement {
         }}
       />
 
-      <div className="relative w-full max-w-md z-10">
+      <div className="relative w-full max-w-[min(92vw,28rem)] z-10">
         <div
-          className="backdrop-blur-xl   border p-8 overflow-hidden relative transition-shadow duration-300]"
+          className="backdrop-blur-xl border p-4 sm:p-8 overflow-hidden relative transition-shadow duration-300 rounded-2xl"
           style={{
             backgroundColor: `${colors.card}CC`,
             borderColor: colors.border,
@@ -166,6 +255,7 @@ export default function LoginPage(): React.ReactElement {
         >
           {/* LOGO */}
           <div className="flex justify-center mb-6">
+            <div className="logo-float">
             <Image
               src="/images/3.png"
               alt="Logo do Sistema"
@@ -174,78 +264,74 @@ export default function LoginPage(): React.ReactElement {
               className="rounded-2xl cursor-pointer "
               priority
             />
+            </div>
           </div>
 
           {/* Título */}
           <div className="text-center mb-6">
-            <h2 className="text-3xl font-bold mb-2" style={{ color: colors.secondary }}>Bem-vindo</h2>
-            <p className="text-sm" style={{ color: colors.textSecondary }}>Faça login para acessar o sistema</p>
+            <h2 id="login-title" className="text-2xl sm:text-3xl font-bold mb-2" style={{ color: colors.secondary }}>Bem-vindo</h2>
+            <p className="text-sm sm:text-base" style={{ color: colors.textSecondary }}>Faça login para acessar o sistema</p>
           </div>
 
-          {/* Erro */}
-          {error && (
-            <div className="mb-4 border-l-4 p-4 rounded-r-xl flex items-center gap-3 shadow-sm"
-              style={{ backgroundColor: `${colors.danger}20`, borderColor: colors.danger, color: colors.danger }}
-            >
-              <AlertCircle size={20} />
-              <span className="text-sm font-medium">{error}</span>
-            </div>
-          )}
-
           {/* Form */}
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-  <InputField
-    type="email"
-    placeholder="Digite seu email"
-    value={email}
-    onChange={(e) => setEmail(e.target.value)}
-    icon={Mail}
-    colors={colors}
-  />
+          <form id="login-form" onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+            <InputField
+              type="email"
+              placeholder="Digite seu email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              icon={Mail}
+              colors={colors}
+              id="email"
+              label="Email"
+              autoComplete="email"
+            />
 
-  <InputField
-    type={showPassword ? "text" : "password"}
-    placeholder="Digite sua senha"
-    value={password}
-    onChange={(e) => setPassword(e.target.value)}
-    icon={Lock}
-    showPasswordToggle
-    onTogglePassword={() => setShowPassword(!showPassword)}
-    colors={colors}
-  />
+            <InputField
+              type={showPassword ? "text" : "password"}
+              placeholder="Digite sua senha"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              icon={Lock}
+              showPasswordToggle
+              onTogglePassword={() => setShowPassword(!showPassword)}
+              colors={colors}
+              id="password"
+              label="Senha"
+              autoComplete="current-password"
+            />
 
+            {/* Forgot password link - aligned right */}
+            <div className="flex justify-end -mt-2">
+              <Link
+                href="/forgot-password"
+                className="text-xs font-medium transition-colors hover:underline"
+                style={{ color: colors.secondary }}
+              >
+                Esqueceu a senha?
+              </Link>
+            </div>
 
-  {/* Forgot password link - aligned right */}
-<div className="flex justify-end -mt-2">
-  <Link
-    href="/forgot-password"
-    className="text-xs font-medium transition-colors hover:underline"
-    style={{ color: colors.secondary }}
-  >
-    Esqueceu a senha?
-  </Link>
-</div>
-
-  {/* Submit button */}
-  <button
-    type="submit"
-    disabled={isLoading}
-    className="w-full py-3.5 mt-2 font-semibold text-white flex items-center justify-center gap-2 transition-all duration-300"
-    style={{ backgroundColor: isLoading ? `${colors.primary}B3` : colors.primary }}
-  >
-    {isLoading ? (
-      <>
-        <Loader2 size={20} className="animate-spin" />
-        Entrando...
-      </>
-    ) : (
-      <>
-        Entrar
-        <ArrowRight size={20} />
-      </>
-    )}
-  </button>
-</form>
+            {/* Submit button */}
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full py-3.5 mt-2 font-semibold text-white flex items-center justify-center gap-2 transition-all duration-300 rounded-lg touch-target"
+              style={{ backgroundColor: isLoading ? `${colors.primary}B3` : colors.primary }}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 size={20} className="animate-spin" />
+                  Entrando...
+                </>
+              ) : (
+                <>
+                  Entrar
+                  <ArrowRight size={20} />
+                </>
+              )}
+            </button>
+          </form>
          
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
@@ -256,23 +342,21 @@ export default function LoginPage(): React.ReactElement {
             </div>
           </div>
 
-           {/* Dentro do bloco onde está o link "Não tem conta? Cadastre-se" */}
-
-<div className="text-center mt-4">
-  <Link
-    href="/login-email-only"
-    className="inline-flex items-center gap-2 text-sm font-medium transition-colors hover:underline"
-    style={{ color: colors.secondary }}
-  >
-    <Mail size={16} />
-    Entrar apenas com email
-  </Link>
-</div>
-
+          {/* Dentro do bloco onde está o link "Não tem conta? Cadastre-se" */}
+          <div className="text-center mt-4">
+            <Link
+              href="/login-email-only"
+              className="inline-flex items-center gap-2 text-sm font-medium transition-colors hover:underline"
+              style={{ color: colors.secondary }}
+            >
+              <Mail size={16} />
+              Entrar com email
+            </Link>
+          </div>
 
           {/* Link Cadastro */}
           <div className="text-center">
-            <Link href="/register" className="group inline-flex items-center gap-2 transition-colors font-medium" style={{ color: colors.secondary }}>
+            <Link href="/register" className="group inline-flex items-center gap-2 transition-colors font-medium touch-target" style={{ color: colors.secondary }}>
               <UserPlus size={18} />
               Não tem conta? Cadastre-se
               <ArrowRight size={16} className="opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -281,6 +365,6 @@ export default function LoginPage(): React.ReactElement {
         </div>
         {/* Footer */}
       </div>
-    </div> 
+    </main> 
   );
 }

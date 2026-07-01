@@ -6,7 +6,7 @@ export interface ThemeColors {
 }
 
 export const CODIGOS_PAIS = [
-  // ─── PALOP (já existentes) ──────────────
+  // ─── PALOP ──────────────────────────────
   { codigo: "+244", pais: "Angola", bandeira: "🇦🇴", iso: "AO" },
   { codigo: "+351", pais: "Portugal", bandeira: "🇵🇹", iso: "PT" },
   { codigo: "+55", pais: "Brasil", bandeira: "🇧🇷", iso: "BR" },
@@ -14,7 +14,7 @@ export const CODIGOS_PAIS = [
   { codigo: "+238", pais: "Cabo Verde", bandeira: "🇨🇻", iso: "CV" },
   { codigo: "+245", pais: "Guiné-Bissau", bandeira: "🇬🇼", iso: "GW" },
   { codigo: "+239", pais: "S. Tomé e Príncipe", bandeira: "🇸🇹", iso: "ST" },
-  
+
   // ─── Outros países lusófonos ────────────
   { codigo: "+670", pais: "Timor-Leste", bandeira: "🇹🇱", iso: "TL" },
   { codigo: "+240", pais: "Guiné Equatorial", bandeira: "🇬🇶", iso: "GQ" }, // espanhol, mas parceiro na CPLP
@@ -26,7 +26,6 @@ export const CODIGOS_PAIS = [
   { codigo: "+260", pais: "Zâmbia", bandeira: "🇿🇲", iso: "ZM" },
   { codigo: "+263", pais: "Zimbabué", bandeira: "🇿🇼", iso: "ZW" },
   { codigo: "+243", pais: "R.D. Congo", bandeira: "🇨🇩", iso: "CD" },
-  { codigo: "+244", pais: "Angola", bandeira: "🇦🇴", iso: "AO" }, // já existe, remover duplicado
   { codigo: "+267", pais: "Botswana", bandeira: "🇧🇼", iso: "BW" },
 
   // ─── África Ocidental ────────────────────

@@ -13,8 +13,8 @@ import {
   PencilLine,
   Trash2,
   History,
+  X,
   Percent,
-
   MoreVertical,
 } from "lucide-react";
 import MainEmpresa from "../../../components/MainEmpresa";
@@ -54,7 +54,96 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { toast } from "sonner";
+
+// --- Componente de Notificação Toast com Animação ---
+interface ToastNotificationProps {
+  message: string;
+  type: 'success' | 'error' | 'warning' | 'info';
+  onClose: () => void;
+  colors: ThemeColors;
+  description?: string;
+}
+
+const ToastNotification: React.FC<ToastNotificationProps> = ({ 
+  message, 
+  type, 
+  onClose, 
+  colors,
+  description 
+}) => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const getIcon = () => {
+    switch (type) {
+      case 'success':
+        return <CheckCircle size={24} style={{ color: colors.success }} />;
+      case 'error':
+        return <AlertCircle size={24} style={{ color: colors.danger }} />;
+      case 'warning':
+        return <AlertCircle size={24} style={{ color: colors.warning }} />;
+      case 'info':
+        return <CheckCircle size={24} style={{ color: colors.primary }} />;
+      default:
+        return <CheckCircle size={24} style={{ color: colors.success }} />;
+    }
+  };
+
+  const getBorderColor = () => {
+    switch (type) {
+      case 'success':
+        return colors.success;
+      case 'error':
+        return colors.danger;
+      case 'warning':
+        return colors.warning;
+      case 'info':
+        return colors.primary;
+      default:
+        return colors.success;
+    }
+  };
+
+  return (
+    <div 
+      className="fixed top-6 right-6 z-50 max-w-md"
+      style={{ 
+        backgroundColor: colors.card,
+        borderLeft: `4px solid ${getBorderColor()}`,
+        boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
+        animation: 'slideInRight 0.3s ease-out forwards'
+      }}
+    >
+      <div className="flex items-start gap-4 p-4">
+        <div className="flex-shrink-0 mt-0.5">
+          {getIcon()}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium" style={{ color: colors.text }}>
+            {message}
+          </p>
+          {description && (
+            <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+              {description}
+            </p>
+          )}
+        </div>
+        <button
+          onClick={onClose}
+          className="flex-shrink-0 transition-opacity hover:opacity-70"
+          style={{ color: colors.textSecondary }}
+        >
+          <X size={18} />
+        </button>
+      </div>
+    </div>
+  );
+};
 
 /* ─── Tipos ──────────────────────────────────────────────────────── */
 interface FormCategoriaData {
@@ -185,8 +274,9 @@ export default function CategoriasPage() {
   const [filtroStatus] = useState<"todos" | "ativo" | "inativo">("todos");
   const [filtroIVA] = useState<string>("todos");
   const [abaAtiva, setAbaAtiva] = useState<"ativos" | "lixeira">("ativos");
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' | 'info'; description?: string } | null>(null);
 
-  // Estados dos modais (mantidos originais)
+  // Estados dos modais
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
@@ -195,6 +285,10 @@ export default function CategoriasPage() {
   const [formData, setFormData] = useState<FormCategoriaData>(INITIAL_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof FormCategoriaData, string>>>({});
+
+  const showToast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info', description?: string) => {
+    setToast({ message, type, description });
+  };
 
   /* ── Filtro local ── */
   useEffect(() => {
@@ -224,10 +318,7 @@ export default function CategoriasPage() {
       setCategorias(response.categorias);
     } catch (error: unknown) {
       const apiError = getApiError(error);
-      toast.error("Erro ao carregar categorias", {
-        description:
-          apiError.response?.data?.message || "Tente novamente mais tarde",
-      });
+      showToast("Erro ao carregar categorias", "error", apiError.response?.data?.message || "Tente novamente mais tarde");
     } finally {
       setLoading(false);
     }
@@ -247,7 +338,7 @@ export default function CategoriasPage() {
     carregarCategoriasDeletadas();
   }, [carregarCategorias, carregarCategoriasDeletadas]);
 
-  /* ── Handlers do formulário (mantidos originais) ── */
+  /* ── Handlers do formulário ── */
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
@@ -294,8 +385,7 @@ export default function CategoriasPage() {
     }
 
     if (!formData.sujeito_iva && !formData.codigo_isencao) {
-      novosErrors.codigo_isencao =
-        "Código de isenção é obrigatório para categorias isentas";
+      novosErrors.codigo_isencao = "Código de isenção é obrigatório para categorias isentas";
     }
 
     setErrors(novosErrors);
@@ -352,42 +442,41 @@ export default function CategoriasPage() {
     setIsSubmitting(true);
 
     try {
-        const dadosParaEnviar: CriarCategoriaInput = {
-            nome: formData.nome,
-            status: formData.status,
-            taxa_iva: formData.taxa_iva,
-            sujeito_iva: formData.sujeito_iva,
-            descricao: formData.descricao,
-        };
+      const dadosParaEnviar: CriarCategoriaInput = {
+        nome: formData.nome,
+        status: formData.status,
+        taxa_iva: formData.taxa_iva,
+        sujeito_iva: formData.sujeito_iva,
+        descricao: formData.descricao,
+      };
 
-        if (!formData.sujeito_iva && formData.codigo_isencao) {
-          dadosParaEnviar.codigo_isencao = formData.codigo_isencao;
-        }
+      if (!formData.sujeito_iva && formData.codigo_isencao) {
+        dadosParaEnviar.codigo_isencao = formData.codigo_isencao;
+      }
 
-        if (categoriaSelecionada) {
-            await categoriaService.atualizarCategoria(
-                categoriaSelecionada.id,
-                dadosParaEnviar,
-            );
-            toast.success("Categoria atualizada com sucesso!");
-        } else {
-            await categoriaService.criarCategoria(dadosParaEnviar);
-            toast.success("Categoria criada com sucesso!");
-        }
+      if (categoriaSelecionada) {
+        await categoriaService.atualizarCategoria(
+          categoriaSelecionada.id,
+          dadosParaEnviar,
+        );
+        showToast("Categoria atualizada com sucesso!", "success");
+      } else {
+        await categoriaService.criarCategoria(dadosParaEnviar);
+        showToast("Categoria criada com sucesso!", "success");
+      }
 
-        setIsModalOpen(false);
-        await carregarCategorias();
-        await carregarCategoriasDeletadas();
+      setIsModalOpen(false);
+      await carregarCategorias();
+      await carregarCategoriasDeletadas();
     } catch (error: unknown) {
-        console.error('❌ Erro ao salvar:', error);
-        const apiError = getApiError(error);
-        const message =
-            apiError.response?.data?.message || "Erro ao salvar categoria";
-        toast.error("Erro ao salvar", { description: message });
+      console.error('❌ Erro ao salvar:', error);
+      const apiError = getApiError(error);
+      const message = apiError.response?.data?.message || "Erro ao salvar categoria";
+      showToast("Erro ao salvar", "error", message);
     } finally {
-        setIsSubmitting(false);
+      setIsSubmitting(false);
     }
-};
+  };
 
   const handleConfirmarDelete = (categoria: Categoria) => {
     setCategoriaSelecionada(categoria);
@@ -399,22 +488,18 @@ export default function CategoriasPage() {
 
     try {
       await categoriaService.deletarCategoria(categoriaSelecionada.id);
-      toast.success("Categoria movida para a lixeira!");
+      showToast("Categoria movida para a lixeira!", "success");
       setIsDeleteModalOpen(false);
       await carregarCategorias();
       await carregarCategoriasDeletadas();
     } catch (error: unknown) {
       const apiError = getApiError(error);
-      const message =
-        apiError.response?.data?.message || "Não foi possível deletar";
+      const message = apiError.response?.data?.message || "Não foi possível deletar";
 
       if (apiError.error === "produtos_activos") {
-        toast.error("Não é possível eliminar", {
-          description: message,
-          duration: 6000,
-        });
+        showToast("Não é possível eliminar", "error", message);
       } else {
-        toast.error("Erro ao deletar", { description: message });
+        showToast("Erro ao deletar", "error", message);
       }
     }
   };
@@ -429,15 +514,13 @@ export default function CategoriasPage() {
 
     try {
       await categoriaService.restaurarCategoria(categoriaSelecionada.id);
-      toast.success("Categoria restaurada com sucesso!");
+      showToast("Categoria restaurada com sucesso!", "success");
       setIsRestoreModalOpen(false);
       await carregarCategorias();
       await carregarCategoriasDeletadas();
     } catch (error: unknown) {
       const apiError = getApiError(error);
-      toast.error("Erro ao restaurar", {
-        description: apiError.response?.data?.message || "Tente novamente",
-      });
+      showToast("Erro ao restaurar", "error", apiError.response?.data?.message || "Tente novamente");
     }
   };
 
@@ -451,15 +534,13 @@ export default function CategoriasPage() {
 
     try {
       await categoriaService.forcarDeleteCategoria(categoriaSelecionada.id);
-      toast.success("Categoria excluída permanentemente!");
+      showToast("Categoria excluída permanentemente!", "success");
       setIsForceDeleteModalOpen(false);
       await carregarCategorias();
       await carregarCategoriasDeletadas();
     } catch (error: unknown) {
       const apiError = getApiError(error);
-      toast.error("Erro ao excluir permanentemente", {
-        description: apiError.response?.data?.message || "Tente novamente",
-      });
+      showToast("Erro ao excluir permanentemente", "error", apiError.response?.data?.message || "Tente novamente");
     }
   };
 
@@ -501,6 +582,17 @@ export default function CategoriasPage() {
         className="space-y-4 max-w-7xl mx-auto pb-6 transition-colors duration-300"
         style={{ backgroundColor: colors.background }}
       >
+        {/* Toast Notification */}
+        {toast && (
+          <ToastNotification
+            message={toast.message}
+            type={toast.type}
+            onClose={() => setToast(null)}
+            colors={colors}
+            description={toast.description}
+          />
+        )}
+
         {/* ── Cabeçalho ── */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
@@ -558,7 +650,6 @@ export default function CategoriasPage() {
                 }}
               />
             </div>
-
 
             {/* Novo */}
             {abaAtiva === "ativos" && (
@@ -956,7 +1047,6 @@ export default function CategoriasPage() {
                   className="text-xs font-medium flex items-center gap-1"
                   style={{ color: colors.text }}
                 >
-
                   Configuração de IVA
                 </Label>
                 <div className="flex items-center gap-2">

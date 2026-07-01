@@ -1,7 +1,7 @@
 // src/app/(empresa)/estoque/components/FiltrosEstoque.tsx
 import React, { useEffect } from "react";
 import { Search, X } from "lucide-react";
-import { Categoria } from "@/services/produtos"; // ✅ Importado do service de produtos
+import { Categoria } from "@/services/produtos"; //  Importado do service de produtos
 import { useThemeColors } from "@/context/ThemeContext";
 
 interface FiltrosEstoqueProps {
@@ -49,16 +49,16 @@ export function FiltrosEstoque({
     };
 
     return (
-        <div className="flex flex-col sm:flex-row flex-wrap gap-3 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_160px_180px] gap-3 mb-6">
             {/* Busca */}
-            <div className="flex-1 min-w-[250px] relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: colors.textSecondary }} />
+            <div className="relative w-full sm:col-span-2 lg:col-span-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: colors.textSecondary }} />
                 <input
                     type="text"
                     value={busca}
                     onChange={(e) => onBuscaChange(e.target.value)}
                     placeholder="Buscar por nome ou código..."
-                    className="w-full pl-10 pr-8 py-2 text-sm border outline-none transition-all"
+                    className="w-full pl-10 pr-8 py-2.5 sm:py-2 text-sm border outline-none transition-all"
                     style={{
                         backgroundColor: colors.card,
                         borderColor: colors.border,
@@ -80,7 +80,7 @@ export function FiltrosEstoque({
             <select
                 value={tipoFiltro}
                 onChange={(e) => onTipoFiltroChange(e.target.value as unknown as "todos" | "produto" | "servico")}
-                className="px-3 py-2 text-sm border outline-none min-w-[130px]"
+                className="w-full px-3 py-2.5 sm:py-2 text-sm border outline-none"
                 style={{
                     backgroundColor: colors.card,
                     borderColor: colors.border,
@@ -96,7 +96,7 @@ export function FiltrosEstoque({
             <select
                 value={categoriaFiltro}
                 onChange={(e) => onCategoriaFiltroChange(e.target.value)}
-                className="px-3 py-2 text-sm border outline-none min-w-[140px]"
+                className="w-full px-3 py-2.5 sm:py-2 text-sm border outline-none"
                 style={{
                     backgroundColor: colors.card,
                     borderColor: colors.border,

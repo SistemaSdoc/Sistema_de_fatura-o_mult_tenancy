@@ -118,7 +118,7 @@ export default function MainEmpresa({
     const userRole = user?.role || "";
     const userEmail = user?.email || "";
     const userInitial = userName.charAt(0).toUpperCase();
-    const logoFromServer =`http://192.168.1.198:8000/storage/${companyLogo || user?.empresa?.logo || null}`;
+    const logoFromServer = `http://192.168.1.192:8000/storage/${companyLogo || user?.empresa?.logo || null}`;
 
     // FUNÇÃO PARA VALIDAR E FORMATAR URL DA IMAGEM
     const getValidImageUrl = (logo: string | null | undefined): string | null => {
@@ -168,6 +168,17 @@ export default function MainEmpresa({
         setIsLoaded(true);
     }, []);
 
+    // Trava o scroll do body quando sidebar mobile ou algum modal estiver aberto
+    // (evita "scroll fantasma" atrás do overlay em telas pequenas)
+    useEffect(() => {
+        const shouldLock =
+            (isMobile && sidebarOpen) || logoutModalOpen || !!submenuOpen;
+        document.body.style.overflow = shouldLock ? "hidden" : "";
+        return () => {
+            document.body.style.overflow = "";
+        };
+    }, [isMobile, sidebarOpen, logoutModalOpen, submenuOpen]);
+
     // Fechar menus ao clicar fora
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -189,84 +200,84 @@ export default function MainEmpresa({
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-// ==================== NOTIFICAÇÕES DE ESTOQUE ====================
-const buscarNotificacoesEstoque = useCallback(async (force = false) => {
-  if (!user || userLoading) return;
-  if (fetchingNotificacoesRef.current) return;
+    // ==================== NOTIFICAÇÕES DE ESTOQUE ====================
+    const buscarNotificacoesEstoque = useCallback(async (force = false) => {
+        if (!user || userLoading) return;
+        if (fetchingNotificacoesRef.current) return;
 
-  const cache = notificacoesCacheRef.current;
-  const agora = Date.now();
-  const cacheValido = cache && agora - cache.at < 60_000;
+        const cache = notificacoesCacheRef.current;
+        const agora = Date.now();
+        const cacheValido = cache && agora - cache.at < 60_000;
 
-  if (!force && cacheValido) {
-    setProdutosEstoqueBaixo(cache.baixo);
-    setProdutosSemEstoque(cache.zero);
-    setUltimaAtualizacao(new Date(cache.at));
-    return;
-  }
+        if (!force && cacheValido) {
+            setProdutosEstoqueBaixo(cache.baixo);
+            setProdutosSemEstoque(cache.zero);
+            setUltimaAtualizacao(new Date(cache.at));
+            return;
+        }
 
-  // Apenas roles que realmente têm permissão no backend
-  const rolesComPermissaoEstoque = ["admin", "operador", "gestor"];
+        // Apenas roles que realmente têm permissão no backend
+        const rolesComPermissaoEstoque = ["admin", "operador", "gestor"];
 
-  if (!rolesComPermissaoEstoque.includes(userRole)) {
-    setProdutosEstoqueBaixo([]);
-    setProdutosSemEstoque([]);
-    setUltimaAtualizacao(new Date());
-    fetchingNotificacoesRef.current = false;
-    return;
-  }
+        if (!rolesComPermissaoEstoque.includes(userRole)) {
+            setProdutosEstoqueBaixo([]);
+            setProdutosSemEstoque([]);
+            setUltimaAtualizacao(new Date());
+            fetchingNotificacoesRef.current = false;
+            return;
+        }
 
-  fetchingNotificacoesRef.current = true;
-  setLoadingNotificacoes(true);
+        fetchingNotificacoesRef.current = true;
+        setLoadingNotificacoes(true);
 
-  try {
-    const resumo = await estoqueService.obterResumo();
-    const produtosCriticos = resumo.produtos_criticos || [];
-    let produtosSemStock: Produto[] = [];
-    let zero: Produto[] = [];
-    
-    const baixo = produtosCriticos.filter(
-      (p: Produto) => p.estoque_atual > 0 && p.estoque_atual <= p.estoque_minimo
-    );
-    setProdutosEstoqueBaixo(baixo);
+        try {
+            const resumo = await estoqueService.obterResumo();
+            const produtosCriticos = resumo.produtos_criticos || [];
+            let produtosSemStock: Produto[] = [];
+            let zero: Produto[] = [];
 
-    // Apenas admin e operador veem produtos sem estoque
-    if (userRole === 'admin' || userRole === 'operador') {
-      const responseSemEstoque = await produtoService.listarProdutos({
-        sem_estoque: true,
-        tipo: "produto",
-        paginar: false,
-      });
+            const baixo = produtosCriticos.filter(
+                (p: Produto) => p.estoque_atual > 0 && p.estoque_atual <= p.estoque_minimo
+            );
+            setProdutosEstoqueBaixo(baixo);
 
-      produtosSemStock = Array.isArray(responseSemEstoque.produtos)
-        ? responseSemEstoque.produtos
-        : responseSemEstoque.produtos?.data || [];
+            // Apenas admin e operador veem produtos sem estoque
+            if (userRole === 'admin' || userRole === 'operador') {
+                const responseSemEstoque = await produtoService.listarProdutos({
+                    sem_estoque: true,
+                    tipo: "produto",
+                    paginar: false,
+                });
 
-      zero = produtosSemStock.filter((p: Produto) => p.estoque_atual === 0);
-      setProdutosSemEstoque(zero);
-    } else {
-      setProdutosSemEstoque([]);
-    }
+                produtosSemStock = Array.isArray(responseSemEstoque.produtos)
+                    ? responseSemEstoque.produtos
+                    : responseSemEstoque.produtos?.data || [];
 
-    setUltimaAtualizacao(new Date());
-    notificacoesCacheRef.current = {
-      at: Date.now(),
-      baixo,
-      zero: userRole === 'admin' || userRole === 'operador' ? zero : [],
-    };
-  } catch (error: unknown) {
-    const apiError = getApiError(error);
-    console.error("[MainEmpresa] Erro ao buscar notificações:", error);
-    
-    // Opcional: só mostrar toast em erros que não sejam 403
-    if (apiError.response?.status !== 403) {
-      toast.error("Erro ao carregar alertas de estoque");
-    }
-  } finally {
-    setLoadingNotificacoes(false);
-    fetchingNotificacoesRef.current = false;
-  }
-}, [user, userLoading, userRole]);
+                zero = produtosSemStock.filter((p: Produto) => p.estoque_atual === 0);
+                setProdutosSemEstoque(zero);
+            } else {
+                setProdutosSemEstoque([]);
+            }
+
+            setUltimaAtualizacao(new Date());
+            notificacoesCacheRef.current = {
+                at: Date.now(),
+                baixo,
+                zero: userRole === 'admin' || userRole === 'operador' ? zero : [],
+            };
+        } catch (error: unknown) {
+            const apiError = getApiError(error);
+            console.error("[MainEmpresa] Erro ao buscar notificações:", error);
+
+            // Opcional: só mostrar toast em erros que não sejam 403
+            if (apiError.response?.status !== 403) {
+                toast.error("Erro ao carregar alertas de estoque");
+            }
+        } finally {
+            setLoadingNotificacoes(false);
+            fetchingNotificacoesRef.current = false;
+        }
+    }, [user, userLoading, userRole]);
 
     // ==================== HELPERS ====================
     const closeSidebar = () => setSidebarOpen(false);
@@ -385,22 +396,22 @@ const buscarNotificacoesEstoque = useCallback(async (force = false) => {
                         {
                             label: "Gerar factura-recibo",
                             path: "/dashboard/Vendas/Nova_venda",
-                            
+
                         },
                         {
                             label: "Gerar facturas",
                             path: "/dashboard/Faturas/Fatura_Normal",
-                            
+
                         },
                         {
                             label: "Gerar proformas",
                             path: "/dashboard/Faturas/Faturas_Proforma",
-                            
+
                         },
                         {
                             label: "Vendas geradas",
                             path: "/dashboard/Faturas/Faturas",
-                            
+
                         },
                     ]
                     : [],
@@ -413,7 +424,7 @@ const buscarNotificacoesEstoque = useCallback(async (force = false) => {
             path: "/dashboard/Faturas/DC",
             links: [],
             isGroup: false,
-            roles: ["admin", "operador","gestor"],
+            roles: ["admin", "operador", "gestor"],
         },
         {
             label: "Gestão de Stock",
@@ -495,7 +506,7 @@ const buscarNotificacoesEstoque = useCallback(async (force = false) => {
 
     return (
         <div
-            className="flex w-screen h-screen overflow-hidden"
+            className="flex min-h-screen w-full overflow-x-hidden"
             style={{ backgroundColor: colors.background }}
         >
             {/* ==================== SIDEBAR ==================== */}
@@ -504,19 +515,20 @@ const buscarNotificacoesEstoque = useCallback(async (force = false) => {
                 style={{
                     backgroundColor: colors.card,
                     borderColor: colors.border,
-                    width: sidebarOpen
-                        ? isMobile
-                            ? "280px"
-                            : "260px"
-                        : isMobile
-                            ? "0"
+                    // No mobile a largura é sempre fixa (capada por viewport) e quem
+                    // controla exibir/ocultar é o translateX — nunca colapsamos para
+                    // width: 0, pois translateX(-100%) de uma caixa com largura 0
+                    // não desloca nada e o conteúdo interno continua sendo pintado.
+                    width: isMobile
+                        ? "min(280px, 85vw)"
+                        : sidebarOpen
+                            ? "260px"
                             : "72px",
-                    transform:
-                        sidebarOpen || !isMobile
+                    transform: isMobile
+                        ? sidebarOpen
                             ? "translateX(0)"
-                            : isMobile
-                                ? "translateX(-100%)"
-                                : "translateX(0)",
+                            : "translateX(-100%)"
+                        : "translateX(0)",
                 }}
             >
                 {!isMobile && (
@@ -570,7 +582,7 @@ const buscarNotificacoesEstoque = useCallback(async (force = false) => {
                             {isMobile && (
                                 <button
                                     onClick={closeSidebar}
-                                    className="p-1 transition-transform hover:scale-110 active:scale-95"
+                                    className="p-1 touch-target transition-transform hover:scale-110 active:scale-95"
                                     style={{ color: colors.text }}
                                     title="Fechar sidebar"
                                 >
@@ -759,8 +771,17 @@ const buscarNotificacoesEstoque = useCallback(async (force = false) => {
                 </div>
             </aside>
 
+            {/* Overlay para fechar a sidebar ao tocar fora dela (apenas mobile) */}
+            {isMobile && sidebarOpen && (
+                <div
+                    className="fixed inset-0 z-30 bg-black/50 transition-opacity duration-300 md:hidden"
+                    onClick={closeSidebar}
+                    aria-hidden="true"
+                />
+            )}
+
             {/* ==================== MAIN CONTENT ==================== */}
-            <div className="flex flex-col flex-1 w-full overflow-hidden">
+            <div className="flex flex-col flex-1 w-full min-w-0">
                 {/* Header */}
                 <header
                     className="flex items-center justify-between gap-3 px-3 h-14 border-b shadow-sm md:h-16 md:px-6 transition-all duration-200"
@@ -770,7 +791,7 @@ const buscarNotificacoesEstoque = useCallback(async (force = false) => {
                         {isMobile && (
                             <button
                                 onClick={() => setSidebarOpen(true)}
-                                className="p-2 transition-all hover:scale-110 active:scale-95"
+                                className="p-2 touch-target transition-all hover:scale-110 active:scale-95"
                                 style={{
                                     color: colors.primary,
                                     backgroundColor: `${colors.primary}10`,
@@ -793,7 +814,8 @@ const buscarNotificacoesEstoque = useCallback(async (force = false) => {
                         {/* Theme Toggle */}
                         <button
                             onClick={toggleTheme}
-                            className="p-2 transition-all hover:scale-110 active:scale-95"
+                            className="p-2 touch-target transition-all hover:scale-110 active:scale-95"
+                            aria-label="Alternar tema"
                             style={{ backgroundColor: colors.hover, color: colors.text }}
                             title="Alternar tema"
                         >
@@ -811,7 +833,8 @@ const buscarNotificacoesEstoque = useCallback(async (force = false) => {
                                 <div className="relative" ref={notificacoesRef}>
                                     <button
                                         onClick={toggleNotificacoes}
-                                        className="relative p-2 transition-all hover:scale-110 active:scale-95"
+                                        className="relative p-2 touch-target transition-all hover:scale-110 active:scale-95"
+                                        aria-label="Abrir notificações"
                                         style={{
                                             backgroundColor: notificacoesAberto
                                                 ? colors.hover
@@ -862,7 +885,7 @@ const buscarNotificacoesEstoque = useCallback(async (force = false) => {
                                                         </h3>
                                                         <button
                                                             onClick={() => setNotificacoesAberto(false)}
-                                                            className="p-1 transition-transform hover:scale-110 active:scale-95"
+                                                            className="p-1 touch-target transition-transform hover:scale-110 active:scale-95"
                                                             title="Fechar"
                                                         >
                                                             <X
@@ -1102,7 +1125,7 @@ const buscarNotificacoesEstoque = useCallback(async (force = false) => {
                             {userMenuOpen && (
                                 <>
                                     <div
-                                        className={`absolute right-0 z-50 mt-2 w-64 overflow-hidden border shadow-xl transition-all duration-200`}
+                                        className={`absolute right-0 z-50 mt-2 w-64 max-w-[90vw] overflow-hidden border shadow-xl transition-all duration-200`}
                                         style={{
                                             backgroundColor: colors.card,
                                             borderColor: colors.border,
@@ -1225,8 +1248,8 @@ const buscarNotificacoesEstoque = useCallback(async (force = false) => {
                 </header>
 
                 {/* Main Content */}
-                <main className="flex-1 overflow-auto p-3 md:p-6">
-                    <div className="animate-fade-in">{children}</div>
+                <main className="flex-1 min-w-0 overflow-auto p-3 sm:p-4 md:p-6">
+                    <div className="animate-fade-in w-full max-w-full">{children}</div>
                 </main>
             </div>
 
@@ -1263,7 +1286,7 @@ const buscarNotificacoesEstoque = useCallback(async (force = false) => {
                                 </h3>
                                 <button
                                     onClick={() => setSubmenuOpen(null)}
-                                    className="p-1 transition-transform hover:scale-110 active:scale-95"
+                                    className="p-1 touch-target transition-transform hover:scale-110 active:scale-95"
                                     style={{ color: colors.textSecondary }}
                                     title="Fechar"
                                 >
@@ -1431,112 +1454,6 @@ const buscarNotificacoesEstoque = useCallback(async (force = false) => {
                     </div>
                 </div>
             )}
-
-            {/* ==================== ANIMATIONS ==================== */}
-            <style jsx>{`
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        @keyframes slideDown {
-          from {
-            opacity: 0;
-            transform: scale(0.95) translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: scale(1) translateY(0);
-          }
-        }
-
-        @keyframes shake {
-          0%,
-          100% {
-            transform: translateX(0);
-          }
-          25% {
-            transform: translateX(-5px);
-          }
-          75% {
-            transform: translateX(5px);
-          }
-        }
-
-        .animate-fade-in {
-          animation: fadeIn 0.3s ease-out forwards;
-        }
-
-        .animate-slide-down {
-          animation: slideDown 0.2s ease-out forwards;
-        }
-
-        .animate-shake {
-          animation: shake 0.3s ease-in-out;
-        }
-
-        .hover\:scale-110:hover {
-          transform: scale(1.1);
-        }
-
-        .hover\:scale-105:hover {
-          transform: scale(1.05);
-        }
-
-        .active\:scale-95:active {
-          transform: scale(0.95);
-        }
-
-        .active\:scale-98:active {
-          transform: scale(0.98);
-        }
-
-        .hover\:translate-x-1:hover {
-          transform: translateX(4px);
-        }
-
-        .transition-all {
-          transition-property: all;
-          transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .duration-200 {
-          transition-duration: 200ms;
-        }
-
-        .duration-250 {
-          transition-duration: 250ms;
-        }
-
-        .duration-300 {
-          transition-duration: 300ms;
-        }
-
-        /* Scrollbar customizado */
-        ::-webkit-scrollbar {
-          width: 6px;
-          height: 6px;
-        }
-
-        ::-webkit-scrollbar-track {
-          background: transparent;
-        }
-
-        ::-webkit-scrollbar-thumb {
-          background: var(--scrollbar-color, #cbd5e1);
-          border-radius: 3px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-          background: var(--scrollbar-hover-color, #94a3b8);
-        }
-      `}</style>
         </div>
     );
 }
