@@ -11,6 +11,17 @@
       0 => 'Barryvdh\\DomPDF\\ServiceProvider',
     ),
   ),
+  'jenssegers/agent' => 
+  array (
+    'aliases' => 
+    array (
+      'Agent' => 'Jenssegers\\Agent\\Facades\\Agent',
+    ),
+    'providers' => 
+    array (
+      0 => 'Jenssegers\\Agent\\AgentServiceProvider',
+    ),
+  ),
   'laravel/pail' => 
   array (
     'providers' => 
@@ -81,6 +92,17 @@
     'providers' => 
     array (
       0 => 'Stancl\\Tenancy\\TenancyServiceProvider',
+    ),
+  ),
+  'stevebauman/location' => 
+  array (
+    'aliases' => 
+    array (
+      'Location' => 'Stevebauman\\Location\\Facades\\Location',
+    ),
+    'providers' => 
+    array (
+      0 => 'Stevebauman\\Location\\LocationServiceProvider',
     ),
   ),
 );

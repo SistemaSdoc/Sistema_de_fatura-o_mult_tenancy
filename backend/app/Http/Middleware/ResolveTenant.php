@@ -58,17 +58,24 @@ class ResolveTenant
         // 3. VERIFICAR SESSION (Tenant já identificado)
         // ============================================
         $tenantId = session('tenant_id');
+        if (!$tenantId) {
+            $tenantId = $request->header('X-Empresa-ID') ?: $request->header('X-Tenant-ID');
+        }
+
         if ($tenantId) {
             $empresa = Empresa::on('landlord')->find($tenantId);
             if ($empresa && $empresa->status === 'ativo') {
+                session()->put('tenant_id', $empresa->id);
+                session()->put('tenant_subdomain', $empresa->subdomain);
                 $this->conectarTenant($empresa);
                 $this->registrarContexto($request, $empresa);
-                
-                Log::info('ResolveTenant: Tenant da sessão', [
+
+                Log::info('ResolveTenant: Tenant via sessão/header', [
                     'empresa_id' => $empresa->id,
                     'modo' => $empresa->modo,
+                    'via_header' => (bool) $request->header('X-Empresa-ID'),
                 ]);
-                
+
                 return $next($request);
             }
         }
@@ -119,20 +126,19 @@ class ResolveTenant
         try {
             $this->conectarTenant($empresa);
             $this->registrarContexto($request, $empresa);
-            
+
             Log::info('ResolveTenant: Tenant conectado', [
                 'empresa_id' => $empresa->id,
                 'subdomain' => $empresa->subdomain,
                 'modo' => $empresa->modo,
                 'database' => $empresa->modo === 'singular' ? $empresa->db_name : 'shared',
             ]);
-
         } catch (\Exception $e) {
             Log::error('ResolveTenant: Erro ao conectar tenant', [
                 'empresa_id' => $empresa->id,
                 'error' => $e->getMessage(),
             ]);
-            
+
             return $this->errorResponse(
                 'Erro ao conectar ao banco da empresa.',
                 500,
@@ -162,14 +168,14 @@ class ResolveTenant
     {
         $host = $request->getHost();
         $host = explode(':', $host)[0];
-        
+
         $subdomain = $this->extrairSubdomain($host);
-        
+
         Log::debug('ResolveTenant: Detectando por subdomain', [
             'host' => $host,
             'subdomain' => $subdomain,
         ]);
-        
+
         if (!$subdomain) {
             Log::debug('ResolveTenant: Nenhum subdomain encontrado');
             return null;
@@ -186,7 +192,7 @@ class ResolveTenant
     protected function detectarPorFallback(Request $request): ?Empresa
     {
         Log::debug('ResolveTenant: Tentando fallback detection');
-        
+
         if ($empresaId = $request->header('X-Empresa-ID')) {
             Log::debug('ResolveTenant: Fallback por header', ['empresa_id' => $empresaId]);
             return Empresa::on('landlord')->find($empresaId);
@@ -209,7 +215,7 @@ class ResolveTenant
     {
         try {
             $tokenHash = hash('sha256', $token);
-            
+
             $landlordToken = DB::connection('landlord')
                 ->table('personal_access_tokens')
                 ->where('token', $tokenHash)
@@ -218,7 +224,7 @@ class ResolveTenant
             if ($landlordToken) {
                 $user = \App\Models\LandlordUser::on('landlord')
                     ->find($landlordToken->tokenable_id);
-                
+
                 if ($user && $user->empresa_id_atual) {
                     return Empresa::on('landlord')->find($user->empresa_id_atual);
                 }
@@ -245,7 +251,7 @@ class ResolveTenant
         if (in_array($request->getHost(), ['localhost', '127.0.0.1']) || $this->isIP($request->getHost())) {
             return null;
         }
-        
+
         $hostAtual = $request->getHost();
         $hostEsperado = $this->montarHost($empresa->subdomain);
 
@@ -255,24 +261,24 @@ class ResolveTenant
 
         if ($this->isDominioBase($hostAtual) && $empresa->subdomain) {
             $novaUrl = $this->montarUrl($request, $empresa->subdomain);
-            
+
             Log::info('ResolveTenant: Redirecionando para subdomain', [
                 'de' => $request->fullUrl(),
                 'para' => $novaUrl,
             ]);
-            
+
             return Redirect::to($novaUrl, 302);
         }
 
         if (!$this->isDominioBase($hostAtual)) {
             $novaUrl = $this->montarUrl($request, $empresa->subdomain);
-            
+
             Log::warning('ResolveTenant: Subdomain incorreto, redirecionando', [
                 'empresa_id' => $empresa->id,
                 'subdomain_esperado' => $empresa->subdomain,
                 'host_atual' => $hostAtual,
             ]);
-            
+
             return Redirect::to($novaUrl, 301);
         }
 
@@ -290,13 +296,13 @@ class ResolveTenant
         $scheme = $request->getScheme();
         $path = $request->getPathInfo();
         $query = $request->getQueryString();
-        
+
         $url = "{$scheme}://{$novoHost}{$path}";
-        
+
         if ($query) {
             $url .= "?{$query}";
         }
-        
+
         return $url;
     }
 
@@ -312,20 +318,20 @@ class ResolveTenant
     protected function extrairSubdomain(string $host): ?string
     {
         $host = explode(':', $host)[0];
-        
+
         if (filter_var($host, FILTER_VALIDATE_IP)) {
             return null;
         }
-        
+
         $parts = explode('.', $host);
-        
+
         if (count($parts) >= 3) {
             if ($parts[0] === 'www') {
                 return $parts[1] ?? null;
             }
             return $parts[0];
         }
-        
+
         return null;
     }
 
@@ -360,7 +366,7 @@ class ResolveTenant
         if ($empresa->modo === 'colectivo') {
             Config::set('database.default', 'shared');
             DB::reconnect('shared');
-            
+
             Log::debug('ResolveTenant: Conectado ao Shared DB (colectivo)', [
                 'empresa_id' => $empresa->id,
             ]);
@@ -383,7 +389,7 @@ class ResolveTenant
                         break;
                     }
                 }
-                
+
                 if (!$exists) {
                     Log::warning('ResolveTenant: Banco de dados não encontrado', [
                         'empresa_id' => $empresa->id,
@@ -398,7 +404,7 @@ class ResolveTenant
         }
 
         Config::set('database.connections.tenant.database', $empresa->db_name);
-        
+
         // ⭐ SÓ USAR PURGE EM AMBIENTE DE DESENVOLVIMENTO
         if (app()->environment('local', 'testing')) {
             DB::purge('tenant');
@@ -406,7 +412,7 @@ class ResolveTenant
         } else {
             DB::reconnect('tenant');
         }
-        
+
         Config::set('database.default', 'tenant');
 
         Log::info('ResolveTenant: Conectado ao Tenant DB (singular)', [
@@ -419,10 +425,10 @@ class ResolveTenant
     {
         $request->attributes->set('current_empresa', $empresa);
         $request->attributes->set('current_tenant', $empresa);
-        
+
         app()->instance('current.empresa', $empresa);
         app()->instance('current.tenant', $empresa);
-        
+
         Config::set('app.current_empresa_id', $empresa->id);
         Config::set('app.current_subdomain', $empresa->subdomain);
         Config::set('app.current_modo', $empresa->modo);

@@ -17,7 +17,7 @@ export function getStatusEstoque(item: Produto): StatusEstoque {
     if (estaSemEstoque(item)) {
         return {
             label: "Sem Estoque",
-            cor: "bg-[#F9941F]/10 text-[#F9941F]",
+            cor: "bg-[#F9941F] text-[#FFFFFF]",
             icone: "XCircle",
         };
     }
@@ -30,7 +30,7 @@ export function getStatusEstoque(item: Produto): StatusEstoque {
     }
     return {
         label: "OK",
-       cor: "bg-[#28A745]/10 text-[#28A745]",
+       cor: "bg-[#F9941F] text-[#FFFFFF]",
         icone: "CheckCircle2",
     };
 }

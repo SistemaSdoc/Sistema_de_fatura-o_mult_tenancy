@@ -8,6 +8,7 @@ use App\Models\Empresa;
 use App\Models\LandlordUser;
 use App\Models\Shared\User as SharedUser;
 use App\Models\Tenant\User as TenantUser;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
@@ -30,7 +31,7 @@ class ClienteController extends Controller
         // ✅ Obtém da sessão (prioridade)
         $this->empresa = app('current.empresa');
         $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
-        
+
         Log::debug('[ClienteController] Inicializado', [
             'modo' => $this->modo,
             'empresa_id' => $this->empresa?->id,
@@ -228,27 +229,27 @@ class ClienteController extends Controller
     }
 
     /**
- * Normaliza o número de telefone para o formato E.164 (+244923456789)
- */
-private function normalizarTelefone(?string $telefone, ?string $isoPais): ?string
-{
-    if (empty($telefone) || empty($isoPais)) {
-        return $telefone; // ou null, dependendo do seu caso
-    }
+     * Normaliza o número de telefone para o formato E.164 (+244923456789)
+     */
+    private function normalizarTelefone(?string $telefone, ?string $isoPais): ?string
+    {
+        if (empty($telefone) || empty($isoPais)) {
+            return $telefone; // ou null, dependendo do seu caso
+        }
 
-    try {
-        $phoneUtil = PhoneNumberUtil::getInstance();
-        $numeroProto = $phoneUtil->parse($telefone, $isoPais);
-        return $phoneUtil->format($numeroProto, PhoneNumberFormat::E164);
-    } catch (\Exception $e) {
-        Log::warning('[ClienteController] Falha ao normalizar telefone', [
-            'telefone' => $telefone,
-            'iso' => $isoPais,
-            'error' => $e->getMessage()
-        ]);
-        return $telefone; // fallback
+        try {
+            $phoneUtil = PhoneNumberUtil::getInstance();
+            $numeroProto = $phoneUtil->parse($telefone, $isoPais);
+            return $phoneUtil->format($numeroProto, PhoneNumberFormat::E164);
+        } catch (\Exception $e) {
+            Log::warning('[ClienteController] Falha ao normalizar telefone', [
+                'telefone' => $telefone,
+                'iso' => $isoPais,
+                'error' => $e->getMessage()
+            ]);
+            return $telefone; // fallback
+        }
     }
-}
 
     /**
      * Valida e normaliza o NIF/BI
@@ -306,7 +307,7 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
     public function index(Request $request)
     {
         $modo = $this->getModo();
-        
+
         Log::info('[ClienteController::index] Iniciando listagem de clientes', [
             'user_id' => $this->getUserId(),
             'modo' => $modo,
@@ -323,8 +324,8 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
             if ($request->search) {
                 $query->where(function ($q) use ($request) {
                     $q->where('nome', 'LIKE', "%{$request->search}%")
-                      ->orWhere('nif', 'LIKE', "%{$request->search}%")
-                      ->orWhere('email', 'LIKE', "%{$request->search}%");
+                        ->orWhere('nif', 'LIKE', "%{$request->search}%")
+                        ->orWhere('email', 'LIKE', "%{$request->search}%");
                 });
                 Log::info('[ClienteController::index] Filtro search aplicado', [
                     'search' => $request->search
@@ -381,7 +382,6 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
                 'data' => $clientes,
                 'modo' => $modo,
             ]);
-
         } catch (\Exception $e) {
             Log::error('[ClienteController::index] Erro ao listar clientes', [
                 'error' => $e->getMessage(),
@@ -401,7 +401,7 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
     /**
      * Criar novo cliente
      */
-   public function store(Request $request)
+    public function store(Request $request)
     {
         $modo = $this->getModo();
         Log::info('[ClienteController::store] Iniciando criação', [
@@ -442,10 +442,10 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
             ]);
 
             // Normaliza telefone
-     if ($request->filled('telefone') && $request->filled('iso_pais')) {
-        $validated['telefone'] = $this->normalizarTelefone($request->telefone, $request->iso_pais);
-    }
-    unset($validated['iso_pais']); // não salvar
+            if ($request->filled('telefone') && $request->filled('iso_pais')) {
+                $validated['telefone'] = $this->normalizarTelefone($request->telefone, $request->iso_pais);
+            }
+            unset($validated['iso_pais']); // não salvar
 
             // Normaliza NIF
             if (isset($validated['nif'])) {
@@ -473,13 +473,14 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
                 'modo' => $modo,
             ]);
 
+            AuditLogger::log('Cliente Criado', '👤', ['area' => 'Clientes', 'detalhes' => ['cliente_id' => $cliente->id, 'cliente_nome' => $cliente->nome]]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Cliente criado com sucesso',
                 'data' => $cliente,
                 'modo' => $modo,
             ], 201);
-
         } catch (ValidationException $e) {
             Log::warning('[ClienteController::store] Erro de validação', ['errors' => $e->errors()]);
             return response()->json([
@@ -503,7 +504,7 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
     public function show($id)
     {
         $modo = $this->getModo();
-        
+
         Log::info('[ClienteController::show] Buscando cliente', [
             'cliente_id' => $id,
             'user_id' => $this->getUserId(),
@@ -526,7 +527,6 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
                 'data' => $cliente,
                 'modo' => $modo,
             ]);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             Log::warning('[ClienteController::show] Cliente não encontrado', [
                 'cliente_id' => $id,
@@ -594,10 +594,10 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
                 'iso_pais.in' => 'Código do país inválido',
             ]);
 
-    if ($request->filled('telefone') && $request->filled('iso_pais')) {
-        $validated['telefone'] = $this->normalizarTelefone($request->telefone, $request->iso_pais);
-    }
-    unset($validated['iso_pais']);
+            if ($request->filled('telefone') && $request->filled('iso_pais')) {
+                $validated['telefone'] = $this->normalizarTelefone($request->telefone, $request->iso_pais);
+            }
+            unset($validated['iso_pais']);
 
             // Normaliza NIF
             $tipo = $validated['tipo'] ?? $cliente->tipo;
@@ -632,13 +632,14 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
                 'modo' => $modo,
             ]);
 
+            AuditLogger::log('Cliente Editado', '✏️', ['area' => 'Clientes', 'detalhes' => ['cliente_id' => $cliente->id, 'campos_alterados' => array_keys($validated)]]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Cliente atualizado com sucesso',
                 'data' => $cliente,
                 'modo' => $modo,
             ]);
-
         } catch (ValidationException $e) {
             Log::warning('[ClienteController::update] Erro de validação', ['errors' => $e->errors()]);
             return response()->json([
@@ -665,7 +666,7 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
     public function destroy($id)
     {
         $modo = $this->getModo();
-        
+
         Log::info('[ClienteController::destroy] Iniciando arquivamento', [
             'cliente_id' => $id,
             'user_id' => $this->getUserId(),
@@ -685,12 +686,13 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
                 'modo' => $modo,
             ]);
 
+            AuditLogger::log('Cliente Deletado', '❌', ['area' => 'Clientes', 'detalhes' => ['cliente_id' => $cliente->id, 'tipo_delecao' => 'soft_delete']]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Cliente arquivado com sucesso',
                 'modo' => $modo,
             ]);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             Log::warning('[ClienteController::destroy] Cliente não encontrado', [
                 'cliente_id' => $id,
@@ -723,7 +725,7 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
     public function restore($id)
     {
         $modo = $this->getModo();
-        
+
         Log::info('[ClienteController::restore] Iniciando restauração', [
             'cliente_id' => $id,
             'user_id' => $this->getUserId(),
@@ -751,13 +753,14 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
                 'modo' => $modo,
             ]);
 
+            AuditLogger::log('Cliente Restaurado', '↩️', ['area' => 'Clientes', 'detalhes' => ['cliente_id' => $cliente->id]]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Cliente restaurado com sucesso',
                 'data' => $cliente,
                 'modo' => $modo,
             ]);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             Log::warning('[ClienteController::restore] Cliente não encontrado', [
                 'cliente_id' => $id,
@@ -790,7 +793,7 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
     public function listDeleted(Request $request)
     {
         $modo = $this->getModo();
-        
+
         Log::info('[ClienteController::listDeleted] Listando clientes deletados', [
             'user_id' => $this->getUserId(),
             'modo' => $modo,
@@ -804,7 +807,7 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
             if ($request->search) {
                 $query->where(function ($q) use ($request) {
                     $q->where('nome', 'LIKE', "%{$request->search}%")
-                      ->orWhere('nif', 'LIKE', "%{$request->search}%");
+                        ->orWhere('nif', 'LIKE', "%{$request->search}%");
                 });
             }
 
@@ -822,7 +825,6 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
                 'data' => $clientes,
                 'modo' => $modo,
             ]);
-
         } catch (\Exception $e) {
             Log::error('[ClienteController::listDeleted] Erro ao listar clientes deletados', [
                 'error' => $e->getMessage(),
@@ -844,7 +846,7 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
     public function forceDelete($id)
     {
         $modo = $this->getModo();
-        
+
         Log::info('[ClienteController::forceDelete] Iniciando exclusão permanente', [
             'cliente_id' => $id,
             'user_id' => $this->getUserId(),
@@ -884,12 +886,13 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
                 'modo' => $modo,
             ]);
 
+            AuditLogger::log('Cliente Eliminado Permanentemente', '🗑️', ['area' => 'Clientes', 'detalhes' => ['cliente_id' => $id]]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Cliente excluído permanentemente',
                 'modo' => $modo,
             ]);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             Log::warning('[ClienteController::forceDelete] Cliente não encontrado', [
                 'cliente_id' => $id,
@@ -922,7 +925,7 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
     public function ativar($id)
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -941,7 +944,6 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
                 'data' => $cliente,
                 'modo' => $modo,
             ]);
-
         } catch (\Exception $e) {
             Log::error('[ClienteController::ativar] Erro ao ativar cliente', [
                 'cliente_id' => $id,
@@ -963,7 +965,7 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
     public function inativar($id)
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -982,7 +984,6 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
                 'data' => $cliente,
                 'modo' => $modo,
             ]);
-
         } catch (\Exception $e) {
             Log::error('[ClienteController::inativar] Erro ao inativar cliente', [
                 'cliente_id' => $id,
@@ -1004,7 +1005,7 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
     public function indexWithTrashed(Request $request)
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -1013,8 +1014,8 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
             if ($request->search) {
                 $query->where(function ($q) use ($request) {
                     $q->where('nome', 'LIKE', "%{$request->search}%")
-                      ->orWhere('nif', 'LIKE', "%{$request->search}%")
-                      ->orWhere('email', 'LIKE', "%{$request->search}%");
+                        ->orWhere('nif', 'LIKE', "%{$request->search}%")
+                        ->orWhere('email', 'LIKE', "%{$request->search}%");
                 });
             }
 
@@ -1035,7 +1036,6 @@ private function normalizarTelefone(?string $telefone, ?string $isoPais): ?strin
                 'data' => $clientes,
                 'modo' => $modo,
             ]);
-
         } catch (\Exception $e) {
             Log::error('[ClienteController::indexWithTrashed] Erro ao listar clientes', [
                 'error' => $e->getMessage(),

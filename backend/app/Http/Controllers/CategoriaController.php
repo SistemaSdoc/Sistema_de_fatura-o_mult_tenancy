@@ -8,6 +8,7 @@ use App\Models\Empresa;
 use App\Models\LandlordUser;
 use App\Models\Shared\User as SharedUser;
 use App\Models\Tenant\User as TenantUser;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -30,7 +31,7 @@ class CategoriaController extends Controller
         // ✅ Obtém da sessão (prioridade)
         $this->empresa = app('current.empresa');
         $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
-        
+
         Log::debug('[CategoriaController] Inicializado', [
             'modo' => $this->modo,
             'empresa_id' => $this->empresa?->id,
@@ -257,7 +258,7 @@ class CategoriaController extends Controller
     public function index(Request $request)
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -313,7 +314,7 @@ class CategoriaController extends Controller
     public function indexTodas(Request $request)
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -357,7 +358,7 @@ class CategoriaController extends Controller
     public function indexDeletadas(Request $request)
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -404,7 +405,7 @@ class CategoriaController extends Controller
     public function paraSelectProdutos()
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -412,7 +413,7 @@ class CategoriaController extends Controller
                 ->where('status', 'ativo')
                 ->orderBy('nome')
                 ->get()
-                ->map(fn ($c) => [
+                ->map(fn($c) => [
                     'id' => $c->id,
                     'nome' => $c->nome,
                     'taxa_iva' => (float) $c->taxa_iva,
@@ -441,7 +442,7 @@ class CategoriaController extends Controller
     public function show($id)
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -478,7 +479,7 @@ class CategoriaController extends Controller
     public function store(Request $request)
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -521,6 +522,17 @@ class CategoriaController extends Controller
                 'modo' => $modo,
             ]);
 
+            // Registar na auditoria
+            AuditLogger::log('Categoria Criada', '📁', [
+                'area' => 'Categorias',
+                'detalhes' => [
+                    'categoria_id' => $categoria->id,
+                    'categoria_nome' => $categoria->nome,
+                    'taxa_iva' => $categoria->taxa_iva,
+                    'tipo' => $categoria->tipo,
+                ],
+            ]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Categoria criada com sucesso',
@@ -546,92 +558,103 @@ class CategoriaController extends Controller
     /**
      * PUT /api/categorias/{categoria}
      */
-public function update(Request $request, $id)
-{
-    try {
-        $modo = $this->getModo();
-        $this->verificarAcessoUsuario();
+    public function update(Request $request, $id)
+    {
+        try {
+            $modo = $this->getModo();
+            $this->verificarAcessoUsuario();
 
-        if (!$this->hasRole(['admin', 'operador', 'gestor', 'contabilista'])) {
-            return response()->json(['error' => 'Não autorizado'], 403);
-        }
+            if (!$this->hasRole(['admin', 'operador', 'gestor', 'contabilista'])) {
+                return response()->json(['error' => 'Não autorizado'], 403);
+            }
 
-        $categoria = $this->buscarCategoria($id);
+            $categoria = $this->buscarCategoria($id);
 
-        if (!$categoria) {
-            return response()->json(['error' => 'Categoria não encontrada'], 404);
-        }
+            if (!$categoria) {
+                return response()->json(['error' => 'Categoria não encontrada'], 404);
+            }
 
-        // 🔥 LOG PARA DEBUG
-        Log::info('[UPDATE] Dados recebidos:', [
-            'todos_dados' => $request->all(),
-            'descricao' => $request->input('descricao'),
-            'raw' => $request->getContent()
-        ]);
+            // 🔥 LOG PARA DEBUG
+            Log::info('[UPDATE] Dados recebidos:', [
+                'todos_dados' => $request->all(),
+                'descricao' => $request->input('descricao'),
+                'raw' => $request->getContent()
+            ]);
 
-        $dados = $request->validate([
-            'nome'           => 'sometimes|string|max:255',
-            'descricao'      => 'nullable|string', // ← PERMITE NULL
-            'taxa_iva'       => 'nullable|numeric|min:0|max:100',
-            'sujeito_iva'    => 'nullable|boolean',
-            'status'         => 'nullable|in:ativo,inativo',
-            'tipo'           => 'nullable|in:produto,servico',
-        ]);
+            $dados = $request->validate([
+                'nome'           => 'sometimes|string|max:255',
+                'descricao'      => 'nullable|string', // ← PERMITE NULL
+                'taxa_iva'       => 'nullable|numeric|min:0|max:100',
+                'sujeito_iva'    => 'nullable|boolean',
+                'status'         => 'nullable|in:ativo,inativo',
+                'tipo'           => 'nullable|in:produto,servico',
+            ]);
 
-        // 🔥 LOG DOS DADOS VALIDADOS
-        Log::info('[UPDATE] Dados validados:', $dados);
+            // 🔥 LOG DOS DADOS VALIDADOS
+            Log::info('[UPDATE] Dados validados:', $dados);
 
-        // 🔥 Forçar update mesmo com campos vazios
-        if (!empty($dados) || array_key_exists('descricao', $dados)) {
-            $categoria->update($dados);
+            // 🔥 Forçar update mesmo com campos vazios
+            if (!empty($dados) || array_key_exists('descricao', $dados)) {
+                $categoria->update($dados);
 
-            $camposIva = ['taxa_iva', 'sujeito_iva', 'codigo_isencao'];
-            $ivaAlterado = count(array_intersect(array_keys($dados), $camposIva)) > 0;
+                $camposIva = ['taxa_iva', 'sujeito_iva', 'codigo_isencao'];
+                $ivaAlterado = count(array_intersect(array_keys($dados), $camposIva)) > 0;
 
-            if ($ivaAlterado) {
-                $produtosAfetados = $categoria->produtos()
-                    ->where('tipo', 'produto')
-                    ->update([
+                if ($ivaAlterado) {
+                    $produtosAfetados = $categoria->produtos()
+                        ->where('tipo', 'produto')
+                        ->update([
+                            'taxa_iva' => (float) $categoria->taxa_iva,
+                            'sujeito_iva' => (bool) $categoria->sujeito_iva,
+                            'codigo_isencao' => $categoria->codigo_isencao,
+                        ]);
+
+                    Log::info('[UPDATE] IVA propagado para produtos da categoria', [
+                        'categoria_id' => $categoria->id,
+                        'produtos_afetados' => $produtosAfetados,
                         'taxa_iva' => (float) $categoria->taxa_iva,
                         'sujeito_iva' => (bool) $categoria->sujeito_iva,
                         'codigo_isencao' => $categoria->codigo_isencao,
                     ]);
-
-                Log::info('[UPDATE] IVA propagado para produtos da categoria', [
-                    'categoria_id' => $categoria->id,
-                    'produtos_afetados' => $produtosAfetados,
-                    'taxa_iva' => (float) $categoria->taxa_iva,
-                    'sujeito_iva' => (bool) $categoria->sujeito_iva,
-                    'codigo_isencao' => $categoria->codigo_isencao,
-                ]);
+                }
             }
+
+            // Recarregar a categoria
+            $categoria->refresh();
+            $categoria->loadCount('produtos');
+
+            Log::info('[UPDATE] Categoria atualizada:', [
+                'id' => $categoria->id,
+                'nome' => $categoria->nome,
+                'descricao' => $categoria->descricao
+            ]);
+
+            // Registar na auditoria
+            AuditLogger::log('Categoria Editada', '✏️', [
+                'area' => 'Categorias',
+                'detalhes' => [
+                    'categoria_id' => $categoria->id,
+                    'categoria_nome' => $categoria->nome,
+                    'campos_alterados' => array_keys($dados),
+                    'taxa_iva' => $categoria->taxa_iva,
+                ],
+            ]);
+
+            return response()->json([
+                'success'   => true,
+                'message'   => 'Categoria actualizada com sucesso',
+                'data'      => $categoria,
+                'categoria' => $categoria,
+                'modo'      => $modo,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[CategoriaController] UPDATE ERROR', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json(['error' => $e->getMessage()], 500);
         }
-
-        // Recarregar a categoria
-        $categoria->refresh();
-        $categoria->loadCount('produtos');
-
-        Log::info('[UPDATE] Categoria atualizada:', [
-            'id' => $categoria->id,
-            'nome' => $categoria->nome,
-            'descricao' => $categoria->descricao
-        ]);
-
-        return response()->json([
-            'success'   => true,
-            'message'   => 'Categoria actualizada com sucesso',
-            'data'      => $categoria,
-            'categoria' => $categoria,
-            'modo'      => $modo,
-        ]);
-    } catch (\Exception $e) {
-        Log::error('[CategoriaController] UPDATE ERROR', [
-            'error' => $e->getMessage(), 
-            'trace' => $e->getTraceAsString()
-        ]);
-        return response()->json(['error' => $e->getMessage()], 500);
     }
-}
 
     /**
      * DELETE /api/categorias/{categoria} (Soft Delete)
@@ -639,7 +662,7 @@ public function update(Request $request, $id)
     public function destroy($id)
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -677,6 +700,16 @@ public function update(Request $request, $id)
                 'modo' => $modo,
             ]);
 
+            // Registar na auditoria
+            AuditLogger::log('Categoria Deletada', '❌', [
+                'area' => 'Categorias',
+                'detalhes' => [
+                    'categoria_id' => $categoria->id,
+                    'categoria_nome' => $categoria->nome,
+                    'tipo_delecao' => 'soft_delete',
+                ],
+            ]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Categoria eliminada com sucesso',
@@ -700,7 +733,7 @@ public function update(Request $request, $id)
     public function restore($id)
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -736,6 +769,15 @@ public function update(Request $request, $id)
                 'modo' => $modo,
             ]);
 
+            // Registar na auditoria
+            AuditLogger::log('Categoria Restaurada', '↩️', [
+                'area' => 'Categorias',
+                'detalhes' => [
+                    'categoria_id' => $categoria->id,
+                    'categoria_nome' => $categoria->nome,
+                ],
+            ]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Categoria restaurada com sucesso',
@@ -759,7 +801,7 @@ public function update(Request $request, $id)
     public function forceDelete($id)
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -794,6 +836,15 @@ public function update(Request $request, $id)
             Log::info('[CategoriaController] Categoria eliminada permanentemente', [
                 'categoria_id' => $id,
                 'modo' => $modo,
+            ]);
+
+            // Registar na auditoria
+            AuditLogger::log('Categoria Eliminada Permanentemente', '🗑️', [
+                'area' => 'Categorias',
+                'detalhes' => [
+                    'categoria_id' => $id,
+                    'tipo_delecao' => 'force_delete',
+                ],
             ]);
 
             return response()->json([

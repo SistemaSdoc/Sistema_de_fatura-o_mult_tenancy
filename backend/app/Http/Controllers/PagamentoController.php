@@ -10,6 +10,7 @@ use App\Models\Tenant\DocumentoFiscal as TenantDocumentoFiscal;
 use App\Models\Tenant\User as TenantUser;
 use App\Models\Empresa;
 use App\Models\LandlordUser;
+use App\Services\AuditLogger;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -26,12 +27,12 @@ class PagamentoController extends Controller
         // ✅ Obtém da sessão (prioridade)
         $this->empresa = app('current.empresa');
         $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
-        
+
         Log::debug('[PagamentoController] Inicializado', [
             'modo' => $this->modo,
             'empresa_id' => $this->empresa?->id,
         ]);
-        
+
         // ⚠️ REMOVER authorizeResource - será controlado manualmente
         // $this->authorizeResource(Pagamento::class, 'pagamento');
     }
@@ -257,7 +258,7 @@ class PagamentoController extends Controller
     public function index(Request $request)
     {
         $modo = $this->getModo();
-        
+
         Log::info('[PagamentoController::index] Listando pagamentos', [
             'user_id' => $this->getUserId(),
             'modo' => $modo,
@@ -290,7 +291,6 @@ class PagamentoController extends Controller
                 'data' => $pagamentos,
                 'modo' => $modo,
             ]);
-
         } catch (\Exception $e) {
             Log::error('[PagamentoController::index] Erro', [
                 'error' => $e->getMessage(),
@@ -310,7 +310,7 @@ class PagamentoController extends Controller
     public function show($id)
     {
         $modo = $this->getModo();
-        
+
         Log::info('[PagamentoController::show] Buscando pagamento', [
             'pagamento_id' => $id,
             'user_id' => $this->getUserId(),
@@ -329,7 +329,6 @@ class PagamentoController extends Controller
                 'data' => $pagamento->load('user', 'fatura'),
                 'modo' => $modo,
             ]);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
                 'success' => false,
@@ -356,7 +355,7 @@ class PagamentoController extends Controller
     public function store(Request $request)
     {
         $modo = $this->getModo();
-        
+
         Log::info('[PagamentoController::store] Criando pagamento', [
             'user_id' => $this->getUserId(),
             'modo' => $modo,
@@ -413,13 +412,14 @@ class PagamentoController extends Controller
                 'modo' => $modo,
             ]);
 
+            AuditLogger::log('Pagamento Criado', '💰', ['area' => 'Pagamentos', 'detalhes' => ['pagamento_id' => $pagamento->id, 'valor' => $pagamento->valor_pago]]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Pagamento registrado com sucesso',
                 'data' => $pagamento->load('user', 'fatura'),
                 'modo' => $modo,
             ], 201);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
@@ -446,7 +446,7 @@ class PagamentoController extends Controller
     public function update(Request $request, $id)
     {
         $modo = $this->getModo();
-        
+
         Log::info('[PagamentoController::update] Atualizando pagamento', [
             'pagamento_id' => $id,
             'user_id' => $this->getUserId(),
@@ -500,13 +500,14 @@ class PagamentoController extends Controller
                 'modo' => $modo,
             ]);
 
+            AuditLogger::log('Pagamento Editado', '✏️', ['area' => 'Pagamentos', 'detalhes' => ['pagamento_id' => $pagamento->id]]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Pagamento atualizado com sucesso',
                 'data' => $pagamento->load('user', 'fatura'),
                 'modo' => $modo,
             ]);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
@@ -540,7 +541,7 @@ class PagamentoController extends Controller
     public function destroy($id)
     {
         $modo = $this->getModo();
-        
+
         Log::info('[PagamentoController::destroy] Deletando pagamento', [
             'pagamento_id' => $id,
             'user_id' => $this->getUserId(),
@@ -560,12 +561,13 @@ class PagamentoController extends Controller
                 'modo' => $modo,
             ]);
 
+            AuditLogger::log('Pagamento Deletado', '❌', ['area' => 'Pagamentos', 'detalhes' => ['pagamento_id' => $id]]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Pagamento deletado com sucesso',
                 'modo' => $modo,
             ]);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
                 'success' => false,
@@ -593,7 +595,7 @@ class PagamentoController extends Controller
     public function porFatura(Request $request, string $faturaId)
     {
         $modo = $this->getModo();
-        
+
         Log::info('[PagamentoController::porFatura] Listando pagamentos por fatura', [
             'fatura_id' => $faturaId,
             'user_id' => $this->getUserId(),
@@ -631,7 +633,6 @@ class PagamentoController extends Controller
                 ],
                 'modo' => $modo,
             ]);
-
         } catch (\Exception $e) {
             Log::error('[PagamentoController::porFatura] Erro', [
                 'fatura_id' => $faturaId,
@@ -652,7 +653,7 @@ class PagamentoController extends Controller
     public function resumo(Request $request)
     {
         $modo = $this->getModo();
-        
+
         Log::info('[PagamentoController::resumo] Gerando resumo de pagamentos', [
             'user_id' => $this->getUserId(),
             'modo' => $modo,
@@ -678,7 +679,8 @@ class PagamentoController extends Controller
             $quantidade = (clone $query)->count();
 
             $porMetodo = (clone $query)
-                ->select('metodo', 
+                ->select(
+                    'metodo',
                     DB::raw('COUNT(*) as quantidade'),
                     DB::raw('SUM(valor_pago) as total')
                 )
@@ -700,7 +702,6 @@ class PagamentoController extends Controller
                 ],
                 'modo' => $modo,
             ]);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,

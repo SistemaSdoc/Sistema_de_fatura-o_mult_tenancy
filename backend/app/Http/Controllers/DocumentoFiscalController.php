@@ -8,6 +8,7 @@ use App\Models\Empresa;
 use App\Models\LandlordUser;
 use App\Models\Shared\User as SharedUser;
 use App\Models\Tenant\User as TenantUser;
+use App\Services\AuditLogger;
 use App\Services\DocumentoFiscalService;
 use App\Services\ImpressoraTermicaService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -43,11 +44,11 @@ class DocumentoFiscalController extends Controller
     public function __construct(DocumentoFiscalService $documentoService)
     {
         $this->documentoService = $documentoService;
-        
+
         // ✅ Obtém da sessão (prioridade)
         $this->empresa = app('current.empresa');
         $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
-        
+
         Log::debug('[DocumentoFiscalController] Inicializado', [
             'modo' => $this->modo,
             'empresa_id' => $this->empresa?->id,
@@ -134,53 +135,53 @@ class DocumentoFiscalController extends Controller
      | VERIFICAÇÃO DE ACESSO - CORRIGIDA ✅
      | ================================================================== */
 
-protected function verificarAcessoUsuario(): void
-{
-    Log::debug('[DocumentoFiscalController] Verificando acesso');
+    protected function verificarAcessoUsuario(): void
+    {
+        Log::debug('[DocumentoFiscalController] Verificando acesso');
 
-    // 1️⃣ Obtém a empresa
-    $this->empresa = app('current.empresa');
-    if (!$this->empresa) {
-        Log::error('[DocumentoFiscalController] Empresa não identificada.');
-        throw new \Exception('Empresa não identificada.', 400);
-    }
-
-    // ✅ Atualiza o modo
-    $this->modo = $this->empresa->modo ?? 'colectivo';
-
-    // 2️⃣ Obtém o landlord user
-    $landlordUser = Auth::guard('landlord')->user();
-
-    // 3️⃣ Fallback
-    if (!$landlordUser) {
-        $landlordId = session('landlord_user_id');
-        if ($landlordId) {
-            $landlordUser = LandlordUser::find($landlordId);
+        // 1️⃣ Obtém a empresa
+        $this->empresa = app('current.empresa');
+        if (!$this->empresa) {
+            Log::error('[DocumentoFiscalController] Empresa não identificada.');
+            throw new \Exception('Empresa não identificada.', 400);
         }
-    }
 
-    if (!$landlordUser) {
-        Log::error('[DocumentoFiscalController] Utilizador landlord não autenticado.');
-        throw new \Exception('Usuário não autenticado.', 401);
-    }
+        // ✅ Atualiza o modo
+        $this->modo = $this->empresa->modo ?? 'colectivo';
 
-    // 4️⃣ Busca o TenantUser
-    $tenantUser = $this->buscarUsuario($this->empresa, $landlordUser->email);
-    if (!$tenantUser) {
-        Log::error('[DocumentoFiscalController] Utilizador tenant não encontrado.', [
-            'email' => $landlordUser->email,
+        // 2️⃣ Obtém o landlord user
+        $landlordUser = Auth::guard('landlord')->user();
+
+        // 3️⃣ Fallback
+        if (!$landlordUser) {
+            $landlordId = session('landlord_user_id');
+            if ($landlordId) {
+                $landlordUser = LandlordUser::find($landlordId);
+            }
+        }
+
+        if (!$landlordUser) {
+            Log::error('[DocumentoFiscalController] Utilizador landlord não autenticado.');
+            throw new \Exception('Usuário não autenticado.', 401);
+        }
+
+        // 4️⃣ Busca o TenantUser
+        $tenantUser = $this->buscarUsuario($this->empresa, $landlordUser->email);
+        if (!$tenantUser) {
+            Log::error('[DocumentoFiscalController] Utilizador tenant não encontrado.', [
+                'email' => $landlordUser->email,
+            ]);
+            throw new \Exception('Usuário não tem permissão para aceder a esta empresa.', 403);
+        }
+
+        $this->tenantUser = $tenantUser;
+
+        Log::info('[DocumentoFiscalController] Acesso verificado com sucesso', [
+            'modo' => $this->modo,
+            'user_id' => $tenantUser->id,
+            'email' => $tenantUser->email,
         ]);
-        throw new \Exception('Usuário não tem permissão para aceder a esta empresa.', 403);
     }
-
-    $this->tenantUser = $tenantUser;
-
-    Log::info('[DocumentoFiscalController] Acesso verificado com sucesso', [
-        'modo' => $this->modo,
-        'user_id' => $tenantUser->id,
-        'email' => $tenantUser->email,
-    ]);
-}
 
     protected function buscarUsuario(Empresa $empresa, string $email): ?object
     {
@@ -216,28 +217,28 @@ protected function verificarAcessoUsuario(): void
     }
 
     protected function getModo(): string
-{
-    $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
-    return $this->modo;
-}
-
-/**
- * ✅ Obtém o tenantUser, verificando se está carregado
- */
-protected function getTenantUser(): ?object
-{
-    if (!$this->tenantUser) {
-        try {
-            $this->verificarAcessoUsuario();
-        } catch (\Exception $e) {
-            Log::warning('[DocumentoFiscalController] Não foi possível carregar tenantUser', [
-                'error' => $e->getMessage(),
-            ]);
-            return null;
-        }
+    {
+        $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
+        return $this->modo;
     }
-    return $this->tenantUser;
-}
+
+    /**
+     * ✅ Obtém o tenantUser, verificando se está carregado
+     */
+    protected function getTenantUser(): ?object
+    {
+        if (!$this->tenantUser) {
+            try {
+                $this->verificarAcessoUsuario();
+            } catch (\Exception $e) {
+                Log::warning('[DocumentoFiscalController] Não foi possível carregar tenantUser', [
+                    'error' => $e->getMessage(),
+                ]);
+                return null;
+            }
+        }
+        return $this->tenantUser;
+    }
 
     /* =====================================================================
      | MÉTODOS DO CONTROLLER (MANTIDOS OS NOMES)
@@ -246,7 +247,7 @@ protected function getTenantUser(): ?object
     public function index(Request $request): JsonResponse
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -301,7 +302,7 @@ protected function getTenantUser(): ?object
     public function show(string $id): JsonResponse
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -323,7 +324,7 @@ protected function getTenantUser(): ?object
     public function emitir(Request $request): JsonResponse
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -383,7 +384,7 @@ protected function getTenantUser(): ?object
     public function gerarRecibo(Request $request, string $documentoId): JsonResponse
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -434,7 +435,7 @@ protected function getTenantUser(): ?object
     public function criarNotaCredito(Request $request, string $documentoId): JsonResponse
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -451,7 +452,7 @@ protected function getTenantUser(): ?object
              * - Cancelamento de serviços não prestados
              * - Retificação de IVA incorreto
              */
-            
+
             // 1. Verificar se o documento é uma Fatura (FT) ou Fatura-Recibo (FR)
             if (!in_array($documento->tipo_documento, ['FT', 'FR'])) {
                 return response()->json([
@@ -558,7 +559,6 @@ protected function getTenantUser(): ?object
                         ]
                     ]
                 ], 201);
-
             } catch (\Exception $e) {
                 DB::rollBack();
                 throw $e;
@@ -584,7 +584,7 @@ protected function getTenantUser(): ?object
     public function criarNotaDebito(Request $request, string $documentoId): JsonResponse
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -609,7 +609,7 @@ protected function getTenantUser(): ?object
              * - Fatura não pode estar cancelada ou expirada
              * - Se fatura já paga, apenas para juros/multas
              */
-            
+
             // 1. Verificar se o documento é uma Fatura (FT)
             if (!in_array($documento->tipo_documento, ['FT'])) {
                 return response()->json([
@@ -642,9 +642,9 @@ protected function getTenantUser(): ?object
                 return response()->json([
                     'success' => false,
                     'message' => "O prazo para emitir Nota de Débito é de até 30 dias após a emissão da fatura.\n" .
-                                 "Fatura emitida em: {$dataEmissao->format('d/m/Y')}\n" .
-                                 "Prazo máximo: {$prazoMaximo->format('d/m/Y')}\n" .
-                                 "Hoje: {$hoje->format('d/m/Y')}",
+                        "Fatura emitida em: {$dataEmissao->format('d/m/Y')}\n" .
+                        "Prazo máximo: {$prazoMaximo->format('d/m/Y')}\n" .
+                        "Hoje: {$hoje->format('d/m/Y')}",
                 ], 422);
             }
 
@@ -678,9 +678,20 @@ protected function getTenantUser(): ?object
 
                 $descricaoLower = strtolower($item['descricao']);
                 $palavrasServico = [
-                    'serviço', 'servico', 'consulta', 'consultoria',
-                    'manutenção', 'manutencao', 'instalação', 'instalacao',
-                    'juro', 'multa', 'penalidade', 'taxa', 'comissão', 'comissao'
+                    'serviço',
+                    'servico',
+                    'consulta',
+                    'consultoria',
+                    'manutenção',
+                    'manutencao',
+                    'instalação',
+                    'instalacao',
+                    'juro',
+                    'multa',
+                    'penalidade',
+                    'taxa',
+                    'comissão',
+                    'comissao'
                 ];
                 foreach ($palavrasServico as $palavra) {
                     if (strpos($descricaoLower, $palavra) !== false) {
@@ -710,10 +721,12 @@ protected function getTenantUser(): ?object
                 }
 
                 // Verifica se é juros ou multa (para fatura paga)
-                if (strpos($descricaoLower, 'juro') !== false || 
+                if (
+                    strpos($descricaoLower, 'juro') !== false ||
                     strpos($descricaoLower, 'juros') !== false ||
                     strpos($descricaoLower, 'multa') !== false ||
-                    strpos($descricaoLower, 'penalidade') !== false) {
+                    strpos($descricaoLower, 'penalidade') !== false
+                ) {
                     $temJurosOuMulta = true;
                 }
             }
@@ -723,7 +736,7 @@ protected function getTenantUser(): ?object
                 return response()->json([
                     'success' => false,
                     'message' => "Nota de Débito só pode ser usada para serviços.\n" .
-                                 "Os seguintes itens não são serviços: " . implode(', ', $itensInvalidos),
+                        "Os seguintes itens não são serviços: " . implode(', ', $itensInvalidos),
                 ], 422);
             }
 
@@ -732,8 +745,8 @@ protected function getTenantUser(): ?object
                 return response()->json([
                     'success' => false,
                     'message' => "Nota de Débito não pode ser usada para produtos físicos.\n" .
-                                 "Os seguintes itens são produtos: " . implode(', ', $itensInvalidos) . "\n" .
-                                 "Use Nota de Débito apenas para serviços adicionais, juros ou multas.",
+                        "Os seguintes itens são produtos: " . implode(', ', $itensInvalidos) . "\n" .
+                        "Use Nota de Débito apenas para serviços adicionais, juros ou multas.",
                 ], 422);
             }
 
@@ -742,10 +755,10 @@ protected function getTenantUser(): ?object
                 return response()->json([
                     'success' => false,
                     'message' => "A fatura já está paga.\n" .
-                                 "Nota de Débito para fatura paga deve ser exclusivamente para:\n" .
-                                 "- Juros de mora\n" .
-                                 "- Multas contratuais\n" .
-                                 "Inclua 'juros' ou 'multa' na descrição dos itens.",
+                        "Nota de Débito para fatura paga deve ser exclusivamente para:\n" .
+                        "- Juros de mora\n" .
+                        "- Multas contratuais\n" .
+                        "Inclua 'juros' ou 'multa' na descrição dos itens.",
                 ], 422);
             }
 
@@ -781,7 +794,7 @@ protected function getTenantUser(): ?object
                  * 8. Atualizar o estado da fatura original
                  */
                 $novoValorTotal = $documento->total_liquido + $valorTotalND;
-                
+
                 // Se a fatura estava paga, passa a parcialmente_paga
                 if ($documento->estado === 'paga') {
                     $documento->estado = 'parcialmente_paga';
@@ -807,7 +820,6 @@ protected function getTenantUser(): ?object
                         ]
                     ]
                 ], 201);
-
             } catch (\Exception $e) {
                 DB::rollBack();
                 throw $e;
@@ -833,7 +845,7 @@ protected function getTenantUser(): ?object
     public function vincularAdiantamento(Request $request, string $adiantamentoId): JsonResponse
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -863,13 +875,15 @@ protected function getTenantUser(): ?object
     public function cancelar(Request $request, string $documentoId): JsonResponse
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
             $documento = $this->documentoService->buscarDocumento($documentoId);
             $dados     = $request->validate(['motivo' => 'required|string|min:10|max:500']);
             $resultado = $this->documentoService->cancelarDocumento($documento, $dados['motivo']);
+
+            AuditLogger::log('Documento Cancelado', '❌', ['area' => 'Documentos Fiscais', 'detalhes' => ['documento_id' => $documento->id, 'numero' => $documento->numero]]);
 
             return response()->json([
                 'success' => true,
@@ -887,12 +901,12 @@ protected function getTenantUser(): ?object
     public function listarRecibos(string $documentoId): JsonResponse
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
             $documento = $this->documentoService->buscarDocumento($documentoId);
-            
+
             if ($this->isColectivo()) {
                 $recibos = SharedDocumentoFiscal::doTenant()
                     ->where('fatura_id', $documento->id)
@@ -920,7 +934,7 @@ protected function getTenantUser(): ?object
     public function adiantamentosPendentes(Request $request): JsonResponse
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -951,7 +965,7 @@ protected function getTenantUser(): ?object
     public function proformasPendentes(Request $request): JsonResponse
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -982,7 +996,7 @@ protected function getTenantUser(): ?object
     public function alertas(): JsonResponse
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -1002,7 +1016,7 @@ protected function getTenantUser(): ?object
     public function processarExpirados(): JsonResponse
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -1022,7 +1036,7 @@ protected function getTenantUser(): ?object
     public function dashboard(): JsonResponse
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -1042,7 +1056,7 @@ protected function getTenantUser(): ?object
     public function evolucaoMensal(Request $request): JsonResponse
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -1067,7 +1081,7 @@ protected function getTenantUser(): ?object
     public function estatisticasPagamentos(): JsonResponse
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -1087,7 +1101,7 @@ protected function getTenantUser(): ?object
     public function imprimirTermica(string $id, ImpressoraTermicaService $impressoraService): JsonResponse
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -1244,7 +1258,7 @@ protected function getTenantUser(): ?object
     public function downloadPdf(string $id)
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -1472,9 +1486,9 @@ protected function getTenantUser(): ?object
                     Log::warning('pdfViewer: erro ao converter logo para base64', [
                         'logo_path' => $logoPath,
                         'error'     => $logoErr->getMessage(),
-            ]);
-        }
-    }
+                    ]);
+                }
+            }
 
             $proofUrl    = $this->montarUrlDeProva($request, $id);
             $proofQrHtml = $this->gerarQrHtml($proofUrl);
@@ -1562,7 +1576,7 @@ protected function getTenantUser(): ?object
     public function converterProforma(Request $request, string $proformaId): JsonResponse
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 

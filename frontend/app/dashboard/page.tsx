@@ -17,7 +17,7 @@ import { useRouter } from "next/navigation";
 import type { TooltipProps } from "recharts";
 
 const DashboardCharts = dynamic(
-  () => import("./components/DashboardCharts").then((mod) => mod.DashboardCharts),
+  () => import("../components/DashboardCharts").then((mod) => mod.DashboardCharts),
   {
     ssr: false,
     loading: () => <div className="h-[28rem] animate-pulse rounded border" />,

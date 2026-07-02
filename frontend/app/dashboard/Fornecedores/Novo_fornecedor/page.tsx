@@ -14,7 +14,6 @@ import {
   XCircle,
   AlertCircle,
   Truck,
-  Archive,
   RotateCcw,
   Trash2,
   History,
@@ -774,8 +773,8 @@ function FormFornecedor({
               <span 
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold px-1.5 py-0.5 rounded"
                 style={{
-                  backgroundColor: nifTipo === 'NIF' ? `${colors.primary}20` : `${colors.secondary}20`,
-                  color: nifTipo === 'NIF' ? colors.primary : colors.secondary
+                  backgroundColor: nifTipo === 'NIF' ? `${colors.primary}` : `${colors.secondary}`,
+                  color: nifTipo === 'NIF' ? colors.textSecondary : colors.textSecondary
                 }}
               >
                 {nifTipo}
@@ -1041,7 +1040,7 @@ export default function FornecedoresPage() {
       color: colors.textSecondary,
     },
     {
-      icon: Archive,
+      icon: Trash2,
       label: "Lixeira",
       value: fornecedoresDeletados.length,
       color: colors.secondary,
@@ -1095,7 +1094,7 @@ export default function FornecedoresPage() {
                   {aba === "ativos" ? (
                     <Truck className="w-4 h-4" />
                   ) : (
-                    <Archive className="w-4 h-4" />
+                    <Trash2 className="w-4 h-4" />
                   )}
                   {aba === "ativos"
                     ? `Ativos (${fornecedores.length})`
@@ -1384,11 +1383,11 @@ export default function FornecedoresPage() {
                                   className="text-[10px] font-bold px-1.5 py-0.5 rounded"
                                   style={{
                                     backgroundColor: nifValidacao.tipo === 'NIF' 
-                                      ? `${colors.primary}20` 
-                                      : `${colors.secondary}20`,
+                                      ? `${colors.primary}` 
+                                      : `${colors.secondary}`,
                                     color: nifValidacao.tipo === 'NIF' 
-                                      ? colors.primary 
-                                      : colors.secondary
+                                      ? colors.textSecondary 
+                                      : colors.textSecondary
                                   }}
                                 >
                                   {nifValidacao.tipo}

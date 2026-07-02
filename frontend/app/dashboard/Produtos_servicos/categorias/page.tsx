@@ -29,48 +29,25 @@ import {
   TaxaIVA,
 } from "@/services/categorias";
 import { ThemeColors, useThemeColors } from "@/context/ThemeContext";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 
 // --- Componente de Notificação Toast com Animação ---
 interface ToastNotificationProps {
   message: string;
-  type: 'success' | 'error' | 'warning' | 'info';
+  type: "success" | "error" | "warning" | "info";
   onClose: () => void;
   colors: ThemeColors;
   description?: string;
 }
 
-const ToastNotification: React.FC<ToastNotificationProps> = ({ 
-  message, 
-  type, 
-  onClose, 
-  colors,
-  description 
-}) => {
+const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, onClose, colors, description }) => {
   useEffect(() => {
     const timer = setTimeout(() => {
       onClose();
@@ -81,13 +58,13 @@ const ToastNotification: React.FC<ToastNotificationProps> = ({
 
   const getIcon = () => {
     switch (type) {
-      case 'success':
+      case "success":
         return <CheckCircle size={24} style={{ color: colors.success }} />;
-      case 'error':
+      case "error":
         return <AlertCircle size={24} style={{ color: colors.danger }} />;
-      case 'warning':
+      case "warning":
         return <AlertCircle size={24} style={{ color: colors.warning }} />;
-      case 'info':
+      case "info":
         return <CheckCircle size={24} style={{ color: colors.primary }} />;
       default:
         return <CheckCircle size={24} style={{ color: colors.success }} />;
@@ -96,13 +73,13 @@ const ToastNotification: React.FC<ToastNotificationProps> = ({
 
   const getBorderColor = () => {
     switch (type) {
-      case 'success':
+      case "success":
         return colors.success;
-      case 'error':
+      case "error":
         return colors.danger;
-      case 'warning':
+      case "warning":
         return colors.warning;
-      case 'info':
+      case "info":
         return colors.primary;
       default:
         return colors.success;
@@ -110,19 +87,16 @@ const ToastNotification: React.FC<ToastNotificationProps> = ({
   };
 
   return (
-    <div 
+    <div
       className="fixed top-6 right-6 z-50 max-w-md"
-      style={{ 
+      style={{
         backgroundColor: colors.card,
         borderLeft: `4px solid ${getBorderColor()}`,
-        boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
-        animation: 'slideInRight 0.3s ease-out forwards'
-      }}
-    >
+        boxShadow: "0 10px 40px rgba(0,0,0,0.15)",
+        animation: "slideInRight 0.3s ease-out forwards",
+      }}>
       <div className="flex items-start gap-4 p-4">
-        <div className="flex-shrink-0 mt-0.5">
-          {getIcon()}
-        </div>
+        <div className="flex-shrink-0 mt-0.5">{getIcon()}</div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium" style={{ color: colors.text }}>
             {message}
@@ -133,11 +107,7 @@ const ToastNotification: React.FC<ToastNotificationProps> = ({
             </p>
           )}
         </div>
-        <button
-          onClick={onClose}
-          className="flex-shrink-0 transition-opacity hover:opacity-70"
-          style={{ color: colors.textSecondary }}
-        >
+        <button onClick={onClose} className="flex-shrink-0 transition-opacity hover:opacity-70" style={{ color: colors.textSecondary }}>
           <X size={18} />
         </button>
       </div>
@@ -173,33 +143,19 @@ type ApiError = {
   error?: string;
 };
 
-const getApiError = (error: unknown): ApiError =>
-  typeof error === "object" && error !== null ? (error as ApiError) : {};
+const getApiError = (error: unknown): ApiError => (typeof error === "object" && error !== null ? (error as ApiError) : {});
 
 /* ─── Loading States ─────────────────────────────────────────────── */
 function LoadingStats({ colors }: { colors: ThemeColors }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       {[...Array(4)].map((_, i) => (
-        <div
-          key={i}
-          className="p-4 border"
-          style={{ backgroundColor: colors.card, borderColor: colors.border }}
-        >
+        <div key={i} className="p-4 border" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
           <div className="flex items-center gap-3">
-            <div
-              className="w-10 h-10"
-              style={{ backgroundColor: colors.border }}
-            />
+            <div className="w-10 h-10" style={{ backgroundColor: colors.border }} />
             <div className="space-y-1.5">
-              <div
-                className="h-5 w-10"
-                style={{ backgroundColor: colors.border }}
-              />
-              <div
-                className="h-3.5 w-14"
-                style={{ backgroundColor: colors.border }}
-              />
+              <div className="h-5 w-10" style={{ backgroundColor: colors.border }} />
+              <div className="h-3.5 w-14" style={{ backgroundColor: colors.border }} />
             </div>
           </div>
         </div>
@@ -210,47 +166,22 @@ function LoadingStats({ colors }: { colors: ThemeColors }) {
 
 function LoadingTabela({ colors }: { colors: ThemeColors }) {
   return (
-    <div
-      className="border overflow-hidden"
-      style={{ backgroundColor: colors.card, borderColor: colors.border }}
-    >
+    <div className="border overflow-hidden" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
       <div className="h-11" style={{ backgroundColor: colors.primary }} />
       <div className="divide-y" style={{ borderColor: colors.border }}>
         {[...Array(5)].map((_, i) => (
           <div key={i} className="flex items-center gap-4 px-5 py-3.5">
-            <div
-              className="w-9 h-9"
-              style={{ backgroundColor: colors.border }}
-            />
+            <div className="w-9 h-9" style={{ backgroundColor: colors.border }} />
             <div className="flex-1 space-y-1.5">
-              <div
-                className="h-3.5 w-36"
-                style={{ backgroundColor: colors.border }}
-              />
-              <div
-                className="h-3 w-28"
-                style={{ backgroundColor: colors.border }}
-              />
+              <div className="h-3.5 w-36" style={{ backgroundColor: colors.border }} />
+              <div className="h-3 w-28" style={{ backgroundColor: colors.border }} />
             </div>
-            <div
-              className="w-20 h-6"
-              style={{ backgroundColor: colors.border }}
-            />
-            <div
-              className="w-20 h-6"
-              style={{ backgroundColor: colors.border }}
-            />
-            <div
-              className="w-28 h-4"
-              style={{ backgroundColor: colors.border }}
-            />
+            <div className="w-20 h-6" style={{ backgroundColor: colors.border }} />
+            <div className="w-20 h-6" style={{ backgroundColor: colors.border }} />
+            <div className="w-28 h-4" style={{ backgroundColor: colors.border }} />
             <div className="flex gap-1.5">
               {[...Array(2)].map((_, j) => (
-                <div
-                  key={j}
-                  className="w-8 h-8"
-                  style={{ backgroundColor: colors.border }}
-                />
+                <div key={j} className="w-8 h-8" style={{ backgroundColor: colors.border }} />
               ))}
             </div>
           </div>
@@ -274,7 +205,11 @@ export default function CategoriasPage() {
   const [filtroStatus] = useState<"todos" | "ativo" | "inativo">("todos");
   const [filtroIVA] = useState<string>("todos");
   const [abaAtiva, setAbaAtiva] = useState<"ativos" | "lixeira">("ativos");
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' | 'info'; description?: string } | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error" | "warning" | "info";
+    description?: string;
+  } | null>(null);
 
   // Estados dos modais
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -286,7 +221,7 @@ export default function CategoriasPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof FormCategoriaData, string>>>({});
 
-  const showToast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info', description?: string) => {
+  const showToast = (message: string, type: "success" | "error" | "warning" | "info" = "info", description?: string) => {
     setToast({ message, type, description });
   };
 
@@ -296,15 +231,10 @@ export default function CategoriasPage() {
     const t = busca.toLowerCase();
     setCategoriasFiltradas(
       lista.filter((c) => {
-        const matchBusca =
-          c.nome.toLowerCase().includes(t) ||
-          (c.descricao && c.descricao.toLowerCase().includes(t));
-        const matchStatus =
-          filtroStatus === "todos" || c.status === filtroStatus;
+        const matchBusca = c.nome.toLowerCase().includes(t) || (c.descricao && c.descricao.toLowerCase().includes(t));
+        const matchStatus = filtroStatus === "todos" || c.status === filtroStatus;
         const matchIVA =
-          filtroIVA === "todos" ||
-          (filtroIVA === "isento" && (!c.sujeito_iva || c.taxa_iva === 0)) ||
-          c.taxa_iva === Number(filtroIVA);
+          filtroIVA === "todos" || (filtroIVA === "isento" && (!c.sujeito_iva || c.taxa_iva === 0)) || c.taxa_iva === Number(filtroIVA);
         return matchBusca && matchStatus && matchIVA;
       })
     );
@@ -339,9 +269,7 @@ export default function CategoriasPage() {
   }, [carregarCategorias, carregarCategoriasDeletadas]);
 
   /* ── Handlers do formulário ── */
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
-  ) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     if (errors[name as keyof FormCategoriaData]) {
@@ -408,8 +336,8 @@ export default function CategoriasPage() {
     }
 
     return {
-      backgroundColor: `${colors.primary}18`,
-      color: colors.primary,
+      backgroundColor: `${colors.primary}`,
+      color: "text-[#FFFFFF]",
     };
   };
 
@@ -455,10 +383,7 @@ export default function CategoriasPage() {
       }
 
       if (categoriaSelecionada) {
-        await categoriaService.atualizarCategoria(
-          categoriaSelecionada.id,
-          dadosParaEnviar,
-        );
+        await categoriaService.atualizarCategoria(categoriaSelecionada.id, dadosParaEnviar);
         showToast("Categoria atualizada com sucesso!", "success");
       } else {
         await categoriaService.criarCategoria(dadosParaEnviar);
@@ -469,7 +394,7 @@ export default function CategoriasPage() {
       await carregarCategorias();
       await carregarCategoriasDeletadas();
     } catch (error: unknown) {
-      console.error('❌ Erro ao salvar:', error);
+      console.error("❌ Erro ao salvar:", error);
       const apiError = getApiError(error);
       const message = apiError.response?.data?.message || "Erro ao salvar categoria";
       showToast("Erro ao salvar", "error", message);
@@ -573,15 +498,11 @@ export default function CategoriasPage() {
   ];
 
   /* ── Lista atual ── */
-  const listaVazia =
-    abaAtiva === "ativos" ? categorias.length === 0 : categoriasDeletadas.length === 0;
+  const listaVazia = abaAtiva === "ativos" ? categorias.length === 0 : categoriasDeletadas.length === 0;
 
   return (
     <MainEmpresa>
-      <div
-        className="space-y-4 max-w-7xl mx-auto pb-6 transition-colors duration-300"
-        style={{ backgroundColor: colors.background }}
-      >
+      <div className="space-y-4 max-w-7xl mx-auto pb-6 transition-colors duration-300" style={{ backgroundColor: colors.background }}>
         {/* Toast Notification */}
         {toast && (
           <ToastNotification
@@ -605,10 +526,7 @@ export default function CategoriasPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             {/* Abas */}
-            <div
-              className="flex border"
-              style={{ borderColor: colors.border, backgroundColor: colors.card }}
-            >
+            <div className="flex border" style={{ borderColor: colors.border, backgroundColor: colors.card }}>
               {(["ativos", "lixeira"] as const).map((aba) => (
                 <button
                   key={aba}
@@ -617,26 +535,16 @@ export default function CategoriasPage() {
                   style={{
                     backgroundColor: abaAtiva === aba ? colors.primary : "transparent",
                     color: abaAtiva === aba ? "#fff" : colors.textSecondary,
-                  }}
-                >
-                  {aba === "ativos" ? (
-                    <LayoutGrid className="w-4 h-4" />
-                  ) : (
-                    <Trash2 className="w-4 h-4" />
-                  )}
-                  {aba === "ativos"
-                    ? `Ativos (${categorias.length})`
-                    : `Lixeira (${categoriasDeletadas.length})`}
+                  }}>
+                  {aba === "ativos" ? <LayoutGrid className="w-4 h-4" /> : <Trash2 className="w-4 h-4" />}
+                  {aba === "ativos" ? `Ativos (${categorias.length})` : `Lixeira (${categoriasDeletadas.length})`}
                 </button>
               ))}
             </div>
 
             {/* Pesquisa */}
             <div className="relative flex-1 min-w-[200px]">
-              <Search
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4"
-                style={{ color: colors.textSecondary }}
-              />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: colors.textSecondary }} />
               <input
                 type="text"
                 value={busca}
@@ -656,8 +564,7 @@ export default function CategoriasPage() {
               <button
                 onClick={handleNovo}
                 className="flex items-center gap-1.5 px-4 py-2 text-white text-sm font-medium"
-                style={{ backgroundColor: colors.primary }}
-              >
+                style={{ backgroundColor: colors.primary }}>
                 <Plus className="w-4 h-4" />
                 Nova categoria
               </button>
@@ -677,17 +584,13 @@ export default function CategoriasPage() {
                 style={{
                   backgroundColor: colors.card,
                   borderColor: colors.border,
-                }}
-              >
+                }}>
                 <div className="flex items-center gap-3">
                   <div className="p-2" style={{ backgroundColor: `${color}18` }}>
                     <Icon className="w-5 h-5" style={{ color }} />
                   </div>
                   <div>
-                    <p
-                      className="text-xl font-bold leading-none"
-                      style={{ color: colors.text }}
-                    >
+                    <p className="text-xl font-bold leading-none" style={{ color: colors.text }}>
                       {value}
                     </p>
                     <p className="text-sm mt-0.5" style={{ color: colors.textSecondary }}>
@@ -704,50 +607,32 @@ export default function CategoriasPage() {
         {loading ? (
           <LoadingTabela colors={colors} />
         ) : listaVazia ? (
-          <div
-            className="border text-center py-14"
-            style={{ backgroundColor: colors.card, borderColor: colors.border }}
-          >
-            <LayoutGrid
-              className="w-14 h-14 mx-auto mb-3"
-              style={{ color: colors.border }}
-            />
+          <div className="border text-center py-14" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+            <LayoutGrid className="w-14 h-14 mx-auto mb-3" style={{ color: colors.border }} />
             <p className="text-sm mb-4" style={{ color: colors.textSecondary }}>
-              {abaAtiva === "ativos"
-                ? "Nenhuma categoria encontrada."
-                : "Nenhuma categoria na lixeira."}
+              {abaAtiva === "ativos" ? "Nenhuma categoria encontrada." : "Nenhuma categoria na lixeira."}
             </p>
             {abaAtiva === "ativos" && (
-              <button
-                onClick={handleNovo}
-                className="px-4 py-2 text-white text-sm"
-                style={{ backgroundColor: colors.primary }}
-              >
+              <button onClick={handleNovo} className="px-4 py-2 text-white text-sm" style={{ backgroundColor: colors.primary }}>
                 Cadastrar primeira categoria
               </button>
             )}
           </div>
         ) : (
-          <div
-            className="border overflow-hidden shadow-sm"
-            style={{ backgroundColor: colors.card, borderColor: colors.border }}
-          >
+          <div className="border overflow-hidden shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ backgroundColor: colors.primary }}>
-                    {["Categoria", "Status", "IVA", "Descrição", "Ações"].map(
-                      (h, i) => (
-                        <th
-                          key={h}
-                          className={`py-3 px-5 font-semibold text-white text-xs uppercase tracking-wider ${
-                            i === 4 ? "text-center" : "text-left"
-                          }`}
-                        >
-                          {h}
-                        </th>
-                      )
-                    )}
+                    {["Categoria", "Status", "IVA", "Descrição", "Ações"].map((h, i) => (
+                      <th
+                        key={h}
+                        className={`py-3 px-5 font-semibold text-white text-xs uppercase tracking-wider ${
+                          i === 4 ? "text-center" : "text-left"
+                        }`}>
+                        {h}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y" style={{ borderColor: colors.border }}>
@@ -756,21 +641,12 @@ export default function CategoriasPage() {
                       key={c.id}
                       className="transition-colors"
                       style={{
-                        backgroundColor:
-                          c.status === "inativo"
-                            ? `${colors.hover}80`
-                            : "transparent",
+                        backgroundColor: c.status === "inativo" ? `${colors.hover}80` : "transparent",
                       }}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.backgroundColor = colors.hover)
-                      }
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = colors.hover)}
                       onMouseLeave={(e) =>
-                        (e.currentTarget.style.backgroundColor =
-                          c.status === "inativo"
-                            ? `${colors.hover}80`
-                            : "transparent")
-                      }
-                    >
+                        (e.currentTarget.style.backgroundColor = c.status === "inativo" ? `${colors.hover}80` : "transparent")
+                      }>
                       {/* Categoria */}
                       <td className="py-3 px-5">
                         <div className="flex items-center gap-3">
@@ -778,25 +654,15 @@ export default function CategoriasPage() {
                             className="w-9 h-9 flex items-center justify-center flex-shrink-0"
                             style={{
                               backgroundColor: `${colors.textSecondary}20`,
-                            }}
-                          >
-                            <Package
-                              className="w-4 h-4"
-                              style={{ color: colors.textSecondary }}
-                            />
+                            }}>
+                            <Package className="w-4 h-4" style={{ color: colors.textSecondary }} />
                           </div>
                           <div className="min-w-0">
-                            <div
-                              className="font-medium text-sm truncate"
-                              style={{ color: colors.text }}
-                            >
+                            <div className="font-medium text-sm truncate" style={{ color: colors.text }}>
                               {c.nome}
                             </div>
                             {c.deleted_at && (
-                              <div
-                                className="text-xs flex items-center gap-1 mt-0.5"
-                                style={{ color: colors.danger }}
-                              >
+                              <div className="text-xs flex items-center gap-1 mt-0.5" style={{ color: colors.danger }}>
                                 <History className="w-3 h-3" />
                                 {new Date(c.deleted_at).toLocaleDateString("pt-PT")}
                               </div>
@@ -810,21 +676,10 @@ export default function CategoriasPage() {
                         <span
                           className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium"
                           style={{
-                            backgroundColor:
-                              c.status === "ativo"
-                                ? `${colors.secondary}18`
-                                : `${colors.textSecondary}18`,
-                            color:
-                              c.status === "ativo"
-                                ? colors.secondary
-                                : colors.textSecondary,
-                          }}
-                        >
-                          {c.status === "ativo" ? (
-                            <CheckCircle className="w-3 h-3" />
-                          ) : (
-                            <XCircle className="w-3 h-3" />
-                          )}
+                            backgroundColor: c.status === "ativo" ? `${colors.secondary}18` : `${colors.textSecondary}18`,
+                            color: c.status === "ativo" ? colors.secondary : colors.textSecondary,
+                          }}>
+                          {c.status === "ativo" ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
                           {getStatusLabel(c.status)}
                         </span>
                       </td>
@@ -836,23 +691,14 @@ export default function CategoriasPage() {
                           style={{
                             ...getTaxaIVABadgeStyle(c.taxa_iva as TaxaIVA, c.sujeito_iva),
                           }}
-                          title={
-                            c.codigo_isencao
-                              ? getCodigoIsencaoLabel(c.codigo_isencao) || ""
-                              : ""
-                          }
-                        >
-                          <Percent className="w-3 h-3" />
+                          title={c.codigo_isencao ? getCodigoIsencaoLabel(c.codigo_isencao) || "" : ""}>
                           {getTaxaIVALabel(c.taxa_iva, c.sujeito_iva)}
                         </span>
                       </td>
 
                       {/* Descrição */}
                       <td className="py-3 px-5">
-                        <span
-                          className="text-sm line-clamp-1 max-w-[200px]"
-                          style={{ color: colors.textSecondary }}
-                        >
+                        <span className="text-sm line-clamp-1 max-w-[200px]" style={{ color: colors.textSecondary }}>
                           {c.descricao || <span className="italic">—</span>}
                         </span>
                       </td>
@@ -865,8 +711,7 @@ export default function CategoriasPage() {
                               <button
                                 className="p-2 transition-colors hover:opacity-70"
                                 style={{ color: colors.textSecondary }}
-                                title="Ações"
-                              >
+                                title="Ações">
                                 <MoreVertical className="w-4 h-4" />
                               </button>
                             </DropdownMenuTrigger>
@@ -876,24 +721,21 @@ export default function CategoriasPage() {
                               style={{
                                 backgroundColor: colors.card,
                                 borderColor: colors.border,
-                              }}
-                            >
+                              }}>
                               {abaAtiva === "ativos" ? (
                                 <>
                                   <DropdownMenuItem
                                     onClick={() => handleEditar(c)}
                                     className="gap-2 cursor-pointer text-xs py-2"
-                                    style={{ color: colors.text }}
-                                  >
+                                    style={{ color: colors.text }}>
                                     <PencilLine className="h-3.5 w-3.5" />
                                     Editar
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     onClick={() => handleConfirmarDelete(c)}
                                     className="gap-2 cursor-pointer text-xs py-2"
-                                    style={{ color: colors.warning }}
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" style={{ color: colors.warning }}/>
+                                    style={{ color: colors.warning }}>
+                                    <Trash2 className="h-3.5 w-3.5" style={{ color: colors.warning }} />
                                     Mover para lixeira
                                   </DropdownMenuItem>
                                 </>
@@ -902,16 +744,14 @@ export default function CategoriasPage() {
                                   <DropdownMenuItem
                                     onClick={() => handleConfirmarRestore(c)}
                                     className="gap-2 cursor-pointer text-xs py-2"
-                                    style={{ color: colors.secondary }}
-                                  >
+                                    style={{ color: colors.secondary }}>
                                     <RotateCcw className="h-3.5 w-3.5" />
                                     Restaurar
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     onClick={() => handleConfirmarForceDelete(c)}
                                     className="gap-2 cursor-pointer text-xs py-2"
-                                    style={{ color: colors.secondary }}
-                                  >
+                                    style={{ color: colors.secondary }}>
                                     <Trash2 className="h-3.5 w-3.5" />
                                     Excluir permanentemente
                                   </DropdownMenuItem>
@@ -929,18 +769,11 @@ export default function CategoriasPage() {
               {/* Sem resultados na pesquisa */}
               {categoriasFiltradas.length === 0 && busca && (
                 <div className="text-center py-12">
-                  <Search
-                    className="w-12 h-12 mx-auto mb-3"
-                    style={{ color: colors.border }}
-                  />
+                  <Search className="w-12 h-12 mx-auto mb-3" style={{ color: colors.border }} />
                   <p className="text-sm" style={{ color: colors.textSecondary }}>
                     Nenhuma categoria encontrada para busca
                   </p>
-                  <button
-                    onClick={() => setBusca("")}
-                    className="mt-2 text-sm underline"
-                    style={{ color: colors.primary }}
-                  >
+                  <button onClick={() => setBusca("")} className="mt-2 text-sm underline" style={{ color: colors.primary }}>
                     Limpar pesquisa
                   </button>
                 </div>
@@ -954,27 +787,13 @@ export default function CategoriasPage() {
 
       {/* Modal de Formulário */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent
-          className="sm:max-w-[500px] p-0"
-          style={{ backgroundColor: colors.card, borderColor: colors.border }}
-        >
-          <DialogHeader
-            className="p-4 border-b"
-            style={{ borderColor: colors.border }}
-          >
-            <DialogTitle
-              className="text-base"
-              style={{ color: colors.secondary }}
-            >
+        <DialogContent className="sm:max-w-[500px] p-0" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+          <DialogHeader className="p-4 border-b" style={{ borderColor: colors.border }}>
+            <DialogTitle className="text-base" style={{ color: colors.secondary }}>
               {categoriaSelecionada ? "Editar Categoria" : "Nova Categoria"}
             </DialogTitle>
-            <DialogDescription
-              className="text-xs"
-              style={{ color: colors.textSecondary }}
-            >
-              {categoriaSelecionada
-                ? "Atualize as informações da categoria"
-                : "Preencha as informações para criar uma nova categoria"}
+            <DialogDescription className="text-xs" style={{ color: colors.textSecondary }}>
+              {categoriaSelecionada ? "Atualize as informações da categoria" : "Preencha as informações para criar uma nova categoria"}
             </DialogDescription>
           </DialogHeader>
 
@@ -1007,25 +826,20 @@ export default function CategoriasPage() {
                 <Label className="text-xs" style={{ color: colors.text }}>
                   Status
                 </Label>
-                <Select
-                  value={formData.status}
-                  onValueChange={(v) => handleSelectChange("status", v)}
-                >
+                <Select value={formData.status} onValueChange={(v) => handleSelectChange("status", v)}>
                   <SelectTrigger
                     className="h-8 text-xs"
                     style={{
                       backgroundColor: colors.card,
                       borderColor: colors.border,
-                    }}
-                  >
+                    }}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent
                     style={{
                       backgroundColor: colors.card,
                       borderColor: colors.border,
-                    }}
-                  >
+                    }}>
                     <SelectItem value="ativo" className="text-xs">
                       Ativo
                     </SelectItem>
@@ -1038,31 +852,20 @@ export default function CategoriasPage() {
             </div>
 
             {/* Configuração de IVA */}
-            <div
-              className="space-y-3 pt-2 border-t"
-              style={{ borderColor: colors.border }}
-            >
+            <div className="space-y-3 pt-2 border-t" style={{ borderColor: colors.border }}>
               <div className="flex items-center justify-between">
-                <Label
-                  className="text-xs font-medium flex items-center gap-1"
-                  style={{ color: colors.text }}
-                >
+                <Label className="text-xs font-medium flex items-center gap-1" style={{ color: colors.text }}>
                   Configuração de IVA
                 </Label>
                 <div className="flex items-center gap-2">
-                  <span
-                    className="text-xs"
-                    style={{ color: colors.textSecondary }}
-                  >
+                  <span className="text-xs" style={{ color: colors.textSecondary }}>
                     {formData.sujeito_iva ? "Sujeito a IVA" : "Isento de IVA"}
                   </span>
                   <Switch
                     checked={formData.sujeito_iva}
                     onCheckedChange={handleSujeitoIVAChange}
                     style={{
-                      backgroundColor: formData.sujeito_iva
-                        ? colors.primary
-                        : colors.border,
+                      backgroundColor: formData.sujeito_iva ? colors.primary : colors.border,
                     }}
                   />
                 </div>
@@ -1076,7 +879,7 @@ export default function CategoriasPage() {
                   type="number"
                   min={0}
                   max={100}
-                  step="0.01"
+                  step="1"
                   value={String(formData.taxa_iva)}
                   onChange={(event) => handleTaxaIVAChange(event.target.value)}
                   disabled={!formData.sujeito_iva}
@@ -1095,32 +898,22 @@ export default function CategoriasPage() {
               {!formData.sujeito_iva && (
                 <div className="space-y-1">
                   <Label className="text-xs" style={{ color: colors.text }}>
-                    Código de Isenção{" "}
-                    <span style={{ color: colors.danger }}>*</span>
+                    Código de Isenção <span style={{ color: colors.danger }}>*</span>
                   </Label>
-                  <Select
-                    value={formData.codigo_isencao}
-                    onValueChange={(v) =>
-                      handleSelectChange("codigo_isencao", v)
-                    }
-                  >
+                  <Select value={formData.codigo_isencao} onValueChange={(v) => handleSelectChange("codigo_isencao", v)}>
                     <SelectTrigger
                       className="h-8 text-xs"
                       style={{
                         backgroundColor: colors.card,
-                        borderColor: errors.codigo_isencao
-                          ? colors.danger
-                          : colors.border,
-                      }}
-                    >
+                        borderColor: errors.codigo_isencao ? colors.danger : colors.border,
+                      }}>
                       <SelectValue placeholder="Selecione..." />
                     </SelectTrigger>
                     <SelectContent
                       style={{
                         backgroundColor: colors.card,
                         borderColor: colors.border,
-                      }}
-                    >
+                      }}>
                       <SelectItem value="M00" className="text-xs">
                         M00 - Não sujeito a IVA
                       </SelectItem>
@@ -1175,10 +968,7 @@ export default function CategoriasPage() {
               />
             </div>
 
-            <div
-              className="flex gap-2 pt-2 border-t"
-              style={{ borderColor: colors.border }}
-            >
+            <div className="flex gap-2 pt-2 border-t" style={{ borderColor: colors.border }}>
               <Button
                 type="button"
                 variant="outline"
@@ -1189,8 +979,7 @@ export default function CategoriasPage() {
                 style={{
                   borderColor: colors.border,
                   color: colors.textSecondary,
-                }}
-              >
+                }}>
                 Cancelar
               </Button>
               <Button
@@ -1198,8 +987,7 @@ export default function CategoriasPage() {
                 size="sm"
                 disabled={isSubmitting}
                 className="flex-1 h-8 gap-1 text-white text-xs"
-                style={{ backgroundColor: colors.primary }}
-              >
+                style={{ backgroundColor: colors.primary }}>
                 {isSubmitting ? (
                   <div className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
@@ -1216,28 +1004,16 @@ export default function CategoriasPage() {
 
       {/* Modal de Confirmação de Delete */}
       <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
-        <DialogContent
-          className="sm:max-w-[350px] p-0"
-          style={{ backgroundColor: colors.card, borderColor: colors.border }}
-        >
-          <DialogHeader
-            className="p-4 border-b"
-            style={{ borderColor: colors.border }}
-          >
-            <DialogTitle
-              className="flex items-center gap-2 text-sm"
-              style={{ color: colors.secondary }}
-            >
+        <DialogContent className="sm:max-w-[350px] p-0" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+          <DialogHeader className="p-4 border-b" style={{ borderColor: colors.border }}>
+            <DialogTitle className="flex items-center gap-2 text-sm" style={{ color: colors.secondary }}>
               <AlertCircle className="h-4 w-4" />
               Confirmar Exclusão
             </DialogTitle>
           </DialogHeader>
           <div className="p-4">
             <p className="text-xs mb-4" style={{ color: colors.textSecondary }}>
-              Tem certeza que deseja excluir a categoria{" "}
-              <strong style={{ color: colors.text }}>
-                {categoriaSelecionada?.nome}
-              </strong>
+              Tem certeza que deseja excluir a categoria <strong style={{ color: colors.text }}>{categoriaSelecionada?.nome}</strong>
               ?
               <br />A categoria será movida para a lixeira.
             </p>
@@ -1250,16 +1026,14 @@ export default function CategoriasPage() {
                 style={{
                   borderColor: colors.border,
                   color: colors.textSecondary,
-                }}
-              >
+                }}>
                 Cancelar
               </Button>
               <Button
                 size="sm"
                 onClick={handleDeletar}
                 className="flex-1 h-8 gap-1 text-white text-xs"
-                style={{ backgroundColor: colors.secondary }}
-              >
+                style={{ backgroundColor: colors.secondary }}>
                 <Trash2 className="h-3 w-3" />
                 Excluir
               </Button>
@@ -1270,29 +1044,16 @@ export default function CategoriasPage() {
 
       {/* Modal de Restaurar */}
       <Dialog open={isRestoreModalOpen} onOpenChange={setIsRestoreModalOpen}>
-        <DialogContent
-          className="sm:max-w-[350px] p-0"
-          style={{ backgroundColor: colors.card, borderColor: colors.border }}
-        >
-          <DialogHeader
-            className="p-4 border-b"
-            style={{ borderColor: colors.border }}
-          >
-            <DialogTitle
-              className="flex items-center gap-2 text-sm"
-              style={{ color: colors.secondary }}
-            >
+        <DialogContent className="sm:max-w-[350px] p-0" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+          <DialogHeader className="p-4 border-b" style={{ borderColor: colors.border }}>
+            <DialogTitle className="flex items-center gap-2 text-sm" style={{ color: colors.secondary }}>
               <RotateCcw className="h-4 w-4" />
               Restaurar Categoria
             </DialogTitle>
           </DialogHeader>
           <div className="p-4">
             <p className="text-xs mb-4" style={{ color: colors.textSecondary }}>
-              Tem certeza que deseja restaurar a categoria{" "}
-              <strong style={{ color: colors.text }}>
-                {categoriaSelecionada?.nome}
-              </strong>
-              ?
+              Tem certeza que deseja restaurar a categoria <strong style={{ color: colors.text }}>{categoriaSelecionada?.nome}</strong>?
             </p>
             <div className="flex gap-2">
               <Button
@@ -1303,16 +1064,14 @@ export default function CategoriasPage() {
                 style={{
                   borderColor: colors.border,
                   color: colors.textSecondary,
-                }}
-              >
+                }}>
                 Cancelar
               </Button>
               <Button
                 size="sm"
                 onClick={handleRestaurar}
                 className="flex-1 h-8 gap-1 text-white text-xs"
-                style={{ backgroundColor: colors.secondary }}
-              > 
+                style={{ backgroundColor: colors.secondary }}>
                 <RotateCcw className="h-3 w-3" />
                 Restaurar
               </Button>
@@ -1322,33 +1081,17 @@ export default function CategoriasPage() {
       </Dialog>
 
       {/* Modal de Delete Permanente */}
-      <Dialog
-        open={isForceDeleteModalOpen}
-        onOpenChange={setIsForceDeleteModalOpen}
-      >
-        <DialogContent
-          className="sm:max-w-[350px] p-0"
-          style={{ backgroundColor: colors.card, borderColor: colors.border }}
-        >
-          <DialogHeader
-            className="p-4 border-b"
-            style={{ borderColor: colors.border }}
-          >
-            <DialogTitle
-              className="flex items-center gap-2 text-sm"
-              style={{ color: colors.danger }}
-            >
+      <Dialog open={isForceDeleteModalOpen} onOpenChange={setIsForceDeleteModalOpen}>
+        <DialogContent className="sm:max-w-[350px] p-0" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+          <DialogHeader className="p-4 border-b" style={{ borderColor: colors.border }}>
+            <DialogTitle className="flex items-center gap-2 text-sm" style={{ color: colors.danger }}>
               <AlertCircle className="h-4 w-4" />
               Excluir Permanentemente
             </DialogTitle>
           </DialogHeader>
           <div className="p-4">
             <p className="text-xs mb-4" style={{ color: colors.textSecondary }}>
-              Tem certeza que deseja excluir{" "}
-              <strong style={{ color: colors.text }}>
-                {categoriaSelecionada?.nome}
-              </strong>{" "}
-              permanentemente?
+              Tem certeza que deseja excluir <strong style={{ color: colors.text }}>{categoriaSelecionada?.nome}</strong> permanentemente?
               <br />
               Esta ação não pode ser desfeita.
             </p>
@@ -1361,16 +1104,14 @@ export default function CategoriasPage() {
                 style={{
                   borderColor: colors.border,
                   color: colors.textSecondary,
-                }}
-              >
+                }}>
                 Cancelar
               </Button>
               <Button
                 size="sm"
                 onClick={handleForceDelete}
                 className="flex-1 h-8 gap-1 text-white text-xs"
-                style={{ backgroundColor: colors.danger }}
-              >
+                style={{ backgroundColor: colors.danger }}>
                 <Trash2 className="h-3 w-3" />
                 Excluir Permanentemente
               </Button>

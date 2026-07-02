@@ -12,6 +12,7 @@ use App\Models\Empresa;
 use App\Models\LandlordUser;
 use App\Models\Shared\User as SharedUser;
 use App\Models\Tenant\User as TenantUser;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use App\Services\CompraService;
 use Illuminate\Support\Facades\Log;
@@ -34,11 +35,11 @@ class CompraController extends Controller
     public function __construct(CompraService $compraService)
     {
         $this->compraService = $compraService;
-        
+
         // ✅ Obtém da sessão (prioridade)
         $this->empresa = app('current.empresa');
         $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
-        
+
         Log::debug('[CompraController] Inicializado', [
             'modo' => $this->modo,
             'empresa_id' => $this->empresa?->id,
@@ -207,7 +208,7 @@ class CompraController extends Controller
     public function index()
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -219,7 +220,6 @@ class CompraController extends Controller
                 'data' => $compras,
                 'modo' => $modo,
             ]);
-
         } catch (\Exception $e) {
             Log::error('[CompraController::index] Erro ao listar compras', [
                 'error' => $e->getMessage(),
@@ -240,7 +240,7 @@ class CompraController extends Controller
     public function show($id)
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -252,7 +252,6 @@ class CompraController extends Controller
                 'data' => $compra,
                 'modo' => $modo,
             ]);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
                 'success' => false,
@@ -279,7 +278,7 @@ class CompraController extends Controller
     public function store(Request $request)
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -324,13 +323,14 @@ class CompraController extends Controller
                 'modo' => $modo,
             ]);
 
+            AuditLogger::log('Compra Criada', '📥', ['area' => 'Compras', 'detalhes' => ['compra_id' => $compra->id, 'fornecedor' => $compra->fornecedor_id]]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Compra criada com sucesso',
                 'data' => $compra,
                 'modo' => $modo,
             ], 201);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
             Log::warning('[CompraController::store] Erro de validação', [
                 'errors' => $e->errors(),
@@ -341,7 +341,6 @@ class CompraController extends Controller
                 'message' => 'Erro de validação',
                 'errors' => $e->errors()
             ], 422);
-
         } catch (\Exception $e) {
             Log::error('[CompraController::store] Erro ao criar compra', [
                 'error' => $e->getMessage(),
@@ -362,7 +361,7 @@ class CompraController extends Controller
     public function cancelar(Request $request, $id)
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -378,26 +377,25 @@ class CompraController extends Controller
                 'modo' => $modo,
             ]);
 
+            AuditLogger::log('Compra Cancelada', '⛔', ['area' => 'Compras', 'detalhes' => ['compra_id' => $compra->id]]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Compra cancelada com sucesso',
                 'data' => $compra,
                 'modo' => $modo,
             ]);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Erro de validação',
                 'errors' => $e->errors()
             ], 422);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Compra não encontrada',
             ], 404);
-
         } catch (\Exception $e) {
             Log::error('[CompraController::cancelar] Erro ao cancelar compra', [
                 'compra_id' => $id,
@@ -419,7 +417,7 @@ class CompraController extends Controller
     public function porPeriodo(Request $request)
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -445,14 +443,12 @@ class CompraController extends Controller
                 ],
                 'modo' => $modo,
             ]);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Erro de validação',
                 'errors' => $e->errors()
             ], 422);
-
         } catch (\Exception $e) {
             Log::error('[CompraController::porPeriodo] Erro ao buscar compras por período', [
                 'error' => $e->getMessage(),
@@ -473,7 +469,7 @@ class CompraController extends Controller
     public function resumo(Request $request)
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -488,7 +484,6 @@ class CompraController extends Controller
                 'data' => $resumo,
                 'modo' => $modo,
             ]);
-
         } catch (\Exception $e) {
             Log::error('[CompraController::resumo] Erro ao buscar resumo de compras', [
                 'error' => $e->getMessage(),
@@ -509,7 +504,7 @@ class CompraController extends Controller
     public function estatisticas(Request $request)
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -524,7 +519,6 @@ class CompraController extends Controller
                 'data' => $estatisticas,
                 'modo' => $modo,
             ]);
-
         } catch (\Exception $e) {
             Log::error('[CompraController::estatisticas] Erro ao buscar estatísticas', [
                 'error' => $e->getMessage(),
@@ -545,7 +539,7 @@ class CompraController extends Controller
     public function create()
     {
         $modo = $this->getModo();
-        
+
         try {
             $this->verificarAcessoUsuario();
 
@@ -567,7 +561,6 @@ class CompraController extends Controller
                 ],
                 'modo' => $modo,
             ]);
-
         } catch (\Exception $e) {
             Log::error('[CompraController::create] Erro ao carregar dados', [
                 'error' => $e->getMessage(),

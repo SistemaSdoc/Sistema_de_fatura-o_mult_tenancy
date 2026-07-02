@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use App\Services\AuditLogger;
 use App\Models\Empresa;
 use App\Models\Tenant\User as TenantUser;
 use App\Models\Shared\User as SharedUser;
@@ -106,7 +107,6 @@ class WebAuthController extends Controller
                 'success' => false,
                 'message' => 'Credenciais inválidas ou usuário não encontrado em nenhuma empresa.',
             ], 401);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
             Log::warning('[AUTH] Validação falhou', ['errors' => $e->errors()]);
             return response()->json([
@@ -114,7 +114,6 @@ class WebAuthController extends Controller
                 'message' => 'Dados inválidos',
                 'errors'  => $e->errors(),
             ], 422);
-
         } catch (\Exception $e) {
             Log::error('[AUTH] ERRO CRÍTICO no login', [
                 'message' => $e->getMessage(),
@@ -132,74 +131,74 @@ class WebAuthController extends Controller
 
 
     /**
- * Login apenas com email – sem verificar senha.
- * Faz cross-tenant search e autentica o primeiro utilizador encontrado.
- */
-public function loginWithEmailOnly(Request $request): JsonResponse
-{
-    $request->validate([
-        'email' => 'required|email',
-    ]);
+     * Login apenas com email – sem verificar senha.
+     * Faz cross-tenant search e autentica o primeiro utilizador encontrado.
+     */
+    public function loginWithEmailOnly(Request $request): JsonResponse
+    {
+        $request->validate([
+            'email' => 'required|email',
+        ]);
 
-    $email = $request->input('email');
+        $email = $request->input('email');
 
-    Log::info('[AUTH] Login sem senha (email-only)', ['email' => $email]);
+        Log::info('[AUTH] Login sem senha (email-only)', ['email' => $email]);
 
-    // 1. Encontrar todos os tenants onde o email existe (sem verificar senha)
-    $empresas = $this->findTenantsByEmail($email);
+        // 1. Encontrar todos os tenants onde o email existe (sem verificar senha)
+        $empresas = $this->findTenantsByEmail($email);
 
-    if (empty($empresas)) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Email não encontrado em nenhuma empresa.'
-        ], 404);
-    }
+        if (empty($empresas)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Email não encontrado em nenhuma empresa.'
+            ], 404);
+        }
 
-    // 2. Escolhe o primeiro tenant (ou pode retornar lista para o frontend escolher)
-    $empresa = $empresas[0];
+        // 2. Escolhe o primeiro tenant (ou pode retornar lista para o frontend escolher)
+        $empresa = $empresas[0];
 
-    // 3. Conectar e buscar o utilizador
-    $this->conectarBanco($empresa);
-    $user = $this->buscarUsuario($empresa, $email);
-
-    if (!$user) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Utilizador não encontrado.'
-        ], 404);
-    }
-
-    if (!$user->ativo) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Utilizador inativo.'
-        ], 403);
-    }
-
-    // 4. Finalizar login (reutiliza o método existente)
-    return $this->finalizarLogin($request, $user, $empresa, 'email-only');
-}
-
-
-
-/**
- * Encontra todas as empresas ativas onde o email existe (cross-tenant, sem senha).
- */
-private function findTenantsByEmail(string $email): array
-{
-    $tenants = Empresa::on('landlord')->where('status', 'ativo')->get();
-    $found = [];
-
-    foreach ($tenants as $empresa) {
+        // 3. Conectar e buscar o utilizador
         $this->conectarBanco($empresa);
         $user = $this->buscarUsuario($empresa, $email);
-        if ($user) {
-            $found[] = $empresa;
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Utilizador não encontrado.'
+            ], 404);
         }
+
+        if (!$user->ativo) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Utilizador inativo.'
+            ], 403);
+        }
+
+        // 4. Finalizar login (reutiliza o método existente)
+        return $this->finalizarLogin($request, $user, $empresa, 'email-only');
     }
 
-    return $found;
-}
+
+
+    /**
+     * Encontra todas as empresas ativas onde o email existe (cross-tenant, sem senha).
+     */
+    private function findTenantsByEmail(string $email): array
+    {
+        $tenants = Empresa::on('landlord')->where('status', 'ativo')->get();
+        $found = [];
+
+        foreach ($tenants as $empresa) {
+            $this->conectarBanco($empresa);
+            $user = $this->buscarUsuario($empresa, $email);
+            if ($user) {
+                $found[] = $empresa;
+            }
+        }
+
+        return $found;
+    }
 
 
     /**
@@ -320,105 +319,105 @@ private function findTenantsByEmail(string $email): array
      * PESQUISA EMAIL EM TODOS OS TENANTS (Cross-Tenant Search)
      * Suporta ambos os modos
      */
-private function pesquisarEmailEmTodosTenants(string $email, string $password): array
-{
-    Log::debug('[AUTH][E2] Iniciando cross-tenant search', ['email' => $email]);
+    private function pesquisarEmailEmTodosTenants(string $email, string $password): array
+    {
+        Log::debug('[AUTH][E2] Iniciando cross-tenant search', ['email' => $email]);
 
-    $cacheKey = "tenant_search:" . md5($email);
-    $tenantsVerificados = 0;
+        $cacheKey = "tenant_search:" . md5($email);
+        $tenantsVerificados = 0;
 
-    // CACHE
-    $cachedTenantId = Cache::get($cacheKey);
-    if ($cachedTenantId) {
-        Log::debug('[AUTH][E2] Cache HIT', ['tenant_id' => $cachedTenantId]);
-        $empresa = Empresa::on('landlord')->find($cachedTenantId);
-        if ($empresa) {
-            // 🔥 CORREÇÃO AQUI
-            $this->conectarBanco($empresa);
-            $user = $this->buscarUsuario($empresa, $email);
-            if ($user && Hash::check($password, $user->password) && $user->ativo) {
-                Log::info('[AUTH][E2] Autenticação via cache SUCESSO');
-                return ['success' => true, 'user' => $user, 'empresa' => $empresa, 'tenants_verificados' => 1];
+        // CACHE
+        $cachedTenantId = Cache::get($cacheKey);
+        if ($cachedTenantId) {
+            Log::debug('[AUTH][E2] Cache HIT', ['tenant_id' => $cachedTenantId]);
+            $empresa = Empresa::on('landlord')->find($cachedTenantId);
+            if ($empresa) {
+                // 🔥 CORREÇÃO AQUI
+                $this->conectarBanco($empresa);
+                $user = $this->buscarUsuario($empresa, $email);
+                if ($user && Hash::check($password, $user->password) && $user->ativo) {
+                    Log::info('[AUTH][E2] Autenticação via cache SUCESSO');
+                    return ['success' => true, 'user' => $user, 'empresa' => $empresa, 'tenants_verificados' => 1];
+                }
+                Log::warning('[AUTH][E2] Cache STALE - removendo');
+                Cache::forget($cacheKey);
+            } else {
+                Log::warning('[AUTH][E2] Cache inválido - empresa não existe');
+                Cache::forget($cacheKey);
             }
-            Log::warning('[AUTH][E2] Cache STALE - removendo');
-            Cache::forget($cacheKey);
         } else {
-            Log::warning('[AUTH][E2] Cache inválido - empresa não existe');
-            Cache::forget($cacheKey);
+            Log::debug('[AUTH][E2] Cache MISS');
         }
-    } else {
-        Log::debug('[AUTH][E2] Cache MISS');
-    }
 
-    // DEDUÇÃO POR DOMÍNIO
-    Log::debug('[AUTH][E2] Tentando dedução por domínio de email');
-    $empresaPorDominio = $this->deduzirPorDominioEmail($email);
-    if ($empresaPorDominio) {
-        Log::info('[AUTH][E2] Tenant deduzido por domínio', [
-            'email' => $email,
-            'tenant' => $empresaPorDominio->subdomain,
-            'tenant_id' => $empresaPorDominio->id,
-        ]);
-        // 🔥 CORREÇÃO AQUI
-        $this->conectarBanco($empresaPorDominio);
-        $user = $this->buscarUsuario($empresaPorDominio, $email);
-        $tenantsVerificados++;
-        if ($user && Hash::check($password, $user->password) && $user->ativo) {
-            Cache::put($cacheKey, $empresaPorDominio->id, now()->addMinutes(30));
-            Log::info('[AUTH][E2] SUCESSO na dedução por domínio');
-            return ['success' => true, 'user' => $user, 'empresa' => $empresaPorDominio, 'tenants_verificados' => $tenantsVerificados];
-        }
-        Log::debug('[AUTH][E2] Falha na dedução por domínio');
-    } else {
-        Log::debug('[AUTH][E2] Não foi possível deduzir por domínio');
-    }
-
-    // SCAN FULL (já estava correto)
-    $tenants = Empresa::on('landlord')->where('status', 'ativo')->get();
-    Log::info('[AUTH][E2] Iniciando scan FULL em tenants', [
-        'email' => $email,
-        'total_tenants' => $tenants->count(),
-    ]);
-
-    foreach ($tenants as $empresa) {
-        $tenantsVerificados++;
-        try {
-            Log::debug('[AUTH][E2] Verificando tenant', [
-                'index'  => $tenantsVerificados,
-                'tenant' => $empresa->subdomain,
-                'modo'   => $empresa->modo,
-                'db'     => $empresa->db_name,
+        // DEDUÇÃO POR DOMÍNIO
+        Log::debug('[AUTH][E2] Tentando dedução por domínio de email');
+        $empresaPorDominio = $this->deduzirPorDominioEmail($email);
+        if ($empresaPorDominio) {
+            Log::info('[AUTH][E2] Tenant deduzido por domínio', [
+                'email' => $email,
+                'tenant' => $empresaPorDominio->subdomain,
+                'tenant_id' => $empresaPorDominio->id,
             ]);
-            // ✅ Já está correto aqui
-            $this->conectarBanco($empresa);
-            $user = $this->buscarUsuario($empresa, $email);
+            // 🔥 CORREÇÃO AQUI
+            $this->conectarBanco($empresaPorDominio);
+            $user = $this->buscarUsuario($empresaPorDominio, $email);
+            $tenantsVerificados++;
             if ($user && Hash::check($password, $user->password) && $user->ativo) {
-                Cache::put($cacheKey, $empresa->id, now()->addMinutes(30));
-                Log::info('[AUTH][E2] SUCESSO - Usuário encontrado', [
-                    'email'  => $email,
-                    'tenant' => $empresa->subdomain,
-                    'tenant_id' => $empresa->id,
-                    'modo'   => $empresa->modo,
-                    'tenants_verificados' => $tenantsVerificados,
-                ]);
-                return ['success' => true, 'user' => $user, 'empresa' => $empresa, 'tenants_verificados' => $tenantsVerificados];
+                Cache::put($cacheKey, $empresaPorDominio->id, now()->addMinutes(30));
+                Log::info('[AUTH][E2] SUCESSO na dedução por domínio');
+                return ['success' => true, 'user' => $user, 'empresa' => $empresaPorDominio, 'tenants_verificados' => $tenantsVerificados];
             }
-            Log::debug('[AUTH][E2] Usuário não encontrado neste tenant', ['tenant' => $empresa->subdomain]);
-        } catch (\Exception $e) {
-            Log::warning('[AUTH][E2] Erro ao verificar tenant', [
-                'tenant' => $empresa->subdomain,
-                'error'  => $e->getMessage(),
-            ]);
-            continue;
+            Log::debug('[AUTH][E2] Falha na dedução por domínio');
+        } else {
+            Log::debug('[AUTH][E2] Não foi possível deduzir por domínio');
         }
-    }
 
-    Log::warning('[AUTH][E2] FALHA TOTAL - Usuário não encontrado em nenhum tenant', [
-        'email' => $email,
-        'tenants_verificados' => $tenantsVerificados,
-    ]);
-    return ['success' => false, 'tenants_verificados' => $tenantsVerificados];
-}
+        // SCAN FULL (já estava correto)
+        $tenants = Empresa::on('landlord')->where('status', 'ativo')->get();
+        Log::info('[AUTH][E2] Iniciando scan FULL em tenants', [
+            'email' => $email,
+            'total_tenants' => $tenants->count(),
+        ]);
+
+        foreach ($tenants as $empresa) {
+            $tenantsVerificados++;
+            try {
+                Log::debug('[AUTH][E2] Verificando tenant', [
+                    'index'  => $tenantsVerificados,
+                    'tenant' => $empresa->subdomain,
+                    'modo'   => $empresa->modo,
+                    'db'     => $empresa->db_name,
+                ]);
+                // ✅ Já está correto aqui
+                $this->conectarBanco($empresa);
+                $user = $this->buscarUsuario($empresa, $email);
+                if ($user && Hash::check($password, $user->password) && $user->ativo) {
+                    Cache::put($cacheKey, $empresa->id, now()->addMinutes(30));
+                    Log::info('[AUTH][E2] SUCESSO - Usuário encontrado', [
+                        'email'  => $email,
+                        'tenant' => $empresa->subdomain,
+                        'tenant_id' => $empresa->id,
+                        'modo'   => $empresa->modo,
+                        'tenants_verificados' => $tenantsVerificados,
+                    ]);
+                    return ['success' => true, 'user' => $user, 'empresa' => $empresa, 'tenants_verificados' => $tenantsVerificados];
+                }
+                Log::debug('[AUTH][E2] Usuário não encontrado neste tenant', ['tenant' => $empresa->subdomain]);
+            } catch (\Exception $e) {
+                Log::warning('[AUTH][E2] Erro ao verificar tenant', [
+                    'tenant' => $empresa->subdomain,
+                    'error'  => $e->getMessage(),
+                ]);
+                continue;
+            }
+        }
+
+        Log::warning('[AUTH][E2] FALHA TOTAL - Usuário não encontrado em nenhum tenant', [
+            'email' => $email,
+            'tenants_verificados' => $tenantsVerificados,
+        ]);
+        return ['success' => false, 'tenants_verificados' => $tenantsVerificados];
+    }
 
     /**
      * DEDUZ TENANT PELO DOMÍNIO DO EMAIL
@@ -434,10 +433,22 @@ private function pesquisarEmailEmTodosTenants(string $email, string $password): 
         $domain = strtolower($parts[1]);
 
         $genericDomains = [
-            'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com',
-            'icloud.com', 'mail.com', 'protonmail.com', 'live.com',
-            'aol.com', 'gmx.com', 'yandex.com', 'zoho.com', 'qq.com',
-            '163.com', '126.com', 'foxmail.com',
+            'gmail.com',
+            'yahoo.com',
+            'hotmail.com',
+            'outlook.com',
+            'icloud.com',
+            'mail.com',
+            'protonmail.com',
+            'live.com',
+            'aol.com',
+            'gmx.com',
+            'yandex.com',
+            'zoho.com',
+            'qq.com',
+            '163.com',
+            '126.com',
+            'foxmail.com',
         ];
 
         if (in_array($domain, $genericDomains)) {
@@ -601,13 +612,25 @@ private function pesquisarEmailEmTodosTenants(string $email, string $password): 
             'user'      => $tenantUser->email,
             'user_id'   => $tenantUser->id,
             'empresa'   => $empresa->nome,
-            'empresa_id'=> $empresa->id,
+            'empresa_id' => $empresa->id,
             'subdomain' => $empresa->subdomain,
             'modo'      => $empresa->modo,
             'ip'        => $request->ip(),
         ]);
 
-        $fmt = fn ($date) => $date ? \Carbon\Carbon::parse($date)->format('Y-m-d H:i:s') : null;
+        // Registar login na auditoria
+        AuditLogger::log("Utilizador Autenticado", "👤", [
+            'area' => 'Autenticação',
+            'detalhes' => [
+                'usuario_id' => $tenantUser->id,
+                'usuario_email' => $tenantUser->email,
+                'empresa_id' => $empresa->id,
+                'empresa_nome' => $empresa->nome,
+                'modo_login' => $modo,
+            ],
+        ]);
+
+        $fmt = fn($date) => $date ? \Carbon\Carbon::parse($date)->format('Y-m-d H:i:s') : null;
 
         return response()->json([
             'success' => true,
@@ -646,103 +669,103 @@ private function pesquisarEmailEmTodosTenants(string $email, string $password): 
      * (com suporte a ambos os modos)
      */
     public function me(Request $request): JsonResponse
-{
-    Log::debug('[AUTH][ME] Debug completo', [
-        'session_id'                => $request->session()->getId(),
-        'session_all'               => session()->all(),
-        'auth_guard_landlord_check' => Auth::guard('landlord')->check(),
-        'auth_guard_landlord_id'    => Auth::guard('landlord')->id(),
-        'database_default'          => Config::get('database.default'),
-    ]);
-
-    $landlordUser = Auth::guard('landlord')->user();
-    if (!$landlordUser) {
-        Log::warning('[AUTH][ME] Usuário não autenticado no guard landlord');
-        return response()->json(['success' => false, 'message' => 'Não autenticado.'], 401);
-    }
-
-    $tenantId = session('tenant_id');
-    if (!$tenantId) {
-        return response()->json(['success' => false, 'message' => 'Sessão incompleta — tenant não identificado.'], 403);
-    }
-
-    $empresa = Empresa::on('landlord')->find($tenantId);
-    if (!$empresa) {
-        return response()->json(['success' => false, 'message' => 'Empresa não encontrada.'], 404);
-    }
-
-    // ✅ LOG PARA VERIFICAR OS CAMPOS DA EMPRESA
-    Log::info('[AUTH][ME] Dados da empresa carregados', [
-        'empresa_id' => $empresa->id,
-        'nome' => $empresa->nome,
-        'campos_bancarios' => [
-            'nome_banco' => $empresa->nome_banco ?? 'null',
-            'iban' => $empresa->iban ?? 'null',
-            'numero_conta' => $empresa->numero_conta ?? 'null',
-        ],
-        'todos_campos' => array_keys($empresa->getAttributes()),
-    ]);
-
-    // Recupera o modo da sessão (garantia)
-    $modo = session('tenant_modo', $empresa->modo);
-    $empresa->modo = $modo;
-
-    // Busca o usuário no banco correto
-    $user = $this->buscarUsuario($empresa, $landlordUser->email);
-
-    if (!$user) {
-        Log::warning('[AUTH][ME] Usuário não encontrado no tenant', [
-            'email' => $landlordUser->email,
-            'tenant' => $empresa->subdomain,
+    {
+        Log::debug('[AUTH][ME] Debug completo', [
+            'session_id'                => $request->session()->getId(),
+            'session_all'               => session()->all(),
+            'auth_guard_landlord_check' => Auth::guard('landlord')->check(),
+            'auth_guard_landlord_id'    => Auth::guard('landlord')->id(),
+            'database_default'          => Config::get('database.default'),
         ]);
-        return response()->json(['success' => false, 'message' => 'Utilizador não encontrado no tenant.'], 404);
+
+        $landlordUser = Auth::guard('landlord')->user();
+        if (!$landlordUser) {
+            Log::warning('[AUTH][ME] Usuário não autenticado no guard landlord');
+            return response()->json(['success' => false, 'message' => 'Não autenticado.'], 401);
+        }
+
+        $tenantId = session('tenant_id');
+        if (!$tenantId) {
+            return response()->json(['success' => false, 'message' => 'Sessão incompleta — tenant não identificado.'], 403);
+        }
+
+        $empresa = Empresa::on('landlord')->find($tenantId);
+        if (!$empresa) {
+            return response()->json(['success' => false, 'message' => 'Empresa não encontrada.'], 404);
+        }
+
+        // ✅ LOG PARA VERIFICAR OS CAMPOS DA EMPRESA
+        Log::info('[AUTH][ME] Dados da empresa carregados', [
+            'empresa_id' => $empresa->id,
+            'nome' => $empresa->nome,
+            'campos_bancarios' => [
+                'nome_banco' => $empresa->nome_banco ?? 'null',
+                'iban' => $empresa->iban ?? 'null',
+                'numero_conta' => $empresa->numero_conta ?? 'null',
+            ],
+            'todos_campos' => array_keys($empresa->getAttributes()),
+        ]);
+
+        // Recupera o modo da sessão (garantia)
+        $modo = session('tenant_modo', $empresa->modo);
+        $empresa->modo = $modo;
+
+        // Busca o usuário no banco correto
+        $user = $this->buscarUsuario($empresa, $landlordUser->email);
+
+        if (!$user) {
+            Log::warning('[AUTH][ME] Usuário não encontrado no tenant', [
+                'email' => $landlordUser->email,
+                'tenant' => $empresa->subdomain,
+            ]);
+            return response()->json(['success' => false, 'message' => 'Utilizador não encontrado no tenant.'], 404);
+        }
+
+        Log::info('[AUTH][ME] Sucesso', [
+            'user_id'          => $user->id,
+            'tenant_id'        => $tenantId,
+            'tenant_subdomain' => $empresa->subdomain,
+            'modo'             => $empresa->modo,
+        ]);
+
+        $fmt = fn($date) => $date ? \Carbon\Carbon::parse($date)->format('Y-m-d H:i:s') : null;
+
+        return response()->json([
+            'success' => true,
+            'user' => [
+                'id'                => $user->id,
+                'name'              => $user->name ?? $user->nome,
+                'email'             => $user->email,
+                'role'              => $user->role ?? 'operador',
+                'ativo'             => (bool) $user->ativo,
+                'ultimo_login'      => $fmt($user->ultimo_login ?? null),
+                'created_at'        => $fmt($user->created_at ?? null),
+                'email_verified_at' => $fmt($user->email_verified_at ?? null),
+            ],
+            'empresa' => [
+                'id'            => $empresa->id,
+                'nome'          => $empresa->nome,
+                'nif'           => $empresa->nif,
+                'email'         => $empresa->email,
+                'telefone'      => $empresa->telefone,
+                'endereco'      => $empresa->endereco,
+                'subdomain'     => $empresa->subdomain,
+                'logo'          => $empresa->logo,
+                'regime_fiscal' => $empresa->regime_fiscal ?? 'simplificado',
+                'sujeito_iva'   => (bool) $empresa->sujeito_iva,
+                'iva_padrao'    => (float) ($empresa->iva_padrao ?? 0),
+                'status'        => $empresa->status ?? 'ativo',
+                'data_registro' => $fmt($empresa->data_registro ?? null),
+                'modo'          => $empresa->modo,
+                // CAMPOS BANCÁRIOS
+                'nome_banco'    => $empresa->nome_banco ?? null,
+                'iban'          => $empresa->iban ?? null,
+                'numero_conta'  => $empresa->numero_conta ?? null,
+                'created_at'    => $fmt($empresa->created_at ?? null),
+                'updated_at'    => $fmt($empresa->updated_at ?? null),
+            ],
+        ]);
     }
-
-    Log::info('[AUTH][ME] Sucesso', [
-        'user_id'          => $user->id,
-        'tenant_id'        => $tenantId,
-        'tenant_subdomain' => $empresa->subdomain,
-        'modo'             => $empresa->modo,
-    ]);
-
-    $fmt = fn ($date) => $date ? \Carbon\Carbon::parse($date)->format('Y-m-d H:i:s') : null;
-
-    return response()->json([
-        'success' => true,
-        'user' => [
-            'id'                => $user->id,
-            'name'              => $user->name ?? $user->nome,
-            'email'             => $user->email,
-            'role'              => $user->role ?? 'operador',
-            'ativo'             => (bool) $user->ativo,
-            'ultimo_login'      => $fmt($user->ultimo_login ?? null),
-            'created_at'        => $fmt($user->created_at ?? null),
-            'email_verified_at' => $fmt($user->email_verified_at ?? null),
-        ],
-        'empresa' => [
-            'id'            => $empresa->id,
-            'nome'          => $empresa->nome,
-            'nif'           => $empresa->nif,
-            'email'         => $empresa->email,
-            'telefone'      => $empresa->telefone,
-            'endereco'      => $empresa->endereco,
-            'subdomain'     => $empresa->subdomain,
-            'logo'          => $empresa->logo,
-            'regime_fiscal' => $empresa->regime_fiscal ?? 'simplificado',
-            'sujeito_iva'   => (bool) $empresa->sujeito_iva,
-            'iva_padrao'    => (float) ($empresa->iva_padrao ?? 0),
-            'status'        => $empresa->status ?? 'ativo',
-            'data_registro' => $fmt($empresa->data_registro ?? null),
-            'modo'          => $empresa->modo,
-            // CAMPOS BANCÁRIOS
-            'nome_banco'    => $empresa->nome_banco ?? null,
-            'iban'          => $empresa->iban ?? null,
-            'numero_conta'  => $empresa->numero_conta ?? null,
-            'created_at'    => $fmt($empresa->created_at ?? null),
-            'updated_at'    => $fmt($empresa->updated_at ?? null),
-        ],
-    ]);
-}
 
     /**
      * LOGOUT DO USUÁRIO (mantém dados do tenant na sessão)
@@ -803,9 +826,23 @@ private function pesquisarEmailEmTodosTenants(string $email, string $password): 
     private function isReservedSubdomain(string $subdomain): bool
     {
         $reserved = [
-            'www', 'api', 'app', 'admin', 'login', 'register',
-            'logout', 'auth', 'static', 'test', 'dev', 'staging',
-            'mail', 'ftp', 'smtp', 'pop', 'imap',
+            'www',
+            'api',
+            'app',
+            'admin',
+            'login',
+            'register',
+            'logout',
+            'auth',
+            'static',
+            'test',
+            'dev',
+            'staging',
+            'mail',
+            'ftp',
+            'smtp',
+            'pop',
+            'imap',
         ];
         return in_array(strtolower($subdomain), $reserved);
     }

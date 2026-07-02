@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Empresa;
 use App\Models\Shared\User;
+use App\Services\AuditLogger;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -94,9 +95,9 @@ SDOCA;
     {
         // Garantir que nunca é null
         $modo = $modo ?? 'colectivo';
-        
-        $modoLabel = $modo === 'colectivo' 
-            ? '🔄 Multi-Tenant (Colectivo)' 
+
+        $modoLabel = $modo === 'colectivo'
+            ? '🔄 Multi-Tenant (Colectivo)'
             : '🏢 Single-Tenant (Singular)';
 
         return <<<BUILDING
@@ -183,219 +184,231 @@ BUILDING;
     // ============================================================
     // 3. CRIAR EMPRESA (COMPLETO)
     // ============================================================
-public function store(Request $request)
-{
-    Log::channel('single')->info("\n" . $this->getFaturajaAscii() . "\n");
-    Log::channel('single')->info("\n" . $this->getSdocAscii() . "\n");
-    $this->logPretty('INÍCIO', "Criando nova empresa: \"{$request->nome}\" (admin: {$request->admin_email})", 'info');
+    public function store(Request $request)
+    {
+        Log::channel('single')->info("\n" . $this->getFaturajaAscii() . "\n");
+        Log::channel('single')->info("\n" . $this->getSdocAscii() . "\n");
+        $this->logPretty('INÍCIO', "Criando nova empresa: \"{$request->nome}\" (admin: {$request->admin_email})", 'info');
 
-    // ⭐ VALIDAÇÃO
-    $validated = $request->validate([
-        'nome'           => 'required|string|max:255',
-        'nif'            => 'required|digits:10|unique:landlord.empresas,nif',
-        'email'          => 'required|email|unique:landlord.empresas,email',
-        'telefone'       => 'required|string|max:20',
-        'endereco'       => 'required|string|max:500',
-        'regime_fiscal'  => 'required|in:simplificado,geral',
-        'sujeito_iva'    => 'required|boolean',
-        'iva_padrao'     => 'nullable|numeric|min:0|max:100',
-        'nome_banco'     => 'nullable|string|max:255',
-        'numero_conta'   => 'nullable|string|max:50|unique:landlord.empresas,numero_conta',
-        'iban'           => 'nullable|string|max:34|unique:landlord.empresas,iban',
-        'logo'           => 'required|string|max:255',
-        'subdomain'      => [
-            'required',
-            'string',
-            'max:100',
-            'regex:/^[a-z0-9][a-z0-9-]*[a-z0-9]$/',
-            'unique:landlord.empresas,subdomain'
-        ],
-        'modo'           => 'required|in:colectivo,singular',
-        'admin_name'     => 'required|string|max:255',
-        'admin_email'    => 'required|email',
-        'admin_password' => 'required|string|min:8',
-    ]);
+        // ⭐ VALIDAÇÃO
+        $validated = $request->validate([
+            'nome'           => 'required|string|max:255',
+            'nif'            => 'required|digits:10|unique:landlord.empresas,nif',
+            'email'          => 'required|email|unique:landlord.empresas,email',
+            'telefone'       => 'required|string|max:20',
+            'endereco'       => 'required|string|max:500',
+            'regime_fiscal'  => 'required|in:simplificado,geral',
+            'sujeito_iva'    => 'required|boolean',
+            'iva_padrao'     => 'nullable|numeric|min:0|max:100',
+            'nome_banco'     => 'nullable|string|max:255',
+            'numero_conta'   => 'nullable|string|max:50|unique:landlord.empresas,numero_conta',
+            'iban'           => 'nullable|string|max:34|unique:landlord.empresas,iban',
+            'logo'           => 'required|string|max:255',
+            'subdomain'      => [
+                'required',
+                'string',
+                'max:100',
+                'regex:/^[a-z0-9][a-z0-9-]*[a-z0-9]$/',
+                'unique:landlord.empresas,subdomain'
+            ],
+            'modo'           => 'required|in:colectivo,singular',
+            'admin_name'     => 'required|string|max:255',
+            'admin_email'    => 'required|email',
+            'admin_password' => 'required|string|min:8',
+        ]);
 
-    $this->logPretty('1/6', 'Validação aprovada', 'success');
+        $this->logPretty('1/6', 'Validação aprovada', 'success');
 
-    // Geração do nome da base de dados
-    $dbNameBase = 'empresa_' . Str::slug($request->nome, '_');
-    $dbName     = $dbNameBase;
-    $counter    = 1;
-    while (!empty(DB::connection('landlord')->select("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?", [$dbName]))) {
-        $dbName = $dbNameBase . '_' . $counter;
-        $counter++;
-    }
+        // Geração do nome da base de dados
+        $dbNameBase = 'empresa_' . Str::slug($request->nome, '_');
+        $dbName     = $dbNameBase;
+        $counter    = 1;
+        while (!empty(DB::connection('landlord')->select("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?", [$dbName]))) {
+            $dbName = $dbNameBase . '_' . $counter;
+            $counter++;
+        }
 
-    // Criar empresa
-    $empresa = Empresa::on('landlord')->create([
-        'id'            => Str::uuid(),
-        'nome'          => $request->nome,
-        'nif'           => $request->nif,
-        'email'         => $request->email,
-        'telefone'      => $request->telefone,
-        'endereco'      => $request->endereco,
-        'db_name'       => $dbName,
-        'subdomain'     => $request->subdomain,
-        'modo'          => $request->modo,
-        'regime_fiscal' => $request->regime_fiscal,
-        'sujeito_iva'   => $request->sujeito_iva,
-        'iva_padrao'    => $request->regime_fiscal === 'simplificado'
-            ? 0.0
-            : (float) ($request->iva_padrao ?? self::IVA_PADRAO_DEFAULT),
-        'nome_banco'    => $request->nome_banco,
-        'numero_conta'  => $request->numero_conta,
-        'iban'          => $request->iban,
-        'logo'          => $request->logo,
-        'status'        => 'ativo',
-        'data_registro' => now(),
-    ]);
+        // Criar empresa
+        $empresa = Empresa::on('landlord')->create([
+            'id'            => Str::uuid(),
+            'nome'          => $request->nome,
+            'nif'           => $request->nif,
+            'email'         => $request->email,
+            'telefone'      => $request->telefone,
+            'endereco'      => $request->endereco,
+            'db_name'       => $dbName,
+            'subdomain'     => $request->subdomain,
+            'modo'          => $request->modo,
+            'regime_fiscal' => $request->regime_fiscal,
+            'sujeito_iva'   => $request->sujeito_iva,
+            'iva_padrao'    => $request->regime_fiscal === 'simplificado'
+                ? 0.0
+                : (float) ($request->iva_padrao ?? self::IVA_PADRAO_DEFAULT),
+            'nome_banco'    => $request->nome_banco,
+            'numero_conta'  => $request->numero_conta,
+            'iban'          => $request->iban,
+            'logo'          => $request->logo,
+            'status'        => 'ativo',
+            'data_registro' => now(),
+        ]);
 
-    $this->logPretty('2/6', "Empresa inserida (ID: {$empresa->id}, Subdomínio: {$empresa->subdomain}, Modo: {$empresa->modo})", 'success');
+        $this->logPretty('2/6', "Empresa inserida (ID: {$empresa->id}, Subdomínio: {$empresa->subdomain}, Modo: {$empresa->modo})", 'success');
 
-    try {
-        // ⭐============================================================
-        // ⭐ MODO SINGULAR: CRIA BANCO DEDICADO + MIGRATIONS TENANT
-        // ⭐============================================================
-        if ($request->modo === 'singular') {
-            // 1. Criar base de dados
-            DB::connection('landlord')
-                ->statement("CREATE DATABASE `{$empresa->db_name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-            $this->logPretty('3/6', "Base de dados criada: {$empresa->db_name}", 'success');
+        try {
+            // ⭐============================================================
+            // ⭐ MODO SINGULAR: CRIA BANCO DEDICADO + MIGRATIONS TENANT
+            // ⭐============================================================
+            if ($request->modo === 'singular') {
+                // 1. Criar base de dados
+                DB::connection('landlord')
+                    ->statement("CREATE DATABASE `{$empresa->db_name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+                $this->logPretty('3/6', "Base de dados criada: {$empresa->db_name}", 'success');
 
-            // 2. Configurar conexão tenant
-            $this->configurarTenantConnection($empresa->db_name);
-            $this->logPretty('4/6', 'Conexão tenant configurada', 'success');
+                // 2. Configurar conexão tenant
+                $this->configurarTenantConnection($empresa->db_name);
+                $this->logPretty('4/6', 'Conexão tenant configurada', 'success');
 
-            // 3. Rodar migrations do tenant
-            $exitCode = Artisan::call('migrate', [
-                '--database' => 'tenant',
-                '--path'     => 'database/migrations/tenant',
-                '--force'    => true,
-            ]);
-            if ($exitCode !== 0) {
-                throw new \Exception('Erro ao executar migrations do tenant. Código: ' . $exitCode);
-            }
-            $this->logPretty('5/6', 'Migrations do tenant executadas com sucesso', 'success');
-
-            // ⭐ 4. CRIAR ADMIN NO BANCO TENANT (MODO SINGULAR)
-            $admin = \App\Models\Tenant\User::create([
-                'id'            => (string) Str::uuid(),
-                'name'          => $request->admin_name,
-                'email'         => $request->admin_email,
-                'password'      => Hash::make($request->admin_password),
-                'role'          => 'admin',
-                'ativo'         => true,
-                'email_verified_at' => now(),
-            ]);
-
-            $this->logPretty('6/6', "Admin criado no tenant: {$admin->email}", 'success');
-
-        } 
-        // ⭐============================================================
-        // ⭐ MODO COLECTIVO: USA BANCO SHARED
-        // ⭐============================================================
-        else {
-            // Verifica se a tabela users existe no shared
-            try {
-                $tabelaExiste = DB::connection('shared')->table('users')->exists();
-            } catch (\Exception $e) {
-                $tabelaExiste = false;
-            }
-
-            if (!$tabelaExiste) {
-                $this->logPretty('3/6', 'Rodando migrations do shared (primeira vez)', 'info');
-                
+                // 3. Rodar migrations do tenant
                 $exitCode = Artisan::call('migrate', [
-                    '--database' => 'shared',
-                    '--path'     => 'database/migrations/shared',
+                    '--database' => 'tenant',
+                    '--path'     => 'database/migrations/tenant',
                     '--force'    => true,
                 ]);
-                
                 if ($exitCode !== 0) {
-                    throw new \Exception('Erro ao executar migrations do shared. Código: ' . $exitCode);
+                    throw new \Exception('Erro ao executar migrations do tenant. Código: ' . $exitCode);
                 }
-                $this->logPretty('4/6', 'Migrations do shared executadas com sucesso', 'success');
-            } else {
-                $this->logPretty('3/6', 'Migrations do shared já executadas anteriormente', 'info');
+                $this->logPretty('5/6', 'Migrations do tenant executadas com sucesso', 'success');
+
+                // ⭐ 4. CRIAR ADMIN NO BANCO TENANT (MODO SINGULAR)
+                $admin = \App\Models\Tenant\User::create([
+                    'id'            => (string) Str::uuid(),
+                    'name'          => $request->admin_name,
+                    'email'         => $request->admin_email,
+                    'password'      => Hash::make($request->admin_password),
+                    'role'          => 'admin',
+                    'ativo'         => true,
+                    'email_verified_at' => now(),
+                ]);
+
+                $this->logPretty('6/6', "Admin criado no tenant: {$admin->email}", 'success');
+            }
+            // ⭐============================================================
+            // ⭐ MODO COLECTIVO: USA BANCO SHARED
+            // ⭐============================================================
+            else {
+                // Verifica se a tabela users existe no shared
+                try {
+                    $tabelaExiste = DB::connection('shared')->table('users')->exists();
+                } catch (\Exception $e) {
+                    $tabelaExiste = false;
+                }
+
+                if (!$tabelaExiste) {
+                    $this->logPretty('3/6', 'Rodando migrations do shared (primeira vez)', 'info');
+
+                    $exitCode = Artisan::call('migrate', [
+                        '--database' => 'shared',
+                        '--path'     => 'database/migrations/shared',
+                        '--force'    => true,
+                    ]);
+
+                    if ($exitCode !== 0) {
+                        throw new \Exception('Erro ao executar migrations do shared. Código: ' . $exitCode);
+                    }
+                    $this->logPretty('4/6', 'Migrations do shared executadas com sucesso', 'success');
+                } else {
+                    $this->logPretty('3/6', 'Migrations do shared já executadas anteriormente', 'info');
+                }
+
+                // ⭐ CRIAR ADMIN NO SHARED (MODO COLECTIVO)
+                $admin = \App\Models\Shared\User::create([
+                    'id'            => (string) Str::uuid(),
+                    'tenant_id'     => $empresa->id,
+                    'name'          => $request->admin_name,
+                    'email'         => $request->admin_email,
+                    'password'      => Hash::make($request->admin_password),
+                    'role'          => 'admin',
+                ]);
+
+                $this->logPretty('5/6', "Admin criado no shared: {$admin->email}", 'success');
+
+                // ⭐ RELACIONAR ADMIN COM O TENANT (pivô user_tenant) - para controle
+                try {
+                    DB::connection('shared')->table('users')->insert([
+                        'id' => (string) Str::uuid(),
+                        'user_id' => $admin->id,
+                        'tenant_id' => $empresa->id,
+                        'role' => 'admin',
+                        'ativo' => true,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                    $this->logPretty('6/6', "Admin relacionado ao tenant {$empresa->subdomain}", 'success');
+                } catch (\Exception $e) {
+                    // Tabela tenant_user pode não existir ainda, criar depois
+                    $this->logPretty('6/6', "Relacionamento não criado (tabela opcional)", 'warning');
+                }
             }
 
-            // ⭐ CRIAR ADMIN NO SHARED (MODO COLECTIVO)
-            $admin = \App\Models\Shared\User::create([
-                'id'            => (string) Str::uuid(),
-                'tenant_id'     => $empresa->id,
-                'name'          => $request->admin_name,
-                'email'         => $request->admin_email,
-                'password'      => Hash::make($request->admin_password),
-                'role'          => 'admin',
+            // Mover logo temporário
+            if (str_starts_with($empresa->logo, 'temp_logos/')) {
+                $extension = pathinfo($empresa->logo, PATHINFO_EXTENSION) ?: 'png';
+                $newLogoName = 'logos/logo_' . $empresa->id . '_' . time() . '.' . $extension;
+                if (Storage::disk('public')->exists($empresa->logo)) {
+                    Storage::disk('public')->move($empresa->logo, $newLogoName);
+                    $empresa->update(['logo' => $newLogoName]);
+                    $this->logPretty('EXTRA', "Logo movido para: {$newLogoName}", 'success');
+                } else {
+                    $this->logPretty('EXTRA', "Logo temporário não encontrado: {$empresa->logo}", 'warning');
+                }
+            }
+
+            // Log final
+            $building = $this->getBuildingAscii(
+                $empresa->subdomain,
+                $empresa->db_name,
+                $admin->email,
+                $empresa->modo ?? 'colectivo'
+            );
+            Log::channel('single')->info("\n" . $building . "\n");
+
+            // Registar criação de empresa na auditoria
+            AuditLogger::log("Empresa Criada", "🏢", [
+                'area' => 'Administração',
+                'detalhes' => [
+                    'empresa_id' => $empresa->id,
+                    'empresa_nome' => $empresa->nome,
+                    'subdomain' => $empresa->subdomain,
+                    'modo' => $empresa->modo,
+                    'nif' => $empresa->nif,
+                    'admin_email' => $admin->email,
+                ],
             ]);
 
-            $this->logPretty('5/6', "Admin criado no shared: {$admin->email}", 'success');
+            return response()->json([
+                'success' => true,
+                'message' => 'Empresa criada com sucesso!',
+                'empresa' => $empresa->fresh(),
+                'admin'   => $admin->only(['name', 'email']),
+                'modo'    => $empresa->modo,
+            ], 201);
+        } catch (\Throwable $e) {
+            $this->logPretty('ERRO', "Falha na criação: {$e->getMessage()}", 'error');
 
-            // ⭐ RELACIONAR ADMIN COM O TENANT (pivô user_tenant) - para controle
+            // Rollback
+            $empresa->delete();
             try {
-                DB::connection('shared')->table('users')->insert([
-                    'id' => (string) Str::uuid(),
-                    'user_id' => $admin->id,
-                    'tenant_id' => $empresa->id,
-                    'role' => 'admin',
-                    'ativo' => true,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-                $this->logPretty('6/6', "Admin relacionado ao tenant {$empresa->subdomain}", 'success');
-            } catch (\Exception $e) {
-                // Tabela tenant_user pode não existir ainda, criar depois
-                $this->logPretty('6/6', "Relacionamento não criado (tabela opcional)", 'warning');
+                DB::connection('landlord')
+                    ->statement("DROP DATABASE IF EXISTS `{$empresa->db_name}`");
+            } catch (\Throwable $ignored) {
             }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Falha ao criar empresa: ' . $e->getMessage()
+            ], 500);
         }
-
-        // Mover logo temporário
-        if (str_starts_with($empresa->logo, 'temp_logos/')) {
-            $extension = pathinfo($empresa->logo, PATHINFO_EXTENSION) ?: 'png';
-            $newLogoName = 'logos/logo_' . $empresa->id . '_' . time() . '.' . $extension;
-            if (Storage::disk('public')->exists($empresa->logo)) {
-                Storage::disk('public')->move($empresa->logo, $newLogoName);
-                $empresa->update(['logo' => $newLogoName]);
-                $this->logPretty('EXTRA', "Logo movido para: {$newLogoName}", 'success');
-            } else {
-                $this->logPretty('EXTRA', "Logo temporário não encontrado: {$empresa->logo}", 'warning');
-            }
-        }
-
-        // Log final
-        $building = $this->getBuildingAscii(
-            $empresa->subdomain, 
-            $empresa->db_name, 
-            $admin->email, 
-            $empresa->modo ?? 'colectivo'
-        );
-        Log::channel('single')->info("\n" . $building . "\n");
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Empresa criada com sucesso!',
-            'empresa' => $empresa->fresh(),
-            'admin'   => $admin->only(['name', 'email']),
-            'modo'    => $empresa->modo,
-        ], 201);
-
-    } catch (\Throwable $e) {
-        $this->logPretty('ERRO', "Falha na criação: {$e->getMessage()}", 'error');
-
-        // Rollback
-        $empresa->delete();
-        try {
-            DB::connection('landlord')
-                ->statement("DROP DATABASE IF EXISTS `{$empresa->db_name}`");
-        } catch (\Throwable $ignored) {}
-
-        return response()->json([
-            'success' => false,
-            'message' => 'Falha ao criar empresa: ' . $e->getMessage()
-        ], 500);
     }
-}
 
     // ============================================================
     // 4. CONFIGURAR CONEXÃO TENANT
@@ -403,7 +416,7 @@ public function store(Request $request)
     private function configurarTenantConnection(string $database): void
     {
         config(['database.connections.tenant.database' => $database]);
-        
+
         // Só usar purge em ambiente de desenvolvimento
         if (app()->environment('local', 'testing')) {
             DB::purge('tenant');
@@ -580,8 +593,13 @@ public function store(Request $request)
         ]);
 
         $empresa->update($request->only([
-            'nome', 'email', 'telefone', 'endereco', 
-            'regime_fiscal', 'sujeito_iva', 'modo'
+            'nome',
+            'email',
+            'telefone',
+            'endereco',
+            'regime_fiscal',
+            'sujeito_iva',
+            'modo'
         ]));
 
         if (($empresa->regime_fiscal ?? 'geral') === 'simplificado') {
@@ -622,14 +640,24 @@ public function store(Request $request)
             'status'       => 'sometimes|in:ativo,suspenso',
             'subdomain'    => 'sometimes|string|unique:landlord.empresas,subdomain,' . $empresa->id,
             'modo'         => 'sometimes|in:colectivo,singular',
-            'regime_fiscal'=> 'sometimes|in:simplificado,geral',
+            'regime_fiscal' => 'sometimes|in:simplificado,geral',
             'sujeito_iva'  => 'sometimes|boolean',
         ]);
 
         $empresa->update($request->only([
-            'nome', 'email', 'telefone', 'endereco', 'status', 
-            'nome_banco', 'numero_conta', 'iban', 'logo', 
-            'subdomain', 'modo', 'regime_fiscal', 'sujeito_iva'
+            'nome',
+            'email',
+            'telefone',
+            'endereco',
+            'status',
+            'nome_banco',
+            'numero_conta',
+            'iban',
+            'logo',
+            'subdomain',
+            'modo',
+            'regime_fiscal',
+            'sujeito_iva'
         ]));
 
         if (($empresa->regime_fiscal ?? 'geral') === 'simplificado') {

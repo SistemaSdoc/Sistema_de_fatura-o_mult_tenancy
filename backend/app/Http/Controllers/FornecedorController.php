@@ -8,6 +8,7 @@ use App\Models\Empresa;
 use App\Models\LandlordUser;
 use App\Models\Shared\User as SharedUser;
 use App\Models\Tenant\User as TenantUser;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
@@ -24,7 +25,7 @@ class FornecedorController extends Controller
         // ✅ Obtém da sessão (prioridade)
         $this->empresa = app('current.empresa');
         $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
-        
+
         Log::debug('[FornecedorController] Inicializado', [
             'modo' => $this->modo,
             'empresa_id' => $this->empresa?->id,
@@ -224,11 +225,11 @@ class FornecedorController extends Controller
     protected function nifExisteNoTenant(string $nif, ?string $excluirId = null): bool
     {
         $query = $this->queryFornecedores();
-        
+
         if ($excluirId) {
             $query->where('id', '!=', $excluirId);
         }
-        
+
         return $query->where('nif', $nif)->exists();
     }
 
@@ -253,17 +254,17 @@ class FornecedorController extends Controller
         }
 
         $clean = preg_replace('/[^a-zA-Z0-9]/', '', $nif);
-        
+
         // NIF: 10 dígitos
         if (preg_match('/^[0-9]{10}$/', $clean)) {
             return $clean;
         }
-        
+
         // BI: 9 números + 2 letras + 3 números
         if (preg_match('/^[0-9]{9}[A-Za-z]{2}[0-9]{3}$/', $clean)) {
             return $clean;
         }
-        
+
         throw new \Illuminate\Validation\ValidationException(
             \Illuminate\Support\Facades\Validator::make([], [
                 'nif' => 'O NIF deve ter 10 dígitos ou o BI deve ter 9 números, 2 letras e 3 números (ex: 123456789AB123)'
@@ -281,7 +282,7 @@ class FornecedorController extends Controller
     public function index()
     {
         $modo = $this->getModo();
-        
+
         Log::info('[FornecedorController::index] Listando fornecedores', [
             'user_id' => $this->getUserId(),
             'modo' => $modo,
@@ -318,7 +319,7 @@ class FornecedorController extends Controller
     public function indexWithTrashed()
     {
         $modo = $this->getModo();
-        
+
         Log::info('[FornecedorController::indexWithTrashed] Listando todos os fornecedores', [
             'user_id' => $this->getUserId(),
             'modo' => $modo,
@@ -355,7 +356,7 @@ class FornecedorController extends Controller
     public function indexOnlyTrashed()
     {
         $modo = $this->getModo();
-        
+
         Log::info('[FornecedorController::indexOnlyTrashed] Listando fornecedores deletados', [
             'user_id' => $this->getUserId(),
             'modo' => $modo,
@@ -392,7 +393,7 @@ class FornecedorController extends Controller
     public function show($id)
     {
         $modo = $this->getModo();
-        
+
         Log::info('[FornecedorController::show] Buscando fornecedor', [
             'fornecedor_id' => $id,
             'user_id' => $this->getUserId(),
@@ -437,7 +438,7 @@ class FornecedorController extends Controller
     public function store(Request $request)
     {
         $modo = $this->getModo();
-        
+
         Log::info('[FornecedorController::store] Criando fornecedor', [
             'user_id' => $this->getUserId(),
             'modo' => $modo,
@@ -513,13 +514,14 @@ class FornecedorController extends Controller
                 'modo' => $modo,
             ]);
 
+            AuditLogger::log('Fornecedor Criado', '🏭', ['area' => 'Fornecedores', 'detalhes' => ['fornecedor_id' => $fornecedor->id, 'fornecedor_nome' => $fornecedor->nome]]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Fornecedor criado com sucesso',
                 'data' => $fornecedor,
                 'modo' => $modo,
             ], 201);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
@@ -546,7 +548,7 @@ class FornecedorController extends Controller
     public function update(Request $request, $id)
     {
         $modo = $this->getModo();
-        
+
         Log::info('[FornecedorController::update] Atualizando fornecedor', [
             'fornecedor_id' => $id,
             'user_id' => $this->getUserId(),
@@ -583,7 +585,7 @@ class FornecedorController extends Controller
             // Normaliza NIF se fornecido
             if (isset($dados['nif'])) {
                 $dados['nif'] = $this->validarENormalizarNIF($dados['nif']);
-                
+
                 // Verificar unicidade no tenant (excluindo o próprio)
                 if ($this->nifExisteNoTenant($dados['nif'], $id)) {
                     return response()->json([
@@ -616,13 +618,14 @@ class FornecedorController extends Controller
                 'modo' => $modo,
             ]);
 
+            AuditLogger::log('Fornecedor Editado', '✏️', ['area' => 'Fornecedores', 'detalhes' => ['fornecedor_id' => $fornecedor->id, 'campos_alterados' => array_keys($dados)]]);
+
             return response()->json([
                 'success' => true,
                 'message'    => 'Fornecedor atualizado com sucesso',
                 'data' => $fornecedor->fresh(),
                 'modo' => $modo,
             ]);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
@@ -656,7 +659,7 @@ class FornecedorController extends Controller
     public function destroy($id)
     {
         $modo = $this->getModo();
-        
+
         Log::info('[FornecedorController::destroy] Movendo fornecedor para lixeira', [
             'fornecedor_id' => $id,
             'user_id' => $this->getUserId(),
@@ -683,6 +686,8 @@ class FornecedorController extends Controller
                 'fornecedor_id' => $id,
                 'nome' => $fornecedor->nome,
                 'modo' => $modo,
+            AuditLogger::log('Fornecedor Deletado', '❌', ['area' => 'Fornecedores', 'detalhes' => ['fornecedor_id' => $fornecedor->id, 'tipo_delecao' => 'soft_delete']]);
+
             ]);
 
             return response()->json([
@@ -691,7 +696,6 @@ class FornecedorController extends Controller
                 'data' => $fornecedor,
                 'modo' => $modo,
             ]);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
                 'success' => false,
@@ -719,7 +723,7 @@ class FornecedorController extends Controller
     public function restore($id)
     {
         $modo = $this->getModo();
-        
+
         Log::info('[FornecedorController::restore] Restaurando fornecedor', [
             'fornecedor_id' => $id,
             'user_id' => $this->getUserId(),
@@ -740,6 +744,8 @@ class FornecedorController extends Controller
 
             Log::info('[FornecedorController::restore] Fornecedor restaurado com sucesso', [
                 'fornecedor_id' => $fornecedor->id,
+            AuditLogger::log('Fornecedor Restaurado', '↩️', ['area' => 'Fornecedores', 'detalhes' => ['fornecedor_id' => $fornecedor->id]]);
+
                 'nome' => $fornecedor->nome,
                 'modo' => $modo,
             ]);
@@ -750,7 +756,6 @@ class FornecedorController extends Controller
                 'data' => $fornecedor,
                 'modo' => $modo,
             ]);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
                 'success' => false,
@@ -778,7 +783,7 @@ class FornecedorController extends Controller
     public function forceDelete($id)
     {
         $modo = $this->getModo();
-        
+
         Log::info('[FornecedorController::forceDelete] Deletando permanentemente', [
             'fornecedor_id' => $id,
             'user_id' => $this->getUserId(),
@@ -807,6 +812,8 @@ class FornecedorController extends Controller
             $fornecedor->forceDelete();
 
             Log::info('[FornecedorController::forceDelete] Fornecedor removido permanentemente', [
+            AuditLogger::log('Fornecedor Eliminado Permanentemente', '🗑️', ['area' => 'Fornecedores', 'detalhes' => ['fornecedor_id' => $id]]);
+
                 'fornecedor_id' => $id,
                 'modo' => $modo,
             ]);
@@ -816,7 +823,6 @@ class FornecedorController extends Controller
                 'message' => 'Fornecedor removido permanentemente',
                 'modo' => $modo,
             ]);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
                 'success' => false,

@@ -50,7 +50,7 @@ interface FormData {
   markup: string;
   preco_venda: string;
 
-  // ✅ REMOVIDO: taxa_iva e sujeito_iva para produtos (vem da categoria)
+  //REMOVIDO: taxa_iva e sujeito_iva para produtos (vem da categoria)
   // Apenas para serviços
   taxa_iva: string;
   sujeito_iva: boolean;

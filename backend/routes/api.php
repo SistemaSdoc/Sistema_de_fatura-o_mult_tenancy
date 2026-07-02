@@ -16,6 +16,7 @@ use App\Http\Controllers\RelatoriosController;
 use App\Http\Controllers\LandlordAuthController;
 use App\Http\Controllers\EmpresaController;
 use App\Http\Controllers\PasswordResetController;
+use App\Http\Controllers\AuditoriaController;
 
 $uuidPattern = '[0-9a-fA-F-]{36}';
 
@@ -32,7 +33,7 @@ Route::prefix('landlord')->group(function () {
     Route::post('/register', [LandlordAuthController::class, 'register']);
 
     Route::middleware(['auth:landlord_api'])->group(function () {
-        
+
         Route::post('/logout', [LandlordAuthController::class, 'logout']);
         Route::get('/landlordme', [LandlordAuthController::class, 'landlordme']);
 
@@ -77,7 +78,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
 
     // ===== DASHBOARD =====
     Route::prefix('dashboard')->group(function () {
-        Route::get('/', [DashboardController::class, 'index'])->name('dashboard.index');
+        Route::get('/', [DashboardController::class, 'index'])->middleware('log.panel')->name('dashboard.index');
         Route::get('/resumo-documentos-fiscais', [DashboardController::class, 'resumoDocumentosFiscais'])->name('dashboard.resumo-documentos');
         Route::get('/estatisticas-pagamentos', [DashboardController::class, 'estatisticasPagamentos'])->name('dashboard.estatisticas-pagamentos');
         Route::get('/alertas', [DashboardController::class, 'alertasPendentes'])->name('dashboard.alertas');
@@ -100,6 +101,17 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::post('/{id}/ativar', [ClienteController::class, 'ativar'])->where('id', $uuidPattern)->name('clientes.ativar');
             Route::post('/{id}/inativar', [ClienteController::class, 'inativar'])->where('id', $uuidPattern)->name('clientes.inativar');
         });
+
+        // ---------- AUDITORIA (logs do painel) - APENAS ADMIN/GESTOR ----------
+        Route::prefix('auditoria')->group(function () {
+            Route::get('/logs', [AuditoriaController::class, 'index'])->name('auditoria.logs');
+            Route::get('/datas', [AuditoriaController::class, 'datasDisponiveis'])->name('auditoria.datas');
+        });
+    });
+
+    // ==================== AUDITORIA - TODOS OS UTILIZADORES AUTENTICADOS ====================
+    Route::prefix('auditoria')->group(function () {
+        Route::post('/eventos', [AuditoriaController::class, 'storeEvento'])->name('auditoria.eventos');
     });
 
     // ==================== ADMIN + GESTOR + CONTABLISTA ====================
@@ -107,7 +119,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
 
         // ---------- PRODUTOS ----------
         Route::prefix('produtos')->group(function () use ($uuidPattern) {
-            Route::get('/', [ProdutoController::class, 'index'])->name('produtos.index');
+            Route::get('/', [ProdutoController::class, 'index'])->middleware('log.panel')->name('produtos.index');
             Route::get('/todos', [ProdutoController::class, 'todos'])->name('produtos.todos');
             Route::get('/trashed', [ProdutoController::class, 'trashed'])->name('produtos.trashed');
             Route::post('/{id}/restore', [ProdutoController::class, 'restore'])->where('id', $uuidPattern)->name('produtos.restore');
@@ -122,7 +134,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
         // ---------- CATEGORIAS (COMPLETO) ----------
         Route::prefix('categorias')->group(function () use ($uuidPattern) {
             // ✅ Listagens
-            Route::get('/', [CategoriaController::class, 'index'])->name('categorias.index');                           // Apenas ativas
+            Route::get('/', [CategoriaController::class, 'index'])->middleware('log.panel')->name('categorias.index');                           // Apenas ativas
             Route::get('/todas', [CategoriaController::class, 'indexTodas'])->name('categorias.todas');                 // Todas (inclui inativas)
             Route::get('/deletadas', [CategoriaController::class, 'indexDeletadas'])->name('categorias.deletadas');     // Apenas deletadas (soft delete)
 
@@ -147,7 +159,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::get('/deletados', [FornecedorController::class, 'indexOnlyTrashed'])->name('fornecedores.deletados');
             Route::post('/{id}/restore', [FornecedorController::class, 'restore'])->where('id', $uuidPattern)->name('fornecedores.restore');
             Route::delete('/{id}/force', [FornecedorController::class, 'forceDelete'])->where('id', $uuidPattern)->name('fornecedores.force-delete');
-            Route::get('/', [FornecedorController::class, 'index'])->name('fornecedores.index');
+            Route::get('/', [FornecedorController::class, 'index'])->middleware('log.panel')->name('fornecedores.index');
             Route::post('/', [FornecedorController::class, 'store'])->name('fornecedores.store');
             Route::get('/{id}', [FornecedorController::class, 'show'])->where('id', $uuidPattern)->name('fornecedores.show');
             Route::put('/{id}', [FornecedorController::class, 'update'])->where('id', $uuidPattern)->name('fornecedores.update');
@@ -155,21 +167,22 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
         });
 
         // ---------- CLIENTES ----------
-        Route::apiResource('/clientes', ClienteController::class)->except(['destroy']);
+        Route::get('/clientes', [ClienteController::class, 'index'])->middleware('log.panel')->name('clientes.index');
+        Route::apiResource('/clientes', ClienteController::class)->except(['destroy', 'index']);
         Route::delete('/clientes/{id}', [ClienteController::class, 'destroy'])->where('id', $uuidPattern)->name('clientes.destroy');
         Route::post('/clientes/{id}/ativar', [ClienteController::class, 'ativar'])->where('id', $uuidPattern)->name('clientes.ativar');
         Route::post('/clientes/{id}/inativar', [ClienteController::class, 'inativar'])->where('id', $uuidPattern)->name('clientes.inativar');
 
         // ---------- COMPRAS ----------
         Route::prefix('compras')->group(function () use ($uuidPattern) {
-            Route::get('/', [CompraController::class, 'index'])->name('compras.index');
+            Route::get('/', [CompraController::class, 'index'])->middleware('log.panel')->name('compras.index');
             Route::post('/', [CompraController::class, 'store'])->name('compras.store');
             Route::get('/{id}', [CompraController::class, 'show'])->where('id', $uuidPattern)->name('compras.show');
         });
 
         // ---------- MOVIMENTOS DE STOCK ----------
         Route::prefix('movimentos-stock')->group(function () use ($uuidPattern) {
-            Route::get('/', [MovimentoStockController::class, 'index'])->name('movimentos-stock.index');
+            Route::get('/', [MovimentoStockController::class, 'index'])->middleware('log.panel')->name('movimentos-stock.index');
             Route::post('/', [MovimentoStockController::class, 'store'])->name('movimentos-stock.store');
             Route::post('/ajuste', [MovimentoStockController::class, 'ajuste'])->name('movimentos-stock.ajuste');
             Route::get('/{id}', [MovimentoStockController::class, 'show'])->where('id', $uuidPattern)->name('movimentos-stock.show');
@@ -180,7 +193,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
 
         // ---------- VENDAS ----------
         Route::prefix('vendas')->group(function () use ($uuidPattern) {
-            Route::get('/', [VendaController::class, 'index'])->name('vendas.index');
+            Route::get('/', [VendaController::class, 'index'])->middleware('log.panel')->name('vendas.index');
             Route::post('/', [VendaController::class, 'store'])->name('vendas.store');
             Route::get('/{venda}', [VendaController::class, 'show'])->where('venda', $uuidPattern)->name('vendas.show');
             Route::post('/{venda}/cancelar', [VendaController::class, 'cancelar'])->where('venda', $uuidPattern)->name('vendas.cancelar');
@@ -189,26 +202,26 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
 
         // ---------- DOCUMENTOS FISCAIS (CORRIGIDO) ----------
         Route::prefix('documentos-fiscais')->group(function () use ($uuidPattern) {
-            
+
             // ── Exportação ──
             Route::get('/exportar-excel', [DocumentoFiscalController::class, 'exportarExcel'])->name('documentos.exportar-excel');
-            
+
             // ── Listagens especiais ──
             Route::get('/adiantamentos-pendentes', [DocumentoFiscalController::class, 'adiantamentosPendentes'])->name('documentos.adiantamentos-pendentes');
             Route::get('/proformas-pendentes', [DocumentoFiscalController::class, 'proformasPendentes'])->name('documentos.proformas-pendentes');
             Route::get('/alertas', [DocumentoFiscalController::class, 'alertas'])->name('documentos.alertas');
-            
+
             // ── Dashboard e Processamento ──
             Route::get('/dashboard', [DocumentoFiscalController::class, 'dashboard'])->name('documentos.dashboard');
             Route::post('/processar-expirados', [DocumentoFiscalController::class, 'processarExpirados'])->name('documentos.processar-expirados');
-            
+
             // ── Emissão ──
             Route::post('/emitir', [DocumentoFiscalController::class, 'emitir'])->name('documentos.emitir');
-            
-            // ── Listagem geral ──
-            Route::get('/', [DocumentoFiscalController::class, 'index'])->name('documentos.index');
+
+            // ── Listagem geral (📂 Painel de Documentos Acessado) ──
+            Route::get('/', [DocumentoFiscalController::class, 'index'])->middleware('log.panel')->name('documentos.index');
             Route::get('/{documento}', [DocumentoFiscalController::class, 'show'])->where('documento', $uuidPattern)->name('documentos.show');
-            
+
             // ═══════════════════════════════════════════════════════════
             //  PDF e Impressão
             // ═══════════════════════════════════════════════════════════
@@ -217,7 +230,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::get('/{id}/imprimir-termica', [DocumentoFiscalController::class, 'imprimirTermica'])->where('id', $uuidPattern)->name('documentos.imprimir-termica');
             Route::get('/{id}/print-view', [DocumentoFiscalController::class, 'printView'])->where('id', $uuidPattern)->name('documentos.print');
             Route::get('/{id}/print-a4', [DocumentoFiscalController::class, 'printA4'])->where('id', $uuidPattern)->name('documentos.print-view');
-            
+
             // ═══════════════════════════════════════════════════════════
             //  NOTAS DE CRÉDITO E DÉBITO (Regras Angola)
             // ═══════════════════════════════════════════════════════════
@@ -240,11 +253,11 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::post('/{id}/nota-credito', [DocumentoFiscalController::class, 'criarNotaCredito'])
                 ->where('id', $uuidPattern)
                 ->name('documentos.nota-credito');
-            
+
             Route::post('/{id}/nota-debito', [DocumentoFiscalController::class, 'criarNotaDebito'])
                 ->where('id', $uuidPattern)
                 ->name('documentos.nota-debito');
-            
+
             // ═══════════════════════════════════════════════════════════
             //  🆕 ROTA PARA VISUALIZAÇÃO DEDICADA DE NC/ND
             //  (usada pelo frontend após criação da nota)
@@ -252,7 +265,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::get('/{id}/Ver_NC_ND', [DocumentoFiscalController::class, 'show'])
                 ->where('id', $uuidPattern)
                 ->name('documentos.ver-nc-nd');
-            
+
             // ═══════════════════════════════════════════════════════════
             //  🆕 ROTA PARA CONVERSÃO DE PROFORMA EM FATURA
             //  (importante: FP NÃO é venda, precisa ser convertida)
@@ -260,25 +273,25 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::post('/{id}/converter-proforma', [DocumentoFiscalController::class, 'converterProforma'])
                 ->where('id', $uuidPattern)
                 ->name('documentos.converter-proforma');
-            
+
             // ═══════════════════════════════════════════════════════════
             //  Recibos e Pagamentos
             // ═══════════════════════════════════════════════════════════
             Route::get('/{documento}/recibos', [DocumentoFiscalController::class, 'listarRecibos'])
                 ->where('documento', $uuidPattern)
                 ->name('documentos.recibos');
-            
+
             Route::post('/{id}/recibo', [DocumentoFiscalController::class, 'gerarRecibo'])
                 ->where('id', $uuidPattern)
                 ->name('documentos.gerar-recibo');
-            
+
             // ═══════════════════════════════════════════════════════════
             //  Cancelamento e Vinculação de Adiantamentos
             // ═══════════════════════════════════════════════════════════
             Route::post('/{documento}/cancelar', [DocumentoFiscalController::class, 'cancelar'])
                 ->where('documento', $uuidPattern)
                 ->name('documentos.cancelar');
-            
+
             Route::post('/{id}/vincular-adiantamento', [DocumentoFiscalController::class, 'vincularAdiantamento'])
                 ->where('id', $uuidPattern)
                 ->name('documentos.vincular');
@@ -286,7 +299,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
 
         // ---------- PAGAMENTOS ----------
         Route::prefix('pagamentos')->group(function () use ($uuidPattern) {
-            Route::get('/', [PagamentoController::class, 'index'])->name('pagamentos.index');
+            Route::get('/', [PagamentoController::class, 'index'])->middleware('log.panel')->name('pagamentos.index');
             Route::post('/', [PagamentoController::class, 'store'])->name('pagamentos.store');
             Route::get('/{id}', [PagamentoController::class, 'show'])->where('id', $uuidPattern)->name('pagamentos.show');
             Route::put('/{id}', [PagamentoController::class, 'update'])->where('id', $uuidPattern)->name('pagamentos.update');
@@ -296,7 +309,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
         // ---------- RELATÓRIOS ----------
         Route::prefix('relatorios')->group(function () {
             Route::get('/debug', [RelatoriosController::class, 'debug'])->name('relatorios.debug');
-            Route::get('/dashboard', [RelatoriosController::class, 'dashboard'])->name('relatorios.dashboard');
+            Route::get('/dashboard', [RelatoriosController::class, 'dashboard'])->middleware('log.panel')->name('relatorios.dashboard');
             Route::get('/vendas', [RelatoriosController::class, 'vendas'])->name('relatorios.vendas');
             Route::get('/compras', [RelatoriosController::class, 'compras'])->name('relatorios.compras');
             Route::get('/faturacao', [RelatoriosController::class, 'faturacao'])->name('relatorios.faturacao');
@@ -306,7 +319,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::get('/retencoes', [RelatoriosController::class, 'retencoes'])->name('relatorios.retencoes');
             Route::get('/documentos-fiscais', [RelatoriosController::class, 'documentosFiscais'])->name('relatorios.documentos-fiscais');
             Route::get('/proformas', [RelatoriosController::class, 'proformas'])->name('relatorios.proformas');
-            
+
             // 🆕 Relatório específico de Notas de Crédito/Débito
             Route::get('/notas-correcao', [RelatoriosController::class, 'notasCorrecao'])->name('relatorios.notas-correcao');
         });

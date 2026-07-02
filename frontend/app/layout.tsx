@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/context/ThemeContext";
+import AuditEventListener from "@/components/AuditEventListener";
 
 export const metadata: Metadata = {
   title: {
@@ -13,11 +14,7 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="pt"
@@ -25,13 +22,10 @@ export default function RootLayout({
       className="h-full"
       style={{
         fontFamily: '"Georgia, serif',
-      }}
-    >
-      <body
-        suppressHydrationWarning
-        className="min-h-screen bg-background text-foreground antialiased"
-      >
+      }}>
+      <body suppressHydrationWarning className="min-h-screen bg-background text-foreground antialiased">
         <ThemeProvider>
+          <AuditEventListener />
           {children}
         </ThemeProvider>
       </body>

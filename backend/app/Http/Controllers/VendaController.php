@@ -17,6 +17,7 @@ use App\Models\LandlordUser;
 use App\Models\Shared\User as SharedUser;
 use App\Models\Tenant\User as TenantUser;
 use App\Services\VendaService;
+use App\Services\AuditLogger;
 use Carbon\Carbon;
 
 class VendaController extends Controller
@@ -29,11 +30,11 @@ class VendaController extends Controller
     public function __construct(VendaService $vendaService)
     {
         $this->vendaService = $vendaService;
-        
+
         // ✅ Obtém da sessão (prioridade)
         $this->empresa = app('current.empresa');
         $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
-        
+
         Log::debug('[VendaController] Inicializado', [
             'modo' => $this->modo,
             'empresa_id' => $this->empresa?->id,
@@ -247,7 +248,6 @@ class VendaController extends Controller
                 ],
                 'modo' => $modo,
             ]);
-
         } catch (\Exception $e) {
             Log::error('[VendaController::create] Erro', [
                 'error' => $e->getMessage(),
@@ -335,6 +335,14 @@ class VendaController extends Controller
 
             $vendas = $query->paginate($request->get('per_page', 15));
 
+            AuditLogger::log('Listou Vendas', '📋', [
+                'area' => 'Vendas',
+                'detalhes' => [
+                    'filtros' => $request->only(['status', 'estado_pagamento', 'tipo_documento', 'cliente_id', 'data_inicio', 'data_fim']),
+                    'total' => $vendas->total(),
+                ],
+            ]);
+
             return response()->json([
                 'message' => 'Lista de vendas carregada',
                 'vendas' => $vendas->map(fn($v) => $this->formatarVenda($v)),
@@ -346,7 +354,6 @@ class VendaController extends Controller
                 ],
                 'modo' => $modo,
             ]);
-
         } catch (\Exception $e) {
             Log::error('[VendaController::index] Erro', [
                 'error' => $e->getMessage(),
@@ -374,12 +381,16 @@ class VendaController extends Controller
             $venda = $this->buscarVendaOrFail($id);
             $venda->load(['cliente', 'user', 'itens.produto', 'documentoFiscal.recibos']);
 
+            AuditLogger::log('Visualizou Venda', '👁️', [
+                'area' => 'Vendas',
+                'detalhes' => ['venda_id' => $venda->id],
+            ]);
+
             return response()->json([
                 'message' => 'Venda carregada',
                 'venda' => $this->formatarVenda($venda, true),
                 'modo' => $modo,
             ]);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
                 'message' => 'Venda não encontrada',
@@ -443,12 +454,22 @@ class VendaController extends Controller
                 $dados['tipo_documento'] ?? 'FT'
             );
 
+            AuditLogger::log('Venda Criada', '🛒', [
+                'area' => 'Vendas',
+                'detalhes' => [
+                    'venda_id' => $venda->id,
+                    'cliente_id' => $dados['cliente_id'] ?? null,
+                    'cliente_nome' => $dados['cliente_nome'] ?? null,
+                    'itens' => count($dados['itens'] ?? []),
+                    'tipo_documento' => $dados['tipo_documento'] ?? 'FT',
+                ],
+            ]);
+
             return response()->json([
                 'message' => 'Venda criada com sucesso',
                 'venda' => $this->formatarVenda($venda->load('itens.produto', 'documentoFiscal')),
                 'modo' => $modo,
             ]);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'message' => 'Erro de validação',
@@ -488,12 +509,19 @@ class VendaController extends Controller
 
             $vendaCancelada = $this->vendaService->cancelarVenda($venda->id, $request->motivo);
 
+            AuditLogger::log('Venda Cancelada', '❌', [
+                'area' => 'Vendas',
+                'detalhes' => [
+                    'venda_id' => $vendaCancelada->id,
+                    'motivo' => $request->motivo,
+                ],
+            ]);
+
             return response()->json([
                 'message' => 'Venda cancelada com sucesso',
                 'venda' => $this->formatarVenda($vendaCancelada),
                 'modo' => $modo,
             ]);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
                 'message' => 'Venda não encontrada',
@@ -532,13 +560,21 @@ class VendaController extends Controller
 
             $resultado = $this->vendaService->processarPagamento($venda->id, $dados);
 
+            AuditLogger::log('Recibo de Venda Gerado', '💰', [
+                'area' => 'Vendas',
+                'detalhes' => [
+                    'venda_id' => $venda->id,
+                    'valor' => $dados['valor'] ?? null,
+                    'metodo_pagamento' => $dados['metodo_pagamento'] ?? null,
+                ],
+            ]);
+
             return response()->json([
                 'message' => 'Recibo gerado com sucesso',
                 'recibo' => $resultado['recibo'],
                 'venda' => $this->formatarVenda($resultado['venda']),
                 'modo' => $modo,
             ]);
-
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
                 'message' => 'Venda não encontrada',
@@ -598,7 +634,6 @@ class VendaController extends Controller
                 )->groupBy('data')->orderBy('data')->get(),
                 'modo' => $modo,
             ]);
-
         } catch (\Exception $e) {
             Log::error('[VendaController::estatisticas] Erro', [
                 'error' => $e->getMessage(),
@@ -654,7 +689,6 @@ class VendaController extends Controller
                 'total_geral' => (float) $vendas->sum('total'),
                 'modo' => $modo,
             ]);
-
         } catch (\Exception $e) {
             Log::error('[VendaController::relatorio] Erro', [
                 'error' => $e->getMessage(),

@@ -22,6 +22,7 @@ use App\Models\Empresa;
 use App\Models\LandlordUser;
 use App\Models\Shared\User as SharedUser;
 use App\Models\Tenant\User as TenantUser;
+use App\Services\AuditLogger;
 use App\Services\ProdutoService;
 use Carbon\Carbon;
 use Throwable;
@@ -36,11 +37,11 @@ class ProdutoController extends Controller
     public function __construct(ProdutoService $produtoService)
     {
         $this->produtoService = $produtoService;
-        
+
         // ✅ Obtém da sessão (prioridade máxima)
         $this->empresa = app('current.empresa');
         $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
-        
+
         Log::debug('[ProdutoController] Inicializado', [
             'modo' => $this->modo,
             'empresa_id' => $this->empresa?->id,
@@ -339,7 +340,6 @@ class ProdutoController extends Controller
                 'produtos' => $produtos,
                 'modo' => $modo,
             ]);
-
         } catch (\Exception $e) {
             Log::error('[ProdutoController::index] Erro', [
                 'error' => $e->getMessage(),
@@ -370,9 +370,9 @@ class ProdutoController extends Controller
 
             if ($request->filled('busca')) {
                 $busca = $request->busca;
-                $query->where(function($q) use ($busca) {
+                $query->where(function ($q) use ($busca) {
                     $q->where('nome', 'like', "%{$busca}%")
-                      ->orWhere('codigo', 'like', "%{$busca}%");
+                        ->orWhere('codigo', 'like', "%{$busca}%");
                 });
             }
 
@@ -396,7 +396,6 @@ class ProdutoController extends Controller
                 'total'     => $produtos->count(),
                 'modo' => $modo,
             ]);
-
         } catch (\Exception $e) {
             Log::error('[ProdutoController::todos] Erro', [
                 'error' => $e->getMessage(),
@@ -424,9 +423,9 @@ class ProdutoController extends Controller
 
             if ($request->filled('busca')) {
                 $busca = $request->busca;
-                $query->where(function($q) use ($busca) {
+                $query->where(function ($q) use ($busca) {
                     $q->where('nome', 'like', "%{$busca}%")
-                      ->orWhere('codigo', 'like', "%{$busca}%");
+                        ->orWhere('codigo', 'like', "%{$busca}%");
                 });
             }
 
@@ -458,7 +457,6 @@ class ProdutoController extends Controller
                     : $produtos->count(),
                 'modo' => $modo,
             ]);
-
         } catch (\Exception $e) {
             Log::error('[ProdutoController::trashed] Erro', [
                 'error' => $e->getMessage(),
@@ -491,7 +489,6 @@ class ProdutoController extends Controller
                 'servicos'         => $produtos->where('tipo', 'servico')->count(),
                 'modo' => $modo,
             ]);
-
         } catch (\Exception $e) {
             Log::error('[ProdutoController::indexWithTrashed] Erro', [
                 'error' => $e->getMessage(),
@@ -515,7 +512,7 @@ class ProdutoController extends Controller
 
             if ($request->filled('busca')) {
                 $busca = $request->busca;
-                $query->where(fn ($q) => $q->where('nome', 'like', "%{$busca}%")->orWhere('codigo', 'like', "%{$busca}%"));
+                $query->where(fn($q) => $q->where('nome', 'like', "%{$busca}%")->orWhere('codigo', 'like', "%{$busca}%"));
             }
             if ($request->filled('tipo')) {
                 $query->where('tipo', $request->tipo);
@@ -539,7 +536,6 @@ class ProdutoController extends Controller
                     : $produtos->count(),
                 'modo' => $modo,
             ]);
-
         } catch (\Exception $e) {
             Log::error('[ProdutoController::indexOnlyTrashed] Erro', [
                 'error' => $e->getMessage(),
@@ -565,7 +561,7 @@ class ProdutoController extends Controller
             $this->verificarAcessoUsuario();
 
             $produto = $this->buscarProdutoOrFail($id, true);
-            $produto->load(['categoria', 'fornecedor', 'movimentosStock' => fn ($q) => $q->limit(10)]);
+            $produto->load(['categoria', 'fornecedor', 'movimentosStock' => fn($q) => $q->limit(10)]);
 
             $produtoArray = $produto->toArray();
             $produtoArray['taxa_iva_efectiva'] = $produto->taxa_iva_efectiva ?? $produto->taxa_iva ?? 0;
@@ -575,7 +571,6 @@ class ProdutoController extends Controller
                 'produto' => $produtoArray,
                 'modo' => $modo,
             ]);
-
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'message' => 'Produto não encontrado',
@@ -618,6 +613,8 @@ class ProdutoController extends Controller
             $produto = $this->produtoService->criarProduto($dados);
             $produto->load('categoria');
 
+            AuditLogger::log('Produto Criado', '📦', ['area' => 'Produtos', 'detalhes' => ['produto_id' => $produto->id, 'produto_nome' => $produto->nome]]);
+
             $resposta = $produto->toArray();
             $resposta['taxa_iva_efectiva'] = $produto->taxa_iva_efectiva ?? $produto->taxa_iva ?? 0;
 
@@ -626,7 +623,6 @@ class ProdutoController extends Controller
                 'produto' => $resposta,
                 'modo' => $modo,
             ], 201);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'message' => 'Erro de validação',
@@ -672,6 +668,8 @@ class ProdutoController extends Controller
             $produto = $this->produtoService->editarProduto($id, $dados);
             $produto->load('categoria');
 
+            AuditLogger::log('Produto Editado', '✏️', ['area' => 'Produtos', 'detalhes' => ['produto_id' => $produto->id, 'campos_alterados' => array_keys($dados)]]);
+
             $resposta = $produto->toArray();
             $resposta['taxa_iva_efectiva'] = $produto->taxa_iva_efectiva ?? $produto->taxa_iva ?? 0;
 
@@ -680,7 +678,6 @@ class ProdutoController extends Controller
                 'produto' => $resposta,
                 'modo' => $modo,
             ]);
-
         } catch (ModelNotFoundException $e) {
             return response()->json(['message' => 'Produto não encontrado'], 404);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -721,12 +718,13 @@ class ProdutoController extends Controller
             $status = $request->validate(['status' => 'required|in:ativo,inativo'])['status'];
             $produto = $this->produtoService->alterarStatus($id, $status);
 
+            AuditLogger::log('Produto Status Alterado', '🔄', ['area' => 'Produtos', 'detalhes' => ['produto_id' => $produto->id, 'novo_status' => $status]]);
+
             return response()->json([
                 'message' => 'Status actualizado',
                 'produto' => $produto,
                 'modo' => $modo,
             ]);
-
         } catch (ModelNotFoundException $e) {
             return response()->json(['message' => 'Produto não encontrado'], 404);
         } catch (\Exception $e) {
@@ -764,11 +762,11 @@ class ProdutoController extends Controller
             if ($this->isColectivo()) {
                 $vendasPendentes = SharedItemVenda::doTenant()
                     ->where('produto_id', $id)
-                    ->whereHas('venda', fn ($q) => $q->where('status', 'pendente'))
+                    ->whereHas('venda', fn($q) => $q->where('status', 'pendente'))
                     ->exists();
             } else {
                 $vendasPendentes = TenantItemVenda::where('produto_id', $id)
-                    ->whereHas('venda', fn ($q) => $q->where('status', 'pendente'))
+                    ->whereHas('venda', fn($q) => $q->where('status', 'pendente'))
                     ->exists();
             }
 
@@ -778,6 +776,8 @@ class ProdutoController extends Controller
 
             $produto->delete();
 
+            AuditLogger::log('Produto Deletado', '❌', ['area' => 'Produtos', 'detalhes' => ['produto_id' => $produto->id, 'tipo_delecao' => 'soft_delete']]);
+
             return response()->json([
                 'message'      => 'Produto removido com sucesso',
                 'soft_deleted' => true,
@@ -785,7 +785,6 @@ class ProdutoController extends Controller
                 'deleted_at'   => $produto->deleted_at,
                 'modo' => $modo,
             ]);
-
         } catch (QueryException $e) {
             if ($e->getCode() == 23000 || str_contains($e->getMessage(), 'foreign key constraint')) {
                 return response()->json([
@@ -847,12 +846,13 @@ class ProdutoController extends Controller
 
             $produto->restore();
 
+            AuditLogger::log('Produto Restaurado', '↩️', ['area' => 'Produtos', 'detalhes' => ['produto_id' => $produto->id]]);
+
             return response()->json([
                 'message' => 'Produto restaurado com sucesso',
                 'produto' => $produto->fresh(['categoria', 'fornecedor']),
                 'modo' => $modo,
             ]);
-
         } catch (ModelNotFoundException $e) {
             return response()->json(['message' => 'Produto não encontrado na lixeira'], 404);
         } catch (Throwable $e) {
@@ -933,12 +933,13 @@ class ProdutoController extends Controller
             $nome = $produto->nome;
             $produto->forceDelete();
 
+            AuditLogger::log('Produto Eliminado Permanentemente', '🗑️', ['area' => 'Produtos', 'detalhes' => ['produto_id' => $id]]);
+
             return response()->json([
                 'message' => "Produto \"{$nome}\" removido permanentemente",
                 'id'      => $id,
                 'modo' => $modo,
             ]);
-
         } catch (ModelNotFoundException $e) {
             return response()->json(['message' => 'Produto não encontrado na lixeira'], 404);
         } catch (Throwable $e) {
@@ -973,19 +974,22 @@ class ProdutoController extends Controller
                 ->join('produtos', 'itens_venda.produto_id', '=', 'produtos.id')
                 ->join('vendas', 'itens_venda.venda_id', '=', 'vendas.id')
                 ->where('vendas.status', '!=', 'cancelada')
-                ->when($dataInicio, fn ($q) => $q->whereDate('vendas.data_venda', '>=', $dataInicio))
-                ->when($dataFim,    fn ($q) => $q->whereDate('vendas.data_venda', '<=', $dataFim));
+                ->when($dataInicio, fn($q) => $q->whereDate('vendas.data_venda', '>=', $dataInicio))
+                ->when($dataFim,    fn($q) => $q->whereDate('vendas.data_venda', '<=', $dataFim));
 
             // ⭐ FILTRO DE TENANT (apenas para colectivo)
             if ($this->isColectivo() && $this->empresa) {
                 $query->where('produtos.tenant_id', $this->empresa->id)
-                      ->where('itens_venda.tenant_id', $this->empresa->id)
-                      ->where('vendas.tenant_id', $this->empresa->id);
+                    ->where('itens_venda.tenant_id', $this->empresa->id)
+                    ->where('vendas.tenant_id', $this->empresa->id);
             }
 
             $maisVendidos = (clone $query)
                 ->select(
-                    'produtos.id', 'produtos.nome', 'produtos.codigo', 'produtos.tipo',
+                    'produtos.id',
+                    'produtos.nome',
+                    'produtos.codigo',
+                    'produtos.tipo',
                     DB::raw('SUM(itens_venda.quantidade) as total_quantidade'),
                     DB::raw('SUM(itens_venda.subtotal) as total_vendas')
                 )
@@ -993,7 +997,7 @@ class ProdutoController extends Controller
                 ->orderByDesc('total_vendas')
                 ->limit(10)
                 ->get()
-                ->map(fn ($i) => [
+                ->map(fn($i) => [
                     'id'          => $i->id,
                     'produto'     => $i->nome,
                     'codigo'      => $i->codigo,
@@ -1015,7 +1019,6 @@ class ProdutoController extends Controller
                 ],
                 'modo' => $modo,
             ]);
-
         } catch (\Exception $e) {
             Log::error('[ProdutoController::estatisticas] Erro', [
                 'error' => $e->getMessage(),
@@ -1112,6 +1115,6 @@ class ProdutoController extends Controller
             'status'       => $request->status,
             'categoria_id' => $request->categoria_id,
             'busca'        => $request->busca,
-        ], fn ($v) => !is_null($v) && $v !== '');
+        ], fn($v) => !is_null($v) && $v !== '');
     }
 }

@@ -78,7 +78,7 @@ export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira, onE
         if (isServicoItem) {
             return {
                 label: getTaxaIVALabel(item.taxa_iva || 0, item.sujeito_iva ?? true),
-                cor: item.sujeito_iva ? colors.primary : colors.textSecondary,
+                cor: item.sujeito_iva ? colors.secondary : colors.textSecondary,
                 isento: !item.sujeito_iva
             };
         }
@@ -86,7 +86,7 @@ export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira, onE
         if (categoria) {
             return {
                 label: getTaxaIVALabel(categoria.taxa_iva || 0, categoria.sujeito_iva ?? true),
-                cor: categoria.sujeito_iva ? colors.primary : colors.textSecondary,
+                cor: categoria.sujeito_iva ? colors.secondary : colors.textSecondary,
                 isento: !categoria.sujeito_iva
             };
         }
@@ -136,7 +136,7 @@ export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira, onE
                                     <td className="py-3 px-4">
                                         <span
                                             className="inline-flex items-center gap-1 px-2 py-1 text-xs"
-                                            style={{ backgroundColor: badgeStyle.bg, color: badgeStyle.text }}
+                                            style={{background:colors.border, color: colors.secondary }}
                                         >
                                             {tipoBadge.texto}
                                         </span>
@@ -146,11 +146,9 @@ export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira, onE
                                         <span
                                             className="inline-flex items-center gap-1 px-2 py-1 text-xs"
                                             style={{
-                                                backgroundColor: ivaDisplay.isento ? `${colors.textSecondary}15` : `${colors.primary}15`,
                                                 color: ivaDisplay.cor
                                             }}
                                         >
-                                            <Percent className="w-3 h-3" />
                                             {ivaDisplay.label}
                                         </span>
                                     </td>
@@ -231,7 +229,7 @@ export function TabelaItens({ itens, onRegistrarEntrada, onMoverParaLixeira, onE
                                 <span
                                     className="inline-flex items-center gap-1 px-2 py-1 text-xs"
                                     style={{
-                                        backgroundColor: ivaDisplay.isento ? `${colors.textSecondary}15` : `${colors.primary}15`,
+                                        backgroundColor: ivaDisplay.isento ? `${colors.textSecondary}` : `${colors.primary}`,
                                         color: ivaDisplay.cor
                                     }}
                                 >
