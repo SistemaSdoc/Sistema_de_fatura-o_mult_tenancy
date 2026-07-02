@@ -79,7 +79,7 @@ interface AuthProviderProps {
 }
 
 // Rotas que NÃO precisam de autenticação (não chamam /me)
-const NO_AUTH_ROUTES = ["/", "/login", "/register", "/forgot-password", "/reset-password"];
+const NO_AUTH_ROUTES = ["/", "/login", "/register", "/forgot-password", "/reset-password", "/auth/callback", "/dashboard/configuracoes", "/onboarding"];
 
 // Roles permitidas no sistema
 const ALLOWED_ROLES = [
@@ -92,9 +92,9 @@ const ALLOWED_ROLES = [
 // Mapa de redirecionamento por role
 const REDIRECT_MAP: Record<string, string> = {
     admin: "/dashboard",
-    gestor: "/dashboard/Produtos_servicos/Stock",        
-    contablista: "/dashboard/relatorios",                
-    operador: "/dashboard/Vendas/Nova_venda",                                  
+    gestor: "/dashboard/Produtos_servicos/Stock",
+    contablista: "/dashboard/relatorios",
+    operador: "/dashboard/Vendas/Nova_venda",
 };
 
 export function AuthProvider({ children }: AuthProviderProps) {
@@ -133,7 +133,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
                     console.warn("[AuthProvider] Role não reconhecida:", userData.role);
                     setUser(null);
                     clearTenant();
-                    
+
                     // Se não estiver na página de login, redireciona
                     if (!isNoAuthRoute && pathname !== "/login") {
                         router.replace("/login");
@@ -167,17 +167,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
     }, [isNoAuthRoute, pathname, router]);
 
-    // ========== MOUNT EFFECT ==========
+    // ========== MOUNT / PATHNAME-CHANGE EFFECT ==========
     useEffect(() => {
+        // Rota pública: nunca marca hasFetched, apenas libera o loading.
+        // Isso permite que, ao navegar depois para uma rota protegida
+        // (ex: /auth/callback -> /dashboard), o fetchUser seja
+        // disparado normalmente, já com o tenant salvo.
+        if (isNoAuthRoute) {
+            setLoading(false);
+            return;
+        }
+
         if (hasFetched.current) return;
         hasFetched.current = true;
 
-        // ✅ Só executa fetchUser se NÃO for rota sem autenticação
-        if (!isNoAuthRoute) {
-            fetchUser();
-        } else {
-            setLoading(false);
-        }
+        fetchUser();
     }, [fetchUser, isNoAuthRoute]);
 
     // ========== LOGIN ==========
@@ -239,12 +243,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
                 // ========== REDIRECIONAMENTO POR ROLE ==========
                 const destination = REDIRECT_MAP[userData.role] || "/dashboard";
-                
+
                 console.log("[AuthProvider] Redirecionando para:", {
                     role: userData.role,
                     destination,
                 });
-                
+
                 router.replace(destination);
 
                 return { success: true };

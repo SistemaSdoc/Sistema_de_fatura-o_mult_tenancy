@@ -81,8 +81,8 @@ protected function verificarAcessoUsuario(): void
     }
     $this->modo = $this->empresa->modo ?? 'colectivo';
 
-    // 2️⃣ Tenta obter via guard landlord
-    $landlordUser = Auth::guard('landlord')->user();
+    // 2️⃣ Tenta obter via guard landlord_api
+    $landlordUser = Auth::guard('landlord_api')->user();
 
     // 3️⃣ Fallback: se falhar, tenta obter da sessão
     if (!$landlordUser) {
@@ -98,7 +98,7 @@ protected function verificarAcessoUsuario(): void
     if (!$landlordUser) {
         Log::error('StockService: Utilizador landlord não autenticado.', [
             'session' => session()->all(),
-            'guard_landlord_check' => Auth::guard('landlord')->check(),
+            'guard_landlord_check' => Auth::guard('landlord_api')->check(),
         ]);
         throw new \Exception('Usuário não autenticado.', 401);
     }

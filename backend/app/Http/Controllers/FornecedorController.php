@@ -686,9 +686,9 @@ class FornecedorController extends Controller
                 'fornecedor_id' => $id,
                 'nome' => $fornecedor->nome,
                 'modo' => $modo,
-            AuditLogger::log('Fornecedor Deletado', '❌', ['area' => 'Fornecedores', 'detalhes' => ['fornecedor_id' => $fornecedor->id, 'tipo_delecao' => 'soft_delete']]);
-
             ]);
+
+            AuditLogger::log('Fornecedor Deletado', '❌', ['area' => 'Fornecedores', 'detalhes' => ['fornecedor_id' => $fornecedor->id, 'tipo_delecao' => 'soft_delete']]);
 
             return response()->json([
                 'success' => true,
@@ -744,11 +744,11 @@ class FornecedorController extends Controller
 
             Log::info('[FornecedorController::restore] Fornecedor restaurado com sucesso', [
                 'fornecedor_id' => $fornecedor->id,
-            AuditLogger::log('Fornecedor Restaurado', '↩️', ['area' => 'Fornecedores', 'detalhes' => ['fornecedor_id' => $fornecedor->id]]);
-
                 'nome' => $fornecedor->nome,
                 'modo' => $modo,
             ]);
+
+            AuditLogger::log('Fornecedor Restaurado', '↩️', ['area' => 'Fornecedores', 'detalhes' => ['fornecedor_id' => $fornecedor->id]]);
 
             return response()->json([
                 'success' => true,
@@ -812,11 +812,11 @@ class FornecedorController extends Controller
             $fornecedor->forceDelete();
 
             Log::info('[FornecedorController::forceDelete] Fornecedor removido permanentemente', [
-            AuditLogger::log('Fornecedor Eliminado Permanentemente', '🗑️', ['area' => 'Fornecedores', 'detalhes' => ['fornecedor_id' => $id]]);
-
                 'fornecedor_id' => $id,
                 'modo' => $modo,
             ]);
+
+            AuditLogger::log('Fornecedor Eliminado Permanentemente', '🗑️', ['area' => 'Fornecedores', 'detalhes' => ['fornecedor_id' => $id]]);
 
             return response()->json([
                 'success' => true,

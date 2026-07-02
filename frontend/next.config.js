@@ -7,10 +7,7 @@ const nextConfig = {
   },
 
   compiler: {
-    removeConsole:
-      process.env.NODE_ENV === "production"
-        ? { exclude: ["error"] }
-        : false,
+    removeConsole: process.env.NODE_ENV === "production" ? { exclude: ["error"] } : false,
   },
 
   images: {
@@ -21,11 +18,6 @@ const nextConfig = {
   // allowedDevOrigins: [
   //   "localhost",
   //   "127.0.0.1",
-  //   "192.168.1.192",
-  //   "192.168.1.198",
-  //   "192.168.1.*",
-  //   "192.168.0.*",
-  //   "10.*",
   // ],
 };
 

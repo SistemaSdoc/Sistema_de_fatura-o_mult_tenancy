@@ -37,15 +37,19 @@ class LandlordUser extends Authenticatable implements MustVerifyEmail
         'ativo',
         'ultimo_login',
         'email_verified_at',
+        'google_id',            // OAuth2 Google
+        'google_name',          // Nome do Google
+        'google_avatar',        // Avatar do Google
+        'oauth_verified',       // Flag de OAuth2
     ];
 
     protected $hidden = ['password', 'remember_token'];
-    
+
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
         'ativo' => 'boolean',
-        'ultimo_login' => 'datetime',
+        'oauth_verified' => 'boolean',
     ];
 
     protected static function boot(): void
@@ -91,12 +95,12 @@ class LandlordUser extends Authenticatable implements MustVerifyEmail
         if ($this->ehSuperAdmin()) {
             return true;
         }
-        
+
         // Suporte pode acessar se estiver em modo atendimento
         if ($this->ehSuporte()) {
             return $this->empresa_id_atual === $empresaId;
         }
-        
+
         return false;
     }
 
@@ -108,7 +112,7 @@ class LandlordUser extends Authenticatable implements MustVerifyEmail
     public function sincronizarTenantUser(): TenantUser
     {
         $empresaId = $this->empresa_id_atual ?? $this->empresa_id;
-        
+
         if (!$empresaId) {
             throw new \RuntimeException('Nenhuma empresa em atendimento ou vinculada');
         }
@@ -129,7 +133,7 @@ class LandlordUser extends Authenticatable implements MustVerifyEmail
     public function tenantUser(): ?TenantUser
     {
         $empresaId = $this->empresa_id_atual ?? $this->empresa_id;
-        
+
         if (!$empresaId) {
             return null;
         }

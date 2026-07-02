@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/context/ThemeContext";
+import { AuthProvider } from "@/context/authprovider"; // ajuste o caminho/case certinho
 import AuditEventListener from "@/components/AuditEventListener";
 
 export const metadata: Metadata = {
@@ -25,8 +26,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       }}>
       <body suppressHydrationWarning className="min-h-screen bg-background text-foreground antialiased">
         <ThemeProvider>
-          <AuditEventListener />
-          {children}
+          <AuthProvider>
+            <AuditEventListener />
+            {children}
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

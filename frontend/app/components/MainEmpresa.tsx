@@ -105,7 +105,9 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
   const userRole = user?.role || "";
   const userEmail = user?.email || "";
   const userInitial = userName.charAt(0).toUpperCase();
-  const logoFromServer = `http://192.168.1.192:8000/storage/${companyLogo || user?.empresa?.logo || null}`;
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const logoPath = companyLogo || user?.empresa?.logo || null;
+  const logoFromServer = logoPath ? `${backendUrl}/storage/${logoPath}` : null;
 
   // FUNÇÃO PARA VALIDAR E FORMATAR URL DA IMAGEM
   const getValidImageUrl = (logo: string | null | undefined): string | null => {

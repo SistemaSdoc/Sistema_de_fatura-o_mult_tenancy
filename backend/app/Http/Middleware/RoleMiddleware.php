@@ -18,8 +18,8 @@ class RoleMiddleware
      */
     public function handle(Request $request, Closure $next, ...$roles)
     {
-        // ✅ 1. Verifica autenticação no guard landlord (onde o login foi feito)
-        if (!Auth::guard('landlord')->check()) {
+        // ✅ 1. Verifica autenticação no guard landlord_api (onde o login foi feito)
+        if (!Auth::guard('landlord_api')->check()) {
             Log::warning('[ROLE] Usuário não autenticado no landlord', [
                 'path' => $request->path(),
             ]);
@@ -27,7 +27,7 @@ class RoleMiddleware
         }
 
         // ✅ 2. Obtém o landlord user
-        $landlordUser = Auth::guard('landlord')->user();
+        $landlordUser = Auth::guard('landlord_api')->user();
         
         // ✅ 3. Obtém o tenant_id da sessão
         $tenantId = session('tenant_id');

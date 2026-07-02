@@ -17,6 +17,7 @@ use App\Http\Controllers\LandlordAuthController;
 use App\Http\Controllers\EmpresaController;
 use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\AuditoriaController;
+use App\Http\Controllers\FreelancerController;
 
 $uuidPattern = '[0-9a-fA-F-]{36}';
 
@@ -32,10 +33,18 @@ Route::prefix('landlord')->group(function () {
     Route::post('/login', [LandlordAuthController::class, 'login']);
     Route::post('/register', [LandlordAuthController::class, 'register']);
 
+    // ✅ OAUTH2 - Google (públicas)
+    Route::get('/auth/google', [LandlordAuthController::class, 'redirectToGoogle'])->name('landlord.google.redirect');
+    Route::get('/auth/google/callback', [LandlordAuthController::class, 'handleGoogleCallback'])->name('landlord.google.callback');
+
     Route::middleware(['auth:landlord_api'])->group(function () {
 
         Route::post('/logout', [LandlordAuthController::class, 'logout']);
         Route::get('/landlordme', [LandlordAuthController::class, 'landlordme']);
+
+        // ✅ FREELANCER - Pessoa Coletiva/Singular
+        Route::post('/freelancer/empresa', [FreelancerController::class, 'criarEmpresaSingular']);
+        Route::get('/freelancer/onboarding', [FreelancerController::class, 'obterStatusOnboarding']);
 
         Route::get('/empresas', [EmpresaController::class, 'index']);
         Route::post('/empresas', [EmpresaController::class, 'store']);

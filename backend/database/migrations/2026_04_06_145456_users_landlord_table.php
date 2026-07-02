@@ -23,6 +23,10 @@ return new class extends Migration
             // Null = super admin (acessa tudo)
             $table->uuid('empresa_id')->nullable();
             $table->foreign('empresa_id')->references('id')->on('empresas')->nullOnDelete();
+
+            // 🔗 Empresa atualmente selecionada/ativa para o usuário (contexto de sessão)
+            $table->uuid('empresa_id_atual')->nullable();
+            $table->foreign('empresa_id_atual')->references('id')->on('empresas')->nullOnDelete();
             
             // Dados básicos
             $table->string('name');

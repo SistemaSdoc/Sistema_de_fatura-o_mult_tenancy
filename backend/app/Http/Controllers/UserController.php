@@ -70,48 +70,52 @@ class UserController extends Controller
      | VERIFICAÇÃO DE ACESSO
      | ================================================================== */
 
-    protected function verificarAcessoUsuario(): void
-    {
-        Log::debug('[UserController] Verificando acesso');
+protected function verificarAcessoUsuario(): void
+{
+    Log::debug('[UserController] Verificando acesso');
 
-        $this->empresa = app('current.empresa');
-        if (!$this->empresa) {
-            Log::error('[UserController] Empresa não identificada.');
-            throw new \Exception('Empresa não identificada.', 400);
-        }
-
-        $this->modo = $this->empresa->modo ?? 'colectivo';
-
-        $landlordUser = Auth::guard('landlord')->user();
-
-        if (!$landlordUser) {
-            $landlordId = session('landlord_user_id');
-            if ($landlordId) {
-                $landlordUser = LandlordUser::find($landlordId);
-            }
-        }
-
-        if (!$landlordUser) {
-            Log::error('[UserController] Utilizador landlord não autenticado.');
-            throw new \Exception('Usuário não autenticado.', 401);
-        }
-
-        $tenantUser = $this->buscarUsuario($this->empresa, $landlordUser->email);
-        if (!$tenantUser) {
-            Log::error('[UserController] Utilizador tenant não encontrado.', [
-                'email' => $landlordUser->email,
-            ]);
-            throw new \Exception('Usuário não tem permissão para aceder a esta empresa.', 403);
-        }
-
-        $this->tenantUser = $tenantUser;
-
-        Log::info('[UserController] Acesso verificado com sucesso', [
-            'modo' => $this->modo,
-            'user_id' => $tenantUser->id,
-            'email' => $tenantUser->email,
-        ]);
+    $this->empresa = app('current.empresa');
+    if (!$this->empresa) {
+        Log::error('[UserController] Empresa não identificada.');
+        throw new \Exception('Empresa não identificada.', 400);
     }
+
+    $this->modo = $this->empresa->modo ?? 'colectivo';
+
+    // ⚠️ CORRIGIDO: era 'landlord', mas o login (normal e Google)
+    // sempre autentica no guard 'landlord_api'. Guards diferentes
+    // usam chaves de sessão diferentes, então 'landlord' nunca
+    // encontrava o usuário logado.
+    $landlordUser = Auth::guard('landlord_api')->user();
+
+    if (!$landlordUser) {
+        $landlordId = session('landlord_user_id');
+        if ($landlordId) {
+            $landlordUser = LandlordUser::find($landlordId);
+        }
+    }
+
+    if (!$landlordUser) {
+        Log::error('[UserController] Utilizador landlord não autenticado.');
+        throw new \Exception('Usuário não autenticado.', 401);
+    }
+
+    $tenantUser = $this->buscarUsuario($this->empresa, $landlordUser->email);
+    if (!$tenantUser) {
+        Log::error('[UserController] Utilizador tenant não encontrado.', [
+            'email' => $landlordUser->email,
+        ]);
+        throw new \Exception('Usuário não tem permissão para aceder a esta empresa.', 403);
+    }
+
+    $this->tenantUser = $tenantUser;
+
+    Log::info('[UserController] Acesso verificado com sucesso', [
+        'modo' => $this->modo,
+        'user_id' => $tenantUser->id,
+        'email' => $tenantUser->email,
+    ]);
+}
 
     protected function buscarUsuario(Empresa $empresa, string $email): ?object
     {
