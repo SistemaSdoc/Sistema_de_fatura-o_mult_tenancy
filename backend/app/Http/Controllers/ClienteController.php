@@ -93,7 +93,7 @@ class ClienteController extends Controller
         $this->modo = $this->empresa->modo ?? 'colectivo';
 
         // 2️⃣ Obtém o landlord user (guard onde o login foi feito)
-        $landlordUser = Auth::guard('landlord')->user();
+       $landlordUser = Auth::guard('landlord_api')->user();
 
         // 3️⃣ Fallback: tenta obter da sessão
         if (!$landlordUser) {

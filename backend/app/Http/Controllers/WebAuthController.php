@@ -583,8 +583,9 @@ class WebAuthController extends Controller
             ]
         );
 
-        // Login no guard landlord
+        // Login no guard landlord e landlord_api para alinhar com o fluxo Google
         Auth::guard('landlord')->login($landlordUser);
+        Auth::guard('landlord_api')->login($landlordUser);
         $request->session()->regenerate();
 
         // Armazena dados do tenant e usuário na sessão

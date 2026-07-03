@@ -25,7 +25,7 @@ class UserController extends Controller
     {
         // ✅ Obtém da sessão (prioridade)
         $this->empresa = app('current.empresa');
-        $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
+       $this->modo = session('tenant_modo') ?? $this->empresa?->modo ?? 'colectivo';
 
         Log::debug('[UserController] Inicializado', [
             'modo' => $this->modo,
@@ -37,12 +37,11 @@ class UserController extends Controller
      | HELPERS
      | ================================================================== */
 
-    protected function getModo(): string
-    {
-        $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
-        return $this->modo;
-    }
-
+protected function getModo(): string
+{
+    $this->modo = session('tenant_modo') ?? $this->empresa?->modo ?? 'colectivo';
+    return $this->modo;
+}
     protected function getEmpresa(): ?Empresa
     {
         if (!$this->empresa) {
@@ -82,23 +81,12 @@ protected function verificarAcessoUsuario(): void
 
     $this->modo = $this->empresa->modo ?? 'colectivo';
 
-    // ⚠️ CORRIGIDO: era 'landlord', mas o login (normal e Google)
-    // sempre autentica no guard 'landlord_api'. Guards diferentes
-    // usam chaves de sessão diferentes, então 'landlord' nunca
-    // encontrava o usuário logado.
-    $landlordUser = Auth::guard('landlord_api')->user();
-
-    if (!$landlordUser) {
-        $landlordId = session('landlord_user_id');
-        if ($landlordId) {
-            $landlordUser = LandlordUser::find($landlordId);
+        // ⚠️ Tenta ambos os guards para garantir consistência entre
+        // login normal e login Google.
+        $landlordUser = Auth::guard('landlord_api')->user();
+        if (!$landlordUser) {
+            $landlordUser = Auth::guard('landlord')->user();
         }
-    }
-
-    if (!$landlordUser) {
-        Log::error('[UserController] Utilizador landlord não autenticado.');
-        throw new \Exception('Usuário não autenticado.', 401);
-    }
 
     $tenantUser = $this->buscarUsuario($this->empresa, $landlordUser->email);
     if (!$tenantUser) {

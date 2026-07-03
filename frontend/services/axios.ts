@@ -320,7 +320,7 @@ export const authApi = {
 
   logout: () => tenantApi.post("/logout"),
 
-  me: () => tenantApi.get("api/me"),
+  me: () => tenantApi.get("/api/me"),
 
   // Rotas de empresa (tenant)
   empresa: {

@@ -79,7 +79,35 @@ interface AuthProviderProps {
 }
 
 // Rotas que NÃO precisam de autenticação (não chamam /me)
-const NO_AUTH_ROUTES = ["/", "/login", "/register", "/forgot-password", "/reset-password", "/auth/callback", "/dashboard/configuracoes", "/onboarding"];
+const NO_AUTH_ROUTES = ["/", "/login", "/register", "/forgot-password", "/reset-password", "/auth/callback", "/onboarding"];
+
+const hasIncompleteEmpresaConfig = (empresa: Empresa): boolean => {
+    if (!empresa) return false;
+    if (empresa.modo !== undefined && empresa.modo !== "singular") return false;
+
+    const missing = [
+        empresa.nome_banco,
+        empresa.numero_conta,
+        empresa.iban,
+        empresa.telefone,
+        empresa.endereco,
+    ];
+
+    return missing.some((value) => !value || value.toString().trim() === "");
+};
+
+const shouldRedirectToOnboarding = (pathname: string | null, user: User | null): boolean => {
+    if (!pathname || !pathname.startsWith("/dashboard")) return false;
+    if (!user) return false;
+    return !user.empresa?.id;
+};
+
+const shouldRedirectToConfiguracoes = (pathname: string | null, user: User | null): boolean => {
+    if (!pathname || !pathname.startsWith("/dashboard")) return false;
+    if (!user || !user.empresa?.id) return false;
+    if (pathname === "/dashboard/configuracoes") return false;
+    return hasIncompleteEmpresaConfig(user.empresa);
+};
 
 // Roles permitidas no sistema
 const ALLOWED_ROLES = [
@@ -156,14 +184,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
                     role: userData.role,
                     empresa: userData.empresa?.nome,
                 });
+
+                if (shouldRedirectToOnboarding(pathname, userData)) {
+                    router.replace("/onboarding");
+                    return;
+                }
+
+                if (shouldRedirectToConfiguracoes(pathname, userData)) {
+                    router.replace("/dashboard/configuracoes");
+                    return;
+                }
             } else {
                 setUser(null);
-            }
-        } catch (error) {
-            console.error("[AuthProvider] fetchUser falhou:", error);
-            setUser(null);
-        } finally {
-            setLoading(false);
+                    if (!isNoAuthRoute && pathname !== "/login") {
+                        router.replace("/login");
+                    }
+                }
+            } catch (error) {
+                console.error("[AuthProvider] fetchUser falhou:", error);
+                setUser(null);
+                if (!isNoAuthRoute && pathname !== "/login") {
+                    router.replace("/login");
+                }
         }
     }, [isNoAuthRoute, pathname, router]);
 

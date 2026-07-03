@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Empresa;
 use App\Models\LandlordUser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -111,6 +112,7 @@ class LandlordAuthController extends Controller
     public function logout(Request $request)
     {
         Auth::guard('landlord_api')->logout();
+        Auth::guard('landlord')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
         return response()->json(['message' => 'Logout efetuado']);
@@ -217,6 +219,7 @@ class LandlordAuthController extends Controller
 
             // 5️⃣ Faz login do usuário
             Auth::guard('landlord_api')->login($user);
+            Auth::guard('landlord')->login($user);
             request()->session()->regenerate(); // ✅ adicionado: evita fixation e força sessão nova
 
             Log::info('[GOOGLE AUTH] Login realizado', ['user_id' => $user->id]);

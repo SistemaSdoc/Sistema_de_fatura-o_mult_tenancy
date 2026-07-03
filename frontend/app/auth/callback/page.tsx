@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { setTenant } from "@/services/axios";
+import { authApi, setTenant } from "@/services/axios";
 
 export default function AuthCallbackPage() {
     const router = useRouter();
@@ -20,7 +20,18 @@ export default function AuthCallbackPage() {
         }
 
         setTenant({ id: empresaId, subdomain: subdomain || undefined });
-        router.replace("/dashboard");
+
+        const verifySession = async () => {
+            try {
+                await authApi.me();
+                router.replace("/dashboard");
+            } catch (err) {
+                console.error("[AuthCallbackPage] authApi.me falhou", err);
+                router.replace("/login?error=auth_failed");
+            }
+        };
+
+        verifySession();
     }, [params, router]);
 
     if (error) return <p>{error} Redirecionando...</p>;
