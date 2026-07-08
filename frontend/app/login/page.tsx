@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/authprovider";
 import { useThemeColors } from "@/context/ThemeContext";
 import { AxiosError } from "axios";
@@ -129,11 +129,7 @@ const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, on
       }}>
       <div className="flex items-center gap-4 p-4">
         <div className="shrink-0">
-          {type === "success" ? (
-            <CheckCircle size={24} style={{ color: colors.success }} />
-          ) : (
-            <AlertCircle size={24} style={{ color: colors.danger }} />
-          )}
+          {type === "success" ? <CheckCircle size={24} style={{ color: colors.success }} /> : <AlertCircle size={24} style={{ color: colors.danger }} />}
         </div>
         <div className="flex-1">
           <p className="text-sm font-medium" style={{ color: colors.text }}>
@@ -151,6 +147,9 @@ const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, on
 /* ---------------- MAIN PAGE ---------------- */
 export default function LoginPage(): React.ReactElement {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirect = searchParams.get('redirect') || '/dashboard'; // pega o redirect da URL
+
   const { login, user, loading: authLoading } = useAuth();
   const colors = useThemeColors();
 
@@ -164,6 +163,7 @@ export default function LoginPage(): React.ReactElement {
     setToast({ message, type });
   };
 
+  // Limpar toast
   useEffect(() => {
     if (toast) {
       const timer = setTimeout(() => {
@@ -173,22 +173,26 @@ export default function LoginPage(): React.ReactElement {
     }
   }, [toast]);
 
+  // Redirecionar após login
   useEffect(() => {
     if (!user) return;
 
+    // Se houver redirect na URL, usa ele
+    if (searchParams.has('redirect')) {
+      router.push(redirect);
+      return;
+    }
+
+    // Fallback: redirecionar por role (caso não haja redirect)
     const redirectMap: Record<string, string> = {
       admin: "/dashboard",
       contablista: "/dashboard/",
       operador: "/dashboard/Vendas",
       gestor: "/dashboard/Produtos_servicos/Stock",
     };
-    const destination = redirectMap[user.role] || "/login";
-
-    // Mostrar toast de boas-vindas
-    showToast(` Bem-vindo, ${user.name || "usuário"}! Redirecionando...`, "success");
-
-    setTimeout(() => router.push(destination), 1500);
-  }, [user, router]);
+    const destination = redirectMap[user.role] || "/dashboard";
+    router.push(destination);
+  }, [user, router, redirect, searchParams]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
@@ -197,17 +201,21 @@ export default function LoginPage(): React.ReactElement {
     try {
       await login(email, password);
       // O toast de sucesso será mostrado no useEffect acima
+      // O useEffect vai redirecionar
     } catch (err: unknown) {
       let errorMessage = "Ocorreu um erro desconhecido";
       if (err instanceof AxiosError) errorMessage = err.response?.data?.message ?? err.message;
       else if (err instanceof Error) errorMessage = err.message;
-      showToast(` ${errorMessage}`, "error");
+      showToast(`❌ ${errorMessage}`, "error");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const isLoading = isSubmitting || authLoading;
+
+  // ✅ Construir link de registo com redirect
+  const registerLink = `/register${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`;
 
   return (
     <main
@@ -241,7 +249,7 @@ export default function LoginPage(): React.ReactElement {
           {/* LOGO */}
           <div className="flex justify-center mb-6">
             <div className="logo-float">
-              <Image src="/images/3.png" alt="Logo do Sistema" width={80} height={80} className="rounded-2xl cursor-pointer " priority />
+              <Image src="/images/3.png" alt="Logo do Sistema" width={80} height={80} className="rounded-2xl cursor-pointer" priority />
             </div>
           </div>
 
@@ -256,7 +264,7 @@ export default function LoginPage(): React.ReactElement {
           </div>
 
           {/* Form */}
-          <form id="login-form" onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <InputField
               type="email"
               placeholder="Digite seu email"
@@ -283,7 +291,6 @@ export default function LoginPage(): React.ReactElement {
               autoComplete="current-password"
             />
 
-            {/* Forgot password link - aligned right */}
             <div className="flex justify-end -mt-2">
               <Link
                 href="/forgot-password"
@@ -293,7 +300,6 @@ export default function LoginPage(): React.ReactElement {
               </Link>
             </div>
 
-            {/* Submit button */}
             <button
               type="submit"
               disabled={isLoading}
@@ -354,14 +360,14 @@ export default function LoginPage(): React.ReactElement {
             Entrar com Google
           </a>
 
-          {/* Link Cadastro */}
+          {/* Link Cadastro com redirect */}
           <div className="text-center">
             <Link
               href="/register"
               className="group inline-flex items-center gap-2 transition-colors font-medium touch-target"
               style={{ color: colors.secondary }}>
               <UserPlus size={18} />
-              Não tem conta? Cadastre-se
+              Não tem conta? Cadastra empresa
               <ArrowRight size={16} className="opacity-0 group-hover:opacity-100 transition-opacity" />
             </Link>
           </div>

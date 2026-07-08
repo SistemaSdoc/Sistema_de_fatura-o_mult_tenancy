@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -115,4 +116,20 @@ class Empresa extends Model
         
         return !empty($result);
     }
+
+        public function subscricao(): HasOne
+    {
+        return $this->hasOne(Subscricao::class)->where('status', 'ativa')->latest();
+    }
+
+    // Ou histórico de assinaturas
+    public function subscricoes(): HasMany
+    {
+        return $this->hasMany(Subscricao::class);
+    }
+    public function subscricaoAtiva()
+{
+    return $this->hasOne(Subscricao::class)->where('status', 'ativa')->with('plano');
+}
+
 }

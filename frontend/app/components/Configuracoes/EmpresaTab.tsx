@@ -1,9 +1,15 @@
 "use client";
 
+import { useRouter } from 'next/navigation';
 import React, { useState, useEffect, useRef } from "react";
-import { Building2, Hash, AtSign, Phone, MapPin, Globe, Loader2, Camera, Upload, ImageIcon } from "lucide-react";
+import {
+  Building2, Hash, AtSign, Phone, MapPin, Globe,
+  Loader2, Camera, Upload, ImageIcon,
+  Crown, Calendar, CreditCard, AlertCircle, CheckCircle, XCircle
+} from "lucide-react";
 import { useAuth } from "@/context/authprovider";
-
+import { subscricaoService } from '@/services/subscricoes';
+import { toast } from "sonner";
 import { api } from "@/services/axios";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -151,6 +157,8 @@ export interface EmpresaTabProps extends WithToast {
 export function EmpresaTab({ colors, showToast }: EmpresaTabProps) {
   const { user, logout, refreshUser } = useAuth();
   const empresa = user?.empresa;
+  const assinatura = user?.empresa?.subscricao || null;
+  const router = useRouter();
 
   const [loading, setLoading] = useState(false);
   const [togglingStatus, setTogglingStatus] = useState(false);

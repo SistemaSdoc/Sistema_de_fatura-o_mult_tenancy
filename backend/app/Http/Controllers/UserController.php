@@ -14,16 +14,18 @@ use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Str;
+use App\Traits\VerificaLimites;
 
 class UserController extends Controller
 {
+    use VerificaLimites;
+
     protected ?Empresa $empresa = null;
     protected string $modo = 'colectivo';
     protected ?object $tenantUser = null;
 
     public function __construct()
     {
-        // ✅ Obtém da sessão (prioridade)
         $this->empresa = app('current.empresa');
         $this->modo = session('tenant_modo') ?? $this->empresa?->modo ?? 'colectivo';
 
@@ -42,6 +44,7 @@ class UserController extends Controller
         $this->modo = session('tenant_modo') ?? $this->empresa?->modo ?? 'colectivo';
         return $this->modo;
     }
+
     protected function getEmpresa(): ?Empresa
     {
         if (!$this->empresa) {
@@ -81,11 +84,14 @@ class UserController extends Controller
 
         $this->modo = $this->empresa->modo ?? 'colectivo';
 
-        // ⚠️ Tenta ambos os guards para garantir consistência entre
-        // login normal e login Google.
         $landlordUser = Auth::guard('landlord_api')->user();
         if (!$landlordUser) {
             $landlordUser = Auth::guard('landlord')->user();
+        }
+
+        if (!$landlordUser) {
+            Log::error('[UserController] Utilizador landlord não autenticado.');
+            throw new \Exception('Usuário não autenticado.', 401);
         }
 
         $tenantUser = $this->buscarUsuario($this->empresa, $landlordUser->email);
@@ -282,6 +288,7 @@ class UserController extends Controller
         Log::warning('[obterEmpresaAtual] Retornando null');
         return null;
     }
+
     /* =====================================================================
      | MÉTODOS DO CONTROLLER
      | ================================================================== */
@@ -499,97 +506,184 @@ class UserController extends Controller
         }
     }
 
-    public function store(Request $request)
-    {
-        $modo = $this->getModo();
+public function store(Request $request)
+{
+    $modo = $this->getModo();
 
-        Log::info('[UserController::store] Criando utilizador', [
-            'user_id' => $this->getUserId(),
+    Log::info('[UserController::store] Criando utilizador', [
+        'user_id' => $this->getUserId(),
+        'modo' => $modo,
+        'ip' => $request->ip(),
+    ]);
+
+    try {
+        // 1. Verificar autenticação e acesso
+        $this->verificarAcessoUsuario();
+
+        $currentUser = $this->tenantUser;
+
+        // 2. Verificar se é admin
+        if (!$this->isAdmin($currentUser)) {
+            Log::warning('[UserController::store] Utilizador não é admin', [
+                'user_id' => $currentUser?->id,
+                'role' => $currentUser?->role,
+                'email' => $currentUser?->email,
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Apenas administradores podem criar utilizadores',
+                'modo' => $modo,
+            ], 403);
+        }
+
+        $empresaId = $this->empresa->id;
+
+        Log::info('[UserController::store] Empresa identificada', [
+            'empresa_id' => $empresaId,
             'modo' => $modo,
+            'empresa_nome' => $this->empresa->nome,
         ]);
 
+        // ============================================================
+        // 3. VERIFICAR LIMITE DE UTILIZADORES (apenas activos)
+        // ============================================================
         try {
-            $this->verificarAcessoUsuario();
+            $planoService = app(\App\Services\PlanoService::class);
 
-            $currentUser = $this->tenantUser;
+            // ✅ Obtém o limite com o modo correto
+            $limite = $planoService->getLimiteUtilizadores($empresaId, $modo);
 
-            if (!$this->isAdmin($currentUser)) {
+            // ✅ Contagem de utilizadores activos
+            // ⚠️ A queryUsers() já aplica doTenant() que filtra por tenant_id
+            //    NÃO adicionar where('empresa_id') porque a coluna não existe no modo colectivo
+            $contagemAtual = $this->queryUsers()
+                ->where('ativo', true)
+                ->count();
+
+            Log::info('[UserController::store] Verificação de limite', [
+                'empresa_id' => $empresaId,
+                'limite' => $limite,
+                'utilizadores_activos' => $contagemAtual,
+                'modo' => $modo,
+            ]);
+
+            // ✅ Verificar se o limite foi atingido
+            if ($limite !== null && $contagemAtual >= $limite) {
+                Log::warning('[UserController::store] Limite de utilizadores atingido', [
+                    'empresa_id' => $empresaId,
+                    'limite' => $limite,
+                    'contagem_atual' => $contagemAtual,
+                    'modo' => $modo,
+                ]);
                 return response()->json([
                     'success' => false,
-                    'message' => 'Apenas administradores podem criar utilizadores',
+                    'message' => "Limite de utilizadores activos do seu plano atingido ({$limite}). Faça upgrade ou desactive utilizadores existentes.",
                     'modo' => $modo,
                 ], 403);
             }
-
-            $dados = $request->validate([
-                'name' => 'required|string|max:255',
-                'email' => [
-                    'required',
-                    'email',
-                    function ($attribute, $value, $fail) {
-                        $exists = $this->queryUsers()->where('email', $value)->exists();
-                        if ($exists) {
-                            $fail('Este email já está cadastrado.');
-                        }
-                    },
-                ],
-                'password' => 'required|string|min:6',
-                'role' => ['required', Rule::in(['admin', 'operador', 'contablista', 'gestor'])],
-                'ativo' => 'nullable|boolean',
-            ]);
-
-            $dados['ativo'] = $dados['ativo'] ?? true;
-            $dados['password'] = Hash::make($dados['password']);
-
-            if ($this->isColectivo()) {
-                $dados['tenant_id'] = $this->empresa->id;
-                $dados['user_id'] = session('landlord_user_id');
-                $user = SharedUser::create($dados);
-
-                Log::info('[UserController::store] Utilizador criado no modo colectivo', [
-                    'user_id' => $user->id,
-                    'tenant_id' => $this->empresa->id,
-                    'modo' => $modo,
-                ]);
-            } else {
-                $user = TenantUser::create($dados);
-            }
-
-            Log::info('[UserController::store] Utilizador criado com sucesso', [
-                'user_id' => $user->id,
-                'modo' => $modo,
-            ]);
-
-            AuditLogger::log('Utilizador Criado', '👥', ['area' => 'Utilizadores', 'detalhes' => ['user_id' => $user->id, 'user_email' => $user->email]]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Utilizador criado com sucesso',
-                'data' => $user,
-                'modo' => $modo,
-            ], 201);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Erro de validação',
-                'errors' => $e->errors(),
-                'modo' => $modo,
-            ], 422);
         } catch (\Exception $e) {
-            Log::error('[UserController::store] Erro', [
+            Log::error('[UserController::store] Falha na verificação de limite', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
+                'empresa_id' => $empresaId,
                 'modo' => $modo,
             ]);
-
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao criar utilizador',
-                'error' => $e->getMessage(),
+                'message' => 'Erro ao verificar limite: ' . $e->getMessage(),
                 'modo' => $modo,
             ], 500);
         }
+        // ============================================================
+
+        // 4. Validar dados de entrada
+        $dados = $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => [
+                'required',
+                'email',
+                function ($attribute, $value, $fail) {
+                    $exists = $this->queryUsers()->where('email', $value)->exists();
+                    if ($exists) {
+                        $fail('Este email já está cadastrado.');
+                    }
+                },
+            ],
+            'password' => 'required|string|min:6',
+            'role' => ['required', Rule::in(['admin', 'operador', 'contablista', 'gestor'])],
+            'ativo' => 'nullable|boolean',
+        ]);
+
+        $dados['ativo'] = $dados['ativo'] ?? true;
+        $dados['password'] = Hash::make($dados['password']);
+
+        // 5. Criar utilizador (colectivo ou singular)
+        if ($this->isColectivo()) {
+            $dados['tenant_id'] = $this->empresa->id;
+            $user = SharedUser::create($dados);
+            Log::debug('[UserController::store] Utilizador criado no modo colectivo', [
+                'user_id' => $user->id,
+                'tenant_id' => $this->empresa->id,
+                'modo' => $modo,
+            ]);
+        } else {
+            $user = TenantUser::create($dados);
+            Log::debug('[UserController::store] Utilizador criado no modo singular', [
+                'user_id' => $user->id,
+                'modo' => $modo,
+            ]);
+        }
+
+        // 6. Log de auditoria
+        AuditLogger::log('Utilizador Criado', '👤', [
+            'area' => 'Utilizadores',
+            'detalhes' => [
+                'user_id' => $user->id,
+                'user_email' => $user->email,
+                'role' => $user->role,
+                'criado_por' => $currentUser?->id,
+            ]
+        ]);
+
+        Log::info('[UserController::store] Utilizador criado com sucesso', [
+            'user_id' => $user->id,
+            'email' => $user->email,
+            'role' => $user->role,
+            'modo' => $modo,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Utilizador criado com sucesso',
+            'data' => $user,
+            'modo' => $modo,
+        ], 201);
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        Log::warning('[UserController::store] Erro de validação', [
+            'errors' => $e->errors(),
+            'modo' => $modo,
+        ]);
+        return response()->json([
+            'success' => false,
+            'message' => 'Erro de validação',
+            'errors' => $e->errors(),
+            'modo' => $modo,
+        ], 422);
+    } catch (\Exception $e) {
+        Log::error('[UserController::store] Erro inesperado', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
+            'modo' => $modo,
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Erro ao criar utilizador',
+            'error' => $e->getMessage(),
+            'modo' => $modo,
+        ], 500);
     }
+}
 
     public function update(Request $request, $id)
     {
@@ -605,7 +699,6 @@ class UserController extends Controller
             $this->verificarAcessoUsuario();
 
             $currentUser = $this->tenantUser;
-
             $user = $this->buscarUserOrFail($id);
 
             if (!$this->isAdmin($currentUser) && $currentUser->id !== $user->id) {
@@ -615,6 +708,46 @@ class UserController extends Controller
                     'modo' => $modo,
                 ], 403);
             }
+
+            // ============================================================
+            // VERIFICAR LIMITE SE FOR REATIVAÇÃO
+            // ============================================================
+            if ($request->has('ativo') && $request->boolean('ativo') === true && !$user->ativo) {
+                $empresaId = $this->empresa->id;
+                $limite = $this->getLimite('Utilizadores');
+
+                Log::info('[UserController::update] Tentativa de reativação', [
+                    'user_id' => $id,
+                    'empresa_id' => $empresaId,
+                    'limite' => $limite,
+                ]);
+
+                if ($limite !== null) {
+                    $ativosAtuais = $this->queryUsers()
+                        ->where('empresa_id', $empresaId)
+                        ->where('ativo', true)
+                        ->count();
+
+                    Log::info('[UserController::update] Reativação - contagem atual', [
+                        'ativos_atuais' => $ativosAtuais,
+                        'limite' => $limite,
+                    ]);
+
+                    if ($ativosAtuais >= $limite) {
+                        Log::warning('[UserController::update] Limite de utilizadores excedido na reativação', [
+                            'ativos_atuais' => $ativosAtuais,
+                            'limite' => $limite,
+                            'user_id' => $id,
+                        ]);
+                        return response()->json([
+                            'success' => false,
+                            'message' => "Limite de utilizadores activos do plano atingido ({$limite}). Não é possível reativar este utilizador.",
+                            'modo' => $modo,
+                        ], 403);
+                    }
+                }
+            }
+            // ============================================================
 
             $dados = $request->validate([
                 'name' => 'sometimes|required|string|max:255',
@@ -664,6 +797,7 @@ class UserController extends Controller
                 'modo' => $modo,
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            Log::warning('[UserController::update] Utilizador não encontrado', ['id' => $id]);
             return response()->json([
                 'success' => false,
                 'message' => 'Utilizador não encontrado',
@@ -671,6 +805,10 @@ class UserController extends Controller
                 'modo' => $modo,
             ], 404);
         } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::warning('[UserController::update] Erro de validação', [
+                'errors' => $e->errors(),
+                'modo' => $modo,
+            ]);
             return response()->json([
                 'success' => false,
                 'message' => 'Erro de validação',
@@ -710,6 +848,9 @@ class UserController extends Controller
             $currentUser = $this->tenantUser;
 
             if (!$this->isAdmin($currentUser)) {
+                Log::warning('[UserController::destroy] Utilizador não é admin', [
+                    'user_id' => $currentUser?->id,
+                ]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Apenas administradores podem eliminar utilizadores',
@@ -720,15 +861,15 @@ class UserController extends Controller
             $user = $this->buscarUserOrFail($id);
 
             if ($currentUser->id === $user->id) {
+                Log::warning('[UserController::destroy] Tentativa de eliminar a própria conta', [
+                    'user_id' => $id,
+                ]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Não pode eliminar a sua própria conta',
                     'modo' => $modo,
                 ], 403);
             }
-
-            // ⭐ No modo colectivo, o user tem tenant_id diretamente
-            // ⭐ Não precisa de tabela pivot separada
 
             $user->delete();
 
@@ -745,6 +886,7 @@ class UserController extends Controller
                 'modo' => $modo,
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            Log::warning('[UserController::destroy] Utilizador não encontrado', ['id' => $id]);
             return response()->json([
                 'success' => false,
                 'message' => 'Utilizador não encontrado',
@@ -808,6 +950,7 @@ class UserController extends Controller
                 'modo' => $modo,
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            Log::warning('[UserController::atualizarUltimoLogin] Utilizador não encontrado', ['id' => $id]);
             return response()->json([
                 'success' => false,
                 'message' => 'Utilizador não encontrado',
@@ -841,10 +984,12 @@ class UserController extends Controller
         try {
             $this->verificarAcessoUsuario();
 
-            // ✅ CORRETO - $this->tenantUser
             $currentUser = $this->tenantUser;
 
             if (!$this->isAdmin($currentUser)) {
+                Log::warning('[UserController::create] Utilizador não é admin', [
+                    'user_id' => $currentUser?->id,
+                ]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Acesso negado',

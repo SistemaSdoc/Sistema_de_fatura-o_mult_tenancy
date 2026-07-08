@@ -19,9 +19,14 @@ use App\Models\Tenant\User as TenantUser;
 use App\Services\VendaService;
 use App\Services\AuditLogger;
 use Carbon\Carbon;
+use App\Traits\VerificaLimites;
+use App\Models\Shared\DocumentoFiscal as SharedDocumentoFiscal;
+use App\Models\Tenant\DocumentoFiscal as TenantDocumentoFiscal;
 
 class VendaController extends Controller
 {
+     use VerificaLimites;
+
     protected VendaService $vendaService;
     protected ?Empresa $empresa = null;
     protected string $modo = 'colectivo';
@@ -421,6 +426,25 @@ public function store(Request $request)
     try {
         $this->verificarAcessoUsuario();
 
+        // ============================================================
+        // VERIFICAR LIMITE DE DOCUMENTOS
+        // ============================================================
+        $empresaId = $this->empresa->id;
+        try {
+            $this->verificarLimite(
+                'Documentos/mês',
+                fn() => $this->contarDocumentosMes($empresaId),
+                'Limite de documentos mensais do seu plano atingido. Faça upgrade para emitir mais documentos.'
+            );
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'modo' => $modo,
+            ], 403);
+        }
+        // ============================================================
+
         $dados = $request->validate([
             'cliente_id' => 'nullable|uuid|exists:clientes,id',
             'cliente_nome' => 'nullable|string|max:255',
@@ -442,7 +466,7 @@ public function store(Request $request)
             'observacoes' => 'nullable|string|max:1000',
             'desconto_global' => 'nullable|numeric|min:0',
             'troco' => 'nullable|numeric|min:0',
-            // ✅ ADICIONAR DADOS BANCÁRIOS
+            //  ADICIONAR DADOS BANCÁRIOS
             'nome_banco' => 'nullable|string|max:255',
             'iban' => 'nullable|string|max:34',
             'numero_conta' => 'nullable|string|max:20',
@@ -452,7 +476,7 @@ public function store(Request $request)
             return response()->json(['message' => 'É necessário informar um cliente (cadastrado ou avulso).'], 422);
         }
 
-        // ✅ Log dos dados bancários recebidos
+        //  Log dos dados bancários recebidos
         Log::info('[VendaController::store] Dados bancários recebidos', [
             'nome_banco' => $dados['nome_banco'] ?? null,
             'iban' => $dados['iban'] ?? null,
@@ -658,6 +682,36 @@ public function store(Request $request)
             ], 500);
         }
     }
+
+
+/**
+ * Conta quantos documentos fiscais a empresa já emitiu no mês atual
+ */
+private function contarDocumentosMes($empresaId): int
+{
+    if ($this->isColectivo()) {
+        //  doTenant() já aplica o global scope que filtra por tenant_id.
+        //    NÃO adicionar where('empresa_id') aqui: no modo colectivo a
+        //    tabela documentos_fiscais (banco shared) não tem essa coluna,
+        //    só tenant_id — mesma regra já documentada em UserController::store.
+        return SharedDocumentoFiscal::doTenant()
+            ->whereIn('tipo_documento', ['FT', 'FR', 'FP', 'NC', 'ND', 'RC', 'FRt'])
+            ->where('estado', '!=', 'cancelado')
+            ->whereMonth('created_at', now()->month)
+            ->whereYear('created_at', now()->year)
+            ->count();
+    } else {
+        // No modo singular a base tenant já é exclusiva da empresa.
+        // Se a coluna empresa_id não existir nesta tabela também,
+        // remova este where (mesmo problema pode se repetir aqui).
+        return TenantDocumentoFiscal::where('empresa_id', $empresaId)
+            ->whereIn('tipo_documento', ['FT', 'FR', 'FP', 'NC', 'ND', 'RC', 'FRt'])
+            ->where('estado', '!=', 'cancelado')
+            ->whereMonth('created_at', now()->month)
+            ->whereYear('created_at', now()->year)
+            ->count();
+    }
+}
 
     public function relatorio(Request $request)
     {

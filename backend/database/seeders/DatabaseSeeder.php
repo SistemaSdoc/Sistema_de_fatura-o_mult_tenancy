@@ -9,10 +9,9 @@ class DatabaseSeeder extends Seeder
 {
     use WithoutModelEvents;
 
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
+        // Chama o seeder de planos e features
+        $this->call(PlanosFeaturesSeeder::class);
     }
 }

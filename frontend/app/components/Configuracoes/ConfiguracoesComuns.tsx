@@ -34,9 +34,19 @@ export const initials = (name: string) =>
 export const formatDate = (d?: string | null) => (d ? new Date(d).toLocaleString("pt-PT") : "—");
 
 export const getLogoUrl = (logo?: string | null): string | null => {
-  if (!logo) return null;
-  if (logo.startsWith("http")) return logo;
-  return `${process.env.NEXT_PUBLIC_API_URL}/storage/${logo}`;
+    if (!logo) return null;
+    if (logo.startsWith('http')) return logo;
+
+    // Limpa barras invertidas e normaliza
+    let clean = logo.replace(/\\/g, '/');
+
+    // Extrai apenas o nome do ficheiro (ex: logo_xxxx.jpeg)
+    // Se o caminho contiver 'logos/', usa o que vem depois, senão usa o próprio clean
+    const match = clean.match(/logos\/([^\/]+)$/);
+    const filename = match ? match[1] : clean.split('/').pop() || clean;
+
+    // Constrói a URL pública relativa à raiz
+    return `/storage/logos/${filename}`;
 };
 
 export const RoleBadge = ({ role, colors }: { role: string; colors: ThemeColors }) => {

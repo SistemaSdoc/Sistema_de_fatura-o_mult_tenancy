@@ -273,6 +273,35 @@ tenantApi.interceptors.response.use(
 
 // ============ API SERVICES ============
 
+
+// ============ API DE ASSINATURAS (requer tenant autenticado) ============
+
+export const subscricaoApi = {
+  // Criar uma nova assinatura para a empresa atual
+  criar: (data: { plano_id: string; forma_pagamento?: string; renovacao_automatica?: boolean }) =>
+    tenantApi.post("/api/subscricoes", data),
+  
+  // Buscar assinatura ativa da empresa
+  minhaAssinatura: () => tenantApi.get("/api/subscricoes/me"),
+  
+  // Cancelar assinatura
+  cancelar: (id: string) => tenantApi.patch(`/api/subscricoes/${id}/cancel`),
+  
+  // Renovar assinatura
+  renovar: (id: string) => tenantApi.post(`/api/subscricoes/${id}/renovar`),
+};
+
+// ============ API DE PLANOS (público / landlord) ============
+
+export const planosApi = {
+  // Lista todos os planos ativos com suas features
+  listarAtivos: () => landlordApi.get("/api/planos-ativos"),
+  
+  // Buscar um plano específico (para página de checkout)
+  buscar: (id: string) => landlordApi.get(`/api/planos/${id}`),
+};
+
+
 /**
  * API para o LANDLORD (Super Admin)
  * - NUNCA envia headers de tenant

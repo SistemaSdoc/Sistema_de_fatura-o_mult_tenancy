@@ -2,6 +2,8 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -16,7 +18,7 @@ return new class extends Migration
             'FR',   -- Fatura-Recibo
             'FP',   -- Fatura Proforma (NOVO)
             'FA',   -- Fatura de Adiantamento
-            'NC',   -- Nota de Crédito
+            'NC',   -A- Nota de Crédito
             'ND',   -- Nota de Débito
             'RC',   -- Recibo
             'FRt'   -- Fatura de Retificação

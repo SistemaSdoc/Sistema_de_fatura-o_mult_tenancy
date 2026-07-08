@@ -27,6 +27,7 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use App\Traits\VerificaLimites;
 
 /**
  * DocumentoFiscalController
@@ -37,6 +38,8 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
  */
 class DocumentoFiscalController extends Controller
 {
+     use VerificaLimites;
+
     protected DocumentoFiscalService $documentoService;
     protected ?Empresa $empresa = null;
     protected string $modo = 'colectivo';
@@ -224,7 +227,7 @@ class DocumentoFiscalController extends Controller
     }
 
     /**
-     * ✅ Obtém o tenantUser, verificando se está carregado
+     * Obtém o tenantUser, verificando se está carregado
      */
     protected function getTenantUser(): ?object
     {
@@ -324,11 +327,38 @@ class DocumentoFiscalController extends Controller
 
 public function emitir(Request $request): JsonResponse
 {
-    $modo = $this->getModo();
-
+     $modo = $this->getModo();
+    
     try {
         $this->verificarAcessoUsuario();
 
+        // ============================================================
+        //  VERIFICAR LIMITE DE DOCUMENTOS (alinhado com o seeder)
+        // ============================================================
+        $empresaId = $this->empresa->id;
+        try {
+            $this->verificarLimite(
+                'Documentos/mês', // nome da feature no seeder
+                function () use ($empresaId) {
+                    // Conta todos os tipos de documentos que consomem limite
+                    return DocumentoFiscal::where('empresa_id', $empresaId)
+                        ->whereIn('tipo_documento', ['FT', 'FR', 'FP', 'NC', 'ND', 'RC', 'FRt'])
+                        ->where('estado', '!=', 'cancelado')
+                        ->whereMonth('created_at', now()->month)
+                        ->whereYear('created_at', now()->year)
+                        ->count();
+                },
+                'Limite de documentos mensais do seu plano atingido. Faça upgrade para emitir mais documentos.'
+            );
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'modo' => $modo,
+            ], 403);
+        }       // ============================================================
+
+        // Validação dos dados de entrada
         $dados = $request->validate([
             'tipo_documento'             => 'required|in:FT,FR,FP,FA,NC,ND,RC,FRt',
             'venda_id'                   => 'nullable|uuid|exists:vendas,id',

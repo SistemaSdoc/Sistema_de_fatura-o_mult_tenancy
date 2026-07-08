@@ -8,23 +8,32 @@ import { toast } from "sonner";
 // ============ TYPES ============
 
 export interface Empresa {
-  id: string;
-  nome: string;
-  nif: string;
-  subdomain: string;
-  email: string;
-  logo: string | null;
-  nome_banco?: string | null;
-  numero_conta?: string | null;
-  iban?: string | null;
-  telefone: string | null;
-  endereco: string | null;
-  regime_fiscal?: string | null;
-  sujeito_iva?: boolean;
-  iva_padrao?: number;
-  status?: string;
-  created_at?: string | null;
-  modo?: string | null;
+    id: string;
+    nome: string;
+    nif: string;
+    subdomain: string;
+    email: string;
+    logo: string | null;
+    nome_banco?: string | null;
+    numero_conta?: string | null;
+    iban?: string | null;
+    telefone: string | null;
+    endereco: string | null;
+    regime_fiscal?: string | null;
+    sujeito_iva?: boolean;
+    iva_padrao?: number;
+    subscricao?: string;
+    modo?: string;
+    status?: string;
+    created_at?: string | null;
+    pagamento?: {
+        id: string;
+        valor: number;
+        data_vencimento: string;
+        codigo_transacao: string;
+        status: string;
+        metodo_pagamento: string | null;
+    };
 }
 
 export interface User {
@@ -51,13 +60,16 @@ interface LogoutResult {
 }
 
 interface AuthContextData {
-  user: User | null;
-  loading: boolean;
-  isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
-  logout: () => Promise<LogoutResult>;
-  refreshUser: () => Promise<void>;
-  refetch: () => Promise<void>;
+    user: User | null;
+    loading: boolean;
+    isAuthenticated: boolean;
+    login: (
+        email: string,
+        password: string,
+        redirectTo?: string // NOVO: destino opcional
+    ) => Promise<{ success: boolean; message?: string }>;
+    logout: () => Promise<LogoutResult>;
+    refreshUser: () => Promise<void>;
 }
 
 // ============ CONTEXT ============
@@ -127,7 +139,7 @@ const shouldRedirectToConfiguracoes = (pathname: string | null, user: User | nul
 // Roles permitidas no sistema
 const ALLOWED_ROLES = ["admin", "gestor", "contablista", "operador"];
 
-// Mapa de redirecionamento por role
+// Mapa de redirecionamento por role (fallback)
 const REDIRECT_MAP: Record<string, string> = {
   admin: "/dashboard",
   gestor: "/dashboard/Produtos_servicos/Stock",
@@ -373,7 +385,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     login,
     logout,
     refreshUser,
-    refetch: refreshUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
