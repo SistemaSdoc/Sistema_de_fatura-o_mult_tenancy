@@ -4,14 +4,11 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import MainEmpresa from "@/app/components/MainEmpresa";
 import { useRouter } from "next/navigation";
 import InvoiceTable from "@/app/components/Faturas/InvoiceTable";
-import {
-  documentoFiscalService,
-  DocumentoFiscal,
-  FiltrosDocumento,
-  GerarReciboDTO,
-} from "@/services/DocumentoFiscal";
+import { documentoFiscalService, DocumentoFiscal, FiltrosDocumento, GerarReciboDTO } from "@/services/DocumentoFiscal";
 import { useThemeColors } from "@/context/ThemeContext";
-import {  FileText, ChevronDown } from "lucide-react";
+import { useAuth, getIncompleteEmpresaFields, formatIncompleteFields } from "@/context/authprovider";
+import { ModalDadosIncompletos } from "../../../components/ModalDadosIncompletos";
+import { FileText, ChevronDown } from "lucide-react";
 import Cookies from "js-cookie";
 
 // ── Helper: lê o XSRF-TOKEN do cookie (já descodificado) ───────────────────
@@ -119,12 +116,12 @@ export default function FaturasPage() {
   const [imprimindoTermica, setImprimindoTermica] = useState<string | null>(null);
   const [dropdownAberto, setDropdownAberto] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
+  const [modalDadosIncompletosOpen, setModalDadosIncompletosOpen] = useState(false);
+  const [camposFaltantes, setCamposFaltantes] = useState<string[]>([]);
 
   // BaseURL dinâmica — igual ao teu axios.ts
-  const baseUrl =
-    typeof window !== "undefined"
-      ? `${window.location.protocol}//${window.location.hostname}:8000`
-      : "http://localhost:8000";
+  const baseUrl = typeof window !== "undefined" ? `${window.location.protocol}//${window.location.hostname}:8000` : "http://localhost:8000";
 
   /* ── Fechar dropdown ao clicar fora ── */
   useEffect(() => {
@@ -165,10 +162,7 @@ export default function FaturasPage() {
     async (documento: DocumentoFiscal) => {
       if (!documento.id) return;
       try {
-        await abrirUrlAutenticada(
-          `${baseUrl}/api/documentos-fiscais/${documento.id}/print-view`,
-          "html"
-        );
+        await abrirUrlAutenticada(`${baseUrl}/api/documentos-fiscais/${documento.id}/print-view`, "html");
       } catch (err: unknown) {
         alert(err instanceof Error ? err.message : "Erro ao abrir visualização de impressão");
       }
@@ -182,10 +176,7 @@ export default function FaturasPage() {
       if (!documento.id) return;
       try {
         setImprimindo(documento.id);
-        await abrirUrlAutenticada(
-          `${baseUrl}/api/documentos-fiscais/${documento.id}/pdf-viewer`,
-          "pdf"
-        );
+        await abrirUrlAutenticada(`${baseUrl}/api/documentos-fiscais/${documento.id}/pdf-viewer`, "pdf");
       } catch (err: unknown) {
         alert(err instanceof Error ? err.message : "Erro ao abrir PDF");
       } finally {
@@ -219,8 +210,7 @@ export default function FaturasPage() {
     if (!documento.id) return;
     try {
       setBaixandoPdf(documento.id);
-      const nome = `${documento.tipo_documento}_${
-        documento.numero_documento ?? documento.id}.pdf`;
+      const nome = `${documento.tipo_documento}_${documento.numero_documento ?? documento.id}.pdf`;
       await documentoFiscalService.downloadPdf(documento.id, nome);
     } catch {
       alert("Erro ao baixar PDF");
@@ -237,6 +227,24 @@ export default function FaturasPage() {
   /* ── Gerar recibo ── */
   const gerarRecibo = async (doc: DocumentoFiscal) => {
     if (!doc.id) return;
+    // Verificar campos obrigatórios da empresa antes de gerar recibo
+    const missing = getIncompleteEmpresaFields(user?.empresa);
+    if (missing.length > 0) {
+      const labels: Record<string, string> = {
+        nif: "NIF",
+        telefone: "Telefone",
+        endereco: "Endereço",
+        regime_fiscal: "Regime Fiscal",
+        nome_banco: "Nome do Banco",
+        numero_conta: "Número da Conta",
+        iban: "IBAN",
+        logo: "Logo",
+      };
+      const camposFormatados = missing.map((f) => labels[f] || f);
+      setCamposFaltantes(camposFormatados);
+      setModalDadosIncompletosOpen(true);
+      return;
+    }
     try {
       setGerandoRecibo(doc.id);
       const dados: GerarReciboDTO = {
@@ -266,11 +274,10 @@ export default function FaturasPage() {
   return (
     <MainEmpresa>
       {/* ── Barra de ações no topo ── */}
-      <div
-        className="flex flex-wrap items-center justify-between px-3 py-3"
-        style={{ borderBottom: `0.5px solid ${colors.border}` }}
-      >
-        <p className="font-medium " style={{color: colors.secondary }}>Documentos gerados</p>
+      <div className="flex flex-wrap items-center justify-between px-3 py-3" style={{ borderBottom: `0.5px solid ${colors.border}` }}>
+        <p className="font-medium " style={{ color: colors.secondary }}>
+          Documentos gerados
+        </p>
         <div></div>
 
         {/* ── Dropdown "Comece a Faturar" alinhado à direita ── */}
@@ -278,26 +285,27 @@ export default function FaturasPage() {
           <button
             onClick={() => setDropdownAberto(!dropdownAberto)}
             className="flex items-center gap-2 px-4 py-2 text-sm text-white transition-opacity hover:opacity-80 rounded"
-            style={{ backgroundColor: colors.primary }}
-          >
+            style={{ backgroundColor: colors.primary }}>
             <span className="font-medium">Comece a Facturar</span>
-            <ChevronDown
-              size={18}
-              className={`transition-transform duration-200 ${
-                dropdownAberto ? "rotate-180" : ""
-              }`}
-            />
+            <ChevronDown size={18} className={`transition-transform duration-200 ${dropdownAberto ? "rotate-180" : ""}`} />
           </button>
 
           {/* ── Menu dropdown ── */}
           {dropdownAberto && (
             <div
               className="absolute right-0 mt-2 w-56 rounded shadow-lg z-50"
-              style={{ backgroundColor: colors.background, border: `1px solid ${colors.border}` }}
-            >
+              style={{ backgroundColor: colors.background, border: `1px solid ${colors.border}` }}>
               {/* Nova Venda */}
               <button
                 onClick={() => {
+                  const missing = getIncompleteEmpresaFields(user?.empresa);
+                  if (missing.length > 0) {
+                    const labels: Record<string, string> = { nif: "NIF", telefone: "Telefone", endereco: "Endereço" };
+                    setCamposFaltantes(missing.map((f) => labels[f] || f));
+                    setModalDadosIncompletosOpen(true);
+                    setDropdownAberto(false);
+                    return;
+                  }
                   router.push("/dashboard/Vendas/Nova_venda");
                   setDropdownAberto(false);
                 }}
@@ -305,8 +313,7 @@ export default function FaturasPage() {
                 style={{
                   color: colors.text,
                   borderBottom: `0.5px solid ${colors.border}`,
-                }}
-              >
+                }}>
                 <FileText size={16} style={{ color: colors.secondary }} />
                 <div className="text-left">
                   <div className="font-medium">Gerar factura-recibo</div>
@@ -319,6 +326,14 @@ export default function FaturasPage() {
               {/* Nova Fatura */}
               <button
                 onClick={() => {
+                  const missing = getIncompleteEmpresaFields(user?.empresa);
+                  if (missing.length > 0) {
+                    const labels: Record<string, string> = { nif: "NIF", telefone: "Telefone", endereco: "Endereço" };
+                    setCamposFaltantes(missing.map((f) => labels[f] || f));
+                    setModalDadosIncompletosOpen(true);
+                    setDropdownAberto(false);
+                    return;
+                  }
                   router.push("/dashboard/Faturas/Fatura_Normal");
                   setDropdownAberto(false);
                 }}
@@ -326,8 +341,7 @@ export default function FaturasPage() {
                 style={{
                   color: colors.text,
                   borderBottom: `0.5px solid ${colors.border}`,
-                }}
-              >
+                }}>
                 <FileText size={16} style={{ color: colors.primary }} />
                 <div className="text-left">
                   <div className="font-medium">Gerar factura</div>
@@ -340,14 +354,21 @@ export default function FaturasPage() {
               {/* Nova Proforma */}
               <button
                 onClick={() => {
+                  const missing = getIncompleteEmpresaFields(user?.empresa);
+                  if (missing.length > 0) {
+                    const labels: Record<string, string> = { nif: "NIF", telefone: "Telefone", endereco: "Endereço" };
+                    setCamposFaltantes(missing.map((f) => labels[f] || f));
+                    setModalDadosIncompletosOpen(true);
+                    setDropdownAberto(false);
+                    return;
+                  }
                   router.push("/dashboard/Faturas/Faturas_Proforma");
                   setDropdownAberto(false);
                 }}
                 className="flex items-center gap-3 w-full px-4 py-3 text-sm transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 last:rounded-b"
                 style={{
                   color: colors.text,
-                }}
-              >
+                }}>
                 <FileText size={16} style={{ color: colors.secondary }} />
                 <div className="text-left">
                   <div className="font-medium">Gerar proforma</div>
@@ -367,6 +388,14 @@ export default function FaturasPage() {
           {error}
         </div>
       )}
+
+      {/* Modal de Dados Incompletos */}
+      <ModalDadosIncompletos
+        isOpen={modalDadosIncompletosOpen}
+        onClose={() => setModalDadosIncompletosOpen(false)}
+        camposFaltantes={camposFaltantes}
+        colors={colors}
+      />
 
       {/* ── Tabela de documentos ── */}
       <InvoiceTable

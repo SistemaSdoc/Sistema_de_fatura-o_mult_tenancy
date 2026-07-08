@@ -19,12 +19,15 @@ class AuditLogger
      * documento) NÃO pode ser interrompida por causa do log.
      *
      * @param string $acao   Ex: "Venda Criada", "Documento Cancelado"
-     * @param string $emoji  Ex: "🛒", "❌", "💰"
+     * @param string|null $emoji  Ex: "🛒", "❌", "💰" (default: '📂')
      * @param array  $extra  ['area' => 'Vendas', ...]
      */
-    public static function log(string $acao, string $emoji = '📂', array $extra = []): void
+    public static function log(string $acao, ?string $emoji = '📂', array $extra = []): void
     {
         try {
+            // ✅ Garante que emoji é sempre string (nunca null)
+            $emoji = $emoji ?? '📂';
+
             $ip = request()->ip() ?? 'N/A';
             $user = Auth::user();
             $now = Carbon::now(config('app.timezone', 'Europe/Lisbon'));

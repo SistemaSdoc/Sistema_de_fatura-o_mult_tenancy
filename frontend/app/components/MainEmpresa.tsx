@@ -132,6 +132,68 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
   const empresaLogo = validImageUrl || "";
   const nomeEmpresa = companyName || user?.empresa?.nome || "";
 
+  const getAllowedRoutesForRole = useCallback((role: string): string[] => {
+    switch (role) {
+      case "admin":
+        return ["/dashboard"];
+      case "operador":
+        return [
+          "/dashboard/Vendas",
+          "/dashboard/Vendas/Nova_venda",
+          "/dashboard/Faturas/Fatura_Normal",
+          "/dashboard/Faturas/Faturas_Proforma",
+          "/dashboard/Faturas/Faturas",
+          "/dashboard/Faturas/DC",
+        ];
+      case "contablista":
+        return ["/dashboard", "/dashboard/relatorios"];
+      case "gestor":
+        return [
+          "/dashboard/Vendas",
+          "/dashboard/Vendas/Nova_venda",
+          "/dashboard/Faturas/Fatura_Normal",
+          "/dashboard/Faturas/Faturas_Proforma",
+          "/dashboard/Faturas/Faturas",
+          "/dashboard/Faturas/DC",
+          "/dashboard/Produtos_servicos",
+          "/dashboard/Produtos_servicos/Stock",
+          "/dashboard/Produtos_servicos/categorias",
+          "/dashboard/Fornecedores/Novo_fornecedor",
+        ];
+      default:
+        return [];
+    }
+  }, []);
+
+  const hasRouteAccess = useCallback(
+    (route: string) => {
+      if (!route.startsWith("/dashboard")) return true;
+      if (!userRole || userRole === "admin") return true;
+
+      const normalizedRoute = route.replace(/\/+$/, "");
+      const allowedRoutes = getAllowedRoutesForRole(userRole);
+
+      return allowedRoutes.some((allowedRoute) => {
+        const normalizedAllowedRoute = allowedRoute.replace(/\/+$/, "");
+        return normalizedRoute === normalizedAllowedRoute || normalizedRoute.startsWith(`${normalizedAllowedRoute}/`);
+      });
+    },
+    [getAllowedRoutesForRole, userRole]
+  );
+
+  const getFallbackRouteForRole = useCallback((role: string) => {
+    switch (role) {
+      case "operador":
+        return "/dashboard/Vendas/Nova_venda";
+      case "contablista":
+        return "/dashboard/relatorios";
+      case "gestor":
+        return "/dashboard/Produtos_servicos/Stock";
+      default:
+        return "/dashboard";
+    }
+  }, []);
+
   useEffect(() => {
     setLogoError(false);
   }, [user?.empresa?.logo, companyLogo]);
@@ -156,6 +218,18 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
   useEffect(() => {
     setIsLoaded(true);
   }, []);
+
+  useEffect(() => {
+    if (userLoading || !user || !pathname) return;
+    if (!pathname.startsWith("/dashboard")) return;
+    if (hasRouteAccess(pathname)) return;
+
+    const fallbackRoute = getFallbackRouteForRole(userRole);
+    if (pathname !== fallbackRoute) {
+      toast.error("Você não tem permissão para acessar esta rota.");
+      router.replace(fallbackRoute);
+    }
+  }, [getFallbackRouteForRole, hasRouteAccess, pathname, router, user, userLoading, userRole]);
 
   // Trava o scroll do body quando sidebar mobile ou algum modal estiver aberto
   // (evita "scroll fantasma" atrás do overlay em telas pequenas)
@@ -297,7 +371,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
 
   const toggleNotificacoes = () => {
     if (!user || userLoading) {
-      toast.info("Aguarde, autenticando...");
+      toast.message("Aguarde, autenticando...");
       return;
     }
 
@@ -378,7 +452,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
           ? [
               {
                 label: "Gerar factura-recibo",
-                path: "/dashboard/Vendas/Nova_venda",
+                path: "/dashboard/Vendas",
               },
               {
                 label: "Gerar facturas",
@@ -427,14 +501,14 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
     {
       label: "Fornecedores",
       icon: Truck,
-      path: "/dashboard/Fornecedores/Novo_fornecedor",
+      path: "/dashboard/Fornecedores",
       links: [],
       roles: ["admin", "gestor"],
     },
     {
       label: "Clientes",
       icon: Users,
-      path: "/dashboard/Clientes/Novo_cliente",
+      path: "/dashboard/Clientes",
       links: [],
       roles: ["admin"],
     },
@@ -482,10 +556,6 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
         style={{
           backgroundColor: colors.card,
           borderColor: colors.border,
-          // No mobile a largura é sempre fixa (capada por viewport) e quem
-          // controla exibir/ocultar é o translateX — nunca colapsamos para
-          // width: 0, pois translateX(-100%) de uma caixa com largura 0
-          // não desloca nada e o conteúdo interno continua sendo pintado.
           width: isMobile ? "min(280px, 85vw)" : sidebarOpen ? "260px" : "72px",
           transform: isMobile ? (sidebarOpen ? "translateX(0)" : "translateX(-100%)") : "translateX(0)",
         }}>
@@ -1143,7 +1213,8 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                 <div
                   className="flex items-center justify-center w-8 h-8 text-xs font-bold text-white rounded-lg flex-shrink-0"
                   style={{
-                    background: `linear-gradient(135deg, ${colors.secondary} 0%, ${colors.primary} 100%)`,
+                    background: `${colors.secondary}`,
+                    color: `${colors.primary}`,
                   }}>
                   {userInitial}
                 </div>
@@ -1174,7 +1245,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                 onClick={handleLogout}
                 disabled={logoutLoading}
                 className="flex-1 py-2 px-3 text-xs font-medium text-white transition-all flex items-center justify-center gap-1 hover:scale-105 active:scale-95 md:text-sm"
-                style={{ backgroundColor: colors.danger }}>
+                style={{ backgroundColor: colors.secondary }}>
                 {logoutLoading ? (
                   <>
                     <Loader2 className="w-3 h-3 md:w-4 md:h-4 animate-spin" />

@@ -310,138 +310,157 @@ class DocumentoFiscalService
      | EMISSÃO DE DOCUMENTOS
      | ================================================================== */
 
-    public function emitirDocumento(array $dados)
-    {
-        $this->verificarAcessoUsuario();
-        $this->criarSeriesPadrao();
+public function emitirDocumento(array $dados)
+{
+    $this->verificarAcessoUsuario();
+    $this->criarSeriesPadrao();
 
-        $tipo = $dados['tipo_documento'];
+    $tipo = $dados['tipo_documento'];
 
-        if (!isset($this->configuracoesTipo[$tipo])) {
-            throw new \InvalidArgumentException("Tipo de documento {$tipo} não suportado.");
+    if (!isset($this->configuracoesTipo[$tipo])) {
+        throw new \InvalidArgumentException("Tipo de documento {$tipo} não suportado.");
+    }
+
+    $config = $this->configuracoesTipo[$tipo];
+
+    Log::info("Iniciando emissão de {$config['nome']}", [
+        'tipo' => $tipo,
+        'modo' => $this->getModo(),
+        'empresa_id' => $this->empresa->id,
+        // ✅ Log dos dados bancários recebidos
+        'nome_banco' => $dados['nome_banco'] ?? null,
+        'iban' => $dados['iban'] ?? null,
+        'numero_conta' => $dados['numero_conta'] ?? null,
+    ]);
+
+    return DB::transaction(function () use ($dados, $tipo, $config) {
+
+        $empresa = $this->obterEmpresa();
+        $aplicaIva = $empresa->sujeito_iva;
+        $regime = $empresa->regime_fiscal;
+
+        $this->validarDadosPorTipo($dados, $tipo, $config);
+
+        // Para NC e ND, validações adicionais
+        if ($tipo === 'NC') {
+            $this->validarNotaCredito($dados);
         }
 
-        $config = $this->configuracoesTipo[$tipo];
+        if ($tipo === 'ND') {
+            $this->validarNotaDebito($dados);
+        }
 
-        Log::info("Iniciando emissão de {$config['nome']}", [
-            'tipo' => $tipo,
-            'modo' => $this->getModo(),
-            'empresa_id' => $this->empresa->id,
+        [$numero, $numeroDocumento, $serieFiscal] = $this->gerarNumeroDocumento($tipo);
+
+        $agoraAngola = Carbon::now('Africa/Luanda');
+        $dataEmissao = $agoraAngola->toDateString();
+        $horaEmissao = $agoraAngola->toTimeString();
+
+        $dataVencimento = $this->calcularDataVencimento($tipo, $dados, $agoraAngola);
+        $totais = $this->processarItens($dados['itens'] ?? [], $aplicaIva, $regime);
+        $clienteId = $this->resolverCliente($dados, $tipo);
+
+        $documentoData = [
+            'id' => Str::uuid(),
+            'user_id' => $this->getUserId(),
+            'venda_id' => $dados['venda_id'] ?? null,
+            'fatura_id' => $dados['fatura_id'] ?? null,
+            'serie' => $serieFiscal->serie ?? 'A',
+            'numero' => $numero,
+            'numero_documento' => $numeroDocumento,
+            'tipo_documento' => $tipo,
+            'data_emissao' => $dataEmissao,
+            'hora_emissao' => $horaEmissao,
+            'data_vencimento' => $dataVencimento,
+            'base_tributavel' => $totais['base'],
+            'total_iva' => $totais['iva'],
+            'total_retencao' => $totais['retencao'],
+            'total_liquido' => $totais['liquido'],
+            'estado' => $config['estado_inicial'],
+            'motivo' => $dados['motivo'] ?? null,
+            'hash_fiscal' => null,
+            'rsa_assinatura' => null,
+            'rsa_versao_chave' => null,
+            'qr_code' => null,
+            'hash_anterior' => null,
+            'referencia_externa' => $dados['referencia_externa'] ?? null,
+            
+            // ✅ ADICIONAR DADOS BANCÁRIOS
+            'nome_banco' => $dados['nome_banco'] ?? null,
+            'iban' => $dados['iban'] ?? null,
+            'numero_conta' => $dados['numero_conta'] ?? null,
+        ];
+
+        if ($this->isColectivo()) {
+            $documentoData['tenant_id'] = $this->empresa->id;
+        }
+
+        if ($clienteId) {
+            $documentoData['cliente_id'] = $clienteId;
+        }
+
+        if (!$clienteId && !empty($dados['cliente_nome'])) {
+            $documentoData['cliente_nome'] = $dados['cliente_nome'];
+            if (!empty($dados['cliente_nif'])) {
+                $documentoData['cliente_nif'] = $dados['cliente_nif'];
+            }
+        }
+
+        if ($this->isColectivo()) {
+            $documento = SharedDocumentoFiscal::create($documentoData);
+        } else {
+            $documento = TenantDocumentoFiscal::create($documentoData);
+        }
+
+        // ✅ Log dos dados bancários salvos
+        Log::info('[DocumentoFiscalService] Dados bancários salvos no documento', [
+            'documento_id' => $documento->id,
+            'numero_documento' => $documento->numero_documento,
+            'nome_banco_salvo' => $documento->nome_banco ?? null,
+            'iban_salvo' => $documento->iban ?? null,
+            'numero_conta_salvo' => $documento->numero_conta ?? null,
         ]);
 
-        return DB::transaction(function () use ($dados, $tipo, $config) {
+        if (!empty($totais['itens_processados'])) {
+            $this->criarItensDocumento($documento, $totais['itens_processados']);
+        }
 
-            $empresa = $this->obterEmpresa();
-            $aplicaIva = $empresa->sujeito_iva;
-            $regime = $empresa->regime_fiscal;
+        $this->executarAcoesPosCriacao($documento, $dados, $tipo);
 
-            $this->validarDadosPorTipo($dados, $tipo, $config);
-
-            // Para NC e ND, validações adicionais
-            if ($tipo === 'NC') {
-                $this->validarNotaCredito($dados);
-            }
-
-            if ($tipo === 'ND') {
-                $this->validarNotaDebito($dados);
-            }
-
-            [$numero, $numeroDocumento, $serieFiscal] = $this->gerarNumeroDocumento($tipo);
-
-            $agoraAngola = Carbon::now('Africa/Luanda');
-            $dataEmissao = $agoraAngola->toDateString();
-            $horaEmissao = $agoraAngola->toTimeString();
-
-            $dataVencimento = $this->calcularDataVencimento($tipo, $dados, $agoraAngola);
-            $totais = $this->processarItens($dados['itens'] ?? [], $aplicaIva, $regime);
-            $clienteId = $this->resolverCliente($dados, $tipo);
-
-            $documentoData = [
-                'id' => Str::uuid(),
-                'user_id' => $this->getUserId(),
-                'venda_id' => $dados['venda_id'] ?? null,
-                'fatura_id' => $dados['fatura_id'] ?? null,
-                'serie' => $serieFiscal->serie ?? 'A',
-                'numero' => $numero,
-                'numero_documento' => $numeroDocumento,
-                'tipo_documento' => $tipo,
-                'data_emissao' => $dataEmissao,
-                'hora_emissao' => $horaEmissao,
-                'data_vencimento' => $dataVencimento,
-                'base_tributavel' => $totais['base'],
-                'total_iva' => $totais['iva'],
-                'total_retencao' => $totais['retencao'],
-                'total_liquido' => $totais['liquido'],
-                'estado' => $config['estado_inicial'],
-                'motivo' => $dados['motivo'] ?? null,
-                'hash_fiscal' => null,
-                'rsa_assinatura' => null,
-                'rsa_versao_chave' => null,
-                'qr_code' => null,
-                'hash_anterior' => null,
-                'referencia_externa' => $dados['referencia_externa'] ?? null,
-            ];
-
-            if ($this->isColectivo()) {
-                $documentoData['tenant_id'] = $this->empresa->id;
-            }
-
-            if ($clienteId) {
-                $documentoData['cliente_id'] = $clienteId;
-            }
-
-            if (!$clienteId && !empty($dados['cliente_nome'])) {
-                $documentoData['cliente_nome'] = $dados['cliente_nome'];
-                if (!empty($dados['cliente_nif'])) {
-                    $documentoData['cliente_nif'] = $dados['cliente_nif'];
-                }
-            }
-
-            if ($this->isColectivo()) {
-                $documento = SharedDocumentoFiscal::create($documentoData);
-            } else {
-                $documento = TenantDocumentoFiscal::create($documentoData);
-            }
-
-            if (!empty($totais['itens_processados'])) {
-                $this->criarItensDocumento($documento, $totais['itens_processados']);
-            }
-
-            $this->executarAcoesPosCriacao($documento, $dados, $tipo);
-
-            if ($config['requer_assinatura']) {
-                $this->assinarDocumento($documento);
-            } else {
-                $documento->update([
-                    'hash_fiscal' => $this->gerarHashSimples($documento),
-                ]);
-            }
-
-            if ($tipo === 'FT' && !empty($dados['dados_pagamento'])) {
-                $this->gerarRecibo($documento, [
-                    'valor' => $dados['dados_pagamento']['valor'],
-                    'metodo_pagamento' => $dados['dados_pagamento']['metodo'],
-                    'data_pagamento' => $dados['dados_pagamento']['data'] ?? $agoraAngola->toDateString(),
-                    'referencia' => $dados['dados_pagamento']['referencia'] ?? null,
-                ]);
-            }
-
-            if ($tipo === 'FR' && !empty($dados['dados_pagamento'])) {
-                $documento->update([
-                    'metodo_pagamento' => $dados['dados_pagamento']['metodo'],
-                    'referencia_pagamento' => $dados['dados_pagamento']['referencia'] ?? null,
-                ]);
-            }
-
-            Log::info("{$config['nome']} emitida com sucesso", [
-                'documento_id' => $documento->id,
-                'numero' => $numeroDocumento,
-                'modo' => $this->getModo(),
+        if ($config['requer_assinatura']) {
+            $this->assinarDocumento($documento);
+        } else {
+            $documento->update([
+                'hash_fiscal' => $this->gerarHashSimples($documento),
             ]);
+        }
 
-            return $documento->load('itens.produto', 'cliente', 'documentoOrigem');
-        });
-    }
+        if ($tipo === 'FT' && !empty($dados['dados_pagamento'])) {
+            $this->gerarRecibo($documento, [
+                'valor' => $dados['dados_pagamento']['valor'],
+                'metodo_pagamento' => $dados['dados_pagamento']['metodo'],
+                'data_pagamento' => $dados['dados_pagamento']['data'] ?? $agoraAngola->toDateString(),
+                'referencia' => $dados['dados_pagamento']['referencia'] ?? null,
+            ]);
+        }
+
+        if ($tipo === 'FR' && !empty($dados['dados_pagamento'])) {
+            $documento->update([
+                'metodo_pagamento' => $dados['dados_pagamento']['metodo'],
+                'referencia_pagamento' => $dados['dados_pagamento']['referencia'] ?? null,
+            ]);
+        }
+
+        Log::info("{$config['nome']} emitida com sucesso", [
+            'documento_id' => $documento->id,
+            'numero' => $numeroDocumento,
+            'modo' => $this->getModo(),
+            'tem_dados_bancarios' => !empty($documento->nome_banco) || !empty($documento->iban) || !empty($documento->numero_conta),
+        ]);
+
+        return $documento->load('itens.produto', 'cliente', 'documentoOrigem');
+    });
+}
 
     /* =====================================================================
      | RECIBO

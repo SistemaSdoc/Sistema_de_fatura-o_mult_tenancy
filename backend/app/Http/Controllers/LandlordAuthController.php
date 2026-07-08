@@ -227,10 +227,14 @@ class LandlordAuthController extends Controller
             // 6️⃣ Determina para onde redirecionar
             $frontendUrl = env('VITE_FRONTEND_URL', 'http://localhost:3000');
 
-            // ✅ Se novo usuário (sem empresa), vai para configurações
+            // ✅ Se novo usuário (sem empresa), vai para onboarding de freelancer
+            // O fluxo Google deve iniciar no shared/faturaja.
             if (!$user->empresa_id) {
-                $redirectFrontend = $frontendUrl . '/onboarding'; // era /dashboard/configuracoes?tab=empresa
-                Log::info('[GOOGLE AUTH] Novo usuário -> onboarding', ['user_id' => $user->id]);
+                $this->limparContextoTenantSessao();
+                $redirectFrontend = $frontendUrl . '/onboarding';
+                Log::info('[GOOGLE AUTH] Onboarding coletivo/shared', [
+                    'user_id' => $user->id,
+                ]);
             } else {
                 // ✅ Usuário existente com empresa -> callback intermediário
                 // (o frontend precisa guardar o tenant_id ANTES de chamar /me)
@@ -243,6 +247,26 @@ class LandlordAuthController extends Controller
                     ]);
                     $redirectFrontend = $frontendUrl . '/login?error=empresa_not_found';
                 } else {
+                    $tenantDatabase = $empresa->modo === 'colectivo'
+                        ? config('database.connections.shared.database', env('DB_SHARED_DATABASE', 'faturaja_shared'))
+                        : $empresa->db_name;
+
+                    // 🔑 ESTABELECER SESSÃO DO TENANT (padrão do FreelancerController)
+                    request()->session()->put([
+                        'tenant_id'      => $empresa->id,
+                        'tenant_db'      => $tenantDatabase,
+                        'tenant_nome'    => $empresa->nome,
+                        'tenant_modo'    => $empresa->modo,
+                        'login_modo'     => 'google-existing',
+                        'login_at'       => now()->toIso8601String(),
+                        'landlord_user_id' => $user->id,
+                    ]);
+
+                    Log::info('[GOOGLE AUTH] Sessão tenant estabelecida (usuário existente)', [
+                        'tenant_id' => $empresa->id,
+                        'user_id' => $user->id,
+                    ]);
+
                     $redirectFrontend = $frontendUrl . '/auth/callback'
                         . '?empresa_id=' . urlencode($empresa->id)
                         . '&subdomain=' . urlencode($empresa->subdomain ?? '');
@@ -263,5 +287,27 @@ class LandlordAuthController extends Controller
             $frontendUrl = env('VITE_FRONTEND_URL', 'http://localhost:3000');
             return redirect()->away($frontendUrl . '/login?error=google_auth_failed');
         }
+    }
+
+    /**
+     * Remove qualquer contexto de tenant preso na sessão.
+     *
+     * Isto é importante quando o login Google deve seguir para onboarding shared/colectivo,
+     * porque uma sessão anterior pode continuar a apontar para uma empresa antiga.
+     */
+    private function limparContextoTenantSessao(): void
+    {
+        request()->session()->forget([
+            'tenant_id',
+            'tenant_subdomain',
+            'tenant_db',
+            'tenant_nome',
+            'tenant_modo',
+            'user_tenant_id',
+            'user_email',
+            'login_modo',
+            'login_at',
+            'landlord_user_id',
+        ]);
     }
 }

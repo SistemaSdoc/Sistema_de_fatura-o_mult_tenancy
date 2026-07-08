@@ -20,317 +20,286 @@ import { TabsEstoque } from "@/app/components/Stock/TabsEstoque";
 // Hooks
 import { useEstoque } from "@/hooks/useEstoque";
 
-const NovoProdutoForm = dynamic(
-    () => import("@/app/components/Stock/NovoProdutoForm").then((mod) => mod.NovoProdutoForm),
-    {
-        ssr: false,
-        loading: () => (
-            <div className="flex min-h-[320px] items-center justify-center text-sm text-slate-500">
-                Carregando formulário...
-            </div>
-        ),
-    },
-);
+const NovoProdutoForm = dynamic(() => import("@/app/components/Stock/NovoProdutoForm").then((mod) => mod.NovoProdutoForm), {
+  ssr: false,
+  loading: () => <div className="flex min-h-[320px] items-center justify-center text-sm text-slate-500">Carregando formulário...</div>,
+});
 
-const ModalEdicao = dynamic(
-    () => import("@/app/components/Stock/ModalEdicao").then((mod) => mod.ModalEdicao),
-    { ssr: false },
-);
+const ModalEdicao = dynamic(() => import("@/app/components/Stock/ModalEdicao").then((mod) => mod.ModalEdicao), { ssr: false });
 
 export default function EstoquePage() {
-    const router = useRouter();
-    const colors = useThemeColors();
+  const router = useRouter();
+  const colors = useThemeColors();
 
-    // Estado para controlar o modal de novo produto
-    const [modalNovoProdutoAberto, setModalNovoProdutoAberto] = useState(false);
+  // Estado para controlar o modal de novo produto
+  const [modalNovoProdutoAberto, setModalNovoProdutoAberto] = useState(false);
 
-    const {
-        // Estados
-        loading,
-        resumo,
-        itens,
-        itensDeletados,
-        categorias,
-        movimentacoes,
-        busca,
-        categoriaFiltro,
-        tipoFiltro,
-        filtroEstoque,
-        abaAtiva,
-        modalEntradaAberto,
-        modalEdicaoAberto,
-        itemSelecionado,
-        modalConfirmacao,
-        produtos,
-        servicos,
+  const {
+    // Estados
+    loading,
+    resumo,
+    itens,
+    itensDeletados,
+    categorias,
+    movimentacoes,
+    busca,
+    categoriaFiltro,
+    tipoFiltro,
+    filtroEstoque,
+    abaAtiva,
+    modalEntradaAberto,
+    modalEdicaoAberto,
+    itemSelecionado,
+    modalConfirmacao,
+    produtos,
+    servicos,
 
-        // Setters
-        setBusca,
-        setCategoriaFiltro,
-        setTipoFiltro,
-        setFiltroEstoque,
-        setAbaAtiva,
+    // Setters
+    setBusca,
+    setCategoriaFiltro,
+    setTipoFiltro,
+    setFiltroEstoque,
+    setAbaAtiva,
 
-        // Actions
-        carregarDados,
-        carregarMovimentacoes,
-        carregarDeletados,
-        aplicarFiltros,
-        abrirModalEntrada,
-        abrirModalEditar,
-        abrirModalDeletar,
-        abrirModalRestaurar,
-        abrirModalForceDelete,
-        fecharModais,
-        handleEntrada,
-        handleEditarItem,
-        handleDeletarItem,
-        handleRestaurarItem,
-        handleForceDelete,
-    } = useEstoque();
+    // Actions
+    carregarDados,
+    carregarMovimentacoes,
+    carregarDeletados,
+    aplicarFiltros,
+    abrirModalEntrada,
+    abrirModalEditar,
+    abrirModalDeletar,
+    abrirModalRestaurar,
+    abrirModalForceDelete,
+    fecharModais,
+    handleEntrada,
+    handleEditarItem,
+    handleDeletarItem,
+    handleRestaurarItem,
+    handleForceDelete,
+  } = useEstoque();
 
-    useEffect(() => {
-        carregarDados();
-    }, [carregarDados]);
+  useEffect(() => {
+    carregarDados();
+  }, [carregarDados]);
 
-    useEffect(() => {
-        if (abaAtiva === "movimentacoes") {
-            carregarMovimentacoes();
-        }
-    }, [abaAtiva, carregarMovimentacoes]);
-
-    useEffect(() => {
-        if (abaAtiva === "deletados") {
-            carregarDeletados();
-        }
-    }, [abaAtiva, carregarDeletados]);
-
-    const abrirModalNovoProduto = () => {
-        setModalNovoProdutoAberto(true);
-    };
-
-    const fecharModalNovoProduto = () => {
-        setModalNovoProdutoAberto(false);
-    };
-
-    const handleProdutoCriado = () => {
-        // Recarregar a lista de produtos após criar um novo
-        carregarDados();
-        fecharModalNovoProduto();
-    };
-
-    if (loading && !resumo) {
-        return (
-            <MainEmpresa>
-                <div className="flex items-center justify-center min-h-[400px] " style={{ backgroundColor: colors.background }}>
-                    <div
-                        className="animate-spin w-10 h-10 border-3 rounded-full"
-                        style={{
-                            borderColor: `${colors.primary}30`,
-                            borderTopColor: colors.primary
-                        }}
-                    />
-                </div>
-            </MainEmpresa>
-        );
+  useEffect(() => {
+    if (abaAtiva === "movimentacoes") {
+      carregarMovimentacoes();
     }
+  }, [abaAtiva, carregarMovimentacoes]);
 
+  useEffect(() => {
+    if (abaAtiva === "deletados") {
+      carregarDeletados();
+    }
+  }, [abaAtiva, carregarDeletados]);
+
+  const abrirModalNovoProduto = () => {
+    setModalNovoProdutoAberto(true);
+  };
+
+  const fecharModalNovoProduto = () => {
+    setModalNovoProdutoAberto(false);
+  };
+
+  const handleProdutoCriado = () => {
+    // Recarregar a lista de produtos após criar um novo
+    carregarDados();
+    fecharModalNovoProduto();
+  };
+
+  if (loading && !resumo) {
     return (
-        <MainEmpresa>
-            <div className="space-y-6 max-w-7xl mx-auto p-4 md:p-6 transition-colors duration-300" style={{ backgroundColor: colors.background }}>
-                {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                        <button
-                            className="flex items-center gap-2 p-1.5 transition-colors hover:opacity-70"
-                            style={{ color: colors.primary }}
-                            onClick={() => router.back()}
-                        >
-                            <ArrowLeft className="w-4 h-4" />
-                            <h1 className="text-2xl md:text-3xl font-bold" style={{ color: colors.secondary }}>Seu Stock</h1>
-                        </button>
+      <MainEmpresa>
+        <div className="flex items-center justify-center min-h-[400px] " style={{ backgroundColor: colors.background }}>
+          <div
+            className="animate-spin w-10 h-10 border-3 rounded-full"
+            style={{
+              borderColor: `${colors.primary}30`,
+              borderTopColor: colors.primary,
+            }}
+          />
+        </div>
+      </MainEmpresa>
+    );
+  }
 
-                        <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>Gerencie seu catálogo e controle de estoque</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={abrirModalNovoProduto}
-                            className="flex items-center gap-2 px-4 py-2 text-white transition-colors text-sm font-medium hover:opacity-90"
-                            style={{ backgroundColor: colors.secondary }}
-                        >
-                            <Plus className="w-4 h-4" />
-                            Novo Item
-                        </button>
+  return (
+    <MainEmpresa>
+      <div className="space-y-6 max-w-7xl mx-auto p-4 md:p-6 transition-colors duration-300" style={{ backgroundColor: colors.background }}>
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <button
+              className="flex items-center gap-2 p-1.5 transition-colors hover:opacity-70"
+              style={{ color: colors.primary }}
+              onClick={() => router.back()}>
+              <ArrowLeft className="w-4 h-4" />
+              <h1 className="text-2xl md:text-3xl font-bold" style={{ color: colors.secondary }}>
+                Seu Stock
+              </h1>
+            </button>
 
-                        <button
-                            onClick={() => router.push("/dashboard/Produtos_servicos/categorias")}
-                            className="flex items-center gap-2 px-4 py-2 text-white transition-colors text-sm font-medium hover:opacity-90"
-                            style={{ backgroundColor: colors.primary }}
-                        >
-                            <Plus className="w-4 h-4" />
-                            Nova Categoria
-                        </button>
-                    </div>
-                </div>
+            <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>
+              Gerencie seu catálogo e controle de estoque
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={abrirModalNovoProduto}
+              className="flex items-center gap-2 px-4 py-2 text-white transition-colors text-sm font-medium hover:opacity-90"
+              style={{ backgroundColor: colors.secondary }}>
+              <Plus className="w-4 h-4" />
+              Novo Item
+            </button>
 
-                {/* Cards de Resumo */}
-                {resumo && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <StatCard
-                            icon={<Package className="w-5 h-5" />}
-                            label="Total de Produtos"
-                            value={produtos.length}
-                            colors={colors}
-                        />
-                        <StatCard
-                            icon={<Wrench className="w-5 h-5" />}
-                            label="Total de Serviços"
-                            value={servicos.length}
-                            colors={colors}
-                        />
-                        <StatCard
-                            icon={<AlertTriangle className="w-5 h-5" />}
-                            label="Estoque Baixo"
-                            value={resumo.produtosEstoqueBaixo || 0}
-                            colors={colors}
-                        />
-                        <StatCard
-                            icon={<XCircle className="w-5 h-5" />}
-                            label="Sem Estoque"
-                            value={resumo.produtosSemEstoque || 0}
-                            colors={colors}
-                        />
-                    </div>
-                )}
+            <button
+              onClick={() => router.push("/dashboard/Produtos_servicos/categorias")}
+              className="flex items-center gap-2 px-4 py-2 text-white transition-colors text-sm font-medium hover:opacity-90"
+              style={{ backgroundColor: colors.primary }}>
+              <Plus className="w-4 h-4" />
+              Nova Categoria
+            </button>
+          </div>
+        </div>
 
-                {/* Tabs e Conteúdo */}
-                <div className="shadow-sm border overflow-hidden " style={{
-                    backgroundColor: colors.card,
-                    borderColor: colors.border
-                }}>
-                    <TabsEstoque
-                        abaAtiva={abaAtiva}
-                        onAbaChange={setAbaAtiva}
-                        totalItens={itens.length}
-                        totalDeletados={itensDeletados.length}
-                        colors={colors}
-                    />
+        {/* Cards de Resumo */}
+        {resumo && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard icon={<Package className="w-5 h-5" />} label="Total de Produtos" value={produtos.length} colors={colors} />
+            <StatCard icon={<Wrench className="w-5 h-5" />} label="Total de Serviços" value={servicos.length} colors={colors} />
+            <StatCard
+              icon={<AlertTriangle className="w-5 h-5" />}
+              label="Estoque Baixo"
+              value={resumo.produtosEstoqueBaixo || 0}
+              colors={colors}
+            />
+            <StatCard icon={<XCircle className="w-5 h-5" />} label="Sem Estoque" value={resumo.produtosSemEstoque || 0} colors={colors} />
+          </div>
+        )}
 
-                    <div className="p-4 md:p-6">
-                        {abaAtiva === "itens" && (
-                            <>
-                                <FiltrosEstoque
-                                    busca={busca}
-                                    onBuscaChange={setBusca}
-                                    tipoFiltro={tipoFiltro}
-                                    onTipoFiltroChange={setTipoFiltro}
-                                    categoriaFiltro={categoriaFiltro}
-                                    onCategoriaFiltroChange={setCategoriaFiltro}
-                                    filtroEstoque={filtroEstoque}
-                                    onFiltroEstoqueChange={setFiltroEstoque}
-                                    categorias={categorias}
-                                    loading={loading}
-                                    onAplicarFiltros={aplicarFiltros}
-                                    showEstoqueFilter={tipoFiltro !== "servico"}
-                                    colors={colors}
-                                />
+        {/* Tabs e Conteúdo */}
+        <div
+          className="shadow-sm border overflow-hidden "
+          style={{
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+          }}>
+          <TabsEstoque
+            abaAtiva={abaAtiva}
+            onAbaChange={setAbaAtiva}
+            totalItens={itens.length}
+            totalDeletados={itensDeletados.length}
+            colors={colors}
+          />
 
-                                <TabelaItens
-                                    itens={itens}
-                                    onEditar={abrirModalEditar}
-                                    onRegistrarEntrada={abrirModalEntrada}
-                                    onMoverParaLixeira={abrirModalDeletar}
-                                    colors={colors}
-                                />
-                            </>
-                        )}
+          <div className="p-4 md:p-6">
+            {abaAtiva === "itens" && (
+              <>
+                <FiltrosEstoque
+                  busca={busca}
+                  onBuscaChange={setBusca}
+                  tipoFiltro={tipoFiltro}
+                  onTipoFiltroChange={setTipoFiltro}
+                  categoriaFiltro={categoriaFiltro}
+                  onCategoriaFiltroChange={setCategoriaFiltro}
+                  filtroEstoque={filtroEstoque}
+                  onFiltroEstoqueChange={setFiltroEstoque}
+                  categorias={categorias}
+                  loading={loading}
+                  onAplicarFiltros={aplicarFiltros}
+                  showEstoqueFilter={tipoFiltro !== "servico"}
+                  colors={colors}
+                />
 
-                        {abaAtiva === "movimentacoes" && (
-                            <TabelaMovimentacoes
-                                movimentacoes={movimentacoes}
-                                colors={colors}
-                            />
-                        )}
-
-                        {abaAtiva === "deletados" && (
-                            <TabelaLixeira
-                                itens={itensDeletados}
-                                onRestaurar={abrirModalRestaurar}
-                                onDeletarPermanentemente={abrirModalForceDelete}
-                                colors={colors}
-                            />
-                        )}
-                    </div>
-                </div>
-            </div>
-
-            {/* Modal de Novo Produto - Usando NovoProdutoForm diretamente */}
-            {modalNovoProdutoAberto && (
-                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in-0 duration-200">
-                    <div
-                        className="shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden rounded-lg animate-in zoom-in-95 fade-in-0 duration-300"
-                        style={{ backgroundColor: colors.card }}
-                    >
-                        <div className="p-6 overflow-y-auto max-h-[90vh]">
-                            <NovoProdutoForm
-                                onSuccess={handleProdutoCriado}
-                                onCancel={fecharModalNovoProduto}
-                            />
-                        </div>
-                    </div>
-                </div>
+                <TabelaItens
+                  itens={itens}
+                  onEditar={abrirModalEditar}
+                  onRegistrarEntrada={abrirModalEntrada}
+                  onMoverParaLixeira={abrirModalDeletar}
+                  colors={colors}
+                />
+              </>
             )}
 
-            {/* Modal de Edição */}
-            <ModalEdicao
-                isOpen={modalEdicaoAberto}
-                item={itemSelecionado}
-                onSave={handleEditarItem}
-                onClose={fecharModais}
-                categorias={categorias}
-            />
+            {abaAtiva === "movimentacoes" && <TabelaMovimentacoes movimentacoes={movimentacoes} colors={colors} />}
 
-            {/* Modal de Entrada de Estoque */}
-            <ModalEntrada
-                isOpen={modalEntradaAberto}
-                onClose={fecharModais}
-                produto={itemSelecionado}
-                onConfirm={handleEntrada}
+            {abaAtiva === "deletados" && (
+              <TabelaLixeira
+                itens={itensDeletados}
+                onRestaurar={abrirModalRestaurar}
+                onDeletarPermanentemente={abrirModalForceDelete}
                 colors={colors}
-            />
+              />
+            )}
+          </div>
+        </div>
+      </div>
 
-            {/* Modal de Confirmação - Delete (Mover para Lixeira) */}
-            <ModalConfirmacao
-                isOpen={modalConfirmacao.isOpen && modalConfirmacao.tipo === "delete"}
-                onClose={fecharModais}
-                onConfirm={handleDeletarItem}
-                titulo="Mover para Lixeira"
-                mensagem={`Tem certeza que deseja mover "${modalConfirmacao.produto?.nome}" para a lixeira?`}
-                tipo="delete"
-                colors={colors}
-            />
+      {/* Modal de Novo Produto - Usando NovoProdutoForm diretamente */}
+      {modalNovoProdutoAberto && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in-0 duration-200">
+          <div
+            className="shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden rounded-lg animate-in zoom-in-95 fade-in-0 duration-300"
+            style={{ backgroundColor: colors.card }}>
+            <div className="p-6 overflow-y-auto max-h-[90vh]">
+              <NovoProdutoForm onSuccess={handleProdutoCriado} onCancel={fecharModalNovoProduto} />
+            </div>
+          </div>
+        </div>
+      )}
 
-            {/* Modal de Confirmação - Restaurar */}
-            <ModalConfirmacao
-                isOpen={modalConfirmacao.isOpen && modalConfirmacao.tipo === "restore"}
-                onClose={fecharModais}
-                onConfirm={handleRestaurarItem}
-                titulo="Restaurar Item"
-                mensagem={`Deseja restaurar "${modalConfirmacao.produto?.nome}"?`}
-                tipo="restore"
-                colors={colors}
-            />
+      {/* Modal de Edição */}
+      <ModalEdicao
+        isOpen={modalEdicaoAberto}
+        item={itemSelecionado}
+        onSave={handleEditarItem}
+        onClose={fecharModais}
+        categorias={categorias}
+      />
 
-            {/* Modal de Confirmação - Delete Permanente */}
-            <ModalConfirmacao
-                isOpen={modalConfirmacao.isOpen && modalConfirmacao.tipo === "warning"}
-                onClose={fecharModais}
-                onConfirm={handleForceDelete}
-                titulo="Deletar Permanentemente"
-                mensagem={`Esta ação não pode ser desfeita. Deletar "${modalConfirmacao.produto?.nome}" permanentemente?`}
-                tipo="warning"
-                colors={colors}
-            />
-        </MainEmpresa>
-    );
+      {/* Modal de Entrada de Estoque */}
+      <ModalEntrada
+        isOpen={modalEntradaAberto}
+        onClose={fecharModais}
+        produto={itemSelecionado}
+        onConfirm={handleEntrada}
+        colors={colors}
+      />
+
+      {/* Modal de Confirmação - Delete (Mover para Lixeira) */}
+      <ModalConfirmacao
+        isOpen={modalConfirmacao.isOpen && modalConfirmacao.tipo === "delete"}
+        onClose={fecharModais}
+        onConfirm={handleDeletarItem}
+        titulo="Mover para Lixeira"
+        mensagem={`Tem certeza que deseja mover "${modalConfirmacao.produto?.nome}" para a lixeira?`}
+        tipo="delete"
+        colors={colors}
+      />
+
+      {/* Modal de Confirmação - Restaurar */}
+      <ModalConfirmacao
+        isOpen={modalConfirmacao.isOpen && modalConfirmacao.tipo === "restore"}
+        onClose={fecharModais}
+        onConfirm={handleRestaurarItem}
+        titulo="Restaurar Item"
+        mensagem={`Deseja restaurar "${modalConfirmacao.produto?.nome}"?`}
+        tipo="restore"
+        colors={colors}
+      />
+
+      {/* Modal de Confirmação - Delete Permanente */}
+      <ModalConfirmacao
+        isOpen={modalConfirmacao.isOpen && modalConfirmacao.tipo === "warning"}
+        onClose={fecharModais}
+        onConfirm={handleForceDelete}
+        titulo="Deletar Permanentemente"
+        mensagem={`Esta ação não pode ser desfeita. Deletar "${modalConfirmacao.produto?.nome}" permanentemente?`}
+        tipo="warning"
+        colors={colors}
+      />
+    </MainEmpresa>
+  );
 }

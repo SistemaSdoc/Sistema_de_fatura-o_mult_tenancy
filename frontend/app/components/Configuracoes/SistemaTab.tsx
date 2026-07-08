@@ -1,41 +1,17 @@
 "use client";
 
 import React from "react";
-import {
-  Download,
-  Upload,
-  RefreshCcw,
-  Sun,
-  Moon,
-  Globe,
-  LogOut,
-  Trash2,
-} from "lucide-react";
+import { Download, Upload, RefreshCcw, Sun, Moon, Globe, LogOut, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeColors } from "./ConfiguracoesComuns";
 
-export function SistemaTab({
-  colors,
-  theme,
-  toggleTheme,
-}: {
-  colors: ThemeColors;
-  theme: string;
-  toggleTheme: () => void;
-}) {
+export function SistemaTab({ colors, theme, toggleTheme }: { colors: ThemeColors; theme: string; toggleTheme: () => void }) {
   return (
     <div className="space-y-6">
-      <Card
-        style={{ backgroundColor: colors.card, borderColor: colors.border }}
-      >
+      <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
         <CardHeader>
           <CardTitle style={{ color: colors.secondary }}>Aparência</CardTitle>
         </CardHeader>
@@ -54,8 +30,7 @@ export function SistemaTab({
               onClick={toggleTheme}
               variant="outline"
               className="gap-2"
-              style={{ borderColor: colors.border, color: colors.text }}
-            >
+              style={{ borderColor: colors.border, color: colors.text }}>
               {theme === "dark" ? (
                 <>
                   <Sun className="w-4 h-4" /> Tema Claro
@@ -70,7 +45,7 @@ export function SistemaTab({
         </CardContent>
       </Card>
 
-    {/*  <Card
+      {/*  <Card
         style={{ backgroundColor: colors.card, borderColor: colors.border }}
       >
         <CardHeader>
@@ -197,9 +172,7 @@ export function SistemaTab({
         </CardContent>
       </Card>*/}
 
-      <Card
-        style={{ backgroundColor: colors.card, borderColor: colors.border }}
-      >
+      <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
         <CardHeader>
           <CardTitle style={{ color: colors.danger }}>Zona de Perigo</CardTitle>
         </CardHeader>
@@ -219,8 +192,7 @@ export function SistemaTab({
               className="gap-2"
               style={{ backgroundColor: colors.danger }}
               onClick={() => toast.error("Funcionalidade restrita")}
-              disabled
-            >
+              disabled>
               <Trash2 className="w-4 h-4" /> Excluir
             </Button>
           </div>

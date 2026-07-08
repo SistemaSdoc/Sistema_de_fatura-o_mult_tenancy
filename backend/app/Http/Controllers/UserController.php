@@ -25,7 +25,7 @@ class UserController extends Controller
     {
         // ✅ Obtém da sessão (prioridade)
         $this->empresa = app('current.empresa');
-       $this->modo = session('tenant_modo') ?? $this->empresa?->modo ?? 'colectivo';
+        $this->modo = session('tenant_modo') ?? $this->empresa?->modo ?? 'colectivo';
 
         Log::debug('[UserController] Inicializado', [
             'modo' => $this->modo,
@@ -37,11 +37,11 @@ class UserController extends Controller
      | HELPERS
      | ================================================================== */
 
-protected function getModo(): string
-{
-    $this->modo = session('tenant_modo') ?? $this->empresa?->modo ?? 'colectivo';
-    return $this->modo;
-}
+    protected function getModo(): string
+    {
+        $this->modo = session('tenant_modo') ?? $this->empresa?->modo ?? 'colectivo';
+        return $this->modo;
+    }
     protected function getEmpresa(): ?Empresa
     {
         if (!$this->empresa) {
@@ -69,17 +69,17 @@ protected function getModo(): string
      | VERIFICAÇÃO DE ACESSO
      | ================================================================== */
 
-protected function verificarAcessoUsuario(): void
-{
-    Log::debug('[UserController] Verificando acesso');
+    protected function verificarAcessoUsuario(): void
+    {
+        Log::debug('[UserController] Verificando acesso');
 
-    $this->empresa = app('current.empresa');
-    if (!$this->empresa) {
-        Log::error('[UserController] Empresa não identificada.');
-        throw new \Exception('Empresa não identificada.', 400);
-    }
+        $this->empresa = app('current.empresa');
+        if (!$this->empresa) {
+            Log::error('[UserController] Empresa não identificada.');
+            throw new \Exception('Empresa não identificada.', 400);
+        }
 
-    $this->modo = $this->empresa->modo ?? 'colectivo';
+        $this->modo = $this->empresa->modo ?? 'colectivo';
 
         // ⚠️ Tenta ambos os guards para garantir consistência entre
         // login normal e login Google.
@@ -88,22 +88,22 @@ protected function verificarAcessoUsuario(): void
             $landlordUser = Auth::guard('landlord')->user();
         }
 
-    $tenantUser = $this->buscarUsuario($this->empresa, $landlordUser->email);
-    if (!$tenantUser) {
-        Log::error('[UserController] Utilizador tenant não encontrado.', [
-            'email' => $landlordUser->email,
+        $tenantUser = $this->buscarUsuario($this->empresa, $landlordUser->email);
+        if (!$tenantUser) {
+            Log::error('[UserController] Utilizador tenant não encontrado.', [
+                'email' => $landlordUser->email,
+            ]);
+            throw new \Exception('Usuário não tem permissão para aceder a esta empresa.', 403);
+        }
+
+        $this->tenantUser = $tenantUser;
+
+        Log::info('[UserController] Acesso verificado com sucesso', [
+            'modo' => $this->modo,
+            'user_id' => $tenantUser->id,
+            'email' => $tenantUser->email,
         ]);
-        throw new \Exception('Usuário não tem permissão para aceder a esta empresa.', 403);
     }
-
-    $this->tenantUser = $tenantUser;
-
-    Log::info('[UserController] Acesso verificado com sucesso', [
-        'modo' => $this->modo,
-        'user_id' => $tenantUser->id,
-        'email' => $tenantUser->email,
-    ]);
-}
 
     protected function buscarUsuario(Empresa $empresa, string $email): ?object
     {
@@ -349,6 +349,7 @@ protected function verificarAcessoUsuario(): void
                         'sujeito_iva' => (bool) $empresaCompleta->sujeito_iva,
                         'iva_padrao' => (float) ($empresaCompleta->iva_padrao ?? 0),
                         'status' => $empresaCompleta->status ?? 'ativo',
+                        'modo' => $empresaCompleta->modo ?? 'colectivo',
                         'data_registro' => $empresaCompleta->data_registro ? date('Y-m-d H:i:s', strtotime($empresaCompleta->data_registro)) : null,
                         'nome_banco' => $empresaCompleta->nome_banco ?? null,
                         'iban' => $empresaCompleta->iban ?? null,
@@ -542,6 +543,7 @@ protected function verificarAcessoUsuario(): void
 
             if ($this->isColectivo()) {
                 $dados['tenant_id'] = $this->empresa->id;
+                $dados['user_id'] = session('landlord_user_id');
                 $user = SharedUser::create($dados);
 
                 Log::info('[UserController::store] Utilizador criado no modo colectivo', [

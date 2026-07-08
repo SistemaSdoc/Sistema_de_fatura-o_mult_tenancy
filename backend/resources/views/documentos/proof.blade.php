@@ -8,6 +8,18 @@ $empresaNif = $empresa['nif'] ?? '0000000000';
 $empresaMorada = $empresa['endereco'] ?? $empresa['morada'] ?? null;
 $empresaTelefone = $empresa['telefone'] ?? null;
 $empresaEmail = $empresa['email'] ?? null;
+
+// ✅ DADOS BANCÁRIOS - PRIORIZAR DADOS DO DOCUMENTO SOBRE OS DA EMPRESA
+$docNomeBanco = $documento->nome_banco ?? null;
+$docIban = $documento->iban ?? null;
+$docNumeroConta = $documento->numero_conta ?? null;
+
+$empresaBanco = $docNomeBanco ?? $empresa['nome_banco'] ?? null;
+$empresaConta = $docNumeroConta ?? $empresa['numero_conta'] ?? null;
+$empresaIban = $docIban ?? $empresa['iban'] ?? null;
+
+$temDadosBancarios = !empty($empresaBanco) || !empty($empresaConta) || !empty($empresaIban);
+
 $empresaLogo = asset('images/default-logo.png');
 if (!empty($empresa['logo_base64'])) {
     $empresaLogo = $empresa['logo_base64'];
@@ -332,6 +344,54 @@ $mostrarQr = ($documento->tipo_documento ?? null) !== 'FP';
             max-width: 520px;
             margin-left: auto;
         }
+
+        /* Estilos para dados bancários */
+        .bank-box {
+            background: linear-gradient(180deg, #f8fbff 0%, #fff 100%);
+            border: 1px solid #cbd5e1;
+            border-radius: 14px;
+            padding: 16px 20px;
+            margin-top: 16px;
+        }
+        .bank-box .bank-title {
+            font-weight: bold;
+            font-size: 13px;
+            color: var(--fj-primary);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .bank-box .bank-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 6px;
+        }
+        .bank-box .bank-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+        .bank-box .bank-label {
+            font-weight: bold;
+            color: #374151;
+            min-width: 95px;
+        }
+        .bank-box .bank-value {
+            color: #111827;
+        }
+        .bank-box .iban-value {
+            font-family: 'Courier New', monospace;
+            letter-spacing: 0.8px;
+        }
+        .bank-box .bank-note {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #6b7280;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 8px;
+        }
+
         @media (max-width: 720px) {
             body {
                 padding: 12px;
@@ -354,6 +414,12 @@ $mostrarQr = ($documento->tipo_documento ?? null) !== 'FP';
             }
             .totals {
                 max-width: 100%;
+            }
+            .bank-box .bank-row {
+                flex-wrap: wrap;
+            }
+            .bank-box .bank-label {
+                min-width: 80px;
             }
         }
     </style>
@@ -447,6 +513,39 @@ $mostrarQr = ($documento->tipo_documento ?? null) !== 'FP';
             </div>
         </div>
 
+        {{-- ✅ DADOS BANCÁRIOS - PRIORIZA DADOS DO DOCUMENTO --}}
+        @if($temDadosBancarios)
+        <div class="section">
+            <div class="section-title">Dados Bancários para Pagamento</div>
+            <div class="bank-box">
+                <div class="bank-grid">
+                    @if(!empty($empresaBanco))
+                    <div class="bank-row">
+                        <span class="bank-label">Banco:</span>
+                        <span class="bank-value">{{ $empresaBanco }}</span>
+                    </div>
+                    @endif
+                    @if(!empty($empresaConta))
+                    <div class="bank-row">
+                        <span class="bank-label">Nº Conta:</span>
+                        <span class="bank-value">{{ $empresaConta }}</span>
+                    </div>
+                    @endif
+                    @if(!empty($empresaIban))
+                    <div class="bank-row">
+                        <span class="bank-label">IBAN:</span>
+                        <span class="bank-value iban-value">{{ $empresaIban }}</span>
+                    </div>
+                    @endif
+                </div>
+                @if(!empty($empresaBanco) || !empty($empresaConta) || !empty($empresaIban))
+                <div class="bank-note">
+                    Utilize estes dados para efectuar o pagamento por transferência bancária.
+                </div>
+                @endif
+            </div>
+        </div>
+        @endif
 
         <div class="footer">
             <div><strong>Hash Fiscal:</strong> {{ $documento->hash_fiscal ?? 'N/A' }}</div>

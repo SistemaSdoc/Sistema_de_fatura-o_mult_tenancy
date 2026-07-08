@@ -286,8 +286,12 @@ export const landAuthApi = {
   me: () => landlordApi.get("/api/landlord/landlordme"),
 
   // ← novo
-  criarEmpresaFreelancer: (data: { nome: string; subdomain: string }) =>
+  criarEmpresaFreelancer: (data: { nome: string; subdomain: string; modo?: "colectivo" | "singular" }) =>
     landlordApi.post("/api/landlord/freelancer/empresa", data),
+  atualizarEmpresaFreelancer: (data: FormData) =>
+    landlordApi.put("/api/landlord/freelancer/empresa", data, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
   onboardingStatus: () => landlordApi.get("/api/landlord/freelancer/onboarding"),
 
   empresas: {list: () => landlordApi.get("/api/landlord/empresas"),

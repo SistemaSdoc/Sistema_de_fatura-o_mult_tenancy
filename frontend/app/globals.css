@@ -6,8 +6,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-inter);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
 
@@ -142,7 +142,6 @@
   --sidebar-ring: var(--ring);
 }
 
-
 /* =========================
    Base styles
    ========================= */
@@ -157,6 +156,7 @@
 
   body {
     @apply bg-background text-foreground min-h-screen antialiased;
+    font-family: var(--font-inter), "Segoe UI", Arial, sans-serif;
     font-size: 16px;
     line-height: 1.5;
   }
@@ -180,7 +180,9 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
+    *,
+    *::before,
+    *::after {
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
@@ -221,146 +223,145 @@
 
 /* Animações para o Toast */
 @keyframes slideInRight {
-    from {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
 @keyframes slideOutRight {
-    from {
-        transform: translateX(0);
-        opacity: 1;
-    }
-    to {
-        transform: translateX(100%);
-        opacity: 0;
-    }
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
 }
 
 .animate-slide-in-right {
-    animation: slideInRight 0.3s ease-out forwards;
+  animation: slideInRight 0.3s ease-out forwards;
 }
 
 .animate-slide-out-right {
-    animation: slideOutRight 0.3s ease-in forwards;
+  animation: slideOutRight 0.3s ease-in forwards;
 }
 
-          /* ==================== ANIMATIONS ==================== */
-            
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
+/* ==================== ANIMATIONS ==================== */
 
-        @keyframes slideDown {
-          from {
-            opacity: 0;
-            transform: scale(0.95) translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: scale(1) translateY(0);
-          }
-        }
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
-        @keyframes shake {
-          0%,
-          100% {
-            transform: translateX(0);
-          }
-          25% {
-            transform: translateX(-5px);
-          }
-          75% {
-            transform: translateX(5px);
-          }
-        }
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
 
-        .animate-fade-in {
-          animation: fadeIn 0.3s ease-out forwards;
-        }
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-5px);
+  }
+  75% {
+    transform: translateX(5px);
+  }
+}
 
-        .animate-slide-down {
-          animation: slideDown 0.2s ease-out forwards;
-        }
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
 
-        .animate-shake {
-          animation: shake 0.3s ease-in-out;
-        }
+.animate-slide-down {
+  animation: slideDown 0.2s ease-out forwards;
+}
 
-        /* Garante área de toque mínima confortável (44x44) em botões mobile */
-        .touch-target {
-          min-width: 44px;
-          min-height: 44px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-        }
+.animate-shake {
+  animation: shake 0.3s ease-in-out;
+}
 
-        .hover\:scale-110:hover {
-          transform: scale(1.1);
-        }
+/* Garante área de toque mínima confortável (44x44) em botões mobile */
+.touch-target {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 
-        .hover\:scale-105:hover {
-          transform: scale(1.05);
-        }
+.hover\:scale-110:hover {
+  transform: scale(1.1);
+}
 
-        .active\:scale-95:active {
-          transform: scale(0.95);
-        }
+.hover\:scale-105:hover {
+  transform: scale(1.05);
+}
 
-        .active\:scale-98:active {
-          transform: scale(0.98);
-        }
+.active\:scale-95:active {
+  transform: scale(0.95);
+}
 
-        .hover\:translate-x-1:hover {
-          transform: translateX(4px);
-        }
+.active\:scale-98:active {
+  transform: scale(0.98);
+}
 
-        .transition-all {
-          transition-property: all;
-          transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-        }
+.hover\:translate-x-1:hover {
+  transform: translateX(4px);
+}
 
-        .duration-200 {
-          transition-duration: 200ms;
-        }
+.transition-all {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
 
-        .duration-250 {
-          transition-duration: 250ms;
-        }
+.duration-200 {
+  transition-duration: 200ms;
+}
 
-        .duration-300 {
-          transition-duration: 300ms;
-        }
+.duration-250 {
+  transition-duration: 250ms;
+}
 
-        /* Scrollbar customizado */
-        ::-webkit-scrollbar {
-          width: 6px;
-          height: 6px;
-        }
+.duration-300 {
+  transition-duration: 300ms;
+}
 
-        ::-webkit-scrollbar-track {
-          background: transparent;
-        }
+/* Scrollbar customizado */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
 
-        ::-webkit-scrollbar-thumb {
-          background: var(--scrollbar-color, #cbd5e1);
-          border-radius: 3px;
-        }
+::-webkit-scrollbar-track {
+  background: transparent;
+}
 
-        ::-webkit-scrollbar-thumb:hover {
-          background: var(--scrollbar-hover-color, #94a3b8);
-        }
-      
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-color, #cbd5e1);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-hover-color, #94a3b8);
+}

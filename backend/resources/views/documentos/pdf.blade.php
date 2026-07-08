@@ -9,13 +9,33 @@ $empresaTelefone = $empresa['telefone'] ?? 'Telefone não registrado';
 $empresaEmail = $empresa['email'] ?? 'Email não registrado';
 $empresaNome = $empresa['nome'] ?? 'EMPRESA';
 $empresaNif = $empresa['nif'] ?? '0000000000';
-// ✅ ADICIONAR DADOS BANCÁRIOS
-$empresaBanco = $empresa['nome_banco'] ?? null;
-$empresaConta = $empresa['numero_conta'] ?? null;
-$empresaIban = $empresa['iban'] ?? null;
+
+// ✅ DADOS BANCÁRIOS - PRIORIZAR DADOS DO DOCUMENTO SOBRE OS DA EMPRESA
+// Primeiro, tenta pegar do documento (campos salvos no banco)
+$docNomeBanco = $documento->nome_banco ?? null;
+$docIban = $documento->iban ?? null;
+$docNumeroConta = $documento->numero_conta ?? null;
+
+// Se não tiver no documento, usa os da empresa
+$empresaBanco = $docNomeBanco ?? $empresa['nome_banco'] ?? null;
+$empresaConta = $docNumeroConta ?? $empresa['numero_conta'] ?? null;
+$empresaIban = $docIban ?? $empresa['iban'] ?? null;
 
 // Verificar se tem dados bancários
 $temDadosBancarios = !empty($empresaBanco) || !empty($empresaConta) || !empty($empresaIban);
+
+// ✅ Log para debug (remover em produção)
+Log::info('[PDF View] Dados bancários', [
+    'doc_nome_banco' => $docNomeBanco,
+    'doc_iban' => $docIban,
+    'doc_numero_conta' => $docNumeroConta,
+    'empresa_banco' => $empresa['nome_banco'] ?? null,
+    'empresa_iban' => $empresa['iban'] ?? null,
+    'empresa_conta' => $empresa['numero_conta'] ?? null,
+    'final_banco' => $empresaBanco,
+    'final_iban' => $empresaIban,
+    'final_conta' => $empresaConta,
+]);
 
 // Logo DINÂMICO
 $empresaLogo = asset('images/default-logo.png');
@@ -172,45 +192,46 @@ $temTroco = $troco > 0;
             padding: 0;
         }
 
-/* Dados Bancários */
-.bank-box {
-    background: #f8fbff;
-    border: 1px solid #cbd5e1;
-    border-radius: 8px;
-    padding: 12px 14px;
-    margin-bottom: 30px;
-    font-size: 11px;
-}
+        /* Dados Bancários */
+        .bank-box {
+            background: #f8fbff;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 12px 14px;
+            margin-bottom: 30px;
+            font-size: 11px;
+        }
 
-.bank-box .bank-title {
-    font-weight: bold;
-    font-size: 11px;
-    color: #123859;
-    margin-bottom: 8px;
-    text-transform: uppercase;
-}
+        .bank-box .bank-title {
+            font-weight: bold;
+            font-size: 11px;
+            color: #123859;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
 
-.bank-box .bank-row {
-    display: table-row;
-}
+        .bank-box .bank-row {
+            display: table-row;
+        }
 
-.bank-box .bank-label {
-    display: table-cell;
-    padding: 3px 8px 3px 0;
-    font-weight: bold;
-    width: 95px;
-    color: #374151;
-}
+        .bank-box .bank-label {
+            display: table-cell;
+            padding: 3px 8px 3px 0;
+            font-weight: bold;
+            width: 95px;
+            color: #374151;
+        }
 
-.bank-box .bank-value {
-    display: table-cell;
-    padding: 3px 0;
-}
+        .bank-box .bank-value {
+            display: table-cell;
+            padding: 3px 0;
+        }
 
-.bank-box .iban-value {
-    font-family: 'DejaVu Sans Mono', monospace;
-    letter-spacing: 0.8px;
-}
+        .bank-box .iban-value {
+            font-family: 'DejaVu Sans Mono', monospace;
+            letter-spacing: 0.8px;
+        }
+
         .clearfix::after {
             content: "";
             display: block;
@@ -857,10 +878,10 @@ $temTroco = $troco > 0;
         </div>
         @endif
 
-        {{-- DADOS BANCÁRIOS --}}
+        {{-- ✅ DADOS BANCÁRIOS - PRIORIZA DADOS DO DOCUMENTO --}}
         @if($temDadosBancarios)
         <div class="bank-box">
-            <div class="bank-title">Dados Bancários para Pagamento</div>
+            <div class="bank-title">📋 DADOS BANCÁRIOS PARA PAGAMENTO</div>
             <div style="display: table; width: 100%;">
                 @if(!empty($empresaBanco))
                 <div class="bank-row">
@@ -880,23 +901,29 @@ $temTroco = $troco > 0;
                     <span class="bank-value iban-value">{{ $empresaIban }}</span>
                 </div>
                 @endif
+                @if(!empty($empresaBanco) || !empty($empresaConta) || !empty($empresaIban))
+                <div style="margin-top: 6px; font-size: 9px; color: #666666; border-top: 1px solid #e5e7eb; padding-top: 6px;">
+                    Utilize estes dados para efectuar o pagamento por transferência bancária.
+                </div>
+                @endif
             </div>
         </div>
         @endif
 
         {{-- RODAPÉ --}}
-<div class="footer-thanks">Obrigado pela preferência!</div>
-<div class="footer clearfix">
-    <div class="footer-left">
-        <strong>{{ $empresaNome }}</strong> &nbsp;|&nbsp; NIF: {{ $empresaNif }}<br>
-        {{ $empresaMorada }} &nbsp;|&nbsp; Tel: {{ $empresaTelefone }}
-    </div>
-    <div class="footer-right">
-        Documento gerado em {{ now()->format('d/m/Y') }} às {{ now()->format('H:i') }}<br>
-        {{ $empresaEmail }}
-    </div>
-</div>
+        <div class="footer-thanks">Obrigado pela preferência!</div>
+        <div class="footer clearfix">
+            <div class="footer-left">
+                <strong>{{ $empresaNome }}</strong> &nbsp;|&nbsp; NIF: {{ $empresaNif }}<br>
+                {{ $empresaMorada }} &nbsp;|&nbsp; Tel: {{ $empresaTelefone }}
+            </div>
+            <div class="footer-right">
+                Documento gerado em {{ now()->format('d/m/Y') }} às {{ now()->format('H:i') }}<br>
+                {{ $empresaEmail }}
+            </div>
+        </div>
 
+    </div>
 </body>
 
 </html>

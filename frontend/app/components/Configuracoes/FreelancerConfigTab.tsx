@@ -313,7 +313,7 @@ export const FreelancerConfigTab = ({ colors, incompleteFields = [] }: Freelance
               name="telefone"
               value={form.telefone}
               onChange={handleInputChange}
-              placeholder="+244 923 456 789"
+              placeholder="923 456 789"
               className="w-full px-3 py-2 border rounded-lg outline-none transition-all text-sm"
               style={{
                 backgroundColor: colors.background,
@@ -381,8 +381,9 @@ export const FreelancerConfigTab = ({ colors, incompleteFields = [] }: Freelance
               Número da Conta {incomplete.includes("numero_conta") && <span style={{ color: colors.danger }}>*</span>}
             </label>
             <input
-              type="text"
+              type="number"
               name="numero_conta"
+              maxLength={12}
               value={form.numero_conta}
               onChange={handleInputChange}
               placeholder="0123456789"
@@ -401,8 +402,9 @@ export const FreelancerConfigTab = ({ colors, incompleteFields = [] }: Freelance
               IBAN {incomplete.includes("iban") && <span style={{ color: colors.danger }}>*</span>}
             </label>
             <input
-              type="text"
+              type="number"
               name="iban"
+              maxLength={21}
               value={form.iban}
               onChange={handleInputChange}
               placeholder="AO06 0010 0000 0000"

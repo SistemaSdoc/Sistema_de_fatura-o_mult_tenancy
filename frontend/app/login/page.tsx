@@ -354,17 +354,6 @@ export default function LoginPage(): React.ReactElement {
             Entrar com Google
           </a>
 
-          {/* Dentro do bloco onde está o link "Não tem conta? Cadastre-se" */}
-          <div className="text-center mt-2">
-            <Link
-              href="/login-email-only"
-              className="inline-flex items-center gap-2 text-sm font-medium transition-colors hover:underline"
-              style={{ color: colors.secondary }}>
-              <Mail size={16} />
-              Entrar com email
-            </Link>
-          </div>
-
           {/* Link Cadastro */}
           <div className="text-center">
             <Link

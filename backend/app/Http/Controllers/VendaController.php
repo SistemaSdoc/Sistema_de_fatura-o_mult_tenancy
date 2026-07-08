@@ -411,80 +411,92 @@ class VendaController extends Controller
         }
     }
 
-    public function store(Request $request)
-    {
-        $modo = $this->getModo();
-        Log::info('[VendaController::store] Criando venda', [
-            'modo' => $modo,
+public function store(Request $request)
+{
+    $modo = $this->getModo();
+    Log::info('[VendaController::store] Criando venda', [
+        'modo' => $modo,
+    ]);
+
+    try {
+        $this->verificarAcessoUsuario();
+
+        $dados = $request->validate([
+            'cliente_id' => 'nullable|uuid|exists:clientes,id',
+            'cliente_nome' => 'nullable|string|max:255',
+            'cliente_nif' => 'nullable|string|max:14',
+            'itens' => 'required|array|min:1',
+            'itens.*.produto_id' => 'required|uuid|exists:produtos,id',
+            'itens.*.quantidade' => 'required|integer|min:1',
+            'itens.*.preco_venda' => 'required|numeric|min:0',
+            'itens.*.desconto' => 'nullable|numeric|min:0',
+            'itens.*.taxa_iva' => 'nullable|numeric',
+            'itens.*.taxa_retencao' => 'nullable|numeric|in:0,2,5,6.5,10,15',
+            'itens.*.codigo_isencao' => 'nullable|string|in:M00,M01,M02,M03,M04,M05,M06,M99',
+            'faturar' => 'nullable|boolean',
+            'tipo_documento' => 'nullable|in:FT,FR,FP,FA',
+            'dados_pagamento' => 'nullable|array',
+            'dados_pagamento.metodo' => 'required_with:dados_pagamento|in:transferencia,multibanco,dinheiro,cheque,cartao',
+            'dados_pagamento.valor' => 'required_with:dados_pagamento|numeric|min:0',
+            'dados_pagamento.referencia' => 'nullable|string|max:255',
+            'observacoes' => 'nullable|string|max:1000',
+            'desconto_global' => 'nullable|numeric|min:0',
+            'troco' => 'nullable|numeric|min:0',
+            // ✅ ADICIONAR DADOS BANCÁRIOS
+            'nome_banco' => 'nullable|string|max:255',
+            'iban' => 'nullable|string|max:34',
+            'numero_conta' => 'nullable|string|max:20',
         ]);
 
-        try {
-            $this->verificarAcessoUsuario();
-
-            $dados = $request->validate([
-                'cliente_id' => 'nullable|uuid|exists:clientes,id',
-                'cliente_nome' => 'nullable|string|max:255',
-                'cliente_nif' => 'nullable|string|max:14',
-                'itens' => 'required|array|min:1',
-                'itens.*.produto_id' => 'required|uuid|exists:produtos,id',
-                'itens.*.quantidade' => 'required|integer|min:1',
-                'itens.*.preco_venda' => 'required|numeric|min:0',
-                'itens.*.desconto' => 'nullable|numeric|min:0',
-                'itens.*.taxa_iva' => 'nullable|numeric',
-                'itens.*.taxa_retencao' => 'nullable|numeric|in:0,2,5,6.5,10,15',
-                'itens.*.codigo_isencao' => 'nullable|string|in:M00,M01,M02,M03,M04,M05,M06,M99',
-                'faturar' => 'nullable|boolean',
-                'tipo_documento' => 'nullable|in:FT,FR,FP,FA',
-                'dados_pagamento' => 'nullable|array',
-                'dados_pagamento.metodo' => 'required_with:dados_pagamento|in:transferencia,multibanco,dinheiro,cheque,cartao',
-                'dados_pagamento.valor' => 'required_with:dados_pagamento|numeric|min:0',
-                'dados_pagamento.referencia' => 'nullable|string|max:255',
-                'observacoes' => 'nullable|string|max:1000',
-                'desconto_global' => 'nullable|numeric|min:0',
-                'troco' => 'nullable|numeric|min:0',
-            ]);
-
-            if (empty($dados['cliente_id']) && empty($dados['cliente_nome'])) {
-                return response()->json(['message' => 'É necessário informar um cliente (cadastrado ou avulso).'], 422);
-            }
-
-            $venda = $this->vendaService->criarVenda(
-                $dados,
-                (bool) ($dados['faturar'] ?? false),
-                $dados['tipo_documento'] ?? 'FT'
-            );
-
-            AuditLogger::log('Venda Criada', '🛒', [
-                'area' => 'Vendas',
-                'detalhes' => [
-                    'venda_id' => $venda->id,
-                    'cliente_id' => $dados['cliente_id'] ?? null,
-                    'cliente_nome' => $dados['cliente_nome'] ?? null,
-                    'itens' => count($dados['itens'] ?? []),
-                    'tipo_documento' => $dados['tipo_documento'] ?? 'FT',
-                ],
-            ]);
-
-            return response()->json([
-                'message' => 'Venda criada com sucesso',
-                'venda' => $this->formatarVenda($venda->load('itens.produto', 'documentoFiscal')),
-                'modo' => $modo,
-            ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'message' => 'Erro de validação',
-                'errors' => $e->errors(),
-                'modo' => $modo,
-            ], 422);
-        } catch (\Exception $e) {
-            Log::error('[VendaController::store] Erro', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'modo' => $modo,
-            ]);
-            return response()->json(['message' => $e->getMessage(), 'modo' => $modo], 422);
+        if (empty($dados['cliente_id']) && empty($dados['cliente_nome'])) {
+            return response()->json(['message' => 'É necessário informar um cliente (cadastrado ou avulso).'], 422);
         }
+
+        // ✅ Log dos dados bancários recebidos
+        Log::info('[VendaController::store] Dados bancários recebidos', [
+            'nome_banco' => $dados['nome_banco'] ?? null,
+            'iban' => $dados['iban'] ?? null,
+            'numero_conta' => $dados['numero_conta'] ?? null,
+        ]);
+
+        $venda = $this->vendaService->criarVenda(
+            $dados,
+            (bool) ($dados['faturar'] ?? false),
+            $dados['tipo_documento'] ?? 'FT'
+        );
+
+        AuditLogger::log('Venda Criada', '🛒', [
+            'area' => 'Vendas',
+            'detalhes' => [
+                'venda_id' => $venda->id,
+                'cliente_id' => $dados['cliente_id'] ?? null,
+                'cliente_nome' => $dados['cliente_nome'] ?? null,
+                'itens' => count($dados['itens'] ?? []),
+                'tipo_documento' => $dados['tipo_documento'] ?? 'FT',
+                'tem_dados_bancarios' => !empty($dados['nome_banco']) || !empty($dados['iban']) || !empty($dados['numero_conta']),
+            ],
+        ]);
+
+        return response()->json([
+            'message' => 'Venda criada com sucesso',
+            'venda' => $this->formatarVenda($venda->load('itens.produto', 'documentoFiscal')),
+            'modo' => $modo,
+        ]);
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'message' => 'Erro de validação',
+            'errors' => $e->errors(),
+            'modo' => $modo,
+        ], 422);
+    } catch (\Exception $e) {
+        Log::error('[VendaController::store] Erro', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
+            'modo' => $modo,
+        ]);
+        return response()->json(['message' => $e->getMessage(), 'modo' => $modo], 422);
     }
+}
 
     public function cancelar($id, Request $request)
     {

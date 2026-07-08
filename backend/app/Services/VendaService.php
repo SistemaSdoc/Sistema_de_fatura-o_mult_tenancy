@@ -257,7 +257,7 @@ class VendaService
     }
 
     /* =====================================================================
-     | CRIAR VENDA
+     | CRIAR VENDA - CORRIGIDO ✅
      | ================================================================== */
 
     public function criarVenda(array $dados, bool $faturar = false, string $tipoDocumento = 'FT'): object
@@ -270,6 +270,9 @@ class VendaService
                 'faturar'         => $faturar,
                 'modo'            => $this->getModo(),
                 'empresa_id'      => $this->empresa?->id,
+                'nome_banco'      => $dados['nome_banco'] ?? null,
+                'iban'            => $dados['iban'] ?? null,
+                'numero_conta'    => $dados['numero_conta'] ?? null,
             ]);
 
             $this->validarTipoDocumento($tipoDocumento);
@@ -321,6 +324,14 @@ class VendaService
                 $venda = TenantVenda::create($dadosVenda);
             }
 
+            // ✅ VERIFICAR SE A VENDA FOI CRIADA
+            if (!$venda) {
+                Log::error('[VendaService] Falha ao criar venda', [
+                    'dados' => $dadosVenda,
+                ]);
+                throw new \Exception('Falha ao criar venda.');
+            }
+
             // Processar itens e calcular totais
             $totais = $this->processarItens($venda, $dados['itens'], $aplicaIva, $regime);
 
@@ -337,6 +348,14 @@ class VendaService
             if ($faturar) {
                 $documento = $this->emitirDocumentoFiscal($venda, $dados, $tipoDocumento);
 
+                // ✅ VERIFICAR SE O DOCUMENTO FOI CRIADO
+                if (!$documento) {
+                    Log::error('[VendaService] Falha ao emitir documento fiscal', [
+                        'venda_id' => $venda->id,
+                    ]);
+                    throw new \Exception('Falha ao emitir documento fiscal.');
+                }
+
                 $novoEstadoPagamento = $this->determinarEstadoAposEmissao($tipoDocumento);
                 $novoStatus = in_array($tipoDocumento, ['FT', 'FR', 'RC']) ? 'faturada' : 'aberta';
 
@@ -347,6 +366,7 @@ class VendaService
                 ]);
             }
 
+            // ✅ FORÇAR O CARREGAMENTO DOS RELACIONAMENTOS E RETORNAR
             return $venda->load('itens.produto', 'cliente', 'user', 'documentoFiscal');
         });
     }
@@ -516,7 +536,7 @@ class VendaService
     }
 
     /* =====================================================================
-     | MÉTODOS PRIVADOS (MANTIDOS)
+     | MÉTODOS PRIVADOS
      | ================================================================== */
 
     private function gerarNumeroVendaInterno(): int
@@ -681,6 +701,11 @@ class VendaService
             $this->validarFR($dados, (float) $venda->total);
         }
 
+        // ✅ VERIFICAR SE A VENDA TEM ITENS
+        if (!$venda->itens || $venda->itens->count() === 0) {
+            throw new \RuntimeException('A venda não possui itens para emitir documento fiscal.');
+        }
+
         $payload = [
             'tipo_documento' => $tipoDocumento,
             'venda_id'       => $venda->id,
@@ -696,7 +721,20 @@ class VendaService
                     'taxa_retencao'  => $item->taxa_retencao,
                 ];
             })->toArray(),
+            // ✅ ADICIONAR DADOS BANCÁRIOS
+            'nome_banco' => $dados['nome_banco'] ?? null,
+            'iban' => $dados['iban'] ?? null,
+            'numero_conta' => $dados['numero_conta'] ?? null,
         ];
+
+        // ✅ Log dos dados bancários sendo enviados
+        Log::info('[VendaService::emitirDocumentoFiscal] Dados bancários no payload', [
+            'nome_banco' => $payload['nome_banco'],
+            'iban' => $payload['iban'],
+            'numero_conta' => $payload['numero_conta'],
+            'venda_id' => $venda->id,
+            'tipo_documento' => $tipoDocumento,
+        ]);
 
         if (!empty($dados['cliente_id'])) {
             $payload['cliente_id'] = $dados['cliente_id'];
@@ -717,7 +755,22 @@ class VendaService
             ];
         }
 
-        return $this->documentoFiscalService->emitirDocumento($payload);
+        try {
+            $documento = $this->documentoFiscalService->emitirDocumento($payload);
+            
+            if (!$documento) {
+                throw new \RuntimeException('Documento fiscal retornou null do serviço.');
+            }
+            
+            return $documento;
+        } catch (\Exception $e) {
+            Log::error('[VendaService] Erro ao emitir documento fiscal', [
+                'venda_id' => $venda->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            throw $e;
+        }
     }
 
     private function validarFR(array $dados, float $totalVenda): void

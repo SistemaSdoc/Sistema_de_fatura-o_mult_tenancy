@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { User, Building2, Bell, Settings } from "lucide-react";
+import { User, Building2, Settings } from "lucide-react";
 import MainEmpresa from "@/app/components/MainEmpresa";
 import { useThemeColors, useTheme } from "@/context/ThemeContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -20,7 +20,7 @@ export default function ConfiguracoesPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("perfil");
 
-  // ✅ Verifica se é freelancer (pessoa singular/oauth)
+  // Verifica se é freelancer (pessoa singular/oauth)
   const isFreelancer = user?.oauth_verified === true;
 
   const tabs = [

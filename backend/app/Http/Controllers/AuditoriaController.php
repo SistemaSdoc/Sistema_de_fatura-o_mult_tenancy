@@ -124,7 +124,7 @@ class AuditoriaController extends Controller
 
         $detalhes = $request->input('detalhes', []);
         $area = $request->input('area', null);
-        $emoji = $request->input('emoji', '');
+        $emoji = $request->input('emoji') ?? '📂'; // ✅ Garante emoji nunca é null
         $acao = $request->input('acao', 'Evento');
 
         $acaoFormatada = $this->formatarAcaoInterface($acao, $detalhes);

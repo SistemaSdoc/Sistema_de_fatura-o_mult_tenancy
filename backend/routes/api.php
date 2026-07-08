@@ -45,6 +45,7 @@ Route::prefix('landlord')->group(function () {
         // ✅ FREELANCER - Pessoa Coletiva/Singular
         Route::post('/freelancer/empresa', [FreelancerController::class, 'criarEmpresaSingular']);
         Route::get('/freelancer/onboarding', [FreelancerController::class, 'obterStatusOnboarding']);
+        Route::put('/freelancer/empresa', [FreelancerController::class, 'atualizarDadosEmpresa']);
 
         Route::get('/empresas', [EmpresaController::class, 'index']);
         Route::post('/empresas', [EmpresaController::class, 'store']);

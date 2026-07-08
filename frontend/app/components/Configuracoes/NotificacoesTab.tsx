@@ -4,13 +4,7 @@ import React, { useState } from "react";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeColors, SaveButton } from "./ConfiguracoesComuns";
 
 interface NotifForm {
@@ -78,9 +72,7 @@ export function NotificacoesTab({ colors }: { colors: ThemeColors }) {
   return (
     <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
       <CardHeader>
-        <CardTitle style={{ color: colors.secondary }}>
-          Preferências de Notificação
-        </CardTitle>
+        <CardTitle style={{ color: colors.secondary }}>Preferências de Notificação</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
         {[
@@ -95,30 +87,16 @@ export function NotificacoesTab({ colors }: { colors: ThemeColors }) {
               </h3>
               <div className="space-y-3">
                 {group.items.map((item) => (
-                  <div
-                    key={item.key}
-                    className="flex items-center justify-between"
-                  >
+                  <div key={item.key} className="flex items-center justify-between">
                     <div>
-                      <p
-                        className="text-sm font-medium"
-                        style={{ color: colors.text }}
-                      >
+                      <p className="text-sm font-medium" style={{ color: colors.text }}>
                         {item.label}
                       </p>
-                      <p
-                        className="text-xs"
-                        style={{ color: colors.textSecondary }}
-                      >
+                      <p className="text-xs" style={{ color: colors.textSecondary }}>
                         {item.desc}
                       </p>
                     </div>
-                    <Switch
-                      checked={form[item.key]}
-                      onCheckedChange={(v) =>
-                        setForm((p) => ({ ...p, [item.key]: v }))
-                      }
-                    />
+                    <Switch checked={form[item.key]} onCheckedChange={(v) => setForm((p) => ({ ...p, [item.key]: v }))} />
                   </div>
                 ))}
               </div>
@@ -126,10 +104,7 @@ export function NotificacoesTab({ colors }: { colors: ThemeColors }) {
           </React.Fragment>
         ))}
       </CardContent>
-      <CardFooter
-        className="flex justify-end border-t pt-6"
-        style={{ borderColor: colors.border }}
-      >
+      <CardFooter className="flex justify-end border-t pt-6" style={{ borderColor: colors.border }}>
         <SaveButton
           onClick={async () => {
             setLoading(true);
@@ -138,8 +113,7 @@ export function NotificacoesTab({ colors }: { colors: ThemeColors }) {
             setLoading(false);
           }}
           loading={loading}
-          colors={colors}
-        >
+          colors={colors}>
           Salvar preferências
         </SaveButton>
       </CardFooter>

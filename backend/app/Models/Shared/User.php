@@ -30,6 +30,7 @@ class User extends Authenticatable implements MustVerifyEmail  //  Extends Authe
     protected $fillable = [
         'id',
         'tenant_id',
+        'user_id',
         'name',
         'email',           // Login rápido no caixa
         'password',
@@ -58,17 +59,17 @@ class User extends Authenticatable implements MustVerifyEmail  //  Extends Authe
         });
     }
 
-            /**
+    /**
      * ✅ RETORNA LandlordUser VINCULADO
      */
     public function landlordUser(): ?\App\Models\LandlordUser
     {
-        if (!$this->landlord_user_id) {
+        if (!$this->user_id) {
             return null;
         }
 
         return \App\Models\LandlordUser::on('landlord')
-            ->find($this->landlord_user_id);
+            ->find($this->user_id);
     }
 
 

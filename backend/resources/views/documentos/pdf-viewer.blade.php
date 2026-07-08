@@ -1,10 +1,7 @@
 @php
 if (!isset($documento) || !$documento) {
-    die('Documento não encontrado');
+die('Documento não encontrado');
 }
-
-
-
 
 // DADOS DINÂMICOS DA EMPRESA (DO TENANT) - Vem do controller
 $empresaMorada = $empresa['endereco'] ?? 'Endereço não registrado';
@@ -12,63 +9,87 @@ $empresaTelefone = $empresa['telefone'] ?? 'Telefone não registrado';
 $empresaEmail = $empresa['email'] ?? 'Email não registrado';
 $empresaNome = $empresa['nome'] ?? 'EMPRESA';
 $empresaNif = $empresa['nif'] ?? '0000000000';
-$empresaBanco = $empresa['nome_banco'] ?? null;
-$empresaConta = $empresa['numero_conta'] ?? null;
-$empresaIban = $empresa['iban'] ?? null;
 
+// ✅ DADOS BANCÁRIOS - Priorizar dados do documento sobre os da empresa
+// Primeiro, tenta pegar do documento (campos salvos no banco)
+$docNomeBanco = $documento->nome_banco ?? null;
+$docIban = $documento->iban ?? null;
+$docNumeroConta = $documento->numero_conta ?? null;
+
+// Se não tiver no documento, usa os da empresa
+$empresaBanco = $docNomeBanco ?? $empresa['nome_banco'] ?? null;
+$empresaConta = $docNumeroConta ?? $empresa['numero_conta'] ?? null;
+$empresaIban = $docIban ?? $empresa['iban'] ?? null;
+
+// Verifica se há pelo menos um dado bancário para exibir
+$temDadosBancarios = !empty($empresaBanco) || !empty($empresaConta) || !empty($empresaIban);
+
+// ✅ Log para debug (remover em produção)
+Log::info('[PrintView] Dados bancários', [
+'doc_nome_banco' => $docNomeBanco,
+'doc_iban' => $docIban,
+'doc_numero_conta' => $docNumeroConta,
+'empresa_banco' => $empresa['nome_banco'] ?? null,
+'empresa_iban' => $empresa['iban'] ?? null,
+'empresa_conta' => $empresa['numero_conta'] ?? null,
+'final_banco' => $empresaBanco,
+'final_iban' => $empresaIban,
+'final_conta' => $empresaConta,
+]);
 
 $logoPath = $empresa['logo'] ?? null;
 
 if (!empty($empresa['logo_base64'])) {
-    $empresaLogo = $empresa['logo_base64']; // já vem pronto como data:image/...
+$empresaLogo = $empresa['logo_base64']; // já vem pronto como data:image/...
 } elseif (!empty($empresa['logo'])) {
-    $logoPath = ltrim($empresa['logo'], '/');
-    $logoPath = str_replace('public/', '', $logoPath);
-    $empresaLogo = asset($logoPath); // fallback
+$logoPath = ltrim($empresa['logo'], '/');
+$logoPath = str_replace('public/', '', $logoPath);
+$empresaLogo = asset($logoPath); // fallback
 } else {
-    $empresaLogo = asset('images/default-logo.png');
+$empresaLogo = asset('images/default-logo.png');
 }
 
 $tiposDocumento = [
-    'FT' => 'Factura',
-    'FR' => 'Factura-Recibo',
-    'FA' => 'Fact. Adiantamento',
-    'NC' => 'Nota de Crédito',
-    'ND' => 'Nota de Débito',
-    'RC' => 'Recibo',
-    'FRt' => 'Fact. Retificação'
+'FT' => 'Factura',
+'FR' => 'Factura-Recibo',
+'FA' => 'Fact. Adiantamento',
+'NC' => 'Nota de Crédito',
+'ND' => 'Nota de Débito',
+'RC' => 'Recibo',
+'FRt' => 'Fact. Retificação'
 ];
 
 // Estado e cores
 $estadoClasse = match($documento->estado ?? '') {
-    'emitido' => 'estado-emitido',
-    'paga' => 'estado-paga',
-    'parcialmente_paga' => 'estado-parcial',
-    'cancelado' => 'estado-cancelado',
-    'expirado' => 'estado-expirado',
-    default => 'estado-emitido'
+'emitido' => 'estado-emitido',
+'paga' => 'estado-paga',
+'parcialmente_paga' => 'estado-parcial',
+'cancelado' => 'estado-cancelado',
+'expirado' => 'estado-expirado',
+default => 'estado-emitido'
 };
 
 $estadoLabel = match($documento->estado ?? '') {
-    'emitido' => 'Emitido',
-    'paga' => 'Pago',
-    'parcialmente_paga' => 'Pag. Parcial',
-    'cancelado' => 'Cancelado',
-    'expirado' => 'Expirado',
-    default => ($documento->estado ?? '')
+'emitido' => 'Emitido',
+'paga' => 'Pago',
+'parcialmente_paga' => 'Pag. Parcial',
+'cancelado' => 'Cancelado',
+'expirado' => 'Expirado',
+default => ($documento->estado ?? '')
 };
 
 $metodosPagamento = [
 'transferencia' => 'Transferência Bancária',
-    'multibanco' => 'Multibanco',
-    'dinheiro' => 'Dinheiro',
-    'cheque' => 'Cheque',
-    'cartao' => 'Cartão'
+'multibanco' => 'Multibanco',
+'dinheiro' => 'Dinheiro',
+'cheque' => 'Cheque',
+'cartao' => 'Cartão'
 ];
+
 // Determinar qual documento usar para os totais (para recibos, usa o documento de origem)
 $docParaTotais = $documento;
 if ($documento->tipo_documento === 'RC' && isset($documentoOrigem) && $documentoOrigem) {
-    $docParaTotais = $documentoOrigem;
+$docParaTotais = $documentoOrigem;
 }
 
 // Tentar obter o desconto global da venda associada
@@ -77,13 +98,13 @@ $troco = 0;
 
 // Se o documento fiscal tem uma venda associada, buscar os dados da venda
 if ($docParaTotais->venda_id && isset($docParaTotais->venda)) {
-    $venda = $docParaTotais->venda;
-    $descontoGlobal = (float) ($venda->desconto_global ?? 0);
-    $troco = (float) ($venda->troco ?? 0);
+$venda = $docParaTotais->venda;
+$descontoGlobal = (float) ($venda->desconto_global ?? 0);
+$troco = (float) ($venda->troco ?? 0);
 } else {
-    // Fallback: usar os campos do próprio documento fiscal
-    $descontoGlobal = (float) ($docParaTotais->desconto_global ?? 0);
-    $troco = (float) ($documento->troco ?? 0);
+// Fallback: usar os campos do próprio documento fiscal
+$descontoGlobal = (float) ($docParaTotais->desconto_global ?? 0);
+$troco = (float) ($documento->troco ?? 0);
 }
 
 // Calcular percentual de desconto
@@ -91,9 +112,9 @@ $percentualDesconto = 0;
 $temDesconto = false;
 
 if ($descontoGlobal > 0 && ($docParaTotais->base_tributavel ?? 0) > 0) {
-    $temDesconto = true;
-    $subtotalBruto = $docParaTotais->base_tributavel + $descontoGlobal;
-    $percentualDesconto = ($descontoGlobal / $subtotalBruto) * 100;
+$temDesconto = true;
+$subtotalBruto = $docParaTotais->base_tributavel + $descontoGlobal;
+$percentualDesconto = ($descontoGlobal / $subtotalBruto) * 100;
 }
 
 // Verificar se tem troco
@@ -131,42 +152,42 @@ $temTroco = $troco > 0;
         }
 
         /* Dados Bancários */
-.bank-box {
-    background: #f0f5ff;
-    border: 1px solid #cccccc;
-    border-radius: 5px;
-    padding: 14px 16px;
-    margin-bottom: 18px;
-    font-size: 14px;
-}
+        .bank-box {
+            background: #f0f5ff;
+            border: 1px solid #cccccc;
+            border-radius: 5px;
+            padding: 14px 16px;
+            margin-bottom: 18px;
+            font-size: 14px;
+        }
 
-.bank-box .bank-title {
-    font-weight: bold;
-    font-size: 15px;
-    color: #000000;
-    margin-bottom: 8px;
-}
+        .bank-box .bank-title {
+            font-weight: bold;
+            font-size: 15px;
+            color: #000000;
+            margin-bottom: 8px;
+        }
 
-.bank-box .bank-row {
-    display: table-row;
-}
+        .bank-box .bank-row {
+            display: table-row;
+        }
 
-.bank-box .bank-label {
-    display: table-cell;
-    padding: 4px 8px 4px 0;
-    font-weight: bold;
-    width: 120px;
-}
+        .bank-box .bank-label {
+            display: table-cell;
+            padding: 4px 8px 4px 0;
+            font-weight: bold;
+            width: 120px;
+        }
 
-.bank-box .bank-value {
-    display: table-cell;
-    padding: 4px 0;
-}
+        .bank-box .bank-value {
+            display: table-cell;
+            padding: 4px 0;
+        }
 
-.bank-box .iban-value {
-    font-family: 'DejaVu Sans Mono', monospace;
-    letter-spacing: 1px;
-}
+        .bank-box .iban-value {
+            font-family: 'DejaVu Sans Mono', monospace;
+            letter-spacing: 1px;
+        }
 
         /* Container do Talão - 70mm */
         .receipt {
@@ -178,6 +199,7 @@ $temTroco = $troco > 0;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
             color: #000;
         }
+
         .header {
             text-align: center;
             margin-bottom: 7px;
@@ -398,7 +420,7 @@ $temTroco = $troco > 0;
             margin: 0 auto;
             display: block;
         }
-        
+
         /* Para SVG QR Code */
         .qr-section svg {
             width: 140px !important;
@@ -406,7 +428,7 @@ $temTroco = $troco > 0;
             max-width: 140px !important;
             max-height: 140px !important;
         }
-        
+
         /* Para qualquer imagem dentro da section QR */
         .qr-section img {
             width: 140px !important;
@@ -441,7 +463,6 @@ $temTroco = $troco > 0;
         /* Footer */
         .footer {
             text-align: center;
-
             font-size: 9.5px;
         }
 
@@ -466,6 +487,30 @@ $temTroco = $troco > 0;
             font-size: 8.5px;
             margin-top: 5px;
             color: #666;
+        }
+
+        /* Dados Bancários no rodapé */
+        .bank-footer {
+            border-top: 1px dashed #ccc;
+            padding-top: 8px;
+            margin-top: 8px;
+            font-size: 9.5px;
+            text-align: left;
+        }
+
+        .bank-footer .bank-title-footer {
+            font-weight: bold;
+            font-size: 10px;
+            margin-bottom: 4px;
+            text-align: center;
+        }
+
+        .bank-footer .bank-line {
+            padding: 2px 0;
+        }
+
+        .bank-footer .bank-label {
+            font-weight: bold;
         }
 
         /* Botões (só na tela) */
@@ -514,7 +559,6 @@ $temTroco = $troco > 0;
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0, 0, 0, 0.85);
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -573,7 +617,7 @@ $temTroco = $troco > 0;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
             }
-            
+
             /* FORÇAR tamanho também na impressão */
             .qr-image {
                 width: 140px !important;
@@ -581,14 +625,14 @@ $temTroco = $troco > 0;
                 max-width: 140px !important;
                 max-height: 140px !important;
             }
-            
+
             .qr-section svg {
                 width: 140px !important;
                 height: 140px !important;
                 max-width: 140px !important;
                 max-height: 140px !important;
             }
-            
+
             .qr-section img {
                 width: 140px !important;
                 height: 140px !important;
@@ -706,14 +750,16 @@ $temTroco = $troco > 0;
         <!-- Totais - Usa docParaTotais para recibos mostrarem dados do documento de origem -->
         <div class="totals-section">
             <!-- Subtotal bruto e Desconto (só mostra se tiver desconto) -->
+            @if($temDesconto)
             <div class="total-line">
                 <span>Subtotal bruto:</span>
                 <span>{{ number_format($docParaTotais->base_tributavel + $descontoGlobal, 2, ',', '.') }} Kz</span>
             </div>
-            <div class="total-line ">
+            <div class="total-line">
                 <span>Desconto ({{ number_format($percentualDesconto, 2, ',', '.') }}%):</span>
                 <span>- {{ number_format($descontoGlobal, 2, ',', '.') }} Kz</span>
             </div>
+            @endif
 
             <div class="total-line">
                 <span>Base Tributável:</span>
@@ -741,10 +787,12 @@ $temTroco = $troco > 0;
             @endif
 
             <!-- Troco (só mostra se tiver troco) -->
+            @if($temTroco)
             <div class="total-line">
                 <span>Troco:</span>
                 <span>{{ number_format($troco, 2, ',', '.') }} Kz</span>
             </div>
+            @endif
 
             <!-- TOTAL A PAGAR (para FT) -->
             @if($documento->tipo_documento === 'FT')
@@ -774,9 +822,9 @@ $temTroco = $troco > 0;
             <div class="qr-section proof-section">
                 <div class="qr-title">QR Code AGT (DP 71/25)</div>
                 @if(!empty($qr_code_img))
-                    <img src="{{ $qr_code_img }}" alt="QR Code" class="qr-image">
+                <img src="{{ $qr_code_img }}" alt="QR Code" class="qr-image">
                 @else
-                    {!! $qr_html !!}
+                {!! $qr_html !!}
                 @endif
             </div>
             @endif
@@ -789,19 +837,27 @@ $temTroco = $troco > 0;
             @endif
         </div>
         @endif
- 
-<div class="footer clearfix">
-    <div class="footer-left">
-        
-        <div style="font-size: 13px; border-top: 1px dashed #ccc; ">
-            <strong>Referências Bancárias :</strong><br>
-            <strong>Banco:</strong> {{ $empresaBanco }}<br>
-            <strong>Nº Conta:</strong> {{ $empresaConta }}<br>
-            <strong>IBAN:</strong> {{ $empresaIban }}<br>
-        </div>
 
-    </div>
-</div>
+        @if($temDadosBancarios)
+        <div class="bank-footer">
+            <div class="bank-title-footer">DADOS BANCÁRIOS</div>
+            @if(!empty($empresaBanco))
+            <div class="bank-line">
+                <span class="bank-label">Banco:</span> {{ $empresaBanco }}
+            </div>
+            @endif
+            @if(!empty($empresaConta))
+            <div class="bank-line">
+                <span class="bank-label">Nº Conta:</span> {{ $empresaConta }}
+            </div>
+            @endif
+            @if(!empty($empresaIban))
+            <div class="bank-line">
+                <span class="bank-label">IBAN:</span> {{ $empresaIban }}
+            </div>
+            @endif
+        </div>
+        @endif
 
         <!-- Rodapé -->
         <div class="footer">

@@ -321,65 +321,119 @@ class DocumentoFiscalController extends Controller
         }
     }
 
-    public function emitir(Request $request): JsonResponse
-    {
-        $modo = $this->getModo();
+public function emitir(Request $request): JsonResponse
+{
+    $modo = $this->getModo();
 
-        try {
-            $this->verificarAcessoUsuario();
+    try {
+        $this->verificarAcessoUsuario();
 
-            $dados = $request->validate([
-                'tipo_documento'             => 'required|in:FT,FR,FP,FA,NC,ND,RC,FRt',
-                'venda_id'                   => 'nullable|uuid|exists:vendas,id',
-                'cliente_id'                 => 'nullable|uuid|exists:clientes,id',
-                'cliente_nome'               => 'nullable|string|max:255',
-                'cliente_nif'                => 'nullable|string|max:14',
-                'fatura_id'                  => 'nullable|uuid|exists:documentos_fiscais,id',
-                'itens'                      => 'required_unless:tipo_documento,FA|array',
-                'itens.*.produto_id'         => 'nullable|uuid|exists:produtos,id',
-                'itens.*.descricao'          => 'required_with:itens|string',
-                'itens.*.quantidade'         => 'required_with:itens|numeric|min:0.01',
-                'itens.*.preco_unitario'     => 'required_with:itens|numeric|min:0',
-                'itens.*.taxa_iva'           => 'required_with:itens|numeric|min:0|max:100',
-                'itens.*.desconto'           => 'nullable|numeric|min:0',
-                'itens.*.codigo_isencao'     => 'nullable|string|in:M00,M01,M02,M03,M04,M05,M06,M99',
-                'itens.*.taxa_retencao'      => 'nullable|numeric|in:0,2,5,6.5,10,15',
-                'dados_pagamento'            => 'nullable|array',
-                'dados_pagamento.metodo'     => 'required_with:dados_pagamento|in:transferencia,multibanco,dinheiro,cheque,cartao',
-                'dados_pagamento.valor'      => 'required_with:dados_pagamento|numeric|min:0.01',
-                'dados_pagamento.data'       => 'nullable|date',
-                'dados_pagamento.referencia' => 'nullable|string|max:100',
-                'motivo'                     => 'nullable|string|max:500',
-                'data_vencimento'            => 'nullable|date',
-                'referencia_externa'         => 'nullable|string|max:100',
-            ]);
+        $dados = $request->validate([
+            'tipo_documento'             => 'required|in:FT,FR,FP,FA,NC,ND,RC,FRt',
+            'venda_id'                   => 'nullable|uuid|exists:vendas,id',
+            'cliente_id'                 => 'nullable|uuid|exists:clientes,id',
+            'cliente_nome'               => 'nullable|string|max:255',
+            'cliente_nif'                => 'nullable|string|max:14',
+            'fatura_id'                  => 'nullable|uuid|exists:documentos_fiscais,id',
+            'itens'                      => 'required_unless:tipo_documento,FA|array',
+            'itens.*.produto_id'         => 'nullable|uuid|exists:produtos,id',
+            'itens.*.descricao'          => 'required_with:itens|string',
+            'itens.*.quantidade'         => 'required_with:itens|numeric|min:0.01',
+            'itens.*.preco_unitario'     => 'required_with:itens|numeric|min:0',
+            'itens.*.taxa_iva'           => 'required_with:itens|numeric|min:0|max:100',
+            'itens.*.desconto'           => 'nullable|numeric|min:0',
+            'itens.*.codigo_isencao'     => 'nullable|string|in:M00,M01,M02,M03,M04,M05,M06,M99',
+            'itens.*.taxa_retencao'      => 'nullable|numeric|in:0,2,5,6.5,10,15',
+            'dados_pagamento'            => 'nullable|array',
+            'dados_pagamento.metodo'     => 'required_with:dados_pagamento|in:transferencia,multibanco,dinheiro,cheque,cartao',
+            'dados_pagamento.valor'      => 'required_with:dados_pagamento|numeric|min:0.01',
+            'dados_pagamento.data'       => 'nullable|date',
+            'dados_pagamento.referencia' => 'nullable|string|max:100',
+            'motivo'                     => 'nullable|string|max:500',
+            'data_vencimento'            => 'nullable|date',
+            'referencia_externa'         => 'nullable|string|max:100',
+            'nome_banco'                 => 'nullable|string|max:255',
+            'iban'                       => 'nullable|string|max:34',
+            'numero_conta'               => 'nullable|string|max:20',
+        ]);
 
-            if (empty($dados['cliente_id']) && empty($dados['cliente_nome'])) {
-                if ($dados['tipo_documento'] === 'FR') {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Fatura-Recibo (FR) requer um cliente (seleccionado ou avulso)',
-                    ], 422);
-                }
-                $dados['cliente_nome'] = 'Consumidor Final';
+        // Log dos dados recebidos para debug
+        Log::info('[DocumentoFiscalController] Dados recebidos para emissão', [
+            'tipo_documento' => $dados['tipo_documento'],
+            'cliente_id' => $dados['cliente_id'] ?? null,
+            'cliente_nome' => $dados['cliente_nome'] ?? null,
+            'nome_banco' => $dados['nome_banco'] ?? null,
+            'iban' => $dados['iban'] ?? null,
+            'numero_conta' => $dados['numero_conta'] ?? null,
+            'total_itens' => count($dados['itens'] ?? []),
+        ]);
+
+        // Validação: cliente é obrigatório para FR (Fatura-Recibo)
+        if (empty($dados['cliente_id']) && empty($dados['cliente_nome'])) {
+            if ($dados['tipo_documento'] === 'FR') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Fatura-Recibo (FR) requer um cliente (seleccionado ou avulso)',
+                ], 422);
             }
-
-            $documento = $this->documentoService->emitirDocumento($dados);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Documento emitido com sucesso',
-                'data'    => $documento,
-                'modo'    => $modo,
-            ], 201);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json(['success' => false, 'message' => 'Erro de validação', 'errors' => $e->errors()], 422);
-        } catch (\InvalidArgumentException $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
-        } catch (\Exception $e) {
-            return $this->erroInterno('Erro ao emitir documento', $e);
+            $dados['cliente_nome'] = 'Consumidor Final';
         }
+
+        // Emitir o documento com todos os dados
+        $documento = $this->documentoService->emitirDocumento($dados);
+
+        // Log do documento criado
+        Log::info('[DocumentoFiscalController] Documento emitido com sucesso', [
+            'documento_id' => $documento->id,
+            'numero_documento' => $documento->numero_documento,
+            'tipo_documento' => $documento->tipo_documento,
+            'nome_banco_salvo' => $documento->nome_banco ?? null,
+            'iban_salvo' => $documento->iban ?? null,
+            'numero_conta_salvo' => $documento->numero_conta ?? null,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Documento emitido com sucesso',
+            'data'    => $documento,
+            'modo'    => $modo,
+        ], 201);
+        
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        Log::warning('[DocumentoFiscalController] Erro de validação', [
+            'errors' => $e->errors(),
+            'modo' => $modo,
+        ]);
+        return response()->json([
+            'success' => false, 
+            'message' => 'Erro de validação', 
+            'errors' => $e->errors()
+        ], 422);
+        
+    } catch (\InvalidArgumentException $e) {
+        Log::warning('[DocumentoFiscalController] Erro de argumento inválido', [
+            'message' => $e->getMessage(),
+            'modo' => $modo,
+        ]);
+        return response()->json([
+            'success' => false, 
+            'message' => $e->getMessage()
+        ], 422);
+        
+    } catch (\Exception $e) {
+        Log::error('[DocumentoFiscalController] Erro ao emitir documento', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
+            'modo' => $modo,
+        ]);
+        return response()->json([
+            'success' => false,
+            'message' => 'Erro ao emitir documento',
+            'error' => $e->getMessage(),
+            'modo' => $modo,
+        ], 500);
     }
+}
 
     public function gerarRecibo(Request $request, string $documentoId): JsonResponse
     {

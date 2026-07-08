@@ -59,6 +59,9 @@ class DocumentoFiscal extends TenantModel
         'metodo_pagamento',
         'referencia_pagamento',
         'user_cancelamento_id',
+        'nome_banco',
+        'iban',
+        'numero_conta',
     ];
 
     protected $casts = [
@@ -72,6 +75,9 @@ class DocumentoFiscal extends TenantModel
         'total_retencao'    => 'decimal:2',
         'total_liquido'     => 'decimal:2',
         'rsa_versao_chave'  => 'integer',
+        'nome_banco'        => 'string',
+        'iban'              => 'string',
+        'numero_conta'      => 'string',
     ];
 
     /* =====================================================================
@@ -519,14 +525,38 @@ class DocumentoFiscal extends TenantModel
         return $this->tipo_documento === $tipo;
     }
 
-    public function ehFatura(): bool            { return $this->tipo_documento === self::TIPO_FATURA; }
-    public function ehFaturaRecibo(): bool       { return $this->tipo_documento === self::TIPO_FATURA_RECIBO; }
-    public function ehFaturaProforma(): bool     { return $this->tipo_documento === self::TIPO_FATURA_PROFORMA; }
-    public function ehFaturaAdiantamento(): bool { return $this->tipo_documento === self::TIPO_FATURA_ADIANTAMENTO; }
-    public function ehNotaCredito(): bool        { return $this->tipo_documento === self::TIPO_NOTA_CREDITO; }
-    public function ehNotaDebito(): bool         { return $this->tipo_documento === self::TIPO_NOTA_DEBITO; }
-    public function ehRecibo(): bool             { return $this->tipo_documento === self::TIPO_RECIBO; }
-    public function ehFaturaRetificacao(): bool  { return $this->tipo_documento === self::TIPO_FATURA_RETIFICACAO; }
+    public function ehFatura(): bool
+    {
+        return $this->tipo_documento === self::TIPO_FATURA;
+    }
+    public function ehFaturaRecibo(): bool
+    {
+        return $this->tipo_documento === self::TIPO_FATURA_RECIBO;
+    }
+    public function ehFaturaProforma(): bool
+    {
+        return $this->tipo_documento === self::TIPO_FATURA_PROFORMA;
+    }
+    public function ehFaturaAdiantamento(): bool
+    {
+        return $this->tipo_documento === self::TIPO_FATURA_ADIANTAMENTO;
+    }
+    public function ehNotaCredito(): bool
+    {
+        return $this->tipo_documento === self::TIPO_NOTA_CREDITO;
+    }
+    public function ehNotaDebito(): bool
+    {
+        return $this->tipo_documento === self::TIPO_NOTA_DEBITO;
+    }
+    public function ehRecibo(): bool
+    {
+        return $this->tipo_documento === self::TIPO_RECIBO;
+    }
+    public function ehFaturaRetificacao(): bool
+    {
+        return $this->tipo_documento === self::TIPO_FATURA_RETIFICACAO;
+    }
 
     public function ehVenda(): bool
     {
@@ -605,7 +635,7 @@ class DocumentoFiscal extends TenantModel
             $totalAdiantamentos = DB::table('adiantamento_fatura')
                 ->where('fatura_id', $this->id)
                 ->sum('valor_utilizado');
-            
+
             return max(0.0, (float) $this->total_liquido - $totalPago - $totalAdiantamentos);
         }
 
@@ -657,7 +687,7 @@ class DocumentoFiscal extends TenantModel
             'cliente_id'      => $this->cliente_id,
             'cliente_nome'    => $this->cliente_nome,
             'cliente_nif'     => $this->cliente_nif,
-            'itens'           => $this->itens->map(fn ($item) => [
+            'itens'           => $this->itens->map(fn($item) => [
                 'produto_id'     => $item->produto_id,
                 'descricao'      => $item->descricao,
                 'quantidade'     => $item->quantidade,

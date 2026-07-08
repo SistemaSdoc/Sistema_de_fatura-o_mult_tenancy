@@ -3,14 +3,16 @@
 import React, { useEffect, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import MainEmpresa from "../../components/MainEmpresa";
-import {
-   Download, FileSpreadsheet, SlidersHorizontal,
-} from "lucide-react";
+import { Download, FileSpreadsheet, SlidersHorizontal } from "lucide-react";
 import {
   relatoriosService,
-  RelatorioVendas, RelatorioFaturacao,
-  RelatorioPagamentosPendentes, RelatorioDocumentosFiscais,
-  RelatorioProformas, RelatorioMovimentosStock, TipoMovimento,
+  RelatorioVendas,
+  RelatorioFaturacao,
+  RelatorioPagamentosPendentes,
+  RelatorioDocumentosFiscais,
+  RelatorioProformas,
+  RelatorioMovimentosStock,
+  TipoMovimento,
   getPeriodoPredefinido,
 } from "@/services/relatorios";
 import { useThemeColors } from "@/context/ThemeContext";
@@ -19,14 +21,14 @@ import { toast } from "sonner";
 import { api } from "@/services/axios";
 
 // Funções de exportação
-import { exportarPDF, exportarExcel } from "./utils/relatorioExport";
+import { exportarPDF, exportarExcel } from "../../../lib/relatorioExport";
 
 const RelatorioVendasComponent = dynamic(
   () => import("@/app/components/Relatorios/RelatorioVendas").then((m) => m.RelatorioVendasComponent),
   {
     ssr: false,
     loading: () => <div className="h-64 animate-pulse rounded border" />,
-  },
+  }
 );
 
 const RelatorioDocumentosComponent = dynamic(
@@ -34,7 +36,7 @@ const RelatorioDocumentosComponent = dynamic(
   {
     ssr: false,
     loading: () => <div className="h-64 animate-pulse rounded border" />,
-  },
+  }
 );
 
 const RelatorioPagamentosComponent = dynamic(
@@ -42,7 +44,7 @@ const RelatorioPagamentosComponent = dynamic(
   {
     ssr: false,
     loading: () => <div className="h-64 animate-pulse rounded border" />,
-  },
+  }
 );
 
 const RelatorioMovimentosStockComponent = dynamic(
@@ -50,7 +52,7 @@ const RelatorioMovimentosStockComponent = dynamic(
   {
     ssr: false,
     loading: () => <div className="h-64 animate-pulse rounded border" />,
-  },
+  }
 );
 
 /* ═══════════════════════════════════════════════════════════
@@ -83,7 +85,7 @@ export default function RelatoriosPage() {
   const podeVerVendas = ["admin", "contablista"].includes(userRole);
   const podeVerDocumentos = ["admin", "contablista"].includes(userRole);
   const podeVerPagamentos = userRole === "admin";
-  const podeVerMovimentosStock = ["admin", "contablista",].includes(userRole);
+  const podeVerMovimentosStock = ["admin", "contablista"].includes(userRole);
 
   const TABS: { id: TipoRelatorio; label: string }[] = [
     ...(podeVerVendas ? [{ id: "vendas" as const, label: "Vendas" }] : []),
@@ -106,7 +108,10 @@ export default function RelatoriosPage() {
   const [relatorioMovimentos, setRelatorioMovimentos] = useState<RelatorioMovimentosStock | null>(null);
 
   const [loading, setLoading] = useState<Record<TipoRelatorio, boolean>>({
-    vendas: false, documentos: false, pagamentos: false, movimentos_stock: false,
+    vendas: false,
+    documentos: false,
+    pagamentos: false,
+    movimentos_stock: false,
   });
   const [exportLoading, setExportLoading] = useState(false);
   const [exportandoSaft, setExportandoSaft] = useState(false);
@@ -122,16 +127,16 @@ export default function RelatoriosPage() {
   // ==================== CARREGAMENTO SEGURO ====================
   const carregarVendas = useCallback(async () => {
     if (!podeVerVendas) return;
-    setLoading(p => ({ ...p, vendas: true }));
+    setLoading((p) => ({ ...p, vendas: true }));
     try {
       const [vendas, faturacao] = await Promise.all([
-        relatoriosService.getRelatorioVendas({ 
-          data_inicio: periodoVendas.data_inicio, 
-          data_fim: periodoVendas.data_fim 
+        relatoriosService.getRelatorioVendas({
+          data_inicio: periodoVendas.data_inicio,
+          data_fim: periodoVendas.data_fim,
         }),
-        relatoriosService.getRelatorioFaturacao({ 
-          data_inicio: periodoVendas.data_inicio, 
-          data_fim: periodoVendas.data_fim 
+        relatoriosService.getRelatorioFaturacao({
+          data_inicio: periodoVendas.data_inicio,
+          data_fim: periodoVendas.data_fim,
         }),
       ]);
       setRelatorioVendas(vendas);
@@ -141,13 +146,13 @@ export default function RelatoriosPage() {
         toast.error("Erro ao carregar vendas e facturação");
       }
     } finally {
-      setLoading(p => ({ ...p, vendas: false }));
+      setLoading((p) => ({ ...p, vendas: false }));
     }
   }, [periodoVendas, podeVerVendas]);
 
   const carregarPagamentos = useCallback(async () => {
     if (!podeVerPagamentos) return;
-    setLoading(p => ({ ...p, pagamentos: true }));
+    setLoading((p) => ({ ...p, pagamentos: true }));
     try {
       const data = await relatoriosService.getRelatorioPagamentosPendentes();
       setRelatorioPagamentos(data);
@@ -156,22 +161,22 @@ export default function RelatoriosPage() {
         toast.error("Erro ao carregar pagamentos pendentes");
       }
     } finally {
-      setLoading(p => ({ ...p, pagamentos: false }));
+      setLoading((p) => ({ ...p, pagamentos: false }));
     }
   }, [podeVerPagamentos]);
 
   const carregarDocumentos = useCallback(async () => {
     if (!podeVerDocumentos) return;
-    setLoading(p => ({ ...p, documentos: true }));
+    setLoading((p) => ({ ...p, documentos: true }));
     try {
       const [documentos, proformas] = await Promise.all([
-        relatoriosService.getRelatorioDocumentosFiscais({ 
-          data_inicio: periodoDocumentos.data_inicio, 
-          data_fim: periodoDocumentos.data_fim 
+        relatoriosService.getRelatorioDocumentosFiscais({
+          data_inicio: periodoDocumentos.data_inicio,
+          data_fim: periodoDocumentos.data_fim,
         }),
-        relatoriosService.getRelatorioProformas({ 
-          data_inicio: periodoDocumentos.data_inicio, 
-          data_fim: periodoDocumentos.data_fim 
+        relatoriosService.getRelatorioProformas({
+          data_inicio: periodoDocumentos.data_inicio,
+          data_fim: periodoDocumentos.data_fim,
         }),
       ]);
       setRelatorioDocumentos(documentos);
@@ -181,44 +186,47 @@ export default function RelatoriosPage() {
         toast.error("Erro ao carregar documentos");
       }
     } finally {
-      setLoading(p => ({ ...p, documentos: false }));
+      setLoading((p) => ({ ...p, documentos: false }));
     }
   }, [periodoDocumentos, podeVerDocumentos]);
 
-  const carregarMovimentos = useCallback(async (params?: {
-    tipo?: "entrada" | "saida";
-    tipo_movimento?: TipoMovimento;
-    agrupar_por?: "dia" | "mes" | "produto" | "tipo_movimento" | null;
-  }) => {
-    if (!podeVerMovimentosStock) return;
-    setLoading(p => ({ ...p, movimentos_stock: true }));
-    try {
-      const temFiltrosExplícitos = params !== undefined;
-      const queryParams = temFiltrosExplícitos
-        ? {
-            data_inicio: periodoMovimentos.data_inicio,
-            data_fim: periodoMovimentos.data_fim,
-            ...(params?.tipo ? { tipo: params.tipo } : {}),
-            ...(params?.tipo_movimento ? { tipo_movimento: params.tipo_movimento } : {}),
-            ...(params?.agrupar_por ? { agrupar_por: params.agrupar_por } : {}),
-          }
-        : {
-            data_inicio: periodoMovimentos.data_inicio,
-            data_fim: periodoMovimentos.data_fim,
-            agrupar_por: "dia" as const,
-          };
-      const data = await relatoriosService.getRelatorioMovimentosStock({
-        ...queryParams,
-      });
-      setRelatorioMovimentos(data);
-    } catch (error: unknown) {
-      if (getErroStatus(error) !== 403) {
-        toast.error("Erro ao carregar movimentos de stock");
+  const carregarMovimentos = useCallback(
+    async (params?: {
+      tipo?: "entrada" | "saida";
+      tipo_movimento?: TipoMovimento;
+      agrupar_por?: "dia" | "mes" | "produto" | "tipo_movimento" | null;
+    }) => {
+      if (!podeVerMovimentosStock) return;
+      setLoading((p) => ({ ...p, movimentos_stock: true }));
+      try {
+        const temFiltrosExplícitos = params !== undefined;
+        const queryParams = temFiltrosExplícitos
+          ? {
+              data_inicio: periodoMovimentos.data_inicio,
+              data_fim: periodoMovimentos.data_fim,
+              ...(params?.tipo ? { tipo: params.tipo } : {}),
+              ...(params?.tipo_movimento ? { tipo_movimento: params.tipo_movimento } : {}),
+              ...(params?.agrupar_por ? { agrupar_por: params.agrupar_por } : {}),
+            }
+          : {
+              data_inicio: periodoMovimentos.data_inicio,
+              data_fim: periodoMovimentos.data_fim,
+              agrupar_por: "dia" as const,
+            };
+        const data = await relatoriosService.getRelatorioMovimentosStock({
+          ...queryParams,
+        });
+        setRelatorioMovimentos(data);
+      } catch (error: unknown) {
+        if (getErroStatus(error) !== 403) {
+          toast.error("Erro ao carregar movimentos de stock");
+        }
+      } finally {
+        setLoading((p) => ({ ...p, movimentos_stock: false }));
       }
-    } finally {
-      setLoading(p => ({ ...p, movimentos_stock: false }));
-    }
-  }, [periodoMovimentos, podeVerMovimentosStock]);
+    },
+    [periodoMovimentos, podeVerMovimentosStock]
+  );
 
   // Carregamento automático
   useEffect(() => {
@@ -233,13 +241,13 @@ export default function RelatoriosPage() {
   type RelAtivo = "vendas" | "documentos" | "movimentos";
 
   const aplicarFiltro = (rel: RelAtivo) => {
-    if (!dataInicio || !dataFim) { 
-      toast.error("Selecione as duas datas"); 
-      return; 
+    if (!dataInicio || !dataFim) {
+      toast.error("Selecione as duas datas");
+      return;
     }
-    if (new Date(dataInicio) > new Date(dataFim)) { 
-      toast.error("Data inicial maior que data final"); 
-      return; 
+    if (new Date(dataInicio) > new Date(dataFim)) {
+      toast.error("Data inicial maior que data final");
+      return;
     }
     const p: PeriodoConfig = { tipo: "personalizado", data_inicio: dataInicio, data_fim: dataFim };
     if (rel === "vendas") setPeriodoVendas(p);
@@ -254,7 +262,7 @@ export default function RelatoriosPage() {
     if (rel === "vendas") setPeriodoVendas(p);
     else if (rel === "documentos") setPeriodoDocumentos(p);
     else setPeriodoMovimentos(p);
-    setDataInicio(""); 
+    setDataInicio("");
     setDataFim("");
     setFiltroAberto(false);
   };
@@ -275,24 +283,36 @@ export default function RelatoriosPage() {
 
   const handleExportPDF = async () => {
     const dados = getDadosAtivos();
-    if (!dados) { toast.error("Sem dados para exportar"); return; }
+    if (!dados) {
+      toast.error("Sem dados para exportar");
+      return;
+    }
     setExportLoading(true);
     try {
       await exportarPDF(activeTab, dados, getPeriodoAtivo());
       toast.success("PDF exportado com sucesso");
-    } catch { toast.error("Erro ao exportar PDF"); }
-    finally { setExportLoading(false); }
+    } catch {
+      toast.error("Erro ao exportar PDF");
+    } finally {
+      setExportLoading(false);
+    }
   };
 
   const handleExportExcel = async () => {
     const dados = getDadosAtivos();
-    if (!dados) { toast.error("Sem dados para exportar"); return; }
+    if (!dados) {
+      toast.error("Sem dados para exportar");
+      return;
+    }
     setExportLoading(true);
     try {
       await exportarExcel(activeTab, dados, getPeriodoAtivo());
       toast.success("Excel exportado com sucesso");
-    } catch { toast.error("Erro ao exportar Excel"); }
-    finally { setExportLoading(false); }
+    } catch {
+      toast.error("Erro ao exportar Excel");
+    } finally {
+      setExportLoading(false);
+    }
   };
 
   const handleExportarSaft = async () => {
@@ -323,18 +343,26 @@ export default function RelatoriosPage() {
 
   const isLoading = loading[activeTab];
   const hasPeriodoFiltro = activeTab !== "pagamentos";
-  const periodoAtivo = activeTab === "vendas" ? periodoVendas : 
-                       activeTab === "documentos" ? periodoDocumentos : 
-                       activeTab === "movimentos_stock" ? periodoMovimentos : null;
+  const periodoAtivo =
+    activeTab === "vendas"
+      ? periodoVendas
+      : activeTab === "documentos"
+        ? periodoDocumentos
+        : activeTab === "movimentos_stock"
+          ? periodoMovimentos
+          : null;
 
-  const relAtivo: RelAtivo = activeTab === "documentos" ? "documentos" :
-                             activeTab === "movimentos_stock" ? "movimentos" : "vendas";
+  const relAtivo: RelAtivo = activeTab === "documentos" ? "documentos" : activeTab === "movimentos_stock" ? "movimentos" : "vendas";
 
   const border = `1px solid ${colors.primary}`;
 
   // ==================== RENDER ====================
   if (userLoading) {
-    return <MainEmpresa><div className="flex justify-center items-center h-screen">Carregando...</div></MainEmpresa>;
+    return (
+      <MainEmpresa>
+        <div className="flex justify-center items-center h-screen">Carregando...</div>
+      </MainEmpresa>
+    );
   }
 
   if (TABS.length === 0) {
@@ -352,9 +380,10 @@ export default function RelatoriosPage() {
   return (
     <MainEmpresa>
       <div className="p-3 sm:p-5 space-y-0" style={{ color: colors.text }}>
-
         {/* CABEÇALHO */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-b" style={{ borderColor: colors.border }}>
+        <div
+          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-b"
+          style={{ borderColor: colors.border }}>
           <div>
             <h1 className="text-base font-bold tracking-tight" style={{ color: colors.text }}>
               Relatórios e Análises
@@ -369,17 +398,19 @@ export default function RelatoriosPage() {
               onClick={handleExportarSaft}
               disabled={exportandoSaft}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 transition-all"
-              style={{ backgroundColor: colors.primary, borderRadius: 4 }}
-            >
-              {exportandoSaft ? <div className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" /> : <Download size={12} />}
+              style={{ backgroundColor: colors.primary, borderRadius: 4 }}>
+              {exportandoSaft ? (
+                <div className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
+              ) : (
+                <Download size={12} />
+              )}
               SAF-T
             </button>
             <button
               onClick={handleExportExcel}
               disabled={exportLoading || !getDadosAtivos()}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 transition-all"
-              style={{ backgroundColor: colors.secondary, borderRadius: 4 }}
-            >
+              style={{ backgroundColor: colors.secondary, borderRadius: 4 }}>
               <FileSpreadsheet size={12} />
               Excel
             </button>
@@ -387,9 +418,12 @@ export default function RelatoriosPage() {
               onClick={handleExportPDF}
               disabled={exportLoading || !getDadosAtivos()}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 transition-all"
-              style={{ backgroundColor: colors.primary, borderRadius: 4 }}
-            >
-              {exportLoading ? <div className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" /> : <Download size={12} />}
+              style={{ backgroundColor: colors.primary, borderRadius: 4 }}>
+              {exportLoading ? (
+                <div className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
+              ) : (
+                <Download size={12} />
+              )}
               PDF
             </button>
           </div>
@@ -398,7 +432,7 @@ export default function RelatoriosPage() {
         {/* TABS */}
         <div style={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderTop: "none" }}>
           <div className="flex overflow-x-auto border-b" style={{ borderColor: colors.border }}>
-            {TABS.map(tab => {
+            {TABS.map((tab) => {
               const active = activeTab === tab.id;
               return (
                 <button
@@ -408,8 +442,7 @@ export default function RelatoriosPage() {
                   style={{
                     color: active ? colors.secondary : colors.textSecondary,
                     borderBottom: active ? `2px solid ${colors.primary}` : "2px solid transparent",
-                  }}
-                >
+                  }}>
                   {tab.label}
                 </button>
               );
@@ -419,37 +452,90 @@ export default function RelatoriosPage() {
           {/* FILTRO */}
           {hasPeriodoFiltro && periodoAtivo && (
             <div className="border-b" style={{ borderColor: colors.border }}>
-              
               <div className="flex items-center gap-3 px-4 py-2" style={{ backgroundColor: colors.hover }}>
-                <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>Período</span>
-                <span className="text-[11px] px-2 py-0.5 font-mono" style={{ backgroundColor: colors.card, border, color: colors.text, borderRadius: 3 }}>
+                <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>
+                  Período
+                </span>
+                <span
+                  className="text-[11px] px-2 py-0.5 font-mono"
+                  style={{ backgroundColor: colors.card, border, color: colors.text, borderRadius: 3 }}>
                   {periodoAtivo.data_inicio} — {periodoAtivo.data_fim}
                 </span>
                 <div className="flex-1" />
-                <button onClick={() => setFiltroAberto(f => !f)} className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium border transition-all"
-                  style={{ backgroundColor: filtroAberto ? `${colors.primary}15` : colors.card, borderColor: filtroAberto ? colors.primary : colors.border, color: filtroAberto ? colors.primary : colors.textSecondary, borderRadius: 3 }}>
+                <button
+                  onClick={() => setFiltroAberto((f) => !f)}
+                  className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium border transition-all"
+                  style={{
+                    backgroundColor: filtroAberto ? `${colors.primary}15` : colors.card,
+                    borderColor: filtroAberto ? colors.primary : colors.border,
+                    color: filtroAberto ? colors.primary : colors.textSecondary,
+                    borderRadius: 3,
+                  }}>
                   <SlidersHorizontal size={11} /> Filtrar período
                 </button>
                 {periodoAtivo.tipo === "personalizado" && (
-                  <button onClick={() => limparFiltro(relAtivo)} className="text-[11px] font-medium transition-colors" style={{ color: "#dc2626" }}>
+                  <button
+                    onClick={() => limparFiltro(relAtivo)}
+                    className="text-[11px] font-medium transition-colors"
+                    style={{ color: "#dc2626" }}>
                     Limpar filtro
                   </button>
                 )}
               </div>
 
               {filtroAberto && (
-                <div className="px-4 py-3 flex flex-wrap items-end gap-3 border-t" style={{ borderColor: colors.border, backgroundColor: colors.card }}>
+                <div
+                  className="px-4 py-3 flex flex-wrap items-end gap-3 border-t"
+                  style={{ borderColor: colors.border, backgroundColor: colors.card }}>
                   {/* Seus inputs de data permanecem iguais */}
                   <div className="flex flex-col gap-1">
-                    <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>Data inicial</label>
-                    <input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} className="px-2.5 py-1.5 text-xs border outline-none" style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text, borderRadius: 3, minWidth: 140 }} />
+                    <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>
+                      Data inicial
+                    </label>
+                    <input
+                      type="date"
+                      value={dataInicio}
+                      onChange={(e) => setDataInicio(e.target.value)}
+                      className="px-2.5 py-1.5 text-xs border outline-none"
+                      style={{
+                        backgroundColor: colors.background,
+                        borderColor: colors.border,
+                        color: colors.text,
+                        borderRadius: 3,
+                        minWidth: 140,
+                      }}
+                    />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>Data final</label>
-                    <input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} className="px-2.5 py-1.5 text-xs border outline-none" style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text, borderRadius: 3, minWidth: 140 }} />
+                    <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>
+                      Data final
+                    </label>
+                    <input
+                      type="date"
+                      value={dataFim}
+                      onChange={(e) => setDataFim(e.target.value)}
+                      className="px-2.5 py-1.5 text-xs border outline-none"
+                      style={{
+                        backgroundColor: colors.background,
+                        borderColor: colors.border,
+                        color: colors.text,
+                        borderRadius: 3,
+                        minWidth: 140,
+                      }}
+                    />
                   </div>
-                  <button onClick={() => aplicarFiltro(relAtivo)} className="px-4 py-1.5 text-xs font-semibold text-white transition-all" style={{ backgroundColor: colors.primary, borderRadius: 3 }}>Aplicar</button>
-                  <button onClick={() => setFiltroAberto(false)} className="px-3 py-1.5 text-xs font-medium border transition-all" style={{ border, color: colors.textSecondary, borderRadius: 3 }}>Cancelar</button>
+                  <button
+                    onClick={() => aplicarFiltro(relAtivo)}
+                    className="px-4 py-1.5 text-xs font-semibold text-white transition-all"
+                    style={{ backgroundColor: colors.primary, borderRadius: 3 }}>
+                    Aplicar
+                  </button>
+                  <button
+                    onClick={() => setFiltroAberto(false)}
+                    className="px-3 py-1.5 text-xs font-medium border transition-all"
+                    style={{ border, color: colors.textSecondary, borderRadius: 3 }}>
+                    Cancelar
+                  </button>
                 </div>
               )}
             </div>
@@ -457,10 +543,33 @@ export default function RelatoriosPage() {
 
           {/* CONTEÚDO */}
           <div className="p-4 space-y-4">
-            {activeTab === "vendas" && <RelatorioVendasComponent colors={colors} isLoading={isLoading} relatorioVendas={relatorioVendas} relatorioFaturacao={relatorioFaturacao} />}
-            {activeTab === "documentos" && <RelatorioDocumentosComponent colors={colors} isLoading={isLoading} relatorioDocumentos={relatorioDocumentos} relatorioProformas={relatorioProformas} />}
-            {activeTab === "pagamentos" && <RelatorioPagamentosComponent colors={colors} isLoading={isLoading} relatorioPagamentos={relatorioPagamentos} />}
-            {activeTab === "movimentos_stock" && <RelatorioMovimentosStockComponent colors={colors} isLoading={isLoading} relatorioMovimentos={relatorioMovimentos} onCarregar={carregarMovimentos} />}
+            {activeTab === "vendas" && (
+              <RelatorioVendasComponent
+                colors={colors}
+                isLoading={isLoading}
+                relatorioVendas={relatorioVendas}
+                relatorioFaturacao={relatorioFaturacao}
+              />
+            )}
+            {activeTab === "documentos" && (
+              <RelatorioDocumentosComponent
+                colors={colors}
+                isLoading={isLoading}
+                relatorioDocumentos={relatorioDocumentos}
+                relatorioProformas={relatorioProformas}
+              />
+            )}
+            {activeTab === "pagamentos" && (
+              <RelatorioPagamentosComponent colors={colors} isLoading={isLoading} relatorioPagamentos={relatorioPagamentos} />
+            )}
+            {activeTab === "movimentos_stock" && (
+              <RelatorioMovimentosStockComponent
+                colors={colors}
+                isLoading={isLoading}
+                relatorioMovimentos={relatorioMovimentos}
+                onCarregar={carregarMovimentos}
+              />
+            )}
           </div>
         </div>
       </div>

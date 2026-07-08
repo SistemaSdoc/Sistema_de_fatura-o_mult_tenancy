@@ -62,6 +62,10 @@ class DocumentoFiscal extends Model
         'metodo_pagamento',
         'referencia_pagamento',
         'user_cancelamento_id',
+        // ✅ ADICIONAR DADOS BANCÁRIOS
+        'nome_banco',
+        'iban',
+        'numero_conta',
     ];
 
     protected $casts = [
@@ -75,6 +79,10 @@ class DocumentoFiscal extends Model
         'total_retencao'    => 'decimal:2',
         'total_liquido'     => 'decimal:2',
         'rsa_versao_chave'  => 'integer',
+        // ✅ ADICIONAR CASTS PARA OS CAMPOS BANCÁRIOS
+        'nome_banco'        => 'string',
+        'iban'              => 'string',
+        'numero_conta'      => 'string',
     ];
 
     /* =====================================================================
@@ -146,8 +154,6 @@ class DocumentoFiscal extends Model
         return $this->belongsTo(DocumentoFiscal::class, 'fatura_id');
     }
 
-    
-
     /** Documentos derivados deste (NC, ND, RC, FRt) */
     public function documentosDerivados()
     {
@@ -213,7 +219,6 @@ class DocumentoFiscal extends Model
      | SCOPES
      | ================================================================== */
 
-
     public function scopeDoTenant($query)
     {
         $empresa = app('current.empresa');
@@ -227,7 +232,7 @@ class DocumentoFiscal extends Model
         return $query->whereRaw('1 = 0');
     }
 
-        public function scopeDoTenantEspecifico($query, string $tenantId)
+    public function scopeDoTenantEspecifico($query, string $tenantId)
     {
         return $query->where('tenant_id', $tenantId);
     }
@@ -479,6 +484,10 @@ class DocumentoFiscal extends Model
             // AGT: campos de auditoria
             'hash_fiscal'         => $this->hash_fiscal,
             'qr_code'             => $this->qr_code,
+            // ✅ ADICIONAR DADOS BANCÁRIOS NO RESUMO
+            'nome_banco'          => $this->nome_banco,
+            'iban'                => $this->iban,
+            'numero_conta'        => $this->numero_conta,
         ];
     }
 
