@@ -32,9 +32,8 @@ const ESTADO_LABEL: Record<string, string> = {
 type TabAtiva = "proforma" | "credito_debito" | "retificacao";
 
 const TABS: { key: TabAtiva; label: string; tipos: TipoDocumento[] }[] = [
-  { key: "proforma", label: "Proformas & Adiantamentos", tipos: ["FP", "FA"] },
+  { key: "proforma", label: "Proformas ", tipos: ["FP", "FA"] },
   { key: "credito_debito", label: "Notas Crédito/Débito", tipos: ["NC", "ND"] },
-  { key: "retificacao", label: "Retificações", tipos: ["FRt"] },
 ];
 
 /* ─── Theme ───────────────────────────────────────────────────────────────── */
@@ -104,7 +103,7 @@ function EstadoBadge({ estado, colors }: { estado: string; colors: ColorsTheme }
   const s = map[estado] ?? { bg: colors.hover, text: colors.textSecondary };
   return (
     <span
-      className="inline-flex items-center px-2 py-0.5 text-xs font-semibold"
+      className="inline-flex items-center px-2 py-0.5 text-xs font-semibold whitespace-nowrap"
       style={{ backgroundColor: s.bg, color: s.text }}
     >
       {ESTADO_LABEL[estado] ?? estado}
@@ -168,13 +167,13 @@ function Paginacao({
   if (total <= 1) return null;
   return (
     <div
-      className="flex justify-between items-center px-3 py-2 text-xs"
+      className="flex flex-wrap justify-between items-center gap-2 px-3 py-2 text-xs"
       style={{ borderTop: `0.5px solid ${colors.border}`, color: colors.textSecondary }}
     >
-      <span>
+      <span className="whitespace-nowrap">
         {pagina} / {total} — {quantidade} documentos
       </span>
-      <div className="flex gap-2">
+      <div className="flex gap-2 shrink-0">
         <button
           onClick={onAnterior}
           disabled={pagina === 1}
@@ -216,10 +215,10 @@ function DocCard({
       style={{ borderBottom: `0.5px solid ${colors.border}` }}
     >
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <span className="text-sm font-medium" style={{ color: colors.text }}>
+        <span className="text-sm font-medium truncate" style={{ color: colors.text }}>
           {doc.numero_documento ?? doc.id}
         </span>
-        <div className="flex gap-1 flex-wrap">
+        <div className="flex gap-1 flex-wrap shrink-0">
           <TipoBadge tipo={doc.tipo_documento} colors={colors} />
           {doc.estado && <EstadoBadge estado={doc.estado} colors={colors} />}
         </div>
@@ -230,10 +229,10 @@ function DocCard({
       </span>
 
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs" style={{ color: colors.textSecondary }}>
+        <span className="text-xs shrink-0" style={{ color: colors.textSecondary }}>
           {new Date(doc.data_emissao).toLocaleDateString()}
         </span>
-        <span className="text-sm font-medium" style={{ color: colors.text }}>
+        <span className="text-sm font-medium truncate" style={{ color: colors.text }}>
           {formatKz(doc.total_liquido)}
         </span>
       </div>
@@ -290,10 +289,9 @@ export default function OutrosDocumentosTable({
     );
   }
 
-  /* ── Menu de ações (dropdown para mobile, inline para desktop) ── */
-  const AcoesDropdown = ({ doc }: { doc: DocumentoFiscal }) => {
+  const AcoesDropdown = ({ doc, align = "right" }: { doc: DocumentoFiscal; align?: "left" | "right" }) => {
     const [open, setOpen] = useState(false);
-    
+
     return (
       <div className="relative">
         <button
@@ -311,7 +309,9 @@ export default function OutrosDocumentosTable({
               onClick={() => setOpen(false)}
             />
             <div
-              className="absolute right-0 z-20 mt-1 w-36 rounded shadow-lg py-1"
+              className={`absolute z-20 mt-1 w-40 max-w-[calc(100vw-2rem)] rounded shadow-lg py-1 ${
+                align === "right" ? "right-0" : "left-0"
+              }`}
               style={{
                 backgroundColor: colors.card,
                 border: `1px solid ${colors.border}`,
@@ -322,7 +322,7 @@ export default function OutrosDocumentosTable({
                   onVerDetalhes(doc);
                   setOpen(false);
                 }}
-                className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:opacity-70"
+                className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:opacity-70 whitespace-nowrap"
                 style={{ color: colors.text }}
               >
                 <Eye size={12} /> Ver detalhes
@@ -333,7 +333,7 @@ export default function OutrosDocumentosTable({
                   setOpen(false);
                 }}
                 disabled={imprimindo === doc.id}
-                className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:opacity-70"
+                className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:opacity-70 whitespace-nowrap"
                 style={{ color: colors.secondary }}
               >
                 {imprimindo === doc.id ? (
@@ -349,7 +349,7 @@ export default function OutrosDocumentosTable({
                   setOpen(false);
                 }}
                 disabled={baixandoPdf === doc.id}
-                className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:opacity-70"
+                className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:opacity-70 whitespace-nowrap"
                 style={{ color: colors.text }}
               >
                 {baixandoPdf === doc.id ? (
@@ -490,8 +490,8 @@ export default function OutrosDocumentosTable({
                   <div className="hidden md:flex justify-center gap-0.5">
                     {acoesDesktop(doc)}
                   </div>
-                  <div className="md:hidden">
-                    <AcoesDropdown doc={doc} />
+                  <div className="md:hidden flex justify-center">
+                    <AcoesDropdown doc={doc} align="right" />
                   </div>
                 </td>
               </tr>
@@ -520,7 +520,7 @@ export default function OutrosDocumentosTable({
             colors={colors}
             formatKz={formatKz}
             getNomeCliente={documentoFiscalService.getNomeCliente}
-            acoes={<AcoesDropdown doc={doc} />}
+            acoes={<AcoesDropdown doc={doc} align="left" />}
           />
         ))
       )}
@@ -530,10 +530,10 @@ export default function OutrosDocumentosTable({
   /* ── Render principal ── */
   return (
     <div className="w-full flex flex-col">
-      {/* Abas */}
+      {/* Abas — scroll horizontal no mobile para não cortar/quebrar o layout */}
       <div
-        className="flex   "
-        style={{ borderBottom: `1px solid ${colors.border}` }}
+        className="flex overflow-x-auto scroll-tabs"
+        style={{ borderBottom: `1px solid ${colors.border}`, WebkitOverflowScrolling: "touch" }}
       >
         {TABS.map((tab) => {
           const count = docsTab(tab.key).length;
@@ -542,7 +542,7 @@ export default function OutrosDocumentosTable({
             <button
               key={tab.key}
               onClick={() => setTabAtiva(tab.key)}
-              className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium shrink-0"
+              className="flex items-center gap-1.5 px-3 sm:px-4 py-2.5 text-xs font-medium shrink-0 whitespace-nowrap"
               style={{
                 color: ativa ? colors.text : colors.textSecondary,
                 background: "none",
@@ -557,7 +557,7 @@ export default function OutrosDocumentosTable({
               {tab.label}
               {count > 0 && (
                 <span
-                  className="px-1.5 py-0.5 text-xs font-semibold"
+                  className="px-1.5 py-0.5 text-xs font-semibold shrink-0"
                   style={{
                     backgroundColor: `${colors.primary}20`,
                     color: colors.secondary,
@@ -570,6 +570,15 @@ export default function OutrosDocumentosTable({
           );
         })}
       </div>
+      <style jsx>{`
+        .scroll-tabs {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .scroll-tabs::-webkit-scrollbar {
+          display: none;
+        }
+      `}</style>
 
       {/* Conteúdo */}
       {loading ? (

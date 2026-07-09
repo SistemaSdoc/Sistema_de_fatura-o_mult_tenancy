@@ -139,7 +139,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
       case "operador":
         return [
           "/dashboard/Vendas",
-          "/dashboard/Vendas/Nova_venda",
+          "/dashboard/Vendas",
           "/dashboard/Faturas/Fatura_Normal",
           "/dashboard/Faturas/Faturas_Proforma",
           "/dashboard/Faturas/Faturas",
@@ -150,7 +150,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
       case "gestor":
         return [
           "/dashboard/Vendas",
-          "/dashboard/Vendas/Nova_venda",
+          "/dashboard/Vendas/",
           "/dashboard/Faturas/Fatura_Normal",
           "/dashboard/Faturas/Faturas_Proforma",
           "/dashboard/Faturas/Faturas",
@@ -184,7 +184,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
   const getFallbackRouteForRole = useCallback((role: string) => {
     switch (role) {
       case "operador":
-        return "/dashboard/Vendas/Nova_venda";
+        return "/dashboard/Vendas";
       case "contablista":
         return "/dashboard/relatorios";
       case "gestor":
@@ -834,17 +834,36 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                 {/* Notifications Panel */}
                 {notificacoesAberto && (
                   <>
+                    {/* Overlay escuro apenas no mobile, para dar a sensação de "bottom sheet" */}
+                    {isMobile && (
+                      <div
+                        onClick={() => setNotificacoesAberto(false)}
+                        className={`fixed inset-0 z-40 transition-opacity duration-200 ${
+                          panelAnimating ? "opacity-0" : "opacity-100"
+                        }`}
+                        style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }}
+                        aria-hidden="true"
+                      />
+                    )}
+
                     <div
-                      className={`absolute right-0 z-50 mt-2 overflow-hidden border shadow-xl transition-all duration-200 ${panelAnimating ? "opacity-0 scale-95" : "opacity-100 scale-100"}`}
+                      className={`z-50 flex flex-col overflow-hidden border shadow-xl transition-all duration-200 ${
+                        isMobile
+                          ? `fixed inset-x-0 bottom-0 ${
+                              panelAnimating ? "translate-y-full opacity-0" : "translate-y-0 opacity-100"
+                            }`
+                          : `absolute right-0 mt-2 ${panelAnimating ? "opacity-0 scale-95" : "opacity-100 scale-100"}`
+                      }`}
                       style={{
                         backgroundColor: colors.card,
                         borderColor: colors.border,
-                        width: "min(380px, calc(100vw - 20px))",
+                        width: isMobile ? "100%" : "min(380px, calc(100vw - 20px))",
                         transformOrigin: "top right",
-                        maxHeight: "calc(100vh - 80px)",
-                      }}>
+                        maxHeight: isMobile ? "80vh" : "calc(100vh - 80px)",
+                      }}
+                      onClick={(e) => e.stopPropagation()}>
                       {/* Header */}
-                      <div className="p-3 border-b md:p-4" style={{ borderColor: colors.border }}>
+                      <div className="p-3 border-b md:p-4 flex-shrink-0" style={{ borderColor: colors.border }}>
                         <div className="flex items-center justify-between">
                           <h3 className="text-sm font-semibold" style={{ color: colors.text }}>
                             Alertas de Estoque
@@ -864,7 +883,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                       </div>
 
                       {/* Tabs */}
-                      <div className="flex border-b" style={{ borderColor: colors.border }}>
+                      <div className="flex border-b flex-shrink-0" style={{ borderColor: colors.border }}>
                         <button
                           onClick={() => setAbaAtiva("baixo")}
                           className="flex-1 py-2 px-3 text-xs font-medium transition-all hover:scale-105 relative"
@@ -890,7 +909,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                       </div>
 
                       {/* Content */}
-                      <div className="max-h-80 overflow-y-auto">
+                      <div className="flex-1 min-h-0 overflow-y-auto">
                         {loadingNotificacoes ? (
                           <div className="flex items-center justify-center py-6">
                             <Loader2 className="w-4 h-4 animate-spin" style={{ color: colors.primary }} />
@@ -955,7 +974,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                       </div>
 
                       {/* Footer */}
-                      <div className="p-2 border-t text-center" style={{ borderColor: colors.border }}>
+                      <div className="p-2 border-t text-center flex-shrink-0" style={{ borderColor: colors.border }}>
                         <button
                           onClick={() => buscarNotificacoesEstoque(true)}
                           disabled={loadingNotificacoes}
@@ -965,7 +984,11 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                         </button>
                       </div>
                     </div>
-                    <div onClick={() => setNotificacoesAberto(false)} className="fixed inset-0 z-40" />
+
+                    {/* Catcher invisível para fechar ao clicar fora (apenas desktop, mobile já tem o overlay escuro acima) */}
+                    {!isMobile && (
+                      <div onClick={() => setNotificacoesAberto(false)} className="fixed inset-0 z-40" />
+                    )}
                   </>
                 )}
               </div>

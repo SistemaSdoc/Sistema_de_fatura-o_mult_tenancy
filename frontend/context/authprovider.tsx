@@ -132,7 +132,7 @@ const REDIRECT_MAP: Record<string, string> = {
   admin: "/dashboard",
   gestor: "/dashboard/Produtos_servicos/Stock",
   contablista: "/dashboard/relatorios",
-  operador: "/dashboard/Vendas/Nova_venda",
+  operador: "/dashboard/Vendas",
 };
 
 export function AuthProvider({ children }: AuthProviderProps) {
@@ -287,8 +287,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
           role: userData.role,
           name: userData.name,
         });
-
-        toast.success(`Bem-vindo, ${data.user.name}!`);
 
         // Pequeno delay para garantir que cookies foram processados
         await new Promise((resolve) => setTimeout(resolve, 100));

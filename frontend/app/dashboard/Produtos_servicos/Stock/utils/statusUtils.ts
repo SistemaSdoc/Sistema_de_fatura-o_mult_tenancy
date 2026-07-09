@@ -16,14 +16,14 @@ export function getStatusEstoque(item: Produto): StatusEstoque {
     }
     if (estaSemEstoque(item)) {
         return {
-            label: "Sem Estoque",
+            label: "Sem stock",
             cor: "bg-[#F9941F] text-[#FFFFFF]",
             icone: "XCircle",
         };
     }
     if (estaEstoqueBaixo(item)) {
         return {
-            label: "Estoque Baixo",
+            label: "Stock Baixo",
             cor: "bg-[#F9941F]/10 text-[#F9941F]",
             icone: "AlertTriangle",
         };

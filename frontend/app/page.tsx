@@ -537,7 +537,7 @@ export default function App() {
               onClick={() => setIsMenuOpen(false)}
               className="w-full text-center py-2 px-4 text-sm cursor-pointer mt-2 block rounded-full font-semibold"
               style={{ backgroundColor: colors.primary, color: "white" }}>
-              Começar Grátis
+              Login
             </Link>
           </div>
         </div>
@@ -568,7 +568,7 @@ export default function App() {
                       href="/register"
                       className="group relative px-8 py-3.5 rounded-full font-bold text-white transition-all duration-300 transform hover:scale-105 hover:shadow-xl overflow-hidden"
                       style={{ backgroundColor: colors.primary }}>
-                      <span className="relative z-10 flex items-center gap-2">Comece Grátis</span>
+                      <span className="relative z-10 flex items-center gap-2">Comece a faturar</span>
                       <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                     </Link>
                     <button

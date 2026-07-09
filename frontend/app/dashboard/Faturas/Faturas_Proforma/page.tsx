@@ -19,6 +19,7 @@ import {
   Building2,
   Hash,
   Globe,
+  ChevronDown,
 } from "lucide-react";
 import { AxiosError } from "axios";
 import MainEmpresa from "../../../components/MainEmpresa";
@@ -206,8 +207,12 @@ export default function NovaFaturaProformaPage() {
   const [buscaItem, setBuscaItem] = useState("");
   const [dropdownAberto, setDropdownAberto] = useState(false);
 
+  // Estado para o dropdown customizado de cliente
+  const [clienteDropdownAberto, setClienteDropdownAberto] = useState(false);
+
   const buscaInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const clienteDropdownRef = useRef<HTMLDivElement>(null);
 
   const showToast = (message: string, type: "success" | "error" | "warning" | "info" = "info") => {
     setToast({ message, type });
@@ -286,11 +291,14 @@ export default function NovaFaturaProformaPage() {
     carregarDados();
   }, [user]);
 
-  // Fechar dropdown ao clicar fora
+  // Fechar dropdowns ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setDropdownAberto(false);
+      }
+      if (clienteDropdownRef.current && !clienteDropdownRef.current.contains(event.target as Node)) {
+        setClienteDropdownAberto(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -315,10 +323,10 @@ export default function NovaFaturaProformaPage() {
     }
   };
 
-  // Handler para selecao de cliente
-  const handleClienteChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const cliente = clientes.find((c) => c.id === e.target.value);
-    setClienteSelecionado(cliente || null);
+  // Handler para selecao de cliente (dropdown customizado)
+  const handleSelectCliente = (cliente: Cliente | null) => {
+    setClienteSelecionado(cliente);
+    setClienteDropdownAberto(false);
   };
 
   // Filtrar itens baseado no tipo selecionado e na busca
@@ -633,8 +641,10 @@ const finalizarProforma = async () => {
 
           <div className="divide-y" style={{ borderColor: colors.border }}>
             {/* Cliente */}
-            <div className="flex min-h-[44px]" style={{ borderColor: colors.border }}>
-              <div className="flex items-center gap-1.5 px-3 py-2.5 w-24 sm:w-28 shrink-0" style={{ backgroundColor: colors.hover }}>
+            <div className="flex flex-col sm:flex-row min-h-[44px]" style={{ borderColor: colors.border }}>
+              <div
+                className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-24 md:w-28 sm:shrink-0"
+                style={{ backgroundColor: colors.hover }}>
                 <User size={13} style={{ color: colors.text }} />
                 <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>
                   Cliente
@@ -652,6 +662,7 @@ const finalizarProforma = async () => {
                         setClienteAvulso("");
                         setClienteAvulsoNif("");
                         setNifError(null);
+                        setClienteDropdownAberto(false);
                       }}
                       className="px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap"
                       style={{
@@ -664,31 +675,82 @@ const finalizarProforma = async () => {
                 </div>
 
                 {modoCliente === "cadastrado" ? (
-                  <select
-                    className="flex-1 min-w-0 px-3 py-1.5 text-sm outline-none"
-                    style={inp}
-                    value={clienteSelecionado?.id ?? ""}
-                    onChange={handleClienteChange}>
-                    <option value="">Selecione um cliente…</option>
-                    {clientes.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.nome}
-                        {c.nif ? ` — ${formatarNIF(c.nif)}` : ""}
-                        {c.tipo === "empresa"}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative flex-1 min-w-[180px] w-full sm:w-auto" ref={clienteDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => setClienteDropdownAberto((prev) => !prev)}
+                      className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-sm outline-none text-left"
+                      style={inp}>
+                      <span
+                        className="truncate"
+                        style={{ color: clienteSelecionado ? colors.text : colors.textSecondary }}>
+                        {clienteSelecionado
+                          ? `${clienteSelecionado.nome}${clienteSelecionado.nif ? ` — ${formatarNIF(clienteSelecionado.nif)}` : ""}`
+                          : "Selecione um cliente…"}
+                      </span>
+                      <ChevronDown
+                        size={14}
+                        className="shrink-0 transition-transform"
+                        style={{
+                          color: colors.textSecondary,
+                          transform: clienteDropdownAberto ? "rotate(180deg)" : "rotate(0deg)",
+                        }}
+                      />
+                    </button>
+
+                    {clienteDropdownAberto && (
+                      <div
+                        className="absolute z-50 left-0 right-0 mt-1 border shadow-lg max-h-60 overflow-y-auto"
+                        style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                        <button
+                          type="button"
+                          onClick={() => handleSelectCliente(null)}
+                          className="w-full px-3 py-2 text-left text-sm border-b last:border-0"
+                          style={{
+                            backgroundColor: !clienteSelecionado ? `${colors.primary}10` : "transparent",
+                            borderColor: colors.border,
+                            color: colors.textSecondary,
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = colors.hover)}
+                          onMouseLeave={(e) =>
+                            (e.currentTarget.style.backgroundColor = !clienteSelecionado ? `${colors.primary}10` : "transparent")
+                          }>
+                          Selecione um cliente…
+                        </button>
+                        {clientes.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => handleSelectCliente(c)}
+                            className="w-full px-3 py-2 text-left text-sm border-b last:border-0 truncate"
+                            style={{
+                              backgroundColor: clienteSelecionado?.id === c.id ? `${colors.primary}10` : "transparent",
+                              borderColor: colors.border,
+                              color: colors.text,
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = colors.hover)}
+                            onMouseLeave={(e) =>
+                              (e.currentTarget.style.backgroundColor =
+                                clienteSelecionado?.id === c.id ? `${colors.primary}10` : "transparent")
+                            }>
+                            {c.nome}
+                            {c.nif ? ` — ${formatarNIF(c.nif)}` : ""}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <>
                     <input
                       type="text"
                       placeholder="Nome (opcional - Consumidor Final)"
-                      className="flex-1 min-w-0 px-3 py-1.5 text-sm outline-none"
+                      className="flex-1 min-w-0 px-3 py-1.5 text-sm outline-none w-full sm:w-auto"
                       style={inp}
                       value={clienteAvulso}
                       onChange={(e) => setClienteAvulso(e.target.value)}
                     />
-                    <div className="relative w-32 sm:w-36 shrink-0">
+                    <div className="relative w-full sm:w-32 md:w-36 shrink-0">
                       <input
                         type="text"
                         inputMode="text"
@@ -715,8 +777,10 @@ const finalizarProforma = async () => {
             </div>
 
             {/* Produto e Servico */}
-            <div className="flex min-h-[44px]" style={{ borderColor: colors.border }}>
-              <div className="flex items-center gap-1.5 px-3 py-2.5 w-24 sm:w-28 shrink-0" style={{ backgroundColor: colors.hover }}>
+            <div className="flex flex-col sm:flex-row min-h-[44px]" style={{ borderColor: colors.border }}>
+              <div
+                className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-24 md:w-28 sm:shrink-0"
+                style={{ backgroundColor: colors.hover }}>
                 <Package size={13} style={{ color: colors.text }} />
                 <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>
                   Itens
@@ -748,7 +812,7 @@ const finalizarProforma = async () => {
                   </div>
 
                   {/* Campo de busca com dropdown */}
-                  <div className="relative flex-1 min-w-[200px]" ref={dropdownRef}>
+                  <div className="relative flex-1 w-full sm:min-w-[200px]" ref={dropdownRef}>
                     <div className="relative">
                       <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: colors.textSecondary }} />
                       <input
@@ -789,14 +853,17 @@ const finalizarProforma = async () => {
                     {dropdownAberto && (
                       <div
                         className="absolute z-50 left-0 right-0 mt-1 border shadow-lg max-h-60 overflow-y-auto"
-                        style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                        style={{
+                          backgroundColor: colors.card,
+                          borderColor: colors.border,
+                        }}>
                         {itensFiltrados.length > 0 ? (
                           itensFiltrados.map((item) => (
                             <button
                               key={item.id}
                               type="button"
                               onClick={() => handleSelectItem(item)}
-                              className="w-full px-3 py-2 text-left text-sm hover:transition-colors flex justify-between items-center border-b last:border-0"
+                              className="w-full px-3 py-2 text-left text-sm hover:transition-colors flex flex-wrap sm:flex-nowrap justify-between items-center gap-x-3 gap-y-0.5 border-b last:border-0"
                               style={{
                                 backgroundColor: formItem.produto_id === item.id ? `${colors.primary}10` : "transparent",
                                 borderColor: colors.border,
@@ -806,7 +873,7 @@ const finalizarProforma = async () => {
                                 (e.currentTarget.style.backgroundColor =
                                   formItem.produto_id === item.id ? `${colors.primary}10` : "transparent")
                               }>
-                              <div className="flex-1">
+                              <div className="flex-1 min-w-0">
                                 <span className="font-medium" style={{ color: colors.text }}>
                                   {item.nome}
                                 </span>
@@ -816,7 +883,7 @@ const finalizarProforma = async () => {
                                   </span>
                                 )}
                               </div>
-                              <div className="text-right shrink-0 ml-3">
+                              <div className="text-right shrink-0 ml-0 sm:ml-3">
                                 <span className="text-sm font-semibold" style={{ color: colors.secondary }}>
                                   {formatarPreco(item.preco_venda)}
                                 </span>
@@ -842,7 +909,7 @@ const finalizarProforma = async () => {
                     )}
                   </div>
 
-                  {/* Stepper quantidade */}
+                  {/* Stepper quantidade 
                   <div className="flex items-center border overflow-hidden shrink-0" style={{ borderColor: colors.border }}>
                     <button
                       type="button"
@@ -884,14 +951,14 @@ const finalizarProforma = async () => {
                       }}>
                       <Plus size={12} style={{ color: colors.text }} />
                     </button>
-                  </div>
+                  </div>*/}
 
                   {/* Botao Adicionar */}
                   <button
                     type="button"
                     onClick={adicionarItem}
                     disabled={!formItem.produto_id}
-                    className="shrink-0 flex items-center gap-1.5 px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40 transition-opacity"
+                    className="shrink-0 w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40 transition-opacity"
                     style={{ backgroundColor: colors.primary }}>
                     <Plus size={13} />
                     Adicionar
@@ -926,8 +993,10 @@ const finalizarProforma = async () => {
             </div>
 
             {/* Observacoes */}
-            <div className="flex min-h-[44px]">
-              <div className="flex items-center gap-1.5 px-3 py-2.5 w-24 sm:w-28 shrink-0" style={{ backgroundColor: colors.hover }}>
+            <div className="flex flex-col sm:flex-row min-h-[44px]">
+              <div
+                className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-24 md:w-28 sm:shrink-0"
+                style={{ backgroundColor: colors.hover }}>
                 <FileText size={13} style={{ color: colors.text }} />
                 <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>
                   Obs.
@@ -946,16 +1015,18 @@ const finalizarProforma = async () => {
             </div>
 
             {/* Dados Bancários */}
-            <div className="flex min-h-[44px]">
-              <div className="flex items-center gap-1.5 px-3 py-2.5 w-24 sm:w-28 shrink-0" style={{ backgroundColor: colors.hover }}>
+            <div className="flex flex-col sm:flex-row min-h-[44px]">
+              <div
+                className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-24 md:w-28 sm:shrink-0"
+                style={{ backgroundColor: colors.hover }}>
                 <Building2 size={13} style={{ color: colors.text }} />
                 <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>
                   Banco
                 </span>
               </div>
               <div className="flex-1 px-3 py-2.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="relative flex-1 min-w-[120px]">
+                <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2">
+                  <div className="relative w-full sm:flex-1 sm:min-w-[120px]">
                     <Building2
                       size={13}
                       className="absolute left-3 top-1/2 -translate-y-1/2"
@@ -970,7 +1041,7 @@ const finalizarProforma = async () => {
                       onChange={(e) => setNomeBanco(e.target.value)}
                     />
                   </div>
-                  <div className="relative flex-1 min-w-[120px]">
+                  <div className="relative w-full sm:flex-1 sm:min-w-[120px]">
                     <Hash
                       size={13}
                       className="absolute left-3 top-1/2 -translate-y-1/2"
@@ -985,7 +1056,7 @@ const finalizarProforma = async () => {
                       onChange={(e) => setNumeroConta(e.target.value)}
                     />
                   </div>
-                  <div className="relative flex-1 min-w-[150px]">
+                  <div className="relative w-full sm:flex-1 sm:min-w-[150px]">
                     <Globe
                       size={13}
                       className="absolute left-3 top-1/2 -translate-y-1/2"
@@ -1216,4 +1287,4 @@ const finalizarProforma = async () => {
       </div>
     </MainEmpresa>
   );
-} 
+}

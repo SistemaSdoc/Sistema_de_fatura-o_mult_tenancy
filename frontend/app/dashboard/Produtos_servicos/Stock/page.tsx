@@ -127,61 +127,63 @@ export default function EstoquePage() {
 
   return (
     <MainEmpresa>
-      <div className="space-y-6 max-w-7xl mx-auto p-4 md:p-6 transition-colors duration-300" style={{ backgroundColor: colors.background }}>
+      <div
+        className="space-y-4 sm:space-y-6 max-w-7xl mx-auto p-3 sm:p-4 md:p-6 transition-colors duration-300"
+        style={{ backgroundColor: colors.background }}>
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div className="min-w-0">
             <button
-              className="flex items-center gap-2 p-1.5 transition-colors hover:opacity-70"
+              className="flex items-center gap-1.5 sm:gap-2 py-1 sm:p-1.5 transition-colors hover:opacity-70"
               style={{ color: colors.primary }}
               onClick={() => router.back()}>
-              <ArrowLeft className="w-4 h-4" />
-              <h1 className="text-2xl md:text-3xl font-bold" style={{ color: colors.secondary }}>
+              <ArrowLeft className="w-4 h-4 shrink-0" />
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold truncate" style={{ color: colors.secondary }}>
                 Seu Stock
               </h1>
             </button>
 
-            <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>
+            <p className="text-xs sm:text-sm mt-1" style={{ color: colors.textSecondary }}>
               Gerencie seu catálogo e controle de estoque
             </p>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={abrirModalNovoProduto}
-              className="flex items-center gap-2 px-4 py-2 text-white transition-colors text-sm font-medium hover:opacity-90"
+              className="flex flex-1 sm:flex-none items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 text-white transition-colors text-xs sm:text-sm font-medium hover:opacity-90 rounded whitespace-nowrap"
               style={{ backgroundColor: colors.secondary }}>
-              <Plus className="w-4 h-4" />
-              Novo Item
+              <Plus className="w-4 h-4 shrink-0" />
+              <span className="sm:inline">Novo Item</span>
             </button>
 
             <button
               onClick={() => router.push("/dashboard/Produtos_servicos/categorias")}
-              className="flex items-center gap-2 px-4 py-2 text-white transition-colors text-sm font-medium hover:opacity-90"
+              className="flex flex-1 sm:flex-none items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 text-white transition-colors text-xs sm:text-sm font-medium hover:opacity-90 rounded whitespace-nowrap"
               style={{ backgroundColor: colors.primary }}>
-              <Plus className="w-4 h-4" />
-              Nova Categoria
+              <Plus className="w-4 h-4 shrink-0" />
+              <span className="sm:inline">Nova Categoria</span>
             </button>
           </div>
         </div>
 
         {/* Cards de Resumo */}
         {resumo && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
             <StatCard icon={<Package className="w-5 h-5" />} label="Total de Produtos" value={produtos.length} colors={colors} />
             <StatCard icon={<Wrench className="w-5 h-5" />} label="Total de Serviços" value={servicos.length} colors={colors} />
             <StatCard
               icon={<AlertTriangle className="w-5 h-5" />}
-              label="Estoque Baixo"
+              label="Stock Baixo"
               value={resumo.produtosEstoqueBaixo || 0}
               colors={colors}
             />
-            <StatCard icon={<XCircle className="w-5 h-5" />} label="Sem Estoque" value={resumo.produtosSemEstoque || 0} colors={colors} />
+            <StatCard icon={<XCircle className="w-5 h-5" />} label="Sem stock" value={resumo.produtosSemEstoque || 0} colors={colors} />
           </div>
         )}
 
         {/* Tabs e Conteúdo */}
         <div
-          className="shadow-sm border overflow-hidden "
+          className="shadow-sm border rounded-lg overflow-hidden"
           style={{
             backgroundColor: colors.card,
             borderColor: colors.border,
@@ -194,7 +196,7 @@ export default function EstoquePage() {
             colors={colors}
           />
 
-          <div className="p-4 md:p-6">
+          <div className="p-3 sm:p-4 md:p-6">
             {abaAtiva === "itens" && (
               <>
                 <FiltrosEstoque
@@ -239,11 +241,11 @@ export default function EstoquePage() {
 
       {/* Modal de Novo Produto - Usando NovoProdutoForm diretamente */}
       {modalNovoProdutoAberto && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in-0 duration-200">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60] p-2 sm:p-4 animate-in fade-in-0 duration-200">
           <div
-            className="shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden rounded-lg animate-in zoom-in-95 fade-in-0 duration-300"
+            className="shadow-2xl max-w-3xl w-full max-h-[92vh] sm:max-h-[90vh] overflow-hidden rounded-lg animate-in zoom-in-95 fade-in-0 duration-300"
             style={{ backgroundColor: colors.card }}>
-            <div className="p-6 overflow-y-auto max-h-[90vh]">
+            <div className="p-4 sm:p-6 overflow-y-auto max-h-[92vh] sm:max-h-[90vh]">
               <NovoProdutoForm onSuccess={handleProdutoCriado} onCancel={fecharModalNovoProduto} />
             </div>
           </div>

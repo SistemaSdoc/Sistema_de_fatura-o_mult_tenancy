@@ -19,6 +19,7 @@ import {
   Building2,
   Hash,
   Globe,
+  ChevronDown,
 } from "lucide-react";
 import { AxiosError } from "axios";
 import MainEmpresa from "../../../components/MainEmpresa";
@@ -209,8 +210,12 @@ export default function NovaFaturaNormalPage() {
   const [buscaItem, setBuscaItem] = useState("");
   const [dropdownAberto, setDropdownAberto] = useState(false);
 
+  // Estado para o dropdown customizado de cliente
+  const [clienteDropdownAberto, setClienteDropdownAberto] = useState(false);
+
   const buscaInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const clienteDropdownRef = useRef<HTMLDivElement>(null);
 
   const showToast = (message: string, type: "success" | "error" | "warning" | "info" = "info") => {
     setToast({ message, type });
@@ -289,11 +294,14 @@ export default function NovaFaturaNormalPage() {
     carregarDados();
   }, [user]);
 
-  // Fechar dropdown ao clicar fora
+  // Fechar dropdowns ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setDropdownAberto(false);
+      }
+      if (clienteDropdownRef.current && !clienteDropdownRef.current.contains(event.target as Node)) {
+        setClienteDropdownAberto(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -588,10 +596,10 @@ export default function NovaFaturaNormalPage() {
     }
   };
 
-  // Handler para selecao de cliente
-  const handleClienteChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const cliente = clientes.find((c) => c.id === e.target.value);
-    setClienteSelecionado(cliente || null);
+  // Handler para selecao de cliente (dropdown customizado)
+  const selecionarCliente = (cliente: Cliente | null) => {
+    setClienteSelecionado(cliente);
+    setClienteDropdownAberto(false);
   };
 
   const produtoSel = produtos.find((p) => p.id === formItem.produto_id);
@@ -617,7 +625,7 @@ export default function NovaFaturaNormalPage() {
           </button>
           <div>
             <h1 className="text-lg font-bold" style={{ color: colors.secondary }}>
-              Venda a prazo
+              Factura
             </h1>
           </div>
         </div>
@@ -649,8 +657,10 @@ export default function NovaFaturaNormalPage() {
 
           <div className="divide-y" style={{ borderColor: colors.border }}>
             {/* Cliente */}
-            <div className="flex min-h-44px">
-              <div className="flex items-center gap-1.5 px-3 py-2.5 w-24 sm:w-28 shrink-0" style={{ backgroundColor: colors.hover }}>
+            <div className="flex flex-col sm:flex-row min-h-[44px]">
+              <div
+                className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-28 shrink-0"
+                style={{ backgroundColor: colors.hover }}>
                 <User size={13} style={{ color: colors.text }} />
                 <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>
                   Cliente
@@ -674,36 +684,90 @@ export default function NovaFaturaNormalPage() {
                         backgroundColor: modoCliente === modo ? colors.primary : "transparent",
                         color: modoCliente === modo ? "white" : colors.textSecondary,
                       }}>
-                      {modo === "cadastrado" ? "Cadastrado" : "Nao cadastrado"}
+                      {modo === "cadastrado" ? "Cadastrado" : "Não cadastrado"}
                     </button>
                   ))}
                 </div>
                 {modoCliente === "cadastrado" ? (
-                  <select
-                    className="flex-1 min-w-0 px-3 py-1.5 text-sm outline-none"
-                    style={inp}
-                    value={clienteSelecionado?.id ?? ""}
-                    onChange={handleClienteChange}>
-                    <option value="">Selecione um cliente…</option>
-                    {clientes.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.nome}
-                        {c.nif ? ` (${formatarNIF(c.nif)})` : ""}
-                        {c.tipo === "empresa"}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative w-full sm:flex-1 sm:min-w-0" ref={clienteDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => setClienteDropdownAberto((v) => !v)}
+                      className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-sm outline-none text-left"
+                      style={inp}>
+                      <span
+                        className="truncate"
+                        style={{ color: clienteSelecionado ? colors.text : colors.textSecondary }}>
+                        {clienteSelecionado
+                          ? `${clienteSelecionado.nome}${clienteSelecionado.nif ? ` (${formatarNIF(clienteSelecionado.nif)})` : ""}`
+                          : "Selecione um cliente…"}
+                      </span>
+                      <ChevronDown
+                        size={14}
+                        className={`shrink-0 transition-transform ${clienteDropdownAberto ? "rotate-180" : ""}`}
+                        style={{ color: colors.textSecondary }}
+                      />
+                    </button>
+
+                    {clienteDropdownAberto && (
+                      <div
+                        className="absolute z-50 left-0 right-0 mt-1 border shadow-lg max-h-60 overflow-y-auto"
+                        style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                        <button
+                          type="button"
+                          onClick={() => selecionarCliente(null)}
+                          className="w-full px-3 py-2 text-left text-sm border-b last:border-0"
+                          style={{
+                            backgroundColor: !clienteSelecionado ? `${colors.primary}10` : "transparent",
+                            borderColor: colors.border,
+                            color: colors.textSecondary,
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = colors.hover)}
+                          onMouseLeave={(e) =>
+                            (e.currentTarget.style.backgroundColor = !clienteSelecionado ? `${colors.primary}10` : "transparent")
+                          }>
+                          Selecione um cliente…
+                        </button>
+                        {clientes.length > 0 ? (
+                          clientes.map((c) => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => selecionarCliente(c)}
+                              className="w-full px-3 py-2 text-left text-sm border-b last:border-0"
+                              style={{
+                                backgroundColor: clienteSelecionado?.id === c.id ? `${colors.primary}10` : "transparent",
+                                borderColor: colors.border,
+                                color: colors.text,
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = colors.hover)}
+                              onMouseLeave={(e) =>
+                                (e.currentTarget.style.backgroundColor =
+                                  clienteSelecionado?.id === c.id ? `${colors.primary}10` : "transparent")
+                              }>
+                              {c.nome}
+                              {c.nif ? ` (${formatarNIF(c.nif)})` : ""}
+                            </button>
+                          ))
+                        ) : (
+                          <div className="p-3 text-center text-sm" style={{ color: colors.textSecondary }}>
+                            Nenhum cliente encontrado
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <>
                     <input
                       type="text"
                       placeholder="Nome (opcional - Consumidor Final)"
-                      className="flex-1 min-w-0 px-3 py-1.5 text-sm outline-none"
+                      className="w-full sm:flex-1 sm:min-w-0 px-3 py-1.5 text-sm outline-none"
                       style={inp}
                       value={clienteAvulso}
                       onChange={(e) => setClienteAvulso(e.target.value)}
                     />
-                    <div className="relative w-32 sm:w-36 shrink-0">
+                    <div className="relative w-full sm:w-36 shrink-0">
                       <input
                         type="text"
                         inputMode="text"
@@ -730,8 +794,10 @@ export default function NovaFaturaNormalPage() {
             </div>
 
             {/* Produto e Servico */}
-            <div className="flex min-h-[44px]">
-              <div className="flex items-center gap-1.5 px-3 py-2.5 w-24 sm:w-28 shrink-0" style={{ backgroundColor: colors.hover }}>
+            <div className="flex flex-col sm:flex-row min-h-[44px]">
+              <div
+                className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-28 shrink-0"
+                style={{ backgroundColor: colors.hover }}>
                 <Package size={13} style={{ color: colors.text }} />
                 <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>
                   Itens
@@ -767,7 +833,7 @@ export default function NovaFaturaNormalPage() {
                   </div>
 
                   {/* Campo de busca com dropdown */}
-                  <div className="relative flex-1 min-w-[200px]" ref={dropdownRef}>
+                  <div className="relative w-full sm:flex-1 sm:min-w-[200px]" ref={dropdownRef}>
                     <div className="relative">
                       <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: colors.textSecondary }} />
                       <input
@@ -826,7 +892,7 @@ export default function NovaFaturaNormalPage() {
                               key={item.id}
                               type="button"
                               onClick={() => handleSelectItem(item)}
-                              className="w-full px-3 py-2 text-left text-sm hover:transition-colors flex justify-between items-center border-b last:border-0"
+                              className="w-full px-3 py-2 text-left text-sm hover:transition-colors flex flex-wrap sm:flex-nowrap justify-between items-center gap-x-3 gap-y-0.5 border-b last:border-0"
                               style={{
                                 backgroundColor: formItem.produto_id === item.id ? `${colors.primary}10` : "transparent",
                                 borderColor: colors.border,
@@ -836,7 +902,7 @@ export default function NovaFaturaNormalPage() {
                                 (e.currentTarget.style.backgroundColor =
                                   formItem.produto_id === item.id ? `${colors.primary}10` : "transparent")
                               }>
-                              <div className="flex-1">
+                              <div className="flex-1 min-w-0">
                                 <span className="font-medium" style={{ color: colors.text }}>
                                   {item.nome}
                                 </span>
@@ -846,7 +912,7 @@ export default function NovaFaturaNormalPage() {
                                   </span>
                                 )}
                               </div>
-                              <div className="text-right shrink-0 ml-3">
+                              <div className="text-right shrink-0 ml-0 sm:ml-3">
                                 <span className="text-sm font-semibold" style={{ color: colors.secondary }}>
                                   {formatarPreco(item.preco_venda)}
                                 </span>
@@ -872,7 +938,7 @@ export default function NovaFaturaNormalPage() {
                     )}
                   </div>
 
-                  {/* Controles de quantidade */}
+                  {/* Controles de quantidade 
                   <div className="flex items-center border overflow-hidden shrink-0" style={{ borderColor: colors.border }}>
                     <button
                       type="button"
@@ -928,9 +994,9 @@ export default function NovaFaturaNormalPage() {
                       }}>
                       <Plus size={12} style={{ color: colors.text }} />
                     </button>
-                  </div>
+                  </div>*/}
 
-                  {/* Campo de desconto */}
+                  {/* Campo de desconto 
                   <input
                     type="number"
                     min={0}
@@ -945,14 +1011,14 @@ export default function NovaFaturaNormalPage() {
                         desconto: Number(e.target.value),
                       }))
                     }
-                  />
+                  />*/}
 
                   {/* Botao adicionar */}
                   <button
                     type="button"
                     onClick={adicionarItem}
                     disabled={!formItem.produto_id}
-                    className="shrink-0 flex items-center gap-1.5 px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40"
+                    className="w-full sm:w-auto shrink-0 flex items-center justify-center gap-1.5 px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40"
                     style={{ backgroundColor: colors.primary }}>
                     <Plus size={13} />
                     Adicionar
@@ -1005,8 +1071,10 @@ export default function NovaFaturaNormalPage() {
             </div>
 
             {/* Observacoes */}
-            <div className="flex min-h-[44px]">
-              <div className="flex items-center gap-1.5 px-3 py-2.5 w-24 sm:w-28 shrink-0" style={{ backgroundColor: colors.hover }}>
+            <div className="flex flex-col sm:flex-row min-h-[44px]">
+              <div
+                className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-28 shrink-0"
+                style={{ backgroundColor: colors.hover }}>
                 <FileText size={13} style={{ color: colors.text }} />
                 <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>
                   Obs.
@@ -1025,16 +1093,18 @@ export default function NovaFaturaNormalPage() {
             </div>
 
             {/* ✅ Dados Bancários */}
-            <div className="flex min-h-[44px]">
-              <div className="flex items-center gap-1.5 px-3 py-2.5 w-24 sm:w-28 shrink-0" style={{ backgroundColor: colors.hover }}>
+            <div className="flex flex-col sm:flex-row min-h-[44px]">
+              <div
+                className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-28 shrink-0"
+                style={{ backgroundColor: colors.hover }}>
                 <Building2 size={13} style={{ color: colors.text }} />
                 <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>
                   Banco
                 </span>
               </div>
               <div className="flex-1 px-3 py-2.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="relative flex-1 min-w-[120px]">
+                <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2">
+                  <div className="relative w-full sm:flex-1 sm:min-w-[120px]">
                     <Building2
                       size={13}
                       className="absolute left-3 top-1/2 -translate-y-1/2"
@@ -1049,7 +1119,7 @@ export default function NovaFaturaNormalPage() {
                       onChange={(e) => setNomeBanco(e.target.value)}
                     />
                   </div>
-                  <div className="relative flex-1 min-w-[120px]">
+                  <div className="relative w-full sm:flex-1 sm:min-w-[120px]">
                     <Hash
                       size={13}
                       className="absolute left-3 top-1/2 -translate-y-1/2"
@@ -1064,7 +1134,7 @@ export default function NovaFaturaNormalPage() {
                       onChange={(e) => setNumeroConta(e.target.value)}
                     />
                   </div>
-                  <div className="relative flex-1 min-w-[150px]">
+                  <div className="relative w-full sm:flex-1 sm:min-w-[150px]">
                     <Globe
                       size={13}
                       className="absolute left-3 top-1/2 -translate-y-1/2"
@@ -1088,17 +1158,17 @@ export default function NovaFaturaNormalPage() {
         {/* CARD 2 — Itens + Resumo Fiscal */}
         {itens.length > 0 ? (
           <div className="border shadow-sm overflow-hidden" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-            <div className="px-3 py-1.5 flex items-center justify-between" style={{ backgroundColor: colors.primary }}>
-              <div className="flex items-center gap-2">
-                <ShoppingCart size={14} className="text-white" />
-                <span className="text-white font-medium text-xs uppercase tracking-wider">
+            <div className="px-3 py-1.5 flex items-center justify-between gap-2" style={{ backgroundColor: colors.primary }}>
+              <div className="flex items-center gap-2 min-w-0">
+                <ShoppingCart size={14} className="text-white shrink-0" />
+                <span className="text-white font-medium text-xs uppercase tracking-wider truncate">
                   Itens da Factura
                   <span className="ml-1.5 text-white/70 font-normal normal-case">
                     ({itens.length} {itens.length !== 1 ? "itens" : "item"})
                   </span>
                 </span>
               </div>
-              <button onClick={() => setItens([])} className="text-white/70 hover:text-white text-xs transition-colors">
+              <button onClick={() => setItens([])} className="shrink-0 text-white/70 hover:text-white text-xs transition-colors">
                 Limpar tudo
               </button>
             </div>
@@ -1309,10 +1379,10 @@ export default function NovaFaturaNormalPage() {
         ) : (
           <div className="text-center py-10 border-2 border-dashed" style={{ borderColor: colors.border }}>
             <ShoppingCart size={28} className="mx-auto mb-2" style={{ color: colors.border }} />
-            <p className="text-sm" style={{ color: colors.textSecondary }}>
+            <p className="text-sm px-4" style={{ color: colors.textSecondary }}>
               Use o scanner ou digite o codigo do produto para adicionar automaticamente
             </p>
-            <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+            <p className="text-xs mt-1 px-4" style={{ color: colors.textSecondary }}>
               Pressione ENTER para adicionar ao carrinho
             </p>
           </div>

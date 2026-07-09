@@ -71,10 +71,10 @@ export function PerfilTab({ colors }: { colors: ThemeColors }) {
         printer_ip: form.printer_ip || undefined,
       });
       await refreshUser();
-      toast.success("Perfil atualizado!");
+
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      toast.error(msg ?? "Erro ao atualizar perfil");
+      toast.error(msg ?? "Erro ao atualizar perfil");   
     } finally {
       setLoading(false);
     }

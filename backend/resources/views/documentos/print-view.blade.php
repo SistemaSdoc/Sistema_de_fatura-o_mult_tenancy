@@ -11,7 +11,7 @@ $empresaEmail = data_get($empresa, 'email') ?? 'Email não registrado';
 $empresaNome = data_get($empresa, 'nome') ?? 'EMPRESA';
 $empresaNif = data_get($empresa, 'nif') ?? '0000000000';
 
-// ✅ DADOS BANCÁRIOS - PRIORIZAR DADOS DO DOCUMENTO SOBRE OS DA EMPRESA
+//  DADOS BANCÁRIOS - PRIORIZAR DADOS DO DOCUMENTO SOBRE OS DA EMPRESA
 // Primeiro, tenta pegar do documento (campos salvos no banco)
 $docNomeBanco = $documento->nome_banco ?? null;
 $docIban = $documento->iban ?? null;
@@ -23,19 +23,6 @@ $empresaConta = $docNumeroConta ?? data_get($empresa, 'numero_conta');
 $empresaIban = $docIban ?? data_get($empresa, 'iban');
 
 $temDadosBancarios = !empty($empresaBanco) || !empty($empresaConta) || !empty($empresaIban);
-
-// ✅ Log para debug (remover em produção)
-Log::info('[PDF Print] Dados bancários', [
-    'doc_nome_banco' => $docNomeBanco,
-    'doc_iban' => $docIban,
-    'doc_numero_conta' => $docNumeroConta,
-    'empresa_banco' => data_get($empresa, 'nome_banco'),
-    'empresa_iban' => data_get($empresa, 'iban'),
-    'empresa_conta' => data_get($empresa, 'numero_conta'),
-    'final_banco' => $empresaBanco,
-    'final_iban' => $empresaIban,
-    'final_conta' => $empresaConta,
-]);
 
 $empresaLogo = asset('images/default-logo.png');
 if (!empty(data_get($empresa, 'logo_base64'))) {
@@ -719,7 +706,7 @@ $temTroco = $troco > 0;
         {{-- ✅ DADOS BANCÁRIOS - PRIORIZA DADOS DO DOCUMENTO --}}
         @if($temDadosBancarios)
             <div class="bank-box">
-                <div class="section-title">📋 Dados Bancários para Pagamento</div>
+                <div class="section-title"> Dados Bancários para Pagamento</div>
                 <div class="bank-grid">
                     @if(!empty($empresaBanco))
                         <div class="bank-row">
@@ -739,11 +726,7 @@ $temTroco = $troco > 0;
                             <span class="bank-value iban">{{ $empresaIban }}</span>
                         </div>
                     @endif
-                    @if(!empty($empresaBanco) || !empty($empresaConta) || !empty($empresaIban))
-                        <div style="margin-top: 6px; font-size: 9px; color: #6b7280; border-top: 1px solid #e5e7eb; padding-top: 6px;">
-                            Utilize estes dados para efectuar o pagamento por transferência bancária.
-                        </div>
-                    @endif
+
                 </div>
             </div>
         @endif
@@ -785,13 +768,7 @@ $temTroco = $troco > 0;
             <div class="meta-line">
                 {{ $empresaNome }} | NIF: {{ $empresaNif }} | {{ $empresaEmail }}
             </div>
-            @if($temDadosBancarios)
-                <div class="footer-bank">
-                    @if(!empty($empresaBanco))<strong>Banco:</strong> {{ $empresaBanco }} @endif
-                    @if(!empty($empresaConta)) @if(!empty($empresaBanco)) | @endif <strong>Conta:</strong> {{ $empresaConta }} @endif
-                    @if(!empty($empresaIban)) @if(!empty($empresaBanco) || !empty($empresaConta)) | @endif <strong>IBAN:</strong> {{ $empresaIban }} @endif
-                </div>
-            @endif
+
         </div>
     </div>
 

@@ -25,6 +25,7 @@ import {
     Banknote,
     X,
     ChevronLeft,
+    ChevronDown,
     UserPlus,
     ArrowRight,
     Globe,
@@ -103,39 +104,46 @@ const InputField: React.FC<InputFieldProps> = ({
 }) => {
     const [isFocused, setIsFocused] = useState(false);
     return (
-        <div className="relative">
+        <div className="relative w-full">
             <Icon
                 size={18}
-                className="absolute left-3 top-1/2 -translate-y-1/2"
+                className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
                 style={{ color: isFocused ? colors.secondary : colors.textSecondary }}
             />
             {prefix && (
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: colors.textSecondary }}>
+                <div className="absolute left-9 top-1/2 -translate-y-1/2 text-sm pointer-events-none" style={{ color: colors.textSecondary }}>
                     {prefix}
                 </div>
             )}
             {isSelect ? (
-                <select
-                    name={name}
-                    value={value}
-                    onChange={onChange}
-                    onFocus={() => setIsFocused(true)}
-                    onBlur={() => setIsFocused(false)}
-                    required={required}
-                    disabled={disabled}
-                    className="w-full pl-10 pr-4 py-3 border outline-none text-sm transition-colors appearance-none"
-                    style={{
-                        backgroundColor: disabled ? `${colors.border}40` : colors.card,
-                        borderColor: isFocused ? colors.secondary : colors.border,
-                        color: colors.text,
-                        cursor: disabled ? 'not-allowed' : 'default',
-                    }}
-                >
-                    <option value="" disabled>{placeholder}</option>
-                    {options.map((opt) => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                </select>
+                <>
+                    <select
+                        name={name}
+                        value={value}
+                        onChange={onChange}
+                        onFocus={() => setIsFocused(true)}
+                        onBlur={() => setIsFocused(false)}
+                        required={required}
+                        disabled={disabled}
+                        className="w-full pl-10 pr-9 py-3 border outline-none text-sm transition-colors appearance-none"
+                        style={{
+                            backgroundColor: disabled ? `${colors.border}40` : colors.card,
+                            borderColor: isFocused ? colors.secondary : colors.border,
+                            color: colors.text,
+                            cursor: disabled ? 'not-allowed' : 'pointer',
+                        }}
+                    >
+                        <option value="" disabled>{placeholder}</option>
+                        {options.map((opt) => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                    </select>
+                    <ChevronDown
+                        size={16}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                        style={{ color: colors.textSecondary }}
+                    />
+                </>
             ) : (
                 <input
                     type={type}
@@ -147,12 +155,14 @@ const InputField: React.FC<InputFieldProps> = ({
                     onBlur={() => setIsFocused(false)}
                     required={required}
                     disabled={disabled}
+                    inputMode={type === "number" ? "numeric" : undefined}
                     className="w-full pl-10 pr-4 py-3 border outline-none text-sm transition-colors"
                     style={{
                         backgroundColor: disabled ? `${colors.border}40` : colors.card,
                         borderColor: isFocused ? colors.secondary : colors.border,
                         color: colors.text,
                         cursor: disabled ? 'not-allowed' : 'default',
+                        paddingLeft: prefix ? '3.75rem' : undefined,
                     }}
                     maxLength={maxLength}
                 />
@@ -181,15 +191,15 @@ const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, on
     const getIcon = () => {
         switch (type) {
             case 'success':
-                return <CheckCircle size={24} style={{ color: colors.success }} />;
+                return <CheckCircle size={22} style={{ color: colors.success }} />;
             case 'error':
-                return <AlertCircle size={24} style={{ color: colors.danger }} />;
+                return <AlertCircle size={22} style={{ color: colors.danger }} />;
             case 'warning':
-                return <AlertCircle size={24} style={{ color: colors.secondary }} />;
+                return <AlertCircle size={22} style={{ color: colors.secondary }} />;
             case 'info':
-                return <CheckCircle size={24} style={{ color: colors.primary }} />;
+                return <CheckCircle size={22} style={{ color: colors.primary }} />;
             default:
-                return <CheckCircle size={24} style={{ color: colors.success }} />;
+                return <CheckCircle size={22} style={{ color: colors.success }} />;
         }
     };
 
@@ -209,20 +219,20 @@ const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, on
     };
 
     return (
-        <div 
-            className="fixed top-6 right-6 z-50 max-w-md animate-slide-in-right"
-            style={{ 
+        <div
+            className="fixed top-4 left-4 right-4 sm:top-6 sm:right-6 sm:left-auto z-50 w-auto sm:w-full sm:max-w-md animate-slide-in-right"
+            style={{
                 backgroundColor: colors.card,
                 borderLeft: `4px solid ${getBorderColor()}`,
                 boxShadow: '0 10px 40px rgba(0,0,0,0.15)'
             }}
         >
-            <div className="flex items-center gap-4 p-4">
+            <div className="flex items-center gap-3 p-3 sm:gap-4 sm:p-4">
                 <div className="flex-shrink-0">
                     {getIcon()}
                 </div>
-                <div className="flex-1">
-                    <p className="text-sm font-medium" style={{ color: colors.text }}>
+                <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium break-words" style={{ color: colors.text }}>
                         {message}
                     </p>
                 </div>
@@ -445,9 +455,9 @@ export default function RegisterCompanyPage() {
             };
 
             await api.post("/api/empresas", submitData);
-            
+
             showToast(" Empresa criada com sucesso! Redirecionando para o login...", "success");
-            
+
             setTimeout(() => router.push("/login"), 3000);
         } catch (err: unknown) {
             let errorMessage = "Erro ao criar empresa. Verifique os dados e tente novamente.";
@@ -469,7 +479,7 @@ export default function RegisterCompanyPage() {
     ];
 
     return (
-        <div className="min-h-screen px-3 py-6 sm:px-4 sm:py-12" style={{ backgroundColor: colors.background }}>
+        <div className="min-h-screen w-full overflow-x-hidden px-3 py-6 sm:px-4 sm:py-12" style={{ backgroundColor: colors.background }}>
             {/* Toast Notification */}
             {toast && (
                 <ToastNotification
@@ -482,15 +492,15 @@ export default function RegisterCompanyPage() {
 
             <div className="mx-auto w-full max-w-5xl">
                 <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="flex items-center gap-4">
-                        <button onClick={() => router.back()} className="p-2 transition-opacity hover:opacity-70" style={{ color: colors.primary }}>
+                    <div className="flex items-center gap-3 sm:gap-4">
+                        <button onClick={() => router.back()} className="shrink-0 p-2 transition-opacity hover:opacity-70" style={{ color: colors.primary }}>
                             <ArrowLeft size={24} />
                         </button>
-                        <div>
-                            <h1 className="text-2xl font-bold sm:text-3xl" style={{ color: colors.secondary }}>
+                        <div className="min-w-0">
+                            <h1 className="text-xl font-bold sm:text-2xl md:text-3xl" style={{ color: colors.secondary }}>
                                 Criar nova empresa
                             </h1>
-                            <p className="mt-2 text-sm sm:text-base" style={{ color: colors.textSecondary }}>
+                            <p className="mt-1 text-xs sm:mt-2 sm:text-sm md:text-base" style={{ color: colors.textSecondary }}>
                                 Preencha os dados abaixo para começar a usar o FaturaJá
                             </p>
                         </div>
@@ -498,84 +508,89 @@ export default function RegisterCompanyPage() {
                 </div>
 
                 {/* STEP INDICATOR */}
-                <div className="mb-6 flex flex-col border-b sm:mb-8 sm:flex-row" style={{ borderColor: colors.border }}>
+                <div className="mb-6 flex flex-row border-b sm:mb-8" style={{ borderColor: colors.border }}>
                     <div className="flex-1 py-3 text-center">
-                        <div className={`inline-flex items-center gap-2 text-sm font-medium ${step === 1 ? "opacity-100" : "opacity-50"}`} style={{ color: step === 1 ? colors.primary : colors.text }}>
-                            <span className="w-6 h-6 flex items-center justify-center text-xs rounded-full" style={{ backgroundColor: step === 1 ? colors.primary : colors.border, color: step === 1 ? "white" : colors.text }}>
+                        <div className={`inline-flex flex-col items-center gap-1 text-xs font-medium sm:flex-row sm:gap-2 sm:text-sm ${step === 1 ? "opacity-100" : "opacity-50"}`} style={{ color: step === 1 ? colors.primary : colors.text }}>
+                            <span className="flex h-6 w-6 items-center justify-center rounded-full text-xs" style={{ backgroundColor: step === 1 ? colors.primary : colors.border, color: step === 1 ? "white" : colors.text }}>
                                 1
                             </span>
-                            Dados da Empresa
+                            <span className="leading-tight">Dados da Empresa</span>
                         </div>
                     </div>
                     <div className="flex-1 py-3 text-center">
-                        <div className={`inline-flex items-center gap-2 text-sm font-medium ${step === 2 ? "opacity-100" : "opacity-50"}`} style={{ color: step === 2 ? colors.primary : colors.text }}>
-                            <span className="w-6 h-6 flex items-center justify-center text-xs rounded-full" style={{ backgroundColor: step === 2 ? colors.primary : colors.border, color: step === 2 ? "white" : colors.text }}>
+                        <div className={`inline-flex flex-col items-center gap-1 text-xs font-medium sm:flex-row sm:gap-2 sm:text-sm ${step === 2 ? "opacity-100" : "opacity-50"}`} style={{ color: step === 2 ? colors.primary : colors.text }}>
+                            <span className="flex h-6 w-6 items-center justify-center rounded-full text-xs" style={{ backgroundColor: step === 2 ? colors.primary : colors.border, color: step === 2 ? "white" : colors.text }}>
                                 2
                             </span>
-                            Administrador do sistema
+                            <span className="leading-tight">Administrador do sistema</span>
                         </div>
                     </div>
                 </div>
 
                 <div className="border shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                     <form onSubmit={handleSubmit} noValidate>
-                        <div className="p-4 sm:p-8">
+                        <div className="p-4 sm:p-6 md:p-8">
                             {step === 1 && (
                                 <div className="space-y-6">
                                     {/* LOGO */}
                                     <div>
-                                        <label className="block text-sm font-medium mb-2" style={{ color: colors.text }}>Logo da Empresa</label>
-                                        <div className="flex items-center gap-4">
+                                        <label className="mb-2 block text-sm font-medium" style={{ color: colors.text }}>Logo da Empresa</label>
+                                        <div className="flex flex-wrap items-center gap-4">
                                             {logoPreview ? (
-                                                <div className="relative">
-                                                    <Image src={logoPreview} alt="Logo" width={64} height={64} className="object-cover border" style={{ borderColor: colors.border }} />
-                                                    <button type="button" onClick={removeLogo} className="absolute -top-2 -right-2 p-1 text-white" style={{ background: colors.secondary }}>
+                                                <div className="relative shrink-0">
+                                                    <Image src={logoPreview} alt="Logo" width={64} height={64} className="border object-cover" style={{ borderColor: colors.border }} />
+                                                    <button type="button" onClick={removeLogo} className="absolute -right-2 -top-2 p-1 text-white" style={{ background: colors.secondary }}>
                                                         <X size={14} />
                                                     </button>
                                                 </div>
                                             ) : (
-                                                <label className="flex flex-col items-center justify-center w-16 h-16 border-2 border-dashed cursor-pointer hover:border-primary" style={{ borderColor: colors.border }}>
+                                                <label className="hover:border-primary flex h-16 w-16 shrink-0 cursor-pointer flex-col items-center justify-center border-2 border-dashed" style={{ borderColor: colors.border }}>
                                                     <Upload size={20} style={{ color: colors.text }} />
-                                                    <span className="text-xs mt-1" style={{ color: colors.textSecondary }}>Upload</span>
+                                                    <span className="mt-1 text-xs" style={{ color: colors.textSecondary }}>Upload</span>
                                                     <input type="file" accept="image/*" onChange={handleLogoChange} className="hidden" />
                                                 </label>
                                             )}
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-px h-10" style={{ backgroundColor: colors.border }} />
+                                            <div className="flex min-w-0 items-center gap-4">
+                                                <div className="hidden h-10 w-px sm:block" style={{ backgroundColor: colors.border }} />
                                                 <span className="text-xs" style={{ color: colors.textSecondary }}>Adicione a logo da tua empresa (JPG/PNG até 2MB)</span>
                                             </div>
                                         </div>
                                     </div>
 
                                     {/* CAMPOS DA EMPRESA */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                        <InputField  name="nome" icon={Building2} placeholder="Nome da empresa *" value={form.nome} onChange={handleChange} colors={colors} required />
-                                        <InputField name="nif" icon={FileText} placeholder="NIF (10 dígitos) *" value={form.nif} onChange={(e) => {const raw = e.target.value.replace(/\D/g, '').slice(0, 10);setForm({ ...form, nif: raw });}} colors={colors} required maxLength={10}/>
+                                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                                        <InputField name="nome" icon={Building2} placeholder="Nome da empresa *" value={form.nome} onChange={handleChange} colors={colors} required />
+                                        <InputField name="nif" icon={FileText} placeholder="NIF (10 dígitos) *" value={form.nif} onChange={(e) => { const raw = e.target.value.replace(/\D/g, '').slice(0, 10); setForm({ ...form, nif: raw }); }} colors={colors} required maxLength={10} />
                                         <InputField name="email" icon={Mail} type="email" placeholder="Email da empresa *" value={form.email} onChange={handleChange} colors={colors} required />
                                         <InputField name="telefone" icon={Phone} placeholder="Telefone *" value={form.telefone} onChange={handleChange} colors={colors} maxLength={9} required />
                                         <InputField name="nome_banco" icon={Landmark} placeholder="Nome do Banco" value={form.nome_banco ?? ""} onChange={handleChange} colors={colors} />
-                                        <InputField name="numero_conta" icon={CreditCard} placeholder="Número da Conta" value={form.numero_conta ?? ""} onChange={(e) => {  const raw = e.target.value.replace(/\D/g, '').slice(0, 11); setForm({ ...form, numero_conta: raw });}} colors={colors}  maxLength={11}/>
+                                        <InputField name="numero_conta" icon={CreditCard} placeholder="Número da Conta" value={form.numero_conta ?? ""} onChange={(e) => { const raw = e.target.value.replace(/\D/g, '').slice(0, 11); setForm({ ...form, numero_conta: raw }); }} colors={colors} maxLength={11} />
                                         <InputField name="iban" icon={Banknote} placeholder="Digite os 21 dígitos do IBAN" value={form.iban?.replace(/^AO06/, "") ?? ""} onChange={(e) => { const raw = e.target.value.replace(/\D/g, '').slice(0, 21); setForm({ ...form, iban: `AO06${raw}` }); }} colors={colors} maxLength={21} />
                                         <InputField name="subdomain" icon={Globe} placeholder="Subdomínio * (ex: minhaempresa)" value={form.subdomain} onChange={handleChange} colors={colors} required />
                                         <div className="md:col-span-2">
-                                        <InputField name="endereco" icon={MapPin} placeholder="Endereço completo *" value={form.endereco} onChange={handleChange} colors={colors} required />
+                                            <InputField name="endereco" icon={MapPin} placeholder="Endereço completo *" value={form.endereco} onChange={handleChange} colors={colors} required />
                                         </div>
                                     </div>
 
                                     {/* SELEÇÃO DO MODO */}
                                     <div className="mt-6">
-                                        <label className="block text-sm font-medium mb-3" style={{ color: colors.text }}>
-                                            <Database size={16} className="inline mr-2" style={{ color: colors.textSecondary }} />
+                                        <label className="mb-3 block text-sm font-medium" style={{ color: colors.text }}>
+                                            <Database size={16} className="mr-2 inline" style={{ color: colors.textSecondary }} />
                                             Modo de Funcionamento *
                                         </label>
-                                        
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                                             {/* Opção Colectivo */}
-                                            <div 
+                                            <div
                                                 onClick={() => toggleModo("colectivo")}
+                                                className="cursor-pointer rounded border p-3 transition-colors sm:p-4"
+                                                style={{
+                                                    borderColor: form.modo === "colectivo" ? colors.primary : colors.border,
+                                                    backgroundColor: form.modo === "colectivo" ? `${colors.primary}0D` : "transparent",
+                                                }}
                                             >
                                                 <div className="flex items-start gap-3">
-                                                    <div className="flex-shrink-0 mt-1">
+                                                    <div className="mt-1 flex-shrink-0">
                                                         <input
                                                             type="radio"
                                                             title="Todas as empresas partilham a mesma base de dados. Ideal para empresas que pretendem uma gestão centralizada com custos reduzidos."
@@ -583,27 +598,35 @@ export default function RegisterCompanyPage() {
                                                             value="colectivo"
                                                             checked={form.modo === "colectivo"}
                                                             onChange={() => toggleModo("colectivo")}
-                                                            className="w-4 h-4 mt-1"
+                                                            className="mt-1 h-4 w-4"
                                                             style={{ accentColor: colors.primary }}
                                                         />
                                                     </div>
-                                                    <div className="flex-1">
+                                                    <div className="min-w-0 flex-1">
                                                         <div className="flex items-center gap-2">
-                                                            <Users size={18} style={{ color: form.modo === "colectivo" ? colors.secondary : colors.textSecondary }} />
+                                                            <Users size={18} className="shrink-0" style={{ color: form.modo === "colectivo" ? colors.secondary : colors.textSecondary }} />
                                                             <span className="font-medium" style={{ color: form.modo === "colectivo" ? colors.secondary : colors.text }}>
                                                                 Colectivo
                                                             </span>
                                                         </div>
+                                                        <p className="mt-1 text-xs leading-snug sm:hidden" style={{ color: colors.textSecondary }}>
+                                                            Base de dados partilhada, gestão centralizada e custos reduzidos.
+                                                        </p>
                                                     </div>
                                                 </div>
                                             </div>
 
                                             {/* Opção Singular */}
-                                            <div 
+                                            <div
                                                 onClick={() => toggleModo("singular")}
+                                                className="cursor-pointer rounded border p-3 transition-colors sm:p-4"
+                                                style={{
+                                                    borderColor: form.modo === "singular" ? colors.primary : colors.border,
+                                                    backgroundColor: form.modo === "singular" ? `${colors.primary}0D` : "transparent",
+                                                }}
                                             >
                                                 <div className="flex items-start gap-3">
-                                                    <div className="flex-shrink-0 mt-1">
+                                                    <div className="mt-1 flex-shrink-0">
                                                         <input
                                                             type="radio"
                                                             title="Cada empresa tem a sua própria base de dados dedicada. Ideal para empresas que necessitam de isolamento rigoroso de dados."
@@ -611,43 +634,46 @@ export default function RegisterCompanyPage() {
                                                             value="singular"
                                                             checked={form.modo === "singular"}
                                                             onChange={() => toggleModo("singular")}
-                                                            className="w-4 h-4 mt-1"
+                                                            className="mt-1 h-4 w-4"
                                                             style={{ accentColor: colors.primary }}
                                                         />
                                                     </div>
-                                                    <div className="flex-1">
+                                                    <div className="min-w-0 flex-1">
                                                         <div className="flex items-center gap-2">
-                                                            <Server size={18} style={{ color: form.modo === "singular" ? colors.secondary : colors.textSecondary }} />
+                                                            <Server size={18} className="shrink-0" style={{ color: form.modo === "singular" ? colors.secondary : colors.textSecondary }} />
                                                             <span className="font-medium" style={{ color: form.modo === "singular" ? colors.secondary : colors.text }}>
                                                                 Singular
                                                             </span>
                                                         </div>
+                                                        <p className="mt-1 text-xs leading-snug sm:hidden" style={{ color: colors.textSecondary }}>
+                                                            Base de dados dedicada e isolamento rigoroso dos dados.
+                                                        </p>
                                                     </div>
                                                 </div>
                                             </div>
-                                        </div>                        
+                                        </div>
                                     </div>
 
                                     {/* REGIME FISCAL E IVA */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-4">
-                                        <InputField 
-                                            name="regime_fiscal" 
-                                            icon={Briefcase} 
-                                            placeholder="Regime Fiscal" 
-                                            value={form.regime_fiscal} 
-                                            onChange={handleRegimeChange} 
-                                            colors={colors} 
-                                            isSelect 
-                                            options={regimeOptions} 
+                                    <div className="mt-4 grid grid-cols-1 gap-5 md:grid-cols-2">
+                                        <InputField
+                                            name="regime_fiscal"
+                                            icon={Briefcase}
+                                            placeholder="Regime Fiscal"
+                                            value={form.regime_fiscal}
+                                            onChange={handleRegimeChange}
+                                            colors={colors}
+                                            isSelect
+                                            options={regimeOptions}
                                         />
                                         <label className="flex items-center gap-3 py-3">
-                                            <input 
-                                                type="checkbox" 
-                                                name="sujeito_iva" 
-                                                checked={form.sujeito_iva} 
-                                                onChange={handleIvaChange} 
-                                                className="w-4 h-4" 
-                                                style={{ accentColor: colors.primary }} 
+                                            <input
+                                                type="checkbox"
+                                                name="sujeito_iva"
+                                                checked={form.sujeito_iva}
+                                                onChange={handleIvaChange}
+                                                className="h-4 w-4 shrink-0"
+                                                style={{ accentColor: colors.primary }}
                                             />
                                             <span className="text-sm" style={{ color: colors.text }}>Sujeito a IVA</span>
                                         </label>
@@ -657,7 +683,7 @@ export default function RegisterCompanyPage() {
 
                             {step === 2 && (
                                 <div className="space-y-6">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                                         <InputField name="admin_name" icon={User} placeholder="Nome completo *" value={form.admin_name} onChange={handleChange} colors={colors} required />
                                         <InputField name="admin_email" icon={Mail} type="email" placeholder="Email *" value={form.admin_email} onChange={handleChange} colors={colors} required />
                                         <InputField name="admin_password" icon={Lock} type="password" placeholder="Senha * (mínimo 8 caracteres)" value={form.admin_password} onChange={handleChange} colors={colors} required />
@@ -666,22 +692,22 @@ export default function RegisterCompanyPage() {
                             )}
                         </div>
 
-                        <div className="flex flex-col gap-3 border-t p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6" style={{ borderColor: colors.border }}>
-                            <Link href="/login" className="group inline-flex items-center gap-2 transition-colors font-medium text-sm" style={{ color: colors.secondary }}>
-                                <UserPlus size={18} /> Já tenho conta <ArrowRight size={16} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className="flex flex-col gap-4 border-t p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6" style={{ borderColor: colors.border }}>
+                            <Link href="/login" className="group inline-flex items-center justify-center gap-2 text-sm font-medium transition-colors sm:justify-start" style={{ color: colors.secondary }}>
+                                <UserPlus size={18} /> Já tenho conta <ArrowRight size={16} className="opacity-0 transition-opacity group-hover:opacity-100" />
                             </Link>
-                            <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
+                            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:gap-4">
                                 {step === 2 && (
-                                    <button type="button" onClick={handlePrevStep} className="flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-medium transition-opacity hover:opacity-70" style={{ color: colors.textSecondary }}>
+                                    <button type="button" onClick={handlePrevStep} className="flex w-full items-center justify-center gap-2 px-6 py-2.5 text-sm font-medium transition-opacity hover:opacity-70 sm:w-auto" style={{ color: colors.textSecondary }}>
                                         <ChevronLeft size={18} /> Voltar
                                     </button>
                                 )}
                                 {step === 1 ? (
-                                    <button type="button" onClick={handleNextStep} className="flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-80" style={{ backgroundColor: colors.primary }}>
+                                    <button type="button" onClick={handleNextStep} className="flex w-full items-center justify-center gap-2 px-6 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-80 sm:w-auto" style={{ backgroundColor: colors.primary }}>
                                         Próximo <ChevronRight size={18} />
                                     </button>
                                 ) : (
-                                    <button type="submit" disabled={loading || uploadingLogo} className="flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-80 disabled:opacity-50" style={{ backgroundColor: colors.primary }}>
+                                    <button type="submit" disabled={loading || uploadingLogo} className="flex w-full items-center justify-center gap-2 px-6 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-80 disabled:opacity-50 sm:w-auto" style={{ backgroundColor: colors.primary }}>
                                         {loading && <Loader2 size={18} className="animate-spin" />}
                                         {loading ? "Criando empresa..." : "Criar empresa"}
                                     </button>

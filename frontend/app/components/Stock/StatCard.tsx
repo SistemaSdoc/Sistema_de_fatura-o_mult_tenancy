@@ -33,23 +33,23 @@ export function StatCard({ icon, label, value, trend = "neutral", colors }: Stat
     const trendColor = getTrendColor();
 
     return (
-        <div 
-            className=" border p-4 hover:shadow-md transition-shadow"
-            style={{ 
-                backgroundColor: colors.card, 
-                borderColor: colors.border 
+        <div
+            className="rounded-lg border p-3 sm:p-4 hover:shadow-md transition-shadow min-w-0"
+            style={{
+                backgroundColor: colors.card,
+                borderColor: colors.border
             }}
         >
-            <div className="flex items-center justify-between">
-                <div 
-                    className="p-2"
+            <div className="flex items-center justify-between gap-2">
+                <div
+                    className="p-1.5 sm:p-2 rounded-md shrink-0"
                     style={{ backgroundColor: colors.hover }}
                 >
                     <div style={{ color: trendColor }}>{icon}</div>
                 </div>
-                <span className="text-2xl font-bold" style={{ color: colors.text }}>{value}</span>
+                <span className="text-lg sm:text-2xl font-bold truncate" style={{ color: colors.text }}>{value}</span>
             </div>
-            <p className="mt-2 text-sm" style={{ color: colors.textSecondary }}>{label}</p>
+            <p className="mt-1.5 sm:mt-2 text-xs sm:text-sm truncate" style={{ color: colors.textSecondary }}>{label}</p>
         </div>
     );
 }

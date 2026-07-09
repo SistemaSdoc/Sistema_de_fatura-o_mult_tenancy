@@ -325,20 +325,28 @@ class ProdutoService
                     throw new \Exception('Categoria não encontrada para o produto');
                 }
 
+                // ✅ NOVO: normaliza e persiste a estratégia de preço realmente usada
+                $tipoPreco = $dados['tipo_preco'] ?? 'fixo';
+
                 $dadosProduto = array_merge($dadosProduto, [
-                    'categoria_id'     => $dados['categoria_id'],
-                    'fornecedor_id'    => $dados['fornecedor_id'] ?? null,
-                    'codigo'           => $dados['codigo'] ?? null,
-                    'preco_compra'     => (float) ($dados['preco_compra'] ?? 0),
-                    'custo_medio'      => (float) ($dados['preco_compra'] ?? 0),
-                    'estoque_atual'    => 0,
-                    'estoque_minimo'   => $dados['estoque_minimo'] ?? 5,
-                    'taxa_iva'         => (float) $categoria->taxa_iva,
-                    'sujeito_iva'      => (bool) $categoria->sujeito_iva,
-                    'codigo_isencao'   => $categoria->codigo_isencao ?? null,
-                    'taxa_retencao'    => null,
-                    'duracao_estimada' => null,
-                    'unidade_medida'   => null,
+                    'categoria_id'        => $dados['categoria_id'],
+                    'fornecedor_id'       => $dados['fornecedor_id'] ?? null,
+                    'codigo'              => $dados['codigo'] ?? null,
+                    'preco_compra'        => (float) ($dados['preco_compra'] ?? 0),
+                    'custo_medio'         => (float) ($dados['preco_compra'] ?? 0),
+                    'estoque_atual'       => 0,
+                    'estoque_minimo'      => $dados['estoque_minimo'] ?? 5,
+                    'taxa_iva'            => (float) $categoria->taxa_iva,
+                    'sujeito_iva'         => (bool) $categoria->sujeito_iva,
+                    'codigo_isencao'      => $categoria->codigo_isencao ?? null,
+                    'taxa_retencao'       => null,
+                    'duracao_estimada'    => null,
+                    'unidade_medida'      => null,
+                    // ⬇ NOVO: sem isto, o default da coluna ('margem') sobrevivia sempre
+                    'tipo_preco'          => $tipoPreco,
+                    'despesas_adicionais' => (float) ($dados['despesas_adicionais'] ?? 0),
+                    'margem_lucro'        => $tipoPreco === 'margem' ? (float) ($dados['margem_lucro'] ?? null) : null,
+                    'markup'              => $tipoPreco === 'markup' ? (float) ($dados['markup'] ?? null) : null,
                 ]);
             } else {
                 $dadosProduto = array_merge($dadosProduto, [
@@ -355,6 +363,11 @@ class ProdutoService
                     'custo_medio'      => 0,
                     'estoque_atual'    => 0,
                     'estoque_minimo'   => 0,
+                    // Serviços não usam estratégia de margem/markup
+                    'tipo_preco'          => 'fixo',
+                    'despesas_adicionais' => 0,
+                    'margem_lucro'        => null,
+                    'markup'              => null,
                 ]);
             }
 
@@ -409,9 +422,20 @@ class ProdutoService
                 }
             }
 
-            $precoVenda = $tipoNovo === 'produto'
-                ? $this->calcularPrecoVenda(array_merge($produto->toArray(), $dados))
-                : ($dados['preco_venda'] ?? $produto->preco_venda);
+            // ✅ NOVO: resolve tipo_preco explicitamente antes de calcular
+            // Se o payload não trouxer tipo_preco, assume 'fixo' em vez de
+            // herdar o que já estava gravado (evita reviver 'margem' obsoleto
+            // vindo de produtos criados antes desta correção, ou de modais
+            // como o ModalEdicao que só editam preço fixo diretamente).
+            $tipoPrecoResolvido = $dados['tipo_preco'] ?? 'fixo';
+
+            if ($tipoNovo === 'produto') {
+                $dadosParaCalculo = array_merge($produto->toArray(), $dados);
+                $dadosParaCalculo['tipo_preco'] = $tipoPrecoResolvido;
+                $precoVenda = $this->calcularPrecoVenda($dadosParaCalculo);
+            } else {
+                $precoVenda = $dados['preco_venda'] ?? $produto->preco_venda;
+            }
 
             $dadosUpdate = [
                 'nome' => $dados['nome'] ?? $produto->nome,
@@ -439,6 +463,10 @@ class ProdutoService
                     'custo_medio' => 0,
                     'estoque_atual' => 0,
                     'estoque_minimo' => 0,
+                    // Serviços não usam estratégia de margem/markup
+                    'tipo_preco' => 'fixo',
+                    'margem_lucro' => null,
+                    'markup' => null,
                 ]);
             } elseif ($tipoNovo === 'produto') {
                 $novaCategoriaId = $dados['categoria_id'] ?? $produto->categoria_id;
@@ -459,6 +487,11 @@ class ProdutoService
                     'taxa_retencao' => null,
                     'duracao_estimada' => null,
                     'unidade_medida' => null,
+                    // ⬇ NOVO: grava a estratégia resolvida, corrigindo produtos antigos automaticamente
+                    'tipo_preco' => $tipoPrecoResolvido,
+                    'despesas_adicionais' => $dados['despesas_adicionais'] ?? $produto->despesas_adicionais ?? 0,
+                    'margem_lucro' => $tipoPrecoResolvido === 'margem' ? (float) ($dados['margem_lucro'] ?? $produto->margem_lucro ?? null) : null,
+                    'markup' => $tipoPrecoResolvido === 'markup' ? (float) ($dados['markup'] ?? $produto->markup ?? null) : null,
                 ]);
 
                 // ✅ Ajustar stock se alterado

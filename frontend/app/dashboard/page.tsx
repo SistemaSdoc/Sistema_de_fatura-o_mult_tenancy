@@ -194,7 +194,7 @@ export default function DashboardPage() {
     if (dashboardAllowedRoles.includes(userRole)) return;
 
     const redirectTo =
-      userRole === "operador" ? "/dashboard/Vendas/Nova_venda" : userRole === "gestor" ? "/dashboard/Produtos_servicos/Stock" : "/login";
+      userRole === "operador" ? "/dashboard/Vendas" : userRole === "gestor" ? "/dashboard/Produtos_servicos/Stock" : "/login";
 
     if (userRole !== "admin" && pathname === "/dashboard") {
       router.replace(redirectTo);
@@ -337,7 +337,7 @@ export default function DashboardPage() {
       helper: `${metricas.crescimento >= 0 ? "+" : ""}${metricas.crescimento.toFixed(1)}% vs mês anterior`,
     },
     {
-      href: "/dashboard/Clientes/Novo_cliente",
+      href: "/dashboard/Clientes",
       icon: Users,
       label: "Clientes Ativos",
       value: formatNumber(metricas.totalClientes),
@@ -367,24 +367,33 @@ export default function DashboardPage() {
             Dashboard
           </h1>
           {canShowButtons && (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="grid grid-cols-3 gap-1.5 sm:flex sm:flex-wrap sm:items-center sm:gap-2">
               <button
-                onClick={() => router.push("/dashboard/Vendas/Nova_venda")}
-                className="px-3 py-2 text-sm text-white flex items-center gap-2 transition-opacity cursor-pointer hover:opacity-80"
+                onClick={() => router.push("/dashboard/Vendas")}
+                className="px-2 py-1.5 text-[11px] sm:px-3 sm:py-2 sm:text-sm text-white flex items-center justify-center gap-1 sm:gap-2 transition-opacity cursor-pointer hover:opacity-80 whitespace-nowrap"
                 style={{ backgroundColor: colors.secondary }}>
-                <FileText size={14} /> Gerar factura-recibo
+                <FileText size={13} className="shrink-0 sm:hidden" />
+                <FileText size={14} className="shrink-0 hidden sm:block" />
+                <span className="sm:hidden">Fac-Recibo</span>
+                <span className="hidden sm:inline">Gerar factura-recibo</span>
               </button>
               <button
                 onClick={() => router.push("/dashboard/Faturas/Fatura_Normal")}
-                className="px-3 py-2 text-sm text-white flex items-center gap-2 transition-opacity cursor-pointer"
+                className="px-2 py-1.5 text-[11px] sm:px-3 sm:py-2 sm:text-sm text-white flex items-center justify-center gap-1 sm:gap-2 transition-opacity cursor-pointer whitespace-nowrap"
                 style={{ backgroundColor: colors.primary }}>
-                <FileText size={14} /> Gerar Factura
+                <FileText size={13} className="shrink-0 sm:hidden" />
+                <FileText size={14} className="shrink-0 hidden sm:block" />
+                <span className="sm:hidden">Factura</span>
+                <span className="hidden sm:inline">Gerar Factura</span>
               </button>
               <button
                 onClick={() => router.push("/dashboard/Faturas/Faturas_Proforma")}
-                className="px-3 py-2 text-sm text-white flex items-center gap-2 transition-opacity cursor-pointer"
+                className="px-2 py-1.5 text-[11px] sm:px-3 sm:py-2 sm:text-sm text-white flex items-center justify-center gap-1 sm:gap-2 transition-opacity cursor-pointer whitespace-nowrap"
                 style={{ backgroundColor: colors.secondary }}>
-                <FileText size={14} /> Gerar Proforma
+                <FileText size={13} className="shrink-0 sm:hidden" />
+                <FileText size={14} className="shrink-0 hidden sm:block" />
+                <span className="sm:hidden">Proforma</span>
+                <span className="hidden sm:inline">Gerar Proforma</span>
               </button>
             </div>
           )}

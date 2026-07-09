@@ -814,6 +814,7 @@ $temTroco = $troco > 0;
         <!-- QR Code e Hash Fiscal -->
         @if(!empty($proof_qr_html) || !empty($proof_url) || !empty($qr_code_img) || !empty($qr_html) || !empty($documento->hash_fiscal))
         <div class="qr-section-wrap">
+            <!-- QR Code e Hash Fiscal 
             @if(!empty($proof_qr_html) || !empty($proof_url))
             <div class="qr-section proof-section">
                 {!! $proof_qr_html !!}
@@ -827,7 +828,7 @@ $temTroco = $troco > 0;
                 {!! $qr_html !!}
                 @endif
             </div>
-            @endif
+            @endif-->
 
             @if(!empty($documento->hash_fiscal))
             <div class="hash-section">

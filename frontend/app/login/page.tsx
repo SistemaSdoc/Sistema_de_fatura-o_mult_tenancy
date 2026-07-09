@@ -179,7 +179,7 @@ export default function LoginPage(): React.ReactElement {
     const redirectMap: Record<string, string> = {
       admin: "/dashboard",
       contablista: "/dashboard/",
-      operador: "/dashboard/Vendas/Nova_venda",
+      operador: "/dashboard/Vendas",
       gestor: "/dashboard/Produtos_servicos/Stock",
     };
     const destination = redirectMap[user.role] || "/login";

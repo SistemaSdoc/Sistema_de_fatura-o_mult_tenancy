@@ -171,25 +171,27 @@ export default function OutrosDocumentosPage() {
   return (
     <MainEmpresa>
       {/* ── Barra de topo ── */}
-      <div className="flex flex-wrap items-center justify-between px-3 py-3" style={{ borderBottom: `0.5px solid ${colors.border}` }}>
+      <div
+        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-3 py-3"
+        style={{ borderBottom: `0.5px solid ${colors.border}` }}>
         <span className="text-sm font-semibold" style={{ color: colors.secondary }}>
           Outros Documentos Fiscais
         </span>
 
-        {/* ── Dropdown "Comece a Faturar" alinhado à direita ── */}
-        <div ref={dropdownRef} className="relative">
+        {/* ── Dropdown "Comece a Faturar" ── */}
+        <div ref={dropdownRef} className="relative w-full sm:w-auto">
           <button
             onClick={() => setDropdownAberto(!dropdownAberto)}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-white transition-opacity hover:opacity-80 rounded"
+            className="flex items-center justify-center sm:justify-start gap-2 w-full sm:w-auto px-4 py-2 text-sm text-white transition-opacity hover:opacity-80 rounded"
             style={{ backgroundColor: colors.primary }}>
             <span className="font-medium">Comece a Facturar</span>
-            <ChevronDown size={18} className={`transition-transform duration-200 ${dropdownAberto ? "rotate-180" : ""}`} />
+            <ChevronDown size={18} className={`shrink-0 transition-transform duration-200 ${dropdownAberto ? "rotate-180" : ""}`} />
           </button>
 
           {/* ── Menu dropdown ── */}
           {dropdownAberto && (
             <div
-              className="absolute right-0 mt-2 w-56 rounded shadow-lg z-50"
+              className="absolute left-0 right-0 sm:left-auto sm:right-0 mt-2 w-full sm:w-56 rounded shadow-lg z-50"
               style={{ backgroundColor: colors.background, border: `1px solid ${colors.border}` }}>
               {/* Nova Venda */}
               <button
@@ -202,8 +204,8 @@ export default function OutrosDocumentosPage() {
                   color: colors.text,
                   borderBottom: `0.5px solid ${colors.border}`,
                 }}>
-                <FileText size={16} style={{ color: colors.secondary }} />
-                <div className="text-left">
+                <FileText size={16} style={{ color: colors.secondary }} className="shrink-0" />
+                <div className="text-left min-w-0">
                   <div className="font-medium">Gerar factura-recibo</div>
                   <div style={{ color: colors.text, opacity: 0.7 }} className="text-xs">
                     Registar uma nova venda
@@ -222,8 +224,8 @@ export default function OutrosDocumentosPage() {
                   color: colors.text,
                   borderBottom: `0.5px solid ${colors.border}`,
                 }}>
-                <FileText size={16} style={{ color: colors.primary }} />
-                <div className="text-left">
+                <FileText size={16} style={{ color: colors.primary }} className="shrink-0" />
+                <div className="text-left min-w-0">
                   <div className="font-medium">Gerar factura</div>
                   <div style={{ color: colors.text, opacity: 0.7 }} className="text-xs">
                     Emitir uma factura normal
@@ -241,8 +243,8 @@ export default function OutrosDocumentosPage() {
                 style={{
                   color: colors.text,
                 }}>
-                <FileText size={16} style={{ color: colors.secondary }} />
-                <div className="text-left">
+                <FileText size={16} style={{ color: colors.secondary }} className="shrink-0" />
+                <div className="text-left min-w-0">
                   <div className="font-medium">Gerar proforma</div>
                   <div style={{ color: colors.text, opacity: 0.7 }} className="text-xs">
                     Criar uma factura proforma
