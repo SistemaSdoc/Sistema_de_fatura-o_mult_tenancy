@@ -609,9 +609,7 @@ export default function RegisterCompanyPage() {
                                                                 Colectivo
                                                             </span>
                                                         </div>
-                                                        <p className="mt-1 text-xs leading-snug sm:hidden" style={{ color: colors.textSecondary }}>
-                                                            Base de dados partilhada, gestão centralizada e custos reduzidos.
-                                                        </p>
+
                                                     </div>
                                                 </div>
                                             </div>
@@ -645,9 +643,7 @@ export default function RegisterCompanyPage() {
                                                                 Singular
                                                             </span>
                                                         </div>
-                                                        <p className="mt-1 text-xs leading-snug sm:hidden" style={{ color: colors.textSecondary }}>
-                                                            Base de dados dedicada e isolamento rigoroso dos dados.
-                                                        </p>
+
                                                     </div>
                                                 </div>
                                             </div>

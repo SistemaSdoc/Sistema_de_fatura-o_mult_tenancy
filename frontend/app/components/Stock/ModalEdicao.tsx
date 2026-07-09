@@ -227,14 +227,15 @@ export function ModalEdicao({ isOpen, item, onSave, onClose, categorias }: Modal
                                         className={inputCls} style={inputStyle(errors.nome)} />
                                     {errors.nome && <p className="text-[10px] mt-0.5" style={{ color: colors.danger }}>{errors.nome}</p>}
                                 </div>
+                                {/* Nome + Status numa linha 
                                 <div>
                                     <label className={labelCls} style={{ color: colors.text }}>Status</label>
-                                    <select name="status" value={formData.status} onChange={handleChange}
+                                    <select name="status" value={formData.status} onChange={handleChange} 
                                         className={inputCls} style={inputStyle()}>
                                         <option value="ativo">Ativo</option>
                                         <option value="inativo">Inativo</option>
                                     </select>
-                                </div>
+                                </div>*/}
                             </div>
 
                             {/* Categoria + Código (só produtos) */}
