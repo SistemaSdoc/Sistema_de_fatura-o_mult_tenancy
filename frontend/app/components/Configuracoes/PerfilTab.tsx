@@ -3,18 +3,21 @@
 import React, { useState, useEffect } from "react";
 import { User, AtSign, Shield, UserCheck, UserX, AlertCircle, Building2 } from "lucide-react";
 import { useAuth } from "@/context/authprovider";
-import { toast } from "sonner";
 import { updateUser } from "@/services/User";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { ThemeColors, formatDate, RoleBadge, FormInput, ReadonlyField, PasswordInput, SaveButton } from "./ConfiguracoesComuns";
+import { ThemeColors, formatDate, RoleBadge, FormInput, ReadonlyField, PasswordInput, SaveButton, WithToast } from "./ConfiguracoesComuns";
 
 interface PassForm {
   nova_senha: string;
   confirmar_senha: string;
 }
 
-export function PerfilTab({ colors }: { colors: ThemeColors }) {
+export interface PerfilTabProps extends WithToast {
+  colors: ThemeColors;
+}
+
+export function PerfilTab({ colors, showToast }: PerfilTabProps) {
   const { user, refreshUser } = useAuth();
 
   const [loading, setLoading] = useState(false);
@@ -71,10 +74,10 @@ export function PerfilTab({ colors }: { colors: ThemeColors }) {
         printer_ip: form.printer_ip || undefined,
       });
       await refreshUser();
-
+      showToast("Sucesso", "success", "Perfil atualizado com sucesso!");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      toast.error(msg ?? "Erro ao atualizar perfil");   
+      showToast("Erro", "error", msg ?? "Erro ao atualizar perfil");
     } finally {
       setLoading(false);
     }
@@ -82,17 +85,23 @@ export function PerfilTab({ colors }: { colors: ThemeColors }) {
 
   const handleSaveSenha = async () => {
     if (!user) return;
-    if (passForm.nova_senha !== passForm.confirmar_senha) return toast.error("As senhas não coincidem");
-    if (passForm.nova_senha.length < 6) return toast.error("A senha deve ter no mínimo 6 caracteres");
+    if (passForm.nova_senha !== passForm.confirmar_senha) {
+      showToast("Erro", "error", "As senhas não coincidem");
+      return;
+    }
+    if (passForm.nova_senha.length < 6) {
+      showToast("Erro", "error", "A senha deve ter no mínimo 6 caracteres");
+      return;
+    }
     setPassLoading(true);
     try {
       await updateUser(user.id, { password: passForm.nova_senha });
       await refreshUser();
-      toast.success("Senha alterada com sucesso!");
+      showToast("Sucesso", "success", "Senha alterada com sucesso!");
       setPassForm({ nova_senha: "", confirmar_senha: "" });
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      toast.error(msg ?? "Erro ao alterar senha");
+      showToast("Erro", "error", msg ?? "Erro ao alterar senha");
     } finally {
       setPassLoading(false);
     }
@@ -158,18 +167,6 @@ export function PerfilTab({ colors }: { colors: ThemeColors }) {
               colors={colors}
               value={(user as any)?.created_at ? new Date((user as any).created_at).toLocaleDateString("pt-PT") : "—"}
             />
-
-            {/*<ReadonlyField label="E-mail verificado" colors={colors}>
-                            {user?.email_verified_at ? (
-                                <span className="flex items-center gap-1.5 text-sm" style={{ color: colors.secondary }}>
-                                    <CheckCircle2 className="w-4 h-4" /> Verificado
-                                </span>
-                            ) : (
-                                <span className="flex items-center gap-1.5 text-sm" style={{ color: colors.primary }}>
-                                    <AlertCircle className="w-4 h-4" /> Não verificado
-                                </span>
-                            )}
-                        </ReadonlyField>*/}
           </div>
         </CardContent>
 

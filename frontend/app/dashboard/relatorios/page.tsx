@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import MainEmpresa from "../../components/MainEmpresa";
-import { Download, FileSpreadsheet, SlidersHorizontal } from "lucide-react";
+import { Download, FileSpreadsheet, SlidersHorizontal, XCircle, CheckCircle, AlertCircle } from "lucide-react";
 import {
   relatoriosService,
   RelatorioVendas,
@@ -17,7 +17,6 @@ import {
 } from "@/services/relatorios";
 import { useThemeColors } from "@/context/ThemeContext";
 import { useAuth } from "@/context/authprovider";
-import { toast } from "sonner";
 import { api } from "@/services/axios";
 
 // Funções de exportação
@@ -55,6 +54,83 @@ const RelatorioMovimentosStockComponent = dynamic(
   }
 );
 
+/* ── Componente de Notificação Toast com Animação ── */
+interface ToastNotificationProps {
+  message: string;
+  type: "success" | "error" | "warning" | "info";
+  onClose: () => void;
+  colors: any;
+  description?: string;
+}
+
+const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, onClose, colors, description }) => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const getIcon = () => {
+    switch (type) {
+      case "success":
+        return <CheckCircle size={24} style={{ color: colors.success }} />;
+      case "error":
+        return <AlertCircle size={24} style={{ color: colors.danger }} />;
+      case "warning":
+        return <AlertCircle size={24} style={{ color: colors.warning }} />;
+      case "info":
+        return <CheckCircle size={24} style={{ color: colors.primary }} />;
+      default:
+        return <CheckCircle size={24} style={{ color: colors.success }} />;
+    }
+  };
+
+  const getBorderColor = () => {
+    switch (type) {
+      case "success":
+        return colors.success;
+      case "error":
+        return colors.danger;
+      case "warning":
+        return colors.warning;
+      case "info":
+        return colors.primary;
+      default:
+        return colors.success;
+    }
+  };
+
+  return (
+    <div
+      className="fixed top-6 right-6 z-[9999] max-w-md"
+      style={{
+        backgroundColor: colors.card,
+        borderLeft: `4px solid ${getBorderColor()}`,
+        boxShadow: "0 10px 40px rgba(0,0,0,0.15)",
+        animation: "slideInRight 0.3s ease-out forwards",
+      }}>
+      <div className="flex items-start gap-4 p-4">
+        <div className="flex-shrink-0 mt-0.5">{getIcon()}</div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium" style={{ color: colors.text }}>
+            {message}
+          </p>
+          {description && (
+            <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+              {description}
+            </p>
+          )}
+        </div>
+        <button onClick={onClose} className="flex-shrink-0 transition-opacity hover:opacity-70" style={{ color: colors.textSecondary }}>
+          <XCircle size={18} />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 /* ═══════════════════════════════════════════════════════════
    TIPOS
 ═══════════════════════════════════════════════════════════ */
@@ -80,6 +156,16 @@ export default function RelatoriosPage() {
   const colors = useThemeColors();
   const { user, loading: userLoading } = useAuth();
   const userRole = user?.role || "";
+
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error" | "warning" | "info";
+    description?: string;
+  } | null>(null);
+
+  const showToast = (message: string, type: "success" | "error" | "warning" | "info" = "info", description?: string) => {
+    setToast({ message, type, description });
+  };
 
   // ==================== PERMISSÕES ====================
   const podeVerVendas = ["admin", "contablista"].includes(userRole);
@@ -143,7 +229,7 @@ export default function RelatoriosPage() {
       setRelatorioFaturacao(faturacao);
     } catch (error: unknown) {
       if (getErroStatus(error) !== 403) {
-        toast.error("Erro ao carregar vendas e facturação");
+        showToast("Erro ao carregar vendas", "error", "Não foi possível carregar os dados de vendas e facturação");
       }
     } finally {
       setLoading((p) => ({ ...p, vendas: false }));
@@ -158,7 +244,7 @@ export default function RelatoriosPage() {
       setRelatorioPagamentos(data);
     } catch (error: unknown) {
       if (getErroStatus(error) !== 403) {
-        toast.error("Erro ao carregar pagamentos pendentes");
+        showToast("Erro ao carregar pagamentos", "error", "Não foi possível carregar os pagamentos pendentes");
       }
     } finally {
       setLoading((p) => ({ ...p, pagamentos: false }));
@@ -183,7 +269,7 @@ export default function RelatoriosPage() {
       setRelatorioProformas(proformas);
     } catch (error: unknown) {
       if (getErroStatus(error) !== 403) {
-        toast.error("Erro ao carregar documentos");
+        showToast("Erro ao carregar documentos", "error", "Não foi possível carregar os documentos");
       }
     } finally {
       setLoading((p) => ({ ...p, documentos: false }));
@@ -219,7 +305,7 @@ export default function RelatoriosPage() {
         setRelatorioMovimentos(data);
       } catch (error: unknown) {
         if (getErroStatus(error) !== 403) {
-          toast.error("Erro ao carregar movimentos de stock");
+          showToast("Erro ao carregar movimentos", "error", "Não foi possível carregar os movimentos de stock");
         }
       } finally {
         setLoading((p) => ({ ...p, movimentos_stock: false }));
@@ -242,11 +328,11 @@ export default function RelatoriosPage() {
 
   const aplicarFiltro = (rel: RelAtivo) => {
     if (!dataInicio || !dataFim) {
-      toast.error("Selecione as duas datas");
+      showToast("Datas obrigatórias", "error", "Selecione as duas datas");
       return;
     }
     if (new Date(dataInicio) > new Date(dataFim)) {
-      toast.error("Data inicial maior que data final");
+      showToast("Datas inválidas", "error", "Data inicial não pode ser maior que a data final");
       return;
     }
     const p: PeriodoConfig = { tipo: "personalizado", data_inicio: dataInicio, data_fim: dataFim };
@@ -254,7 +340,7 @@ export default function RelatoriosPage() {
     else if (rel === "documentos") setPeriodoDocumentos(p);
     else setPeriodoMovimentos(p);
     setFiltroAberto(false);
-    toast.success("Filtro aplicado");
+    showToast("Filtro aplicado", "success");
   };
 
   const limparFiltro = (rel: RelAtivo) => {
@@ -265,6 +351,7 @@ export default function RelatoriosPage() {
     setDataInicio("");
     setDataFim("");
     setFiltroAberto(false);
+    showToast("Filtro limpo", "info");
   };
 
   const getDadosAtivos = () => {
@@ -284,15 +371,15 @@ export default function RelatoriosPage() {
   const handleExportPDF = async () => {
     const dados = getDadosAtivos();
     if (!dados) {
-      toast.error("Sem dados para exportar");
+      showToast("Sem dados", "error", "Não há dados disponíveis para exportar");
       return;
     }
     setExportLoading(true);
     try {
       await exportarPDF(activeTab, dados, getPeriodoAtivo());
-      toast.success("PDF exportado com sucesso");
+      showToast("PDF exportado", "success", "Ficheiro PDF exportado com sucesso");
     } catch {
-      toast.error("Erro ao exportar PDF");
+      showToast("Erro ao exportar", "error", "Não foi possível gerar o ficheiro PDF");
     } finally {
       setExportLoading(false);
     }
@@ -301,15 +388,15 @@ export default function RelatoriosPage() {
   const handleExportExcel = async () => {
     const dados = getDadosAtivos();
     if (!dados) {
-      toast.error("Sem dados para exportar");
+      showToast("Sem dados", "error", "Não há dados disponíveis para exportar");
       return;
     }
     setExportLoading(true);
     try {
       await exportarExcel(activeTab, dados, getPeriodoAtivo());
-      toast.success("Excel exportado com sucesso");
+      showToast("Excel exportado", "success", "Ficheiro Excel exportado com sucesso");
     } catch {
-      toast.error("Erro ao exportar Excel");
+      showToast("Erro ao exportar", "error", "Não foi possível gerar o ficheiro Excel");
     } finally {
       setExportLoading(false);
     }
@@ -332,10 +419,10 @@ export default function RelatoriosPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
 
-      toast.success("Ficheiro SAF-T exportado com sucesso");
+      showToast("SAF-T exportado", "success", "Ficheiro SAF-T exportado com sucesso");
     } catch (error) {
       console.error("Erro ao exportar SAF-T:", error);
-      toast.error("Erro ao gerar o ficheiro SAF-T");
+      showToast("Erro ao exportar", "error", "Não foi possível gerar o ficheiro SAF-T");
     } finally {
       setExportandoSaft(false);
     }
@@ -378,201 +465,213 @@ export default function RelatoriosPage() {
   }
 
   return (
-    <MainEmpresa>
-      <div className="p-3 sm:p-5 space-y-0" style={{ color: colors.text }}>
-        {/* CABEÇALHO */}
-        <div
-          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-b"
-          style={{ borderColor: colors.border }}>
-          <div>
-            <h1 className="text-base font-bold tracking-tight" style={{ color: colors.text }}>
-              Relatórios e Análises
-            </h1>
-            <p className="text-xs mt-0.5" style={{ color: colors.textSecondary }}>
-              Indicadores e relatórios detalhados do negócio
-            </p>
+    <>
+      {/* Toast Notification - Fora do MainEmpresa para ficar acima de tudo */}
+      {toast && (
+        <ToastNotification
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+          colors={colors}
+          description={toast.description}
+        />
+      )}
+
+      <MainEmpresa>
+        <div className="p-3 sm:p-5 space-y-0" style={{ color: colors.text }}>
+          {/* CABEÇALHO */}
+          <div
+            className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-b"
+            style={{ borderColor: colors.border }}>
+            <div>
+              <h1 className="text-base font-bold tracking-tight" style={{ color: colors.text }}>
+                Relatórios e Análises
+              </h1>
+              <p className="text-xs mt-0.5" style={{ color: colors.textSecondary }}>
+                Indicadores e relatórios detalhados do negócio
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={handleExportarSaft}
+                disabled={exportandoSaft}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 transition-all"
+                style={{ backgroundColor: colors.primary, borderRadius: 4 }}>
+                {exportandoSaft ? (
+                  <div className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                ) : (
+                  <Download size={12} />
+                )}
+                SAF-T
+              </button>
+              <button
+                onClick={handleExportExcel}
+                disabled={exportLoading || !getDadosAtivos()}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 transition-all"
+                style={{ backgroundColor: colors.secondary, borderRadius: 4 }}>
+                <FileSpreadsheet size={12} />
+                Excel
+              </button>
+              <button
+                onClick={handleExportPDF}
+                disabled={exportLoading || !getDadosAtivos()}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 transition-all"
+                style={{ backgroundColor: colors.primary, borderRadius: 4 }}>
+                {exportLoading ? (
+                  <div className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                ) : (
+                  <Download size={12} />
+                )}
+                PDF
+              </button>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={handleExportarSaft}
-              disabled={exportandoSaft}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 transition-all"
-              style={{ backgroundColor: colors.primary, borderRadius: 4 }}>
-              {exportandoSaft ? (
-                <div className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
-              ) : (
-                <Download size={12} />
-              )}
-              SAF-T
-            </button>
-            <button
-              onClick={handleExportExcel}
-              disabled={exportLoading || !getDadosAtivos()}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 transition-all"
-              style={{ backgroundColor: colors.secondary, borderRadius: 4 }}>
-              <FileSpreadsheet size={12} />
-              Excel
-            </button>
-            <button
-              onClick={handleExportPDF}
-              disabled={exportLoading || !getDadosAtivos()}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 transition-all"
-              style={{ backgroundColor: colors.primary, borderRadius: 4 }}>
-              {exportLoading ? (
-                <div className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
-              ) : (
-                <Download size={12} />
-              )}
-              PDF
-            </button>
-          </div>
-        </div>
-
-        {/* TABS */}
-        <div style={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderTop: "none" }}>
-          <div className="flex overflow-x-auto border-b" style={{ borderColor: colors.border }}>
-            {TABS.map((tab) => {
-              const active = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className="shrink-0 px-5 py-2.5 text-xs font-semibold tracking-wide uppercase transition-colors whitespace-nowrap"
-                  style={{
-                    color: active ? colors.secondary : colors.textSecondary,
-                    borderBottom: active ? `2px solid ${colors.primary}` : "2px solid transparent",
-                  }}>
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* FILTRO */}
-          {hasPeriodoFiltro && periodoAtivo && (
-            <div className="border-b" style={{ borderColor: colors.border }}>
-              <div className="flex items-center gap-3 px-4 py-2" style={{ backgroundColor: colors.hover }}>
-                <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>
-                  Período
-                </span>
-                <span
-                  className="text-[11px] px-2 py-0.5 font-mono"
-                  style={{ backgroundColor: colors.card, border, color: colors.text, borderRadius: 3 }}>
-                  {periodoAtivo.data_inicio} — {periodoAtivo.data_fim}
-                </span>
-                <div className="flex-1" />
-                <button
-                  onClick={() => setFiltroAberto((f) => !f)}
-                  className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium border transition-all"
-                  style={{
-                    backgroundColor: filtroAberto ? `${colors.primary}15` : colors.card,
-                    borderColor: filtroAberto ? colors.primary : colors.border,
-                    color: filtroAberto ? colors.primary : colors.textSecondary,
-                    borderRadius: 3,
-                  }}>
-                  <SlidersHorizontal size={11} /> Filtrar período
-                </button>
-                {periodoAtivo.tipo === "personalizado" && (
+          {/* TABS */}
+          <div style={{ backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderTop: "none" }}>
+            <div className="flex overflow-x-auto border-b" style={{ borderColor: colors.border }}>
+              {TABS.map((tab) => {
+                const active = activeTab === tab.id;
+                return (
                   <button
-                    onClick={() => limparFiltro(relAtivo)}
-                    className="text-[11px] font-medium transition-colors"
-                    style={{ color: "#dc2626" }}>
-                    Limpar filtro
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className="shrink-0 px-5 py-2.5 text-xs font-semibold tracking-wide uppercase transition-colors whitespace-nowrap"
+                    style={{
+                      color: active ? colors.secondary : colors.textSecondary,
+                      borderBottom: active ? `2px solid ${colors.primary}` : "2px solid transparent",
+                    }}>
+                    {tab.label}
                   </button>
+                );
+              })}
+            </div>
+
+            {/* FILTRO */}
+            {hasPeriodoFiltro && periodoAtivo && (
+              <div className="border-b" style={{ borderColor: colors.border }}>
+                <div className="flex items-center gap-3 px-4 py-2" style={{ backgroundColor: colors.hover }}>
+                  <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>
+                    Período
+                  </span>
+                  <span
+                    className="text-[11px] px-2 py-0.5 font-mono"
+                    style={{ backgroundColor: colors.card, border, color: colors.text, borderRadius: 3 }}>
+                    {periodoAtivo.data_inicio} — {periodoAtivo.data_fim}
+                  </span>
+                  <div className="flex-1" />
+                  <button
+                    onClick={() => setFiltroAberto((f) => !f)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium border transition-all"
+                    style={{
+                      backgroundColor: filtroAberto ? `${colors.primary}15` : colors.card,
+                      borderColor: filtroAberto ? colors.primary : colors.border,
+                      color: filtroAberto ? colors.primary : colors.textSecondary,
+                      borderRadius: 3,
+                    }}>
+                    <SlidersHorizontal size={11} /> Filtrar período
+                  </button>
+                  {periodoAtivo.tipo === "personalizado" && (
+                    <button
+                      onClick={() => limparFiltro(relAtivo)}
+                      className="text-[11px] font-medium transition-colors"
+                      style={{ color: "#dc2626" }}>
+                      Limpar filtro
+                    </button>
+                  )}
+                </div>
+
+                {filtroAberto && (
+                  <div
+                    className="px-4 py-3 flex flex-wrap items-end gap-3 border-t"
+                    style={{ borderColor: colors.border, backgroundColor: colors.card }}>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>
+                        Data inicial
+                      </label>
+                      <input
+                        type="date"
+                        value={dataInicio}
+                        onChange={(e) => setDataInicio(e.target.value)}
+                        className="px-2.5 py-1.5 text-xs border outline-none"
+                        style={{
+                          backgroundColor: colors.background,
+                          borderColor: colors.border,
+                          color: colors.text,
+                          borderRadius: 3,
+                          minWidth: 140,
+                        }}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>
+                        Data final
+                      </label>
+                      <input
+                        type="date"
+                        value={dataFim}
+                        onChange={(e) => setDataFim(e.target.value)}
+                        className="px-2.5 py-1.5 text-xs border outline-none"
+                        style={{
+                          backgroundColor: colors.background,
+                          borderColor: colors.border,
+                          color: colors.text,
+                          borderRadius: 3,
+                          minWidth: 140,
+                        }}
+                      />
+                    </div>
+                    <button
+                      onClick={() => aplicarFiltro(relAtivo)}
+                      className="px-4 py-1.5 text-xs font-semibold text-white transition-all"
+                      style={{ backgroundColor: colors.primary, borderRadius: 3 }}>
+                      Aplicar
+                    </button>
+                    <button
+                      onClick={() => setFiltroAberto(false)}
+                      className="px-3 py-1.5 text-xs font-medium border transition-all"
+                      style={{ border, color: colors.textSecondary, borderRadius: 3 }}>
+                      Cancelar
+                    </button>
+                  </div>
                 )}
               </div>
+            )}
 
-              {filtroAberto && (
-                <div
-                  className="px-4 py-3 flex flex-wrap items-end gap-3 border-t"
-                  style={{ borderColor: colors.border, backgroundColor: colors.card }}>
-                  {/* Seus inputs de data permanecem iguais */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>
-                      Data inicial
-                    </label>
-                    <input
-                      type="date"
-                      value={dataInicio}
-                      onChange={(e) => setDataInicio(e.target.value)}
-                      className="px-2.5 py-1.5 text-xs border outline-none"
-                      style={{
-                        backgroundColor: colors.background,
-                        borderColor: colors.border,
-                        color: colors.text,
-                        borderRadius: 3,
-                        minWidth: 140,
-                      }}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>
-                      Data final
-                    </label>
-                    <input
-                      type="date"
-                      value={dataFim}
-                      onChange={(e) => setDataFim(e.target.value)}
-                      className="px-2.5 py-1.5 text-xs border outline-none"
-                      style={{
-                        backgroundColor: colors.background,
-                        borderColor: colors.border,
-                        color: colors.text,
-                        borderRadius: 3,
-                        minWidth: 140,
-                      }}
-                    />
-                  </div>
-                  <button
-                    onClick={() => aplicarFiltro(relAtivo)}
-                    className="px-4 py-1.5 text-xs font-semibold text-white transition-all"
-                    style={{ backgroundColor: colors.primary, borderRadius: 3 }}>
-                    Aplicar
-                  </button>
-                  <button
-                    onClick={() => setFiltroAberto(false)}
-                    className="px-3 py-1.5 text-xs font-medium border transition-all"
-                    style={{ border, color: colors.textSecondary, borderRadius: 3 }}>
-                    Cancelar
-                  </button>
-                </div>
+            {/* CONTEÚDO */}
+            <div className="p-4 space-y-4">
+              {activeTab === "vendas" && (
+                <RelatorioVendasComponent
+                  colors={colors}
+                  isLoading={isLoading}
+                  relatorioVendas={relatorioVendas}
+                  relatorioFaturacao={relatorioFaturacao}
+                />
+              )}
+              {activeTab === "documentos" && (
+                <RelatorioDocumentosComponent
+                  colors={colors}
+                  isLoading={isLoading}
+                  relatorioDocumentos={relatorioDocumentos}
+                  relatorioProformas={relatorioProformas}
+                />
+              )}
+              {activeTab === "pagamentos" && (
+                <RelatorioPagamentosComponent colors={colors} isLoading={isLoading} relatorioPagamentos={relatorioPagamentos} />
+              )}
+              {activeTab === "movimentos_stock" && (
+                <RelatorioMovimentosStockComponent
+                  colors={colors}
+                  isLoading={isLoading}
+                  relatorioMovimentos={relatorioMovimentos}
+                  onCarregar={carregarMovimentos}
+                />
               )}
             </div>
-          )}
-
-          {/* CONTEÚDO */}
-          <div className="p-4 space-y-4">
-            {activeTab === "vendas" && (
-              <RelatorioVendasComponent
-                colors={colors}
-                isLoading={isLoading}
-                relatorioVendas={relatorioVendas}
-                relatorioFaturacao={relatorioFaturacao}
-              />
-            )}
-            {activeTab === "documentos" && (
-              <RelatorioDocumentosComponent
-                colors={colors}
-                isLoading={isLoading}
-                relatorioDocumentos={relatorioDocumentos}
-                relatorioProformas={relatorioProformas}
-              />
-            )}
-            {activeTab === "pagamentos" && (
-              <RelatorioPagamentosComponent colors={colors} isLoading={isLoading} relatorioPagamentos={relatorioPagamentos} />
-            )}
-            {activeTab === "movimentos_stock" && (
-              <RelatorioMovimentosStockComponent
-                colors={colors}
-                isLoading={isLoading}
-                relatorioMovimentos={relatorioMovimentos}
-                onCarregar={carregarMovimentos}
-              />
-            )}
           </div>
         </div>
-      </div>
-    </MainEmpresa>
+      </MainEmpresa>
+    </>
   );
 }

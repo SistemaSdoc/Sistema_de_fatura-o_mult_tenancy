@@ -771,51 +771,34 @@ class WebAuthController extends Controller
     /**
      * LOGOUT DO USUÁRIO (mantém dados do tenant na sessão)
      */
-    public function logout(Request $request): JsonResponse
-    {
-        Log::info('[AUTH] Logout iniciado', ['user_id' => Auth::guard('landlord')->id()]);
+public function logout(Request $request): JsonResponse
+{
+    $tenantId   = session('tenant_id');
+    $tenantDb   = session('tenant_db');
+    $tenantNome = session('tenant_nome');
+    $tenantModo = session('tenant_modo');
 
-        // Salva tenant_id ANTES de limpar
-        $tenantId   = session('tenant_id');
-        $tenantDb   = session('tenant_db');
-        $tenantNome = session('tenant_nome');
-        $tenantModo = session('tenant_modo');
+    Auth::guard('landlord')->logout();
+    Auth::guard('landlord_api')->logout(); // <- faltava isso
 
-        // Logout do guard landlord
-        Auth::guard('landlord')->logout();
+    $request->session()->invalidate();       // <- mata a sessão de fato
+    $request->session()->regenerateToken();  // <- novo CSRF
 
-        // Limpa apenas dados de autenticação (mantém tenant)
-        session()->forget([
-            'user_tenant_id',
-            'user_email',
-            'login_at',
-            'login_modo',
-        ]);
-
-        // Regenera token CSRF
-        $request->session()->regenerateToken();
-
-        // Restaura informações do tenant (para futuras requisições sem login)
-        if ($tenantId) {
-            session([
-                'tenant_id'   => $tenantId,
-                'tenant_db'   => $tenantDb,
-                'tenant_nome' => $tenantNome,
-                'tenant_modo' => $tenantModo,
-            ]);
-        }
-
-        Log::info('[AUTH] Logout completo', [
-            'tenant_id_preserved' => $tenantId,
-            'session_id' => $request->session()->getId(),
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Logout realizado',
-            'tenant_id' => $tenantId,
+    if ($tenantId) {
+        session([
+            'tenant_id'   => $tenantId,
+            'tenant_db'   => $tenantDb,
+            'tenant_nome' => $tenantNome,
+            'tenant_modo' => $tenantModo,
         ]);
     }
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Logout realizado',
+        'tenant_id' => $tenantId,
+    ]);
+}
 
     // ==================== UTILITÁRIOS ====================
 

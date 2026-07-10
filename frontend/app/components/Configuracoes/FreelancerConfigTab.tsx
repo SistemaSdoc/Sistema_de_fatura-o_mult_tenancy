@@ -5,7 +5,7 @@ import { useAuth } from "@/context/authprovider";
 import { useThemeColors } from "@/context/ThemeContext";
 import { Loader2, AlertCircle, CheckCircle, Save, Upload, Trash2 } from "lucide-react";
 import api from "@/services/axios";
-import { toast } from "sonner";
+import { WithToast } from "./ConfiguracoesComuns";
 
 interface ThemeColors {
   primary: string;
@@ -29,12 +29,12 @@ interface FormData {
   logo_file?: File;
 }
 
-export interface FreelancerConfigTabProps {
+export interface FreelancerConfigTabProps extends WithToast {
   colors: ThemeColors;
   incompleteFields?: string[];
 }
 
-export const FreelancerConfigTab = ({ colors, incompleteFields = [] }: FreelancerConfigTabProps) => {
+export const FreelancerConfigTab = ({ colors, incompleteFields = [], showToast }: FreelancerConfigTabProps) => {
   const { user, refetch: refetchAuth } = useAuth();
   const [form, setForm] = useState<FormData>({
     nif: "",
@@ -73,14 +73,14 @@ export const FreelancerConfigTab = ({ colors, incompleteFields = [] }: Freelance
         }
       } catch (err) {
         console.error("Erro ao carregar dados:", err);
-        toast.error("Erro ao carregar dados de configuração");
+        showToast("Erro", "error", "Erro ao carregar dados de configuração");
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchStatus();
-  }, []);
+  }, [showToast]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -145,7 +145,7 @@ export const FreelancerConfigTab = ({ colors, incompleteFields = [] }: Freelance
       });
 
       if (response.data.success) {
-        toast.success(response.data.message);
+        showToast("Sucesso", "success", response.data.message);
 
         if (response.data.data?.empresa) {
           setForm((prev) => ({
@@ -164,7 +164,7 @@ export const FreelancerConfigTab = ({ colors, incompleteFields = [] }: Freelance
       }
     } catch (err: any) {
       const errorMessage = err.response?.data?.message || "Erro ao atualizar dados";
-      toast.error(errorMessage);
+      showToast("Erro", "error", errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -446,7 +446,7 @@ export const FreelancerConfigTab = ({ colors, incompleteFields = [] }: Freelance
               borderColor: colors.success,
               color: colors.success,
             }}>
-            <CheckCircle size={18} />✅ Perfil completo! Você pode gerar faturas normalmente.
+            <CheckCircle size={18} /> Perfil completo! Você pode gerar faturas normalmente.
           </div>
         )}
       </form>

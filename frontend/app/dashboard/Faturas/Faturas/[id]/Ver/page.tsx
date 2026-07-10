@@ -24,7 +24,84 @@ import {
 import MainEmpresa from "@/app/components/MainEmpresa";
 import { documentoFiscalService, DocumentoFiscal, ItemDocumento, TipoDocumento } from "@/services/DocumentoFiscal";
 import { useThemeColors, LIGHT_COLORS } from "@/context/ThemeContext";
-import { toast } from "sonner";
+
+/* ── Componente de Notificação Toast com Animação ── */
+interface ToastNotificationProps {
+  message: string;
+  type: "success" | "error" | "warning" | "info";
+  onClose: () => void;
+  colors: typeof LIGHT_COLORS;
+  description?: string;
+}
+
+const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, onClose, colors, description }) => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const getIcon = () => {
+    switch (type) {
+      case "success":
+        return <CheckCircle size={24} style={{ color: colors.success }} />;
+      case "error":
+        return <AlertCircleIcon size={24} style={{ color: colors.danger }} />;
+      case "warning":
+        return <AlertCircleIcon size={24} style={{ color: colors.warning }} />;
+      case "info":
+        return <CheckCircle size={24} style={{ color: colors.primary }} />;
+      default:
+        return <CheckCircle size={24} style={{ color: colors.success }} />;
+    }
+  };
+
+  const getBorderColor = () => {
+    switch (type) {
+      case "success":
+        return colors.success;
+      case "error":
+        return colors.danger;
+      case "warning":
+        return colors.warning;
+      case "info":
+        return colors.primary;
+      default:
+        return colors.success;
+    }
+  };
+
+  return (
+    <div
+      className="fixed top-6 right-6 max-w-md"
+      style={{
+        zIndex: 9999, // <-- Z-INDEX ALTO PARA FICAR ACIMA DO MODAL
+        backgroundColor: colors.card,
+        borderLeft: `4px solid ${getBorderColor()}`,
+        boxShadow: "0 10px 40px rgba(0,0,0,0.15)",
+        animation: "slideInRight 0.3s ease-out forwards",
+      }}>
+      <div className="flex items-start gap-4 p-4">
+        <div className="flex-shrink-0 mt-0.5">{getIcon()}</div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium" style={{ color: colors.text }}>
+            {message}
+          </p>
+          {description && (
+            <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+              {description}
+            </p>
+          )}
+        </div>
+        <button onClick={onClose} className="flex-shrink-0 transition-opacity hover:opacity-70" style={{ color: colors.textSecondary }}>
+          <XCircle size={18} />
+        </button>
+      </div>
+    </div>
+  );
+};
 
 /* ── Constantes ─────────────────────────────────────── */
 const TIPO_LABEL: Record<TipoDocumento, string> = {
@@ -341,11 +418,13 @@ function ModalNotaCredito({
   onClose,
   onSuccess,
   colors,
+  showToast,
 }: {
   documento: DocumentoFiscal;
   onClose: () => void;
   onSuccess: (nota: DocumentoFiscal) => void;
   colors: typeof LIGHT_COLORS;
+  showToast: (message: string, type: "success" | "error" | "warning" | "info", description?: string) => void;
 }) {
   const itensOriginais = documento.itens ?? [];
 
@@ -385,9 +464,7 @@ function ModalNotaCredito({
   const handleGerar = async () => {
     // 1. Motivo obrigatório
     if (!motivo.trim() || motivo.trim().length < 10) {
-      setErro(
-        "O motivo da Nota de Crédito é obrigatório e deve ter pelo menos 10 caracteres. " + "Forneça uma descrição detalhada da correção."
-      );
+      showToast("Motivo obrigatório", "error", "O motivo deve ter pelo menos 10 caracteres.");
       return;
     }
 
@@ -405,16 +482,16 @@ function ModalNotaCredito({
       }));
 
     if (itens.length === 0) {
-      setErro("Seleccione pelo menos um item com quantidade > 0.");
+      showToast("Seleccione itens", "error", "Seleccione pelo menos um item com quantidade > 0.");
       return;
     }
 
     // 3. Validar saldo disponível
     if (saldoDisponivel !== null && totalSelecionado > saldoDisponivel) {
-      setErro(
-        `O valor total da Nota de Crédito (${fmtKz(totalSelecionado)}) ` +
-          `excede o saldo disponível da fatura (${fmtKz(saldoDisponivel)}).\n` +
-          `Reduza as quantidades ou seleccione menos itens.`
+      showToast(
+        "Saldo insuficiente",
+        "error",
+        `O valor total (${fmtKz(totalSelecionado)}) excede o saldo disponível (${fmtKz(saldoDisponivel)})`
       );
       return;
     }
@@ -427,9 +504,12 @@ function ModalNotaCredito({
         itens,
         motivo: motivo.trim(),
       });
+      showToast("Nota de Crédito gerada com sucesso!", "success");
       onSuccess(resposta.nota_credito);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Erro ao gerar nota.");
+      const errorMessage = e instanceof Error ? e.message : "Erro ao gerar nota.";
+      showToast("Erro ao gerar NC", "error", errorMessage);
+      setErro(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -689,11 +769,13 @@ function ModalNotaDebito({
   onClose,
   onSuccess,
   colors,
+  showToast,
 }: {
   documento: DocumentoFiscal;
   onClose: () => void;
   onSuccess: (nota: DocumentoFiscal) => void;
   colors: typeof LIGHT_COLORS;
+  showToast: (message: string, type: "success" | "error" | "warning" | "info", description?: string) => void;
 }) {
   const itensOriginais = documento.itens ?? [];
 
@@ -747,7 +829,7 @@ function ModalNotaDebito({
 
   const handleAdicionarNovoItem = () => {
     if (!novoItemDescricao.trim() || !novoItemPreco || Number(novoItemPreco) <= 0) {
-      setErro("Preencha a descrição e o preço do novo serviço.");
+      showToast("Dados incompletos", "error", "Preencha a descrição e o preço do novo serviço.");
       return;
     }
 
@@ -769,7 +851,11 @@ function ModalNotaDebito({
     ].some((term) => novoItemDescricao.toLowerCase().includes(term));
 
     if (!isServico) {
-      setErro("Nota de Débito só pode ser usada para serviços. Inclua 'serviço', 'juros' ou 'multa' na descrição.");
+      showToast(
+        "Serviço não reconhecido",
+        "error",
+        "Nota de Débito só pode ser usada para serviços. Inclua 'serviço', 'juros' ou 'multa' na descrição."
+      );
       return;
     }
 
@@ -788,6 +874,7 @@ function ModalNotaDebito({
     setNovoItemQuantidade("1");
     setShowNovoItem(false);
     setErro(null);
+    showToast("Serviço adicionado!", "success");
   };
 
   const handleRemoverNovoItem = (index: number) => {
@@ -817,11 +904,7 @@ function ModalNotaDebito({
 
     if (itensInvalidos.length > 0) {
       const nomesInvalidos = itensInvalidos.map((i) => `"${i.descricao}"`).join(", ");
-      setErro(
-        `Nota de Débito só pode ser usada para serviços.\n` +
-          `Os seguintes itens não estão cadastrados como serviços: ${nomesInvalidos}\n` +
-          `Verifique o cadastro do item ou seleccione apenas serviços para esta nota.`
-      );
+      showToast("Itens inválidos para ND", "error", `Nota de Débito só pode ser usada para serviços. Itens inválidos: ${nomesInvalidos}`);
       return;
     }
 
@@ -847,13 +930,13 @@ function ModalNotaDebito({
     ];
 
     if (todosItens.length === 0) {
-      setErro("Adicione pelo menos um item ou serviço.");
+      showToast("Nenhum item selecionado", "error", "Adicione pelo menos um item ou serviço.");
       return;
     }
 
     // 2. Validar prazo
     if (prazoExpirado) {
-      setErro("O prazo de 30 dias para emitir Nota de Débito já expirou.");
+      showToast("Prazo expirado", "error", "O prazo de 30 dias para emitir Nota de Débito já expirou.");
       return;
     }
 
@@ -865,9 +948,12 @@ function ModalNotaDebito({
         itens: todosItens,
         motivo: motivo.trim() || undefined,
       });
+      showToast("Nota de Débito gerada com sucesso!", "success");
       onSuccess(resposta.nota_debito);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Erro ao gerar nota.");
+      const errorMessage = e instanceof Error ? e.message : "Erro ao gerar nota.";
+      showToast("Erro ao gerar ND", "error", errorMessage);
+      setErro(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -1259,6 +1345,15 @@ export default function VisualizarNotaPage() {
   const [modalTipo, setModalTipo] = useState<"NC" | "ND" | null>(null);
   const [podeGerarNC, setPodeGerarNC] = useState<{ pode: boolean; motivo?: string }>({ pode: false });
   const [podeGerarND, setPodeGerarND] = useState<{ pode: boolean; motivo?: string }>({ pode: false });
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error" | "warning" | "info";
+    description?: string;
+  } | null>(null);
+
+  const showToast = (message: string, type: "success" | "error" | "warning" | "info" = "info", description?: string) => {
+    setToast({ message, type, description });
+  };
 
   const carregarNota = useCallback(async () => {
     if (!notaId) {
@@ -1280,7 +1375,9 @@ export default function VisualizarNotaPage() {
         setDocumentoOrigem(origem);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao carregar");
+      const errorMessage = e instanceof Error ? e.message : "Erro ao carregar";
+      setError(errorMessage);
+      showToast("Erro ao carregar", "error", errorMessage);
     } finally {
       setLoading(false);
     }
@@ -1295,7 +1392,7 @@ export default function VisualizarNotaPage() {
     if (notaGerada?.id) {
       router.push("/dashboard/Faturas/DC");
     } else {
-      toast.error("Erro ao redirecionar para a nota gerada.");
+      showToast("Erro ao redirecionar", "error", "Erro ao redirecionar para a nota gerada.");
       router.push("/dashboard/Faturas/Faturas");
     }
   };
@@ -1380,6 +1477,17 @@ export default function VisualizarNotaPage() {
 
   return (
     <MainEmpresa>
+      {/* Toast Notification */}
+      {toast && (
+        <ToastNotification
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+          colors={colors}
+          description={toast.description}
+        />
+      )}
+
       <div className="p-3 sm:p-4 max-w-4xl mx-auto space-y-3">
         {/* ── Barra de topo ── */}
         <div
@@ -1435,7 +1543,7 @@ export default function VisualizarNotaPage() {
                   if (podeGerarNC.pode) {
                     setModalTipo("NC");
                   } else {
-                    alert(podeGerarNC.motivo || "Não é possível gerar Nota de Crédito para esta fatura.");
+                    showToast("Não disponível", "warning", podeGerarNC.motivo || "Não é possível gerar Nota de Crédito para esta fatura.");
                   }
                 }}
                 className="p-2 rounded transition-colors flex items-center gap-1.5 text-xs font-medium disabled:opacity-50"
@@ -1457,7 +1565,7 @@ export default function VisualizarNotaPage() {
                   if (podeGerarND.pode) {
                     setModalTipo("ND");
                   } else {
-                    alert(podeGerarND.motivo || "Não é possível gerar Nota de Débito para esta fatura.");
+                    showToast("Não disponível", "warning", podeGerarND.motivo || "Não é possível gerar Nota de Débito para esta fatura.");
                   }
                 }}
                 className="p-2 rounded transition-colors flex items-center gap-1.5 text-xs font-medium disabled:opacity-50"
@@ -1474,33 +1582,7 @@ export default function VisualizarNotaPage() {
           </div>
         </div>
 
-        {/* ── Info adicional para NC ── */}
-        {isNC && (
-          <div
-            className="border rounded p-3 text-sm"
-            style={{
-              backgroundColor: `${colors.danger}08`,
-              borderColor: `${colors.danger}30`,
-              color: colors.textSecondary,
-            }}>
-            <div className="flex items-center gap-2">
-              <MinusCircle className="w-4 h-4" style={{ color: colors.danger }} />
-              <span>
-                <strong style={{ color: colors.danger }}>Nota de Crédito</strong>
-                {" — Esta nota REDUZ o valor da fatura original. "}
-                <span className="font-medium" style={{ color: colors.danger }}>
-                  Total creditado: {fmtKz(totalCreditado)}
-                </span>
-                {saldoDisponivel > 0 && (
-                  <span style={{ color: colors.textSecondary }}>
-                    {" · Saldo restante: "}
-                    <span style={{ color: colors.success }}>{fmtKz(saldoDisponivel)}</span>
-                  </span>
-                )}
-              </span>
-            </div>
-          </div>
-        )}
+
 
         {/* ── Info adicional para ND ── */}
         {isND && (
@@ -1751,7 +1833,7 @@ export default function VisualizarNotaPage() {
           </div>
         ) : null}
 
-        {/* ── Mensagem para Proformas ── */}
+        {/* ── Mensagem para Proformas ── 
         {isFP && (
           <div
             className="border rounded p-4 text-center"
@@ -1765,7 +1847,7 @@ export default function VisualizarNotaPage() {
               Proforma em Fatura.
             </p>
           </div>
-        )}
+        )}*/}
 
         {/* ── Mensagem para Notas de Correção ── */}
         {isNotaCorrecao && documentoOrigem && (
@@ -1800,12 +1882,24 @@ export default function VisualizarNotaPage() {
 
       {/* ── Modal NC ── */}
       {modalTipo === "NC" && (
-        <ModalNotaCredito documento={nota} onClose={() => setModalTipo(null)} onSuccess={handleNotaGerada} colors={colors} />
+        <ModalNotaCredito
+          documento={nota}
+          onClose={() => setModalTipo(null)}
+          onSuccess={handleNotaGerada}
+          colors={colors}
+          showToast={showToast}
+        />
       )}
 
       {/* ── Modal ND ── */}
       {modalTipo === "ND" && (
-        <ModalNotaDebito documento={nota} onClose={() => setModalTipo(null)} onSuccess={handleNotaGerada} colors={colors} />
+        <ModalNotaDebito
+          documento={nota}
+          onClose={() => setModalTipo(null)}
+          onSuccess={handleNotaGerada}
+          colors={colors}
+          showToast={showToast}
+        />
       )}
     </MainEmpresa>
   );

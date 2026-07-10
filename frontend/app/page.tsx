@@ -496,7 +496,7 @@ export default function App() {
               href="/login"
               className="px-4 py-2 rounded-full font-semibold text-sm transition duration-300 ease-in-out transform hover:scale-[1.05]"
               style={{ backgroundColor: colors.primary, color: "white" }}>
-              Login
+              Entrar
             </Link>
             <Link
               href="/register"
@@ -537,7 +537,7 @@ export default function App() {
               onClick={() => setIsMenuOpen(false)}
               className="w-full text-center py-2 px-4 text-sm cursor-pointer mt-2 block rounded-full font-semibold"
               style={{ backgroundColor: colors.primary, color: "white" }}>
-              Login
+              Entrar
             </Link>
           </div>
         </div>

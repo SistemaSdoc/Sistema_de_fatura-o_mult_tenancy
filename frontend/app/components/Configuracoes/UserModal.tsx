@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import { Eye, EyeOff, Save, Loader2, AlertCircle } from "lucide-react";
-import { toast } from "sonner";
 import { registerUser, updateUser, User as UserType, RegisterData, UpdateUserData } from "@/services/User";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +9,15 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ThemeColors, RoleType } from "./ConfiguracoesComuns";
+import { ThemeColors, RoleType, WithToast } from "./ConfiguracoesComuns";
+
+export interface UserModalProps extends WithToast {
+  open: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+  editUser?: UserType | null;
+  colors: ThemeColors;
+}
 
 export function UserModal({
   open,
@@ -18,13 +25,8 @@ export function UserModal({
   onSaved,
   editUser,
   colors,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onSaved: () => void;
-  editUser?: UserType | null;
-  colors: ThemeColors;
-}) {
+  showToast,
+}: UserModalProps) {
   const isEdit = !!editUser;
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
@@ -81,7 +83,7 @@ export function UserModal({
         };
         if (form.password.trim()) payload.password = form.password;
         await updateUser(editUser.id, payload);
-        toast.success("Utilizador atualizado!");
+        showToast("Sucesso", "success", "Utilizador atualizado com sucesso!");
       } else {
         await registerUser({
           name: form.name,
@@ -90,6 +92,7 @@ export function UserModal({
           role: form.role,
           ativo: form.ativo,
         } as RegisterData);
+        showToast("Sucesso", "success", "Utilizador criado com sucesso!");
       }
       onSaved();
       onClose();
@@ -105,7 +108,7 @@ export function UserModal({
         if (serverErrors.password) mapped.password = serverErrors.password[0];
         setErrors(mapped);
       } else {
-        toast.error(errObj?.response?.data?.message ?? "Erro ao salvar utilizador");
+        showToast("Erro", "error", errObj?.response?.data?.message ?? "Erro ao salvar utilizador");
       }
     } finally {
       setLoading(false);

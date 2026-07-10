@@ -447,20 +447,23 @@ export default function NovaFaturaReciboPage() {
     setDropdownAberto(false);
   };
 
-  // 🔥 FUNÇÃO PARA BUSCAR PRODUTO POR CÓDIGO
-  const buscarProdutoPorCodigo = (codigo: string) => {
-    if (!codigo.trim()) return null;
+  //  FUNÇÃO PARA BUSCAR PRODUTO POR CÓDIGO
+const buscarProdutoPorCodigo = (codigo: string) => {
+  if (!codigo.trim()) return null;
 
-    // Busca exata por código
-    let produto = produtos.find((p) => p.codigo === codigo.trim());
+  let produto = produtos.find((p) => p.codigo === codigo.trim());
 
-    // Se não encontrar, tenta buscar por código parcial (útil para scanners)
-    if (!produto) {
-      produto = produtos.find((p) => p.codigo?.includes(codigo.trim()));
-    }
+  if (!produto) {
+    produto = produtos.find((p) => p.codigo?.includes(codigo.trim()));
+  }
 
-    return produto;
-  };
+  // ignora produto (não serviço) sem stock
+  if (produto && produto.tipo === "produto" && produto.estoque_atual <= 0) {
+    return null;
+  }
+
+  return produto;
+};
 
   const handleSelectItem = (produto: Produto) => {
     const qtd = produto.tipo === "produto" ? Math.min(1, produto.estoque_atual) : 1;
@@ -618,14 +621,18 @@ export default function NovaFaturaReciboPage() {
   // ─── RENDER ────────────────────────────────────────────────────────
 
   const produtoSel = produtos.find((p) => p.id === formItem.produto_id);
-  const itensFiltrados = produtos.filter((p) => {
-    if (p.status !== "ativo") return false;
-    if (tipoItemSelecionado === "produto" && p.tipo !== "produto") return false;
-    if (tipoItemSelecionado === "servico" && p.tipo !== "servico") return false;
-    if (buscaItem.trim() === "") return true;
-    const buscaLower = buscaItem.toLowerCase();
-    return p.nome.toLowerCase().includes(buscaLower) || (p.codigo && p.codigo.toLowerCase().includes(buscaLower));
-  });
+const itensFiltrados = produtos.filter((p) => {
+  if (p.status !== "ativo") return false;
+  if (tipoItemSelecionado === "produto" && p.tipo !== "produto") return false;
+  if (tipoItemSelecionado === "servico" && p.tipo !== "servico") return false;
+
+  //  NOVO: esconde produtos (não serviços) sem stock
+  if (p.tipo === "produto" && p.estoque_atual <= 0) return false;
+
+  if (buscaItem.trim() === "") return true;
+  const buscaLower = buscaItem.toLowerCase();
+  return p.nome.toLowerCase().includes(buscaLower) || (p.codigo && p.codigo.toLowerCase().includes(buscaLower));
+});
 
   return (
     <MainEmpresa>
@@ -1067,7 +1074,7 @@ export default function NovaFaturaReciboPage() {
             CARD 2 — Itens + Resumo Fiscal + Pagamento
         ════════════════════════════════════════════════════════════════ */}
         {itens.length > 0 ? (
-          <div className="border shadow-sm overflow-hidden" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+          <div className="border shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
             <div className="px-3 py-1.5 flex items-center justify-between gap-2" style={{ backgroundColor: colors.primary }}>
               <div className="flex items-center gap-2 min-w-0">
                 <ShoppingCart size={14} className="text-white shrink-0" />

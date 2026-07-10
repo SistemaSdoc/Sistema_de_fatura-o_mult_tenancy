@@ -1,5 +1,5 @@
 import React from "react";
-import { Eye, EyeOff, Save, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Save, Loader2, XCircle, CheckCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -201,3 +201,94 @@ export const SaveButton = ({
     {loading ? "Salvando..." : children}
   </Button>
 );
+
+/* ── Componente de Notificação Toast com Animação ── */
+export interface ToastNotificationProps {
+  message: string;
+  type: "success" | "error" | "warning" | "info";
+  onClose: () => void;
+  colors: ThemeColors;
+  description?: string;
+}
+
+export const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, onClose, colors, description }) => {
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const getIcon = () => {
+    switch (type) {
+      case "success":
+        return <CheckCircle size={24} style={{ color: colors.success }} />;
+      case "error":
+        return <AlertCircle size={24} style={{ color: colors.danger }} />;
+      case "warning":
+        return <AlertCircle size={24} style={{ color: colors.warning }} />;
+      case "info":
+        return <CheckCircle size={24} style={{ color: colors.primary }} />;
+      default:
+        return <CheckCircle size={24} style={{ color: colors.success }} />;
+    }
+  };
+
+  const getBorderColor = () => {
+    switch (type) {
+      case "success":
+        return colors.success;
+      case "error":
+        return colors.danger;
+      case "warning":
+        return colors.warning;
+      case "info":
+        return colors.primary;
+      default:
+        return colors.success;
+    }
+  };
+
+  return (
+    <div
+      className="fixed top-6 right-6 z-[9999] max-w-md"
+      style={{
+        backgroundColor: colors.card,
+        borderLeft: `4px solid ${getBorderColor()}`,
+        boxShadow: "0 10px 40px rgba(0,0,0,0.15)",
+        animation: "slideInRight 0.3s ease-out forwards",
+      }}>
+      <div className="flex items-start gap-4 p-4">
+        <div className="flex-shrink-0 mt-0.5">{getIcon()}</div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium" style={{ color: colors.text }}>
+            {message}
+          </p>
+          {description && (
+            <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+              {description}
+            </p>
+          )}
+        </div>
+        <button onClick={onClose} className="flex-shrink-0 transition-opacity hover:opacity-70" style={{ color: colors.textSecondary }}>
+          <XCircle size={18} />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+/* ── Hook para gerenciar Toast ── */
+export interface ToastState {
+  message: string;
+  type: "success" | "error" | "warning" | "info";
+  description?: string;
+}
+
+export type ShowToastFn = (message: string, type: "success" | "error" | "warning" | "info", description?: string) => void;
+
+/* ── Tipo para componentes que recebem showToast como prop ── */
+export interface WithToast {
+  showToast: ShowToastFn;
+}

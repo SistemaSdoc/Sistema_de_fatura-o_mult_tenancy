@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Plus, Search, RefreshCcw, Loader2, User, UserCheck, UserX, MoreVertical, Pencil, Trash2, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { toast } from "sonner";
 import { fetchUsers, deleteUser, User as UserType } from "@/services/User";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,11 +12,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { ThemeColors, initials, RoleBadge } from "./ConfiguracoesComuns";
+import { ThemeColors, initials, RoleBadge, WithToast } from "./ConfiguracoesComuns";
 import { UserModal } from "./UserModal";
 
-export function UsuariosTab({ colors, currentUser }: { colors: ThemeColors; currentUser: UserType | null }) {
-  // ✅ Inicializa com array vazio
+export interface UsuariosTabProps extends WithToast {
+  colors: ThemeColors;
+  currentUser: UserType | null;
+}
+
+export function UsuariosTab({ colors, currentUser, showToast }: UsuariosTabProps) {
+  // Inicializa com array vazio
   const [users, setUsers] = useState<UserType[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -48,13 +52,13 @@ export function UsuariosTab({ colors, currentUser }: { colors: ThemeColors; curr
             ? "Sessão expirada — faça login novamente"
             : (errObj?.response?.data?.message ?? errObj?.message ?? "Erro ao carregar utilizadores");
       setLoadError(msg);
-      toast.error(msg);
+      showToast("Erro", "error", msg);
       // ✅ Garantir que users fica como array vazio em caso de erro
       setUsers([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     void loadUsers();
@@ -85,12 +89,12 @@ export function UsuariosTab({ colors, currentUser }: { colors: ThemeColors; curr
     setDeleting(true);
     try {
       await deleteUser(deleteConfirm.id);
-      toast.success("Utilizador removido!");
+      showToast("Sucesso", "success", "Utilizador removido com sucesso!");
       setDeleteConfirm(null);
       void loadUsers();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      toast.error(msg ?? "Erro ao remover utilizador");
+      showToast("Erro", "error", msg ?? "Erro ao remover utilizador");
     } finally {
       setDeleting(false);
     }
@@ -278,7 +282,14 @@ export function UsuariosTab({ colors, currentUser }: { colors: ThemeColors; curr
         </CardContent>
       </Card>
 
-      <UserModal open={modalOpen} onClose={closeModal} onSaved={() => void loadUsers()} editUser={editTarget} colors={colors} />
+      <UserModal
+        open={modalOpen}
+        onClose={closeModal}
+        onSaved={() => void loadUsers()}
+        editUser={editTarget}
+        colors={colors}
+        showToast={showToast}
+      />
 
       <Dialog
         open={!!deleteConfirm}
@@ -310,7 +321,7 @@ export function UsuariosTab({ colors, currentUser }: { colors: ThemeColors; curr
               {deleting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
               {deleting ? "Removendo..." : "Remover"}
             </Button>
-          </DialogFooter>
+          </DialogFooter> 
         </DialogContent>
       </Dialog>
     </div>

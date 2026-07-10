@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef } from "react";
 import { Building2, Hash, AtSign, Phone, MapPin, Globe, Loader2, Camera, Upload, ImageIcon } from "lucide-react";
 import { useAuth } from "@/context/authprovider";
 
-import { toast } from "sonner";
 import { api } from "@/services/axios";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -13,18 +12,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ThemeColors, FormInput, ReadonlyField, SaveButton, getLogoUrl } from "./ConfiguracoesComuns";
+import { ThemeColors, FormInput, ReadonlyField, SaveButton, getLogoUrl, WithToast } from "./ConfiguracoesComuns";
 
 const LogoUploader = ({
   colors,
   currentLogo,
   onUploaded,
   disabled,
+  showToast,
 }: {
   colors: ThemeColors;
   currentLogo?: string | null;
   onUploaded: (url: string) => void;
   disabled?: boolean;
+  showToast: (message: string, type: "success" | "error" | "warning" | "info", description?: string) => void;
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(getLogoUrl(currentLogo));
@@ -36,11 +37,11 @@ const LogoUploader = ({
 
   const handleFile = async (file: File) => {
     if (!file.type.startsWith("image/")) {
-      toast.error("Selecione uma imagem válida");
+      showToast("Erro", "error", "Selecione uma imagem válida");
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
-      toast.error("Imagem deve ter no máximo 2MB");
+      showToast("Erro", "error", "Imagem deve ter no máximo 2MB");
       return;
     }
 
@@ -57,9 +58,9 @@ const LogoUploader = ({
       });
       if (!response.data.success) throw new Error("Upload falhou");
       onUploaded(response.data.logo_url);
-      toast.success("Logo atualizado com sucesso!");
+      showToast("Sucesso", "success", "Logo atualizado com sucesso!");
     } catch {
-      toast.error("Erro ao fazer upload do logo");
+      showToast("Erro", "error", "Erro ao fazer upload do logo");
       setPreview(getLogoUrl(currentLogo));
     } finally {
       setUploading(false);
@@ -143,7 +144,11 @@ const LogoUploader = ({
   );
 };
 
-export function EmpresaTab({ colors }: { colors: ThemeColors }) {
+export interface EmpresaTabProps extends WithToast {
+  colors: ThemeColors;
+}
+
+export function EmpresaTab({ colors, showToast }: EmpresaTabProps) {
   const { user, logout, refreshUser } = useAuth();
   const empresa = user?.empresa;
 
@@ -190,7 +195,7 @@ export function EmpresaTab({ colors }: { colors: ThemeColors }) {
 
   const handleSubmit = async () => {
     if (empresa?.status === "suspenso") {
-      toast.error("Empresa suspensa — não é possível editar os dados.");
+      showToast("Erro", "error", "Empresa suspensa — não é possível editar os dados.");
       return;
     }
 
@@ -211,14 +216,14 @@ export function EmpresaTab({ colors }: { colors: ThemeColors }) {
 
       if (response.data.success) {
         await refreshUser();
-        toast.success("Dados da empresa atualizados com sucesso!");
+        showToast("Sucesso", "success", "Dados da empresa atualizados com sucesso!");
       } else {
-        toast.error("Resposta inválida do servidor");
+        showToast("Erro", "error", "Resposta inválida do servidor");
       }
     } catch (error: unknown) {
       const apiError = error as { response?: { data?: { message?: string } } };
       console.error(error);
-      toast.error(apiError.response?.data?.message || "Erro ao atualizar empresa");
+      showToast("Erro", "error", apiError.response?.data?.message || "Erro ao atualizar empresa");
     } finally {
       setLoading(false);
     }
@@ -226,7 +231,7 @@ export function EmpresaTab({ colors }: { colors: ThemeColors }) {
 
   const handleToggleStatus = async () => {
     if (!empresa?.id) {
-      toast.error("Empresa não identificada");
+      showToast("Erro", "error", "Empresa não identificada");
       return;
     }
 
@@ -234,14 +239,14 @@ export function EmpresaTab({ colors }: { colors: ThemeColors }) {
     try {
       const response = await api.patch(`/api/empresa/toggle-status/`);
 
-      toast.success(response.data.message);
+      showToast("Sucesso", "success", response.data.message);
       setShowConfirmDialog(false);
       setTimeout(async () => {
         await logout();
       }, 1500);
 
       if (response.data.redirect_to_login) {
-        toast.message("Empresa suspensa. A sessão será encerrada...");
+        showToast("Info", "info", "Empresa suspensa. A sessão será encerrada...");
       }
 
       await refreshUser();
@@ -254,15 +259,21 @@ export function EmpresaTab({ colors }: { colors: ThemeColors }) {
       };
 
       if (error.response?.status === 409) {
-        toast.error("Status foi alterado por outro utilizador. Recarregando...");
+        showToast("Erro", "error", "Status foi alterado por outro utilizador. Recarregando...");
         await refreshUser();
       } else {
         const msg = error.response?.data?.message;
-        toast.error(msg ?? "Erro ao alterar status da empresa");
+        showToast("Erro", "error", msg ?? "Erro ao alterar status da empresa");
       }
     } finally {
       setTogglingStatus(false);
     }
+  };
+
+  const handleLogoUploaded = async (url: string) => {
+    setForm((p) => ({ ...p, logo: url }));
+    await refreshUser();
+    showToast("Sucesso", "success", "Logo atualizado com sucesso!");
   };
 
   const empresaStatus = empresa?.status ?? "ativo";
@@ -334,11 +345,8 @@ export function EmpresaTab({ colors }: { colors: ThemeColors }) {
             colors={colors}
             currentLogo={form.logo}
             disabled={isSuspended}
-            onUploaded={async (url) => {
-              setForm((p) => ({ ...p, logo: url }));
-              await refreshUser();
-              toast.success("Logo atualizado com sucesso!");
-            }}
+            onUploaded={handleLogoUploaded}
+            showToast={showToast}
           />
         </CardContent>
       </Card>

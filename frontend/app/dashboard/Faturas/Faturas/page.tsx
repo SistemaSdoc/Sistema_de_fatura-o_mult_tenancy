@@ -306,7 +306,7 @@ export default function FaturasPage() {
                     setDropdownAberto(false);
                     return;
                   }
-                  router.push("/dashboard/Vendas/Nova_venda");
+                  router.push("/dashboard/Vendas");
                   setDropdownAberto(false);
                 }}
                 className="flex items-center gap-3 w-full px-4 py-3 text-sm transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 first:rounded-t last:rounded-b"

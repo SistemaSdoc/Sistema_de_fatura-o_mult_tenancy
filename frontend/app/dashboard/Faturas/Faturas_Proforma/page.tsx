@@ -330,28 +330,36 @@ export default function NovaFaturaProformaPage() {
   };
 
   // Filtrar itens baseado no tipo selecionado e na busca
-  const itensFiltrados = produtos.filter((p) => {
-    if (p.status !== "ativo") return false;
-    if (tipoItemSelecionado === "produto" && p.tipo !== "produto") return false;
-    if (tipoItemSelecionado === "servico" && p.tipo !== "servico") return false;
-    if (buscaItem.trim() === "") return true;
-    const buscaLower = buscaItem.toLowerCase();
-    return p.nome.toLowerCase().includes(buscaLower) || (p.codigo && p.codigo.toLowerCase().includes(buscaLower));
-  });
+const itensFiltrados = produtos.filter((p) => {
+  if (p.status !== "ativo") return false;
+  if (tipoItemSelecionado === "produto" && p.tipo !== "produto") return false;
+  if (tipoItemSelecionado === "servico" && p.tipo !== "servico") return false;
+
+  // esconde produtos (não serviços) sem stock
+  if (p.tipo === "produto" && p.estoque_atual <= 0) return false;
+
+  if (buscaItem.trim() === "") return true;
+  const buscaLower = buscaItem.toLowerCase();
+  return p.nome.toLowerCase().includes(buscaLower) || (p.codigo && p.codigo.toLowerCase().includes(buscaLower));
+});
 
   // Funcao para buscar produto por codigo
-  const buscarProdutoPorCodigo = (codigo: string) => {
-    if (!codigo.trim()) return null;
+const buscarProdutoPorCodigo = (codigo: string) => {
+  if (!codigo.trim()) return null;
 
-    let produto = produtos.find((p) => p.codigo === codigo.trim());
+  let produto = produtos.find((p) => p.codigo === codigo.trim());
 
-    if (!produto) {
-      produto = produtos.find((p) => p.codigo?.includes(codigo.trim()));
-    }
+  if (!produto) {
+    produto = produtos.find((p) => p.codigo?.includes(codigo.trim()));
+  }
 
-    return produto;
-  };
+  // ignora produto (não serviço) sem stock
+  if (produto && produto.tipo === "produto" && produto.estoque_atual <= 0) {
+    return null;
+  }
 
+  return produto;
+};
   // Funcao para adicionar item automaticamente ao carrinho
   const adicionarItemAutomaticamente = (produto: Produto, quantidade: number = 1) => {
     const idx = itens.findIndex((i) => i.produto_id === produto.id);

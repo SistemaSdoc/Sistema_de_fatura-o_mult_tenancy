@@ -838,9 +838,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                     {isMobile && (
                       <div
                         onClick={() => setNotificacoesAberto(false)}
-                        className={`fixed inset-0 z-40 transition-opacity duration-200 ${
-                          panelAnimating ? "opacity-0" : "opacity-100"
-                        }`}
+                        className={`fixed inset-0 z-40 transition-opacity duration-200 ${panelAnimating ? "opacity-0" : "opacity-100"}`}
                         style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }}
                         aria-hidden="true"
                       />
@@ -849,9 +847,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                     <div
                       className={`z-50 flex flex-col overflow-hidden border shadow-xl transition-all duration-200 ${
                         isMobile
-                          ? `fixed inset-x-0 bottom-0 ${
-                              panelAnimating ? "translate-y-full opacity-0" : "translate-y-0 opacity-100"
-                            }`
+                          ? `fixed inset-x-0 bottom-0 ${panelAnimating ? "translate-y-full opacity-0" : "translate-y-0 opacity-100"}`
                           : `absolute right-0 mt-2 ${panelAnimating ? "opacity-0 scale-95" : "opacity-100 scale-100"}`
                       }`}
                       style={{
@@ -986,9 +982,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                     </div>
 
                     {/* Catcher invisível para fechar ao clicar fora (apenas desktop, mobile já tem o overlay escuro acima) */}
-                    {!isMobile && (
-                      <div onClick={() => setNotificacoesAberto(false)} className="fixed inset-0 z-40" />
-                    )}
+                    {!isMobile && <div onClick={() => setNotificacoesAberto(false)} className="fixed inset-0 z-40" />}
                   </>
                 )}
               </div>
@@ -1069,36 +1063,40 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                       </div>
                     </div>
 
-                    {/* Menu Items */}
-                    <div className="py-1">
-                      <Link href="/dashboard/configuracoes" onClick={() => setUserMenuOpen(false)}>
-                        <div
-                          className="flex items-center gap-3 px-4 py-2.5 text-xs font-medium transition-all duration-200 hover:translate-x-1"
-                          style={{
-                            color: colors.text,
-                            backgroundColor: "transparent",
-                          }}>
-                          <User size={14} />
-                          <span>Perfil</span>
+                    {/* Menu Items - APENAS PARA ADMIN */}
+                    {userRole === "admin" && (
+                      <>
+                        <div className="py-1">
+                          <Link href="/dashboard/configuracoes" onClick={() => setUserMenuOpen(false)}>
+                            <div
+                              className="flex items-center gap-3 px-4 py-2.5 text-xs font-medium transition-all duration-200 hover:translate-x-1"
+                              style={{
+                                color: colors.text,
+                                backgroundColor: "transparent",
+                              }}>
+                              <User size={14} />
+                              <span>Perfil</span>
+                            </div>
+                          </Link>
+                          <Link href="/dashboard/configuracoes" onClick={() => setUserMenuOpen(false)}>
+                            <div
+                              className="flex items-center gap-3 px-4 py-2.5 text-xs font-medium transition-all duration-200 hover:translate-x-1"
+                              style={{
+                                color: colors.text,
+                                backgroundColor: "transparent",
+                              }}>
+                              <Settings size={14} />
+                              <span>Configurações</span>
+                            </div>
+                          </Link>
                         </div>
-                      </Link>
-                      <Link href="/dashboard/configuracoes" onClick={() => setUserMenuOpen(false)}>
-                        <div
-                          className="flex items-center gap-3 px-4 py-2.5 text-xs font-medium transition-all duration-200 hover:translate-x-1"
-                          style={{
-                            color: colors.text,
-                            backgroundColor: "transparent",
-                          }}>
-                          <Settings size={14} />
-                          <span>Configurações</span>
-                        </div>
-                      </Link>
-                    </div>
 
-                    {/* Divider */}
-                    <div style={{ borderColor: colors.border }} className="border-t" />
+                        {/* Divider - só aparece se for admin */}
+                        <div style={{ borderColor: colors.border }} className="border-t" />
+                      </>
+                    )}
 
-                    {/* Logout */}
+                    {/* Logout - aparece para todos */}
                     <div className="p-1">
                       <button
                         onClick={() => {

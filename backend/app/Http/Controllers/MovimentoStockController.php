@@ -271,7 +271,7 @@ class MovimentoStockController extends Controller
         $modo = $this->getModo();
         Log::info('[MovimentoStockController::store] Criando movimento manual', [
             'modo' => $modo,
-        ]);
+        ]); 
 
         try {
             $dados = $request->validate([
