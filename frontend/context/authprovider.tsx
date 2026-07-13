@@ -66,7 +66,7 @@ interface AuthContextData {
     login: (
         email: string,
         password: string,
-        redirectTo?: string // NOVO: destino opcional
+        redirectTo?: string
     ) => Promise<{ success: boolean; message?: string }>;
     logout: () => Promise<LogoutResult>;
     refreshUser: () => Promise<void>;
@@ -82,7 +82,6 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-// Rotas que NÃO precisam de autenticação (não chamam /me)
 const NO_AUTH_ROUTES = ["/", "/login", "/register", "/forgot-password", "/reset-password", "/auth/callback", "/onboarding"];
 
 const REQUIRED_BILLING_FIELDS = ["nif", "telefone", "endereco"] as const;
@@ -136,10 +135,7 @@ const shouldRedirectToConfiguracoes = (pathname: string | null, user: User | nul
   return hasIncompleteEmpresaConfig(user.empresa);
 };
 
-// Roles permitidas no sistema
 const ALLOWED_ROLES = ["admin", "gestor", "contablista", "operador"];
-
-// Mapa de redirecionamento por role (fallback)
 const REDIRECT_MAP: Record<string, string> = {
   admin: "/dashboard",
   gestor: "/dashboard/Produtos_servicos/Stock",
@@ -153,16 +149,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
 
-  // Ref para evitar fetch duplicado na montagem (React Strict Mode)
   const hasFetched = useRef(false);
 
-  // Verifica se a rota atual NÃO precisa de autenticação
   const isNoAuthRoute = pathname ? NO_AUTH_ROUTES.includes(pathname) : false;
 
   // ========== FETCH USER ==========
   const fetchUser = useCallback(async (): Promise<void> => {
     console.log("[AuthProvider] fetchUser iniciado");
+
+    if (isLoggingOut) {
+      console.log("[AuthProvider] fetchUser cancelado (logout em andamento)");
+      setLoading(false);
+      return;
+    }
 
     if (isNoAuthRoute) {
       setLoading(false);
@@ -179,13 +180,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
           empresa: response.data.empresa,
         };
 
-        // Verifica se a role é válida
         if (!ALLOWED_ROLES.includes(userData.role)) {
           console.warn("[AuthProvider] Role não reconhecida:", userData.role);
           setUser(null);
           clearTenant();
-
-          // Se não estiver na página de login, redireciona
           if (!isNoAuthRoute && pathname !== "/login") {
             router.replace("/login");
             toast.error(`Role "${userData.role}" não autorizada. Contacte o administrador.`);
@@ -223,8 +221,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
           router.replace("/login");
         }
       }
-    } catch (error) {
-      console.error("[AuthProvider] fetchUser falhou:", error);
+    } catch (error: any) {
+      if (error._silenced) {
+        console.log("[AuthProvider] Erro silenciado (400/401) – ignorado");
+      } else {
+        console.error("[AuthProvider] fetchUser falhou:", error);
+      }
       setUser(null);
       if (!isNoAuthRoute && pathname !== "/login") {
         router.replace("/login");
@@ -232,14 +234,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } finally {
       setLoading(false);
     }
-  }, [isNoAuthRoute, pathname, router]);
+  }, [isNoAuthRoute, pathname, router, isLoggingOut]);
 
   // ========== MOUNT / PATHNAME-CHANGE EFFECT ==========
   useEffect(() => {
-    // Rota pública: nunca marca hasFetched, apenas libera o loading.
-    // Isso permite que, ao navegar depois para uma rota protegida
-    // (ex: /auth/callback -> /dashboard), o fetchUser seja
-    // disparado normalmente, já com o tenant salvo.
     if (isNoAuthRoute) {
       setLoading(false);
       return;
@@ -257,10 +255,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setLoading(true);
 
       try {
-        // 1. CSRF cookie (Sanctum requirement)
         await authApi.getCsrf();
 
-        // 2. Login
         const response = await authApi.login(email, password);
         const data: LoginResponse = response.data;
 
@@ -272,14 +268,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
           throw new Error("Dados do usuário não retornados");
         }
 
-        // Verifica se a role é válida antes de prosseguir
         if (!ALLOWED_ROLES.includes(data.user.role)) {
           console.warn("[AuthProvider] Login com role inválida:", data.user.role);
           toast.error(`Role "${data.user.role}" não autorizada. Contacte o administrador.`);
           return { success: false, message: "Role não autorizada" };
         }
 
-        // 3. Persiste tenant
         if (data.empresa) {
           setTenant(data.empresa);
           console.log("[AuthProvider] Tenant guardado no login:", data.empresa.id);
@@ -287,7 +281,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
           console.warn("[AuthProvider] Login sem empresa!");
         }
 
-        // 4. Persiste user DIRETAMENTE
         const userData: User = {
           ...data.user,
           empresa: data.empresa,
@@ -300,12 +293,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
           name: userData.name,
         });
 
-        // Pequeno delay para garantir que cookies foram processados
         await new Promise((resolve) => setTimeout(resolve, 100));
 
-        // ========== REDIRECIONAMENTO POR ROLE ==========
         const destination = REDIRECT_MAP[userData.role] || "/dashboard";
-
         console.log("[AuthProvider] Redirecionando para:", {
           role: userData.role,
           destination,
@@ -332,7 +322,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // ========== LOGOUT ==========
   const logout = useCallback(async (): Promise<LogoutResult> => {
+    setIsLoggingOut(true);
     setLoading(true);
+
     let apiSuccess = false;
     let apiMessage = "";
 
@@ -346,14 +338,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
       console.warn("[AuthProvider]", apiMessage, error);
     }
 
-    // Sempre limpa estado local
+    // Limpa estado local
     setUser(null);
     clearTenant();
+    localStorage.removeItem("landlord_user");
+    sessionStorage.clear();
 
-    // Reset do ref para permitir novo fetch após próximo login
     hasFetched.current = false;
+    setIsLoggingOut(false);
 
+    // Redireciona para login
     router.replace("/login");
+
+    // Aguarda a página de login ser renderizada e recarrega para limpar completamente
+    setTimeout(() => {
+      window.location.reload();
+    }, 900);
 
     return {
       success: true,
@@ -364,12 +364,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // ========== REFRESH USER ==========
   const refreshUser = useCallback(async (): Promise<void> => {
     console.log("[AuthProvider] refreshUser chamado - Forçando atualização");
-
-    // Força re-fetch sempre que refreshUser for chamado
     hasFetched.current = false;
-    setUser(null); // ← Limpa temporariamente para forçar busca
+    setUser(null);
     setLoading(true);
-
     try {
       await fetchUser();
     } catch (error) {

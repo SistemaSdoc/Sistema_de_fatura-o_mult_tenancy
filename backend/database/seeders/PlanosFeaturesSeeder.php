@@ -101,7 +101,7 @@ class PlanosFeaturesSeeder extends Seeder
         }
 
         // ==========================================
-        // 2. PLANOS
+        // 2. PLANOS – Com limites mais generosos
         // ==========================================
         $planos = [
             // ─── EXPERIMENTAL (Grátis) ────────────────────────────
@@ -114,20 +114,20 @@ class PlanosFeaturesSeeder extends Seeder
                 'valor_anual'     => 0,
                 'duracao_meses'   => 1,
                 'features'        => [
-                    ['nome' => 'Gestão de Clientes',  'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Gestão de Produtos',  'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Documentos/mês',      'quantidade' => 20, 'unidade' => 'documentos'],
-                    ['nome' => 'Utilizadores',        'quantidade' => 1, 'unidade' => 'utilizador'],
-                    ['nome' => 'Suporte Técnico',     'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Envio por Email',     'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Versão Mobile',       'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'API',                 'quantidade' => 0, 'unidade' => null],
-                    ['nome' => 'Logótipo',            'quantidade' => 0, 'unidade' => null],
-                    ['nome' => 'Moeda Estrangeira',   'quantidade' => 0, 'unidade' => null],
-                    ['nome' => 'Impressão em Talões', 'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Relatórios Financeiros','quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Assinatura Digital',  'quantidade' => 0, 'unidade' => null],
-                    ['nome' => 'Exportação SAFT‑AO',  'quantidade' => 0, 'unidade' => null],
+                    ['nome' => 'Gestão de Clientes',      'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Gestão de Produtos',      'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Documentos/mês',          'quantidade' => 50, 'unidade' => 'documentos'], // ↑ 20 → 50
+                    ['nome' => 'Utilizadores',            'quantidade' => 1,  'unidade' => 'utilizador'],
+                    ['nome' => 'Suporte Técnico',         'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Envio por Email',         'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Versão Mobile',           'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'API',                     'quantidade' => 0,  'unidade' => null],
+                    ['nome' => 'Logótipo',                'quantidade' => 0,  'unidade' => null],
+                    ['nome' => 'Moeda Estrangeira',       'quantidade' => 0,  'unidade' => null],
+                    ['nome' => 'Impressão em Talões',     'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Relatórios Financeiros',  'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Assinatura Digital',      'quantidade' => 0,  'unidade' => null],
+                    ['nome' => 'Exportação SAFT‑AO',      'quantidade' => 0,  'unidade' => null],
                 ]
             ],
 
@@ -141,20 +141,20 @@ class PlanosFeaturesSeeder extends Seeder
                 'valor_anual'     => 69000,
                 'duracao_meses'   => 12,
                 'features'        => [
-                    ['nome' => 'Gestão de Clientes',  'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Gestão de Produtos',  'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Documentos/mês',      'quantidade' => 500, 'unidade' => 'documentos'],
-                    ['nome' => 'Utilizadores',        'quantidade' => 3, 'unidade' => 'utilizadores'],
-                    ['nome' => 'Suporte Técnico',     'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Envio por Email',     'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Versão Mobile',       'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'API',                 'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Logótipo',            'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Moeda Estrangeira',   'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Impressão em Talões', 'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Relatórios Financeiros','quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Assinatura Digital',  'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Exportação SAFT‑AO',  'quantidade' => 1, 'unidade' => null],
+                    ['nome' => 'Gestão de Clientes',      'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Gestão de Produtos',      'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Documentos/mês',          'quantidade' => 750, 'unidade' => 'documentos'], // ↑ 500 → 750
+                    ['nome' => 'Utilizadores',            'quantidade' => 3,  'unidade' => 'utilizadores'],
+                    ['nome' => 'Suporte Técnico',         'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Envio por Email',         'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Versão Mobile',           'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'API',                     'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Logótipo',                'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Moeda Estrangeira',       'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Impressão em Talões',     'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Relatórios Financeiros',  'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Assinatura Digital',      'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Exportação SAFT‑AO',      'quantidade' => 1,  'unidade' => null],
                 ]
             ],
 
@@ -168,20 +168,20 @@ class PlanosFeaturesSeeder extends Seeder
                 'valor_anual'     => 74900,
                 'duracao_meses'   => 12,
                 'features'        => [
-                    ['nome' => 'Gestão de Clientes',  'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Gestão de Produtos',  'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Documentos/mês',      'quantidade' => 750, 'unidade' => 'documentos'],
-                    ['nome' => 'Utilizadores',        'quantidade' => 5, 'unidade' => 'utilizadores'],
-                    ['nome' => 'Suporte Técnico',     'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Envio por Email',     'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Versão Mobile',       'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'API',                 'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Logótipo',            'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Moeda Estrangeira',   'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Impressão em Talões', 'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Relatórios Financeiros','quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Assinatura Digital',  'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Exportação SAFT‑AO',  'quantidade' => 1, 'unidade' => null],
+                    ['nome' => 'Gestão de Clientes',      'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Gestão de Produtos',      'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Documentos/mês',          'quantidade' => 1000, 'unidade' => 'documentos'], // ↑ 750 → 1000
+                    ['nome' => 'Utilizadores',            'quantidade' => 8,  'unidade' => 'utilizadores'], // ↑ 5 → 8
+                    ['nome' => 'Suporte Técnico',         'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Envio por Email',         'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Versão Mobile',           'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'API',                     'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Logótipo',                'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Moeda Estrangeira',       'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Impressão em Talões',     'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Relatórios Financeiros',  'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Assinatura Digital',      'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Exportação SAFT‑AO',      'quantidade' => 1,  'unidade' => null],
                 ]
             ],
 
@@ -195,20 +195,20 @@ class PlanosFeaturesSeeder extends Seeder
                 'valor_anual'     => 82600,
                 'duracao_meses'   => 12,
                 'features'        => [
-                    ['nome' => 'Gestão de Clientes',  'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Gestão de Produtos',  'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Documentos/mês',      'quantidade' => 1000, 'unidade' => 'documentos'],
-                    ['nome' => 'Utilizadores',        'quantidade' => 10, 'unidade' => 'utilizadores'],
-                    ['nome' => 'Suporte Técnico',     'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Envio por Email',     'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Versão Mobile',       'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'API',                 'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Logótipo',            'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Moeda Estrangeira',   'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Impressão em Talões', 'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Relatórios Financeiros','quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Assinatura Digital',  'quantidade' => 1, 'unidade' => null],
-                    ['nome' => 'Exportação SAFT‑AO',  'quantidade' => 1, 'unidade' => null],
+                    ['nome' => 'Gestão de Clientes',      'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Gestão de Produtos',      'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Documentos/mês',          'quantidade' => 1500, 'unidade' => 'documentos'], // ↑ 1000 → 1500
+                    ['nome' => 'Utilizadores',            'quantidade' => 15, 'unidade' => 'utilizadores'], // ↑ 10 → 15
+                    ['nome' => 'Suporte Técnico',         'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Envio por Email',         'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Versão Mobile',           'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'API',                     'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Logótipo',                'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Moeda Estrangeira',       'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Impressão em Talões',     'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Relatórios Financeiros',  'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Assinatura Digital',      'quantidade' => 1,  'unidade' => null],
+                    ['nome' => 'Exportação SAFT‑AO',      'quantidade' => 1,  'unidade' => null],
                 ]
             ],
         ];

@@ -821,35 +821,39 @@ public function me(Request $request): JsonResponse
     ]);
 }
 
-    /**
-     * LOGOUT DO USUÁRIO (mantém dados do tenant na sessão)
-     */
 public function logout(Request $request): JsonResponse
 {
-    $tenantId   = session('tenant_id');
-    $tenantDb   = session('tenant_db');
-    $tenantNome = session('tenant_nome');
-    $tenantModo = session('tenant_modo');
+    Log::info('[AUTH] Logout iniciado', ['user_id' => Auth::guard('landlord')->id()]);
 
+    // Desloga do guard
     Auth::guard('landlord')->logout();
-    Auth::guard('landlord_api')->logout(); // <- faltava isso
 
-    $request->session()->invalidate();       // <- mata a sessão de fato
-    $request->session()->regenerateToken();  // <- novo CSRF
+    // Invalida a sessão completamente
+    $request->session()->invalidate();
 
-    if ($tenantId) {
-        session([
-            'tenant_id'   => $tenantId,
-            'tenant_db'   => $tenantDb,
-            'tenant_nome' => $tenantNome,
-            'tenant_modo' => $tenantModo,
-        ]);
-    }
+    // Regenera o token CSRF
+    $request->session()->regenerateToken();
+
+    // Opcional: limpar todas as variáveis de sessão relacionadas a tenant
+    session()->forget([
+        'tenant_id',
+        'tenant_db',
+        'tenant_nome',
+        'tenant_modo',
+        'user_id',
+        'user_email',
+        'login_at',
+        'login_modo',
+        'landlord_user_id',
+    ]);
+
+    Log::info('[AUTH] Logout completo - sessão destruída', [
+        'session_id' => $request->session()->getId(),
+    ]);
 
     return response()->json([
         'success' => true,
-        'message' => 'Logout realizado',
-        'tenant_id' => $tenantId,
+        'message' => 'Logout realizado com sucesso',
     ]);
 }
 

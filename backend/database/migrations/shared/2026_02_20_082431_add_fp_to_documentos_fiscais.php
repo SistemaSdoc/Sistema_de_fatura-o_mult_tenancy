@@ -18,7 +18,7 @@ return new class extends Migration
             'FR',   -- Fatura-Recibo
             'FP',   -- Fatura Proforma (NOVO)
             'FA',   -- Fatura de Adiantamento
-            'NC',   -A- Nota de Crédito
+            'NC',   -- Nota de Crédito
             'ND',   -- Nota de Débito
             'RC',   -- Recibo
             'FRt'   -- Fatura de Retificação
