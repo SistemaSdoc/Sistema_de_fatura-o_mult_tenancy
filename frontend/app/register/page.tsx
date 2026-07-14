@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { useThemeColors } from "@/context/ThemeContext";
 import { api } from "@/services/axios";
@@ -35,6 +35,7 @@ import {
     Server,
     Users,
 } from "lucide-react";
+import { planosService } from "@/services/planos";
 
 // --- Tipagem local do tema ---
 interface ThemeColors {
@@ -250,6 +251,9 @@ const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, on
 
 export default function RegisterCompanyPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const planoId = searchParams.get('plano_id');
+
     const colors = useThemeColors() as ThemeColors;
 
     const [step, setStep] = useState(1);
@@ -452,13 +456,38 @@ export default function RegisterCompanyPage() {
                 admin_name: form.admin_name,
                 admin_email: form.admin_email,
                 admin_password: form.admin_password,
+                plano_id: planoId || undefined,
             };
 
             await api.post("/api/empresas", submitData);
 
-            showToast(" Empresa criada com sucesso! Redirecionando para o login...", "success");
-
-            setTimeout(() => router.push("/login"), 3000);
+            // ============================================================
+            // REDIRECIONAMENTO INTELIGENTE
+            // ============================================================
+            if (planoId) {
+                try {
+                    // Buscar o plano para saber se é gratuito ou pago
+                    const plano = await planosService.buscarPorId(planoId);
+                    if (plano && plano.valor_mensal === 0) {
+                        // Plano gratuito → dashboard (subscrição já criada)
+                        showToast('Empresa criada e subscrição experimental ativada! Redirecionando para o dashboard...', 'success');
+                        setTimeout(() => router.push('/dashboard'), 2000);
+                    } else {
+                        // Plano pago → checkout para finalizar pagamento
+                        showToast('Empresa criada com sucesso! Redirecionando para o checkout...', 'success');
+                        setTimeout(() => router.push(`/checkout?plano_id=${planoId}`), 2000);
+                    }
+                } catch (error) {
+                    // Fallback: se não conseguir buscar o plano, assume pago
+                    console.error('Erro ao buscar plano:', error);
+                    showToast(' Empresa criada com sucesso! Redirecionando para o checkout...', 'success');
+                    setTimeout(() => router.push(`/checkout?plano_id=${planoId}`), 2000);
+                }
+            } else {
+                // Sem plano → login
+                showToast(' Empresa criada com sucesso! Redirecionando para o login...', 'success');
+                setTimeout(() => router.push('/login'), 3000);
+            }
         } catch (err: unknown) {
             let errorMessage = "Erro ao criar empresa. Verifique os dados e tente novamente.";
             if (err instanceof AxiosError && err.response?.data?.message) {
@@ -466,7 +495,7 @@ export default function RegisterCompanyPage() {
             } else if (err instanceof Error) {
                 errorMessage = err.message;
             }
-            showToast(` ${errorMessage}`, "error");
+            showToast(`❌ ${errorMessage}`, "error");
         } finally {
             setLoading(false);
             setUploadingLogo(false);

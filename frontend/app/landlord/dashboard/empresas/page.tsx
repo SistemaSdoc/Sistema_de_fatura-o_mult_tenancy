@@ -24,6 +24,7 @@ import {
     Phone,
     Globe,
     Hash,
+    ClipboardCheck, 
 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
@@ -38,6 +39,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { pagamentoService } from '@/services/pagamentosplanos';
 
 interface Empresa {
     id: string;
@@ -71,6 +73,7 @@ export default function EmpresasDashboard() {
     const [showStatusDialog, setShowStatusDialog] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(10);
+    const [pendingCount, setPendingCount] = useState<number | null>(null);
 
     // Redirecionar se não for super admin
     useEffect(() => {
@@ -133,6 +136,8 @@ export default function EmpresasDashboard() {
 
     useEffect(() => {
         if (user) fetchEmpresas();
+        
+        fetchPendingCount();
     }, [user]);
 
     // Filtros e busca
@@ -155,6 +160,16 @@ export default function EmpresasDashboard() {
         setFilteredEmpresas(filtered);
         setCurrentPage(1);
     }, [searchTerm, statusFilter, empresas]);
+
+
+    const fetchPendingCount = async () => {
+    try {
+        const response = await pagamentoService.listar({ status: 'em_analise' });
+        setPendingCount(response.pagamentos?.length || 0);
+    } catch (error) {
+        // Silêncio – não quebra a página
+    }
+};
 
     // Paginação
     const totalPages = Math.ceil(filteredEmpresas.length / itemsPerPage);
@@ -276,6 +291,66 @@ export default function EmpresasDashboard() {
 
              
             </div>
+
+            <div
+    className="relative transition-all duration-300 hover:scale-[1.02] hover:shadow-xl overflow-hidden cursor-pointer"
+    style={{
+        backgroundColor: colors.card,
+        border: `1px solid ${colors.border}`,
+    }}
+    onClick={() => router.push('/landlord/pagamentos/pendentes')}
+>
+    <div
+        className="absolute left-0 top-0 bottom-0 w-1"
+        style={{ backgroundColor: colors.warning || '#f59e0b' }}
+    />
+    <div className="p-5 sm:p-6">
+        <div className="flex items-center justify-between">
+            <div>
+                <p
+                    className="text-sm font-medium"
+                    style={{ color: colors.textSecondary }}
+                >
+                    Pagamentos Pendentes
+                </p>
+                <p
+                    className="text-3xl font-bold mt-1"
+                    style={{ color: colors.warning || '#f59e0b' }}
+                >
+                    {pendingCount !== null ? pendingCount : '...'}
+                </p>
+            </div>
+            <div
+                className="p-3 rounded-full"
+                style={{
+                    backgroundColor: `${colors.warning || '#f59e0b'}15`,
+                }}
+            >
+                <ClipboardCheck
+                    size={24}
+                    style={{ color: colors.warning || '#f59e0b' }}
+                />
+            </div>
+        </div>
+        <div className="mt-3">
+            <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs"
+                style={{
+                    borderColor: colors.border,
+                    color: colors.text,
+                }}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    router.push('/landlord/pagamentos/pendentes');
+                }}
+            >
+                Ver pendentes
+            </Button>
+        </div>
+    </div>
+</div>
 
             {/* Cards de resumo */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">

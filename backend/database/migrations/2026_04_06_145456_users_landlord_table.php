@@ -19,6 +19,7 @@ return new class extends Migration
         Schema::create('users_landlord', function (Blueprint $table) {
             $table->uuid('id')->primary();
             
+
             // 🔗 Opcional: link para empresa se for admin específico de uma empresa
             // Null = super admin (acessa tudo)
             $table->uuid('empresa_id')->nullable();

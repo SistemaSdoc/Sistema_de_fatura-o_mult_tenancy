@@ -3,26 +3,27 @@
 import React, { ReactNode, useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
-  Home,
-  FileText,
-  Users,
-  BarChart2,
-  LogOut,
-  ChevronDown,
-  Package,
-  Archive,
-  Truck,
-  ChevronLeft,
-  Settings,
-  Bell,
-  Loader2,
-  X,
-  Sun,
-  Moon,
-  Menu,
-  AlertCircle,
-  TrendingDown,
-  User,
+    Home,
+    FileText,
+    Users,
+    BarChart2,
+    LogOut,
+    ChevronDown,
+    Package,
+    Archive,
+    Truck,
+    ChevronLeft,
+    Settings,
+    Bell,
+    Loader2,
+    X,
+    Sun,
+    Moon,
+    Menu,
+    AlertCircle,
+    TrendingDown,
+    User,
+    HelpCircle,
 } from "lucide-react";
 import { LucideIcon } from "lucide-react";
 import Image from "next/image";
@@ -135,22 +136,21 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
   const getAllowedRoutesForRole = useCallback((role: string): string[] => {
     switch (role) {
       case "admin":
-        return ["/dashboard"];
+        return ["/dashboard" , "/dashboard/ajuda"];
       case "operador":
         return [
-          "/dashboard/Vendas",
           "/dashboard/Vendas",
           "/dashboard/Faturas/Fatura_Normal",
           "/dashboard/Faturas/Faturas_Proforma",
           "/dashboard/Faturas/Faturas",
           "/dashboard/Faturas/DC",
+          "/dashboard/ajuda",
         ];
       case "contablista":
         return ["/dashboard", "/dashboard/relatorios"];
       case "gestor":
         return [
           "/dashboard/Vendas",
-          "/dashboard/Vendas/",
           "/dashboard/Faturas/Fatura_Normal",
           "/dashboard/Faturas/Faturas_Proforma",
           "/dashboard/Faturas/Faturas",
@@ -525,6 +525,13 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
       path: "/dashboard/configuracoes",
       links: [],
       roles: ["admin"],
+    },
+    {
+      label: "Ajuda",
+      icon: HelpCircle,
+      path: "/dashboard/ajuda",
+      links: [],
+      roles: ["admin", "gestor","operador","contablista"],
     },
   ];
 

@@ -6,8 +6,20 @@ import { Facebook, Instagram, Linkedin, Sun, Moon } from "lucide-react";
 import EmpresasSection from "./components/EmpresasSection";
 import { HelpCircle, Headset, FileText, ShieldCheck, BookOpenCheck } from "lucide-react";
 import { useThemeColors, useTheme } from "@/context/ThemeContext";
+import { planosService } from '@/services/planos';
+import { featuresService } from '@/services/features';
 
-// Tipos para os componentes
+// ====================================================
+// TIPOS
+// ====================================================
+interface Feature {
+  id: string;
+  nome: string;
+  descricao: string;
+  icone: string;
+  ativo: boolean;
+}
+
 interface ThemeColors {
   background: string;
   card: string;
@@ -51,20 +63,30 @@ interface FAQItemProps {
 
 interface PricingCardProps {
   plan: {
+    id: string;
     name: string;
     price: string;
     interval: string;
+    precoTrimestral: string | null;
+    precoSemestral: string | null;
+    precoAnual: string | null;
     isPopular: boolean;
     features: string[];
+    valor_mensal: number;
+    valor_trimestral: number | null;
+    valor_semestral: number | null;
+    valor_anual: number | null;
   };
   index: number;
   colors: ThemeColors;
+  periodo: 'mensal' | 'trimestral' | 'semestral' | 'anual';
 }
 
-// Botão de Toggle do Tema
+// ====================================================
+// COMPONENTES AUXILIARES
+// ====================================================
 const ThemeToggleButton = () => {
   const { theme, toggleTheme } = useTheme();
-
   return (
     <button
       type="button"
@@ -83,7 +105,6 @@ const ThemeToggleButton = () => {
   );
 };
 
-// Componente de Animação - MODIFICADO para animar apenas UMA VEZ
 const AnimatedSection: React.FC<AnimatedSectionProps> = ({ children, animation = "fade-up", delay = 0, threshold = 0.1 }) => {
   const [hasAnimated, setHasAnimated] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -92,25 +113,20 @@ const AnimatedSection: React.FC<AnimatedSectionProps> = ({ children, animation =
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
-        // Se já animou, não faz mais nada
         if (hasAnimated) return;
-
         if (entry.isIntersecting && !hasAnimated) {
           setIsVisible(true);
-          setHasAnimated(true); // Marca como já animado para nunca mais voltar
+          setHasAnimated(true);
         }
       },
-      { threshold: threshold }
+      { threshold }
     );
 
     if (ref.current) {
       observer.observe(ref.current);
     }
-
     return () => {
-      if (ref.current) {
-        observer.unobserve(ref.current);
-      }
+      if (ref.current) observer.unobserve(ref.current);
     };
   }, [threshold, hasAnimated]);
 
@@ -127,7 +143,6 @@ const AnimatedSection: React.FC<AnimatedSectionProps> = ({ children, animation =
     animationClasses = isVisible ? "opacity-100 translate-x-0" : "opacity-0 translate-x-10";
   }
 
-  // Se já animou, força a classe final para manter visível
   const finalClasses =
     hasAnimated && !isVisible
       ? animation === "fade-up"
@@ -148,7 +163,6 @@ const AnimatedSection: React.FC<AnimatedSectionProps> = ({ children, animation =
   );
 };
 
-// Ícone de Visto
 const CheckIcon: React.FC<{ color: string }> = ({ color }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -162,19 +176,16 @@ const CheckIcon: React.FC<{ color: string }> = ({ color }) => (
   </svg>
 );
 
-// Ícone de Factura
 const InvoiceIcon: React.FC<{ sizeClass?: string }> = ({ sizeClass = "w-12 h-12" }) => (
   <img src="/images/3.png" alt="Invoice Icon" className={sizeClass} />
 );
 
-// Ícone de Menu
 const MenuIcon: React.FC = () => (
   <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16m-7 6h7" />
   </svg>
 );
 
-// Componente Cartão de Funcionalidade
 const FeatureCard: React.FC<FeatureCardProps> = ({ Icon = () => <CheckIcon color="#F9941F" />, title, description, delay = 0, colors }) => (
   <AnimatedSection animation="fade-up" delay={delay}>
     <div
@@ -196,7 +207,6 @@ const FeatureCard: React.FC<FeatureCardProps> = ({ Icon = () => <CheckIcon color
   </AnimatedSection>
 );
 
-// Componente Cartão de Passo do Processo
 const StepCard: React.FC<StepCardProps> = ({ number, title, description, delay = 0, colors }) => (
   <AnimatedSection animation="fade-up" delay={delay}>
     <div
@@ -218,7 +228,6 @@ const StepCard: React.FC<StepCardProps> = ({ number, title, description, delay =
   </AnimatedSection>
 );
 
-// Componente Visual Grande para a Secção Hero
 const HeroVisual: React.FC<{ colors: ThemeColors }> = ({ colors }) => (
   <AnimatedSection animation="slide-left" delay={500} threshold={0.1}>
     <div
@@ -229,10 +238,8 @@ const HeroVisual: React.FC<{ colors: ThemeColors }> = ({ colors }) => (
   </AnimatedSection>
 );
 
-// Componente Acordeão FAQ
 const FAQItem: React.FC<FAQItemProps> = ({ question, answer, index, colors }) => {
   const [isOpen, setIsOpen] = useState(false);
-
   return (
     <AnimatedSection animation="fade-up" delay={index * 100}>
       <div className="border-b" style={{ borderColor: colors.border }}>
@@ -253,8 +260,42 @@ const FAQItem: React.FC<FAQItemProps> = ({ question, answer, index, colors }) =>
   );
 };
 
-// Componente Cartão do Plano de Preços
-const PricingCard: React.FC<PricingCardProps> = ({ plan, index, colors }) => {
+// ====================================================
+// PRICING CARD COM SELETOR DE PERÍODO
+// ====================================================
+const PricingCard: React.FC<PricingCardProps> = ({ plan, index, colors, periodo }) => {
+  const getPreco = () => {
+    switch (periodo) {
+      case 'trimestral':
+        return plan.valor_trimestral !== null && plan.valor_trimestral !== undefined 
+          ? plan.valor_trimestral 
+          : plan.valor_mensal * 3;
+      case 'semestral':
+        return plan.valor_semestral !== null && plan.valor_semestral !== undefined
+          ? plan.valor_semestral
+          : plan.valor_mensal * 6;
+      case 'anual':
+        return plan.valor_anual !== null && plan.valor_anual !== undefined
+          ? plan.valor_anual
+          : plan.valor_mensal * 12;
+      default:
+        return plan.valor_mensal;
+    }
+  };
+
+  const getIntervalo = () => {
+    switch (periodo) {
+      case 'trimestral': return '/trimestre';
+      case 'semestral': return '/semestre';
+      case 'anual': return '/ano';
+      default: return '/mês';
+    }
+  };
+
+  const preco = getPreco();
+  const precoFormatado = `${Number(preco).toLocaleString('pt-AO')} KZ`;
+  const intervalo = getIntervalo();
+
   const buttonStyle = {
     backgroundColor: "white",
     color: colors.primary,
@@ -269,6 +310,10 @@ const PricingCard: React.FC<PricingCardProps> = ({ plan, index, colors }) => {
     transform: "scale(1.05)",
   };
 
+  const href = plan.name === "Experimental" || plan.name === "Grátis" 
+    ? `/register?plano_id=${plan.id}` 
+    : `/dashboard/checkout?plano_id=${plan.id}&periodo=${periodo}`;
+
   return (
     <AnimatedSection animation="fade-up" delay={index * 100} threshold={0.2}>
       <div
@@ -280,16 +325,10 @@ const PricingCard: React.FC<PricingCardProps> = ({ plan, index, colors }) => {
         <h3 className="mb-4 text-2xl font-semibold" style={{ color: colors.text }}>
           {plan.name}
         </h3>
-
         <div className="flex justify-center items-baseline my-4">
-          <span className="text-5xl font-extrabold" style={{ color: colors.text }}>
-            {plan.price}
-          </span>
-          <span className="text-xl font-medium" style={{ color: colors.textSecondary }}>
-            {plan.interval}
-          </span>
+          <span className="text-5xl font-extrabold" style={{ color: colors.text }}>{precoFormatado}</span>
+          <span className="text-xl font-medium" style={{ color: colors.textSecondary }}>{intervalo}</span>
         </div>
-
         <ul className="space-y-3 text-left mb-8 grow">
           {plan.features.map((feature, idx) => (
             <li key={idx} className="flex items-start">
@@ -300,14 +339,14 @@ const PricingCard: React.FC<PricingCardProps> = ({ plan, index, colors }) => {
             </li>
           ))}
         </ul>
-
         <Link
-          href="/register"
+          href={href}
           className="mt-auto cursor-pointer inline-block text-center px-8 py-3 rounded-full font-semibold transition duration-300 ease-in-out transform hover:scale-[1.05]"
           style={buttonStyle}
-          onMouseOver={(e) => Object.assign(e.currentTarget.style, buttonHoverStyle)}
-          onMouseOut={(e) => Object.assign(e.currentTarget.style, buttonStyle)}>
-          {plan.name === "Grátis" ? "Experimente Agora" : "Assinar"}
+          onMouseOver={e => Object.assign(e.currentTarget.style, buttonHoverStyle)}
+          onMouseOut={e => Object.assign(e.currentTarget.style, buttonStyle)}
+        >
+          {plan.name === "Experimental" || plan.name === "Grátis" ? "Experimente Agora" : "Assinar"}
         </Link>
       </div>
     </AnimatedSection>
@@ -380,43 +419,6 @@ const faqData = [
   },
 ];
 
-const pricingPlans = [
-  {
-    name: "Grátis",
-    price: "0 KZ",
-    interval: "/mês",
-    isPopular: false,
-    features: ["Facturação ilimitada", "Acesso a todo tipo de utilizador", "Gestáo de usuários", " Exportação de Saf-t", "Com relatórios"],
-  },
-  {
-    name: "Essencial",
-    price: "19.000 KZ",
-    interval: "/mês",
-    isPopular: true,
-    features: [
-      "Facturação ilimitada",
-      "Até 3 utilizadores",
-      "Suporte prioritário",
-      "Gestão de clientes avançada",
-      "Relatórios detalhados (trimestrais)",
-    ],
-  },
-  {
-    name: "Pro",
-    price: "39.000 KZ",
-    interval: "/mês",
-    isPopular: false,
-    features: ["Tudo no Essencial", "Até 5 utilizadores", "Monitorização de pagamentos", "Relatórios avançados "],
-  },
-  {
-    name: "Empresa",
-    price: "149.000 KZ",
-    interval: "/mês",
-    isPopular: false,
-    features: ["Tudo no Premium", "Utilizadores ilimitados", "Formação personalizada"],
-  },
-];
-
 const navLinks = [
   { name: "Funcionalidades", id: "funcionalidades" },
   { name: "Processo", id: "processo" },
@@ -424,9 +426,106 @@ const navLinks = [
   { name: "FAQ", id: "faq" },
 ];
 
+// ====================================================
+// COMPONENTE PRINCIPAL
+// ====================================================
 export default function App() {
   const colors = useThemeColors();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  // Estados para planos
+  const [planos, setPlanos] = useState<any[]>([]);
+  const [loadingPlanos, setLoadingPlanos] = useState(true);
+  const [errorPlanos, setErrorPlanos] = useState<string | null>(null);
+
+  // Estados para features
+  const [features, setFeatures] = useState<Feature[]>([]);
+  const [loadingFeatures, setLoadingFeatures] = useState(true);
+  const [errorFeatures, setErrorFeatures] = useState<string | null>(null);
+
+  // Estado para período selecionado
+  const [periodo, setPeriodo] = useState<'mensal' | 'trimestral' | 'semestral' | 'anual'>('mensal');
+
+  // ⭐ Encontrar o plano gratuito (Experimental)
+  const planoGratuito = planos.find(
+    (p) => p.valor_mensal === 0 || p.name?.toLowerCase() === 'experimental'
+  );
+
+  // ⭐ Link para registo com plano gratuito (se existir)
+  const registerLink = planoGratuito
+    ? `/register?plano_id=${planoGratuito.id}`
+    : '/register';
+
+  // Buscar planos
+  useEffect(() => {
+    const fetchPlanos = async () => {
+      try {
+        const data = await planosService.listarAtivos();
+        console.log('📦 Planos recebidos:', JSON.stringify(data, null, 2));
+
+        const planosFormatados = data.map((plano: any) => ({
+          id: plano.id,
+          name: plano.nome,
+          price: `${Number(plano.valor_mensal).toLocaleString('pt-AO')} KZ`,
+          interval: '/mês',
+          valor_mensal: plano.valor_mensal,
+          valor_trimestral: plano.valor_trimestral || null,
+          valor_semestral: plano.valor_semestral || null,
+          valor_anual: plano.valor_anual || null,
+          precoTrimestral: plano.valor_trimestral ? `${Number(plano.valor_trimestral).toLocaleString('pt-AO')} KZ` : null,
+          precoSemestral: plano.valor_semestral ? `${Number(plano.valor_semestral).toLocaleString('pt-AO')} KZ` : null,
+          precoAnual: plano.valor_anual ? `${Number(plano.valor_anual).toLocaleString('pt-AO')} KZ` : null,
+          isPopular: plano.nome === 'Pro' || plano.nome === 'Empresa',
+          features: plano.features.map((f: any) => {
+            let featureText = f.nome;
+            if (f.pivot?.quantidade && f.pivot?.quantidade > 0) {
+              const qtd = f.pivot.quantidade === 0 ? 'Ilimitados' : f.pivot.quantidade;
+              const unidade = f.pivot.unidade || '';
+              featureText = `${qtd} ${unidade} ${f.nome}`;
+            }
+            return featureText;
+          }),
+        }));
+        setPlanos(planosFormatados);
+      } catch (err) {
+        console.error('Erro ao buscar planos:', err);
+        setErrorPlanos('Não foi possível carregar os planos.');
+      } finally {
+        setLoadingPlanos(false);
+      }
+    };
+    fetchPlanos();
+  }, []);
+
+  // Buscar features
+  useEffect(() => {
+    const fetchFeatures = async () => {
+      try {
+        console.log('🔄 A buscar features...');
+        const data = await featuresService.listarAtivas();
+        console.log('📦 Resposta bruta da API:', data);
+
+        if (!Array.isArray(data)) {
+          console.error('❌ A resposta NÃO é um array! É:', typeof data);
+          setErrorFeatures('Resposta inválida da API.');
+          return;
+        }
+
+        console.log('✅ É um array com', data.length, 'itens.');
+
+        const ativas = data.filter(f => f.ativo === true || f.ativo === 1);
+        console.log('🔎 Features ativas:', ativas);
+
+        setFeatures(ativas);
+      } catch (err) {
+        console.error('❌ Erro no fetch:', err);
+        setErrorFeatures('Não foi possível carregar as funcionalidades.');
+      } finally {
+        setLoadingFeatures(false);
+      }
+    };
+    fetchFeatures();
+  }, []);
 
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
@@ -447,13 +546,7 @@ export default function App() {
           font-family: "Inter", sans-serif;
         }
         .animated-gradient-section {
-          background: linear-gradient(
-            -30deg,
-            ${FOOTER_GRADIENT_START},
-            ${FOOTER_GRADIENT_END},
-            ${FOOTER_GRADIENT_MID},
-            ${FOOTER_GRADIENT_START}
-          );
+          background: linear-gradient(-30deg, ${FOOTER_GRADIENT_START}, ${FOOTER_GRADIENT_END}, ${FOOTER_GRADIENT_MID}, ${FOOTER_GRADIENT_START});
           background-size: 400% 400%;
           animation: gradientShift 25s ease infinite;
         }
@@ -470,7 +563,7 @@ export default function App() {
         }
       `}</style>
 
-      {/* Header */}
+      {/* HEADER */}
       <header className="sticky top-0 z-50 shadow-lg" style={{ backgroundColor: colors.card }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <div className="flex items-center space-x-2 cursor-pointer" onClick={() => scrollToSection("topo")}>
@@ -479,7 +572,6 @@ export default function App() {
               Fatura<span style={{ color: colors.secondary }}>Já</span>
             </h1>
           </div>
-
           <nav className="hidden lg:flex items-center space-x-4">
             {navLinks.map((link) => (
               <button
@@ -499,13 +591,12 @@ export default function App() {
               Entrar
             </Link>
             <Link
-              href="/register"
+              href={registerLink} // Link dinâmico com plano gratuito
               className="px-4 py-2 rounded-full font-semibold text-sm transition duration-300 ease-in-out transform hover:scale-[1.05]"
               style={{ backgroundColor: colors.secondary, color: "white" }}>
               Cadastro
             </Link>
           </nav>
-
           <div className="lg:hidden flex items-center gap-2">
             <ThemeToggleButton />
             <button
@@ -533,19 +624,18 @@ export default function App() {
               </button>
             ))}
             <Link
-              href="/login"
+              href="/login" //  Link dinâmico com plano gratuito
               onClick={() => setIsMenuOpen(false)}
               className="w-full text-center py-2 px-4 text-sm cursor-pointer mt-2 block rounded-full font-semibold"
               style={{ backgroundColor: colors.primary, color: "white" }}>
-              Entrar
+              Login
             </Link>
           </div>
         </div>
       </header>
 
-      {/* Conteúdo Principal */}
       <main>
-        {/* Hero Section */}
+        {/* HERO */}
         <section id="topo" className="pt-20 pb-16 md:py-32" style={{ backgroundColor: colors.background }}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
@@ -565,7 +655,7 @@ export default function App() {
                 <AnimatedSection animation="fade-up" delay={400}>
                   <div className="flex flex-col sm:flex-row justify-center lg:justify-start gap-4">
                     <Link
-                      href="/register"
+                      href={registerLink} //  Link dinâmico com plano gratuito
                       className="group relative px-8 py-3.5 rounded-full font-bold text-white transition-all duration-300 transform hover:scale-105 hover:shadow-xl overflow-hidden"
                       style={{ backgroundColor: colors.primary }}>
                       <span className="relative z-10 flex items-center gap-2">Comece a faturar</span>
@@ -585,7 +675,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* Funcionalidades */}
+        {/* FUNCIONALIDADES */}
         <section id="funcionalidades" className="py-16 md:py-24" style={{ backgroundColor: colors.card }}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <AnimatedSection animation="fade-up">
@@ -596,22 +686,39 @@ export default function App() {
                 Tudo o que precisa para começar a facturar de forma simples, segura e eficiente.
               </p>
             </AnimatedSection>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-              {allFeaturesData.map((feature, index) => (
-                <FeatureCard
-                  key={index}
-                  Icon={() => <CheckIcon color={colors.secondary} />}
-                  title={feature.title}
-                  description={feature.description}
-                  delay={index * 100}
-                  colors={colors}
-                />
-              ))}
-            </div>
+
+            {loadingFeatures ? (
+              <div className="text-center py-10">
+                <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2" style={{ borderColor: colors.primary }}></div>
+                <p className="mt-4" style={{ color: colors.textSecondary }}>Carregando funcionalidades...</p>
+              </div>
+            ) : errorFeatures ? (
+              <div className="text-center py-10 text-red-500">
+                <p>{errorFeatures}</p>
+                <button onClick={() => window.location.reload()} className="mt-4 px-6 py-2 rounded-full text-white" style={{ backgroundColor: colors.primary }}>Tentar novamente</button>
+              </div>
+            ) : features.length === 0 ? (
+              <div className="text-center py-10" style={{ color: colors.textSecondary }}>
+                Nenhuma funcionalidade disponível no momento.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+                {features.map((feature, index) => (
+                  <FeatureCard
+                    key={feature.id}
+                    Icon={() => <CheckIcon color={colors.secondary} />}
+                    title={feature.nome}
+                    description={feature.descricao || ''}
+                    delay={index * 100}
+                    colors={colors}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </section>
 
-        {/* Processo */}
+        {/* PROCESSO */}
         <section id="processo" className="py-16 md:py-24" style={{ backgroundColor: colors.hover }}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <AnimatedSection animation="fade-up">
@@ -621,20 +728,13 @@ export default function App() {
             </AnimatedSection>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-9">
               {processSteps.map((step, index) => (
-                <StepCard
-                  key={index}
-                  number={step.number}
-                  title={step.title}
-                  description={step.description}
-                  delay={index * 200}
-                  colors={colors}
-                />
+                <StepCard key={index} number={step.number} title={step.title} description={step.description} delay={index * 200} colors={colors} />
               ))}
             </div>
           </div>
         </section>
 
-        {/* Planos */}
+        {/* PLANOS */}
         <section id="planos" className="py-16 md:py-24" style={{ backgroundColor: colors.card }}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <AnimatedSection animation="fade-up">
@@ -642,11 +742,51 @@ export default function App() {
                 Escolha o Plano Certo para Si
               </h2>
             </AnimatedSection>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-8">
-              {pricingPlans.map((plan, index) => (
-                <PricingCard key={index} plan={plan} index={index} colors={colors} />
+
+            {/* Seletor de período */}
+            <div className="flex flex-wrap justify-center gap-2 mb-10">
+              {[
+                { label: 'Mensal', value: 'mensal' },
+                { label: 'Trimestral', value: 'trimestral' },
+                { label: 'Semestral', value: 'semestral' },
+                { label: 'Anual', value: 'anual' },
+              ].map((p) => (
+                <button
+                  key={p.value}
+                  onClick={() => setPeriodo(p.value as any)}
+                  className={`px-5 py-2 rounded-full text-sm font-medium transition duration-200 hover:scale-105 ${
+                    periodo === p.value ? 'text-white' : ''
+                  }`}
+                  style={{
+                    backgroundColor: periodo === p.value ? colors.primary : colors.hover,
+                    color: periodo === p.value ? '#fff' : colors.textSecondary,
+                    border: `1px solid ${periodo === p.value ? colors.primary : colors.border}`
+                  }}
+                >
+                  {p.label}
+                </button>
               ))}
             </div>
+
+            {loadingPlanos ? (
+              <div className="text-center py-10">
+                <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2" style={{ borderColor: colors.primary }}></div>
+                <p className="mt-4" style={{ color: colors.textSecondary }}>Carregando planos...</p>
+              </div>
+            ) : errorPlanos ? (
+              <div className="text-center py-10 text-red-500">
+                <p>{errorPlanos}</p>
+                <button onClick={() => window.location.reload()} className="mt-4 px-6 py-2 rounded-full text-white" style={{ backgroundColor: colors.primary }}>Tentar novamente</button>
+              </div>
+            ) : planos.length === 0 ? (
+              <div className="text-center py-10" style={{ color: colors.textSecondary }}>Nenhum plano disponível no momento.</div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-8">
+                {planos.map((plan, index) => (
+                  <PricingCard key={plan.id} plan={plan} index={index} colors={colors} periodo={periodo} />
+                ))}
+              </div>
+            )}
           </div>
         </section>
 
@@ -669,7 +809,7 @@ export default function App() {
         <EmpresasSection />
       </main>
 
-      {/* Footer */}
+      {/* FOOTER */}
       <AnimatedSection animation="fade-in" delay={200}>
         <footer className="py-10 shadow-inner transition-colors duration-1000 animated-gradient-section text-white [&_p]:text-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

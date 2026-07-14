@@ -24,7 +24,7 @@ class PagamentoController extends Controller
 
     public function __construct()
     {
-        // ✅ Obtém da sessão (prioridade)
+        //  Obtém da sessão (prioridade)
         $this->empresa = app('current.empresa');
         $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
 

@@ -11,6 +11,8 @@ use App\Http\Middleware\ResolveTenant;
 use App\Http\Middleware\AuthTenant;
 use App\Http\Middleware\EnsureTenantConnection;
 use App\Http\Middleware\LogPanelAccess;
+use App\Http\Middleware\VerificarSubscricao;
+
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -19,7 +21,6 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
-    
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->prepend(\Illuminate\Http\Middleware\HandleCors::class);
 
@@ -29,6 +30,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'tenant.auth' => EnsureTenantConnection::class,
             'auth.tenant' => AuthTenant::class,
             'log.panel' => LogPanelAccess::class,
+            'auth.tenant' => AuthTenant::class, 
+            'subscricao.ativa' => VerificarSubscricao::class,
         ]);
 
         // Web: tenant primeiro, sessão depois
@@ -46,6 +49,7 @@ return Application::configure(basePath: dirname(__DIR__))
         \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
     ]);
 
+    
 
         
     })

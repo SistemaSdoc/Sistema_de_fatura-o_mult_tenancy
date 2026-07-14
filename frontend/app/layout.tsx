@@ -14,10 +14,10 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "FacturaJá — Sistema de Faturação",
-    template: "%s | FacturaJá",
+    default: "FaturaJá — Sistema de Facturação",
+    template: "%s | FaturaJá",
   },
-  description: "FacturaJá — Sistema moderno de faturação e gestão empresarial",
+  description: "FaturaJá — Sistema moderno de facturação e gestão empresarial",
   icons: {
     icon: "/favicon.ico",
   },

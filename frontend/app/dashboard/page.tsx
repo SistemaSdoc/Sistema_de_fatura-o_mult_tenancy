@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Users, DollarSign, Package, FileText, AlertTriangle, RefreshCw, Clock } from "lucide-react";
+import { Users, DollarSign, Package, FileText, AlertTriangle, RefreshCw, Clock, Crown } from "lucide-react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/context/authprovider";
@@ -11,6 +11,8 @@ import { dashboardService, DashboardData as ServiceDashboardData } from "@/servi
 import { useThemeColors, useTheme } from "@/context/ThemeContext";
 import { usePathname, useRouter } from "next/navigation";
 import type { TooltipProps } from "recharts";
+import { subscricaoService } from '@/services/subscricoes';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const DashboardCharts = dynamic(() => import("../components/DashboardCharts").then((mod) => mod.DashboardCharts), {
   ssr: false,
@@ -34,10 +36,8 @@ interface ThemeColors {
   fp: string;
 }
 
-// Re-exportar o tipo do serviço para consistência
 type DashboardData = ServiceDashboardData;
 
-// Dados para gráficos
 interface ProdutoItem {
   nome: string;
   quantidade: number;
@@ -54,15 +54,9 @@ interface EstadoDocumento {
   quantidade: number;
 }
 
-// Props para skeletons
 interface SkeletonProps {
   colors: ThemeColors;
   tall?: boolean;
-}
-
-interface EstadoDocumento extends Record<string, unknown> {
-  estado: string;
-  quantidade: number;
 }
 
 type BadgeVariant = "green" | "yellow" | "blue" | "red" | "orange" | "gray";
@@ -154,9 +148,14 @@ const StatusBadge = ({ status, theme }: { status: string; theme: string }) => {
 
 /* ==================== MAIN COMPONENT ==================== */
 export default function DashboardPage() {
+  // ==================== ESTADOS ====================
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Estado para subscrição
+  const [subscricao, setSubscricao] = useState<any>(null);
+  const [loadingSub, setLoadingSub] = useState(false);
 
   const router = useRouter();
   const pathname = usePathname();
@@ -165,6 +164,44 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const userRole = user?.role || "";
 
+  // ==================== EFFECTS ====================
+  // Carregar dados do dashboard
+  useEffect(() => {
+    carregarDashboard();
+  }, []);
+
+  // Buscar subscrição
+  useEffect(() => {
+    const fetchSubscricao = async () => {
+      setLoadingSub(true);
+      try {
+        const response = await subscricaoService.minhaAssinatura();
+        setSubscricao(response?.subscricao ?? response);
+      } catch {
+        // Sem subscrição – silêncio
+      } finally {
+        setLoadingSub(false);
+      }
+    };
+    if (user) fetchSubscricao();
+  }, [user]);
+
+  // Redirecionamento por role (apenas no dashboard raiz)
+  useEffect(() => {
+    if (!user) return;
+
+    const dashboardAllowedRoles = ["admin", "contablista"];
+    if (dashboardAllowedRoles.includes(userRole)) return;
+
+    const redirectTo =
+      userRole === "operador" ? "/dashboard/Vendas/Nova_venda" : userRole === "gestor" ? "/dashboard/Produtos_servicos/Stock" : "/login";
+
+    if (userRole !== "admin" && pathname === "/dashboard") {
+      router.replace(redirectTo);
+    }
+  }, [pathname, router, user, userRole]);
+
+  // ==================== FUNÇÕES ====================
   const carregarDashboard = async () => {
     setError(null);
     try {
@@ -250,7 +287,7 @@ export default function DashboardPage() {
     );
   }
 
-  // Dados preparados pelos serviços
+  // ==================== DADOS PARA O DASHBOARD ====================
   const metricas = dashboardService.calcularMetricas(data);
   const graficos = dashboardService.prepararDadosGraficos(data);
 
@@ -288,7 +325,6 @@ export default function DashboardPage() {
     }, {})
   );
 
-  // ✅ Configuração de tooltip com tipo correto
   const tooltipStyle: TooltipProps<number, string>["contentStyle"] = {
     backgroundColor: colors.card,
     borderColor: colors.border,
@@ -297,7 +333,6 @@ export default function DashboardPage() {
     borderRadius: "8px",
   };
 
-  // ✅ Formatters com assinatura correta para Recharts
   const formatterQuantidade = (value: number | string | null | undefined): [string, string] => {
     const num = Number(value ?? 0);
     return [`${formatNumber(num)} unid.`, "Quantidade"];
@@ -359,6 +394,7 @@ export default function DashboardPage() {
     },
   ];
 
+  // ==================== RENDER PRINCIPAL ====================
   return (
     <MainEmpresa>
       <div className="space-y-4 sm:space-y-6 pb-8 transition-colors duration-300">
@@ -398,6 +434,35 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+
+        {/* Card da subscrição */}
+        <Link href="/dashboard/subscricao">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Crown className="w-5 h-5" style={{ color: colors.primary }} />
+                Minha Subscrição
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loadingSub ? (
+                <div className="animate-pulse h-4 w-32 rounded" style={{ background: colors.hover }} />
+              ) : subscricao ? (
+                <>
+                  <p className="text-sm font-medium" style={{ color: colors.text }}>
+                    {subscricao.plano?.nome || 'Plano'}
+                  </p>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>
+                    {subscricao.status === 'ativa' ? '✅ Activa' : '⛔ Inactiva'}
+                    {subscricao.data_fim && ` • Vence em ${new Date(subscricao.data_fim).toLocaleDateString('pt-PT')}`}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">Nenhum plano activo</p>
+              )}
+            </CardContent>
+          </Card>
+        </Link>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {kpiCards.map(({ href, icon: Icon, label, value, helper }, i) => (

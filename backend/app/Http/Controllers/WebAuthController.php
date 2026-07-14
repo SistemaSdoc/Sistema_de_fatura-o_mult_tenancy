@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
+use App\Traits\ResolvesTenantAuth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Config;
@@ -129,7 +130,10 @@ class WebAuthController extends Controller
         }
     }
 
-
+public function subscricaoAtiva()
+{
+    return $this->hasOne(Subscricao::class)->where('status', 'ativa')->with('plano');
+}
     /**
      * Login apenas com email – sem verificar senha.
      * Faz cross-tenant search e autentica o primeiro utilizador encontrado.
@@ -669,134 +673,187 @@ class WebAuthController extends Controller
      * RETORNA O USUÁRIO ATUAL AUTENTICADO
      * (com suporte a ambos os modos)
      */
-    public function me(Request $request): JsonResponse
-    {
-        Log::debug('[AUTH][ME] Debug completo', [
-            'session_id'                => $request->session()->getId(),
-            'session_all'               => session()->all(),
-            'auth_guard_landlord_check' => Auth::guard('landlord')->check(),
-            'auth_guard_landlord_id'    => Auth::guard('landlord')->id(),
-            'database_default'          => Config::get('database.default'),
-        ]);
-
-        $landlordUser = Auth::guard('landlord')->user();
-        if (!$landlordUser) {
-            Log::warning('[AUTH][ME] Usuário não autenticado no guard landlord');
-            return response()->json(['success' => false, 'message' => 'Não autenticado.'], 401);
-        }
-
-        $tenantId = session('tenant_id');
-        if (!$tenantId) {
-            return response()->json(['success' => false, 'message' => 'Sessão incompleta — tenant não identificado.'], 403);
-        }
-
-        $empresa = Empresa::on('landlord')->find($tenantId);
-        if (!$empresa) {
-            return response()->json(['success' => false, 'message' => 'Empresa não encontrada.'], 404);
-        }
-
-        // ✅ LOG PARA VERIFICAR OS CAMPOS DA EMPRESA
-        Log::info('[AUTH][ME] Dados da empresa carregados', [
-            'empresa_id' => $empresa->id,
-            'nome' => $empresa->nome,
-            'campos_bancarios' => [
-                'nome_banco' => $empresa->nome_banco ?? 'null',
-                'iban' => $empresa->iban ?? 'null',
-                'numero_conta' => $empresa->numero_conta ?? 'null',
-            ],
-            'todos_campos' => array_keys($empresa->getAttributes()),
-        ]);
-
-        // Recupera o modo da sessão (garantia)
-        $modo = session('tenant_modo', $empresa->modo);
-        $empresa->modo = $modo;
-
-        // Busca o usuário no banco correto
-        $user = $this->buscarUsuario($empresa, $landlordUser->email);
-
-        if (!$user) {
-            Log::warning('[AUTH][ME] Usuário não encontrado no tenant', [
-                'email' => $landlordUser->email,
-                'tenant' => $empresa->subdomain,
-            ]);
-            return response()->json(['success' => false, 'message' => 'Utilizador não encontrado no tenant.'], 404);
-        }
-
-        Log::info('[AUTH][ME] Sucesso', [
-            'user_id'          => $user->id,
-            'tenant_id'        => $tenantId,
-            'tenant_subdomain' => $empresa->subdomain,
-            'modo'             => $empresa->modo,
-        ]);
-
-        $fmt = fn($date) => $date ? \Carbon\Carbon::parse($date)->format('Y-m-d H:i:s') : null;
-
-        return response()->json([
-            'success' => true,
-            'user' => [
-                'id'                => $user->id,
-                'name'              => $user->name ?? $user->nome,
-                'email'             => $user->email,
-                'role'              => $user->role ?? 'operador',
-                'ativo'             => (bool) $user->ativo,
-                'ultimo_login'      => $fmt($user->ultimo_login ?? null),
-                'created_at'        => $fmt($user->created_at ?? null),
-                'email_verified_at' => $fmt($user->email_verified_at ?? null),
-            ],
-            'empresa' => [
-                'id'            => $empresa->id,
-                'nome'          => $empresa->nome,
-                'nif'           => $empresa->nif,
-                'email'         => $empresa->email,
-                'telefone'      => $empresa->telefone,
-                'endereco'      => $empresa->endereco,
-                'subdomain'     => $empresa->subdomain,
-                'logo'          => $empresa->logo,
-                'regime_fiscal' => $empresa->regime_fiscal ?? 'simplificado',
-                'sujeito_iva'   => (bool) $empresa->sujeito_iva,
-                'iva_padrao'    => (float) ($empresa->iva_padrao ?? 0),
-                'status'        => $empresa->status ?? 'ativo',
-                'data_registro' => $fmt($empresa->data_registro ?? null),
-                'modo'          => $empresa->modo,
-                // CAMPOS BANCÁRIOS
-                'nome_banco'    => $empresa->nome_banco ?? null,
-                'iban'          => $empresa->iban ?? null,
-                'numero_conta'  => $empresa->numero_conta ?? null,
-                'created_at'    => $fmt($empresa->created_at ?? null),
-                'updated_at'    => $fmt($empresa->updated_at ?? null),
-            ],
-        ]);
-    }
-
-    /**
-     * LOGOUT DO USUÁRIO (mantém dados do tenant na sessão)
-     */
-public function logout(Request $request): JsonResponse
+public function me(Request $request): JsonResponse
 {
-    $tenantId   = session('tenant_id');
-    $tenantDb   = session('tenant_db');
-    $tenantNome = session('tenant_nome');
-    $tenantModo = session('tenant_modo');
+    Log::debug('[AUTH][ME] Debug completo', [
+        'session_id'                => $request->session()->getId(),
+        'session_all'               => session()->all(),
+        'auth_guard_landlord_check' => Auth::guard('landlord')->check(),
+        'auth_guard_landlord_id'    => Auth::guard('landlord')->id(),
+        'database_default'          => Config::get('database.default'),
+    ]);
 
-    Auth::guard('landlord')->logout();
-    Auth::guard('landlord_api')->logout(); // <- faltava isso
+    $landlordUser = Auth::guard('landlord')->user();
+    if (!$landlordUser) {
+        Log::warning('[AUTH][ME] Usuário não autenticado no guard landlord');
+        return response()->json(['success' => false, 'message' => 'Não autenticado.'], 401);
+    }
 
-    $request->session()->invalidate();       // <- mata a sessão de fato
-    $request->session()->regenerateToken();  // <- novo CSRF
+    $tenantId = session('tenant_id');
+    if (!$tenantId) {
+        return response()->json(['success' => false, 'message' => 'Sessão incompleta — tenant não identificado.'], 403);
+    }
 
-    if ($tenantId) {
-        session([
-            'tenant_id'   => $tenantId,
-            'tenant_db'   => $tenantDb,
-            'tenant_nome' => $tenantNome,
-            'tenant_modo' => $tenantModo,
+    $empresa = Empresa::on('landlord')->find($tenantId);
+    if (!$empresa) {
+        return response()->json(['success' => false, 'message' => 'Empresa não encontrada.'], 404);
+    }
+
+    // Buscar assinatura ativa
+    $subscricao = $empresa->subscricaoAtiva()
+        ->with('plano.features') // ← carrega features
+        ->first();
+
+    $dadosSubscricao = null;
+    if ($subscricao) {
+        $planoData = null;
+        if ($subscricao->plano) {
+            // Mapeia as features com os dados do pivot
+            $features = $subscricao->plano->features->map(function ($feature) {
+                return [
+                    'id'          => $feature->id,
+                    'nome'        => $feature->nome,
+                    'descricao'   => $feature->descricao,
+                    'icone'       => $feature->icone,
+                    'ativo'       => $feature->ativo,
+                    'pivot'       => [
+                        'quantidade' => $feature->pivot->quantidade ?? null,
+                        'unidade'    => $feature->pivot->unidade ?? null,
+                    ]
+                ];
+            })->toArray();
+
+            $planoData = [
+                'id'            => $subscricao->plano->id,
+                'nome'          => $subscricao->plano->nome,
+                'valor_mensal'  => $subscricao->plano->valor_mensal,
+                'valor_anual'   => $subscricao->plano->valor_anual,
+                'duracao_meses' => $subscricao->plano->duracao_meses,
+                'features'      => $features, // ← aqui estão as features
+            ];
+        }
+
+        $dadosSubscricao = [
+            'id'                  => $subscricao->id,
+            'plano'               => $planoData,
+            'data_inicio'         => $subscricao->data_inicio,
+            'data_fim'            => $subscricao->data_fim,
+            'status'              => $subscricao->status,
+            'forma_pagamento'     => $subscricao->forma_pagamento,
+            'renovacao_automatica'=> $subscricao->renovacao_automatica,
+            'cancelado_em'        => $subscricao->cancelado_em,
+        ];
+    }
+    
+    // Log dos dados bancários (mantido)
+    Log::info('[AUTH][ME] Dados da empresa carregados', [
+        'empresa_id' => $empresa->id,
+        'nome' => $empresa->nome,
+        'subscricao' => $dadosSubscricao,
+        'campos_bancarios' => [
+            'nome_banco' => $empresa->nome_banco ?? 'null',
+            'iban' => $empresa->iban ?? 'null',
+            'numero_conta' => $empresa->numero_conta ?? 'null',
+        ],
+        'todos_campos' => array_keys($empresa->getAttributes()),
+    ]);
+
+    // Recupera o modo da sessão (garantia)
+    $modo = session('tenant_modo', $empresa->modo);
+    $empresa->modo = $modo;
+
+    // Busca o usuário no banco correto
+    $user = $this->buscarUsuario($empresa, $landlordUser->email);
+
+    if (!$user) {
+        Log::warning('[AUTH][ME] Usuário não encontrado no tenant', [
+            'email' => $landlordUser->email,
+            'tenant' => $empresa->subdomain,
         ]);
     }
+
+    Log::info('[AUTH][ME] Sucesso', [
+        'user_id'          => $user->id,
+        'tenant_id'        => $tenantId,
+        'tenant_subdomain' => $empresa->subdomain,
+        'modo'             => $empresa->modo,
+        'assinatura'       => $dadosSubscricao ? 'ativa' : 'nenhuma',
+    ]);
+
+    $fmt = fn ($date) => $date ? \Carbon\Carbon::parse($date)->format('Y-m-d H:i:s') : null;
 
     return response()->json([
         'success' => true,
-        'message' => 'Logout realizado',
-        'tenant_id' => $tenantId,
+        'user' => [
+            'id'                => $user->id,
+            'name'              => $user->name ?? $user->nome,
+            'email'             => $user->email,
+            'role'              => $user->role ?? 'operador',
+            'ativo'             => (bool) $user->ativo,
+            'ultimo_login'      => $fmt($user->ultimo_login ?? null),
+            'created_at'        => $fmt($user->created_at ?? null),
+            'email_verified_at' => $fmt($user->email_verified_at ?? null),
+        ],
+        'empresa' => [
+            'id'            => $empresa->id,
+            'nome'          => $empresa->nome,
+            'nif'           => $empresa->nif,
+            'email'         => $empresa->email,
+            'telefone'      => $empresa->telefone,
+            'endereco'      => $empresa->endereco,
+            'subdomain'     => $empresa->subdomain,
+            'logo'          => $empresa->logo,
+            'regime_fiscal' => $empresa->regime_fiscal ?? 'simplificado',
+            'sujeito_iva'   => (bool) $empresa->sujeito_iva,
+            'iva_padrao'    => (float) ($empresa->iva_padrao ?? 0),
+            'status'        => $empresa->status ?? 'ativo',
+            'data_registro' => $fmt($empresa->data_registro ?? null),
+            'modo'          => $empresa->modo,
+            // CAMPOS BANCÁRIOS
+            'nome_banco'    => $empresa->nome_banco ?? null,
+            'iban'          => $empresa->iban ?? null,
+            'numero_conta'  => $empresa->numero_conta ?? null,
+            'created_at'    => $fmt($empresa->created_at ?? null),
+            'updated_at'    => $fmt($empresa->updated_at ?? null),
+            // ASSINATURA
+            'subscricao'    => $dadosSubscricao,
+        ],
+    ]);
+}
+
+public function logout(Request $request): JsonResponse
+{
+    Log::info('[AUTH] Logout iniciado', ['user_id' => Auth::guard('landlord')->id()]);
+
+    // Desloga do guard
+    Auth::guard('landlord')->logout();
+
+    // Invalida a sessão completamente
+    $request->session()->invalidate();
+
+    // Regenera o token CSRF
+    $request->session()->regenerateToken();
+
+    // Opcional: limpar todas as variáveis de sessão relacionadas a tenant
+    session()->forget([
+        'tenant_id',
+        'tenant_db',
+        'tenant_nome',
+        'tenant_modo',
+        'user_id',
+        'user_email',
+        'login_at',
+        'login_modo',
+        'landlord_user_id',
+    ]);
+
+    Log::info('[AUTH] Logout completo - sessão destruída', [
+        'session_id' => $request->session()->getId(),
+    ]);
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Logout realizado com sucesso',
     ]);
 }
 
