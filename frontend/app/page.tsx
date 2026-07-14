@@ -312,7 +312,7 @@ const PricingCard: React.FC<PricingCardProps> = ({ plan, index, colors, periodo 
 
   const href = plan.name === "Experimental" || plan.name === "Grátis" 
     ? `/register?plano_id=${plan.id}` 
-    : `/dashboard/checkout?plano_id=${plan.id}&periodo=${periodo}`;
+    : `/checkout?plano_id=${plan.id}&periodo=${periodo}`;
 
   return (
     <AnimatedSection animation="fade-up" delay={index * 100} threshold={0.2}>
@@ -461,7 +461,7 @@ export default function App() {
     const fetchPlanos = async () => {
       try {
         const data = await planosService.listarAtivos();
-        console.log('📦 Planos recebidos:', JSON.stringify(data, null, 2));
+        console.log(' Planos recebidos:', JSON.stringify(data, null, 2));
 
         const planosFormatados = data.map((plano: any) => ({
           id: plano.id,

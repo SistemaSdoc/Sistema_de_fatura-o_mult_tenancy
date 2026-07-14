@@ -40,13 +40,12 @@ export const getLogoUrl = (logo?: string | null): string | null => {
     // Limpa barras invertidas e normaliza
     let clean = logo.replace(/\\/g, '/');
 
-    // Extrai apenas o nome do ficheiro (ex: logo_xxxx.jpeg)
-    // Se o caminho contiver 'logos/', usa o que vem depois, senão usa o próprio clean
     const match = clean.match(/logos\/([^\/]+)$/);
     const filename = match ? match[1] : clean.split('/').pop() || clean;
 
-    // Constrói a URL pública relativa à raiz
-    return `/storage/logos/${filename}`;
+    // URL absoluta apontando para o backend, não para o Next.js
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    return `${baseUrl}/storage/logos/${filename}`;
 };
 
 export const RoleBadge = ({ role, colors }: { role: string; colors: ThemeColors }) => {

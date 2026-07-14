@@ -24,6 +24,7 @@ import {
     TrendingDown,
     User,
     HelpCircle,
+    Crown,
 } from "lucide-react";
 import { LucideIcon } from "lucide-react";
 import Image from "next/image";
@@ -31,6 +32,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/context/authprovider";
 import { estoqueService } from "@/services/estoque";
 import { produtoService, Produto } from "@/services/produtos";
+import { subscricaoService } from "@/services/subscricoes";
 import { useTheme, useThemeColors } from "@/context/ThemeContext";
 import { toast } from "sonner";
 
@@ -61,6 +63,19 @@ type ApiError = {
   };
 };
 
+interface Subscricao {
+  status?: string;
+  data_fim?: string;
+  data_inicio?: string;
+  plano?: {
+    nome?: string;
+    preco?: number | string;
+    limite_usuarios?: number;
+    limite_produtos?: number;
+  };
+  dias_restantes?: number;
+}
+
 const getApiError = (error: unknown): ApiError => (typeof error === "object" && error !== null ? (error as ApiError) : {});
 
 export default function MainEmpresa({ children, companyLogo, companyName }: MainEmpresaProps) {
@@ -90,6 +105,14 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
   const [logoError, setLogoError] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [submenuOpen, setSubmenuOpen] = useState<string | null>(null);
+
+  // Estado para subscrição (painel no header)
+  const [subscricaoAberta, setSubscricaoAberta] = useState(false);
+  const [subscricaoPanelAnimating, setSubscricaoPanelAnimating] = useState(false);
+  const [subscricao, setSubscricao] = useState<Subscricao | null>(null);
+  const [loadingSubscricao, setLoadingSubscricao] = useState(false);
+  const subscricaoRef = useRef<HTMLDivElement>(null);
+  const subscricaoFetchedRef = useRef(false);
 
   // Refs para controlar chamadas concorrentes
   const fetchingNotificacoesRef = useRef(false);
@@ -232,7 +255,6 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
   }, [getFallbackRouteForRole, hasRouteAccess, pathname, router, user, userLoading, userRole]);
 
   // Trava o scroll do body quando sidebar mobile ou algum modal estiver aberto
-  // (evita "scroll fantasma" atrás do overlay em telas pequenas)
   useEffect(() => {
     const shouldLock = (isMobile && sidebarOpen) || logoutModalOpen || !!submenuOpen;
     document.body.style.overflow = shouldLock ? "hidden" : "";
@@ -249,6 +271,9 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
       }
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setUserMenuOpen(false);
+      }
+      if (subscricaoRef.current && !subscricaoRef.current.contains(event.target as Node)) {
+        setSubscricaoAberta(false);
       }
     };
 
@@ -273,7 +298,6 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
         return;
       }
 
-      // Apenas roles que realmente têm permissão no backend
       const rolesComPermissaoEstoque = ["admin", "operador", "gestor"];
 
       if (!rolesComPermissaoEstoque.includes(userRole)) {
@@ -296,7 +320,6 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
         const baixo = produtosCriticos.filter((p: Produto) => p.estoque_atual > 0 && p.estoque_atual <= p.estoque_minimo);
         setProdutosEstoqueBaixo(baixo);
 
-        // Apenas admin e operador veem produtos sem estoque
         if (userRole === "admin" || userRole === "operador") {
           const responseSemEstoque = await produtoService.listarProdutos({
             sem_estoque: true,
@@ -324,7 +347,6 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
         const apiError = getApiError(error);
         console.error("[MainEmpresa] Erro ao buscar notificações:", error);
 
-        // Opcional: só mostrar toast em erros que não sejam 403
         if (apiError.response?.status !== 403) {
           toast.error("Erro ao carregar alertas de estoque");
         }
@@ -335,6 +357,51 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
     },
     [user, userLoading, userRole]
   );
+
+  // ==================== SUBSCRIÇÃO ====================
+  const buscarSubscricao = useCallback(
+    async (force = false) => {
+      if (!user || userLoading) return;
+      if (!force && subscricaoFetchedRef.current) return;
+
+      setLoadingSubscricao(true);
+      try {
+        const response = await subscricaoService.minhaAssinatura();
+        setSubscricao((response?.subscricao ?? response) as Subscricao);
+        subscricaoFetchedRef.current = true;
+      } catch (error) {
+        console.error("[MainEmpresa] Erro ao buscar subscrição:", error);
+        setSubscricao(null);
+      } finally {
+        setLoadingSubscricao(false);
+      }
+    },
+    [user, userLoading]
+  );
+
+  useEffect(() => {
+    if (user) buscarSubscricao();
+  }, [user, buscarSubscricao]);
+
+  const toggleSubscricao = () => {
+    if (!user || userLoading) {
+      toast.message("Aguarde, autenticando...");
+      return;
+    }
+
+    if (!subscricaoAberta) {
+      setSubscricaoAberta(true);
+      setSubscricaoPanelAnimating(true);
+      setTimeout(() => setSubscricaoPanelAnimating(false), 10);
+      buscarSubscricao();
+    } else {
+      setSubscricaoPanelAnimating(true);
+      setTimeout(() => {
+        setSubscricaoAberta(false);
+        setSubscricaoPanelAnimating(false);
+      }, 10);
+    }
+  };
 
   // ==================== HELPERS ====================
   const closeSidebar = () => setSidebarOpen(false);
@@ -348,16 +415,12 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
     e.stopPropagation();
 
     if (item.links.length > 0) {
-      // Tem sublinks
       if (sidebarOpen) {
-        // Sidebar aberto: toggle dropdown normal
         toggleDropdown(item.label);
       } else {
-        // Sidebar fechado: abrir submenu em modal/sheet
         setSubmenuOpen(item.label);
       }
     } else {
-      // Sem sublinks: navega diretamente
       if (isMobile) {
         closeSidebar();
       }
@@ -553,6 +616,8 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
   const currentPageLabel = menuItemsFiltrados.find((item) => isParentActive(item))?.label || "Dashboard";
   const itemComSubmenu = menuItemsFiltrados.find((item) => item.label === submenuOpen);
 
+  const subscricaoAtiva = subscricao?.status === "ativa";
+
   return (
     <div className="flex h-screen w-full overflow-hidden" style={{ backgroundColor: colors.background }}>
       {/* ==================== SIDEBAR ==================== */}
@@ -632,7 +697,6 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
               return (
                 <div key={item.label}>
                   {hasLinks ? (
-                    // Item com sublinks - apenas botão, nunca Link
                     <div
                       className="flex items-center justify-between px-3 py-2.5 transition-all duration-200 cursor-pointer select-none group"
                       style={{
@@ -661,7 +725,6 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                         )}
                       </div>
 
-                      {/* Chevron para dropdown (apenas quando aberto) */}
                       {sidebarOpen && (
                         <div
                           className="ml-1 transition-transform duration-250"
@@ -677,7 +740,6 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                         </div>
                       )}
 
-                      {/* Indicador visual para menu com sublinks (quando sidebar fechado) */}
                       {!sidebarOpen && (
                         <div
                           className="absolute right-2 w-1.5 h-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -686,7 +748,6 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                       )}
                     </div>
                   ) : (
-                    // Item sem sublinks - Link normal
                     <Link
                       href={item.path}
                       className="flex items-center justify-between px-3 py-2.5 transition-all duration-200 cursor-pointer select-none group w-full"
@@ -716,7 +777,6 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                     </Link>
                   )}
 
-                  {/* Submenu (apenas quando sidebar aberto E item tem links) */}
                   {hasLinks && isOpen && sidebarOpen && (
                     <div className="ml-3 mt-1 space-y-1 overflow-hidden animate-slide-down">
                       {item.links.map((link) => {
@@ -815,6 +875,154 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
               )}
             </button>
 
+            {/* Subscrição */}
+            <div className="relative" ref={subscricaoRef}>
+              <button
+                onClick={toggleSubscricao}
+                className="relative p-2 touch-target transition-all hover:scale-110 active:scale-95"
+                aria-label="Abrir subscrição"
+                style={{
+                  backgroundColor: subscricaoAberta ? colors.hover : "transparent",
+                }}
+                title="Minha Subscrição">
+                <Crown size={16} style={{ color: colors.secondary }} />
+                {!subscricaoAtiva && subscricao && (
+                  <span
+                    className="absolute -top-1 -right-1 text-[10px] font-bold flex items-center justify-center px-1.5 py-0.5 text-white animate-pulse shadow-md"
+                    style={{ backgroundColor: colors.danger }}>
+                    !
+                  </span>
+                )}
+              </button>
+
+              {/* Painel de Subscrição */}
+              {subscricaoAberta && (
+                <>
+                  {isMobile && (
+                    <div
+                      onClick={() => setSubscricaoAberta(false)}
+                      className={`fixed inset-0 z-40 transition-opacity duration-200 ${subscricaoPanelAnimating ? "opacity-0" : "opacity-100"}`}
+                      style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }}
+                      aria-hidden="true"
+                    />
+                  )}
+
+                  <div
+                    className={`z-50 flex flex-col overflow-hidden border shadow-xl transition-all duration-200 ${
+                      isMobile
+                        ? `fixed inset-x-0 bottom-0 ${subscricaoPanelAnimating ? "translate-y-full opacity-0" : "translate-y-0 opacity-100"}`
+                        : `absolute right-0 mt-2 ${subscricaoPanelAnimating ? "opacity-0 scale-95" : "opacity-100 scale-100"}`
+                    }`}
+                    style={{
+                      backgroundColor: colors.card,
+                      borderColor: colors.border,
+                      width: isMobile ? "100%" : "min(380px, calc(100vw - 20px))",
+                      transformOrigin: "top right",
+                      maxHeight: isMobile ? "80vh" : "calc(100vh - 80px)",
+                    }}
+                    onClick={(e) => e.stopPropagation()}>
+                    {/* Header */}
+                    <div className="p-3 border-b md:p-4 flex-shrink-0" style={{ borderColor: colors.border }}>
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: colors.text }}>
+                          <Crown size={15} style={{ color: colors.primary }} />
+                          Minha Subscrição
+                        </h3>
+                        <button
+                          onClick={() => setSubscricaoAberta(false)}
+                          className="p-1 touch-target transition-transform hover:scale-110 active:scale-95"
+                          title="Fechar">
+                          <X size={16} style={{ color: colors.textSecondary }} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 min-h-0 overflow-y-auto p-3 md:p-4">
+                      {loadingSubscricao ? (
+                        <div className="flex items-center justify-center py-6">
+                          <Loader2 className="w-4 h-4 animate-spin" style={{ color: colors.primary }} />
+                        </div>
+                      ) : subscricao ? (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-semibold" style={{ color: colors.text }}>
+                              {subscricao.plano?.nome || "Plano"}
+                            </p>
+                            <span
+                              className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                              style={{
+                                backgroundColor: subscricaoAtiva ? `${colors.success}20` : `${colors.danger}20`,
+                                color: subscricaoAtiva ? colors.success : colors.danger,
+                              }}>
+                              {subscricaoAtiva ? "Activa" : "Inactiva"}
+                            </span>
+                          </div>
+
+                          {subscricao.plano?.preco !== undefined && (
+                            <div className="flex items-center justify-between text-xs">
+                              <span style={{ color: colors.textSecondary }}>Preço</span>
+                              <span style={{ color: colors.text }}>{subscricao.plano.preco} Kz</span>
+                            </div>
+                          )}
+
+                          {subscricao.data_fim && (
+                            <div className="flex items-center justify-between text-xs">
+                              <span style={{ color: colors.textSecondary }}>Vencimento</span>
+                              <span style={{ color: colors.text }}>
+                                {new Date(subscricao.data_fim).toLocaleDateString("pt-PT")}
+                              </span>
+                            </div>
+                          )}
+
+                          {typeof subscricao.dias_restantes === "number" && (
+                            <div className="flex items-center justify-between text-xs">
+                              <span style={{ color: colors.textSecondary }}>Dias restantes</span>
+                              <span style={{ color: colors.text }}>{subscricao.dias_restantes}</span>
+                            </div>
+                          )}
+
+                          <Link
+                            href="/dashboard/subscricao"
+                            onClick={() => setSubscricaoAberta(false)}
+                            className="block text-center mt-3 py-2 text-xs font-medium text-white rounded"
+                            style={{ backgroundColor: colors.primary }}>
+                            Ver detalhes
+                          </Link>
+                        </div>
+                      ) : (
+                        <div className="py-8 text-center">
+                          <p className="text-xs" style={{ color: colors.textSecondary }}>
+                            Nenhum plano activo
+                          </p>
+                          <Link
+                            href="/dashboard/subscricao"
+                            onClick={() => setSubscricaoAberta(false)}
+                            className="inline-block mt-3 py-2 px-4 text-xs font-medium text-white rounded"
+                            style={{ backgroundColor: colors.primary }}>
+                            Ver planos
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="p-2 border-t text-center flex-shrink-0" style={{ borderColor: colors.border }}>
+                      <button
+                        onClick={() => buscarSubscricao(true)}
+                        disabled={loadingSubscricao}
+                        className="text-xs font-medium transition-all hover:scale-105 disabled:opacity-50 px-2 py-1"
+                        style={{ color: colors.primary }}>
+                        {loadingSubscricao ? "Atualizando..." : "Atualizar"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {!isMobile && <div onClick={() => setSubscricaoAberta(false)} className="fixed inset-0 z-40" />}
+                </>
+              )}
+            </div>
+
             {/* Notifications */}
             {(userRole === "admin" || userRole === "operador" || userRole === "gestor") && (
               <div className="relative" ref={notificacoesRef}>
@@ -841,7 +1049,6 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                 {/* Notifications Panel */}
                 {notificacoesAberto && (
                   <>
-                    {/* Overlay escuro apenas no mobile, para dar a sensação de "bottom sheet" */}
                     {isMobile && (
                       <div
                         onClick={() => setNotificacoesAberto(false)}
@@ -988,7 +1195,6 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                       </div>
                     </div>
 
-                    {/* Catcher invisível para fechar ao clicar fora (apenas desktop, mobile já tem o overlay escuro acima) */}
                     {!isMobile && <div onClick={() => setNotificacoesAberto(false)} className="fixed inset-0 z-40" />}
                   </>
                 )}

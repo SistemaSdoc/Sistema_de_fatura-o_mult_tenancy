@@ -11,7 +11,6 @@ import { dashboardService, DashboardData as ServiceDashboardData } from "@/servi
 import { useThemeColors, useTheme } from "@/context/ThemeContext";
 import { usePathname, useRouter } from "next/navigation";
 import type { TooltipProps } from "recharts";
-import { subscricaoService } from '@/services/subscricoes';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const DashboardCharts = dynamic(() => import("../components/DashboardCharts").then((mod) => mod.DashboardCharts), {
@@ -153,9 +152,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Estado para subscrição
-  const [subscricao, setSubscricao] = useState<any>(null);
-  const [loadingSub, setLoadingSub] = useState(false);
 
   const router = useRouter();
   const pathname = usePathname();
@@ -170,21 +166,6 @@ export default function DashboardPage() {
     carregarDashboard();
   }, []);
 
-  // Buscar subscrição
-  useEffect(() => {
-    const fetchSubscricao = async () => {
-      setLoadingSub(true);
-      try {
-        const response = await subscricaoService.minhaAssinatura();
-        setSubscricao(response?.subscricao ?? response);
-      } catch {
-        // Sem subscrição – silêncio
-      } finally {
-        setLoadingSub(false);
-      }
-    };
-    if (user) fetchSubscricao();
-  }, [user]);
 
   // Redirecionamento por role (apenas no dashboard raiz)
   useEffect(() => {
@@ -434,36 +415,6 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
-
-        {/* Card da subscrição */}
-        <Link href="/dashboard/subscricao">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Crown className="w-5 h-5" style={{ color: colors.primary }} />
-                Minha Subscrição
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {loadingSub ? (
-                <div className="animate-pulse h-4 w-32 rounded" style={{ background: colors.hover }} />
-              ) : subscricao ? (
-                <>
-                  <p className="text-sm font-medium" style={{ color: colors.text }}>
-                    {subscricao.plano?.nome || 'Plano'}
-                  </p>
-                  <p className="text-xs" style={{ color: colors.textSecondary }}>
-                    {subscricao.status === 'ativa' ? '✅ Activa' : '⛔ Inactiva'}
-                    {subscricao.data_fim && ` • Vence em ${new Date(subscricao.data_fim).toLocaleDateString('pt-PT')}`}
-                  </p>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">Nenhum plano activo</p>
-              )}
-            </CardContent>
-          </Card>
-        </Link>
-
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {kpiCards.map(({ href, icon: Icon, label, value, helper }, i) => (
             <div

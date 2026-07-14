@@ -1,0 +1,220 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { X, Loader2, CheckCircle2 } from 'lucide-react';
+import { useThemeColors } from '@/context/ThemeContext';
+import { planosService } from '@/services/planos';
+
+interface PlanosModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export default function PlanosModal({ isOpen, onClose }: PlanosModalProps) {
+  const colors = useThemeColors();
+
+  const [planos, setPlanos] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [periodo, setPeriodo] = useState<'mensal' | 'trimestral' | 'semestral' | 'anual'>('mensal');
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    document.body.style.overflow = 'hidden';
+
+    const fetchPlanos = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await planosService.listarAtivos();
+        const planosFormatados = data.map((plano: any) => ({
+          id: plano.id,
+          name: plano.nome,
+          valor_mensal: plano.valor_mensal,
+          valor_trimestral: plano.valor_trimestral || null,
+          valor_semestral: plano.valor_semestral || null,
+          valor_anual: plano.valor_anual || null,
+          features: plano.features.map((f: any) => {
+            let featureText = f.nome;
+            if (f.pivot?.quantidade && f.pivot?.quantidade > 0) {
+              const qtd = f.pivot.quantidade === 0 ? 'Ilimitados' : f.pivot.quantidade;
+              const unidade = f.pivot.unidade || '';
+              featureText = `${qtd} ${unidade} ${f.nome}`.trim();
+            }
+            return featureText;
+          }),
+        }));
+        setPlanos(planosFormatados);
+      } catch (err) {
+        console.error('Erro ao buscar planos:', err);
+        setError('Não foi possível carregar os planos.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPlanos();
+
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const getPreco = (plan: any) => {
+    switch (periodo) {
+      case 'trimestral':
+        return plan.valor_trimestral ?? plan.valor_mensal * 3;
+      case 'semestral':
+        return plan.valor_semestral ?? plan.valor_mensal * 6;
+      case 'anual':
+        return plan.valor_anual ?? plan.valor_mensal * 12;
+      default:
+        return plan.valor_mensal;
+    }
+  };
+
+  const getIntervalo = () => {
+    switch (periodo) {
+      case 'trimestral': return '/trimestre';
+      case 'semestral': return '/semestre';
+      case 'anual': return '/ano';
+      default: return '/mês';
+    }
+  };
+
+  const handleAssinar = (plan: any) => {
+    const isGratis = plan.name === 'Experimental' || plan.name === 'Grátis' || plan.valor_mensal === 0;
+    const href = isGratis
+      ? `/register?plano_id=${plan.id}`
+      : `/checkout?plano_id=${plan.id}&periodo=${periodo}`;
+    window.location.href = href;
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      {/* Overlay */}
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+        onClick={onClose}
+      />
+
+      {/* Conteúdo do Modal */}
+      <div
+        className="relative w-full max-w-6xl max-h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200"
+        style={{ backgroundColor: colors.card }}
+      >
+        {/* Header */}
+        <div
+          className="flex items-center justify-between px-6 py-4 border-b sticky top-0 z-10"
+          style={{ backgroundColor: colors.card, borderColor: colors.border }}
+        >
+          <h2 className="text-xl sm:text-2xl font-extrabold" style={{ color: colors.text }}>
+            Escolha o Plano Certo para Si
+          </h2>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-full transition hover:opacity-70"
+            style={{ color: colors.textSecondary }}
+            aria-label="Fechar"
+          >
+            <X size={22} />
+          </button>
+        </div>
+
+        {/* Corpo com scroll */}
+        <div className="overflow-y-auto px-6 py-6">
+          {/* Seletor de período */}
+          <div className="flex flex-wrap justify-center gap-2 mb-8">
+            {[
+              { label: 'Mensal', value: 'mensal' },
+              { label: 'Trimestral', value: 'trimestral' },
+              { label: 'Semestral', value: 'semestral' },
+              { label: 'Anual', value: 'anual' },
+            ].map((p) => (
+              <button
+                key={p.value}
+                onClick={() => setPeriodo(p.value as any)}
+                className="px-5 py-2 rounded-full text-sm font-medium transition duration-200 hover:scale-105"
+                style={{
+                  backgroundColor: periodo === p.value ? colors.primary : colors.hover,
+                  color: periodo === p.value ? '#fff' : colors.textSecondary,
+                  border: `1px solid ${periodo === p.value ? colors.primary : colors.border}`,
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {loading ? (
+            <div className="text-center py-16">
+              <Loader2 className="w-10 h-10 animate-spin mx-auto" style={{ color: colors.primary }} />
+              <p className="mt-4" style={{ color: colors.textSecondary }}>Carregando planos...</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-16">
+              <p className="text-red-500">{error}</p>
+            </div>
+          ) : planos.length === 0 ? (
+            <div className="text-center py-16" style={{ color: colors.textSecondary }}>
+              Nenhum plano disponível no momento.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {planos.map((plan) => {
+                const preco = getPreco(plan);
+                const precoFormatado = `${Number(preco).toLocaleString('pt-AO')} KZ`;
+                const isGratis = plan.name === 'Experimental' || plan.name === 'Grátis' || plan.valor_mensal === 0;
+
+                return (
+                  <div
+                    key={plan.id}
+                    className="flex flex-col p-6 rounded-xl border-2 transition duration-300 hover:shadow-xl hover:scale-[1.02]"
+                    style={{ backgroundColor: colors.background, borderColor: colors.border }}
+                  >
+                    <h3 className="text-xl font-bold mb-3" style={{ color: colors.text }}>
+                      {plan.name}
+                    </h3>
+                    <div className="flex items-baseline mb-4">
+                      <span className="text-3xl font-extrabold" style={{ color: colors.text }}>
+                        {precoFormatado}
+                      </span>
+                      <span className="text-sm font-medium ml-1" style={{ color: colors.textSecondary }}>
+                        {getIntervalo()}
+                      </span>
+                    </div>
+                    <ul className="space-y-2 mb-6 grow">
+                      {plan.features.map((feature: string, idx: number) => (
+                        <li key={idx} className="flex items-start gap-2 text-sm">
+                          <CheckCircle2 size={16} className="shrink-0 mt-0.5" style={{ color: colors.secondary }} />
+                          <span style={{ color: colors.textSecondary }}>{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      onClick={() => handleAssinar(plan)}
+                      className="mt-auto px-6 py-3 rounded-full font-semibold transition duration-300 hover:scale-[1.03]"
+                      style={{
+                        backgroundColor: colors.primary,  
+                        color: 'white',
+                      }}
+                    >
+                      {isGratis ? 'Experimente Agora' : 'Assinar'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
