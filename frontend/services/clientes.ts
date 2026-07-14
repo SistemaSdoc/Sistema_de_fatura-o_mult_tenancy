@@ -38,6 +38,22 @@ export interface CriarClienteInput {
     iso_pais?: string;        // ← adicionado
 }
 
+// ─── Tipos para importação ──────────────────────────────────────────
+export interface ErroImportacao {
+    linha: number;
+    nome: string | null;
+    erro: string;
+}
+
+export interface ImportarClientesResponse {
+    success: boolean;
+    message: string;
+    total_sucesso: number;
+    total_erros: number;
+    erros: ErroImportacao[];
+    modo?: string;
+}
+
 export interface AtualizarClienteInput extends Partial<CriarClienteInput> { }
 
 // ─── Estrutura de Resposta da API ──────────────────────────────────
@@ -159,6 +175,23 @@ export const clienteService = {
         
         // A resposta da API já vem com a estrutura PaginatedResponse
         return response.data.data;
+    },
+
+    /**
+     * Importar clientes via planilha Excel
+     */
+    async importarClientes(file: File): Promise<ImportarClientesResponse> {
+        console.log('[CLIENTE SERVICE] Importar clientes - Arquivo:', file.name);
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await api.post(`${API_PREFIX}/clientes/importar`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+
+        console.log('[CLIENTE SERVICE] Importar clientes - Resultado:', response.data);
+        return response.data;
     },
 
     /**

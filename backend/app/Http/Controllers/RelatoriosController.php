@@ -35,7 +35,7 @@ class RelatoriosController extends Controller
     {
         $this->relatoriosService = $relatoriosService;
         
-        // ✅ Obtém da sessão (prioridade)
+        // Obtém da sessão (prioridade)
         $this->empresa = app('current.empresa');
         $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
         
@@ -79,7 +79,7 @@ class RelatoriosController extends Controller
     }
 
     /* =====================================================================
-     | VERIFICAÇÃO DE ACESSO - CORRIGIDA ✅
+     | VERIFICAÇÃO DE ACESSO - CORRIGIDA 
      | ================================================================== */
 
     /**
@@ -89,20 +89,20 @@ class RelatoriosController extends Controller
     {
         Log::debug('[RelatoriosController] Verificando acesso');
 
-        // 1️⃣ Obtém a empresa
+        // Obtém a empresa
         $this->empresa = app('current.empresa');
         if (!$this->empresa) {
             Log::error('[RelatoriosController] Empresa não identificada.');
             throw new \Exception('Empresa não identificada.', 400);
         }
 
-        // ✅ Atualiza o modo
+        // Atualiza o modo
         $this->modo = $this->empresa->modo ?? 'colectivo';
 
-        // 2️⃣ Obtém o landlord user (guard onde o login foi feito)
+        // Obtém o landlord user (guard onde o login foi feito)
         $landlordUser = Auth::guard('landlord')->user();
 
-        // 3️⃣ Fallback: tenta obter da sessão
+        // Fallback: tenta obter da sessão
         if (!$landlordUser) {
             $landlordId = session('landlord_user_id');
             if ($landlordId) {
@@ -115,7 +115,7 @@ class RelatoriosController extends Controller
             throw new \Exception('Usuário não autenticado.', 401);
         }
 
-        // 4️⃣ Busca o TenantUser correspondente
+        // Busca o TenantUser correspondente
         $tenantUser = $this->buscarUsuario($this->empresa, $landlordUser->email);
         if (!$tenantUser) {
             Log::error('[RelatoriosController] Utilizador tenant não encontrado.', [
@@ -170,11 +170,11 @@ class RelatoriosController extends Controller
 
     /**
      * Método auxiliar para controlar permissões
-     * ✅ CORRIGIDO: Verifica se tenantUser está carregado e obtém role
+     * CORRIGIDO: Verifica se tenantUser está carregado e obtém role
      */
     private function authorizeRelatorio(string $tipo = 'basico'): void
     {
-        // ✅ GARANTIR QUE O USUÁRIO ESTÁ CARREGADO
+        // GARANTIR QUE O USUÁRIO ESTÁ CARREGADO
         if (!$this->tenantUser) {
             Log::warning('[RelatoriosController] TenantUser não carregado, tentando verificar acesso');
             try {
@@ -197,10 +197,10 @@ class RelatoriosController extends Controller
             abort(401, 'Usuário não autenticado. Por favor, faça login.');
         }
 
-        // ✅ OBTÉM A ROLE DO TENANT USER
+        //  OBTÉM A ROLE DO TENANT USER
         $role = $this->tenantUser?->role ?? null;
 
-        // ✅ FALLBACK: tentar obter do usuário landlord via relação
+        //  FALLBACK: tentar obter do usuário landlord via relação
         if (!$role && $user) {
             if ($this->isColectivo() && method_exists($user, 'getRoleNoTenant')) {
                 $role = $user->getRoleNoTenant($this->empresa?->id);
@@ -331,7 +331,7 @@ class RelatoriosController extends Controller
     }
 
     /* =====================================================================
-     | ENDPOINTS - CORRIGIDOS ✅
+     | ENDPOINTS - CORRIGIDOS 
      | ================================================================== */
 
     public function debug()
@@ -791,10 +791,10 @@ class RelatoriosController extends Controller
     {
         $modo = $this->getModo();
         
-        // ✅ 1. Verificar acesso (carrega tenantUser)
+        //  1. Verificar acesso (carrega tenantUser)
         $this->verificarAcessoUsuario();
         
-        // ✅ 2. Autorizar role
+        //  2. Autorizar role
         $this->authorizeRelatorio('basico');
 
         try {
@@ -809,7 +809,7 @@ class RelatoriosController extends Controller
             $dataInicio = $dados['data_inicio'] ?? now()->startOfMonth()->toDateString();
             $dataFim = $dados['data_fim'] ?? now()->toDateString();
 
-            // ⭐ USAR O SERVICE
+            //  USAR O SERVICE
             $relatorio = $this->relatoriosService->relatorioFaturacao($dataInicio, $dataFim, $dados);
 
             // Adicionar retenções se solicitado

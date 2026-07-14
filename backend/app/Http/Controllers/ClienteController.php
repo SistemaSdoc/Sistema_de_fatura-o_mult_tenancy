@@ -19,6 +19,8 @@ use App\Http\Controllers\Controller;
 use App\Rules\ValidPhoneNumber;
 use libphonenumber\PhoneNumberUtil;
 use libphonenumber\PhoneNumberFormat;
+use App\Imports\ClientesImport;
+use Illuminate\Support\Facades\Validator as ValidatorFacade;
 
 class ClienteController extends Controller
 {
@@ -93,7 +95,7 @@ class ClienteController extends Controller
         $this->modo = $this->empresa->modo ?? 'colectivo';
 
         // 2️⃣ Obtém o landlord user (guard onde o login foi feito)
-       $landlordUser = Auth::guard('landlord_api')->user();
+        $landlordUser = Auth::guard('landlord_api')->user();
 
         // 3️⃣ Fallback: tenta obter da sessão
         if (!$landlordUser) {
@@ -124,6 +126,53 @@ class ClienteController extends Controller
             'user_id' => $tenantUser->id,
             'email' => $tenantUser->email,
         ]);
+    }
+
+    public function importar(Request $request)
+    {
+        $modo = $this->getModo();
+
+        $request->validate([
+            'file' => 'required|file|mimes:xlsx,xls',
+        ]);
+
+        try {
+            $this->verificarAcessoUsuario();
+
+            $import = new ClientesImport($this->isColectivo(), $this->empresa?->id);
+            \Maatwebsite\Excel\Facades\Excel::import($import, $request->file('file'));
+
+            Log::info('[ClienteController::importar] Importação concluída', [
+                'sucesso' => count($import->sucesso),
+                'erros' => count($import->erros),
+                'modo' => $modo,
+            ]);
+
+            AuditLogger::log('Clientes Importados', '📥', [
+                'area' => 'Clientes',
+                'detalhes' => ['total_sucesso' => count($import->sucesso), 'total_erros' => count($import->erros)],
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => count($import->sucesso) . ' clientes importados com sucesso',
+                'total_sucesso' => count($import->sucesso),
+                'total_erros' => count($import->erros),
+                'erros' => $import->erros, // detalhe linha a linha do que falhou
+                'modo' => $modo,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[ClienteController::importar] Erro na importação', [
+                'error' => $e->getMessage(),
+                'modo' => $modo,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao importar clientes',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**

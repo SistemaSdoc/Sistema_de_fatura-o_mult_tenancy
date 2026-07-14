@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { useRouter } from "next/navigation";
 import {
@@ -254,6 +254,10 @@ export default function NovaFaturaReciboPage() {
   const clienteDropdownRef = useRef<HTMLDivElement>(null);
   const metodoDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Lock contra disparo duplo (scanner de código de barras costuma
+  // enviar Enter/keydown mais de uma vez em sequência muito rápida).
+  const processandoBuscaRef = useRef(false);
+
   const METODOS_PAGAMENTO: { value: DadosPagamento["metodo"]; label: string }[] = [
     { value: "dinheiro", label: "Dinheiro" },
     { value: "cartao", label: "Cartão" },
@@ -288,6 +292,40 @@ export default function NovaFaturaReciboPage() {
     return true;
   };
 
+  // NOVO: busca os produtos no backend, atualiza o estado local e
+  // recalcula/mostra o aviso de estoque baixo. Reutilizado no
+  // carregamento inicial, depois de uma venda concluída com sucesso e
+  // depois de um erro de "estoque insuficiente" — garantindo que o
+  // frontend nunca fique validando contra números desatualizados.
+  const recarregarProdutos = useCallback(async (opts?: { avisarEstoqueBaixo?: boolean }) => {
+    const avisar = opts?.avisarEstoqueBaixo ?? true;
+    try {
+      const produtosData = await produtoService
+        .listar({ status: "ativo", paginar: false })
+        .then((r) => (Array.isArray(r.produtos) ? r.produtos : []));
+
+      setProdutos(produtosData);
+
+      const fisicos = produtosData.filter((p) => !isServico(p));
+      const estoqueBaixo = fisicos.filter((p) => p.estoque_atual > 0 && p.estoque_atual <= ESTOQUE_MINIMO);
+      setProdutosEstoqueBaixo(estoqueBaixo);
+
+      if (avisar && estoqueBaixo.length > 0) {
+        const nomes = estoqueBaixo
+          .slice(0, 3)
+          .map((p) => p.nome)
+          .join(", ");
+        const extra = estoqueBaixo.length > 3 ? ` e mais ${estoqueBaixo.length - 3}` : "";
+        showToast(` ${estoqueBaixo.length} produto(s) com estoque baixo: ${nomes}${extra}`, "warning");
+      }
+
+      return produtosData;
+    } catch (error) {
+      console.error(" Erro ao atualizar produtos:", error);
+      return null;
+    }
+  }, []);
+
   // ─── EFFECTS ─────────────────────────────────────────────────────────
 
   // Verificar autenticação
@@ -315,22 +353,8 @@ export default function NovaFaturaReciboPage() {
         setClientes(clientesData);
         console.log(` ${clientesData.length} clientes ativos carregados`);
 
-        // 2. Carregar produtos
-        const produtosData = await produtoService
-          .listar({ status: "ativo", paginar: false })
-          .then((r) => (Array.isArray(r.produtos) ? r.produtos : []));
-        setProdutos(produtosData);
-        console.log(` ${produtosData.length} produtos carregados`);
-
-        // 3. Verificar estoque baixo
-        const fisicos = produtosData.filter((p) => !isServico(p));
-        const estoqueBaixo = fisicos.filter((p) => p.estoque_atual > 0 && p.estoque_atual <= ESTOQUE_MINIMO);
-        setProdutosEstoqueBaixo(estoqueBaixo);
-
-        if (estoqueBaixo.length > 0) {
-          console.warn(` ${estoqueBaixo.length} produtos com estoque baixo`);
-          showToast(` ${estoqueBaixo.length} produtos com estoque baixo`, "warning");
-        }
+        // 2. Carregar produtos + verificar estoque baixo
+        await recarregarProdutos();
       } catch (error) {
         console.error(" Erro ao carregar dados:", error);
         showToast(" Erro ao carregar dados", "error");
@@ -338,7 +362,7 @@ export default function NovaFaturaReciboPage() {
     };
 
     carregarDadosIniciais();
-  }, [user]);
+  }, [user, recarregarProdutos]);
 
   // Fechar dropdown ao clicar fora
   useEffect(() => {
@@ -413,27 +437,60 @@ export default function NovaFaturaReciboPage() {
     }
   };
 
-  //  FUNÇÃO PARA ADICIONAR ITEM AUTOMATICAMENTE AO CARRINHO
-  const adicionarItemAutomaticamente = (produto: Produto, quantidade: number = 1) => {
-    // Verificar se o produto já está no carrinho
-    const idx = itens.findIndex((i) => i.produto_id === produto.id);
-
-    if (idx >= 0) {
-      // Se já existe, atualiza a quantidade
-      const novaQtd = itens[idx].quantidade + quantidade;
-      if (!isServico(produto) && novaQtd > produto.estoque_atual) {
-        showToast(` Estoque insuficiente para ${novaQtd} unidades de ${produto.nome}.`, "error");
-        return;
-      }
-      setItens((prev) => prev.map((it, i) => (i === idx ? calcularItem(produto, novaQtd, it.desconto, it.id) : it)));
-      showToast(` ${produto.nome} adicionado (quantidade: ${novaQtd})`, "success");
-    } else {
-      // Se não existe, adiciona novo item
-      setItens((prev) => [...prev, calcularItem(produto, quantidade, 0)]);
-      showToast(`${produto.nome} adicionado ao carrinho`, "success");
+  // Monta a mensagem/tipo do toast levando em conta o estoque restante
+  // do produto depois da adição — se ficar em nível baixo (mas ainda
+  // positivo), o toast avisa em vez de só confirmar a adição.
+  const montarFeedbackEstoque = (produto: Produto, novaQtd: number, mensagemBase: string) => {
+    if (isServico(produto)) {
+      return { mensagem: mensagemBase, tipo: "success" as const };
     }
+    const restante = produto.estoque_atual - novaQtd;
+    if (restante <= ESTOQUE_MINIMO) {
+      return {
+        mensagem: ` ${mensagemBase} — estoque restante baixo: ${restante}`,
+        tipo: "warning" as const,
+      };
+    }
+    return { mensagem: mensagemBase, tipo: "success" as const };
+  };
 
-    // Limpar mensagem de sucesso após 3 segundos
+  //  FUNÇÃO PARA ADICIONAR ITEM AUTOMATICAMENTE AO CARRINHO
+  // CORRIGIDO: a decisão de mesclar (idx >= 0) ou criar uma linha nova
+  // agora acontece DENTRO do updater funcional do setItens, usando o
+  // "prev" mais atual do React — nunca a variável "itens" do escopo do
+  // componente. Antes, duas chamadas rápidas (comum com leitores de
+  // código de barras que disparam Enter/keydown mais de uma vez antes
+  // do primeiro re-render) liam o mesmo "itens" desatualizado, ambas
+  // concluíam que o produto ainda não estava no carrinho e criavam DUAS
+  // linhas separadas para o mesmo produto — cujas quantidades, somadas
+  // no backend, ultrapassavam o estoque real (ex.: 120 + 26 = 146).
+  const adicionarItemAutomaticamente = (produto: Produto, quantidade: number = 1) => {
+    let mensagem = "";
+    let tipoToast: "success" | "error" | "warning" = "success";
+
+    setItens((prev) => {
+      const idx = prev.findIndex((i) => i.produto_id === produto.id);
+
+      if (idx >= 0) {
+        const novaQtd = prev[idx].quantidade + quantidade;
+        if (!isServico(produto) && novaQtd > produto.estoque_atual) {
+          mensagem = ` Estoque insuficiente para ${novaQtd} unidades de ${produto.nome}.`;
+          tipoToast = "error";
+          return prev;
+        }
+        const feedback = montarFeedbackEstoque(produto, novaQtd, `${produto.nome} adicionado (quantidade: ${novaQtd})`);
+        mensagem = feedback.mensagem;
+        tipoToast = feedback.tipo;
+        return prev.map((it, i) => (i === idx ? calcularItem(produto, novaQtd, it.desconto, it.id) : it));
+      }
+
+      const feedback = montarFeedbackEstoque(produto, quantidade, `${produto.nome} adicionado ao carrinho`);
+      mensagem = feedback.mensagem;
+      tipoToast = feedback.tipo;
+      return [...prev, calcularItem(produto, quantidade, 0)];
+    });
+
+    showToast(mensagem, tipoToast);
     setTimeout(() => setToast(null), 3000);
 
     // Limpar o campo de busca
@@ -448,34 +505,42 @@ export default function NovaFaturaReciboPage() {
   };
 
   //  FUNÇÃO PARA BUSCAR PRODUTO POR CÓDIGO
-const buscarProdutoPorCodigo = (codigo: string) => {
-  if (!codigo.trim()) return null;
+  // Produtos (não serviços) sem estoque (<= 0) nunca são retornados —
+  // ficam automaticamente indisponíveis para venda por código.
+  const buscarProdutoPorCodigo = (codigo: string) => {
+    if (!codigo.trim()) return null;
 
-  let produto = produtos.find((p) => p.codigo === codigo.trim());
+    let produto = produtos.find((p) => p.codigo === codigo.trim());
 
-  if (!produto) {
-    produto = produtos.find((p) => p.codigo?.includes(codigo.trim()));
-  }
+    if (!produto) {
+      produto = produtos.find((p) => p.codigo?.includes(codigo.trim()));
+    }
 
-  // ignora produto (não serviço) sem stock
-  if (produto && produto.tipo === "produto" && produto.estoque_atual <= 0) {
-    return null;
-  }
+    // ignora produto (não serviço) sem stock
+    if (produto && produto.tipo === "produto" && produto.estoque_atual <= 0) {
+      return null;
+    }
 
-  return produto;
-};
+    return produto;
+  };
 
   const handleSelectItem = (produto: Produto) => {
     const qtd = produto.tipo === "produto" ? Math.min(1, produto.estoque_atual) : 1;
     adicionarItemAutomaticamente(produto, qtd);
   };
+
   // MANIPULADOR PARA PRESSIONAR ENTER NO CAMPO DE BUSCA
+  // CORRIGIDO: bloqueado contra disparo duplo do Enter/scanner.
   const handleBuscaKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.preventDefault();
 
+      if (processandoBuscaRef.current) return;
+
       const codigoBusca = buscaItem.trim();
       if (!codigoBusca) return;
+
+      processandoBuscaRef.current = true;
 
       // Tenta encontrar o produto pelo código
       const produto = buscarProdutoPorCodigo(codigoBusca);
@@ -489,9 +554,17 @@ const buscarProdutoPorCodigo = (codigo: string) => {
         showToast(` Produto com código "${codigoBusca}" não encontrado`, "error");
         setTimeout(() => setToast(null), 3000);
       }
+
+      // Libera o lock no próximo ciclo, já com o carrinho atualizado
+      setTimeout(() => {
+        processandoBuscaRef.current = false;
+      }, 300);
     }
   };
 
+  // CORRIGIDO: mesma lógica do setItens funcional aplicada aqui,
+  // para evitar duplicar linha do mesmo produto ao clicar rápido
+  // duas vezes no botão "Adicionar".
   const adicionarItem = () => {
     if (!formItem.produto_id || !previewItem) {
       showToast(" Selecione um produto/serviço", "error");
@@ -499,43 +572,73 @@ const buscarProdutoPorCodigo = (codigo: string) => {
     }
     const p = produtos.find((x) => x.id === formItem.produto_id);
     if (!p) return;
-    if (!isServico(p) && formItem.quantidade > p.estoque_atual) {
-      showToast(` Estoque insuficiente. Disponível: ${p.estoque_atual}`, "error");
-      return;
-    }
-    const idx = itens.findIndex((i) => i.produto_id === formItem.produto_id);
-    if (idx >= 0) {
-      const novaQtd = itens[idx].quantidade + formItem.quantidade;
-      if (!isServico(p) && novaQtd > p.estoque_atual) {
-        showToast(` Estoque insuficiente para ${novaQtd} unidades.`, "error");
-        return;
+
+    let mensagem = "";
+    let tipoToast: "success" | "error" | "warning" = "success";
+    let bloqueado = false;
+
+    setItens((prev) => {
+      const idx = prev.findIndex((i) => i.produto_id === formItem.produto_id);
+
+      if (idx >= 0) {
+        const novaQtd = prev[idx].quantidade + formItem.quantidade;
+        if (!isServico(p) && novaQtd > p.estoque_atual) {
+          mensagem = ` Estoque insuficiente para ${novaQtd} unidades.`;
+          tipoToast = "error";
+          bloqueado = true;
+          return prev;
+        }
+        const feedback = montarFeedbackEstoque(p, novaQtd, `${p.nome} adicionado ao carrinho`);
+        mensagem = feedback.mensagem;
+        tipoToast = feedback.tipo;
+        return prev.map((it, i) => (i === idx ? calcularItem(p, novaQtd, formItem.desconto, it.id) : it));
       }
-      setItens((prev) => prev.map((it, i) => (i === idx ? calcularItem(p, novaQtd, formItem.desconto, it.id) : it)));
-    } else {
-      setItens((prev) => [...prev, calcularItem(p, formItem.quantidade, formItem.desconto)]);
-    }
-    showToast(`${p.nome} adicionado ao carrinho`, "success");
+
+      if (!isServico(p) && formItem.quantidade > p.estoque_atual) {
+        mensagem = ` Estoque insuficiente. Disponível: ${p.estoque_atual}`;
+        tipoToast = "error";
+        bloqueado = true;
+        return prev;
+      }
+
+      const feedback = montarFeedbackEstoque(p, formItem.quantidade, `${p.nome} adicionado ao carrinho`);
+      mensagem = feedback.mensagem;
+      tipoToast = feedback.tipo;
+      return [...prev, calcularItem(p, formItem.quantidade, formItem.desconto)];
+    });
+
+    showToast(mensagem, tipoToast);
     setTimeout(() => setToast(null), 3000);
-    setFormItem({ produto_id: "", quantidade: 1, desconto: 0 });
-    setBuscaItem("");
-    setPreviewItem(null);
+
+    if (!bloqueado) {
+      setFormItem({ produto_id: "", quantidade: 1, desconto: 0 });
+      setBuscaItem("");
+      setPreviewItem(null);
+    }
   };
 
+  // CORRIGIDO: idx e validação de estoque calculados a partir do "prev"
+  // dentro do updater, não da variável "itens" do escopo externo.
   const atualizarQtd = (itemId: string, novaQtd: number) => {
-    const idx = itens.findIndex((i) => i.id === itemId);
-    if (idx < 0) return;
-    if (novaQtd < 1) {
-      setItens((p) => p.filter((i) => i.id !== itemId));
-      return;
-    }
-    const item = itens[idx];
-    const p = produtos.find((x) => x.id === item.produto_id);
-    if (!p) return;
-    if (!isServico(p) && novaQtd > p.estoque_atual) {
-      showToast(` Máximo disponível: ${p.estoque_atual}`, "error");
-      return;
-    }
-    setItens((prev) => prev.map((it, i) => (i === idx ? calcularItem(p, novaQtd, item.desconto, item.id) : it)));
+    setItens((prev) => {
+      const idx = prev.findIndex((i) => i.id === itemId);
+      if (idx < 0) return prev;
+
+      if (novaQtd < 1) {
+        return prev.filter((i) => i.id !== itemId);
+      }
+
+      const item = prev[idx];
+      const p = produtos.find((x) => x.id === item.produto_id);
+      if (!p) return prev;
+
+      if (!isServico(p) && novaQtd > p.estoque_atual) {
+        showToast(` Máximo disponível: ${p.estoque_atual}`, "error");
+        return prev;
+      }
+
+      return prev.map((it, i) => (i === idx ? calcularItem(p, novaQtd, item.desconto, item.id) : it));
+    });
   };
 
   const removerItem = (id: string) => setItens((p) => p.filter((i) => i.id !== id));
@@ -564,11 +667,61 @@ const buscarProdutoPorCodigo = (codigo: string) => {
     return pagamentoSuficiente;
   };
 
+  // NOVO: revalida o estoque em tempo real (busca os produtos mais
+  // recentes no backend) imediatamente antes de montar/enviar o
+  // payload da venda. Evita que o utilizador só descubra que o estoque
+  // acabou depois de o backend rejeitar a venda — o carrinho é
+  // corrigido/limpo localmente e o utilizador é avisado na hora.
+  const revalidarEstoqueAntesDeFinalizar = async (): Promise<boolean> => {
+    const produtosAtuais = await recarregarProdutos({ avisarEstoqueBaixo: false });
+    if (!produtosAtuais) {
+      // Não foi possível confirmar o estoque atual — deixa o backend
+      // validar normalmente (o catch de finalizarVenda trata o erro).
+      return true;
+    }
+
+    const insuficientes = itens.filter((it) => {
+      const p = produtosAtuais.find((x) => x.id === it.produto_id);
+      return !!p && !isServico(p) && it.quantidade > p.estoque_atual;
+    });
+
+    if (insuficientes.length === 0) return true;
+
+    const nomes = insuficientes.map((i) => i.descricao).join(", ");
+    showToast(` Estoque insuficiente para: ${nomes}. As quantidades foram ajustadas — revise antes de finalizar.`, "error");
+
+    setItens((prev) =>
+      prev
+        .map((it) => {
+          const p = produtosAtuais.find((x) => x.id === it.produto_id);
+          if (p && !isServico(p) && it.quantidade > p.estoque_atual) {
+            // Reduz para o máximo disponível (se ainda houver stock)
+            return p.estoque_atual > 0 ? calcularItem(p, p.estoque_atual, it.desconto, it.id) : it;
+          }
+          return it;
+        })
+        // Remove do carrinho os itens cujo estoque real caiu para 0
+        .filter((it) => {
+          const p = produtosAtuais.find((x) => x.id === it.produto_id);
+          return !p || isServico(p) || p.estoque_atual > 0;
+        })
+    );
+
+    return false;
+  };
+
   const finalizarVenda = async () => {
-    if (bloquearSeDadosIncompletos()) return;
-    if (!podeFinalizar()) return;
+    if (loading) return; // guarda síncrona contra duplo clique
     setLoading(true);
     try {
+      if (bloquearSeDadosIncompletos()) return;
+      if (!podeFinalizar()) return;
+
+      const estoqueOk = await revalidarEstoqueAntesDeFinalizar();
+      if (!estoqueOk) {
+        return;
+      }
+
       const payload: CriarVendaPayload = {
         itens: itens.map((it) => ({
           produto_id: it.produto_id,
@@ -610,9 +763,28 @@ const buscarProdutoPorCodigo = (codigo: string) => {
       }
       await vendaService.criar(payload);
       showToast(" Venda criada com sucesso! Redirecionando...", "success");
+
+      // Atualiza o snapshot local de estoque antes de sair — garante
+      // que, se o utilizador continuar na página, a próxima venda já
+      // valide contra o estoque real (evita usar números obsoletos).
+      await recarregarProdutos({ avisarEstoqueBaixo: false });
+
       setTimeout(() => router.push("/dashboard/Faturas/Faturas"), 1500);
     } catch (err: unknown) {
-      showToast(err instanceof AxiosError ? ` ${err.response?.data?.message || "Erro ao salvar"}` : " Erro ao salvar", "error");
+      const mensagemErro = err instanceof AxiosError ? err.response?.data?.message || "Erro ao salvar" : "Erro ao salvar";
+
+      showToast(` ${mensagemErro}`, "error");
+
+      // Se o erro foi de estoque insuficiente, os dados locais estavam
+      // desatualizados — recarrega os produtos para refletir o estoque
+      // real e avisa o utilizador para revalidar as quantidades.
+      const mensagemLower = mensagemErro.toLowerCase();
+      if (mensagemLower.includes("stock insuficiente") || mensagemLower.includes("estoque insuficiente")) {
+        await recarregarProdutos({ avisarEstoqueBaixo: false });
+        setTimeout(() => {
+          showToast(" Estoque atualizado. Verifique as quantidades no carrinho antes de tentar novamente.", "warning");
+        }, 400);
+      }
     } finally {
       setLoading(false);
     }
@@ -621,18 +793,18 @@ const buscarProdutoPorCodigo = (codigo: string) => {
   // ─── RENDER ────────────────────────────────────────────────────────
 
   const produtoSel = produtos.find((p) => p.id === formItem.produto_id);
-const itensFiltrados = produtos.filter((p) => {
-  if (p.status !== "ativo") return false;
-  if (tipoItemSelecionado === "produto" && p.tipo !== "produto") return false;
-  if (tipoItemSelecionado === "servico" && p.tipo !== "servico") return false;
+  const itensFiltrados = produtos.filter((p) => {
+    if (p.status !== "ativo") return false;
+    if (tipoItemSelecionado === "produto" && p.tipo !== "produto") return false;
+    if (tipoItemSelecionado === "servico" && p.tipo !== "servico") return false;
 
-  //  NOVO: esconde produtos (não serviços) sem stock
-  if (p.tipo === "produto" && p.estoque_atual <= 0) return false;
+    //  esconde produtos (não serviços) sem stock
+    if (p.tipo === "produto" && p.estoque_atual <= 0) return false;
 
-  if (buscaItem.trim() === "") return true;
-  const buscaLower = buscaItem.toLowerCase();
-  return p.nome.toLowerCase().includes(buscaLower) || (p.codigo && p.codigo.toLowerCase().includes(buscaLower));
-});
+    if (buscaItem.trim() === "") return true;
+    const buscaLower = buscaItem.toLowerCase();
+    return p.nome.toLowerCase().includes(buscaLower) || (p.codigo && p.codigo.toLowerCase().includes(buscaLower));
+  });
 
   return (
     <MainEmpresa>
@@ -670,9 +842,7 @@ const itensFiltrados = produtos.filter((p) => {
           <div className="divide-y" style={{ borderColor: colors.border }}>
             {/* ── Cliente ── */}
             <div className="flex flex-col sm:flex-row min-h-[44px]">
-              <div
-                className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-28 shrink-0"
-                style={{ backgroundColor: colors.hover }}>
+              <div className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-28 shrink-0" style={{ backgroundColor: colors.hover }}>
                 <User size={13} style={{ color: colors.text }} />
                 <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>
                   Cliente
@@ -707,9 +877,7 @@ const itensFiltrados = produtos.filter((p) => {
                       onClick={() => setClienteDropdownAberto((v) => !v)}
                       className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-sm outline-none text-left"
                       style={inp}>
-                      <span
-                        className="truncate"
-                        style={{ color: clienteSelecionado ? colors.text : colors.textSecondary }}>
+                      <span className="truncate" style={{ color: clienteSelecionado ? colors.text : colors.textSecondary }}>
                         {clienteSelecionado
                           ? `${clienteSelecionado.nome}${clienteSelecionado.nif ? ` — ${formatarNIF(clienteSelecionado.nif)}` : ""}`
                           : "Selecione um cliente…"}
@@ -807,9 +975,7 @@ const itensFiltrados = produtos.filter((p) => {
 
             {/* ── Produto e Serviços ── */}
             <div className="flex flex-col sm:flex-row min-h-[44px]">
-              <div
-                className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-28 shrink-0"
-                style={{ backgroundColor: colors.hover }}>
+              <div className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-28 shrink-0" style={{ backgroundColor: colors.hover }}>
                 <Package size={13} style={{ color: colors.text }} />
                 <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>
                   Itens
@@ -929,7 +1095,11 @@ const itensFiltrados = produtos.filter((p) => {
                                   {formatarPreco(item.preco_venda)}
                                 </span>
                                 {item.tipo === "produto" && (
-                                  <span className="text-xs ml-2" style={{ color: colors.textSecondary }}>
+                                  <span
+                                    className="text-xs ml-2"
+                                    style={{
+                                      color: item.estoque_atual <= ESTOQUE_MINIMO ? colors.warning : colors.textSecondary,
+                                    }}>
                                     Stock: {item.estoque_atual}
                                   </span>
                                 )}
@@ -950,81 +1120,6 @@ const itensFiltrados = produtos.filter((p) => {
                     )}
                   </div>
 
-                  {/* Controles de quantidade 
-                  <div className="flex items-center border overflow-hidden shrink-0" style={{ borderColor: colors.border }}>
-                    <button
-                      type="button"
-                      className="w-8 h-9 flex items-center justify-center disabled:opacity-30"
-                      style={{ backgroundColor: colors.hover }}
-                      disabled={!formItem.produto_id || formItem.quantidade <= 1}
-                      onClick={() =>
-                        setFormItem((p) => ({
-                          ...p,
-                          quantidade: Math.max(1, p.quantidade - 1),
-                        }))
-                      }>
-                      <Minus size={12} style={{ color: colors.text }} />
-                    </button>
-                    <input
-                      type="number"
-                      min={1}
-                      className="w-11 text-center text-sm h-9 border-0 outline-none"
-                      style={{
-                        backgroundColor: colors.card,
-                        color: colors.text,
-                      }}
-                      value={formItem.quantidade}
-                      disabled={!formItem.produto_id}
-                      onChange={(e) => {
-                        const p = produtos.find((x) => x.id === formItem.produto_id);
-                        if (p) {
-                          const maxQtd = p.tipo === "servico" ? 9999 : p.estoque_atual;
-                          setFormItem((prev) => ({
-                            ...prev,
-                            quantidade: Math.max(1, Math.min(Number(e.target.value) || 1, maxQtd)),
-                          }));
-                        }
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="w-8 h-9 flex items-center justify-center disabled:opacity-30"
-                      style={{ backgroundColor: colors.hover }}
-                      disabled={
-                        !formItem.produto_id ||
-                        (produtoSel && produtoSel.tipo === "produto" && formItem.quantidade >= produtoSel.estoque_atual)
-                      }
-                      onClick={() => {
-                        const p = produtos.find((x) => x.id === formItem.produto_id);
-                        if (p) {
-                          const maxQtd = p.tipo === "servico" ? 9999 : p.estoque_atual;
-                          setFormItem((prev) => ({
-                            ...prev,
-                            quantidade: Math.min(prev.quantidade + 1, maxQtd),
-                          }));
-                        }
-                      }}>
-                      <Plus size={12} style={{ color: colors.text }} />
-                    </button>
-                  </div>*/}
-
-                  {/* Campo de desconto 
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="Desconto"
-                    className="w-24 shrink-0 px-3 py-1.5 text-sm outline-none"
-                    style={inp}
-                    value={formItem.desconto || ""}
-                    disabled={!formItem.produto_id}
-                    onChange={(e) =>
-                      setFormItem((p) => ({
-                        ...p,
-                        desconto: Number(e.target.value),
-                      }))
-                    }
-                  />*/}
-
                   {/* Botão adicionar */}
                   <button
                     type="button"
@@ -1038,7 +1133,9 @@ const itensFiltrados = produtos.filter((p) => {
 
                   {/* Indicador de estoque */}
                   {produtoSel && produtoSel.tipo === "produto" && (
-                    <span className="text-xs shrink-0" style={{ color: colors.textSecondary }}>
+                    <span
+                      className="text-xs shrink-0"
+                      style={{ color: produtoSel.estoque_atual <= ESTOQUE_MINIMO ? colors.warning : colors.textSecondary }}>
                       disp.: {produtoSel.estoque_atual}
                     </span>
                   )}
@@ -1048,9 +1145,7 @@ const itensFiltrados = produtos.filter((p) => {
 
             {/* ── Observações ── */}
             <div className="flex flex-col sm:flex-row min-h-[44px]">
-              <div
-                className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-28 shrink-0"
-                style={{ backgroundColor: colors.hover }}>
+              <div className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-28 shrink-0" style={{ backgroundColor: colors.hover }}>
                 <FileText size={13} style={{ color: colors.text }} />
                 <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>
                   Obs.
@@ -1296,9 +1391,7 @@ const itensFiltrados = produtos.filter((p) => {
                       onClick={() => setMetodoDropdownAberto((v) => !v)}
                       className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm outline-none text-left"
                       style={inp}>
-                      <span style={{ color: colors.text }}>
-                        {METODOS_PAGAMENTO.find((m) => m.value === formPagamento.metodo)?.label}
-                      </span>
+                      <span style={{ color: colors.text }}>{METODOS_PAGAMENTO.find((m) => m.value === formPagamento.metodo)?.label}</span>
                       <ChevronDown
                         size={14}
                         className={`shrink-0 transition-transform ${metodoDropdownAberto ? "rotate-180" : ""}`}

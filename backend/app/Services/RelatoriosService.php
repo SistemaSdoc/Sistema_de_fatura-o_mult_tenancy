@@ -613,17 +613,14 @@ public function relatorioVendas($dataInicio = null, $dataFim = null, $filtros = 
     if ($dataFim) {
         $query->whereDate('data_venda', '<=', $dataFim);
     }
-
     if (!empty($filtros['cliente_id'])) {
         $query->where('cliente_id', $filtros['cliente_id']);
     }
-
     if (!empty($filtros['apenas_vendas'])) {
         $query->whereHas('documentoFiscal', function ($q) {
             $q->whereIn('tipo_documento', ['FT', 'FR', 'RC']);
         });
     }
-
     if (!empty($filtros['estado_pagamento'])) {
         $query->where('estado_pagamento', $filtros['estado_pagamento']);
     }
@@ -637,6 +634,14 @@ public function relatorioVendas($dataInicio = null, $dataFim = null, $filtros = 
     $ticketMedio      = $quantidadeVendas > 0 ? $totalPeriodo / $quantidadeVendas : 0;
     $clientesUnicos   = $vendas->pluck('cliente_id')->filter()->unique()->count();
     $produtosVendidos = $vendas->flatMap(fn($v) => $v->itens->pluck('produto_id'))->filter()->unique()->count();
+
+    // ✅ Estas 4 linhas é que faltavam — sem elas as variáveis não existem
+    $totalBaseTributavel = $vendas->sum('base_tributavel');
+    $totalIva            = $vendas->sum('total_iva');
+    $totalRetencao       = $vendas->sum(fn($v) => $v->documentoFiscal->total_retencao ?? 0);
+    $totalServicos       = $vendas->flatMap(fn($v) => $v->itens)
+        ->filter(fn($item) => optional($item->produto)->tipo === 'servico')
+        ->count();
 
     $vendasPorStatus = [
         'pagas'      => $vendas->where('estado_pagamento', 'paga')->count(),
@@ -659,14 +664,31 @@ public function relatorioVendas($dataInicio = null, $dataFim = null, $filtros = 
                 'tipo_documento'   => $venda->documentoFiscal?->tipo_documento,
             ];
         }),
+
+        // ✅ mantém 'kpis' — é o que RelatorioVendasComponent.tsx (gráficos) usa
         'kpis' => [
-            'total_vendas'     => $totalPeriodo,
+            'total_vendas'      => $totalPeriodo,     // valor em Kz
             'quantidade_vendas' => $quantidadeVendas,
-            'ticket_medio'     => round($ticketMedio, 2),
-            'clientes_periodo' => $clientesUnicos,
+            'ticket_medio'      => round($ticketMedio, 2),
+            'clientes_periodo'  => $clientesUnicos,
             'produtos_vendidos' => $produtosVendidos,
             'vendas_por_status' => $vendasPorStatus,
         ],
+
+        // ✅ acrescenta 'totais' — é o que relatorioExport.ts (PDF/Excel) precisa
+        'totais' => [
+            'total_valor'           => $totalPeriodo,
+            'total_vendas'          => $quantidadeVendas,  // aqui é contagem
+            'total_base_tributavel' => $totalBaseTributavel,
+            'total_iva'             => $totalIva,
+            'total_retencao'        => $totalRetencao,
+            'total_servicos'        => $totalServicos,
+            'ticket_medio'          => round($ticketMedio, 2),
+            'clientes_periodo'      => $clientesUnicos,
+            'produtos_vendidos'     => $produtosVendidos,
+            'vendas_por_status'     => $vendasPorStatus,
+        ],
+
         'periodo' => [
             'data_inicio' => $dataInicio,
             'data_fim'    => $dataFim,

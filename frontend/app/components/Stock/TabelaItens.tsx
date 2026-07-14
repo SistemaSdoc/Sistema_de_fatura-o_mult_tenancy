@@ -190,12 +190,12 @@ export function TabelaItens({
                                         )}
                                     </td>
                                     <td className="py-2.5 px-3">
-                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded whitespace-nowrap" style={{ background: `${colors.border}50`, color: colors.secondary }}>
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs whitespace-nowrap" style={{ background: `${colors.border}50`, color: colors.secondary }}>
                                             {tipoBadge.texto}
                                         </span>
                                     </td>
                                     <td className="py-2.5 px-3 text-center">
-                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded whitespace-nowrap" style={{ color: ivaDisplay.cor, backgroundColor: `${ivaDisplay.isento ? colors.textSecondary : colors.primary}20` }}>
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs whitespace-nowrap" style={{ color: ivaDisplay.cor, backgroundColor: `${ivaDisplay.isento ? colors.textSecondary : colors.primary}20` }}>
                                             {ivaDisplay.label}
                                         </span>
                                     </td>
@@ -220,7 +220,7 @@ export function TabelaItens({
                                                 }
                                             }}
                                             onClick={(e) => toggleMenu(e, item.id)}
-                                            className="p-1.5 hover:opacity-70 transition-opacity rounded"
+                                            className="p-1.5 hover:opacity-70 transition-opacity"
                                             style={{
                                                 color: colors.textSecondary,
                                                 backgroundColor: menuId === item.id && menuOpen ? `${colors.primary}20` : 'transparent'
@@ -245,7 +245,7 @@ export function TabelaItens({
                     const ivaDisplay = getIVADisplay(item);
 
                     return (
-                        <div key={item.id} className="border p-3 rounded-lg" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                        <div key={item.id} className="border p-3 " style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                             <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0">
                                     <p className="font-medium text-sm truncate" style={{ color: colors.text }}>{item.nome}</p>
@@ -255,7 +255,7 @@ export function TabelaItens({
                                 </div>
                                 <button
                                     onClick={(e) => toggleMenu(e, item.id)}
-                                    className="p-1.5 shrink-0 hover:opacity-70 transition-opacity rounded"
+                                    className="p-1.5 shrink-0 hover:opacity-70 transition-opacity "
                                     style={{ color: colors.textSecondary }}
                                     aria-label="Ações"
                                 >
@@ -263,10 +263,10 @@ export function TabelaItens({
                                 </button>
                             </div>
                             <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded" style={{ backgroundColor: `${colors.border}50`, color: colors.secondary }}>
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs " style={{ backgroundColor: `${colors.border}50`, color: colors.secondary }}>
                                     {tipoBadge.texto}
                                 </span>
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded" style={{ color: ivaDisplay.cor, backgroundColor: `${ivaDisplay.isento ? colors.textSecondary : colors.primary}20` }}>
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs " style={{ color: ivaDisplay.cor, backgroundColor: `${ivaDisplay.isento ? colors.textSecondary : colors.primary}20` }}>
                                     <Percent className="w-3 h-3" />
                                     {ivaDisplay.label}
                                 </span>

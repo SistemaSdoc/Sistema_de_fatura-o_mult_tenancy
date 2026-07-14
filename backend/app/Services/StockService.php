@@ -340,105 +340,130 @@ class StockService
      | MOVIMENTAÇÃO GENÉRICA
      | ================================================================== */
 
-    public function movimentar(
-        string $produtoId,
-        int $quantidade,
-        string $tipo,
-        string $tipoMovimento,
-        ?string $referencia = null,
-        ?string $observacao = null,
-        ?string $userId = null,
-    ): ?object {
-        // ✅ Verifica acesso
-        $this->verificarAcessoUsuario();
+public function movimentar(
+    string $produtoId,
+    int $quantidade,
+    string $tipo,
+    string $tipoMovimento,
+    ?string $referencia = null,
+    ?string $observacao = null,
+    ?string $userId = null,
+): ?object {
+    // ✅ Verifica acesso
+    $this->verificarAcessoUsuario();
 
-        // ✅ Validar tipo de movimento
-        if (!in_array($tipoMovimento, self::TIPOS_MOVIMENTO_VALIDOS)) {
-            throw new \InvalidArgumentException(
-                "Tipo de movimento inválido: {$tipoMovimento}. " .
-                "Permitidos: " . implode(', ', self::TIPOS_MOVIMENTO_VALIDOS)
-            );
-        }
+    // ✅ Validar tipo de movimento
+    if (!in_array($tipoMovimento, self::TIPOS_MOVIMENTO_VALIDOS)) {
+        throw new \InvalidArgumentException(
+            "Tipo de movimento inválido: {$tipoMovimento}. " .
+            "Permitidos: " . implode(', ', self::TIPOS_MOVIMENTO_VALIDOS)
+        );
+    }
 
-        $modo = $this->getModo();
+    $modo = $this->getModo();
 
-        Log::info('[StockService] Iniciando movimentação', [
-            'produto_id'      => $produtoId,
-            'quantidade'      => $quantidade,
-            'tipo'            => $tipo,
-            'tipo_movimento'  => $tipoMovimento,
-            'modo'            => $modo,
-        ]);
+    Log::info('[StockService] Iniciando movimentação', [
+        'produto_id'      => $produtoId,
+        'quantidade'      => $quantidade,
+        'tipo'            => $tipo,
+        'tipo_movimento'  => $tipoMovimento,
+        'referencia'      => $referencia,
+        'modo'            => $modo,
+    ]);
 
-        return DB::transaction(function () use (
-            $produtoId,
-            $quantidade,
-            $tipo,
-            $tipoMovimento,
-            $referencia,
-            $observacao,
-            $userId
-        ) {
-            $produto = $this->buscarProdutoComLock($produtoId);
+    return DB::transaction(function () use (
+        $produtoId,
+        $quantidade,
+        $tipo,
+        $tipoMovimento,
+        $referencia,
+        $observacao,
+        $userId
+    ) {
+        // ✅ IDEMPOTÊNCIA: se já existe um movimento para este produto +
+        // referência (venda/documento) + tipo de movimento, não duplica.
+        // Isto evita descontar o stock duas vezes quando o mesmo produto
+        // é processado em mais de um ponto do fluxo (ex.: uma vez ao
+        // criar a venda, outra vez ao emitir o documento fiscal).
+        if ($referencia !== null) {
+            $jaExiste = $this->queryMovimentosStock()
+                ->where('produto_id', $produtoId)
+                ->where('referencia', $referencia)
+                ->where('tipo_movimento', $tipoMovimento)
+                ->lockForUpdate()
+                ->exists();
 
-            if ($quantidade <= 0) {
-                throw new \Exception('Quantidade inválida para movimentação de stock.');
-            }
-
-            if ($produto->tipo === 'servico') {
-                Log::warning('[StockService] Tentativa de movimentar serviço ignorada');
+            if ($jaExiste) {
+                Log::warning('[StockService] Movimento duplicado ignorado (idempotência)', [
+                    'produto_id'      => $produtoId,
+                    'referencia'      => $referencia,
+                    'tipo_movimento'  => $tipoMovimento,
+                    'quantidade_tentada' => $quantidade,
+                ]);
                 return null;
             }
+        }
 
-            $estoqueAnterior = $produto->estoque_atual;
+        $produto = $this->buscarProdutoComLock($produtoId);
 
-            if ($tipo === 'entrada') {
-                $novaQuantidade = $estoqueAnterior + $quantidade;
-            } else {
-                if ($estoqueAnterior < $quantidade) {
-                    throw new \Exception(
-                        "Stock insuficiente. Produto: {$produto->nome}, " .
-                        "Disponível: {$estoqueAnterior}, Necessário: {$quantidade}"
-                    );
-                }
-                $novaQuantidade = $estoqueAnterior - $quantidade;
+        if ($quantidade <= 0) {
+            throw new \Exception('Quantidade inválida para movimentação de stock.');
+        }
+
+        if ($produto->tipo === 'servico') {
+            Log::warning('[StockService] Tentativa de movimentar serviço ignorada');
+            return null;
+        }
+
+        $estoqueAnterior = $produto->estoque_atual;
+
+        if ($tipo === 'entrada') {
+            $novaQuantidade = $estoqueAnterior + $quantidade;
+        } else {
+            if ($estoqueAnterior < $quantidade) {
+                throw new \Exception(
+                    "Stock insuficiente. Produto: {$produto->nome}, " .
+                    "Disponível: {$estoqueAnterior}, Necessário: {$quantidade}"
+                );
             }
+            $novaQuantidade = $estoqueAnterior - $quantidade;
+        }
 
-            $produto->estoque_atual = $novaQuantidade;
-            $produto->save();
+        $produto->estoque_atual = $novaQuantidade;
+        $produto->save();
 
-            $finalUserId = $this->getUserId($userId);
+        $finalUserId = $this->getUserId($userId);
 
-            $dadosMovimento = [
-                'id'                => Str::uuid(),
-                'produto_id'        => $produto->id,
-                'user_id'           => $finalUserId,
-                'tipo'              => $tipo,
-                'tipo_movimento'    => $tipoMovimento,
-                'quantidade'        => $tipo === 'entrada' ? $quantidade : -$quantidade,
-                'estoque_anterior'  => $estoqueAnterior,
-                'estoque_novo'      => $novaQuantidade,
-                'custo_medio'       => $produto->custo_medio,
-                'stock_minimo'      => $produto->estoque_minimo,
-                'referencia'        => $referencia,
-                'observacao'        => $observacao,
-            ];
+        $dadosMovimento = [
+            'id'                => Str::uuid(),
+            'produto_id'        => $produto->id,
+            'user_id'           => $finalUserId,
+            'tipo'              => $tipo,
+            'tipo_movimento'    => $tipoMovimento,
+            'quantidade'        => $tipo === 'entrada' ? $quantidade : -$quantidade,
+            'estoque_anterior'  => $estoqueAnterior,
+            'estoque_novo'      => $novaQuantidade,
+            'custo_medio'       => $produto->custo_medio,
+            'stock_minimo'      => $produto->estoque_minimo,
+            'referencia'        => $referencia,
+            'observacao'        => $observacao,
+        ];
 
-            if ($this->isColectivo()) {
-                $dadosMovimento['tenant_id'] = $this->empresa->id;
-            }
+        if ($this->isColectivo()) {
+            $dadosMovimento['tenant_id'] = $this->empresa->id;
+        }
 
-            $movimentoModel = $this->movimentoStockModel();
-            $movimento = $movimentoModel->create($dadosMovimento);
+        $movimentoModel = $this->movimentoStockModel();
+        $movimento = $movimentoModel->create($dadosMovimento);
 
-            Log::info('[StockService] Movimento registrado', [
-                'movimento_id' => $movimento->id,
-                'modo' => $this->getModo(),
-            ]);
+        Log::info('[StockService] Movimento registrado', [
+            'movimento_id' => $movimento->id,
+            'modo' => $this->getModo(),
+        ]);
 
-            return $movimento;
-        });
-    }
+        return $movimento;
+    });
+}
 
     /* =====================================================================
      | MÉTODOS ESPECÍFICOS

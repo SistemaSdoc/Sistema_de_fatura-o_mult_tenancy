@@ -21,10 +21,6 @@ use App\Http\Controllers\FreelancerController;
 
 $uuidPattern = '[0-9a-fA-F-]{36}';
 
-
-
-
-
 Route::post('/password/email', [PasswordResetController::class, 'sendResetLink'])
     ->middleware('throttle:5,10'); // 5 tentativas a cada 10 minutos
 
@@ -33,7 +29,7 @@ Route::prefix('landlord')->group(function () {
     Route::post('/login', [LandlordAuthController::class, 'login']);
     Route::post('/register', [LandlordAuthController::class, 'register']);
 
-    // ✅ OAUTH2 - Google (públicas)
+    //  OAUTH2 - Google (públicas)
     Route::get('/auth/google', [LandlordAuthController::class, 'redirectToGoogle'])->name('landlord.google.redirect');
     Route::get('/auth/google/callback', [LandlordAuthController::class, 'handleGoogleCallback'])->name('landlord.google.callback');
 
@@ -42,7 +38,7 @@ Route::prefix('landlord')->group(function () {
         Route::post('/logout', [LandlordAuthController::class, 'logout']);
         Route::get('/landlordme', [LandlordAuthController::class, 'landlordme']);
 
-        // ✅ FREELANCER - Pessoa Coletiva/Singular
+        // FREELANCER - Pessoa Coletiva/Singular
         Route::post('/freelancer/empresa', [FreelancerController::class, 'criarEmpresaSingular']);
         Route::get('/freelancer/onboarding', [FreelancerController::class, 'obterStatusOnboarding']);
         Route::put('/freelancer/empresa', [FreelancerController::class, 'atualizarDadosEmpresa']);
@@ -109,6 +105,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::post('/{id}/restore', [ClienteController::class, 'restore'])->where('id', $uuidPattern)->name('clientes.restore');
             Route::delete('/{id}/force', [ClienteController::class, 'forceDelete'])->where('id', $uuidPattern)->name('clientes.force-delete');
             Route::post('/{id}/ativar', [ClienteController::class, 'ativar'])->where('id', $uuidPattern)->name('clientes.ativar');
+            Route::post('/clientes/importar', [ClienteController::class, 'importar']);
             Route::post('/{id}/inativar', [ClienteController::class, 'inativar'])->where('id', $uuidPattern)->name('clientes.inativar');
         });
 
@@ -129,6 +126,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
 
         // ---------- PRODUTOS ----------
         Route::prefix('produtos')->group(function () use ($uuidPattern) {
+            Route::post('importar', [ProdutoController::class, 'importar']);
             Route::get('/', [ProdutoController::class, 'index'])->middleware('log.panel')->name('produtos.index');
             Route::get('/todos', [ProdutoController::class, 'todos'])->name('produtos.todos');
             Route::get('/trashed', [ProdutoController::class, 'trashed'])->name('produtos.trashed');
@@ -143,21 +141,21 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
 
         // ---------- CATEGORIAS (COMPLETO) ----------
         Route::prefix('categorias')->group(function () use ($uuidPattern) {
-            // ✅ Listagens
+            //  Listagens
             Route::get('/', [CategoriaController::class, 'index'])->middleware('log.panel')->name('categorias.index');                           // Apenas ativas
             Route::get('/todas', [CategoriaController::class, 'indexTodas'])->name('categorias.todas');                 // Todas (inclui inativas)
             Route::get('/deletadas', [CategoriaController::class, 'indexDeletadas'])->name('categorias.deletadas');     // Apenas deletadas (soft delete)
 
-            // ✅ Select para dropdowns
+            //  Select para dropdowns
             Route::get('/select', [CategoriaController::class, 'paraSelectProdutos'])->name('categorias.select');
 
-            // ✅ CRUD básico
+            //  CRUD básico
             Route::post('/', [CategoriaController::class, 'store'])->name('categorias.store');
             Route::get('/{id}', [CategoriaController::class, 'show'])->where('id', $uuidPattern)->name('categorias.show');
             Route::put('/{id}', [CategoriaController::class, 'update'])->where('id', $uuidPattern)->name('categorias.update');
             Route::delete('/{id}', [CategoriaController::class, 'destroy'])->where('id', $uuidPattern)->name('categorias.destroy');
 
-            // ✅ Soft Delete - Restaurar e Forçar Delete
+            //  Soft Delete - Restaurar e Forçar Delete
             Route::post('/{id}/restore', [CategoriaController::class, 'restore'])->where('id', $uuidPattern)->name('categorias.restore');
             Route::delete('/{id}/force', [CategoriaController::class, 'forceDelete'])->where('id', $uuidPattern)->name('categorias.force-delete');
         });
@@ -182,6 +180,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
         Route::delete('/clientes/{id}', [ClienteController::class, 'destroy'])->where('id', $uuidPattern)->name('clientes.destroy');
         Route::post('/clientes/{id}/ativar', [ClienteController::class, 'ativar'])->where('id', $uuidPattern)->name('clientes.ativar');
         Route::post('/clientes/{id}/inativar', [ClienteController::class, 'inativar'])->where('id', $uuidPattern)->name('clientes.inativar');
+        Route::post('/clientes/importar', [ClienteController::class, 'importar']);
 
         // ---------- COMPRAS ----------
         Route::prefix('compras')->group(function () use ($uuidPattern) {

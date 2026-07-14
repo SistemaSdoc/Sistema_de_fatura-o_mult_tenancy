@@ -26,6 +26,10 @@ use App\Services\AuditLogger;
 use App\Services\ProdutoService;
 use Carbon\Carbon;
 use Throwable;
+use App\Imports\ProdutoServicoImport;
+use App\Imports\ProdutosSheetImport;
+use App\Imports\ServicosSheetImport;
+use Maatwebsite\Excel\Facades\Excel;
 
 class ProdutoController extends Controller
 {
@@ -38,7 +42,7 @@ class ProdutoController extends Controller
     {
         $this->produtoService = $produtoService;
 
-        // ✅ Obtém da sessão (prioridade máxima)
+        // Obtém da sessão (prioridade máxima)
         $this->empresa = app('current.empresa');
         $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
 
@@ -54,7 +58,7 @@ class ProdutoController extends Controller
 
     protected function getModo(): string
     {
-        // ✅ Atualiza da sessão a cada chamada
+        //Atualiza da sessão a cada chamada
         $this->modo = session('tenant_modo', 'colectivo');
         return $this->modo;
     }
@@ -1070,6 +1074,74 @@ class ProdutoController extends Controller
             'duracao_estimada' => 'required|string|max:50',
             'unidade_medida'   => 'required|in:hora,dia,semana,mes',
         ]);
+    }
+
+    public function importar(Request $request)
+    {
+        $modo = $this->getModo();
+        Log::info('[ProdutoController::importar] Iniciando importação', ['modo' => $modo]);
+
+        $request->validate([
+            'ficheiro' => 'required|file|mimes:xlsx,xls|max:5120', // 5MB
+        ]);
+
+        try {
+            $this->verificarAcessoUsuario();
+
+            if (!$this->hasRole(['admin', 'gestor'])) {
+                return response()->json(['error' => 'Não autorizado'], 403);
+            }
+
+            $produtosImport = new ProdutosSheetImport();
+            $servicosImport = new ServicosSheetImport();
+
+            Excel::import(
+                new ProdutoServicoImport($produtosImport, $servicosImport),
+                $request->file('ficheiro')
+            );
+
+            AuditLogger::log('Importação de Produtos/Serviços', '📥', [
+                'area' => 'Produtos',
+                'detalhes' => [
+                    'produtos_sucesso'   => count($produtosImport->sucesso),
+                    'produtos_erros'     => count($produtosImport->erros),
+                    'produtos_ignorados' => count($produtosImport->ignorados),
+                    'servicos_sucesso'   => count($servicosImport->sucesso),
+                    'servicos_erros'     => count($servicosImport->erros),
+                    'servicos_ignorados' => count($servicosImport->ignorados),
+                ],
+            ]);
+
+            return response()->json([
+                'message' => 'Importação concluída',
+                'produtos' => [
+                    'total_sucesso'   => count($produtosImport->sucesso),
+                    'total_erros'     => count($produtosImport->erros),
+                    'total_ignorados' => count($produtosImport->ignorados),
+                    'sucesso'         => $produtosImport->sucesso,
+                    'erros'           => $produtosImport->erros,
+                    'ignorados'       => $produtosImport->ignorados,
+                ],
+                'servicos' => [
+                    'total_sucesso'   => count($servicosImport->sucesso),
+                    'total_erros'     => count($servicosImport->erros),
+                    'total_ignorados' => count($servicosImport->ignorados),
+                    'sucesso'         => $servicosImport->sucesso,
+                    'erros'           => $servicosImport->erros,
+                    'ignorados'       => $servicosImport->ignorados,
+                ],
+                'modo' => $modo,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('[ProdutoController::importar] Erro', [
+                'error' => $e->getMessage(),
+                'modo' => $modo,
+            ]);
+            return response()->json([
+                'message' => 'Erro ao processar a importação',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
     }
 
     private function regrasValidacaoUpdate(string $tipo, string $id): array

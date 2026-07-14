@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import MainEmpresa from "../../../components/MainEmpresa";
 import { Plus, Package, AlertTriangle, Wrench, XCircle, ArrowLeft } from "lucide-react";
 import { useThemeColors } from "@/context/ThemeContext";
-
+import { FileSpreadsheet } from "lucide-react";
 // Componentes
 import { StatCard } from "@/app/components/Stock/StatCard";
 import { ModalEntrada } from "@/app/components/Stock/ModalEntrada";
@@ -19,6 +19,8 @@ import { TabsEstoque } from "@/app/components/Stock/TabsEstoque";
 
 // Hooks
 import { useEstoque } from "@/hooks/useEstoque";
+
+const ModalImportacao = dynamic(() => import("@/app/components/Stock/ModalImportacao").then((mod) => mod.ModalImportacao), { ssr: false });
 
 const NovoProdutoForm = dynamic(() => import("@/app/components/Stock/NovoProdutoForm").then((mod) => mod.NovoProdutoForm), {
   ssr: false,
@@ -33,7 +35,7 @@ export default function EstoquePage() {
 
   // Estado para controlar o modal de novo produto
   const [modalNovoProdutoAberto, setModalNovoProdutoAberto] = useState(false);
-
+  const [modalImportacaoAberto, setModalImportacaoAberto] = useState(false);
   const {
     // Estados
     loading,
@@ -149,8 +151,15 @@ export default function EstoquePage() {
           </div>
           <div className="flex items-center gap-2">
             <button
+              onClick={() => setModalImportacaoAberto(true)}
+              className="flex flex-1 sm:flex-none items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2  transition-colors text-xs sm:text-sm font-medium hover:opacity-80 whitespace-nowrap"
+              style={{ backgroundColor: colors.primary }}>
+              <FileSpreadsheet className="w-4 h-4 shrink-0" />
+              <span className="sm:inline">Importar Excel</span>
+            </button>
+            <button
               onClick={abrirModalNovoProduto}
-              className="flex flex-1 sm:flex-none items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 text-white transition-colors text-xs sm:text-sm font-medium hover:opacity-90 rounded whitespace-nowrap"
+              className="flex flex-1 sm:flex-none items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 text-white transition-colors text-xs sm:text-sm font-medium hover:opacity-90 whitespace-nowrap"
               style={{ backgroundColor: colors.secondary }}>
               <Plus className="w-4 h-4 shrink-0" />
               <span className="sm:inline">Novo Item</span>
@@ -158,7 +167,7 @@ export default function EstoquePage() {
 
             <button
               onClick={() => router.push("/dashboard/Produtos_servicos/categorias")}
-              className="flex flex-1 sm:flex-none items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 text-white transition-colors text-xs sm:text-sm font-medium hover:opacity-90 rounded whitespace-nowrap"
+              className="flex flex-1 sm:flex-none items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 text-white transition-colors text-xs sm:text-sm font-medium hover:opacity-90 whitespace-nowrap"
               style={{ backgroundColor: colors.primary }}>
               <Plus className="w-4 h-4 shrink-0" />
               <span className="sm:inline">Nova Categoria</span>
@@ -183,7 +192,7 @@ export default function EstoquePage() {
 
         {/* Tabs e Conteúdo */}
         <div
-          className="shadow-sm border rounded-lg overflow-hidden"
+          className="shadow-sm border overflow-hidden"
           style={{
             backgroundColor: colors.card,
             borderColor: colors.border,
@@ -243,7 +252,7 @@ export default function EstoquePage() {
       {modalNovoProdutoAberto && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60] p-2 sm:p-4 animate-in fade-in-0 duration-200">
           <div
-            className="shadow-2xl max-w-3xl w-full max-h-[92vh] sm:max-h-[90vh] overflow-hidden rounded-lg animate-in zoom-in-95 fade-in-0 duration-300"
+            className="shadow-2xl max-w-3xl w-full max-h-[92vh] sm:max-h-[90vh] overflow-hidden animate-in zoom-in-95 fade-in-0 duration-300"
             style={{ backgroundColor: colors.card }}>
             <div className="p-4 sm:p-6 overflow-y-auto max-h-[92vh] sm:max-h-[90vh]">
               <NovoProdutoForm onSuccess={handleProdutoCriado} onCancel={fecharModalNovoProduto} />
@@ -300,6 +309,14 @@ export default function EstoquePage() {
         titulo="Deletar Permanentemente"
         mensagem={`Esta ação não pode ser desfeita. Deletar "${modalConfirmacao.produto?.nome}" permanentemente?`}
         tipo="warning"
+        colors={colors}
+      />
+
+      {/* Modal de importacao do exel */}
+      <ModalImportacao
+        isOpen={modalImportacaoAberto}
+        onClose={() => setModalImportacaoAberto(false)}
+        onSuccess={carregarDados}
         colors={colors}
       />
     </MainEmpresa>

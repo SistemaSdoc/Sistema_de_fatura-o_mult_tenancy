@@ -342,7 +342,6 @@ class ProdutoService
                     'taxa_retencao'       => null,
                     'duracao_estimada'    => null,
                     'unidade_medida'      => null,
-                    // ⬇ NOVO: sem isto, o default da coluna ('margem') sobrevivia sempre
                     'tipo_preco'          => $tipoPreco,
                     'despesas_adicionais' => (float) ($dados['despesas_adicionais'] ?? 0),
                     'margem_lucro'        => $tipoPreco === 'margem' ? (float) ($dados['margem_lucro'] ?? null) : null,

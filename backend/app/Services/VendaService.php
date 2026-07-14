@@ -43,11 +43,11 @@ class VendaService
     ) {
         $this->stockService = $stockService;
         $this->documentoFiscalService = $documentoFiscalService;
-        
+
         // ✅ Obtém da sessão (prioridade)
         $this->empresa = app('current.empresa');
         $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
-        
+
         Log::debug('[VendaService] Inicializado', [
             'modo' => $this->modo,
             'empresa_id' => $this->empresa?->id,
@@ -556,62 +556,61 @@ class VendaService
         }
     }
 
-    private function processarItens(object $venda, array $itens, bool $aplicaIva, string $regime): array
-    {
-        $totalBase = 0.0;
-        $totalIva = 0.0;
-        $totalRetencao = 0.0;
+private function processarItens(object $venda, array $itens, bool $aplicaIva, string $regime): array
+{
+    $totalBase = 0.0;
+    $totalIva = 0.0;
+    $totalRetencao = 0.0;
 
-        foreach ($itens as $item) {
-            $produto = $this->buscarProduto($item['produto_id']);
-            $resultado = $this->processarItem($produto, $item, $aplicaIva, $regime);
+    foreach ($itens as $item) {
+        $produto = $this->buscarProduto($item['produto_id']);
+        $resultado = $this->processarItem($produto, $item, $aplicaIva, $regime);
 
-            $dadosItem = array_merge($resultado, [
-                'id'             => Str::uuid(),
-                'venda_id'       => $venda->id,
-                'produto_id'     => $produto->id,
-                'descricao'      => $produto->nome,
-                'codigo_produto' => $produto->codigo,
-                'unidade'        => $produto->tipo === 'servico'
-                    ? ($produto->unidade_medida ?? 'hora')
-                    : ($produto->unidade ?? 'UN'),
-                'codigo_isencao' => $resultado['codigo_isencao'],
-                'motivo_isencao' => $resultado['motivo_isencao'],
-            ]);
+        $dadosItem = array_merge($resultado, [
+            'id'             => Str::uuid(),
+            'venda_id'       => $venda->id,
+            'produto_id'     => $produto->id,
+            'descricao'      => $produto->nome,
+            'codigo_produto' => $produto->codigo,
+            'unidade'        => $produto->tipo === 'servico'
+                ? ($produto->unidade_medida ?? 'hora')
+                : ($produto->unidade ?? 'UN'),
+            'codigo_isencao' => $resultado['codigo_isencao'],
+            'motivo_isencao' => $resultado['motivo_isencao'],
+        ]);
 
-            if ($this->isColectivo()) {
-                $dadosItem['tenant_id'] = $this->empresa->id;
-            }
-
-            if ($this->isColectivo()) {
-                SharedItemVenda::create($dadosItem);
-            } else {
-                TenantItemVenda::create($dadosItem);
-            }
-
-            if ($produto->tipo !== 'servico') {
-                $this->stockService->saidaVenda(
-                    $produto->id,
-                    (int) $item['quantidade'],
-                    $venda->id
-                );
-            }
-
-            $totalBase += $resultado['base_tributavel'];
-            $totalIva += $resultado['valor_iva'];
-            $totalRetencao += $resultado['valor_retencao'];
+        if ($this->isColectivo()) {
+            $dadosItem['tenant_id'] = $this->empresa->id;
         }
 
-        $totalPagar = round($totalBase + $totalIva - $totalRetencao, 2);
+        if ($this->isColectivo()) {
+            SharedItemVenda::create($dadosItem);
+        } else {
+            TenantItemVenda::create($dadosItem);
+        }
 
-        return [
-            'base_tributavel' => round($totalBase, 2),
-            'total_iva'       => round($totalIva, 2),
-            'total_retencao'  => round($totalRetencao, 2),
-            'total_pagar'     => $totalPagar,
-            'total'           => $totalPagar,
-        ];
+        // ✅ REMOVIDO: a movimentação de stock NÃO acontece aqui.
+        // Ela é feita exclusivamente por DocumentoFiscalService::movimentarStock()
+        // quando o documento fiscal é emitido (executarAcoesPosCriacao), evitando
+        // que o mesmo produto tenha o stock descontado duas vezes — uma aqui e
+        // outra na emissão do documento (FT/FR), que é o que causava o erro
+        // "Stock insuficiente" mesmo com stock real disponível.
+
+        $totalBase += $resultado['base_tributavel'];
+        $totalIva += $resultado['valor_iva'];
+        $totalRetencao += $resultado['valor_retencao'];
     }
+
+    $totalPagar = round($totalBase + $totalIva - $totalRetencao, 2);
+
+    return [
+        'base_tributavel' => round($totalBase, 2),
+        'total_iva'       => round($totalIva, 2),
+        'total_retencao'  => round($totalRetencao, 2),
+        'total_pagar'     => $totalPagar,
+        'total'           => $totalPagar,
+    ];
+}
 
     private function processarItem(
         object $produto,
@@ -651,9 +650,11 @@ class VendaService
         $valorRetencao = 0.0;
         $taxaRetencao = 0.0;
 
-        if ($produto->tipo === 'servico' && $aplicaIva) {
+        if ($produto->tipo === 'servico') {
             $taxaRetencao = (float) ($item['taxa_retencao'] ?? $produto->taxa_retencao ?? ProdutoService::TAXA_RETENCAO_DEFAULT);
-            $valorRetencao = round(($subtotal * $taxaRetencao) / 100, 2);
+            if ($taxaRetencao > 0) {
+                $valorRetencao = round(($subtotal * $taxaRetencao) / 100, 2);
+            }
         }
 
         $baseTributavel = round($subtotal, 2);
@@ -757,11 +758,11 @@ class VendaService
 
         try {
             $documento = $this->documentoFiscalService->emitirDocumento($payload);
-            
+
             if (!$documento) {
                 throw new \RuntimeException('Documento fiscal retornou null do serviço.');
             }
-            
+
             return $documento;
         } catch (\Exception $e) {
             Log::error('[VendaService] Erro ao emitir documento fiscal', [
@@ -782,10 +783,18 @@ class VendaService
         $valorPagamento = (float) $dados['dados_pagamento']['valor'];
 
         if ($valorPagamento < $totalVenda - 0.01) {
+            Log::warning('[VendaService::validarFR] Pagamento insuficiente', [
+                'valor_pagamento' => $valorPagamento,
+                'total_venda'     => $totalVenda,
+                'diferenca'       => round($totalVenda - $valorPagamento, 2),
+                'desconto_global' => $dados['desconto_global'] ?? null,
+                'itens'           => $dados['itens'] ?? null,
+            ]);
+
             throw new \Exception(
                 'Valor do pagamento (' . number_format($valorPagamento, 2, ',', '.') .
-                ') é insuficiente. Total da venda: ' .
-                number_format($totalVenda, 2, ',', '.') . ' para FR.'
+                    ') é insuficiente. Total da venda: ' .
+                    number_format($totalVenda, 2, ',', '.') . ' para FR.'
             );
         }
     }

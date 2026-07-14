@@ -585,8 +585,12 @@ BUILDING;
         $request->validate([
             'nome'          => 'sometimes|string|max:255',
             'email'         => 'sometimes|email|unique:landlord.empresas,email,' . $empresa->id,
+            'nif'           => 'sometimes|nullable|string|max:14', // + regra de formato se quiseres
             'telefone'      => 'nullable|string|max:20',
             'endereco'      => 'nullable|string|max:500',
+            'nome_banco'    => 'nullable|string|max:255',
+            'numero_conta'  => 'nullable|string|max:50',
+            'iban'          => 'nullable|string|max:34',
             'regime_fiscal' => 'sometimes|in:simplificado,geral',
             'sujeito_iva'   => 'sometimes|boolean',
             'modo'          => 'sometimes|in:colectivo,singular',
@@ -595,8 +599,12 @@ BUILDING;
         $empresa->update($request->only([
             'nome',
             'email',
+            'nif',
             'telefone',
             'endereco',
+            'nome_banco',
+            'numero_conta',
+            'iban',
             'regime_fiscal',
             'sujeito_iva',
             'modo'

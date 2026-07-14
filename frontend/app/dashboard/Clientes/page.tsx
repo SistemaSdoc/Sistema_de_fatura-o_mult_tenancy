@@ -4,13 +4,14 @@ import React, { useEffect, useState, useCallback } from "react";
 import MainEmpresa from "../../components/MainEmpresa";
 import { clienteService, formatarNIF, getTipoClienteLabel, getStatusClienteLabel } from "@/services/clientes";
 import type { Cliente, CriarClienteInput, AtualizarClienteInput } from "@/services/clientes";
-import { Users, Plus, Search, CheckCircle, XCircle, Building2, X, AlertCircle } from "lucide-react";
+import { Users, Plus, Search, CheckCircle, XCircle, Building2, X, AlertCircle, Upload } from "lucide-react";
 import { useThemeColors } from "@/context/ThemeContext";
 import { Modal } from "@/app/components/Clientes/Modal";
 import { ConfirmModal } from "@/app/components/Clientes/ConfirmModal";
 import { FormCliente } from "@/app/components/Clientes/FormCliente";
 import { LoadingStats, LoadingTabela } from "@/app/components/Clientes/LoadingStates";
 import { TabelaClientes } from "@/app/components/Clientes/TabelaClientes";
+import { ModalImportar } from "@/app/components/Clientes/ModalImportar";
 
 // --- Componente de Notificação Toast com Animação ---
 interface ToastNotificationProps {
@@ -95,7 +96,7 @@ export default function ClientesPage() {
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState<"todos" | "ativos" | "inativos">("ativos");
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "warning" | "info" } | null>(null);
-
+  const [modalImportar, setModalImportar] = useState(false);
   const [modalForm, setModalForm] = useState(false);
   const [modalDetalhes, setModalDetalhes] = useState(false);
   const [modalStatus, setModalStatus] = useState(false);
@@ -319,6 +320,18 @@ export default function ClientesPage() {
               <option value="inativos">Inativos</option>
               <option value="todos">Todos</option>
             </select>
+            {/* Importar */}
+            <button
+              onClick={() => setModalImportar(true)}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium"
+              style={{
+                color: colors.text,
+                border: `1px solid ${colors.border}`,
+                backgroundColor: colors.card,
+              }}>
+              <Upload className="w-4 h-4" />
+              Importar Excel
+            </button>
             {/* Novo */}
             <button
               onClick={abrirCriar}
@@ -520,6 +533,13 @@ export default function ClientesPage() {
         confirmText={selecao?.status === "ativo" ? "Inativar" : "Ativar"}
         type={selecao?.status === "ativo" ? "warning" : "info"}
         loading={loadingAcao}
+        colors={colors}
+      />
+      <ModalImportar
+        isOpen={modalImportar}
+        onClose={() => setModalImportar(false)}
+        onImportar={(file) => clienteService.importarClientes(file)}
+        onConcluido={carregar}
         colors={colors}
       />
     </MainEmpresa>

@@ -86,17 +86,12 @@ const OPCOES_ISENCAO = [
   { value: "M99", label: "Outras isenções" },
 ] as const;
 
-export function NovoProdutoForm({
-  onSuccess,
-  onCancel,
-  initialTipo = "produto",
-}: NovoProdutoFormProps) {
+export function NovoProdutoForm({ onSuccess, onCancel, initialTipo = "produto" }: NovoProdutoFormProps) {
   const router = useRouter();
   const colors = useThemeColors();
 
   const [categorias, setCategorias] = useState<any[]>([]);
-  const [categoriaSelecionada, setCategoriaSelecionada] =
-    useState<Categoria | null>(null);
+  const [categoriaSelecionada, setCategoriaSelecionada] = useState<Categoria | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingCategorias, setLoadingCategorias] = useState(true);
   const [success, setSuccess] = useState(false);
@@ -203,10 +198,7 @@ export function NovoProdutoForm({
 
   const custoTotal = useMemo(() => {
     if (isServico) return 0;
-    return (
-      (parseFloat(formData.preco_compra) || 0) +
-      (parseFloat(formData.despesas_adicionais) || 0)
-    );
+    return (parseFloat(formData.preco_compra) || 0) + (parseFloat(formData.despesas_adicionais) || 0);
   }, [formData.preco_compra, formData.despesas_adicionais, isServico]);
 
   const lucroBruto = useMemo(() => {
@@ -262,11 +254,7 @@ export function NovoProdutoForm({
 
   // ===== HANDLERS =====
 
-  const handleChange = (
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-    >,
-  ) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
     const checked = (e.target as HTMLInputElement).checked;
 
@@ -330,8 +318,7 @@ export function NovoProdutoForm({
     }
 
     if (!isServico) {
-      if (!formData.categoria_id)
-        newErrors.categoria_id = "Categoria obrigatória";
+      if (!formData.categoria_id) newErrors.categoria_id = "Categoria obrigatória";
 
       const precoCompra = parseFloat(formData.preco_compra);
       if (precoCompra === undefined || precoCompra < 0) {
@@ -407,7 +394,6 @@ export function NovoProdutoForm({
           taxa_retencao: dados.taxa_retencao,
           codigo_isencao: dados.codigo_isencao,
         });
-
       } else {
         // ============================================================
         // ✅ PRODUTO: NÃO envia taxa_iva e sujeito_iva (vem da categoria)
@@ -420,8 +406,7 @@ export function NovoProdutoForm({
 
         // Campos de cálculo
         dados.tipo_preco = formData.tipo_preco;
-        dados.despesas_adicionais =
-          parseFloat(formData.despesas_adicionais) || 0;
+        dados.despesas_adicionais = parseFloat(formData.despesas_adicionais) || 0;
 
         if (formData.tipo_preco === "margem") {
           dados.margem_lucro = parseFloat(formData.margem_lucro) || 0;
@@ -444,8 +429,7 @@ export function NovoProdutoForm({
         }
       }, 1000);
     } catch (error: any) {
-      const msg =
-        error?.response?.data?.message || "Erro ao criar. Tente novamente.";
+      const msg = error?.response?.data?.message || "Erro ao criar. Tente novamente.";
       if (error?.response?.data?.errors) {
         const errs: FormErrors = {};
         Object.entries(error.response.data.errors).forEach(([k, v]) => {
@@ -475,33 +459,21 @@ export function NovoProdutoForm({
       {/* Header */}
       {!onCancel ? (
         <div className="flex items-center gap-3 mb-6">
-          <button
-            onClick={handleCancel}
-            className="p-2 transition-colors"
-            style={{ color: colors.textSecondary }}
-            type="button"
-          >
+          <button onClick={handleCancel} className="p-2 transition-colors" style={{ color: colors.textSecondary }} type="button">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1
-              className="text-xl md:text-2xl font-bold"
-              style={{ color: colors.secondary }}
-            >
+            <h1 className="text-xl md:text-2xl font-bold" style={{ color: colors.secondary }}>
               Novo {isServico ? "Serviço" : "Produto"}
             </h1>
             <p className="text-sm" style={{ color: colors.textSecondary }}>
-              Preencha os dados para cadastrar um novo{" "}
-              {isServico ? "serviço" : "produto"}
+              Preencha os dados para cadastrar um novo {isServico ? "serviço" : "produto"}
             </p>
           </div>
         </div>
       ) : (
         <div className="mb-6">
-          <h2
-            className="text-lg font-semibold"
-            style={{ color: colors.secondary }}
-          >
+          <h2 className="text-lg font-semibold" style={{ color: colors.secondary }}>
             Novo {isServico ? "Serviço" : "Produto"}
           </h2>
           <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
@@ -519,8 +491,7 @@ export function NovoProdutoForm({
             borderColor: colors.success,
             borderWidth: 1,
             color: colors.success,
-          }}
-        >
+          }}>
           <CheckCircle2 className="w-4 h-4" />
           <span>Criado com sucesso! Redirecionando...</span>
         </div>
@@ -534,8 +505,7 @@ export function NovoProdutoForm({
             borderColor: colors.danger,
             borderWidth: 1,
             color: colors.danger,
-          }}
-        >
+          }}>
           <AlertCircle className="w-4 h-4" />
           <span>{errors.submit}</span>
         </div>
@@ -548,8 +518,7 @@ export function NovoProdutoForm({
           style={{
             backgroundColor: colors.card,
             borderColor: colors.border,
-          }}
-        >
+          }}>
           <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
@@ -557,16 +526,10 @@ export function NovoProdutoForm({
               className="flex items-center  justify-center gap-2 p-2 border-2 transition-all"
               style={{
                 borderColor: !isServico ? colors.primary : colors.border,
-                backgroundColor: !isServico
-                  ? `${colors.primary}10`
-                  : "transparent",
+                backgroundColor: !isServico ? `${colors.primary}10` : "transparent",
                 color: !isServico ? colors.textSecondary : colors.textSecondary,
-              }}
-            >
-              <Package
-                className="w-5 h-5"
-                style={{ color: colors.secondary }}
-              />
+              }}>
+              <Package className="w-5 h-5" style={{ color: colors.secondary }} />
               <span className="font-medium">Produto</span>
             </button>
             <button
@@ -575,12 +538,9 @@ export function NovoProdutoForm({
               className="flex items-center justify-center gap-2 p-3 border-2 transition-all"
               style={{
                 borderColor: isServico ? colors.secondary : colors.border,
-                backgroundColor: isServico
-                  ? `${colors.secondary}10`
-                  : "transparent",
+                backgroundColor: isServico ? `${colors.secondary}10` : "transparent",
                 color: isServico ? colors.secondary : colors.textSecondary,
-              }}
-            >
+              }}>
               <Wrench className="w-5 h-5" style={{ color: colors.secondary }} />
               <span className="font-medium">Serviço</span>
             </button>
@@ -593,46 +553,61 @@ export function NovoProdutoForm({
           style={{
             backgroundColor: colors.card,
             borderColor: colors.border,
-          }}
-        >
-          <div>
-            <label
-              className="block text-sm font-medium mb-1"
-              style={{ color: colors.text }}
-            >
-              Nome do {isServico ? "serviço" : "produto"}
-            </label>
-            <input
-              type="text"
-              name="nome"
-              value={formData.nome}
-              onChange={handleChange}
-              placeholder={
-                isServico
-                  ? "Insira o nome do serviço"
-                  : "Insira o nome do produto"
-              }
-              className="w-full px-3 py-2 border outline-none transition-all"
-              style={{
-                backgroundColor: colors.card,
-                borderColor: errors.nome ? colors.danger : colors.border,
-                color: colors.text,
-              }}
-            />
-            {errors.nome && (
-              <p className="mt-1 text-xs" style={{ color: colors.danger }}>
-                {errors.nome}
-              </p>
-            )}
-          </div>
+          }}>
+          {isServico && (
+            <div>
+              <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
+                Nome do serviço
+              </label>
+              <input
+                type="text"
+                name="nome"
+                value={formData.nome}
+                onChange={handleChange}
+                placeholder="Insira o nome do serviço"
+                className="w-full px-3 py-2 border outline-none transition-all"
+                style={{
+                  backgroundColor: colors.card,
+                  borderColor: errors.nome ? colors.danger : colors.border,
+                  color: colors.text,
+                }}
+              />
+              {errors.nome && (
+                <p className="mt-1 text-xs" style={{ color: colors.danger }}>
+                  {errors.nome}
+                </p>
+              )}
+            </div>
+          )}
 
           {!isServico && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Nome do produto */}
               <div>
-                <label
-                  className="block text-sm font-medium mb-1"
-                  style={{ color: colors.text }}
-                >
+                <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
+                  Nome do {isServico ? "serviço" : "produto"}
+                </label>
+                <input
+                  type="text"
+                  name="nome"
+                  value={formData.nome}
+                  onChange={handleChange}
+                  placeholder={isServico ? "Insira o nome do serviço" : "Insira o nome do produto"}
+                  className="w-full px-3 py-2 border outline-none transition-all"
+                  style={{
+                    backgroundColor: colors.card,
+                    borderColor: errors.nome ? colors.danger : colors.border,
+                    color: colors.text,
+                  }}
+                />
+                {errors.nome && (
+                  <p className="mt-1 text-xs" style={{ color: colors.danger }}>
+                    {errors.nome}
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
                   Categoria
                 </label>
                 <select
@@ -643,17 +618,10 @@ export function NovoProdutoForm({
                   className="w-full px-3 py-2 border outline-none"
                   style={{
                     backgroundColor: colors.card,
-                    borderColor: errors.categoria_id
-                      ? colors.danger
-                      : colors.border,
+                    borderColor: errors.categoria_id ? colors.danger : colors.border,
                     color: colors.text,
-                  }}
-                >
-                  <option value="">
-                    {loadingCategorias
-                      ? "Carregando..."
-                      : "Selecione a categoria"}
-                  </option>
+                  }}>
+                  <option value="">{loadingCategorias ? "Carregando..." : "Selecione a categoria"}</option>
                   {categorias.map((cat) => (
                     <option key={cat.id} value={cat.id}>
                       {cat.nome} {cat.label_iva ? `(${cat.label_iva})` : ""}
@@ -667,10 +635,7 @@ export function NovoProdutoForm({
                 )}
               </div>
               <div>
-                <label
-                  className="block text-sm font-medium mb-1"
-                  style={{ color: colors.text }}
-                >
+                <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
                   Código/SKU
                 </label>
                 <input
@@ -690,77 +655,15 @@ export function NovoProdutoForm({
             </div>
           )}
         </div>
-
-        {/* ✅ NOVO: Card de IVA da Categoria (apenas para produtos) */}
-        {!isServico && categoriaSelecionada && (
-          <div
-            className="p-4 shadow-sm border"
-            style={{
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-            }}
-          >
-            <div
-              className="flex items-center gap-2 mb-3 pb-2 border-b"
-              style={{ borderColor: colors.border }}
-            >
-              <h3 className="font-semibold" style={{ color: colors.text }}>
-                IVA da Categoria
-              </h3>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <p
-                  className="text-sm font-medium"
-                  style={{ color: colors.text }}
-                >
-                  {categoriaSelecionada.nome}
-                </p>
-                <p className="text-xs" style={{ color: colors.textSecondary }}>
-                  {categoriaSelecionada.sujeito_iva
-                    ? `Taxa: ${getTaxaIVALabel(categoriaSelecionada.taxa_iva, true)}`
-                    : "Isento de IVA"}
-                  {categoriaSelecionada.codigo_isencao &&
-                    ` • Código: ${categoriaSelecionada.codigo_isencao}`}
-                </p>
-              </div>
-              <div
-                className="px-3 py-1.5  text-sm font-medium"
-                style={{
-                  backgroundColor: categoriaSelecionada.sujeito_iva
-                    ? `${colors.primary}20`
-                    : `${colors.textSecondary}20`,
-                  color: categoriaSelecionada.sujeito_iva
-                    ? colors.text
-                    : colors.textSecondary,
-                }}
-              >
-                {getTaxaIVALabel(
-                  categoriaSelecionada.taxa_iva,
-                  categoriaSelecionada.sujeito_iva,
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Seção de Preço */}
         <div
           className="p-4 shadow-sm border"
           style={{
             backgroundColor: colors.card,
             borderColor: colors.border,
-          }}
-        >
-          <div
-            className="flex items-center gap-3 mb-4 pb-2 border-b"
-            style={{ borderColor: colors.border }}
-          >
-            <Calculator
-              className="w-5 h-5"
-              style={{ color: colors.secondary }}
-            />
+          }}>
+          <div className="flex items-center gap-3 mb-4 pb-2 border-b" style={{ borderColor: colors.border }}>
+            <Calculator className="w-5 h-5" style={{ color: colors.secondary }} />
             <h3 className="font-semibold" style={{ color: colors.text }}>
               Configuração de Preço
             </h3>
@@ -777,24 +680,14 @@ export function NovoProdutoForm({
                     onClick={() => handleTipoPrecoChange(tipo)}
                     className="flex flex-col items-center gap-1 p-1 border-2 transition-all "
                     style={{
-                      borderColor:
-                        formData.tipo_preco === tipo
-                          ? colors.secondary
-                          : colors.border,
-                      backgroundColor:
-                        formData.tipo_preco === tipo
-                          ? `${colors.secondary}10`
-                          : "transparent",
-                    }}
-                  >
+                      borderColor: formData.tipo_preco === tipo ? colors.secondary : colors.border,
+                      backgroundColor: formData.tipo_preco === tipo ? `${colors.secondary}10` : "transparent",
+                    }}>
                     {tipo === "fixo" && (
                       <Tag
                         className="w-4 h-4"
                         style={{
-                          color:
-                            formData.tipo_preco === tipo
-                              ? colors.textSecondary
-                              : colors.textSecondary,
+                          color: formData.tipo_preco === tipo ? colors.textSecondary : colors.textSecondary,
                         }}
                       />
                     )}
@@ -802,10 +695,7 @@ export function NovoProdutoForm({
                       <TrendingUp
                         className="w-4 h-4"
                         style={{
-                          color:
-                            formData.tipo_preco === tipo
-                              ? colors.textSecondary
-                              : colors.textSecondary,
+                          color: formData.tipo_preco === tipo ? colors.textSecondary : colors.textSecondary,
                         }}
                       />
                     )}
@@ -813,31 +703,21 @@ export function NovoProdutoForm({
                       <DollarSign
                         className="w-4 h-4"
                         style={{
-                          color:
-                            formData.tipo_preco === tipo
-                              ? colors.textSecondary
-                              : colors.textSecondary,
+                          color: formData.tipo_preco === tipo ? colors.textSecondary : colors.textSecondary,
                         }}
                       />
                     )}
                     <span
                       className="text-xs font-medium"
                       style={{
-                        color:
-                          formData.tipo_preco === tipo
-                            ? colors.textSecondary
-                            : colors.text,
-                      }}
-                    >
+                        color: formData.tipo_preco === tipo ? colors.textSecondary : colors.text,
+                      }}>
                       {getTipoPrecoLabel(tipo)}
                     </span>
                   </button>
                 ))}
               </div>
-              <p
-                className="mt-2 text-xs"
-                style={{ color: colors.textSecondary }}
-              >
+              <p className="mt-2 text-xs" style={{ color: colors.textSecondary }}>
                 <HelpCircle className="w-3 h-3 inline mr-1" />
                 {getFormulaDescricao(formData.tipo_preco)}
               </p>
@@ -848,17 +728,11 @@ export function NovoProdutoForm({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             {!isServico && (
               <div>
-                <label
-                  className="block text-sm font-medium mb-1"
-                  style={{ color: colors.text }}
-                >
+                <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
                   Preço de Compra (Kz)
                 </label>
                 <div className="relative">
-                  <span
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-sm"
-                    style={{ color: colors.textSecondary }}
-                  >
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: colors.textSecondary }}>
                     Kz
                   </span>
                   <input
@@ -871,9 +745,7 @@ export function NovoProdutoForm({
                     className="w-full pl-10 pr-3 py-2 border outline-none"
                     style={{
                       backgroundColor: colors.card,
-                      borderColor: errors.preco_compra
-                        ? colors.danger
-                        : colors.border,
+                      borderColor: errors.preco_compra ? colors.danger : colors.border,
                       color: colors.text,
                     }}
                   />
@@ -888,17 +760,11 @@ export function NovoProdutoForm({
 
             {!isServico && (
               <div>
-                <label
-                  className="block text-sm font-medium mb-1"
-                  style={{ color: colors.text }}
-                >
+                <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
                   Despesas Adicionais (Kz)
                 </label>
                 <div className="relative">
-                  <span
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-sm"
-                    style={{ color: colors.textSecondary }}
-                  >
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: colors.textSecondary }}>
                     Kz
                   </span>
                   <input
@@ -926,12 +792,8 @@ export function NovoProdutoForm({
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="mb-4"
-                  >
-                    <label
-                      className="block text-sm font-medium mb-1"
-                      style={{ color: colors.text }}
-                    >
+                    className="mb-4">
+                    <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
                       Margem de Lucro (%)
                     </label>
                     <div className="flex items-center gap-2">
@@ -946,24 +808,13 @@ export function NovoProdutoForm({
                         className="flex-1 px-3 py-2 border outline-none"
                         style={{
                           backgroundColor: colors.card,
-                          borderColor: errors.margem_lucro
-                            ? colors.danger
-                            : colors.border,
+                          borderColor: errors.margem_lucro ? colors.danger : colors.border,
                           color: colors.text,
                         }}
                       />
-                      <span
-                        className="text-lg"
-                        style={{ color: colors.textSecondary }}
-                      >
-                        %
-                      </span>
                     </div>
                     {errors.margem_lucro && (
-                      <p
-                        className="mt-1 text-xs"
-                        style={{ color: colors.danger }}
-                      >
+                      <p className="mt-1 text-xs" style={{ color: colors.danger }}>
                         {errors.margem_lucro}
                       </p>
                     )}
@@ -975,12 +826,8 @@ export function NovoProdutoForm({
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="mb-4"
-                  >
-                    <label
-                      className="block text-sm font-medium mb-1"
-                      style={{ color: colors.text }}
-                    >
+                    className="mb-4">
+                    <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
                       Markup (%)
                     </label>
                     <div className="flex items-center gap-2">
@@ -998,73 +845,50 @@ export function NovoProdutoForm({
                           color: colors.text,
                         }}
                       />
-                      <span
-                        className="text-lg"
-                        style={{ color: colors.textSecondary }}
-                      >
-                        %
-                      </span>
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
             )}
-          </div>
-
-          {/* Preço de Venda */}
-          <div className={`${isServico ? "md:col-span-2" : ""}`}>
-            <label
-              className="block text-sm font-medium mb-1"
-              style={{ color: colors.text }}
-            >
-              Preço de Venda (Kz){" "}
-              {formData.tipo_preco !== "fixo" && !isServico && "(Calculado)"}
-            </label>
-            <div className="relative">
-              <span
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-sm"
-                style={{ color: colors.textSecondary }}
-              >
-                Kz
-              </span>
-              <input
-                type="number"
-                name="preco_venda"
-                value={formData.preco_venda}
-                onChange={handleChange}
-                min="0.01"
-                step="0.01"
-                readOnly={!isServico && formData.tipo_preco !== "fixo"}
-                className={`w-full pl-10 pr-3 py-2 border outline-none ${
-                  !isServico && formData.tipo_preco !== "fixo"
-                    ? "bg-muted/50"
-                    : ""
-                }`}
-                style={{
-                  backgroundColor:
-                    !isServico && formData.tipo_preco !== "fixo"
-                      ? `${colors.hover}`
-                      : colors.card,
-                  borderColor: errors.preco_venda
-                    ? colors.danger
-                    : colors.border,
-                  color: colors.text,
-                }}
-              />
-            </div>
-            {errors.preco_venda && (
-              <p className="mt-1 text-xs" style={{ color: colors.danger }}>
-                {errors.preco_venda}
-              </p>
+            {!isServico && (
+              <div className={`${isServico ? "md:col-span-2" : ""}`}>
+                <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
+                  Preço de Venda (Kz) {formData.tipo_preco !== "fixo" && !isServico && "(Calculado)"}
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: colors.textSecondary }}>
+                    Kz
+                  </span>
+                  <input
+                    type="number"
+                    name="preco_venda"
+                    value={formData.preco_venda}
+                    onChange={handleChange}
+                    min="0.01"
+                    step="0.01"
+                    readOnly={!isServico && formData.tipo_preco !== "fixo"}
+                    className={`w-full pl-10 pr-3 py-2 border outline-none ${
+                      !isServico && formData.tipo_preco !== "fixo" ? "bg-muted/50" : ""
+                    }`}
+                    style={{
+                      backgroundColor: !isServico && formData.tipo_preco !== "fixo" ? `${colors.hover}` : colors.card,
+                      borderColor: errors.preco_venda ? colors.danger : colors.border,
+                      color: colors.text,
+                    }}
+                  />
+                </div>
+                {errors.preco_venda && (
+                  <p className="mt-1 text-xs" style={{ color: colors.danger }}>
+                    {errors.preco_venda}
+                  </p>
+                )}
+              </div>
             )}
           </div>
 
           {/* ✅ IVA - Apenas para Serviços */}
           {isServico && (
-            <div
-              className="mt-4 p-3 grid grid-cols-1 md:grid-cols-2 gap-4"
-              style={{ backgroundColor: colors.hover }}
-            >
+            <div className="mt-4 p-3 grid grid-cols-1 md:grid-cols-2 gap-4" style={{ backgroundColor: colors.hover }}>
               <div className="flex items-center gap-4 mb-3">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -1075,20 +899,14 @@ export function NovoProdutoForm({
                     className="w-4 h-4"
                     style={{ accentColor: colors.primary }}
                   />
-                  <span
-                    className="text-sm font-medium"
-                    style={{ color: colors.text }}
-                  >
+                  <span className="text-sm font-medium" style={{ color: colors.text }}>
                     Sujeito a IVA
                   </span>
                 </label>
 
                 {formData.sujeito_iva && (
                   <div className="flex items-center gap-2">
-                    <Percent
-                      className="w-4 h-4"
-                      style={{ color: colors.textSecondary }}
-                    />
+                    
                     <input
                       type="number"
                       name="taxa_iva"
@@ -1104,10 +922,7 @@ export function NovoProdutoForm({
                         color: colors.text,
                       }}
                     />
-                    <span
-                      className="text-sm"
-                      style={{ color: colors.textSecondary }}
-                    >
+                    <span className="text-sm" style={{ color: colors.textSecondary }}>
                       %
                     </span>
                   </div>
@@ -1115,14 +930,8 @@ export function NovoProdutoForm({
               </div>
 
               {/* ✅ RETENÇÃO - Aceita 0 ou valores positivos com vírgula */}
-              <div
-                className="flex items-center gap-4"
-                style={{ borderColor: colors.border }}
-              >
-                <span
-                  className="text-sm font-medium"
-                  style={{ color: colors.text }}
-                >
+              <div className="flex items-center gap-4" style={{ borderColor: colors.border }}>
+                <span className="text-sm font-medium" style={{ color: colors.text }}>
                   Retenção:
                 </span>
                 <div className="flex items-center gap-2">
@@ -1137,16 +946,11 @@ export function NovoProdutoForm({
                     className="w-20 px-2 py-1 border text-sm"
                     style={{
                       backgroundColor: colors.card,
-                      borderColor: errors.taxa_retencao
-                        ? colors.danger
-                        : colors.border,
+                      borderColor: errors.taxa_retencao ? colors.danger : colors.border,
                       color: colors.text,
                     }}
                   />
-                  <span
-                    className="text-sm"
-                    style={{ color: colors.textSecondary }}
-                  >
+                  <span className="text-sm" style={{ color: colors.textSecondary }}>
                     %
                   </span>
                 </div>
@@ -1162,61 +966,33 @@ export function NovoProdutoForm({
 
           {/* Preview de Cálculos */}
           {!isServico && (
-            <div
-              className="mt-4 p-3  space-y-2"
-              style={{ backgroundColor: colors.hover }}
-            >
+            <div className="mt-4 p-3  space-y-2" style={{ backgroundColor: colors.hover }}>
               <div className="flex justify-between text-sm">
-                <span style={{ color: colors.textSecondary }}>
-                  Custo Total:
-                </span>
+                <span style={{ color: colors.textSecondary }}>Custo Total:</span>
                 <span className="font-medium" style={{ color: colors.text }}>
                   {formatarPreco(custoTotal)}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span style={{ color: colors.textSecondary }}>
-                  Lucro Bruto:
-                </span>
-                <span
-                  className={`font-medium `}
-                >
-                  {formatarPreco(lucroBruto)}
-                </span>
+                <span style={{ color: colors.textSecondary }}>Lucro Bruto:</span>
+                <span className={`font-medium `}>{formatarPreco(lucroBruto)}</span>
               </div>
-              <div
-                className="grid grid-cols-2 gap-4 text-xs"
-                style={{ color: colors.textSecondary }}
-              >
+              <div className="grid grid-cols-2 gap-4 text-xs" style={{ color: colors.textSecondary }}>
                 <div>Margem Real: {margemReal.toFixed(2)}%</div>
                 <div>Markup Real: {markupReal.toFixed(2)}%</div>
               </div>
-              <div
-                className="border-t pt-2 mt-2"
-                style={{ borderColor: colors.border }}
-              >
+              <div className="border-t pt-2 mt-2" style={{ borderColor: colors.border }}>
                 <div className="flex justify-between items-center">
-                  <span
-                    className="font-semibold"
-                    style={{ color: colors.text }}
-                  >
-                    Preço Final{" "}
-                    {sujeitoIVA ? `+ IVA (${taxaIVA}%)` : "(Isento)"}:
+                  <span className="font-semibold" style={{ color: colors.text }}>
+                    Preço Final {sujeitoIVA ? `+ IVA (${taxaIVA}%)` : "(Isento)"}:
                   </span>
-                  <span
-                    className="text-lg font-bold"
-                    style={{ color: colors.text }}
-                  >
+                  <span className="text-lg font-bold" style={{ color: colors.text }}>
                     {formatarPreco(precoComIva)}
                   </span>
                 </div>
                 {categoriaSelecionada && !categoriaSelecionada.sujeito_iva && (
-                  <p
-                    className="text-xs mt-1"
-                    style={{ color: colors.textSecondary }}
-                  >
-                    Isento segundo código{" "}
-                    {categoriaSelecionada.codigo_isencao || "M00"}
+                  <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+                    Isento segundo código {categoriaSelecionada.codigo_isencao || "M00"}
                   </p>
                 )}
               </div>
@@ -1225,18 +1001,10 @@ export function NovoProdutoForm({
 
           {/* Preview Serviço */}
           {isServico && valorRetencao > 0 && (
-            <div
-              className="mt-4 p-3 "
-              style={{ backgroundColor: colors.hover }}
-            >
+            <div className="mt-4 p-3 " style={{ backgroundColor: colors.hover }}>
               <div className="flex justify-between items-center">
-                <span style={{ color: colors.textSecondary }}>
-                  Valor Líquido (após retenção):
-                </span>
-                <span
-                  className="text-lg font-bold"
-                  style={{ color: colors.secondary }}
-                >
+                <span style={{ color: colors.textSecondary }}>Valor Líquido (após retenção):</span>
+                <span className="text-lg font-bold" style={{ color: colors.secondary }}>
                   {formatarPreco(valorLiquido)}
                 </span>
               </div>
@@ -1251,20 +1019,13 @@ export function NovoProdutoForm({
             style={{
               backgroundColor: colors.card,
               borderColor: colors.border,
-            }}
-          >
-            <h3
-              className="font-semibold mb-4 text-sm"
-              style={{ color: colors.text }}
-            >
+            }}>
+            <h3 className="font-semibold mb-4 text-sm" style={{ color: colors.text }}>
               Estoque
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label
-                  className="block text-sm font-medium mb-1"
-                  style={{ color: colors.text }}
-                >
+                <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
                   Estoque Atual
                 </label>
                 <input
@@ -1282,10 +1043,7 @@ export function NovoProdutoForm({
                 />
               </div>
               <div>
-                <label
-                  className="block text-sm font-medium mb-1"
-                  style={{ color: colors.text }}
-                >
+                <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
                   Estoque Mínimo
                 </label>
                 <input
@@ -1313,13 +1071,9 @@ export function NovoProdutoForm({
             style={{
               backgroundColor: colors.card,
               borderColor: colors.border,
-            }}
-          >
+            }}>
             <div>
-              <label
-                className="block text-sm font-medium mb-1"
-                style={{ color: colors.text }}
-              >
+              <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
                 Duração Estimada
               </label>
               <div className="flex flex-col sm:flex-row gap-2">
@@ -1345,8 +1099,7 @@ export function NovoProdutoForm({
                     backgroundColor: colors.card,
                     borderColor: colors.border,
                     color: colors.text,
-                  }}
-                >
+                  }}>
                   <option value="hora">Hora(s)</option>
                   <option value="dia">Dia(s)</option>
                   <option value="semana">Semana(s)</option>
@@ -1355,12 +1108,9 @@ export function NovoProdutoForm({
               </div>
             </div>
 
-            {/* ✅ CORRIGIDO: Código de Isenção para serviços com valores válidos */}
+            {/*Código de Isenção para serviços */}
             <div>
-              <label
-                className="block text-sm font-medium mb-1"
-                style={{ color: colors.text }}
-              >
+              <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
                 Código de Isenção de IVA (opcional)
               </label>
               <select
@@ -1372,18 +1122,14 @@ export function NovoProdutoForm({
                   backgroundColor: colors.card,
                   borderColor: colors.border,
                   color: colors.text,
-                }}
-              >
+                }}>
                 {OPCOES_ISENCAO.map(({ value, label }) => (
                   <option key={value} value={value}>
                     {label}
                   </option>
                 ))}
               </select>
-              <p
-                className="mt-1 text-xs"
-                style={{ color: colors.textSecondary }}
-              >
+              <p className="mt-1 text-xs" style={{ color: colors.textSecondary }}>
                 Código de isenção conforme Código do IVA de Angola
               </p>
             </div>
@@ -1396,16 +1142,14 @@ export function NovoProdutoForm({
             type="button"
             onClick={handleCancel}
             className="px-4 py-2 transition-colors text-sm font-medium"
-            style={{ color: colors.textSecondary }}
-          >
+            style={{ color: colors.textSecondary }}>
             Cancelar
           </button>
           <button
             type="submit"
             disabled={loading}
             className="flex items-center gap-2 px-6 py-2 text-white transition-colors font-medium disabled:opacity-50"
-            style={{ backgroundColor: colors.primary }}
-          >
+            style={{ backgroundColor: colors.primary }}>
             {loading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
