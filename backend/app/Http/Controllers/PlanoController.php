@@ -22,24 +22,47 @@ class PlanoController extends Controller
     /**
      * Criar um novo plano
      */
-    public function store(Request $request)
-    {
-        $validated = $request->validate([
-            'nome' => 'required|string|max:100|unique:planos',
-            'descricao' => 'nullable|string',
-            'valor_mensal' => 'required|numeric|min:0',
-            'valor_anual' => 'nullable|numeric|min:0',
-            'duracao_meses' => 'integer|min:1|default:1',
-            'ativo' => 'boolean',
-        ]);
+public function store(Request $request)
+{
+    // Define valor padrão para duracao_meses
+    $request->mergeIfMissing(['duracao_meses' => 1]);
 
-        $plano = Plano::create([
-            'id' => (string) Str::uuid(),
-            ...$validated
-        ]);
+    // Valida os dados básicos
+    $validated = $request->validate([
+        'nome' => 'required|string|max:100|unique:planos',
+        'descricao' => 'nullable|string',
+        'valor_mensal' => 'required|numeric|min:0',
+        'valor_anual' => 'nullable|numeric|min:0',
+        'duracao_meses' => 'integer|min:1',
+        'ativo' => 'boolean',
+        // Valida o array de features (opcional)
+        'features' => 'nullable|array',
+        'features.*.feature_id' => 'required|exists:features,id',
+        'features.*.quantidade' => 'required|integer|min:0',
+        'features.*.unidade' => 'nullable|string|max:20',
+    ]);
 
-        return response()->json($plano, 201);
+    // Cria o plano
+    $plano = Plano::create([
+        'id' => (string) Str::uuid(),
+        ...$validated
+    ]);
+
+    // Se houver features, associa
+    if (!empty($validated['features'])) {
+        foreach ($validated['features'] as $feature) {
+            $plano->features()->attach($feature['feature_id'], [
+                'quantidade' => $feature['quantidade'],
+                'unidade' => $feature['unidade'] ?? null,
+            ]);
+        }
     }
+
+    // Recarrega o plano com as features para retornar ao frontend
+    $plano->load('features');
+
+    return response()->json($plano, 201);
+}
 
     /**
      * Exibir um plano específico
@@ -99,7 +122,7 @@ class PlanoController extends Controller
 
         $plano->features()->attach($validated['feature_id'], [
             'quantidade' => $validated['quantidade'],
-            'unidade' => $validated['unidade']
+            'unidade' => $validated['unidade'] ?? null,
         ]);
 
         return response()->json(['message' => 'Feature associada com sucesso.']);

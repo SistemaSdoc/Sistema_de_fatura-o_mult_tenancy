@@ -1,4 +1,4 @@
-// @/services/pagamentos.ts
+// @/services/pagamentosplanos.ts
 import api from "@/services/axios";
 
 export type MetodoPagamento = "transferencia" | "multicaixa" | "cartao_credito";
@@ -15,12 +15,11 @@ export interface Pagamento {
     status: EstadoPagamento;
     motivo_rejeicao: string | null;
     comprovativo_path: string | null;
-    data_pagamento: string | null; // ISO date
+    data_pagamento: string | null;
     created_at: string;
     updated_at: string;
 }
 
-// Input para criar pagamento (chamado pela empresa)
 export interface CriarPagamentoInput {
     empresa_id: string;
     plano_id: string;
@@ -29,12 +28,6 @@ export interface CriarPagamentoInput {
     referencia?: string;
 }
 
-// Input para rejeitar (admin)
-export interface RejeitarInput {
-    motivo: string;
-}
-
-// Respostas
 export interface PagamentoResponse {
     message: string;
     pagamento: Pagamento;
@@ -55,27 +48,27 @@ export interface UploadResponse {
 
 export const pagamentoService = {
     /**
-     * Listar pagamentos com filtros
+     * Listar pagamentos (ADMIN/LANDLORD) — vê pagamentos de qualquer empresa
      */
     listar: async (params?: {
         empresa_id?: string;
         subscricao_id?: string;
         status?: EstadoPagamento;
     }): Promise<ListaPagamentosResponse> => {
-        const response = await api.get<ListaPagamentosResponse>("/api/pagamentos-plano", { params });
+        const response = await api.get<ListaPagamentosResponse>("/api/landlord/pagamentos-plano", { params });
         return response.data;
     },
 
     /**
-     * Mostrar detalhes de um pagamento
+     * Mostrar detalhes de um pagamento (ADMIN/LANDLORD)
      */
     mostrar: async (id: string): Promise<PagamentoResponse> => {
-        const response = await api.get<PagamentoResponse>(`/api/pagamentos-plano/${id}`);
+        const response = await api.get<PagamentoResponse>(`/api/landlord/pagamentos-plano/${id}`);
         return response.data;
     },
 
     /**
-     * Criar novo pagamento (início do fluxo)
+     * Criar novo pagamento (EMPRESA/TENANT) — início do fluxo, feito pela própria empresa
      */
     criar: async (data: CriarPagamentoInput): Promise<PagamentoResponse> => {
         const response = await api.post<PagamentoResponse>("/api/pagamentos-plano", data);
@@ -83,7 +76,7 @@ export const pagamentoService = {
     },
 
     /**
-     * Upload do comprovativo (empresa)
+     * Upload do comprovativo (EMPRESA/TENANT)
      */
     enviarComprovativo: async (id: string, file: File): Promise<UploadResponse> => {
         const formData = new FormData();
@@ -97,7 +90,7 @@ export const pagamentoService = {
     },
 
     /**
-     * Confirmar pagamento (admin) → status 'pago'
+     * Confirmar pagamento (ADMIN/LANDLORD) → status 'pago'
      */
     confirmar: async (id: string): Promise<{ message: string; subscricao_id?: string }> => {
         const response = await api.post(`/api/landlord/pagamentos-plano/${id}/confirmar`);
@@ -105,7 +98,7 @@ export const pagamentoService = {
     },
 
     /**
-     * Rejeitar pagamento (admin) → status 'rejeitado'
+     * Rejeitar pagamento (ADMIN/LANDLORD) → status 'rejeitado'
      */
     rejeitar: async (id: string, motivo: string): Promise<PagamentoResponse> => {
         const response = await api.post<PagamentoResponse>(`/api/landlord/pagamentos-plano/${id}/rejeitar`, { motivo });
@@ -113,15 +106,14 @@ export const pagamentoService = {
     },
 
     /**
-     * Deletar pagamento
+     * Deletar pagamento (ADMIN/LANDLORD)
      */
     deletar: async (id: string): Promise<DeleteResponse> => {
-        const response = await api.delete<DeleteResponse>(`/api/pagamentos-plano/${id}`);
+        const response = await api.delete<DeleteResponse>(`/api/landlord/pagamentos-plano/${id}`);
         return response.data;
     },
 };
 
-// Helpers
 export const formatMetodoPagamento = (metodo: MetodoPagamento): string => {
     const labels: Record<MetodoPagamento, string> = {
         transferencia: "Transferência bancária",

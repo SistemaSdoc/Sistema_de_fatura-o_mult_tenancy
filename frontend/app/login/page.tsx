@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -144,11 +144,11 @@ const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, on
   );
 };
 
-/* ---------------- MAIN PAGE ---------------- */
-export default function LoginPage(): React.ReactElement {
+// ============ COMPONENTE INTERNO (usa useSearchParams) ============
+function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get('redirect') || '/dashboard'; // pega o redirect da URL
+  const redirect = searchParams.get('redirect') || '/dashboard';
 
   const { login, user, loading: authLoading } = useAuth();
   const colors = useThemeColors();
@@ -200,8 +200,7 @@ export default function LoginPage(): React.ReactElement {
 
     try {
       await login(email, password);
-      // O toast de sucesso será mostrado no useEffect acima
-      // O useEffect vai redirecionar
+      // O redirecionamento será feito pelo useEffect acima
     } catch (err: unknown) {
       let errorMessage = "Ocorreu um erro desconhecido";
       if (err instanceof AxiosError) errorMessage = err.response?.data?.message ?? err.message;
@@ -214,7 +213,7 @@ export default function LoginPage(): React.ReactElement {
 
   const isLoading = isSubmitting || authLoading;
 
-  // ✅ Construir link de registo com redirect
+  // ✅ Link de registo com redirect
   const registerLink = `/register${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`;
 
   return (
@@ -227,6 +226,7 @@ export default function LoginPage(): React.ReactElement {
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:shadow-lg">
         Saltar para o formulário de login
       </a>
+
       {/* Toast Notification */}
       {toast && <ToastNotification message={toast.message} type={toast.type} onClose={() => setToast(null)} colors={colors} />}
 
@@ -363,7 +363,7 @@ export default function LoginPage(): React.ReactElement {
           {/* Link Cadastro com redirect */}
           <div className="text-center">
             <Link
-              href="/register"
+              href={registerLink}
               className="group inline-flex items-center gap-2 transition-colors font-medium touch-target"
               style={{ color: colors.secondary }}>
               <UserPlus size={18} />
@@ -375,5 +375,19 @@ export default function LoginPage(): React.ReactElement {
         {/* Footer */}
       </div>
     </main>
+  );
+}
+
+// ============ PÁGINA PRINCIPAL (com Suspense) ============
+export default function LoginPage(): React.ReactElement {
+  return (
+    <Suspense fallback={
+      <div className="flex justify-center items-center min-h-screen">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <span className="ml-2 text-muted-foreground">A carregar...</span>
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   );
 }

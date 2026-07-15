@@ -327,21 +327,20 @@ class DocumentoFiscalController extends Controller
 
 public function emitir(Request $request): JsonResponse
 {
-     $modo = $this->getModo();
-    
+    $modo = $this->getModo();
+
     try {
         $this->verificarAcessoUsuario();
 
         // ============================================================
-        //  VERIFICAR LIMITE DE DOCUMENTOS (alinhado com o seeder)
+        //  VERIFICAR LIMITE DE DOCUMENTOS (CORRIGIDO )
         // ============================================================
-        $empresaId = $this->empresa->id;
         try {
             $this->verificarLimite(
-                'Documentos/mês', // nome da feature no seeder
-                function () use ($empresaId) {
-                    // Conta todos os tipos de documentos que consomem limite
-                    return DocumentoFiscal::where('empresa_id', $empresaId)
+                'Documentos/mês',
+                function () {
+                    // Usa o método auxiliar que já filtra pelo tenant
+                    return $this->queryDocumentosFiscais()
                         ->whereIn('tipo_documento', ['FT', 'FR', 'FP', 'NC', 'ND', 'RC', 'FRt'])
                         ->where('estado', '!=', 'cancelado')
                         ->whereMonth('created_at', now()->month)
@@ -356,9 +355,10 @@ public function emitir(Request $request): JsonResponse
                 'message' => $e->getMessage(),
                 'modo' => $modo,
             ], 403);
-        }       // ============================================================
+        }
+        // ============================================================
 
-        // Validação dos dados de entrada
+        // Validação dos dados de entrada (mantida inalterada)
         $dados = $request->validate([
             'tipo_documento'             => 'required|in:FT,FR,FP,FA,NC,ND,RC,FRt',
             'venda_id'                   => 'nullable|uuid|exists:vendas,id',
@@ -388,7 +388,7 @@ public function emitir(Request $request): JsonResponse
             'numero_conta'               => 'nullable|string|max:20',
         ]);
 
-        // Log dos dados recebidos para debug
+        // Log dos dados recebidos para debug (mantido)
         Log::info('[DocumentoFiscalController] Dados recebidos para emissão', [
             'tipo_documento' => $dados['tipo_documento'],
             'cliente_id' => $dados['cliente_id'] ?? null,
@@ -399,7 +399,7 @@ public function emitir(Request $request): JsonResponse
             'total_itens' => count($dados['itens'] ?? []),
         ]);
 
-        // Validação: cliente é obrigatório para FR (Fatura-Recibo)
+        // Validação adicional para FR (mantida)
         if (empty($dados['cliente_id']) && empty($dados['cliente_nome'])) {
             if ($dados['tipo_documento'] === 'FR') {
                 return response()->json([
@@ -413,7 +413,6 @@ public function emitir(Request $request): JsonResponse
         // Emitir o documento com todos os dados
         $documento = $this->documentoService->emitirDocumento($dados);
 
-        // Log do documento criado
         Log::info('[DocumentoFiscalController] Documento emitido com sucesso', [
             'documento_id' => $documento->id,
             'numero_documento' => $documento->numero_documento,
@@ -429,28 +428,28 @@ public function emitir(Request $request): JsonResponse
             'data'    => $documento,
             'modo'    => $modo,
         ], 201);
-        
+
     } catch (\Illuminate\Validation\ValidationException $e) {
         Log::warning('[DocumentoFiscalController] Erro de validação', [
             'errors' => $e->errors(),
             'modo' => $modo,
         ]);
         return response()->json([
-            'success' => false, 
-            'message' => 'Erro de validação', 
+            'success' => false,
+            'message' => 'Erro de validação',
             'errors' => $e->errors()
         ], 422);
-        
+
     } catch (\InvalidArgumentException $e) {
         Log::warning('[DocumentoFiscalController] Erro de argumento inválido', [
             'message' => $e->getMessage(),
             'modo' => $modo,
         ]);
         return response()->json([
-            'success' => false, 
+            'success' => false,
             'message' => $e->getMessage()
         ], 422);
-        
+
     } catch (\Exception $e) {
         Log::error('[DocumentoFiscalController] Erro ao emitir documento', [
             'error' => $e->getMessage(),

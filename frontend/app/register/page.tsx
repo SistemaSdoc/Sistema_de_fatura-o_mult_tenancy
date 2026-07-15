@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { useThemeColors } from "@/context/ThemeContext";
@@ -249,7 +249,8 @@ const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, on
     );
 };
 
-export default function RegisterCompanyPage() {
+// ============ COMPONENTE INTERNO (usa useSearchParams) ============
+function RegisterContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const planoId = searchParams.get('plano_id');
@@ -743,5 +744,19 @@ export default function RegisterCompanyPage() {
                 </div>
             </div>
         </div>
+    );
+}
+
+// ============ PÁGINA PRINCIPAL (com Suspense) ============
+export default function RegisterCompanyPage() {
+    return (
+        <Suspense fallback={
+            <div className="flex items-center justify-center min-h-screen">
+                <Loader2 className="w-8 h-8 animate-spin" style={{ color: '#F9941F' }} />
+                <span className="ml-2 text-sm" style={{ color: '#6b7280' }}>A carregar...</span>
+            </div>
+        }>
+            <RegisterContent />
+        </Suspense>
     );
 }

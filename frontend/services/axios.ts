@@ -241,6 +241,52 @@ tenantApi.interceptors.response.use(
 );
 
 // ============ API SERVICES ============
+export const landlordUsersApi = {
+  listar: (params?: { role?: string; ativo?: boolean; per_page?: number }) =>
+    landlordApi.get("/api/landlord/usuarios", { params }),
+  criar: (data: { name: string; email: string; password: string; password_confirmation: string; role: string; empresa_id?: string | null; ativo?: boolean }) =>
+    landlordApi.post("/api/landlord/usuarios", data),
+  atualizar: (id: string, data: { name?: string; email?: string; role?: string; ativo?: boolean }) =>
+    landlordApi.put(`/api/landlord/usuarios/${id}`, data),
+  remover: (id: string) => landlordApi.delete(`/api/landlord/usuarios/${id}`),
+  toggleStatus: (id: string) => landlordApi.patch(`/api/landlord/usuarios/${id}/toggle-status`),
+  resetPassword: (id: string, data: { password: string; password_confirmation: string }) =>
+    landlordApi.post(`/api/landlord/usuarios/${id}/reset-password`, data),
+  vincularEmpresa: (id: string, empresa_id: string) =>
+    landlordApi.post(`/api/landlord/usuarios/${id}/vincular-empresa`, { empresa_id }),
+  desvincularEmpresa: (id: string) =>
+    landlordApi.delete(`/api/landlord/usuarios/${id}/desvincular-empresa`),
+};
+
+export const featuresApi = {
+  listar: () => landlordApi.get("/api/landlord/features"),
+  criar: (data: { nome: string; descricao?: string; icone?: string; ativo?: boolean }) =>
+    landlordApi.post("/api/landlord/features", data),
+  atualizar: (id: string, data: any) => landlordApi.put(`/api/landlord/features/${id}`, data),
+  remover: (id: string) => landlordApi.delete(`/api/landlord/features/${id}`),
+};
+
+export const planosCrudApi = {
+  listar: () => landlordApi.get("/api/landlord/planos"),
+  criar: (data: any) => landlordApi.post("/api/landlord/planos", data),
+  atualizar: (id: string, data: any) => landlordApi.put(`/api/landlord/planos/${id}`, data),
+  remover: (id: string) => landlordApi.delete(`/api/landlord/planos/${id}`),
+    attachFeature: (planoId: string, data: { feature_id: string; quantidade: number; unidade?: string }) =>
+    landlordApi.post(`/api/landlord/planos/${planoId}/features`, data),
+  detachFeature: (planoId: string, featureId: string) =>
+    landlordApi.delete(`/api/landlord/planos/${planoId}/features/${featureId}`),
+
+};
+
+export const perfilApi = {
+  atualizar: (data: { name: string }) => landlordApi.put("/api/landlord/perfil", data),
+  alterarSenha: (data: { senha_atual: string; nova_senha: string; nova_senha_confirmation: string }) =>
+    landlordApi.put("/api/landlord/perfil/senha", data),
+};
+
+export const analyticsApi = {
+  resumo: () => landlordApi.get("/api/landlord/analytics/resumo"),
+};
 
 export const subscricaoApi = {
   criar: (data: { plano_id: string; forma_pagamento?: string; renovacao_automatica?: boolean }) =>
@@ -261,12 +307,21 @@ export const landAuthApi = {
   login: (email: string, password: string) => landlordApi.post("/api/landlord/login", { email, password }),
   logout: () => landlordApi.post("/api/landlord/logout"),
   me: () => landlordApi.get("/api/landlord/landlordme"),
+  perfil: {
+  atualizar: (data: { name: string }) => landlordApi.put("/api/landlord/perfil", data),
+  alterarSenha: (data: { senha_atual: string; nova_senha: string; nova_senha_confirmation: string }) =>
+    landlordApi.put("/api/landlord/perfil/senha", data),
+},
+
+
   criarEmpresaFreelancer: (data: { nome: string; subdomain: string; modo?: "colectivo" | "singular" }) =>
     landlordApi.post("/api/landlord/freelancer/empresa", data),
   atualizarEmpresaFreelancer: (data: FormData) =>
     landlordApi.put("/api/landlord/freelancer/empresa", data, {
       headers: { "Content-Type": "multipart/form-data" },
     }),
+
+    
   onboardingStatus: () => landlordApi.get("/api/landlord/freelancer/onboarding"),
   empresas: {
     list: () => landlordApi.get("/api/landlord/empresas"),

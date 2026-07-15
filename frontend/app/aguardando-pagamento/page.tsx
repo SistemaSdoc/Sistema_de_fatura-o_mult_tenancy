@@ -1,7 +1,7 @@
 'use client';
 
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, Suspense } from 'react';
 import {
   Copy,
   CheckCircle,
@@ -21,7 +21,8 @@ const NOME_BENEFICIARIO = process.env.NEXT_PUBLIC_NOME_BENEFICIARIO || '';
 
 type PagamentoEstado = 'pendente' | 'em_analise' | 'pago' | 'rejeitado' | 'desconhecido';
 
-export default function AguardandoPagamentoPage() {
+// Componente que usa useSearchParams
+function PagamentoContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -75,22 +76,17 @@ export default function AguardandoPagamentoPage() {
       }
 
       if (novoEstado === 'em_analise') {
-        // Podemos manter polling para detectar aprovação/rejeição
-        // Mas já não mostramos loading
         setIsLoading(false);
       }
 
-      // Para pendente, também paramos loading
       if (novoEstado === 'pendente') {
         setIsLoading(false);
       }
 
-      // Reset retry count on success
       setRetryCount(0);
     } catch (err) {
       console.error('Erro ao buscar estado:', err);
       setRetryCount(prev => prev + 1);
-      // Após 5 tentativas falhas, para o polling e mostra erro
       if (retryCount >= 4) {
         clearPolling();
         setIsLoading(false);
@@ -142,7 +138,7 @@ export default function AguardandoPagamentoPage() {
     try {
       await pagamentoService.enviarComprovativo(pagamentoId, file);
       toast.success('Comprovativo enviado com sucesso! Aguarde a análise.');
-      await fetchStatus(); // Atualiza imediatamente
+      await fetchStatus();
       setFile(null);
       const input = document.querySelector('input[type="file"]') as HTMLInputElement;
       if (input) input.value = '';
@@ -428,5 +424,18 @@ export default function AguardandoPagamentoPage() {
         </CardFooter>
       </Card>
     </div>
+  );
+}
+
+// Página principal com Suspense
+export default function AguardandoPagamentoPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    }>
+      <PagamentoContent />
+    </Suspense>
   );
 }

@@ -143,6 +143,7 @@ const REDIRECT_MAP: Record<string, string> = {
   operador: "/dashboard/Vendas",
 };
 
+
 export function AuthProvider({ children }: AuthProviderProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -153,8 +154,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const hasFetched = useRef(false);
 
-  const isNoAuthRoute = pathname ? NO_AUTH_ROUTES.includes(pathname) : false;
-
+const isNoAuthRoute = pathname
+    ? NO_AUTH_ROUTES.includes(pathname) || pathname.startsWith("/landlord")
+    : false;
   // ========== FETCH USER ==========
   const fetchUser = useCallback(async (): Promise<void> => {
     console.log("[AuthProvider] fetchUser iniciado");
