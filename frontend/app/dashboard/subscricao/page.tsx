@@ -42,37 +42,39 @@ export default function MinhaSubscricaoPage() {
   const [subscricao, setSubscricao] = useState<Subscricao | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [modalCancelarAberto, setModalCancelarAberto] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
 
   const carregarSubscricao = async () => {
     setLoading(true);
     setError(null);
     try {
       const response = await subscricaoService.minhaAssinatura();
-      
+
       // O serviço retorna null quando não tem assinatura (404)
       if (response === null) {
         setSubscricao(null);
         return;
       }
-      
+
       // Processa a resposta - pode ser { subscricao: {...} } ou diretamente o objeto
       const sub = response?.subscricao ?? response;
-      
+
       // Verifica se é um objeto válido com ID
-      if (sub && typeof sub === 'object' && 'id' in sub) {
+      if (sub && typeof sub === "object" && "id" in sub) {
         setSubscricao(sub as Subscricao);
       } else {
         setSubscricao(null);
       }
     } catch (err: any) {
       console.error("Erro ao carregar subscrição:", err);
-      
+
       // Fallback para 404 (caso o serviço não tenha capturado)
       if (err.response?.status === 404) {
         setSubscricao(null);
         return;
       }
-      
+
       setError(err.response?.data?.message || err.message || "Erro ao carregar subscrição");
     } finally {
       setLoading(false);
@@ -96,13 +98,16 @@ export default function MinhaSubscricaoPage() {
 
   const handleCancelar = async () => {
     if (!subscricao) return;
-    if (!confirm("Tem certeza que deseja cancelar a subscrição? Esta ação não pode ser desfeita.")) return;
+    setCancelando(true);
     try {
       await subscricaoService.cancelar(subscricao.id);
       toast.success("Subscrição cancelada com sucesso.");
+      setModalCancelarAberto(false);
       carregarSubscricao();
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Erro ao cancelar subscrição");
+    } finally {
+      setCancelando(false);
     }
   };
 
@@ -158,7 +163,7 @@ export default function MinhaSubscricaoPage() {
         <div className="max-w-3xl mx-auto p-4">
           <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
             <CardContent className="py-12 text-center">
-              <Crown className="w-16 h-16 mx-auto mb-4" style={{ color: colors.primary }} />
+              <Crown className="w-16 h-16 mx-auto mb-4" style={{ color: colors.secondary }} />
               <h2 className="text-xl font-bold" style={{ color: colors.text }}>
                 Sem subscrição activa
               </h2>
@@ -167,7 +172,7 @@ export default function MinhaSubscricaoPage() {
               </p>
               <button
                 onClick={() => setModalPlanosAberto(true)}
-                className="mt-6 px-6 py-2 rounded-full font-semibold cursor-pointer"
+                className="mt-6 px-6 py-2 font-semibold cursor-pointer"
                 style={{ backgroundColor: colors.primary, color: "white" }}>
                 Ver planos disponíveis
               </button>
@@ -187,9 +192,9 @@ export default function MinhaSubscricaoPage() {
     cancelada: { label: "Cancelada", color: colors.danger || "#ef4444" },
   };
 
-  const statusInfo = statusMap[subscricao.status] || { 
-    label: subscricao.status, 
-    color: colors.textSecondary || "#6b7280" 
+  const statusInfo = statusMap[subscricao.status] || {
+    label: subscricao.status,
+    color: colors.textSecondary || "#6b7280",
   };
 
   // Render principal - COM SUBSCRIÇÃO
@@ -210,9 +215,7 @@ export default function MinhaSubscricaoPage() {
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <Crown className="w-6 h-6" style={{ color: colors.secondary }} />
-                <CardTitle style={{ color: colors.text }}>
-                  {subscricao.plano?.nome || "Plano"}
-                </CardTitle>
+                <CardTitle style={{ color: colors.text }}>{subscricao.plano?.nome || "Plano"}</CardTitle>
               </div>
               <Badge
                 className="capitalize"
@@ -224,9 +227,7 @@ export default function MinhaSubscricaoPage() {
               </Badge>
             </div>
             {subscricao.plano?.descricao && (
-              <CardDescription style={{ color: colors.textSecondary }}>
-                {subscricao.plano.descricao}
-              </CardDescription>
+              <CardDescription style={{ color: colors.textSecondary }}>{subscricao.plano.descricao}</CardDescription>
             )}
           </CardHeader>
           <CardContent className="space-y-4">
@@ -318,20 +319,15 @@ export default function MinhaSubscricaoPage() {
             {subscricao.status === "ativa" && (
               <>
                 {!isExperimental && (
-                  <Button 
-                    variant="outline" 
-                    onClick={handleRenovar} 
-                    style={{ borderColor: colors.border, color: colors.text }}
-                  >
+                  <Button variant="outline" onClick={handleRenovar} style={{ borderColor: colors.border, color: colors.text }}>
                     <RefreshCw className="w-4 h-4 mr-2" />
                     Renovar
                   </Button>
                 )}
-                <Button 
-                  variant="destructive" 
-                  onClick={handleCancelar} 
-                  style={{ background: colors.danger || "#ef4444", color: "white" }}
-                >
+                <Button
+                  variant="destructive"
+                  onClick={() => setModalCancelarAberto(true)}
+                  style={{ background: colors.secondary, color: colors.text }}>
                   Cancelar subscrição
                 </Button>
               </>
@@ -346,6 +342,59 @@ export default function MinhaSubscricaoPage() {
         </Card>
       </div>
       <PlanosModal isOpen={modalPlanosAberto} onClose={() => setModalPlanosAberto(false)} />
+        {modalCancelarAberto && (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+    onClick={() => !cancelando && setModalCancelarAberto(false)}
+  >
+    <div
+      className="w-full max-w-md rounded-xl shadow-2xl p-6"
+      style={{ backgroundColor: colors.card, border: `1px solid ${colors.border}` }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-center gap-3 mb-4">
+        <div className="p-2 rounded-full" style={{ backgroundColor: `${colors.secondary}1A` }}>
+          <AlertTriangle className="w-6 h-6" style={{ color: colors.secondary }} />
+        </div>
+        <h3 className="text-lg font-bold" style={{ color: colors.text }}>
+          Cancelar subscrição
+        </h3>
+      </div>
+
+      <p className="text-sm mb-6" style={{ color: colors.textSecondary }}>
+        Tem certeza que deseja cancelar a sua subscrição do plano{" "}
+        <strong style={{ color: colors.text }}>{subscricao?.plano?.nome}</strong>? Esta ação não pode ser desfeita.
+      </p>
+
+      <div className="flex flex-col-reverse sm:flex-row gap-3 justify-end">
+        <Button
+          variant="outline"
+          onClick={() => setModalCancelarAberto(false)}
+          disabled={cancelando}
+          style={{ borderColor: colors.border, color: colors.text }}
+        >
+          Voltar
+        </Button>
+        <Button
+          variant="destructive"
+          onClick={handleCancelar}
+          disabled={cancelando}
+          style={{ background: colors.secondary , color: colors.text }}
+        >
+          {cancelando ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              A cancelar...
+            </>
+          ) : (
+            "Sim, cancelar"
+          )}
+        </Button>
+      </div>
+    </div>
+  </div>
+)}
     </MainEmpresa>
   );
 }

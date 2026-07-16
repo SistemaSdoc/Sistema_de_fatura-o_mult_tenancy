@@ -312,7 +312,7 @@ export default function CheckoutPage() {
       >
         <CardHeader>
           <div className="flex items-center gap-2">
-            <Crown className="w-6 h-6" style={{ color: colors.primary }} />
+            <Crown className="w-6 h-6" style={{ color: colors.secondary }} />
             <CardTitle style={{ color: colors.text }}>Finalizar Assinatura</CardTitle>
           </div>
           <CardDescription style={{ color: colors.textSecondary }}>
@@ -361,7 +361,7 @@ export default function CheckoutPage() {
                   )}
                   <div className="flex justify-between items-center border-b pb-3" style={{ borderColor: colors.border }}>
                     <span style={{ color: colors.textSecondary }}>Valor mensal</span>
-                    <span className="font-bold text-xl" style={{ color: colors.primary }}>
+                    <span className="font-bold text-xl" style={{ color: colors.secondary }}>
                       {Number(plano.valor_mensal).toLocaleString('pt-AO')} KZ
                     </span>
                   </div>
@@ -402,7 +402,7 @@ export default function CheckoutPage() {
                   style={{ borderColor: colors.border }}
                 >
                   <div className="flex items-center gap-2 mb-4">
-                    <CreditCard className="w-5 h-5" style={{ color: colors.primary }} />
+                    <CreditCard className="w-5 h-5" style={{ color: colors.secondary }} />
                     <h3 className="font-semibold" style={{ color: colors.text }}>
                       Dados de pagamento
                     </h3>
@@ -445,11 +445,6 @@ export default function CheckoutPage() {
                           <SelectItem value="cartao_credito">
                             <div className="flex items-center gap-2">
                               <CreditCard className="w-4 h-4" /> Cartão de crédito
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="pix">
-                            <div className="flex items-center gap-2">
-                              <Wallet className="w-4 h-4" /> PIX
                             </div>
                           </SelectItem>
                         </SelectContent>
@@ -495,6 +490,7 @@ export default function CheckoutPage() {
                         Data de vencimento
                       </Label>
                       <Input
+                      disabled
                         id="vencimento"
                         type="date"
                         value={pagamento.data_vencimento}
@@ -512,7 +508,7 @@ export default function CheckoutPage() {
                     <div className="mt-4 p-3 rounded-lg" style={{ backgroundColor: colors.hover }}>
                       <div className="flex justify-between items-center">
                         <span style={{ color: colors.textSecondary }}>Total a pagar:</span>
-                        <span className="text-xl font-bold" style={{ color: colors.primary }}>
+                        <span className="text-xl font-bold" style={{ color: colors.secondary }}>
                           {Number(plano.valor_mensal).toLocaleString('pt-AO')} KZ
                         </span>
                       </div>

@@ -14,7 +14,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
+import { useThemeColors } from '@/context/ThemeContext';
 import { pagamentoService } from '@/services/pagamentosplanos';
+
 
 const IBAN_EMPRESA = process.env.NEXT_PUBLIC_IBAN_EMPRESA || '';
 const NOME_BENEFICIARIO = process.env.NEXT_PUBLIC_NOME_BENEFICIARIO || '';
@@ -24,7 +26,7 @@ type PagamentoEstado = 'pendente' | 'em_analise' | 'pago' | 'rejeitado' | 'desco
 export default function AguardandoPagamentoPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-
+  const colors = useThemeColors();
   const referencia = searchParams.get('referencia') || '';
   const valor = searchParams.get('valor') || '0';
   const metodo = searchParams.get('metodo') || 'transferencia';
@@ -63,7 +65,7 @@ export default function AguardandoPagamentoPage() {
         clearPolling();
         setIsLoading(false);
         toast.success('Pagamento confirmado! A sua assinatura está ativa.');
-        setTimeout(() => router.push('/dashboard'), 1500);
+        setTimeout(() => router.push('/dashboard'), 150000);
         return;
       }
 
@@ -273,7 +275,7 @@ export default function AguardandoPagamentoPage() {
             <div className="p-4 bg-muted/50 rounded-lg border">
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">Valor a pagar:</span>
-                <span className="text-2xl font-bold text-primary">
+                <span className="text-2xl font-bold" style={{ color: colors.secondary }}>
                   {Number(valor).toLocaleString('pt-AO', { style: 'currency', currency: 'AOA' })}
                 </span>
               </div>
@@ -320,7 +322,7 @@ export default function AguardandoPagamentoPage() {
                 </div>
               )}
               {metodo === 'multicaixa' && (
-                <p className="text-sm">Dirija-se a um ATM ou use o Multicaixa Express e seleccione "Pagamento por referência".</p>
+                <p className="text-sm">Dirija-se a um ATM ou use o Multicaixa Express e seleccione Pagamento por referência.</p>
               )}
               {metodo === 'cartao_credito' && (
                 <p className="text-sm">O pagamento com cartão é processado em minutos. Se não for actualizado, contacte o suporte.</p>
@@ -339,12 +341,14 @@ export default function AguardandoPagamentoPage() {
                     accept="image/*,application/pdf"
                     onChange={handleFileChange}
                     className="flex-1 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+                    
                   />
                 </div>
                 <Button
                   onClick={handleUpload}
                   disabled={!file || uploading}
                   className="w-full"
+                  style={{ color: colors.text, background: colors.primary }} 
                 >
                   {uploading ? (
                     <>
@@ -375,7 +379,7 @@ export default function AguardandoPagamentoPage() {
         <CardHeader>
           <div className="flex items-center gap-3">
             {estado === 'pago' && <CheckCircle className="w-8 h-8 text-green-500" />}
-            {estado === 'em_analise' && <Loader2 className="w-8 h-8 text-yellow-500 animate-spin" />}
+            {estado === 'em_analise' && <Loader2 className="w-8 h-8 animate-spin" style={{ color: colors.secondary }} />}
             {estado === 'rejeitado' && <XCircle className="w-8 h-8 text-destructive" />}
             {(estado === 'pendente' || estado === 'desconhecido') && (
               <CheckCircle className="w-8 h-8 text-yellow-500" />

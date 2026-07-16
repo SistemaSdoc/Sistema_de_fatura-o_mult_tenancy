@@ -6,8 +6,8 @@ import { Facebook, Instagram, Linkedin, Sun, Moon } from "lucide-react";
 import EmpresasSection from "./components/EmpresasSection";
 import { HelpCircle, Headset, FileText, ShieldCheck, BookOpenCheck } from "lucide-react";
 import { useThemeColors, useTheme } from "@/context/ThemeContext";
-import { planosService } from '@/services/planos';
-import { featuresService } from '@/services/features';
+import { planosService } from "@/services/planos";
+import { featuresService } from "@/services/features";
 
 // ====================================================
 // TIPOS
@@ -79,7 +79,7 @@ interface PricingCardProps {
   };
   index: number;
   colors: ThemeColors;
-  periodo: 'mensal' | 'trimestral' | 'semestral' | 'anual';
+  periodo: "mensal" | "trimestral" | "semestral" | "anual";
 }
 
 // ====================================================
@@ -266,18 +266,12 @@ const FAQItem: React.FC<FAQItemProps> = ({ question, answer, index, colors }) =>
 const PricingCard: React.FC<PricingCardProps> = ({ plan, index, colors, periodo }) => {
   const getPreco = () => {
     switch (periodo) {
-      case 'trimestral':
-        return plan.valor_trimestral !== null && plan.valor_trimestral !== undefined 
-          ? plan.valor_trimestral 
-          : plan.valor_mensal * 3;
-      case 'semestral':
-        return plan.valor_semestral !== null && plan.valor_semestral !== undefined
-          ? plan.valor_semestral
-          : plan.valor_mensal * 6;
-      case 'anual':
-        return plan.valor_anual !== null && plan.valor_anual !== undefined
-          ? plan.valor_anual
-          : plan.valor_mensal * 12;
+      case "trimestral":
+        return plan.valor_trimestral !== null && plan.valor_trimestral !== undefined ? plan.valor_trimestral : plan.valor_mensal * 3;
+      case "semestral":
+        return plan.valor_semestral !== null && plan.valor_semestral !== undefined ? plan.valor_semestral : plan.valor_mensal * 6;
+      case "anual":
+        return plan.valor_anual !== null && plan.valor_anual !== undefined ? plan.valor_anual : plan.valor_mensal * 12;
       default:
         return plan.valor_mensal;
     }
@@ -285,15 +279,19 @@ const PricingCard: React.FC<PricingCardProps> = ({ plan, index, colors, periodo 
 
   const getIntervalo = () => {
     switch (periodo) {
-      case 'trimestral': return '/trimestre';
-      case 'semestral': return '/semestre';
-      case 'anual': return '/ano';
-      default: return '/mês';
+      case "trimestral":
+        return "/trimestre";
+      case "semestral":
+        return "/semestre";
+      case "anual":
+        return "/ano";
+      default:
+        return "/mês";
     }
   };
 
   const preco = getPreco();
-  const precoFormatado = `${Number(preco).toLocaleString('pt-AO')} KZ`;
+  const precoFormatado = `${Number(preco).toLocaleString("pt-AO")} KZ`;
   const intervalo = getIntervalo();
 
   const buttonStyle = {
@@ -310,9 +308,7 @@ const PricingCard: React.FC<PricingCardProps> = ({ plan, index, colors, periodo 
     transform: "scale(1.05)",
   };
 
-  const href = plan.name === "Experimental" || plan.name === "Grátis" 
-    ? `/register?plano_id=${plan.id}` 
-    : `/checkout?plano_id=${plan.id}&periodo=${periodo}`;
+  const href = `/register?plano_id=${plan.id}&periodo=${periodo}`;
 
   return (
     <AnimatedSection animation="fade-up" delay={index * 100} threshold={0.2}>
@@ -326,8 +322,12 @@ const PricingCard: React.FC<PricingCardProps> = ({ plan, index, colors, periodo 
           {plan.name}
         </h3>
         <div className="flex justify-center items-baseline my-4">
-          <span className="text-5xl font-extrabold" style={{ color: colors.text }}>{precoFormatado}</span>
-          <span className="text-xl font-medium" style={{ color: colors.textSecondary }}>{intervalo}</span>
+          <span className="text-5xl font-extrabold" style={{ color: colors.text }}>
+            {precoFormatado}
+          </span>
+          <span className="text-xl font-medium" style={{ color: colors.textSecondary }}>
+            {intervalo}
+          </span>
         </div>
         <ul className="space-y-3 text-left mb-8 grow">
           {plan.features.map((feature, idx) => (
@@ -343,9 +343,8 @@ const PricingCard: React.FC<PricingCardProps> = ({ plan, index, colors, periodo 
           href={href}
           className="mt-auto cursor-pointer inline-block text-center px-8 py-3 rounded-full font-semibold transition duration-300 ease-in-out transform hover:scale-[1.05]"
           style={buttonStyle}
-          onMouseOver={e => Object.assign(e.currentTarget.style, buttonHoverStyle)}
-          onMouseOut={e => Object.assign(e.currentTarget.style, buttonStyle)}
-        >
+          onMouseOver={(e) => Object.assign(e.currentTarget.style, buttonHoverStyle)}
+          onMouseOut={(e) => Object.assign(e.currentTarget.style, buttonStyle)}>
           {plan.name === "Experimental" || plan.name === "Grátis" ? "Experimente Agora" : "Assinar"}
         </Link>
       </div>
@@ -444,43 +443,39 @@ export default function App() {
   const [errorFeatures, setErrorFeatures] = useState<string | null>(null);
 
   // Estado para período selecionado
-  const [periodo, setPeriodo] = useState<'mensal' | 'trimestral' | 'semestral' | 'anual'>('mensal');
+  const [periodo, setPeriodo] = useState<"mensal" | "trimestral" | "semestral" | "anual">("mensal");
 
   // ⭐ Encontrar o plano gratuito (Experimental)
-  const planoGratuito = planos.find(
-    (p) => p.valor_mensal === 0 || p.name?.toLowerCase() === 'experimental'
-  );
+  const planoGratuito = planos.find((p) => p.valor_mensal === 0 || p.name?.toLowerCase() === "experimental");
 
   // ⭐ Link para registo com plano gratuito (se existir)
-  const registerLink = planoGratuito
-    ? `/register?plano_id=${planoGratuito.id}`
-    : '/register';
+  const registerLink = planoGratuito ? `/register?plano_id=${planoGratuito.id}` : "/register";
 
   // Buscar planos
   useEffect(() => {
     const fetchPlanos = async () => {
       try {
         const data = await planosService.listarAtivos();
-        console.log(' Planos recebidos:', JSON.stringify(data, null, 2));
+        console.log(" Planos recebidos:", JSON.stringify(data, null, 2));
 
         const planosFormatados = data.map((plano: any) => ({
           id: plano.id,
           name: plano.nome,
-          price: `${Number(plano.valor_mensal).toLocaleString('pt-AO')} KZ`,
-          interval: '/mês',
+          price: `${Number(plano.valor_mensal).toLocaleString("pt-AO")} KZ`,
+          interval: "/mês",
           valor_mensal: plano.valor_mensal,
           valor_trimestral: plano.valor_trimestral || null,
           valor_semestral: plano.valor_semestral || null,
           valor_anual: plano.valor_anual || null,
-          precoTrimestral: plano.valor_trimestral ? `${Number(plano.valor_trimestral).toLocaleString('pt-AO')} KZ` : null,
-          precoSemestral: plano.valor_semestral ? `${Number(plano.valor_semestral).toLocaleString('pt-AO')} KZ` : null,
-          precoAnual: plano.valor_anual ? `${Number(plano.valor_anual).toLocaleString('pt-AO')} KZ` : null,
-          isPopular: plano.nome === 'Pro' || plano.nome === 'Empresa',
+          precoTrimestral: plano.valor_trimestral ? `${Number(plano.valor_trimestral).toLocaleString("pt-AO")} KZ` : null,
+          precoSemestral: plano.valor_semestral ? `${Number(plano.valor_semestral).toLocaleString("pt-AO")} KZ` : null,
+          precoAnual: plano.valor_anual ? `${Number(plano.valor_anual).toLocaleString("pt-AO")} KZ` : null,
+          isPopular: plano.nome === "Pro" || plano.nome === "Empresa",
           features: plano.features.map((f: any) => {
             let featureText = f.nome;
             if (f.pivot?.quantidade && f.pivot?.quantidade > 0) {
-              const qtd = f.pivot.quantidade === 0 ? 'Ilimitados' : f.pivot.quantidade;
-              const unidade = f.pivot.unidade || '';
+              const qtd = f.pivot.quantidade === 0 ? "Ilimitados" : f.pivot.quantidade;
+              const unidade = f.pivot.unidade || "";
               featureText = `${qtd} ${unidade} ${f.nome}`;
             }
             return featureText;
@@ -488,8 +483,8 @@ export default function App() {
         }));
         setPlanos(planosFormatados);
       } catch (err) {
-        console.error('Erro ao buscar planos:', err);
-        setErrorPlanos('Não foi possível carregar os planos.');
+        console.error("Erro ao buscar planos:", err);
+        setErrorPlanos("Não foi possível carregar os planos.");
       } finally {
         setLoadingPlanos(false);
       }
@@ -501,25 +496,25 @@ export default function App() {
   useEffect(() => {
     const fetchFeatures = async () => {
       try {
-        console.log('🔄 A buscar features...');
+        console.log("🔄 A buscar features...");
         const data = await featuresService.listarAtivas();
-        console.log('📦 Resposta bruta da API:', data);
+        console.log("📦 Resposta bruta da API:", data);
 
         if (!Array.isArray(data)) {
-          console.error('❌ A resposta NÃO é um array! É:', typeof data);
-          setErrorFeatures('Resposta inválida da API.');
+          console.error("❌ A resposta NÃO é um array! É:", typeof data);
+          setErrorFeatures("Resposta inválida da API.");
           return;
         }
 
-        console.log('✅ É um array com', data.length, 'itens.');
+        console.log("✅ É um array com", data.length, "itens.");
 
-        const ativas = data.filter(f => f.ativo === true || f.ativo === 1);
-        console.log('🔎 Features ativas:', ativas);
+        const ativas = data.filter((f) => f.ativo === true || f.ativo === 1);
+        console.log("🔎 Features ativas:", ativas);
 
         setFeatures(ativas);
       } catch (err) {
-        console.error('❌ Erro no fetch:', err);
-        setErrorFeatures('Não foi possível carregar as funcionalidades.');
+        console.error("❌ Erro no fetch:", err);
+        setErrorFeatures("Não foi possível carregar as funcionalidades.");
       } finally {
         setLoadingFeatures(false);
       }
@@ -546,7 +541,13 @@ export default function App() {
           font-family: "Inter", sans-serif;
         }
         .animated-gradient-section {
-          background: linear-gradient(-30deg, ${FOOTER_GRADIENT_START}, ${FOOTER_GRADIENT_END}, ${FOOTER_GRADIENT_MID}, ${FOOTER_GRADIENT_START});
+          background: linear-gradient(
+            -30deg,
+            ${FOOTER_GRADIENT_START},
+            ${FOOTER_GRADIENT_END},
+            ${FOOTER_GRADIENT_MID},
+            ${FOOTER_GRADIENT_START}
+          );
           background-size: 400% 400%;
           animation: gradientShift 25s ease infinite;
         }
@@ -687,34 +688,11 @@ export default function App() {
               </p>
             </AnimatedSection>
 
-            {loadingFeatures ? (
-              <div className="text-center py-10">
-                <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2" style={{ borderColor: colors.primary }}></div>
-                <p className="mt-4" style={{ color: colors.textSecondary }}>Carregando funcionalidades...</p>
-              </div>
-            ) : errorFeatures ? (
-              <div className="text-center py-10 text-red-500">
-                <p>{errorFeatures}</p>
-                <button onClick={() => window.location.reload()} className="mt-4 px-6 py-2 rounded-full text-white" style={{ backgroundColor: colors.primary }}>Tentar novamente</button>
-              </div>
-            ) : features.length === 0 ? (
-              <div className="text-center py-10" style={{ color: colors.textSecondary }}>
-                Nenhuma funcionalidade disponível no momento.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                {features.map((feature, index) => (
-                  <FeatureCard
-                    key={feature.id}
-                    Icon={() => <CheckIcon color={colors.secondary} />}
-                    title={feature.nome}
-                    description={feature.descricao || ''}
-                    delay={index * 100}
-                    colors={colors}
-                  />
-                ))}
-              </div>
-            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {allFeaturesData.map((feature, index) => (
+                <FeatureCard key={index} title={feature.title} description={feature.description} delay={index * 100} colors={colors} />
+              ))}
+            </div>
           </div>
         </section>
 
@@ -728,7 +706,14 @@ export default function App() {
             </AnimatedSection>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-9">
               {processSteps.map((step, index) => (
-                <StepCard key={index} number={step.number} title={step.title} description={step.description} delay={index * 200} colors={colors} />
+                <StepCard
+                  key={index}
+                  number={step.number}
+                  title={step.title}
+                  description={step.description}
+                  delay={index * 200}
+                  colors={colors}
+                />
               ))}
             </div>
           </div>
@@ -746,23 +731,22 @@ export default function App() {
             {/* Seletor de período */}
             <div className="flex flex-wrap justify-center gap-2 mb-10">
               {[
-                { label: 'Mensal', value: 'mensal' },
-                { label: 'Trimestral', value: 'trimestral' },
-                { label: 'Semestral', value: 'semestral' },
-                { label: 'Anual', value: 'anual' },
+                { label: "Mensal", value: "mensal" },
+                { label: "Trimestral", value: "trimestral" },
+                { label: "Semestral", value: "semestral" },
+                { label: "Anual", value: "anual" },
               ].map((p) => (
                 <button
                   key={p.value}
                   onClick={() => setPeriodo(p.value as any)}
                   className={`px-5 py-2 rounded-full text-sm font-medium transition duration-200 hover:scale-105 ${
-                    periodo === p.value ? 'text-white' : ''
+                    periodo === p.value ? "text-white" : ""
                   }`}
                   style={{
                     backgroundColor: periodo === p.value ? colors.primary : colors.hover,
-                    color: periodo === p.value ? '#fff' : colors.textSecondary,
-                    border: `1px solid ${periodo === p.value ? colors.primary : colors.border}`
-                  }}
-                >
+                    color: periodo === p.value ? "#fff" : colors.textSecondary,
+                    border: `1px solid ${periodo === p.value ? colors.primary : colors.border}`,
+                  }}>
                   {p.label}
                 </button>
               ))}
@@ -770,16 +754,27 @@ export default function App() {
 
             {loadingPlanos ? (
               <div className="text-center py-10">
-                <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2" style={{ borderColor: colors.primary }}></div>
-                <p className="mt-4" style={{ color: colors.textSecondary }}>Carregando planos...</p>
+                <div
+                  className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2"
+                  style={{ borderColor: colors.primary }}></div>
+                <p className="mt-4" style={{ color: colors.textSecondary }}>
+                  Carregando planos...
+                </p>
               </div>
             ) : errorPlanos ? (
               <div className="text-center py-10 text-red-500">
                 <p>{errorPlanos}</p>
-                <button onClick={() => window.location.reload()} className="mt-4 px-6 py-2 rounded-full text-white" style={{ backgroundColor: colors.primary }}>Tentar novamente</button>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="mt-4 px-6 py-2 rounded-full text-white"
+                  style={{ backgroundColor: colors.primary }}>
+                  Tentar novamente
+                </button>
               </div>
             ) : planos.length === 0 ? (
-              <div className="text-center py-10" style={{ color: colors.textSecondary }}>Nenhum plano disponível no momento.</div>
+              <div className="text-center py-10" style={{ color: colors.textSecondary }}>
+                Nenhum plano disponível no momento.
+              </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-8">
                 {planos.map((plan, index) => (

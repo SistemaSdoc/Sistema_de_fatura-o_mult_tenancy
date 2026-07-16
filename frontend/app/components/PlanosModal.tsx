@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Loader2, CheckCircle2 } from 'lucide-react';
+import { X, Loader2, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useThemeColors } from '@/context/ThemeContext';
 import { planosService } from '@/services/planos';
 
@@ -10,6 +10,8 @@ interface PlanosModalProps {
   onClose: () => void;
 }
 
+const FEATURES_VISIVEIS = 5;
+
 export default function PlanosModal({ isOpen, onClose }: PlanosModalProps) {
   const colors = useThemeColors();
 
@@ -17,6 +19,7 @@ export default function PlanosModal({ isOpen, onClose }: PlanosModalProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [periodo, setPeriodo] = useState<'mensal' | 'trimestral' | 'semestral' | 'anual'>('mensal');
+  const [expandido, setExpandido] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!isOpen) return;
@@ -93,9 +96,13 @@ export default function PlanosModal({ isOpen, onClose }: PlanosModalProps) {
     window.location.href = href;
   };
 
+  const toggleExpandir = (id: string) => {
+    setExpandido((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4"
       role="dialog"
       aria-modal="true"
     >
@@ -107,31 +114,31 @@ export default function PlanosModal({ isOpen, onClose }: PlanosModalProps) {
 
       {/* Conteúdo do Modal */}
       <div
-        className="relative w-full max-w-6xl max-h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200"
+        className="relative w-full max-w-5xl max-h-[92vh] sm:max-h-[88vh] rounded-xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200"
         style={{ backgroundColor: colors.card }}
       >
         {/* Header */}
         <div
-          className="flex items-center justify-between px-6 py-4 border-b sticky top-0 z-10"
+          className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b sticky top-0 z-10 shrink-0"
           style={{ backgroundColor: colors.card, borderColor: colors.border }}
         >
-          <h2 className="text-xl sm:text-2xl font-extrabold" style={{ color: colors.text }}>
+          <h2 className="text-base sm:text-xl font-extrabold leading-tight" style={{ color: colors.text }}>
             Escolha o Plano Certo para Si
           </h2>
           <button
             onClick={onClose}
-            className="p-2 rounded-full transition hover:opacity-70"
+            className="p-1.5 sm:p-2 rounded-full transition hover:opacity-70 shrink-0"
             style={{ color: colors.textSecondary }}
             aria-label="Fechar"
           >
-            <X size={22} />
+            <X size={20} />
           </button>
         </div>
 
         {/* Corpo com scroll */}
-        <div className="overflow-y-auto px-6 py-6">
+        <div className="overflow-y-auto overscroll-contain px-3 sm:px-6 py-4 sm:py-6">
           {/* Seletor de período */}
-          <div className="flex flex-wrap justify-center gap-2 mb-8">
+          <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2 mb-5 sm:mb-6">
             {[
               { label: 'Mensal', value: 'mensal' },
               { label: 'Trimestral', value: 'trimestral' },
@@ -141,7 +148,7 @@ export default function PlanosModal({ isOpen, onClose }: PlanosModalProps) {
               <button
                 key={p.value}
                 onClick={() => setPeriodo(p.value as any)}
-                className="px-5 py-2 rounded-full text-sm font-medium transition duration-200 hover:scale-105"
+                className="px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition duration-200"
                 style={{
                   backgroundColor: periodo === p.value ? colors.primary : colors.hover,
                   color: periodo === p.value ? '#fff' : colors.textSecondary,
@@ -167,42 +174,63 @@ export default function PlanosModal({ isOpen, onClose }: PlanosModalProps) {
               Nenhum plano disponível no momento.
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 items-start">
               {planos.map((plan) => {
                 const preco = getPreco(plan);
                 const precoFormatado = `${Number(preco).toLocaleString('pt-AO')} KZ`;
                 const isGratis = plan.name === 'Experimental' || plan.name === 'Grátis' || plan.valor_mensal === 0;
+                const estaExpandido = !!expandido[plan.id];
+                const featuresVisiveis = estaExpandido
+                  ? plan.features
+                  : plan.features.slice(0, FEATURES_VISIVEIS);
+                const temMais = plan.features.length > FEATURES_VISIVEIS;
 
                 return (
                   <div
                     key={plan.id}
-                    className="flex flex-col p-6 rounded-xl border-2 transition duration-300 hover:shadow-xl hover:scale-[1.02]"
+                    className="flex flex-col p-4 sm:p-5 rounded-lg sm:rounded-xl border transition duration-300 hover:shadow-lg"
                     style={{ backgroundColor: colors.background, borderColor: colors.border }}
                   >
-                    <h3 className="text-xl font-bold mb-3" style={{ color: colors.text }}>
+                    <h3 className="text-base sm:text-lg font-bold mb-1.5" style={{ color: colors.text }}>
                       {plan.name}
                     </h3>
-                    <div className="flex items-baseline mb-4">
-                      <span className="text-3xl font-extrabold" style={{ color: colors.text }}>
+                    <div className="flex items-baseline mb-3 sm:mb-4">
+                      <span className="text-2xl font-extrabold" style={{ color: colors.text }}>
                         {precoFormatado}
                       </span>
-                      <span className="text-sm font-medium ml-1" style={{ color: colors.textSecondary }}>
+                      <span className="text-xs font-medium ml-1" style={{ color: colors.textSecondary }}>
                         {getIntervalo()}
                       </span>
                     </div>
-                    <ul className="space-y-2 mb-6 grow">
-                      {plan.features.map((feature: string, idx: number) => (
-                        <li key={idx} className="flex items-start gap-2 text-sm">
-                          <CheckCircle2 size={16} className="shrink-0 mt-0.5" style={{ color: colors.secondary }} />
+
+                    <ul className="space-y-1.5 mb-2">
+                      {featuresVisiveis.map((feature: string, idx: number) => (
+                        <li key={idx} className="flex items-start gap-1.5 text-xs sm:text-sm">
+                          <CheckCircle2 size={14} className="shrink-0 mt-0.5" style={{ color: colors.secondary }} />
                           <span style={{ color: colors.textSecondary }}>{feature}</span>
                         </li>
                       ))}
                     </ul>
+
+                    {temMais && (
+                      <button
+                        onClick={() => toggleExpandir(plan.id)}
+                        className="flex items-center gap-1 text-xs font-medium mb-4 self-start"
+                        style={{ color: colors.primary }}
+                      >
+                        {estaExpandido ? (
+                          <>Ver menos <ChevronUp size={14} /></>
+                        ) : (
+                          <>Ver mais {plan.features.length - FEATURES_VISIVEIS} recursos <ChevronDown size={14} /></>
+                        )}
+                      </button>
+                    )}
+
                     <button
                       onClick={() => handleAssinar(plan)}
-                      className="mt-auto px-6 py-3 rounded-full font-semibold transition duration-300 hover:scale-[1.03]"
+                      className="mt-auto px-4 py-2 sm:py-2.5 rounded-full text-sm font-semibold transition duration-300 hover:scale-[1.02]"
                       style={{
-                        backgroundColor: colors.primary,  
+                        backgroundColor: colors.primary,
                         color: 'white',
                       }}
                     >
