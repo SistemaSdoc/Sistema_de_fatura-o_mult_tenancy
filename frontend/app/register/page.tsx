@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { useThemeColors } from "@/context/ThemeContext";
@@ -255,10 +255,18 @@ const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, on
   );
 };
 
+<<<<<<< HEAD
 export default function RegisterCompanyPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const planoId = searchParams.get("plano_id");
+=======
+// ============ COMPONENTE INTERNO (usa useSearchParams) ============
+function RegisterContent() {
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const planoId = searchParams.get('plano_id');
+>>>>>>> 6a932ba1e481d4308e8544843be6bda1a6c67047
 
   const colors = useThemeColors() as ThemeColors;
 

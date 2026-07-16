@@ -702,34 +702,28 @@ class VendaController extends Controller
         }
     }
 
-    /**
-     * Conta quantos documentos fiscais a empresa já emitiu no mês atual
-     */
-    private function contarDocumentosMes($empresaId): int
-    {
-        if ($this->isColectivo()) {
-            // doTenant() já aplica o global scope que filtra por tenant_id.
-            // NÃO adicionar where('empresa_id') aqui: no modo colectivo a
-            //    tabela documentos_fiscais (banco shared) não tem essa coluna,
-            //    só tenant_id — mesma regra já documentada em UserController::store.
-            return SharedDocumentoFiscal::doTenant()
-                ->whereIn('tipo_documento', ['FT', 'FR', 'FP', 'NC', 'ND', 'RC', 'FRt'])
-                ->where('estado', '!=', 'cancelado')
-                ->whereMonth('created_at', now()->month)
-                ->whereYear('created_at', now()->year)
-                ->count();
-        } else {
-            // No modo singular a base tenant já é exclusiva da empresa.
-            // Se a coluna empresa_id não existir nesta tabela também,
-            // remova este where (mesmo problema pode se repetir aqui).
-            return TenantDocumentoFiscal::where('empresa_id', $empresaId)
-                ->whereIn('tipo_documento', ['FT', 'FR', 'FP', 'NC', 'ND', 'RC', 'FRt'])
-                ->where('estado', '!=', 'cancelado')
-                ->whereMonth('created_at', now()->month)
-                ->whereYear('created_at', now()->year)
-                ->count();
-        }
+
+/**
+ * Conta quantos documentos fiscais a empresa já emitiu no mês atual
+ */
+private function contarDocumentosMes($empresaId): int
+{
+    if ($this->isColectivo()) {
+        return SharedDocumentoFiscal::doTenant()
+            ->whereIn('tipo_documento', ['FT', 'FR', 'FP', 'NC', 'ND', 'RC', 'FRt'])
+            ->where('estado', '!=', 'cancelado')
+            ->whereMonth('created_at', now()->month)
+            ->whereYear('created_at', now()->year)
+            ->count();
+    } else {
+        //  SEM empresa_id no singular
+        return TenantDocumentoFiscal::whereIn('tipo_documento', ['FT', 'FR', 'FP', 'NC', 'ND', 'RC', 'FRt'])
+            ->where('estado', '!=', 'cancelado')
+            ->whereMonth('created_at', now()->month)
+            ->whereYear('created_at', now()->year)
+            ->count();
     }
+}
 
     public function relatorio(Request $request)
     {

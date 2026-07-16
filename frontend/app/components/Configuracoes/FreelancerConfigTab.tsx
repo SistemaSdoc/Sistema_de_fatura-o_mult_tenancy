@@ -35,7 +35,7 @@ export interface FreelancerConfigTabProps extends WithToast {
 }
 
 export const FreelancerConfigTab = ({ colors, incompleteFields = [], showToast }: FreelancerConfigTabProps) => {
-  const { user, refetch: refetchAuth } = useAuth();
+  const { user, refreshUser } = useAuth(); // ✅ agora usa refreshUser
   const [form, setForm] = useState<FormData>({
     nif: "",
     telefone: "",
@@ -160,7 +160,8 @@ export const FreelancerConfigTab = ({ colors, incompleteFields = [], showToast }
           setIncomplete(response.data.data.incomplete_fields || []);
         }
 
-        await refetchAuth?.();
+        // ✅ agora usa refreshUser em vez de refetch
+        await refreshUser();
       }
     } catch (err: any) {
       const errorMessage = err.response?.data?.message || "Erro ao atualizar dados";

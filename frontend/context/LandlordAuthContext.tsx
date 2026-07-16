@@ -2,7 +2,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import { landAuthApi } from "@/services/axios";
+import { landAuthApi, landlordApi  } from "@/services/axios";
 import { useRouter } from 'next/navigation';
 import { clearTenant } from "@/services/axios";
 
@@ -18,6 +18,7 @@ interface LandlordAuthContextType {
     loading: boolean;
     login: (email: string, password: string) => Promise<void>;
     logout: () => Promise<void>;
+    refreshUser: () => Promise<void>;   
 }
 
 const LandlordAuthContext = createContext({} as LandlordAuthContextType);
@@ -59,7 +60,7 @@ export function LandlordAuthProvider({ children }: { children: React.ReactNode }
     };
 
     return (
-        <LandlordAuthContext.Provider value={{ user, loading, login, logout }}>
+        <LandlordAuthContext.Provider value={{ user, loading, login, logout, refreshUser: fetchMe }}>
             {children}
         </LandlordAuthContext.Provider>
     );

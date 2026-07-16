@@ -14,6 +14,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\RelatoriosController;
 use App\Http\Controllers\LandlordAuthController;
+use App\Http\Controllers\LandlordUserController;
 use App\Http\Controllers\EmpresaController;
 use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\AuditoriaController;
@@ -21,7 +22,10 @@ use App\Http\Controllers\FreelancerController;
 use App\Http\Controllers\PlanoController;
 use App\Http\Controllers\FeatureController;
 use App\Http\Controllers\SubscricaoController;
+use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\PagamentoLandlordController;
+use App\Http\Controllers\LandlordNotificacaoController;
+
 
 $uuidPattern = '[0-9a-fA-F-]{36}';
 
@@ -45,15 +49,61 @@ Route::get('/planos/{plano}', [PlanoController::class, 'show']);
 // ================================================================
 // 2. ROTAS DO LANDLORD (Administração)
 // ================================================================
+
+
 Route::prefix('landlord')->group(function () {
     Route::post('/login', [LandlordAuthController::class, 'login']);
     Route::post('/register', [LandlordAuthController::class, 'register']);
     Route::get('/auth/google', [LandlordAuthController::class, 'redirectToGoogle'])->name('landlord.google.redirect');
     Route::get('/auth/google/callback', [LandlordAuthController::class, 'handleGoogleCallback'])->name('landlord.google.callback');
 
+    Route::get('/notificacoes', [LandlordNotificacaoController::class, 'index']);
+    Route::post('/notificacoes/{id}/marcar-lida', [LandlordNotificacaoController::class, 'marcarLida']);
+    Route::post('/notificacoes/marcar-todas-lidas', [LandlordNotificacaoController::class, 'marcarTodasLidas']);
+
     Route::middleware(['auth:landlord_api'])->group(function () {
         Route::post('/logout', [LandlordAuthController::class, 'logout']);
         Route::get('/landlordme', [LandlordAuthController::class, 'landlordme']);
+        Route::get('/analytics/resumo', [AnalyticsController::class, 'resumo']);
+
+        // ✅ removido o "/landlord" duplicado
+        Route::put('/perfil', [LandlordUserController::class, 'atualizarPerfil']);
+        Route::put('/perfil/senha', [LandlordUserController::class, 'alterarSenhaPropria']);
+
+        // ✅ prefix sem duplicar "landlord"
+Route::prefix('usuarios')->group(function () {
+    Route::get('/', [LandlordUserController::class, 'index']);
+    Route::post('/', [LandlordUserController::class, 'store']);
+    Route::get('/tenant-users', [LandlordUserController::class, 'listarTenantUsers']);
+    Route::get('/shared-users', [LandlordUserController::class, 'listarSharedUsers']);
+    Route::get('/{landlordUser}', [LandlordUserController::class, 'show']);
+    Route::put('/{landlordUser}', [LandlordUserController::class, 'update']);
+    Route::delete('/{landlordUser}', [LandlordUserController::class, 'destroy']);
+    Route::patch('/{landlordUser}/toggle-status', [LandlordUserController::class, 'toggleStatus']);
+    Route::post('/{landlordUser}/reset-password', [LandlordUserController::class, 'resetPassword']);
+    Route::post('/{landlordUser}/vincular-empresa', [LandlordUserController::class, 'vincularEmpresa']);
+    Route::delete('/{landlordUser}/desvincular-empresa', [LandlordUserController::class, 'desvincularEmpresa']);
+});
+
+        // ✅ NOVO: CRUD completo de planos, dentro do landlord
+        Route::prefix('planos')->group(function () {
+            Route::get('/', [PlanoController::class, 'index']);
+            Route::post('/', [PlanoController::class, 'store']);
+            Route::get('/{plano}', [PlanoController::class, 'show']);
+            Route::put('/{plano}', [PlanoController::class, 'update']);
+            Route::delete('/{plano}', [PlanoController::class, 'destroy']);
+            Route::post('/{plano}/features', [PlanoController::class, 'attachFeature']);
+            Route::delete('/{plano}/features/{feature}', [PlanoController::class, 'detachFeature']);
+        });
+
+        // ✅ NOVO: gestão de features pelo landlord (create/update/delete)
+        Route::prefix('features')->group(function () {
+            Route::get('/', [FeatureController::class, 'index']);
+            Route::post('/', [FeatureController::class, 'store']);
+            Route::get('/{feature}', [FeatureController::class, 'show']);
+            Route::put('/{feature}', [FeatureController::class, 'update']);
+            Route::delete('/{feature}', [FeatureController::class, 'destroy']);
+        });
 
         // Freelancer
         Route::post('/freelancer/empresa', [FreelancerController::class, 'criarEmpresaSingular']);
@@ -68,13 +118,14 @@ Route::prefix('landlord')->group(function () {
         Route::patch('/empresas/{empresa}/toggle-status', [EmpresaController::class, 'toggleStatusLandlord']);
         Route::post('/minha-empresa', [EmpresaController::class, 'storeParaLandlordAutenticado']);
 
-        // Gestão de pagamentos de planos (admin)
         Route::prefix('pagamentos-plano')->group(function () {
-            Route::get('/pendentes', [PagamentoLandlordController::class, 'pendentes']);
-            Route::post('{id}/confirmar', [PagamentoLandlordController::class, 'confirmarPagamento']);
-            Route::post('{id}/rejeitar', [PagamentoLandlordController::class, 'rejeitarPagamento']);
-            Route::delete('{id}', [PagamentoLandlordController::class, 'destroy']);
-        });
+    Route::get('/', [PagamentoLandlordController::class, 'index']);
+    Route::get('/pendentes', [PagamentoLandlordController::class, 'pendentes']);
+    Route::get('/{id}', [PagamentoLandlordController::class, 'show']);
+    Route::post('{id}/confirmar', [PagamentoLandlordController::class, 'confirmarPagamento']);
+    Route::post('{id}/rejeitar', [PagamentoLandlordController::class, 'rejeitarPagamento']);
+    Route::delete('{id}', [PagamentoLandlordController::class, 'destroy']);
+});
     });
 });
 

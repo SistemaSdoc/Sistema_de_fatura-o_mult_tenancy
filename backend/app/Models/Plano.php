@@ -14,6 +14,7 @@ class Plano extends Model
     protected $connection = 'landlord'; 
 
     protected $fillable = [
+        'id',
         'nome', 
         'descricao', 
         'valor_mensal', 
@@ -24,6 +25,9 @@ class Plano extends Model
         'ativo'
     ];
 
+    protected $attributes = [
+    'duracao_meses' => 1,
+];
     // Relacionamento muitos-para-muitos com Features (via tabela pivot planos_features)
     public function features()
     {
@@ -42,4 +46,5 @@ class Plano extends Model
     {
         return $this->hasMany(Pagamento::class);
     }
+    
 }

@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Models\Landlord\LandlordUser;
+use App\Models\LandlordUser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -12,6 +12,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use App\Models\Empresa;
+use Illuminate\Support\Facades\DB;
 
 class LandlordUserController extends Controller
 {
@@ -20,7 +21,7 @@ class LandlordUserController extends Controller
      */
     public function __construct()
     {
-        $this->middleware('auth:landlord');
+        $this->middleware('auth:landlord_api');
     }
 
     // ================= LISTAGEM =================
@@ -96,8 +97,7 @@ class LandlordUserController extends Controller
             'email' => 'required|email|unique:landlord.users,email',
             'password' => 'required|string|min:8|confirmed',
             'role' => ['required', Rule::in([
-                LandlordUser::ROLE_SUPER_ADMIN,
-                LandlordUser::ROLE_SUPORTE
+                LandlordUser::ROLE_SUPER_ADMIN
             ])],
             'empresa_id' => 'nullable|uuid|exists:landlord.empresas,id',
             'ativo' => 'boolean',
@@ -148,19 +148,43 @@ class LandlordUserController extends Controller
     /**
      * Atualiza usuário
      */
-    public function update(Request $request, LandlordUser $landlordUser)
-    {
-        $this->authorize('update', $landlordUser);
+public function update(Request $request, LandlordUser $landlordUser)
+{
+    $this->authorize('update', $landlordUser);
 
-        $user = Auth::guard('landlord')->user();        
-        
+    $validator = Validator::make($request->all(), [
+        'name' => 'sometimes|required|string|max:255',
+        'email' => ['sometimes', 'required', 'email', Rule::unique('landlord.users', 'email')->ignore($landlordUser->id)],
+        'role' => ['sometimes', 'required', Rule::in([
+            LandlordUser::ROLE_SUPER_ADMIN
+        ])],
+        'ativo' => 'sometimes|boolean',
+    ]);
 
+    if ($validator->fails()) {
         return response()->json([
-            'success' => true,
-            'message' => 'Usuário atualizado com sucesso',
-            'data' => $landlordUser->fresh()->load('empresa')
-        ]);
+            'success' => false,
+            'errors' => $validator->errors()
+        ], 422);
     }
+
+    // Não pode alterar a própria role (evita auto-rebaixamento acidental)
+    $authUser = Auth::guard('landlord')->user();
+    if ($landlordUser->id === $authUser->id && $request->has('role') && $request->role !== $landlordUser->role) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Não podes alterar a tua própria role'
+        ], 403);
+    }
+
+    $landlordUser->update($validator->validated());
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Usuário atualizado com sucesso',
+        'data' => $landlordUser->fresh()->load('empresa')
+    ]);
+}
 
     // ================= EXCLUSÃO =================
 
@@ -268,32 +292,35 @@ class LandlordUserController extends Controller
     /**
      * Vincula usuário a empresa (transforma em admin_empresa)
      */
-    public function vincularEmpresa(Request $request, LandlordUser $landlordUser)
-    {
-        $this->authorize('update', $landlordUser);
+public function vincularEmpresa(Request $request, LandlordUser $landlordUser)
+{
+    $this->authorize('update', $landlordUser);
 
-        $request->validate([
-            'empresa_id' => 'required|uuid|exists:landlord.empresas,id',
-        ]);
+    $request->validate([
+        'empresa_id' => 'required|uuid|exists:landlord.empresas,id',
+    ]);
 
-        $user = Auth::guard('landlord')->user();
+    // ✅ Faltava isto — vincular a empresa antes de sincronizar
+    $landlordUser->update([
+        'empresa_id' => $request->empresa_id,
+        'role' => LandlordUser::ROLE_ADMIN_EMPRESA ?? $landlordUser->role, // ajusta à tua constante real, se existir
+    ]);
 
-        // Sincroniza com tenant
-        try {
-            $landlordUser->sincronizarTenantUser();
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Usuário vinculado, mas falha ao criar no tenant: ' . $e->getMessage()
-            ], 500);
-        }
-
+    try {
+        $landlordUser->sincronizarTenantUser();
+    } catch (\Exception $e) {
         return response()->json([
-            'success' => true,
-            'message' => 'Usuário vinculado à empresa com sucesso',
-            'data' => $landlordUser->load('empresa')
-        ]);
+            'success' => false,
+            'message' => 'Usuário vinculado, mas falha ao criar no tenant: ' . $e->getMessage()
+        ], 500);
     }
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Usuário vinculado à empresa com sucesso',
+        'data' => $landlordUser->fresh()->load('empresa')
+    ]);
+}
 
     /**
      * Remove vínculo com empresa (volta a ser suporte ou super_admin)
@@ -356,4 +383,228 @@ class LandlordUserController extends Controller
 
         return $perms;
     }
+
+    // ================= PERFIL DO UTILIZADOR LOGADO =================
+
+/**
+ * Atualiza o nome do próprio utilizador logado
+ */
+public function atualizarPerfil(Request $request)
+{
+    $user = Auth::guard('landlord')->user();
+
+    $validator = Validator::make($request->all(), [
+        'name' => 'required|string|max:255',
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'success' => false,
+            'errors' => $validator->errors()
+        ], 422);
+    }
+
+    $user->update([
+        'name' => $request->name,
+    ]);
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Perfil atualizado com sucesso',
+        'data' => $user->fresh()
+    ]);
+}
+
+/**
+ * Altera a senha do próprio utilizador logado (exige senha atual)
+ */
+public function alterarSenhaPropria(Request $request)
+{
+    $user = Auth::guard('landlord')->user();
+
+    $validator = Validator::make($request->all(), [
+        'senha_atual' => 'required|string',
+        'nova_senha' => 'required|string|min:8|confirmed',
+    ], [], [
+        'nova_senha' => 'nova senha',
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'success' => false,
+            'errors' => $validator->errors()
+        ], 422);
+    }
+
+    if (!Hash::check($request->senha_atual, $user->password)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'A senha atual está incorreta'
+        ], 422);
+    }
+
+    $user->update([
+        'password' => Hash::make($request->nova_senha),
+    ]);
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Senha alterada com sucesso'
+    ]);
+}
+
+/**
+ * Lista todos os utilizadores do tenant (de todas as empresas)
+ */
+public function listarTenantUsers()
+{
+    \Log::info('listarTenantUsers: Iniciando consulta', [
+        'user_id' => Auth::guard('landlord_api')->id()
+    ]);
+
+    $user = Auth::guard('landlord_api')->user();
+    if (!$user) {
+        return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+    }
+
+    try {
+        // Busca todas as empresas ativas (ou todas, conforme necessidade)
+        $empresas = Empresa::on('landlord')->where('status', 'ativo')->get();
+        $tenantUsers = [];
+
+        foreach ($empresas as $empresa) {
+            $modo = $empresa->modo ?? 'colectivo'; // assume colectivo se não tiver
+            $database = $empresa->db_name ?? null;
+
+            \Log::debug('Processando empresa', [
+                'empresa_id' => $empresa->id,
+                'empresa_nome' => $empresa->nome,
+                'modo' => $modo,
+                'database' => $database
+            ]);
+
+            if ($modo === 'singular' && $database) {
+                // -------------------------------
+                // MODO SINGULAR: buscar na base tenant dedicada
+                // -------------------------------
+                try {
+                    config(['database.connections.tenant.database' => $database]);
+                    $users = DB::connection('tenant')->table('users')->get();
+
+                    foreach ($users as $user) {
+                        $user->empresa_nome = $empresa->nome;
+                        $user->role = $user->role ?? 'user'; // fallback
+                        $tenantUsers[] = $user;
+                    }
+
+                    \Log::info('Usuários encontrados (singular)', [
+                        'empresa' => $empresa->nome,
+                        'quantidade' => $users->count()
+                    ]);
+
+                } catch (\Exception $e) {
+                    \Log::error('Erro ao buscar usuários (singular)', [
+                        'empresa' => $empresa->nome,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+
+            } elseif ($modo === 'colectivo') {
+                // -------------------------------
+                // MODO COLECTIVO: buscar na base shared
+                // -------------------------------
+                try {
+                    $users = DB::connection('shared')
+                        ->table('users')
+                        ->where('empresa_id', $empresa->id) // ajuste o nome da coluna (pode ser 'tenant_id')
+                        ->get();
+
+                    foreach ($users as $user) {
+                        $user->empresa_nome = $empresa->nome;
+                        $user->role = $user->role ?? 'user'; // fallback
+                        $tenantUsers[] = $user;
+                    }
+
+                    \Log::info('Usuários encontrados (colectivo)', [
+                        'empresa' => $empresa->nome,
+                        'quantidade' => $users->count()
+                    ]);
+
+                } catch (\Exception $e) {
+                    \Log::error('Erro ao buscar usuários (colectivo)', [
+                        'empresa' => $empresa->nome,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+        }
+
+        \Log::info('listarTenantUsers: Consulta concluída', [
+            'total_empresas' => $empresas->count(),
+            'total_usuarios' => count($tenantUsers)
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'data' => $tenantUsers
+        ]);
+
+    } catch (\Exception $e) {
+        \Log::error('listarTenantUsers: Erro geral', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Erro ao processar a requisição: ' . $e->getMessage()
+        ], 500);
+    }
+}
+
+
+public function listarSharedUsers()
+{
+    $user = Auth::guard('landlord_api')->user();
+    if (!$user) {
+        return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+    }
+
+    // 1. Buscar utilizadores da base shared
+    $users = DB::connection('shared')
+        ->table('users')
+        ->select('id', 'name', 'email', 'tenant_id', 'role', 'created_at')
+        ->get();
+
+    // 2. Buscar empresas da base landlord (apenas id e nome)
+    $empresas = DB::connection('landlord')
+        ->table('empresas')
+        ->select('id', 'nome')
+        ->get()
+        ->keyBy('id'); // transforma em array associativo [id => empresa]
+
+    // 3. Combinar: adicionar o nome da empresa a cada utilizador
+    $users->transform(function ($user) use ($empresas) {
+        $empresa = $empresas->get($user->tenant_id);
+        $user->empresa_nome = $empresa ? $empresa->nome : null;
+        return $user;
+    });
+
+    // (Opcional) Mapear role para rótulo legível
+    $roleLabels = [
+        'admin' => 'empresa_admin',
+        'contabilista'     => 'contabilista',
+        'operador'         => 'Operador',
+    ];
+    $users->transform(function ($user) use ($roleLabels) {
+        $user->role_label = $roleLabels[$user->role] ?? $user->role;
+        return $user;
+    });
+
+    return response()->json([
+        'success' => true,
+        'data' => $users
+    ]);
+}
+
 }

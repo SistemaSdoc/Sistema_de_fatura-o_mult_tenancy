@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -123,11 +123,11 @@ const ToggleSwitch: React.FC<{ checked: boolean; onChange: () => void; label: st
     </div>
 );
 
-/* ---------------- MAIN PAGE ---------------- */
-export default function RegisterPage(): React.ReactElement {
+// ========== COMPONENTE INTERNO ==========
+function RegisterContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const redirect = searchParams.get('redirect') || '/dashboard'; // ✅ Pega o redirect da URL
+    const redirect = searchParams.get('redirect') || '/dashboard';
 
     const [formData, setFormData] = useState<RegisterData>({ 
         name: "", 
@@ -161,7 +161,6 @@ export default function RegisterPage(): React.ReactElement {
         try {
             await registerUser(formData);
             setSuccess(true);
-            // ✅ Redireciona para o login mantendo o redirect
             const loginUrl = `/login${searchParams.has('redirect') ? `?redirect=${encodeURIComponent(redirect)}` : ''}`;
             setTimeout(() => router.push(loginUrl), 2000);
         } catch (err: unknown) {
@@ -300,5 +299,18 @@ export default function RegisterPage(): React.ReactElement {
                 <p className="text-center text-gray-400 text-xs mt-6">© {new Date().getFullYear()} Sistema. Todos os direitos reservados.</p>
             </div>
         </div>
+    );
+}
+
+// ========== PÁGINA PRINCIPAL COM SUSPENSE ==========
+export default function RegisterPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-[#123859]" />
+            </div>
+        }>
+            <RegisterContent />
+        </Suspense>
     );
 }

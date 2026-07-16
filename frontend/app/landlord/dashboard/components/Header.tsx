@@ -1,20 +1,17 @@
 'use client';
 
 import { useLandlordAuth } from '@/context/LandlordAuthContext';
-import { useRouter } from 'next/navigation';
 import { LogOut, Moon, Sun } from 'lucide-react';
 import { useTheme, useThemeColors } from '@/context/ThemeContext';
 
 export default function DashboardHeader() {
     const { user, logout } = useLandlordAuth();
-    const router = useRouter();
     const { theme, toggleTheme } = useTheme();
     const colors = useThemeColors();
 
     const handleLogout = async () => {
         try {
-            await logout();
-            router.push('/landlord/login');
+            await logout(); // já redireciona para /landlord/login internamente
         } catch (error) {
             console.error('Erro ao fazer logout:', error);
         }
@@ -35,7 +32,7 @@ export default function DashboardHeader() {
                 <div className="flex items-center gap-3 min-w-0">
                     <img
                         src="/images/3.png"
-                        alt="FaturaJa Logo"
+                        alt="FaturaJá Logo"
                         className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg object-contain shrink-0 transition-transform duration-300 hover:scale-110"
                     />
                     <div className="min-w-0 leading-tight">
@@ -46,8 +43,8 @@ export default function DashboardHeader() {
                             FaturaJá <span className="hidden sm:inline">– Gestão de Empresas</span>
                         </h1>
                         <p className="text-xs sm:text-sm hidden sm:block truncate" style={{ color: colors.textSecondary }}>
-                            Bem‑vindo,{' '}
-                            <span 
+                            Bem-vindo,{' '}
+                            <span
                                 className="font-medium transition-colors duration-200"
                                 style={{ color: colors.primary }}
                             >
@@ -61,7 +58,7 @@ export default function DashboardHeader() {
                 <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                     {/* Perfil completo (desktop) */}
                     <div
-                        className="hidden md:flex items-center gap-3 pr-3 mr-1 border-r"
+                        className="hidden md:flex items-center gap-3 pr-3 border-r"
                         style={{ borderColor: colors.border }}
                     >
                         <div className="text-right leading-tight">
@@ -92,10 +89,8 @@ export default function DashboardHeader() {
                     {/* Botão de Toggle Tema */}
                     <button
                         onClick={toggleTheme}
-                        className="flex items-center justify-center w-9 h-9 sm:w-auto sm:px-3 sm:py-2 transition-all duration-200 hover:scale-105 cursor-pointer gap-2"
-                        style={{
-                            color: colors.textSecondary,
-                        }}
+                        className="flex items-center justify-center w-9 h-9 sm:w-auto sm:px-3 sm:py-2 rounded-lg transition-all duration-200 hover:scale-105 cursor-pointer gap-2"
+                        style={{ color: colors.textSecondary, backgroundColor: colors.hover }}
                         title={theme === 'light' ? 'Modo escuro' : 'Modo claro'}
                     >
                         {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}

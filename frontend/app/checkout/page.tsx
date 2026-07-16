@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -41,7 +41,8 @@ const CheckIcon: React.FC<{ color: string }> = ({ color }) => (
   </svg>
 );
 
-export default function CheckoutPage() {
+// ============ COMPONENTE INTERNO (usa useSearchParams) ============
+function CheckoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const planoId = searchParams.get('plano_id');
@@ -596,5 +597,19 @@ export default function CheckoutPage() {
         </CardFooter>
       </Card>
     </div>
+  );
+}
+
+// ============ PÁGINA PRINCIPAL (com Suspense) ============
+export default function CheckoutPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex justify-center items-center min-h-screen">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <span className="ml-2 text-muted-foreground">A carregar...</span>
+      </div>
+    }>
+      <CheckoutContent />
+    </Suspense>
   );
 }

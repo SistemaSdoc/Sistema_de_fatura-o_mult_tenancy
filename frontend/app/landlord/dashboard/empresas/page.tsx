@@ -7,7 +7,6 @@ import { api } from "@/services/axios";
 import { useThemeColors } from "@/context/ThemeContext";
 import {
     Building2,
-    Plus,
     AlertCircle,
     CheckCircle,
     XCircle,
@@ -15,7 +14,6 @@ import {
     Database,
     Search,
     Filter,
-    Eye,
     Power,
     Download,
     ChevronLeft,
@@ -24,7 +22,7 @@ import {
     Phone,
     Globe,
     Hash,
-    ClipboardCheck, 
+    ClipboardCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
@@ -66,16 +64,13 @@ export default function EmpresasDashboard() {
     const [error, setError] = useState("");
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
-    const [statusFilter, setStatusFilter] = useState<
-        "todos" | "ativo" | "suspenso"
-    >("todos");
+    const [statusFilter, setStatusFilter] = useState<"todos" | "ativo" | "suspenso">("todos");
     const [selectedEmpresa, setSelectedEmpresa] = useState<Empresa | null>(null);
     const [showStatusDialog, setShowStatusDialog] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(10);
     const [pendingCount, setPendingCount] = useState<number | null>(null);
 
-    // Redirecionar se não for super admin
     useEffect(() => {
         if (!authLoading && (!user || user.role !== "super_admin")) {
             router.push("/landlord/login");
@@ -91,8 +86,7 @@ export default function EmpresasDashboard() {
             setFilteredEmpresas(data);
             setError("");
         } catch (err: any) {
-            const errorMsg =
-                err.response?.data?.message || "Erro ao carregar a lista de empresas";
+            const errorMsg = err.response?.data?.message || "Erro ao carregar a lista de empresas";
             setError(errorMsg);
             toast.error(errorMsg);
         } finally {
@@ -103,9 +97,7 @@ export default function EmpresasDashboard() {
     const toggleStatus = async (id: string, currentStatus: string) => {
         setActionLoading(id);
         try {
-            const response = await api.patch(
-                `/api/landlord/empresas/${id}/toggle-status`,
-            );
+            const response = await api.patch(`/api/landlord/empresas/${id}/toggle-status`);
 
             toast.success(response.data.message || "Status alterado com sucesso");
 
@@ -121,9 +113,7 @@ export default function EmpresasDashboard() {
             setShowStatusDialog(false);
             setSelectedEmpresa(null);
         } catch (err: any) {
-            toast.error(
-                err.response?.data?.message || "Erro ao alterar status da empresa",
-            );
+            toast.error(err.response?.data?.message || "Erro ao alterar status da empresa");
         } finally {
             setActionLoading(null);
         }
@@ -134,13 +124,20 @@ export default function EmpresasDashboard() {
         setShowStatusDialog(true);
     };
 
+    const fetchPendingCount = async () => {
+        try {
+            const response = await pagamentoService.listar({ status: 'em_analise' });
+            setPendingCount(response.pagamentos?.length || 0);
+        } catch {
+            // Silêncio – não quebra a página
+        }
+    };
+
     useEffect(() => {
         if (user) fetchEmpresas();
-        
         fetchPendingCount();
     }, [user]);
 
-    // Filtros e busca
     useEffect(() => {
         let filtered = [...empresas];
 
@@ -161,37 +158,16 @@ export default function EmpresasDashboard() {
         setCurrentPage(1);
     }, [searchTerm, statusFilter, empresas]);
 
-
-    const fetchPendingCount = async () => {
-    try {
-        const response = await pagamentoService.listar({ status: 'em_analise' });
-        setPendingCount(response.pagamentos?.length || 0);
-    } catch (error) {
-        // Silêncio – não quebra a página
-    }
-};
-
-    // Paginação
     const totalPages = Math.ceil(filteredEmpresas.length / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
-    const paginatedEmpresas = filteredEmpresas.slice(
-        startIndex,
-        startIndex + itemsPerPage,
-    );
+    const paginatedEmpresas = filteredEmpresas.slice(startIndex, startIndex + itemsPerPage);
 
     const totalEmpresas = empresas.length;
     const ativas = empresas.filter((e) => e.status === "ativo").length;
     const suspensas = empresas.filter((e) => e.status === "suspenso").length;
 
     const exportToCSV = () => {
-        const headers = [
-            "Nome",
-            "NIF",
-            "Email",
-            "Telefone",
-            "Status",
-            "Regime Fiscal",
-        ];
+        const headers = ["Nome", "NIF", "Email", "Telefone", "Status", "Regime Fiscal"];
         const data = empresas.map((emp) => [
             emp.nome,
             emp.nif,
@@ -201,17 +177,12 @@ export default function EmpresasDashboard() {
             emp.regime_fiscal,
         ]);
 
-        const csvContent = [headers, ...data]
-            .map((row) => row.join(","))
-            .join("\n");
+        const csvContent = [headers, ...data].map((row) => row.join(",")).join("\n");
         const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
         const link = document.createElement("a");
         const url = URL.createObjectURL(blob);
         link.href = url;
-        link.setAttribute(
-            "download",
-            `empresas_${new Date().toISOString().split("T")[0]}.csv`,
-        );
+        link.setAttribute("download", `empresas_${new Date().toISOString().split("T")[0]}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -223,10 +194,7 @@ export default function EmpresasDashboard() {
         return (
             <div className="flex items-center justify-center min-h-[70vh]">
                 <div className="text-center">
-                    <RefreshCw
-                        className="animate-spin w-10 h-10 mx-auto mb-4"
-                        style={{ color: colors.primary }}
-                    />
+                    <RefreshCw className="animate-spin w-10 h-10 mx-auto mb-4" style={{ color: colors.primary }} />
                     <p style={{ color: colors.textSecondary }}>A carregar empresas...</p>
                 </div>
             </div>
@@ -235,10 +203,8 @@ export default function EmpresasDashboard() {
 
     if (error) {
         return (
-            <Card
-                style={{ backgroundColor: colors.card, borderColor: colors.border }}
-            >
-                <CardContent className="p-6">
+            <Card className="rounded-xl" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                <CardContent className="p-4 sm:p-5">
                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                         <AlertCircle className="text-red-500 shrink-0" size={24} />
                         <div className="flex-1">
@@ -266,210 +232,117 @@ export default function EmpresasDashboard() {
         <div className="space-y-6">
             {/* Cabeçalho */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div className="flex items-center gap-4">
-                    <div>
-                        <h1
-                            className="text-2xl sm:text-3xl font-bold tracking-tight"
-                            style={{ color: colors.secondary }}
-                        >
-                            Bem‑vindo,{" "}
-                            <span
-                                className="text-2xl sm:text-3xl font-bold tracking-tight"
-                                style={{ color: colors.secondary }}
-                            >
-                                {user?.name?.split(" ")[0] || "Super Admin"}
-                            </span>
-                        </h1>
-                        <p
-                            className="text-sm sm:text-base flex items-center gap-2 mt-1"
-                            style={{ color: colors.textSecondary }}
-                        >
-                            Gerir todas as empresas do sistema
-                        </p>
-                    </div>
+                <div>
+                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: colors.secondary }}>
+                        Bem-vindo, {user?.name?.split(" ")[0] || "Super Admin"}
+                    </h1>
+                    <p className="text-sm sm:text-base mt-1" style={{ color: colors.textSecondary }}>
+                        Gerir todas as empresas do sistema
+                    </p>
                 </div>
-
-             
             </div>
 
-            <div
-    className="relative transition-all duration-300 hover:scale-[1.02] hover:shadow-xl overflow-hidden cursor-pointer"
-    style={{
-        backgroundColor: colors.card,
-        border: `1px solid ${colors.border}`,
-    }}
-    onClick={() => router.push('/landlord/pagamentos/pendentes')}
->
-    <div
-        className="absolute left-0 top-0 bottom-0 w-1"
-        style={{ backgroundColor: colors.warning || '#f59e0b' }}
-    />
-    <div className="p-5 sm:p-6">
-        <div className="flex items-center justify-between">
-            <div>
-                <p
-                    className="text-sm font-medium"
-                    style={{ color: colors.textSecondary }}
-                >
-                    Pagamentos Pendentes
-                </p>
-                <p
-                    className="text-3xl font-bold mt-1"
-                    style={{ color: colors.warning || '#f59e0b' }}
-                >
-                    {pendingCount !== null ? pendingCount : '...'}
-                </p>
-            </div>
-            <div
-                className="p-3 rounded-full"
-                style={{
-                    backgroundColor: `${colors.warning || '#f59e0b'}15`,
-                }}
-            >
-                <ClipboardCheck
-                    size={24}
-                    style={{ color: colors.warning || '#f59e0b' }}
-                />
-            </div>
-        </div>
-        <div className="mt-3">
-            <Button
-                variant="outline"
-                size="sm"
-                className="w-full text-xs"
-                style={{
-                    borderColor: colors.border,
-                    color: colors.text,
-                }}
-                onClick={(e) => {
-                    e.stopPropagation();
-                    router.push('/landlord/pagamentos/pendentes');
-                }}
-            >
-                Ver pendentes
-            </Button>
-        </div>
-    </div>
-</div>
-
-            {/* Cards de resumo */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+            {/* Cards de métricas — unificados num único grid de 4 colunas */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+                {/* Pagamentos Pendentes */}
                 <div
-                    className="relative transition-all duration-300 hover:scale-[1.02] hover:shadow-xl overflow-hidden"
-                    style={{
-                        backgroundColor: colors.card,
-                        border:
-                            statusFilter === "todos"
-                                ? `1px solid ${colors.primary}`
-                                : `1px solid ${colors.border}`,
-                    }}
+                    className="relative rounded-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-xl overflow-hidden cursor-pointer"
+                    style={{ backgroundColor: colors.card, border: `1px solid ${colors.border}` }}
+                    onClick={() => router.push('/landlord/pagamentos/pendentes')}
                 >
                     <div
                         className="absolute left-0 top-0 bottom-0 w-1"
-                        style={{ backgroundColor: colors.primary }}
+                        style={{ backgroundColor: colors.warning || '#f59e0b' }}
                     />
-                    <div className="p-5 sm:p-6">
+                    <div className="p-4 sm:p-5">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p
-                                    className="text-sm font-medium"
-                                    style={{ color: colors.textSecondary }}
-                                >
+                                <p className="text-sm font-medium" style={{ color: colors.textSecondary }}>
+                                    Pagamentos Pendentes
+                                </p>
+                                <p className="text-3xl font-bold mt-1" style={{ color: colors.warning || '#f59e0b' }}>
+                                    {pendingCount !== null ? pendingCount : '...'}
+                                </p>
+                            </div>
+                            <div className="p-3 rounded-full" style={{ backgroundColor: `${colors.warning || '#f59e0b'}15` }}>
+                                <ClipboardCheck size={24} style={{ color: colors.warning || '#f59e0b' }} />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Total de Empresas */}
+                <div
+                    className="relative rounded-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-xl overflow-hidden"
+                    style={{
+                        backgroundColor: colors.card,
+                        border: statusFilter === "todos" ? `1px solid ${colors.primary}` : `1px solid ${colors.border}`,
+                    }}
+                >
+                    <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: colors.primary }} />
+                    <div className="p-4 sm:p-5">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm font-medium" style={{ color: colors.textSecondary }}>
                                     Total de Empresas
                                 </p>
-                                <p
-                                    className="text-3xl font-bold mt-1"
-                                    style={{ color: colors.primary }}
-                                >
+                                <p className="text-3xl font-bold mt-1" style={{ color: colors.primary }}>
                                     {totalEmpresas}
                                 </p>
                             </div>
-                            <div
-                                className="p-3 rounded-full"
-                                style={{ backgroundColor: `${colors.primary}15` }}
-                            >
+                            <div className="p-3 rounded-full" style={{ backgroundColor: `${colors.primary}15` }}>
                                 <Building2 size={24} style={{ color: colors.primary }} />
                             </div>
                         </div>
                     </div>
                 </div>
 
+                {/* Ativas */}
                 <div
-                    className="relative transition-all duration-300 hover:scale-[1.02] hover:shadow-xl overflow-hidden"
+                    className="relative rounded-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-xl overflow-hidden"
                     style={{
                         backgroundColor: colors.card,
-                        border:
-                            statusFilter === "ativo"
-                                ? `1px solid ${colors.success}`
-                                : `1px solid ${colors.border}`,
+                        border: statusFilter === "ativo" ? `1px solid ${colors.success}` : `1px solid ${colors.border}`,
                     }}
-                    
                 >
-                    <div
-                        className="absolute left-0 top-0 bottom-0 w-1"
-                        style={{ backgroundColor: colors.success }}
-                    />
-                    <div className="p-5 sm:p-6">
+                    <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: colors.success }} />
+                    <div className="p-4 sm:p-5">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p
-                                    className="text-sm font-medium"
-                                    style={{ color: colors.textSecondary }}
-                                >
+                                <p className="text-sm font-medium" style={{ color: colors.textSecondary }}>
                                     Ativas
                                 </p>
-                                <p
-                                    className="text-3xl font-bold mt-1"
-                                    style={{ color: colors.success }}
-                                >
+                                <p className="text-3xl font-bold mt-1" style={{ color: colors.success }}>
                                     {ativas}
                                 </p>
                             </div>
-                            <div
-                                className="p-3 rounded-full"
-                                style={{ backgroundColor: `${colors.success}15` }}
-                            >
+                            <div className="p-3 rounded-full" style={{ backgroundColor: `${colors.success}15` }}>
                                 <CheckCircle size={24} style={{ color: colors.success }} />
                             </div>
                         </div>
                     </div>
                 </div>
 
+                {/* Suspensas */}
                 <div
-                    className="relative transition-all duration-300 hover:scale-[1.02] hover:shadow-xl overflow-hidden"
+                    className="relative rounded-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-xl overflow-hidden"
                     style={{
                         backgroundColor: colors.card,
-                        border:
-                            statusFilter === "suspenso"
-                                ? `1px solid ${colors.secondary}`
-                                : `1px solid ${colors.border}`,
+                        border: statusFilter === "suspenso" ? `1px solid ${colors.secondary}` : `1px solid ${colors.border}`,
                     }}
-                    
                 >
-                    <div
-                        className="absolute left-0 top-0 bottom-0 w-1"
-                        style={{ backgroundColor: colors.secondary }}
-                    />
-                    <div className="p-5 sm:p-6">
+                    <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: colors.secondary }} />
+                    <div className="p-4 sm:p-5">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p
-                                    className="text-sm font-medium"
-                                    style={{ color: colors.textSecondary }}
-                                >
+                                <p className="text-sm font-medium" style={{ color: colors.textSecondary }}>
                                     Suspensas
                                 </p>
-                                <p
-                                    className="text-3xl font-bold mt-1"
-                                    style={{ color: colors.secondary }}
-                                >
+                                <p className="text-3xl font-bold mt-1" style={{ color: colors.secondary }}>
                                     {suspensas}
                                 </p>
                             </div>
-                            <div
-                                className="p-3 rounded-full"
-                                style={{ backgroundColor: `${colors.secondary}15` }}
-                            >
+                            <div className="p-3 rounded-full" style={{ backgroundColor: `${colors.secondary}15` }}>
                                 <XCircle size={24} style={{ color: colors.secondary }} />
                             </div>
                         </div>
@@ -478,11 +351,8 @@ export default function EmpresasDashboard() {
             </div>
 
             {/* Barra de ferramentas */}
-            <Card
-                style={{ backgroundColor: colors.card, borderColor: colors.border }}
-                className="shadow-sm"
-            >
-                <CardContent className="p-4">
+            <Card className="rounded-xl shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                <CardContent className="p-4 sm:p-5">
                     <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center sm:justify-between">
                         <div className="flex flex-col sm:flex-row flex-1 gap-3">
                             <div className="relative flex-1 sm:max-w-sm">
@@ -495,7 +365,7 @@ export default function EmpresasDashboard() {
                                     placeholder="Buscar por nome, NIF ou email..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="pl-9 transition-all duration-200 focus:ring-2"
+                                    className="pl-9 rounded-lg transition-all duration-200 focus:ring-2"
                                     style={{
                                         backgroundColor: colors.background,
                                         borderColor: colors.border,
@@ -513,7 +383,7 @@ export default function EmpresasDashboard() {
                                 <select
                                     value={statusFilter}
                                     onChange={(e) => setStatusFilter(e.target.value as any)}
-                                    className="w-full sm:w-auto pl-9 pr-3 py-2 text-sm border focus:outline-none "
+                                    className="w-full sm:w-auto pl-9 pr-3 py-2 text-sm border rounded-lg focus:outline-none"
                                     style={{
                                         backgroundColor: colors.background,
                                         borderColor: colors.border,
@@ -531,7 +401,7 @@ export default function EmpresasDashboard() {
                         <Button
                             variant="outline"
                             onClick={exportToCSV}
-                            className="transition-all duration-200 hover:scale-105 cursor-pointer w-full sm:w-auto"
+                            className="rounded-lg transition-all duration-200 hover:scale-105 cursor-pointer w-full sm:w-auto"
                             style={{
                                 borderColor: colors.border,
                                 color: colors.text,
@@ -547,20 +417,10 @@ export default function EmpresasDashboard() {
 
             {/* Lista de empresas */}
             {filteredEmpresas.length === 0 ? (
-                <Card
-                    style={{ backgroundColor: colors.card, borderColor: colors.border }}
-                    className="shadow-sm"
-                >
+                <Card className="rounded-xl shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                     <CardContent className="p-12 text-center">
-                        <Database
-                            size={48}
-                            className="mx-auto mb-4"
-                            style={{ color: colors.textSecondary }}
-                        />
-                        <p
-                            className="text-lg font-medium mb-1"
-                            style={{ color: colors.text }}
-                        >
+                        <Database size={48} className="mx-auto mb-4" style={{ color: colors.textSecondary }} />
+                        <p className="text-lg font-medium mb-1" style={{ color: colors.text }}>
                             Nenhuma empresa encontrada
                         </p>
                         <p style={{ color: colors.textSecondary }}>
@@ -573,91 +433,48 @@ export default function EmpresasDashboard() {
             ) : (
                 <>
                     {/* Tabela (desktop) */}
-                    <div
-                        className="hidden lg:block overflow-x-auto  border shadow-sm"
-                        style={{ borderColor: colors.border }}
-                    >
-                        <table
-                            className="min-w-full divide-y"
-                            style={{ borderColor: colors.border }}
-                        >
+                    <div className="hidden lg:block overflow-x-auto rounded-xl border shadow-sm" style={{ borderColor: colors.border }}>
+                        <table className="min-w-full divide-y" style={{ borderColor: colors.border }}>
                             <thead style={{ backgroundColor: colors.primary }}>
                                 <tr>
-                                    <th
-                                        className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider"
-                                        style={{ color: '#fff'}}
-                                    >
+                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>
                                         Empresa
                                     </th>
-                                    <th
-                                        className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider"
-                                        style={{ color: '#fff'}}
-                                    >
+                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>
                                         NIF
                                     </th>
-                                    <th
-                                        className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider"
-                                        style={{ color: '#fff'}}
-                                    >
+                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>
                                         Contacto
                                     </th>
-                                    <th
-                                        className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider"
-                                        style={{ color: '#fff'}}
-                                    >
+                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>
                                         Regime Fiscal
                                     </th>
-                                    <th
-                                        className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider"
-                                        style={{ color: '#fff'}}
-                                    >
+                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>
                                         Base Dados
                                     </th>
-                                    <th
-                                        className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider"
-                                        style={{ color: '#fff'}}
-                                    >
+                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>
                                         Status
                                     </th>
-                                    <th
-                                        className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider"
-                                        style={{ color: '#fff'}}
-                                    >
+                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>
                                         Acções
                                     </th>
                                 </tr>
                             </thead>
-                            <tbody
-                                className="divide-y"
-                                style={{ borderColor: colors.border }}
-                            >
+                            <tbody className="divide-y" style={{ borderColor: colors.border }}>
                                 {paginatedEmpresas.map((emp) => (
                                     <tr
                                         key={emp.id}
                                         className="transition-colors duration-150 cursor-pointer"
                                         style={{ backgroundColor: colors.card }}
-                                        onMouseEnter={(e) =>
-                                            (e.currentTarget.style.backgroundColor = colors.hover)
-                                        }
-                                        onMouseLeave={(e) =>
-                                            (e.currentTarget.style.backgroundColor = colors.card)
-                                        }
+                                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = colors.hover)}
+                                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = colors.card)}
                                     >
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex items-center gap-2">
-
-                                                <span
-                                                    className="font-semibold"
-                                                    style={{ color: colors.text }}
-                                                >
-                                                    {emp.nome}
-                                                </span>
-                                            </div>
+                                            <span className="font-semibold" style={{ color: colors.text }}>
+                                                {emp.nome}
+                                            </span>
                                             {emp.subdomain && (
-                                                <div
-                                                    className="text-xs mt-1 flex items-center gap-1"
-                                                    style={{ color: colors.textSecondary }}
-                                                >
+                                                <div className="text-xs mt-1 flex items-center gap-1" style={{ color: colors.textSecondary }}>
                                                     <Globe size={10} />
                                                     {emp.subdomain}
                                                 </div>
@@ -665,35 +482,20 @@ export default function EmpresasDashboard() {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="flex items-center gap-1">
-                                                <Hash
-                                                    size={12}
-                                                    style={{ color: colors.textSecondary }}
-                                                />
-                                                <span
-                                                    className="font-mono"
-                                                    style={{ color: colors.text }}
-                                                >
+                                                <Hash size={12} style={{ color: colors.textSecondary }} />
+                                                <span className="font-mono" style={{ color: colors.text }}>
                                                     {emp.nif}
                                                 </span>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex flex-col gap-1">
-                                                <div
-                                                    className="flex items-center gap-1 text-sm"
-                                                    style={{ color: colors.text }}
-                                                >
-                                                    <Mail
-                                                        size={12}
-                                                        style={{ color: colors.textSecondary }}
-                                                    />
+                                                <div className="flex items-center gap-1 text-sm" style={{ color: colors.text }}>
+                                                    <Mail size={12} style={{ color: colors.textSecondary }} />
                                                     {emp.email}
                                                 </div>
                                                 {emp.telefone && (
-                                                    <div
-                                                        className="flex items-center gap-1 text-xs"
-                                                        style={{ color: colors.textSecondary }}
-                                                    >
+                                                    <div className="flex items-center gap-1 text-xs" style={{ color: colors.textSecondary }}>
                                                         <Phone size={10} />
                                                         {emp.telefone}
                                                     </div>
@@ -715,11 +517,8 @@ export default function EmpresasDashboard() {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <code
-                                                className="text-xs px-2 py-1 rounded font-mono"
-                                                style={{
-                                                    backgroundColor: colors.hover,
-                                                    color: colors.textSecondary,
-                                                }}
+                                                className="text-xs px-2 py-1 rounded-md font-mono"
+                                                style={{ backgroundColor: colors.hover, color: colors.textSecondary }}
                                             >
                                                 {emp.db_name}
                                             </code>
@@ -727,14 +526,8 @@ export default function EmpresasDashboard() {
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <Badge
                                                 style={{
-                                                    backgroundColor:
-                                                        emp.status === "ativo"
-                                                            ? `${colors.success}15`
-                                                            : `${colors.danger}15`,
-                                                    color:
-                                                        emp.status === "ativo"
-                                                            ? colors.success
-                                                            : colors.danger,
+                                                    backgroundColor: emp.status === "ativo" ? `${colors.success}15` : `${colors.danger}15`,
+                                                    color: emp.status === "ativo" ? colors.success : colors.danger,
                                                     border: `1px solid ${emp.status === "ativo" ? colors.success : colors.danger}30`,
                                                 }}
                                                 className="font-medium px-3 py-1"
@@ -743,19 +536,13 @@ export default function EmpresasDashboard() {
                                             </Badge>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <div
-                                                className="flex gap-2"
-                                                onClick={(e) => e.stopPropagation()}
-                                            >
+                                            <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                                                 <Button
                                                     size="sm"
                                                     onClick={() => confirmStatusChange(emp)}
-                                                    className="transition-all duration-200 hover:scale-105 cursor-pointer"
+                                                    className="rounded-lg transition-all duration-200 hover:scale-105 cursor-pointer"
                                                     style={{
-                                                        backgroundColor:
-                                                            emp.status === "ativo"
-                                                                ? colors.primary
-                                                                : colors.secondary,
+                                                        backgroundColor: emp.status === "ativo" ? colors.primary : colors.secondary,
                                                         color: "white",
                                                     }}
                                                     disabled={actionLoading === emp.id}
@@ -782,46 +569,27 @@ export default function EmpresasDashboard() {
                         {paginatedEmpresas.map((emp) => (
                             <Card
                                 key={emp.id}
-                                className="shadow-sm transition-all duration-200 hover:shadow-md cursor-pointer"
-                                style={{
-                                    backgroundColor: colors.card,
-                                    borderColor: colors.border,
-                                }}
-                                onClick={() =>
-                                    router.push(`/landlord/dashboard/empresas/${emp.id}`)
-                                }
+                                className="rounded-xl shadow-sm transition-all duration-200 hover:shadow-md cursor-pointer"
+                                style={{ backgroundColor: colors.card, borderColor: colors.border }}
+                                onClick={() => router.push(`/landlord/dashboard/empresas/${emp.id}`)}
                             >
                                 <CardContent className="p-4 space-y-3">
                                     <div className="flex items-start justify-between gap-2">
-                                        <div className="flex items-center gap-2 min-w-0">
-                                            <div className="min-w-0">
-                                                <p
-                                                    className="font-semibold truncate"
-                                                    style={{ color: colors.text }}
-                                                >
-                                                    {emp.nome}
+                                        <div className="min-w-0">
+                                            <p className="font-semibold truncate" style={{ color: colors.text }}>
+                                                {emp.nome}
+                                            </p>
+                                            {emp.subdomain && (
+                                                <p className="text-xs flex items-center gap-1 truncate" style={{ color: colors.textSecondary }}>
+                                                    <Globe size={10} className="shrink-0" />
+                                                    {emp.subdomain}
                                                 </p>
-                                                {emp.subdomain && (
-                                                    <p
-                                                        className="text-xs flex items-center gap-1 truncate"
-                                                        style={{ color: colors.textSecondary }}
-                                                    >
-                                                        <Globe size={10} className="shrink-0" />
-                                                        {emp.subdomain}
-                                                    </p>
-                                                )}
-                                            </div>
+                                            )}
                                         </div>
                                         <Badge
                                             style={{
-                                                backgroundColor:
-                                                    emp.status === "ativo"
-                                                        ? `${colors.success}15`
-                                                        : `${colors.danger}15`,
-                                                color:
-                                                    emp.status === "ativo"
-                                                        ? colors.success
-                                                        : colors.danger,
+                                                backgroundColor: emp.status === "ativo" ? `${colors.success}15` : `${colors.danger}15`,
+                                                color: emp.status === "ativo" ? colors.success : colors.danger,
                                                 border: `1px solid ${emp.status === "ativo" ? colors.success : colors.danger}30`,
                                             }}
                                             className="font-medium shrink-0"
@@ -830,28 +598,18 @@ export default function EmpresasDashboard() {
                                         </Badge>
                                     </div>
 
-                                    <div
-                                        className="grid grid-cols-1 gap-1.5 text-sm"
-                                        style={{ color: colors.text }}
-                                    >
+                                    <div className="grid grid-cols-1 gap-1.5 text-sm" style={{ color: colors.text }}>
                                         <div className="flex items-center gap-1.5">
                                             <Hash size={12} style={{ color: colors.textSecondary }} />
                                             <span className="font-mono">{emp.nif}</span>
                                         </div>
                                         <div className="flex items-center gap-1.5 truncate">
-                                            <Mail
-                                                size={12}
-                                                style={{ color: colors.textSecondary }}
-                                                className="shrink-0"
-                                            />
+                                            <Mail size={12} style={{ color: colors.textSecondary }} className="shrink-0" />
                                             <span className="truncate">{emp.email}</span>
                                         </div>
                                         {emp.telefone && (
                                             <div className="flex items-center gap-1.5">
-                                                <Phone
-                                                    size={12}
-                                                    style={{ color: colors.textSecondary }}
-                                                />
+                                                <Phone size={12} style={{ color: colors.textSecondary }} />
                                                 {emp.telefone}
                                             </div>
                                         )}
@@ -870,30 +628,20 @@ export default function EmpresasDashboard() {
                                             {emp.regime_fiscal}
                                         </Badge>
                                         <code
-                                            className="text-xs px-2 py-1 rounded font-mono truncate max-w-[40%]"
-                                            style={{
-                                                backgroundColor: colors.hover,
-                                                color: colors.textSecondary,
-                                            }}
+                                            className="text-xs px-2 py-1 rounded-md font-mono truncate max-w-[40%]"
+                                            style={{ backgroundColor: colors.hover, color: colors.textSecondary }}
                                         >
                                             {emp.db_name}
                                         </code>
                                     </div>
 
-                                    <div
-                                        className="flex gap-2 pt-1"
-                                        onClick={(e) => e.stopPropagation()}
-                                    >
-
+                                    <div className="pt-1" onClick={(e) => e.stopPropagation()}>
                                         <Button
                                             size="sm"
                                             onClick={() => confirmStatusChange(emp)}
-                                            className="flex-1 transition-all duration-200 cursor-pointer"
+                                            className="w-full rounded-lg transition-all duration-200 cursor-pointer"
                                             style={{
-                                                backgroundColor:
-                                                    emp.status === "ativo"
-                                                        ? colors.warning
-                                                        : colors.success,
+                                                backgroundColor: emp.status === "ativo" ? colors.warning : colors.success,
                                                 color: "white",
                                             }}
                                             disabled={actionLoading === emp.id}
@@ -916,26 +664,18 @@ export default function EmpresasDashboard() {
                     {/* Paginação */}
                     {totalPages > 1 && (
                         <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
-                            <div
-                                className="text-sm text-center sm:text-left"
-                                style={{ color: colors.textSecondary }}
-                            >
-                                Mostrando {startIndex + 1} -{" "}
-                                {Math.min(startIndex + itemsPerPage, filteredEmpresas.length)}{" "}
-                                de {filteredEmpresas.length}
+                            <div className="text-sm text-center sm:text-left" style={{ color: colors.textSecondary }}>
+                                Mostrando {startIndex + 1} - {Math.min(startIndex + itemsPerPage, filteredEmpresas.length)} de{" "}
+                                {filteredEmpresas.length}
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-3">
                                 <Button
                                     variant="outline"
                                     size="sm"
                                     onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                                     disabled={currentPage === 1}
-                                    className="transition-all duration-200 hover:scale-105 cursor-pointer"
-                                    style={{
-                                        borderColor: colors.border,
-                                        color: colors.text,
-                                        backgroundColor: colors.card,
-                                    }}
+                                    className="rounded-lg transition-all duration-200 hover:scale-105 cursor-pointer"
+                                    style={{ borderColor: colors.border, color: colors.text, backgroundColor: colors.card }}
                                 >
                                     <ChevronLeft size={14} />
                                     <span className="hidden sm:inline ml-1">Anterior</span>
@@ -943,33 +683,22 @@ export default function EmpresasDashboard() {
                                 <div className="hidden sm:flex gap-1">
                                     {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                                         let pageNum;
-                                        if (totalPages <= 5) {
-                                            pageNum = i + 1;
-                                        } else if (currentPage <= 3) {
-                                            pageNum = i + 1;
-                                        } else if (currentPage >= totalPages - 2) {
-                                            pageNum = totalPages - 4 + i;
-                                        } else {
-                                            pageNum = currentPage - 2 + i;
-                                        }
+                                        if (totalPages <= 5) pageNum = i + 1;
+                                        else if (currentPage <= 3) pageNum = i + 1;
+                                        else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                                        else pageNum = currentPage - 2 + i;
 
                                         return (
                                             <Button
                                                 key={pageNum}
                                                 size="sm"
-                                                variant={
-                                                    currentPage === pageNum ? "default" : "outline"
-                                                }
+                                                variant={currentPage === pageNum ? "default" : "outline"}
                                                 onClick={() => setCurrentPage(pageNum)}
-                                                className="transition-all duration-200 cursor-pointer"
+                                                className="rounded-lg transition-all duration-200 cursor-pointer"
                                                 style={
                                                     currentPage === pageNum
                                                         ? { backgroundColor: colors.primary, color: "#fff" }
-                                                        : {
-                                                            borderColor: colors.border,
-                                                            color: colors.text,
-                                                            backgroundColor: colors.card,
-                                                        }
+                                                        : { borderColor: colors.border, color: colors.text, backgroundColor: colors.card }
                                                 }
                                             >
                                                 {pageNum}
@@ -977,25 +706,16 @@ export default function EmpresasDashboard() {
                                         );
                                     })}
                                 </div>
-                                <span
-                                    className="sm:hidden text-sm font-medium"
-                                    style={{ color: colors.text }}
-                                >
+                                <span className="sm:hidden text-sm font-medium" style={{ color: colors.text }}>
                                     {currentPage} / {totalPages}
                                 </span>
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() =>
-                                        setCurrentPage((p) => Math.min(totalPages, p + 1))
-                                    }
+                                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                                     disabled={currentPage === totalPages}
-                                    className="transition-all duration-200 hover:scale-105 cursor-pointer"
-                                    style={{
-                                        borderColor: colors.border,
-                                        color: colors.text,
-                                        backgroundColor: colors.card,
-                                    }}
+                                    className="rounded-lg transition-all duration-200 hover:scale-105 cursor-pointer"
+                                    style={{ borderColor: colors.border, color: colors.text, backgroundColor: colors.card }}
                                 >
                                     <span className="hidden sm:inline mr-1">Próxima</span>
                                     <ChevronRight size={14} />
@@ -1009,7 +729,7 @@ export default function EmpresasDashboard() {
             {/* Dialog de confirmação */}
             <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
                 <DialogContent
-                    className="transition-all duration-300"
+                    className="rounded-xl transition-all duration-300"
                     style={{
                         backgroundColor: colors.card,
                         borderColor: colors.border,
@@ -1021,10 +741,7 @@ export default function EmpresasDashboard() {
                             <div
                                 className="p-2 rounded-full"
                                 style={{
-                                    backgroundColor:
-                                        selectedEmpresa?.status === "ativo"
-                                            ? `${colors.primary}15`
-                                            : `${colors.secondary}15`,
+                                    backgroundColor: selectedEmpresa?.status === "ativo" ? `${colors.primary}15` : `${colors.secondary}15`,
                                 }}
                             >
                                 {selectedEmpresa?.status === "ativo" ? (
@@ -1033,13 +750,8 @@ export default function EmpresasDashboard() {
                                     <CheckCircle size={24} style={{ color: colors.secondary }} />
                                 )}
                             </div>
-                            <DialogTitle
-                                className="text-xl font-bold"
-                                style={{ color: colors.text }}
-                            >
-                                {selectedEmpresa?.status === "ativo"
-                                    ? "Suspender Empresa"
-                                    : "Ativar Empresa"}
+                            <DialogTitle className="text-xl font-bold" style={{ color: colors.text }}>
+                                {selectedEmpresa?.status === "ativo" ? "Suspender Empresa" : "Ativar Empresa"}
                             </DialogTitle>
                         </div>
                         <DialogDescription style={{ color: colors.textSecondary }}>
@@ -1052,22 +764,16 @@ export default function EmpresasDashboard() {
                         <Button
                             variant="outline"
                             onClick={() => setShowStatusDialog(false)}
-                            className="transition-all duration-200 w-full sm:w-auto"
+                            className="rounded-lg transition-all duration-200 w-full sm:w-auto"
                             style={{ borderColor: colors.border, color: colors.text }}
                         >
                             Cancelar
                         </Button>
                         <Button
-                            onClick={() =>
-                                selectedEmpresa &&
-                                toggleStatus(selectedEmpresa.id, selectedEmpresa.status)
-                            }
-                            className="transition-all duration-200 hover:scale-105 w-full sm:w-auto"
+                            onClick={() => selectedEmpresa && toggleStatus(selectedEmpresa.id, selectedEmpresa.status)}
+                            className="rounded-lg transition-all duration-200 hover:scale-105 w-full sm:w-auto"
                             style={{
-                                backgroundColor:
-                                    selectedEmpresa?.status === "ativo"
-                                        ? colors.primary
-                                        : colors.secondary,
+                                backgroundColor: selectedEmpresa?.status === "ativo" ? colors.primary : colors.secondary,
                                 color: "white",
                             }}
                         >

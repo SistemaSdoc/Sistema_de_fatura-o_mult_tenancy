@@ -16,7 +16,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class EmpresaController extends Controller
-{
+{ 
+
     private const IVA_PADRAO_DEFAULT = 14.0;
 
     // ------------------------------------------------------------
