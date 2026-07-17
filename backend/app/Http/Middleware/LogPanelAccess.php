@@ -10,7 +10,7 @@ class LogPanelAccess
 {
     public function handle(Request $request, Closure $next)
     {
-        AuditLogger::log('Painel Acessado', '📂', [
+        AuditLogger::log('Painel Acessado', null, [
             'area' => optional($request->route())->getName() ?? 'Geral',
         ]);
 

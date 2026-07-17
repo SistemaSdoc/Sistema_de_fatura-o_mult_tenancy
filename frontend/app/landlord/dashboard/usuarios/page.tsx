@@ -221,7 +221,7 @@ export default function UsuariosLandlordPage() {
             );
         }
 
-        // 👇 APLICA FILTRO DE ROLE APENAS NA ABA LANDLORD
+        // APLICA FILTRO DE ROLE APENAS NA ABA LANDLORD
         if (activeTab === "landlord" && roleFilter !== "todos") {
             list = (list as LandlordUserItem[]).filter((u) => u.role === roleFilter);
         }
@@ -406,94 +406,82 @@ export default function UsuariosLandlordPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
                 {/* Landlord - todos */}
                 <div
-                    className="relative rounded-xl overflow-hidden cursor-pointer transition-all hover:scale-[1.02]"
-                    style={{ backgroundColor: colors.card, border: `1px solid ${colors.border}` }}
+                    className="relative  overflow-hidden cursor-pointer transition-all hover:scale-[1.02]"
+                    style={{ backgroundColor: colors.card }}
                     onClick={() => { setActiveTab("landlord"); setRoleFilter("todos"); }}
                 >
                     <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: colors.primary }} />
                     <div className="p-4 sm:p-5 flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium" style={{ color: colors.textSecondary }}>Landlord</p>
+                            <p className="text-sm font-medium" style={{ color: colors.blue }}>Todos utilizadores</p>
                             <p className="text-3xl font-bold mt-1" style={{ color: colors.primary }}>{usuarios.length}</p>
-                        </div>
-                        <div className="p-3 rounded-full" style={{ backgroundColor: `${colors.primary}15` }}>
-                            <Shield size={24} style={{ color: colors.primary }} />
                         </div>
                     </div>
                 </div>
 
                 {/* Super Admins - filtra por super_admin */}
                 <div
-                    className="relative rounded-xl overflow-hidden cursor-pointer transition-all hover:scale-[1.02]"
-                    style={{ backgroundColor: colors.card, border: `1px solid ${colors.border}` }}
+                    className="relative overflow-hidden cursor-pointer transition-all hover:scale-[1.02]"
+                    style={{ backgroundColor: colors.card }}
                     onClick={() => { setActiveTab("landlord"); setRoleFilter("super_admin"); }}
                 >
-                    <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: colors.danger }} />
+                    <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: colors.secondary }} />
                     <div className="p-4 sm:p-5 flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium" style={{ color: colors.textSecondary }}>Super Admins</p>
-                            <p className="text-3xl font-bold mt-1" style={{ color: colors.danger }}>{totalSuperAdmins}</p>
-                        </div>
-                        <div className="p-3 rounded-full" style={{ backgroundColor: `${colors.danger}15` }}>
-                            <User size={24} style={{ color: colors.danger }} />
+                            <p className="text-sm font-medium" style={{ color: colors.secondary }}>Super Admin</p>
+                            <p className="text-3xl font-bold mt-1" style={{ color: colors.secondary }}>{totalSuperAdmins}</p>
                         </div>
                     </div>
                 </div>
 
                 {/* Suporte - filtra por suporte */}
                 <div
-                    className="relative rounded-xl overflow-hidden cursor-pointer transition-all hover:scale-[1.02]"
+                    className="relative overflow-hidden cursor-pointer transition-all hover:scale-[1.02]"
                     style={{ backgroundColor: colors.card, border: `1px solid ${colors.border}` }}
                     onClick={() => { setActiveTab("landlord"); setRoleFilter("suporte"); }}
                 >
-                    <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: colors.warning || "#f59e0b" }} />
+                    <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: colors.primary }} />
                     <div className="p-4 sm:p-5 flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium" style={{ color: colors.textSecondary }}>Suporte</p>
-                            <p className="text-3xl font-bold mt-1" style={{ color: colors.warning || "#f59e0b" }}>{totalSuporte}</p>
-                        </div>
-                        <div className="p-3 rounded-full" style={{ backgroundColor: `${colors.warning || "#f59e0b"}15` }}>
-                            <Headset size={24} style={{ color: colors.warning || "#f59e0b" }} />
+                            <p className="text-sm font-medium" style={{ color: colors.blue }}>Utilizadores comum</p>
+                            <p className="text-3xl font-bold mt-1" style={{ color: colors.primary }}>{totalSuporte}</p>
                         </div>
                     </div>
                 </div>
 
                 {/* Tenant */}
                 <div
-                    className="relative rounded-xl overflow-hidden cursor-pointer transition-all hover:scale-[1.02]"
-                    style={{ backgroundColor: colors.card, border: `1px solid ${colors.border}` }}
+                    className="relative overflow-hidden cursor-pointer transition-all hover:scale-[1.02]"
+                    style={{ backgroundColor: colors.card }}
                     onClick={() => { setActiveTab("tenant"); setRoleFilter("todos"); }}
                 >
-                    <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: colors.success }} />
+                    <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: colors.secondary }} />
                     <div className="p-4 sm:p-5 flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium" style={{ color: colors.textSecondary }}>Tenant (Empresas)</p>
-                            <p className="text-3xl font-bold mt-1" style={{ color: colors.success }}>{totalTenant}</p>
-                        </div>
-                        <div className="p-3 rounded-full" style={{ backgroundColor: `${colors.success}15` }}>
-                            <Building2 size={24} style={{ color: colors.success }} />
+                            <p className="text-sm font-medium" style={{ color: colors.secondary }}>Multi-tenant (Empresas)</p>
+                            <p className="text-3xl font-bold mt-1" style={{ color: colors.secondary }}>{totalTenant}</p>
                         </div>
                     </div>
                 </div>
             </div>
 
             {/* Tabs e Toolbar */}
-            <Card className="rounded-xl shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+            <Card className=" shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                 <CardContent className="p-4 sm:p-5">
                     <div className="flex flex-col lg:flex-row gap-4">
                         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="flex-1">
                             <TabsList className="grid w-full grid-cols-3" style={{ backgroundColor: colors.background }}>
                                 <TabsTrigger value="landlord" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                                    <Shield size={14} className="mr-2" />
-                                    Landlord
+                                    <UsersRound size={14} className="mr-2" />
+                                    Super-admin
                                 </TabsTrigger>
                                 <TabsTrigger value="tenant" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
                                     <Building2 size={14} className="mr-2" />
-                                    Tenant
+                                    multi-Tenant
                                 </TabsTrigger>
                                 <TabsTrigger value="shared" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                                    <UsersRound size={14} className="mr-2" />
-                                    Shared
+                                    <Building2 size={14} className="mr-2" />
+                                    single-Tenant
                                 </TabsTrigger>
                             </TabsList>
                         </Tabs>
@@ -505,7 +493,7 @@ export default function UsuariosLandlordPage() {
                                     placeholder="Buscar..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="pl-9 rounded-lg"
+                                    className="pl-9"
                                     style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
                                 />
                             </div>
@@ -550,12 +538,6 @@ export default function UsuariosLandlordPage() {
                     )}
                 </TabsContent>
             </Tabs>
-
-            {/* ===== MODAIS (mesmos de antes, mantidos) ===== */}
-            {/* ... (modais de criar, vincular, reset e status) ... */}
-            {/* Mantive os modais do código anterior, não os repeti aqui para poupar espaço */}
-            {/* No arquivo final, incluí-los-ia na íntegra */}
-
         </div>
     );
 }
@@ -567,7 +549,7 @@ export default function UsuariosLandlordPage() {
 function EmptyState({ icon, message }: { icon: React.ReactNode; message: string }) {
     const colors = useThemeColors();
     return (
-        <Card className="rounded-xl shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+        <Card className=" shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
             <CardContent className="p-12 text-center">
                 <div className="mx-auto mb-4" style={{ color: colors.textSecondary }}>{icon}</div>
                 <p className="text-lg font-medium mb-1" style={{ color: colors.text }}>{message}</p>
@@ -606,7 +588,7 @@ function UserTable({
     return (
         <>
             {/* Desktop */}
-            <div className="hidden lg:block overflow-x-auto rounded-xl border shadow-sm" style={{ borderColor: colors.border }}>
+            <div className="hidden lg:block overflow-x-auto border shadow-sm" style={{ borderColor: colors.border }}>
                 <table className="min-w-full divide-y" style={{ borderColor: colors.border }}>
                     <thead style={{ backgroundColor: colors.primary }}>
                         <tr>
@@ -641,20 +623,20 @@ function UserTable({
                                             </button>
                                         </div>
                                     ) : (
-                                        <button onClick={() => onVincular(u)} className="text-xs font-medium flex items-center gap-1 rounded-md px-2 py-1 transition-all hover:scale-105" style={{ color: colors.primary, backgroundColor: `${colors.primary}10` }}>
+                                        <button onClick={() => onVincular(u)} className="text-xs font-medium flex items-center gap-1 rounded-md px-2 py-1 transition-all hover:scale-105" style={{ color: colors.blue, backgroundColor: `${colors.primary}10` }}>
                                             <Link2 size={12} />
                                             Vincular
                                         </button>
                                     )}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                    <Badge style={{ backgroundColor: u.ativo ? `${colors.success}15` : `${colors.danger}15`, color: u.ativo ? colors.success : colors.danger, border: `1px solid ${u.ativo ? colors.success : colors.danger}30` }} className="font-medium">
+                                    <Badge style={{ backgroundColor: u.ativo ? `${colors.secondary}` : `${colors.danger}15`, color: u.ativo ? colors.blue : colors.danger}} className="font-medium">
                                         {u.ativo ? "Ativo" : "Inativo"}
                                     </Badge>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                     <div className="flex gap-2">
-                                        <Button size="sm" onClick={() => onToggleStatus(u)} disabled={actionLoading === u.id || u.id === currentUser?.id} className="rounded-lg" style={{ backgroundColor: u.ativo ? colors.danger : colors.success, color: "white" }} title={u.id === currentUser?.id ? "Não podes alterar o teu próprio status" : ""}>
+                                        <Button size="sm" onClick={() => onToggleStatus(u)} disabled={actionLoading === u.id || u.id === currentUser?.id} className="rounded-lg" style={{ backgroundColor: u.ativo ? colors.secondary : colors.success, color: colors.blue }} title={u.id === currentUser?.id ? "Não podes alterar o teu próprio status" : ""}>
                                             {actionLoading === u.id ? <RefreshCw size={14} className="animate-spin" /> : <Power size={14} />}
                                         </Button>
                                     </div>

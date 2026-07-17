@@ -1,29 +1,10 @@
 "use client";
 
-import {
-  useState,
-  useEffect,
-  forwardRef,
-  useMemo,
-  useCallback,
-  useRef,
-} from "react";
+import { useState, useEffect, forwardRef, useMemo, useCallback, useRef } from "react";
 import { useLandlordAuth } from "@/context/LandlordAuthContext";
 import { useThemeColors } from "@/context/ThemeContext";
 import { perfilApi } from "@/services/axios";
-import {
-  User,
-  Mail,
-  Shield,
-  Lock,
-  Save,
-  Eye,
-  EyeOff,
-  Loader2,
-  CheckCircle2,
-  AlertCircle,
-  X,
-} from "lucide-react";
+import { User, Mail, Shield, Lock, Save, Eye, EyeOff, Loader2, CheckCircle2, AlertCircle, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,13 +29,8 @@ function calcularForcaSenha(senha: string) {
   return { nivel: 3, label: "Forte", cor: "#22c55e" };
 }
 
-function validarSenha(
-  atual: string,
-  nova: string,
-  confirmacao: string
-): string | null {
-  if (!atual || !nova || !confirmacao)
-    return "Preencha todos os campos para alterar a senha.";
+function validarSenha(atual: string, nova: string, confirmacao: string): string | null {
+  if (!atual || !nova || !confirmacao) return "Preencha todos os campos para alterar a senha.";
   if (nova.length < 8) return "A nova senha deve ter pelo menos 8 caracteres.";
   if (nova !== confirmacao) return "As senhas não coincidem.";
   if (nova === atual) return "A nova senha deve ser diferente da atual.";
@@ -104,18 +80,11 @@ const InputWithIcon = forwardRef<HTMLInputElement, InputWithIconProps>(
 
     return (
       <div className={`space-y-1.5 ${className}`}>
-        <label
-          htmlFor={id}
-          className="text-xs font-medium block"
-          style={{ color: colors.textSecondary }}
-        >
+        <label htmlFor={id} className="text-xs font-medium block" style={{ color: colors.textSecondary }}>
           {label}
         </label>
         <div className="relative">
-          <div
-            className="absolute left-3 top-1/2 -translate-y-1/2"
-            style={{ color: colors.textSecondary }}
-          >
+          <div className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: colors.textSecondary }}>
             {icon}
           </div>
           <Input
@@ -133,7 +102,7 @@ const InputWithIcon = forwardRef<HTMLInputElement, InputWithIconProps>(
             style={{
               backgroundColor: colors.background,
               borderColor: error ? colors.danger : colors.border,
-              color: colors.text,
+              color: colors.blue,
             }}
             aria-describedby={error ? `${id}-error` : undefined}
           />
@@ -143,17 +112,12 @@ const InputWithIcon = forwardRef<HTMLInputElement, InputWithIconProps>(
               onClick={onToggle}
               className="absolute right-3 top-1/2 -translate-y-1/2 transition-transform hover:scale-110"
               style={{ color: colors.textSecondary }}
-              aria-label={isVisible ? "Ocultar senha" : "Mostrar senha"}
-            >
+              aria-label={isVisible ? "Ocultar senha" : "Mostrar senha"}>
               {isVisible ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           )}
           {error && (
-            <p
-              id={`${id}-error`}
-              className="text-xs mt-1 flex items-center gap-1"
-              style={{ color: colors.danger }}
-            >
+            <p id={`${id}-error`} className="text-xs mt-1 flex items-center gap-1" style={{ color: colors.danger }}>
               <AlertCircle size={12} />
               {error}
             </p>
@@ -176,10 +140,7 @@ interface PasswordStrengthMeterProps {
 
 function PasswordStrengthMeter({ password }: PasswordStrengthMeterProps) {
   const colors = useThemeColors();
-  const { nivel, label, cor } = useMemo(
-    () => calcularForcaSenha(password),
-    [password]
-  );
+  const { nivel, label, cor } = useMemo(() => calcularForcaSenha(password), [password]);
 
   if (!password) return null;
 
@@ -231,16 +192,12 @@ export default function PerfilPage() {
     if (user?.name) setNome(user.name);
   }, [user]);
 
-  const nomeAlterado = useMemo(
-    () => nome.trim() !== "" && nome.trim() !== user?.name,
-    [nome, user?.name]
-  );
+  const nomeAlterado = useMemo(() => nome.trim() !== "" && nome.trim() !== user?.name, [nome, user?.name]);
 
   // ===== VALIDAÇÃO DO NOME =====
   const validateNome = useCallback((value: string) => {
     if (!value.trim()) return "O nome não pode estar vazio.";
-    if (value.trim().length < 2)
-      return "O nome deve ter pelo menos 2 caracteres.";
+    if (value.trim().length < 2) return "O nome deve ter pelo menos 2 caracteres.";
     return null;
   }, []);
 
@@ -337,10 +294,7 @@ export default function PerfilPage() {
   if (authLoading) {
     return (
       <div className="flex items-center justify-center min-h-[70vh]">
-        <Loader2
-          className="w-8 h-8 animate-spin"
-          style={{ color: colors.primary }}
-        />
+        <Loader2 className="w-8 h-8 animate-spin" style={{ color: colors.primary }} />
         <span className="sr-only">A carregar perfil...</span>
       </div>
     );
@@ -354,46 +308,31 @@ export default function PerfilPage() {
     <div className="space-y-6 max-w-3xl mx-auto px-4 sm:px-0">
       {/* Cabeçalho */}
       <header>
-        <h1
-          className="text-2xl sm:text-3xl font-bold tracking-tight"
-          style={{ color: colors.secondary }}
-        >
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: colors.secondary }}>
           Meu Perfil
         </h1>
-        <p
-          className="text-sm sm:text-base mt-1"
-          style={{ color: colors.textSecondary }}
-        >
+        <p className="text-sm sm:text-base mt-1" style={{ color: colors.textSecondary }}>
           Gerencie as suas informações pessoais e segurança da conta
         </p>
       </header>
 
       {/* Cartão de Identidade */}
-      <Card
-        className="rounded-xl shadow-sm border-0"
-        style={{ backgroundColor: colors.card, borderColor: colors.border }}
-      >
+      <Card className=" border-0" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
         <CardContent className="p-4 sm:p-5">
           <div className="flex items-center gap-4">
             <div
               className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold text-white shrink-0 shadow-sm"
               style={{
-                background: `linear-gradient(135deg, ${colors.secondary} 0%, ${colors.primary} 100%)`,
-              }}
-            >
+                background: colors.secondary,
+                color: colors.blue,
+              }}>
               {userInitial}
             </div>
             <div className="min-w-0 flex-1">
-              <p
-                className="text-lg font-semibold truncate"
-                style={{ color: colors.text }}
-              >
+              <p className="text-lg font-semibold truncate" style={{ color: colors.blue }}>
                 {user.name}
               </p>
-              <p
-                className="text-sm truncate"
-                style={{ color: colors.textSecondary }}
-              >
+              <p className="text-sm truncate" style={{ color: colors.textSecondary }}>
                 {user.email}
               </p>
               <Badge
@@ -402,8 +341,7 @@ export default function PerfilPage() {
                   backgroundColor: `${colors.secondary}15`,
                   color: colors.secondary,
                   border: `1px solid ${colors.secondary}30`,
-                }}
-              >
+                }}>
                 <Shield size={12} className="mr-1" />
                 {user.role === "super_admin" ? "Super Admin" : "Suporte"}
               </Badge>
@@ -413,22 +351,15 @@ export default function PerfilPage() {
       </Card>
 
       {/* Informações Pessoais */}
-      <Card
-        className="rounded-xl shadow-sm border-0"
-        style={{ backgroundColor: colors.card, borderColor: colors.border }}
-      >
-        <CardContent
-          className="p-4 sm:p-5 space-y-4"
-          onKeyDown={handleKeyDownProfile}
-        >
+      <Card className=" border-0" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+        <CardContent className="p-4 sm:p-5 space-y-4" onKeyDown={handleKeyDownProfile}>
           <div className="flex items-center gap-2">
-            <User size={18} style={{ color: colors.primary }} />
-            <h2 className="text-base font-semibold" style={{ color: colors.text }}>
+            <User size={18} style={{ color: colors.blue }} />
+            <h2 className="text-base font-semibold" style={{ color: colors.blue }}>
               Informações Pessoais
             </h2>
           </div>
-
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <InputWithIcon
               ref={nomeInputRef}
               id="nome"
@@ -444,19 +375,11 @@ export default function PerfilPage() {
             />
 
             <div>
-              <label
-                htmlFor="email"
-                className="text-xs font-medium mb-1.5 block"
-                style={{ color: colors.textSecondary }}
-              >
+              <label htmlFor="email" className="text-xs font-medium mb-1.5 block" style={{ color: colors.textSecondary }}>
                 Email
               </label>
               <div className="relative">
-                <Mail
-                  size={16}
-                  className="absolute left-3 top-1/2 -translate-y-1/2"
-                  style={{ color: colors.textSecondary }}
-                />
+                <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: colors.textSecondary }} />
                 <Input
                   id="email"
                   value={user.email}
@@ -469,24 +392,14 @@ export default function PerfilPage() {
                   }}
                 />
               </div>
-              <p
-                className="text-xs mt-1.5"
-                style={{ color: colors.textSecondary }}
-              >
-                O email não pode ser alterado. Contacte o suporte se precisar de
-                mudá-lo.
+              <p className="text-xs mt-1.5" style={{ color: colors.textSecondary }}>
+                O email não pode ser alterado. Contacte o suporte se precisar de mudá-lo.
               </p>
             </div>
           </div>
-
           <div className="flex justify-end gap-2 pt-1">
             {nomeAlterado && (
-              <Button
-                variant="outline"
-                onClick={handleCancelarNome}
-                disabled={savingProfile}
-                className="rounded-lg"
-              >
+              <Button variant="outline" onClick={handleCancelarNome} disabled={savingProfile} className="rounded-lg">
                 Cancelar
               </Button>
             )}
@@ -494,13 +407,8 @@ export default function PerfilPage() {
               onClick={handleSaveProfile}
               disabled={!nomeAlterado || savingProfile || !!nomeError}
               className="rounded-lg transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-60"
-              style={{ backgroundColor: colors.primary, color: "#fff" }}
-            >
-              {savingProfile ? (
-                <Loader2 size={16} className="mr-2 animate-spin" />
-              ) : (
-                <Save size={16} className="mr-2" />
-              )}
+              style={{ backgroundColor: colors.primary, color: "#fff" }}>
+              {savingProfile ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Save size={16} className="mr-2" />}
               Guardar Alterações
             </Button>
           </div>
@@ -508,17 +416,11 @@ export default function PerfilPage() {
       </Card>
 
       {/* Segurança / Senha */}
-      <Card
-        className="rounded-xl shadow-sm border-0"
-        style={{ backgroundColor: colors.card, borderColor: colors.border }}
-      >
-        <CardContent
-          className="p-4 sm:p-5 space-y-4"
-          onKeyDown={handleKeyDownSenha}
-        >
+      <Card className="border-0" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+        <CardContent className="p-4 sm:p-5 space-y-4" onKeyDown={handleKeyDownSenha}>
           <div className="flex items-center gap-2">
-            <Lock size={18} style={{ color: colors.primary }} />
-            <h2 className="text-base font-semibold" style={{ color: colors.text }}>
+            <Lock size={18} style={{ color: colors.blue }} />
+            <h2 className="text-base font-semibold" style={{ color: colors.blue }}>
               Segurança
             </h2>
           </div>
@@ -532,8 +434,7 @@ export default function PerfilPage() {
                 border: `1px solid ${colors.danger}30`,
               }}
               role="alert"
-              aria-live="polite"
-            >
+              aria-live="polite">
               <AlertCircle size={16} className="shrink-0" />
               {passwordError}
             </div>
@@ -589,42 +490,25 @@ export default function PerfilPage() {
                   }}
                   icon={<Lock size={16} />}
                   placeholder="Repita a nova senha"
-                  error={
-                    confirmarSenha && novaSenha && confirmarSenha !== novaSenha
-                      ? "As senhas não coincidem"
-                      : null
-                  }
+                  error={confirmarSenha && novaSenha && confirmarSenha !== novaSenha ? "As senhas não coincidem" : null}
                   disabled={savingPassword}
                 />
               </div>
             </div>
 
-            <div
-              className="flex items-center gap-2 text-xs"
-              style={{ color: colors.textSecondary }}
-            >
+            <div className="flex items-center gap-2 text-xs" style={{ color: colors.textSecondary }}>
               <CheckCircle2 size={14} />
-              <span>
-                A senha deve ter pelo menos 8 caracteres, incluindo letras
-                maiúsculas, minúsculas, números e símbolos.
-              </span>
+              <span>A senha deve ter pelo menos 8 caracteres, incluindo letras maiúsculas, minúsculas, números e símbolos.</span>
             </div>
           </div>
 
           <div className="flex justify-end pt-1">
             <Button
               onClick={handleChangePassword}
-              disabled={
-                savingPassword || !senhaAtual || !novaSenha || !confirmarSenha
-              }
+              disabled={savingPassword || !senhaAtual || !novaSenha || !confirmarSenha}
               className="rounded-lg transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-60"
-              style={{ backgroundColor: colors.danger, color: "#fff" }}
-            >
-              {savingPassword ? (
-                <Loader2 size={16} className="mr-2 animate-spin" />
-              ) : (
-                <Lock size={16} className="mr-2" />
-              )}
+              style={{ backgroundColor: colors.secondary, color: colors.blue }}>
+              {savingPassword ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Lock size={16} className="mr-2" />}
               Alterar Senha
             </Button>
           </div>

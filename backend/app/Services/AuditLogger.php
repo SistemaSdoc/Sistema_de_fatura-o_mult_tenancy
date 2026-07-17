@@ -19,15 +19,12 @@ class AuditLogger
      * documento) NÃO pode ser interrompida por causa do log.
      *
      * @param string $acao   Ex: "Venda Criada", "Documento Cancelado"
-     * @param string|null $emoji  Ex: "🛒", "❌", "💰" (default: '📂')
+     * @param string|null $emoji  
      * @param array  $extra  ['area' => 'Vendas', ...]
      */
     public static function log(string $acao, ?string $emoji = '📂', array $extra = []): void
     {
         try {
-            // ✅ Garante que emoji é sempre string (nunca null)
-            $emoji = $emoji ?? '📂';
-
             $ip = request()->ip() ?? 'N/A';
             $user = Auth::user();
             $now = Carbon::now(config('app.timezone', 'Europe/Lisbon'));
@@ -42,20 +39,23 @@ class AuditLogger
             $area = $extra['area'] ?? 'N/A';
             $detalhes = $extra['detalhes'] ?? [];
             $url = request()->fullUrl();
-            $prefixo = $emoji !== '' ? $emoji . ' ' : '';
+            $detalhesFormatados = self::formatarDetalhes($detalhes);
+            $detalhesTexto = $detalhesFormatados !== '' ? " | Detalhes: {$detalhesFormatados}" : '';
+
             $mensagem = sprintf(
-                "%s%s: Usuário: %s | Data/Hora: %s || %s | Área Atual: %s | IP: %s | Sistema Operativo: %s | Navegador: %s | Dispositivo: %s | Localização: %s",
-                $prefixo,
+                "%s: Usuário: %s | Data/Hora: %s || %s | Área Atual: %s | URL: %s | IP: %s | Sistema Operativo: %s | Navegador: %s | Dispositivo: %s | Localização: %s%s",
                 $acao,
                 $user ? $user->name : 'Convidado',
                 $now->format('H:i:s'),
                 $now->format('d-m-Y'),
                 $area ?: 'N/A',
+                $url,
                 $ip,
                 $sistemaOperativo,
                 $navegador,
                 $dispositivo,
-                $localizacao
+                $localizacao,
+                $detalhesTexto
             );
 
             Log::channel('auditoria')->info($mensagem);
@@ -64,6 +64,34 @@ class AuditLogger
             // Regista o problema num canal separado (ou no log padrão) para investigação.
             report($e);
         }
+    }
+
+    private static function formatarDetalhes(mixed $detalhes): string
+    {
+        if (empty($detalhes)) {
+            return '';
+        }
+
+        if (!is_array($detalhes)) {
+            return (string) $detalhes;
+        }
+
+        $partes = [];
+
+        foreach ($detalhes as $chave => $valor) {
+            if (is_array($valor)) {
+                $valor = json_encode($valor, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            } elseif (is_bool($valor)) {
+                $valor = $valor ? 'true' : 'false';
+            } elseif ($valor === null) {
+                $valor = 'null';
+            }
+
+            $nome = str_replace('_', ' ', (string) $chave);
+            $partes[] = sprintf('%s=%s', $nome, $valor);
+        }
+
+        return implode(' | ', $partes);
     }
 
     /**

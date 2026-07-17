@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useThemeColors } from "@/context/ThemeContext";
-import { getTenant, tenantApi } from "@/services/axios";
+import { landlordApi } from "@/services/axios";
+import MainLandlord from "@/app/components/MainLandlord";
 
 interface LinhaAuditoria {
   timestamp: string;
   nivel: string;
-  emoji: string;
   acao: string;
   usuario: string | null;
   hora: string | null;
@@ -34,7 +34,7 @@ function hojeISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export default function AuditoriaPage() {
+function AuditoriaPageContent() {
   const colors = useThemeColors();
   const [dataFiltro, setDataFiltro] = useState(hojeISO());
   const [usuario, setUsuario] = useState("");
@@ -46,13 +46,6 @@ export default function AuditoriaPage() {
   const [autoAtualizar, setAutoAtualizar] = useState(false);
 
   const buscar = useCallback(async () => {
-    const tenantId = getTenant();
-    if (!tenantId) {
-      setErro("Não foi possível identificar a empresa ativa. Faça login novamente.");
-      setResposta(null);
-      return;
-    }
-
     setCarregando(true);
     setErro(null);
 
@@ -65,15 +58,8 @@ export default function AuditoriaPage() {
       if (usuario.trim()) params.set("usuario", usuario.trim());
       if (acao.trim()) params.set("acao", acao.trim());
 
-      const res = await tenantApi.get<RespostaLogs>(`/api/auditoria/logs`, {
+      const res = await landlordApi.get<RespostaLogs>(`/api/landlord/auditoria/logs`, {
         params,
-        withCredentials: true,
-        headers: tenantId
-          ? {
-              "X-Empresa-ID": tenantId,
-              "X-Tenant-ID": tenantId,
-            }
-          : undefined,
       });
 
       setResposta(res.data);
@@ -88,7 +74,6 @@ export default function AuditoriaPage() {
     buscar();
   }, [buscar]);
 
-  // Auto-atualização a cada 15s
   const intervaloRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
     if (autoAtualizar) {
@@ -102,16 +87,7 @@ export default function AuditoriaPage() {
   const linhas = resposta?.linhas ?? [];
 
   return (
-    <div
-      style={{
-        padding: "24px",
-        maxWidth: "1600px",
-        margin: "0 auto",
-        fontFamily: "system-ui, sans-serif",
-        background: colors.background,
-        color: colors.text,
-        minHeight: "100vh",
-      }}>
+    <div style={{ fontFamily: "system-ui, sans-serif", color: colors.text }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
         <h1 style={{ fontSize: "1.5rem", fontWeight: 600 }}>Logs de Auditoria</h1>
         <button
@@ -129,7 +105,6 @@ export default function AuditoriaPage() {
         </button>
       </div>
 
-      {/* Filtros */}
       <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "16px" }}>
         <div>
           <label style={{ display: "block", fontSize: "0.8rem", marginBottom: "4px" }}>Data</label>
@@ -201,7 +176,6 @@ export default function AuditoriaPage() {
         </div>
       )}
 
-      {/* Tabela */}
       <div
         style={{
           overflowX: "auto",
@@ -255,7 +229,6 @@ export default function AuditoriaPage() {
         </table>
       </div>
 
-      {/* Paginação */}
       {resposta && resposta.total_paginas > 1 && (
         <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "16px" }}>
           <button onClick={() => setPagina((p) => Math.max(1, p - 1))} disabled={pagina <= 1} style={pagBtnStyle(pagina <= 1)}>
@@ -286,3 +259,11 @@ const pagBtnStyle = (disabled: boolean): React.CSSProperties => ({
   color: disabled ? "#aaa" : "#000",
   cursor: disabled ? "default" : "pointer",
 });
+
+export default function AuditoriaPage() {
+  return (
+    <MainLandlord>
+      <AuditoriaPageContent />
+    </MainLandlord>
+  );
+}

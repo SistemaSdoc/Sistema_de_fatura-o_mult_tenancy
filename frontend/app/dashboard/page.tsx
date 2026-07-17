@@ -8,7 +8,7 @@ import { useAuth } from "@/context/authprovider";
 
 import MainEmpresa from "@/app/components/MainEmpresa";
 import { dashboardService, DashboardData as ServiceDashboardData } from "@/services/Dashboard";
-import { useThemeColors, useTheme } from "@/context/ThemeContext";
+import { useThemeColors, useTheme, type ThemeColors } from "@/context/ThemeContext";
 import { usePathname, useRouter } from "next/navigation";
 import type { TooltipProps } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,22 +19,6 @@ const DashboardCharts = dynamic(() => import("../components/DashboardCharts").th
 });
 
 /* ==================== TIPOS LOCAIS ==================== */
-interface ThemeColors {
-  primary: string;
-  secondary: string;
-  background: string;
-  card: string;
-  text: string;
-  textSecondary: string;
-  border: string;
-  danger: string;
-  success: string;
-  warning: string;
-  error: string;
-  hover?: string;
-  fp: string;
-}
-
 type DashboardData = ServiceDashboardData;
 
 interface ProdutoItem {
@@ -152,7 +136,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-
   const router = useRouter();
   const pathname = usePathname();
   const colors = useThemeColors() as ThemeColors;
@@ -165,7 +148,6 @@ export default function DashboardPage() {
   useEffect(() => {
     carregarDashboard();
   }, []);
-
 
   // Redirecionamento por role (apenas no dashboard raiz)
   useEffect(() => {
@@ -448,7 +430,7 @@ export default function DashboardPage() {
         </div>
 
         <DashboardCharts
-          colors={{ ...colors, hover: colors.hover ?? colors.primary }}
+          colors={colors}
           produtosData={produtosData}
           evolucaoData={evolucaoData}
           documentosPorTipo={documentosPorTipo}

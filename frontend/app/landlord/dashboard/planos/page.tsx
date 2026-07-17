@@ -163,7 +163,6 @@ export default function PlanosPage() {
     };
 
     const sincronizarFeatures = async (planoId: string, planoAnterior?: Plano) => {
-        // Em edição: desassocia tudo o que estava antes, para evitar conflito de pivot duplicado
         if (planoAnterior) {
             for (const pf of planoAnterior.features) {
                 try {
@@ -343,14 +342,14 @@ export default function PlanosPage() {
                                 <button
                                     onClick={() => abrirEditar(plano)}
                                     className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all hover:scale-105 active:scale-95"
-                                    style={{ backgroundColor: `${colors.primary}15`, color: colors.primary }}
+                                    style={{ backgroundColor: colors.primary, color: colors.blue }}
                                 >
                                     <Pencil size={13} /> Editar
                                 </button>
                                 <button
                                     onClick={() => setConfirmarRemocao(plano)}
                                     className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all hover:scale-105 active:scale-95"
-                                    style={{ backgroundColor: "#ef444415", color: "#ef4444" }}
+                                    style={{ backgroundColor: colors.secondary, color: colors.text }}
                                 >
                                     <Trash2 size={13} /> Remover
                                 </button>
@@ -363,25 +362,34 @@ export default function PlanosPage() {
             {/* Modal criar/editar */}
             {modalOpen && (
                 <div
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                    className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
                     style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
                     onClick={fecharModal}
                 >
                     <div
-                        className="w-full max-w-2xl rounded-xl overflow-hidden shadow-xl max-h-[90vh] overflow-y-auto"
-                        style={{ backgroundColor: colors.card }}
+                        className="w-full max-w-2xl rounded-xl shadow-xl flex flex-col"
+                        style={{ backgroundColor: colors.card, maxHeight: "min(90vh, 720px)" }}
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="flex items-center justify-between p-4 border-b sticky top-0" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-                            <h3 className="text-sm font-bold" style={{ color: colors.text }}>
+                        {/* Header fixo */}
+                        <div
+                            className="flex items-center justify-between px-4 py-3.5 sm:px-5 border-b shrink-0"
+                            style={{ borderColor: colors.border }}
+                        >
+                            <h3 className="text-sm sm:text-base font-bold" style={{ color: colors.text }}>
                                 {editando ? "Editar Plano" : "Novo Plano"}
                             </h3>
-                            <button onClick={fecharModal} className="p-1.5 rounded-lg hover:scale-110 transition-transform">
+                            <button
+                                onClick={fecharModal}
+                                className="p-1.5 rounded-lg hover:scale-110 transition-transform"
+                                style={{ backgroundColor: `${colors.textSecondary}10` }}
+                            >
                                 <X size={18} style={{ color: colors.textSecondary }} />
                             </button>
                         </div>
 
-                        <div className="p-4 space-y-4">
+                        {/* Corpo com scroll */}
+                        <div className="px-4 py-4 sm:px-5 space-y-5 overflow-y-auto flex-1 min-h-0">
                             <div className="space-y-3">
                                 <div>
                                     <label className="text-xs font-medium" style={{ color: colors.text }}>Nome</label>
@@ -389,7 +397,7 @@ export default function PlanosPage() {
                                         type="text"
                                         value={form.nome}
                                         onChange={(e) => setForm({ ...form, nome: e.target.value })}
-                                        className="w-full mt-1 px-3 py-2 rounded-lg text-sm border outline-none"
+                                        className="w-full mt-1.5 px-3 py-2.5 rounded-lg text-sm border outline-none"
                                         style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
                                         placeholder="Ex: Profissional"
                                     />
@@ -401,19 +409,19 @@ export default function PlanosPage() {
                                         type="text"
                                         value={form.descricao}
                                         onChange={(e) => setForm({ ...form, descricao: e.target.value })}
-                                        className="w-full mt-1 px-3 py-2 rounded-lg text-sm border outline-none"
+                                        className="w-full mt-1.5 px-3 py-2.5 rounded-lg text-sm border outline-none"
                                         style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
                                     />
                                 </div>
 
-                                <div className="grid grid-cols-3 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                     <div>
                                         <label className="text-xs font-medium" style={{ color: colors.text }}>Valor mensal (Kz)</label>
                                         <input
                                             type="number"
                                             value={form.valor_mensal}
                                             onChange={(e) => setForm({ ...form, valor_mensal: e.target.value })}
-                                            className="w-full mt-1 px-3 py-2 rounded-lg text-sm border outline-none"
+                                            className="w-full mt-1.5 px-3 py-2.5 rounded-lg text-sm border outline-none"
                                             style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
                                         />
                                     </div>
@@ -423,7 +431,7 @@ export default function PlanosPage() {
                                             type="number"
                                             value={form.valor_anual}
                                             onChange={(e) => setForm({ ...form, valor_anual: e.target.value })}
-                                            className="w-full mt-1 px-3 py-2 rounded-lg text-sm border outline-none"
+                                            className="w-full mt-1.5 px-3 py-2.5 rounded-lg text-sm border outline-none"
                                             style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
                                             placeholder="Opcional"
                                         />
@@ -435,13 +443,13 @@ export default function PlanosPage() {
                                             min={1}
                                             value={form.duracao_meses}
                                             onChange={(e) => setForm({ ...form, duracao_meses: e.target.value })}
-                                            className="w-full mt-1 px-3 py-2 rounded-lg text-sm border outline-none"
+                                            className="w-full mt-1.5 px-3 py-2.5 rounded-lg text-sm border outline-none"
                                             style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
                                         />
                                     </div>
                                 </div>
 
-                                <label className="flex items-center gap-2 cursor-pointer">
+                                <label className="flex items-center gap-2 cursor-pointer pt-1">
                                     <input
                                         type="checkbox"
                                         checked={form.ativo}
@@ -452,7 +460,7 @@ export default function PlanosPage() {
                                 </label>
                             </div>
 
-                            <div className="pt-3 border-t" style={{ borderColor: colors.border }}>
+                            <div className="pt-4 border-t" style={{ borderColor: colors.border }}>
                                 <h4 className="text-xs font-semibold mb-2" style={{ color: colors.text }}>Features do plano</h4>
                                 {features.length === 0 ? (
                                     <p className="text-xs" style={{ color: colors.textSecondary }}>
@@ -480,13 +488,13 @@ export default function PlanosPage() {
                                                         </span>
                                                     </label>
                                                     {sel.selecionada && (
-                                                        <div className="grid grid-cols-2 gap-2 mt-2 pl-6">
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 sm:pl-6">
                                                             <input
                                                                 type="number"
                                                                 value={sel.quantidade}
                                                                 onChange={(e) => atualizarFeature(feature.id, "quantidade", e.target.value)}
                                                                 placeholder="Quantidade"
-                                                                className="px-2 py-1.5 rounded-md text-xs border outline-none"
+                                                                className="px-2.5 py-2 rounded-md text-xs border outline-none"
                                                                 style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
                                                             />
                                                             <input
@@ -494,7 +502,7 @@ export default function PlanosPage() {
                                                                 value={sel.unidade}
                                                                 onChange={(e) => atualizarFeature(feature.id, "unidade", e.target.value)}
                                                                 placeholder="Unidade (ex: usuários)"
-                                                                className="px-2 py-1.5 rounded-md text-xs border outline-none"
+                                                                className="px-2.5 py-2 rounded-md text-xs border outline-none"
                                                                 style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
                                                             />
                                                         </div>
@@ -507,10 +515,14 @@ export default function PlanosPage() {
                             </div>
                         </div>
 
-                        <div className="flex gap-2 p-4 border-t sticky bottom-0" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                        {/* Footer fixo */}
+                        <div
+                            className="flex gap-2 px-4 py-3.5 sm:px-5 border-t shrink-0"
+                            style={{ backgroundColor: colors.card, borderColor: colors.border }}
+                        >
                             <button
                                 onClick={fecharModal}
-                                className="flex-1 py-2 rounded-lg text-xs font-medium"
+                                className="flex-1 py-2.5 rounded-lg text-xs font-medium transition-all hover:scale-[1.02] active:scale-95"
                                 style={{ backgroundColor: `${colors.textSecondary}15`, color: colors.text }}
                             >
                                 Cancelar
@@ -518,7 +530,7 @@ export default function PlanosPage() {
                             <button
                                 onClick={salvar}
                                 disabled={salvando}
-                                className="flex-1 py-2 rounded-lg text-xs font-medium text-white flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                className="flex-1 py-2.5 rounded-lg text-xs font-medium text-white flex items-center justify-center gap-1.5 disabled:opacity-50 transition-all hover:scale-[1.02] active:scale-95"
                                 style={{ backgroundColor: colors.primary }}
                             >
                                 {salvando && <Loader2 size={13} className="animate-spin" />}

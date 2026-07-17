@@ -246,26 +246,26 @@ export default function EmpresasDashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
                 {/* Pagamentos Pendentes */}
                 <div
-                    className="relative rounded-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-xl overflow-hidden cursor-pointer"
-                    style={{ backgroundColor: colors.card, border: `1px solid ${colors.border}` }}
+                    className="relative transition-all duration-300 hover:scale-[1.02] hover:shadow-xl overflow-hidden cursor-pointer"
+                    style={{ backgroundColor: colors.card }}
                     onClick={() => router.push('/landlord/pagamentos/pendentes')}
                 >
                     <div
                         className="absolute left-0 top-0 bottom-0 w-1"
-                        style={{ backgroundColor: colors.warning || '#f59e0b' }}
+                        style={{ backgroundColor: colors.secondary }}
                     />
                     <div className="p-4 sm:p-5">
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm font-medium" style={{ color: colors.textSecondary }}>
-                                    Pagamentos Pendentes
+                                    Pendentes
                                 </p>
-                                <p className="text-3xl font-bold mt-1" style={{ color: colors.warning || '#f59e0b' }}>
+                                <p className="text-3xl font-bold mt-1" style={{ color: colors.secondary}}>
                                     {pendingCount !== null ? pendingCount : '...'}
                                 </p>
                             </div>
-                            <div className="p-3 rounded-full" style={{ backgroundColor: `${colors.warning || '#f59e0b'}15` }}>
-                                <ClipboardCheck size={24} style={{ color: colors.warning || '#f59e0b' }} />
+                            <div className="p-3 rounded-full" style={{ backgroundColor: `${colors.secondary}10`  }}>
+                                <ClipboardCheck size={24} style={{ color: colors.secondary  }} />
                             </div>
                         </div>
                     </div>
@@ -273,11 +273,9 @@ export default function EmpresasDashboard() {
 
                 {/* Total de Empresas */}
                 <div
-                    className="relative rounded-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-xl overflow-hidden"
+                    className="relative transition-all duration-300 hover:scale-[1.02] hover:shadow-xl overflow-hidden"
                     style={{
-                        backgroundColor: colors.card,
-                        border: statusFilter === "todos" ? `1px solid ${colors.primary}` : `1px solid ${colors.border}`,
-                    }}
+                        backgroundColor: colors.card}}
                 >
                     <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: colors.primary }} />
                     <div className="p-4 sm:p-5">
@@ -299,25 +297,22 @@ export default function EmpresasDashboard() {
 
                 {/* Ativas */}
                 <div
-                    className="relative rounded-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-xl overflow-hidden"
-                    style={{
-                        backgroundColor: colors.card,
-                        border: statusFilter === "ativo" ? `1px solid ${colors.success}` : `1px solid ${colors.border}`,
-                    }}
+                    className="relative transition-all duration-300 hover:scale-[1.02] hover:shadow-xl overflow-hidden"
+                    style={{backgroundColor: colors.card}}
                 >
-                    <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: colors.success }} />
+                    <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: colors.secondary }} />
                     <div className="p-4 sm:p-5">
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm font-medium" style={{ color: colors.textSecondary }}>
                                     Ativas
                                 </p>
-                                <p className="text-3xl font-bold mt-1" style={{ color: colors.success }}>
+                                <p className="text-3xl font-bold mt-1" style={{ color: colors.secondary }}>
                                     {ativas}
                                 </p>
                             </div>
-                            <div className="p-3 rounded-full" style={{ backgroundColor: `${colors.success}15` }}>
-                                <CheckCircle size={24} style={{ color: colors.success }} />
+                            <div className="p-3 rounded-full" style={{ backgroundColor: `${colors.secondary}15` }}>
+                                <CheckCircle size={24} style={{ color: colors.secondary }} />
                             </div>
                         </div>
                     </div>
@@ -325,25 +320,22 @@ export default function EmpresasDashboard() {
 
                 {/* Suspensas */}
                 <div
-                    className="relative rounded-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-xl overflow-hidden"
-                    style={{
-                        backgroundColor: colors.card,
-                        border: statusFilter === "suspenso" ? `1px solid ${colors.secondary}` : `1px solid ${colors.border}`,
-                    }}
+                    className="relative transition-all duration-300 hover:scale-[1.02] hover:shadow-xl overflow-hidden"
+                    style={{backgroundColor: colors.card}}
                 >
-                    <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: colors.secondary }} />
+                    <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: colors.primary }} />
                     <div className="p-4 sm:p-5">
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm font-medium" style={{ color: colors.textSecondary }}>
                                     Suspensas
                                 </p>
-                                <p className="text-3xl font-bold mt-1" style={{ color: colors.secondary }}>
+                                <p className="text-3xl font-bold mt-1" style={{ color: colors.primary }}>
                                     {suspensas}
                                 </p>
                             </div>
-                            <div className="p-3 rounded-full" style={{ backgroundColor: `${colors.secondary}15` }}>
-                                <XCircle size={24} style={{ color: colors.secondary }} />
+                            <div className="p-3 rounded-full" style={{ backgroundColor: `${colors.primary}15` }}>
+                                <XCircle size={24} style={{ color: colors.primary }} />
                             </div>
                         </div>
                     </div>
@@ -351,7 +343,7 @@ export default function EmpresasDashboard() {
             </div>
 
             {/* Barra de ferramentas */}
-            <Card className="rounded-xl shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+            <Card style={{ backgroundColor: colors.card }}>
                 <CardContent className="p-4 sm:p-5">
                     <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center sm:justify-between">
                         <div className="flex flex-col sm:flex-row flex-1 gap-3">
@@ -365,7 +357,7 @@ export default function EmpresasDashboard() {
                                     placeholder="Buscar por nome, NIF ou email..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="pl-9 rounded-lg transition-all duration-200 focus:ring-2"
+                                    className="pl-9 transition-all duration-200 focus:ring-2"
                                     style={{
                                         backgroundColor: colors.background,
                                         borderColor: colors.border,
@@ -383,7 +375,7 @@ export default function EmpresasDashboard() {
                                 <select
                                     value={statusFilter}
                                     onChange={(e) => setStatusFilter(e.target.value as any)}
-                                    className="w-full sm:w-auto pl-9 pr-3 py-2 text-sm border rounded-lg focus:outline-none"
+                                    className="w-full sm:w-auto pl-9 pr-3 py-2 text-sm border focus:outline-none"
                                     style={{
                                         backgroundColor: colors.background,
                                         borderColor: colors.border,
@@ -401,7 +393,7 @@ export default function EmpresasDashboard() {
                         <Button
                             variant="outline"
                             onClick={exportToCSV}
-                            className="rounded-lg transition-all duration-200 hover:scale-105 cursor-pointer w-full sm:w-auto"
+                            className=" transition-all duration-200 hover:scale-105 cursor-pointer w-full sm:w-auto"
                             style={{
                                 borderColor: colors.border,
                                 color: colors.text,
@@ -419,8 +411,8 @@ export default function EmpresasDashboard() {
             {filteredEmpresas.length === 0 ? (
                 <Card className="rounded-xl shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                     <CardContent className="p-12 text-center">
-                        <Database size={48} className="mx-auto mb-4" style={{ color: colors.textSecondary }} />
-                        <p className="text-lg font-medium mb-1" style={{ color: colors.text }}>
+                        <Database size={48} className="mx-auto mb-4" style={{ color: colors.blue }} />
+                        <p className="text-lg font-medium mb-1" style={{ color: colors.blue }}>
                             Nenhuma empresa encontrada
                         </p>
                         <p style={{ color: colors.textSecondary }}>
@@ -433,29 +425,29 @@ export default function EmpresasDashboard() {
             ) : (
                 <>
                     {/* Tabela (desktop) */}
-                    <div className="hidden lg:block overflow-x-auto rounded-xl border shadow-sm" style={{ borderColor: colors.border }}>
+                    <div className="hidden lg:block overflow-x-auto border shadow-sm" style={{ borderColor: colors.border }}>
                         <table className="min-w-full divide-y" style={{ borderColor: colors.border }}>
                             <thead style={{ backgroundColor: colors.primary }}>
                                 <tr>
-                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF'  }}>
                                         Empresa
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF'  }}>
                                         NIF
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF'  }}>
                                         Contacto
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF'  }}>
                                         Regime Fiscal
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF'  }}>
                                         Base Dados
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF'  }}>
                                         Status
                                     </th>
-                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF' }}>
                                         Acções
                                     </th>
                                 </tr>
@@ -542,7 +534,7 @@ export default function EmpresasDashboard() {
                                                     onClick={() => confirmStatusChange(emp)}
                                                     className="rounded-lg transition-all duration-200 hover:scale-105 cursor-pointer"
                                                     style={{
-                                                        backgroundColor: emp.status === "ativo" ? colors.primary : colors.secondary,
+                                                        backgroundColor: emp.status === "ativo" ? colors.secondary : colors.secondary,
                                                         color: "white",
                                                     }}
                                                     disabled={actionLoading === emp.id}
@@ -697,7 +689,7 @@ export default function EmpresasDashboard() {
                                                 className="rounded-lg transition-all duration-200 cursor-pointer"
                                                 style={
                                                     currentPage === pageNum
-                                                        ? { backgroundColor: colors.primary, color: "#fff" }
+                                                        ? { backgroundColor: colors.secondary, color: "#fff" }
                                                         : { borderColor: colors.border, color: colors.text, backgroundColor: colors.card }
                                                 }
                                             >
@@ -729,11 +721,11 @@ export default function EmpresasDashboard() {
             {/* Dialog de confirmação */}
             <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
                 <DialogContent
-                    className="rounded-xl transition-all duration-300"
+                    className="transition-all duration-300"
                     style={{
                         backgroundColor: colors.card,
                         borderColor: colors.border,
-                        borderTop: `4px solid ${selectedEmpresa?.status === "ativo" ? colors.primary : colors.secondary}`,
+                        borderTop: `4px solid ${selectedEmpresa?.status === "ativo" ? colors.secondary : colors.secondary}`,
                     }}
                 >
                     <DialogHeader>
@@ -741,16 +733,16 @@ export default function EmpresasDashboard() {
                             <div
                                 className="p-2 rounded-full"
                                 style={{
-                                    backgroundColor: selectedEmpresa?.status === "ativo" ? `${colors.primary}15` : `${colors.secondary}15`,
+                                    backgroundColor: selectedEmpresa?.status === "ativo" ? `${colors.secondary}15` : `${colors.secondary}15`,
                                 }}
                             >
                                 {selectedEmpresa?.status === "ativo" ? (
-                                    <XCircle size={24} style={{ color: colors.primary }} />
+                                    <XCircle size={24} style={{ color: colors.secondary }} />
                                 ) : (
                                     <CheckCircle size={24} style={{ color: colors.secondary }} />
                                 )}
                             </div>
-                            <DialogTitle className="text-xl font-bold" style={{ color: colors.text }}>
+                            <DialogTitle className="text-xl font-bold" style={{ color: colors.secondary }}>
                                 {selectedEmpresa?.status === "ativo" ? "Suspender Empresa" : "Ativar Empresa"}
                             </DialogTitle>
                         </div>
@@ -773,8 +765,8 @@ export default function EmpresasDashboard() {
                             onClick={() => selectedEmpresa && toggleStatus(selectedEmpresa.id, selectedEmpresa.status)}
                             className="rounded-lg transition-all duration-200 hover:scale-105 w-full sm:w-auto"
                             style={{
-                                backgroundColor: selectedEmpresa?.status === "ativo" ? colors.primary : colors.secondary,
-                                color: "white",
+                                backgroundColor: selectedEmpresa?.status === "ativo" ? colors.secondary : colors.secondary,
+                                color: colors.blue,
                             }}
                         >
                             Confirmar

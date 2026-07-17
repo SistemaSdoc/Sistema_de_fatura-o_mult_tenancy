@@ -35,13 +35,13 @@ import {
   Server,
   Users,
   Calendar,
-  Wallet,
 } from "lucide-react";
 import { planosService } from "@/services/planos";
 import { subscricaoService } from "@/services/subscricoes";
 
 // --- Tipagem local do tema ---
 interface ThemeColors {
+  blue: Color | undefined;
   primary: string;
   secondary: string;
   background: string;
@@ -255,18 +255,10 @@ const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, on
   );
 };
 
-<<<<<<< HEAD
-export default function RegisterCompanyPage() {
+function RegisterCompanyPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const planoId = searchParams.get("plano_id");
-=======
-// ============ COMPONENTE INTERNO (usa useSearchParams) ============
-function RegisterContent() {
-    const router = useRouter();
-    const searchParams = useSearchParams();
-    const planoId = searchParams.get('plano_id');
->>>>>>> 6a932ba1e481d4308e8544843be6bda1a6c67047
 
   const colors = useThemeColors() as ThemeColors;
 
@@ -1023,63 +1015,65 @@ function RegisterContent() {
                       {planoEhPago && (
                         <div className="border rounded p-4 space-y-4" style={{ borderColor: colors.border }}>
                           <div className="flex items-center gap-2">
-                            <CreditCard size={18} style={{ color: colors.primary }} />
-                            <h4 className="font-semibold text-sm" style={{ color: colors.text }}>
+                            <CreditCard size={18} style={{ color: colors.blue }} />
+                            <h4 className="font-semibold text-sm" style={{ color: colors.blue }}>
                               Dados de pagamento
                             </h4>
                           </div>
 
-                          <div className="space-y-1.5">
-                            <label className="text-sm" style={{ color: colors.textSecondary }}>
-                              Método de pagamento
-                            </label>
-                            <select
-                              value={pagamento.metodo}
-                              onChange={(e) => setPagamento((prev) => ({ ...prev, metodo: e.target.value }))}
-                              className="w-full px-3 py-2.5 border text-sm outline-none"
-                              style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text }}>
-                              <option value="transferencia">Transferência bancária</option>
-                              <option value="multicaixa">Multicaixa</option>
-                              <option value="cartao_credito">Cartão de crédito</option>
-                              <option value="pix">PIX</option>
-                            </select>
-                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="space-y-1.5">
+                              <label className="text-sm" style={{ color: colors.textSecondary }}>
+                                Método de pagamento
+                              </label>
+                              <select
+                                value={pagamento.metodo}
+                                onChange={(e) => setPagamento((prev) => ({ ...prev, metodo: e.target.value }))}
+                                className="w-full px-3 py-2.5 border text-sm outline-none"
+                                style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text }}>
+                                <option value="transferencia">Transferência bancária</option>
+                                <option value="multicaixa">Multicaixa</option>
+                                <option value="cartao_credito">Cartão de crédito</option>
+                              </select>
+                            </div>
 
-                          <div className="space-y-1.5">
-                            <label className="text-sm" style={{ color: colors.textSecondary }}>
-                              Número de parcelas
-                            </label>
-                            <select
-                              value={String(pagamento.parcelas)}
-                              onChange={(e) => setPagamento((prev) => ({ ...prev, parcelas: parseInt(e.target.value) }))}
-                              className="w-full px-3 py-2.5 border text-sm outline-none"
-                              style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text }}>
-                              {[1, 2, 3, 4, 5, 6].map((n) => (
-                                <option key={n} value={n}>
-                                  {n}x sem juros
-                                </option>
-                              ))}
-                            </select>
-                          </div>
+                            <div className="space-y-1.5">
+                              <label className="text-sm" style={{ color: colors.textSecondary }}>
+                                Número de parcelas
+                              </label>
+                              <select
+                                value={String(pagamento.parcelas)}
+                                onChange={(e) => setPagamento((prev) => ({ ...prev, parcelas: parseInt(e.target.value) }))}
+                                className="w-full px-3 py-2.5 border text-sm outline-none"
+                                style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text }}>
+                                {[1, 2, 3, 4, 5, 6].map((n) => (
+                                  <option key={n} value={n}>
+                                    {n}x sem juros
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
 
-                          <div className="space-y-1.5">
-                            <label className="text-sm" style={{ color: colors.textSecondary }}>
-                              <Calendar size={14} className="inline mr-1" style={{ color: colors.textSecondary }} />
-                              Data de vencimento
-                            </label>
-                            <input
-                              type="date"
-                              value={pagamento.data_vencimento}
-                              onChange={(e) => setPagamento((prev) => ({ ...prev, data_vencimento: e.target.value }))}
-                              className="w-full px-3 py-2.5 border text-sm outline-none"
-                              style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text }}
-                            />
+                            <div className="space-y-1.5">
+                              <label className="text-sm" style={{ color: colors.textSecondary }}>
+                                <Calendar size={14} className="inline mr-1" style={{ color: colors.textSecondary }} />
+                                Data de vencimento
+                              </label>
+                              <input
+                                type="date"
+                                value={pagamento.data_vencimento}
+                                disabled
+                                onChange={(e) => setPagamento((prev) => ({ ...prev, data_vencimento: e.target.value }))}
+                                className="w-full px-3 py-2.5 border text-sm outline-none"
+                                style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text }}
+                              />
+                            </div>
                           </div>
 
                           <div className="p-3 rounded" style={{ backgroundColor: colors.hover }}>
                             <div className="flex justify-between items-center">
                               <span style={{ color: colors.textSecondary }}>Total a pagar:</span>
-                              <span className="text-lg font-bold" style={{ color: colors.primary }}>
+                              <span className="text-lg font-bold" style={{ color: colors.secondary }}>
                                 {Number(plano.valor_mensal).toLocaleString("pt-AO")} KZ
                               </span>
                             </div>
@@ -1092,11 +1086,7 @@ function RegisterContent() {
                                 KZ
                               </div>
                             )}
-                            {pagamento.data_vencimento && (
-                              <div className="text-xs mt-1" style={{ color: colors.textSecondary }}>
-                                Vence em {new Date(pagamento.data_vencimento).toLocaleDateString("pt-PT")}
-                              </div>
-                            )}
+          
                           </div>
                         </div>
                       )}
@@ -1157,5 +1147,18 @@ function RegisterContent() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function RegisterCompanyPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#f2f2f2" }}>
+          A carregar...
+        </div>
+      }>
+      <RegisterCompanyPageContent />
+    </Suspense>
   );
 }

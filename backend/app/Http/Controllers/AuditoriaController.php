@@ -20,6 +20,16 @@ class AuditoriaController extends Controller
      *   pagina     (int, default 1)
      *   por_pagina (int, default 25, max 100)
      */
+
+    /**
+     * GET /api/landlord/auditoria/logs
+     * Mesmo comportamento do index(), mas acessível pelo landlord (sem tenant).
+     */
+    public function indexLandlord(Request $request): JsonResponse
+    {
+        return $this->index($request);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $data = $request->query('data', now()->format('Y-m-d'));
@@ -124,7 +134,7 @@ class AuditoriaController extends Controller
 
         $detalhes = $request->input('detalhes', []);
         $area = $request->input('area', null);
-        $emoji = $request->input('emoji') ?? '📂'; // ✅ Garante emoji nunca é null
+        $emoji = $request->input('emoji') ?? '';
         $acao = $request->input('acao', 'Evento');
 
         $acaoFormatada = $this->formatarAcaoInterface($acao, $detalhes);
@@ -139,24 +149,20 @@ class AuditoriaController extends Controller
 
     private function formatarAcaoInterface(string $acao, array $detalhes): string
     {
-        // Ações com formatação específica
         if ($acao === 'Página Visualizada') {
             $caminho = $detalhes['caminho'] ?? '/';
-            // Melhorar o caminho para ser mais legível
             $caminhoLegivel = $this->normalizarCaminho($caminho);
-            return "Visualizou a página: {$caminhoLegivel}";
+            return "Acessou a página {$caminhoLegivel}";
         }
 
         if ($acao === 'Elemento Clicado') {
             $elemento = $detalhes['elemento'] ?? $detalhes['rotulo'] ?? 'um elemento';
-            $tipo = $detalhes['tipo'] ?? 'elemento';
             $caminho = $detalhes['caminho'] ?? '/';
             $caminhoLegivel = $this->normalizarCaminho($caminho);
 
             $rotulo = is_string($elemento) && trim($elemento) !== '' ? trim($elemento) : 'um elemento';
-            $tipoFormatado = is_string($tipo) && trim($tipo) !== '' ? trim($tipo) : 'elemento';
 
-            return "Clicou em \"{$rotulo}\" ({$tipoFormatado}) na página {$caminhoLegivel}";
+            return $this->descreverClique($rotulo, $caminhoLegivel);
         }
 
         if ($acao === 'Formulário Enviado') {
@@ -165,10 +171,50 @@ class AuditoriaController extends Controller
             $campos = $detalhes['campos'] ?? 0;
             $caminhoLegivel = $this->normalizarCaminho($caminho);
 
-            return "Enviou o formulário \"{$formulario}\" ({$campos} campo(s)) na página {$caminhoLegivel}";
+            return "Submeteu o formulário \"{$formulario}\" com {$campos} campo(s) na página {$caminhoLegivel}";
         }
 
         return $acao;
+    }
+
+    private function descreverClique(string $rotulo, string $caminho): string
+    {
+        $rotuloLimpo = trim($rotulo);
+        $rotuloNormalizado = mb_strtolower($rotuloLimpo);
+
+        if (preg_match('/\b(nova|adicionar|criar|registar)\b/', $rotuloNormalizado)) {
+            return "Iniciou a criação de {$rotuloLimpo} na página {$caminho}";
+        }
+
+        if (preg_match('/\b(editar|alterar|atualizar|guardar|salvar)\b/', $rotuloNormalizado)) {
+            return "Atualizou o registo através de {$rotuloLimpo} na página {$caminho}";
+        }
+
+        if (preg_match('/\b(importar|carregar ficheiro|anexar)\b/', $rotuloNormalizado)) {
+            return "Iniciou a importação de dados através de {$rotuloLimpo} na página {$caminho}";
+        }
+
+        if (preg_match('/\b(concluir|finalizar|confirmar|prosseguir)\b/', $rotuloNormalizado)) {
+            return "Concluiu a operação {$rotuloLimpo} na página {$caminho}";
+        }
+
+        if (preg_match('/\b(cancelar|fechar|voltar)\b/', $rotuloNormalizado)) {
+            return "Cancelou ou abandonou a operação {$rotuloLimpo} na página {$caminho}";
+        }
+
+        if (preg_match('/\b(ver detalhes|detalhes|abrir)\b/', $rotuloNormalizado)) {
+            return "Consultou os detalhes de {$rotuloLimpo} na página {$caminho}";
+        }
+
+        if (str_contains($rotuloNormalizado, 'enviar comprovativo')) {
+            return "Enviou o comprovativo de pagamento na página {$caminho}";
+        }
+
+        if (str_contains($rotuloNormalizado, 'facturação')) {
+            return "Acessou a funcionalidade {$rotuloLimpo} na página {$caminho}";
+        }
+
+        return "Interagiu com {$rotuloLimpo} na página {$caminho}";
     }
 
     /**
