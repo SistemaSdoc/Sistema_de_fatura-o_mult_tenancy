@@ -26,16 +26,34 @@ class ComprovativoRecebido extends Notification implements ShouldQueue
 
 public function toMail($notifiable)
 {
-    // URL absoluta para o frontend do landlord
+    $pagamento = $this->pagamento;
+    $empresa = $pagamento->empresa;
+    $plano = $pagamento->plano;
+
+    // URLs
     $frontendUrl = config('app.frontend_url', 'http://localhost:3000');
-    $url = $frontendUrl . '/landlord/pagamentos/' . $this->pagamento->id;
+    $url = $frontendUrl . '/landlord/pagamentos/' . $pagamento->id;
+
+    // Formatação de valores
+    $valorFormatado = number_format($pagamento->valor, 2, ',', '.');
+    $dataPagamento = $pagamento->created_at->format('d/m/Y H:i');
 
     return (new MailMessage)
-        ->subject('Novo comprovativo de pagamento aguardando análise')
-        ->greeting('Olá Admin,')
-        ->line('A empresa com ID ' . $this->pagamento->empresa_id . ' enviou um comprovativo de pagamento para o plano ID ' . $this->pagamento->plano_id . '.')
-        ->line('Valor: ' . number_format($this->pagamento->valor, 2, ',', '.') . ' AOA')
-        ->action('Ver comprovativo', $url)
-        ->line('Por favor, aceda ao painel para aprovar ou rejeitar o pagamento.');
+        ->subject('📄 Novo comprovativo de pagamento aguardando análise')
+        ->greeting('Olá, Administrador!')
+        ->line('Acabamos de receber um comprovativo de pagamento que aguarda a sua validação.')
+        ->line('')
+        ->line('**Detalhes do pagamento:**')
+        ->line("- **Empresa:** {$empresa->nome}")
+        ->line("- **Plano contratado:** {$plano->nome}")
+        ->line("- **Valor pago:** **{$valorFormatado} AOA**")
+        ->line("- **Data do envio:** {$dataPagamento}")
+        ->line('')
+        ->line('Clique no botão abaixo para visualizar o comprovativo e tomar a decisão (aprovar ou rejeitar).')
+        ->action('🔍 Analisar comprovativo', $url)
+        ->line('')
+        ->line('⚠️ **Importante:** A empresa só terá acesso ao plano após a aprovação do pagamento.')
+        ->line('')
+        ->salutation('Equipa FaturaJA');
 }
 }

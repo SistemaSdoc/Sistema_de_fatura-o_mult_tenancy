@@ -20,12 +20,12 @@ return new class extends Migration
             $table->uuid('id')->primary();
             
 
-            // 🔗 Opcional: link para empresa se for admin específico de uma empresa
+            // Opcional: link para empresa se for admin específico de uma empresa
             // Null = super admin (acessa tudo)
             $table->uuid('empresa_id')->nullable();
             $table->foreign('empresa_id')->references('id')->on('empresas')->nullOnDelete();
 
-            // 🔗 Empresa atualmente selecionada/ativa para o usuário (contexto de sessão)
+            // Empresa atualmente selecionada/ativa para o usuário (contexto de sessão)
             $table->uuid('empresa_id_atual')->nullable();
             $table->foreign('empresa_id_atual')->references('id')->on('empresas')->nullOnDelete();
             
@@ -37,7 +37,7 @@ return new class extends Migration
             // Níveis de acesso
             // super_admin: acesso total a todas as empresas
             // admin_empresa: admin de uma empresa específica (empresa_id obrigatório)
-            $table->enum('role', ['super_admin', 'suporte'])->default('suporte');
+            $table->enum('role', ['super_admin', 'admin_empresa'])->default('admin_empresa');
             
             $table->boolean('ativo')->default(true);
             $table->timestamp('ultimo_login')->nullable();
