@@ -8,7 +8,8 @@ import { useLandlordAuth } from "@/context/LandlordAuthContext";
 import { useThemeColors } from "@/context/ThemeContext";
 import { AxiosError } from "axios";
 import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Loader2, UserPlus } from "lucide-react";
-import styles from "./login.module.css"; // se quiseres manter o mesmo CSS module
+import { ToastNotification } from "@/components/ToastNotification";
+import styles from "./login.module.css";
 
 /* ---------------- TYPES ---------------- */
 interface ThemeColors {
@@ -20,6 +21,8 @@ interface ThemeColors {
     textSecondary: string;
     border: string;
     danger: string;
+    warning: string;
+    info?: string;
 }
 
 interface InputFieldProps {
@@ -103,24 +106,28 @@ export default function LandlordLoginPage(): React.ReactElement {
     const [email, setEmail] = useState<string>("");
     const [password, setPassword] = useState<string>("");
     const [showPassword, setShowPassword] = useState<boolean>(false);
-    const [error, setError] = useState<string>("");
+    const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+    const showToast = (message: string, type: "success" | "error" = "success") => {
+        setToast({ message, type });
+    };
 
     // Limpa erro quando o utilizador altera os campos
     useEffect(() => {
-        if (error) setError("");
+        if (toast) setToast(null);
     }, [email, password]);
 
     // Redireciona após login bem-sucedido (apenas super_admin)
     useEffect(() => {
         if (!user) return;
         // Se for suporte, também pode aceder, mas redirecionamos para o mesmo dashboard
-        router.push("/landlord/dashboard/empresas");
+        router.push("/landlord/dashboard");
     }, [user, router]);
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
         e.preventDefault();
-        setError("");
+        setToast(null);
         setIsSubmitting(true);
 
         try {
@@ -133,7 +140,7 @@ export default function LandlordLoginPage(): React.ReactElement {
             } else if (err instanceof Error) {
                 errorMessage = err.message;
             }
-            setError(errorMessage);
+            showToast(errorMessage, "error");
         } finally {
             setIsSubmitting(false);
         }
@@ -146,6 +153,9 @@ export default function LandlordLoginPage(): React.ReactElement {
             className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden transition-colors duration-300"
             style={{ backgroundColor: colors.background }}
         >
+            {/* Toast Notification */}
+            {toast && <ToastNotification message={toast.message} type={toast.type} onClose={() => setToast(null)} colors={colors} />}
+
             {/* Grid decorativa */}
             <div
                 className="absolute inset-0 opacity-[0.03]"
@@ -181,16 +191,8 @@ export default function LandlordLoginPage(): React.ReactElement {
                         <p className="text-sm" style={{ color: colors.textSecondary }}>Login para super administrador</p>
                     </div>
 
-                    {/* Mensagem de erro */}
-                    {error && (
-                        <div
-                            className="mb-4 border-l-4 p-4 rounded-r-xl flex items-center gap-3 shadow-sm"
-                            style={{ backgroundColor: `${colors.danger}20`, borderColor: colors.danger, color: colors.danger }}
-                        >
-                            <AlertCircle size={20} />
-                            <span className="text-sm font-medium">{error}</span>
-                        </div>
-                    )}
+
+
 
                     {/* Formulário */}
                     <form onSubmit={handleSubmit} className="flex flex-col gap-4">

@@ -25,6 +25,7 @@ import {
     User,
     HelpCircle,
     Crown,
+    MessageSquare,
 } from "lucide-react";
 import { LucideIcon } from "lucide-react";
 import Image from "next/image";
@@ -33,6 +34,7 @@ import { useAuth } from "@/context/authprovider";
 import { estoqueService } from "@/services/estoque";
 import { produtoService, Produto } from "@/services/produtos";
 import { subscricaoService } from "@/services/subscricoes";
+import { mensagensEmpresaApi, MensagemEmpresa } from "@/services/mensagensEmpresa";
 import { useTheme, useThemeColors } from "@/context/ThemeContext";
 import { toast } from "sonner";
 
@@ -97,9 +99,11 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
   const [notificacoesAberto, setNotificacoesAberto] = useState(false);
   const [produtosEstoqueBaixo, setProdutosEstoqueBaixo] = useState<Produto[]>([]);
   const [produtosSemEstoque, setProdutosSemEstoque] = useState<Produto[]>([]);
+  const [mensagensEmpresa, setMensagensEmpresa] = useState<MensagemEmpresa[]>([]);
   const [loadingNotificacoes, setLoadingNotificacoes] = useState(false);
+  const [loadingMensagens, setLoadingMensagens] = useState(false);
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState<Date | null>(null);
-  const [abaAtiva, setAbaAtiva] = useState<"baixo" | "zero">("baixo");
+  const [abaAtiva, setAbaAtiva] = useState<"baixo" | "zero" | "mensagens">("baixo");
   const [modalAnimating, setModalAnimating] = useState(false);
   const [panelAnimating, setPanelAnimating] = useState(false);
   const [logoError, setLogoError] = useState(false);
@@ -218,7 +222,8 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
   }, []);
 
   useEffect(() => {
-    setLogoError(false);
+    const timer = window.setTimeout(() => setLogoError(false), 0);
+    return () => window.clearTimeout(timer);
   }, [user?.empresa?.logo, companyLogo]);
 
   // Responsive detection
@@ -235,11 +240,14 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
   }, []);
 
   useEffect(() => {
-    if (isMobile) setSidebarOpen(false);
+    if (!isMobile) return;
+    const timer = window.setTimeout(() => setSidebarOpen(false), 0);
+    return () => window.clearTimeout(timer);
   }, [pathname, isMobile]);
 
   useEffect(() => {
-    setIsLoaded(true);
+    const timer = window.setTimeout(() => setIsLoaded(true), 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -358,6 +366,36 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
     [user, userLoading, userRole]
   );
 
+  const buscarMensagensEmpresa = useCallback(
+    async (force = false) => {
+      if (!user || userLoading) return;
+      if (!force && mensagensEmpresa.length > 0) return;
+
+      setLoadingMensagens(true);
+      try {
+        const response = await mensagensEmpresaApi.listar();
+        const mensagens = response.data?.mensagens || [];
+        setMensagensEmpresa(mensagens);
+      } catch (error) {
+        console.error("[MainEmpresa] Erro ao buscar mensagens:", error);
+        toast.error("Erro ao carregar mensagens do landlord");
+      } finally {
+        setLoadingMensagens(false);
+      }
+    },
+    [mensagensEmpresa.length, user, userLoading]
+  );
+
+  const marcarMensagemComoLida = useCallback(async (id: string) => {
+    try {
+      await mensagensEmpresaApi.marcarComoLida(id);
+      setMensagensEmpresa((prev) => prev.map((mensagem) => (mensagem.id === id ? { ...mensagem, lida: true } : mensagem)));
+    } catch (error) {
+      console.error("[MainEmpresa] Erro ao marcar mensagem como lida:", error);
+      toast.error("Erro ao actualizar estado da mensagem");
+    }
+  }, []);
+
   // ==================== SUBSCRIÇÃO ====================
   const buscarSubscricao = useCallback(
     async (force = false) => {
@@ -380,8 +418,20 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
   );
 
   useEffect(() => {
-    if (user) buscarSubscricao();
+    if (!user) return;
+    const timer = window.setTimeout(() => {
+      void buscarSubscricao();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [user, buscarSubscricao]);
+
+  useEffect(() => {
+    if (!user) return;
+    const timer = window.setTimeout(() => {
+      void buscarMensagensEmpresa(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [user, buscarMensagensEmpresa]);
 
   const toggleSubscricao = () => {
     if (!user || userLoading) {
@@ -443,6 +493,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
       setPanelAnimating(true);
       setTimeout(() => setPanelAnimating(false), 10);
       buscarNotificacoesEstoque();
+      buscarMensagensEmpresa();
     } else {
       setPanelAnimating(true);
       setTimeout(() => {
@@ -599,7 +650,9 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
   ];
 
   const menuItemsFiltrados = menuItems.filter(temPermissao);
-  const totalNotificacoes = produtosEstoqueBaixo.length + produtosSemEstoque.length;
+  const totalMensagensNaoLidas = mensagensEmpresa.filter((mensagem) => !mensagem.lida).length;
+  const totalNotificacoes = produtosEstoqueBaixo.length + produtosSemEstoque.length + totalMensagensNaoLidas;
+  const badgeColor = produtosSemEstoque.length > 0 ? colors.danger : totalMensagensNaoLidas > 0 ? colors.primary : "#f59e0b";
 
   if (userLoading) {
     return (
@@ -1039,7 +1092,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                     <span
                       className="absolute -top-1 -right-1 text-[10px] font-bold flex items-center justify-center px-1.5 py-0.5 text-white animate-pulse shadow-md"
                       style={{
-                        backgroundColor: produtosSemEstoque.length > 0 ? colors.danger : "#f59e0b",
+                        backgroundColor: badgeColor,
                       }}>
                       {totalNotificacoes > 9 ? "9+" : totalNotificacoes}
                     </span>
@@ -1076,7 +1129,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                       <div className="p-3 border-b md:p-4 flex-shrink-0" style={{ borderColor: colors.border }}>
                         <div className="flex items-center justify-between">
                           <h3 className="text-sm font-semibold" style={{ color: colors.text }}>
-                            Alertas de Estoque
+                            Notificações e Mensagens
                           </h3>
                           <button
                             onClick={() => setNotificacoesAberto(false)}
@@ -1116,11 +1169,91 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                             <div className="absolute bottom-0 left-0 right-0 h-0.5 " style={{ backgroundColor: colors.secondary }} />
                           )}
                         </button>
+                        <button
+                          onClick={() => setAbaAtiva("mensagens")}
+                          className="flex-1 py-2 px-3 text-xs font-medium transition-all hover:scale-105 relative"
+                          style={{
+                            color: abaAtiva === "mensagens" ? colors.text : colors.textSecondary,
+                          }}>
+                          Mensagens ({totalMensagensNaoLidas})
+                          {abaAtiva === "mensagens" && (
+                            <div className="absolute bottom-0 left-0 right-0 h-0.5 " style={{ backgroundColor: colors.secondary }} />
+                          )}
+                        </button>
                       </div>
 
                       {/* Content */}
                       <div className="flex-1 min-h-0 overflow-y-auto">
-                        {loadingNotificacoes ? (
+                        {abaAtiva === "mensagens" ? (
+                          loadingMensagens ? (
+                            <div className="flex items-center justify-center py-6">
+                              <Loader2 className="w-4 h-4 animate-spin" style={{ color: colors.primary }} />
+                            </div>
+                          ) : mensagensEmpresa.length > 0 ? (
+                            <div style={{ borderColor: colors.border }} className="divide-y">
+                              {mensagensEmpresa.map((mensagem, idx) => (
+                                <div
+                                  key={mensagem.id}
+                                  className="p-3 transition-all duration-200 hover:translate-x-1"
+                                  style={{
+                                    animation: `fadeIn 0.2s ease-out ${idx * 0.03}s forwards`,
+                                  }}>
+                                  <div className="flex items-start gap-2">
+                                    <div
+                                      className="mt-0.5 rounded p-1.5"
+                                      style={{ backgroundColor: mensagem.lida ? colors.hover : colors.primary }}>
+                                      <MessageSquare size={14} className="text-white" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <p className="text-xs font-medium truncate" style={{ color: colors.text }}>
+                                          {mensagem.remetente_nome || "Landlord"}
+                                        </p>
+                                        {!mensagem.lida ? (
+                                          <span
+                                            className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                                            style={{ backgroundColor: `${colors.primary}18`, color: colors.primary }}>
+                                            Nova
+                                          </span>
+                                        ) : (
+                                          <span
+                                            className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+                                            style={{ backgroundColor: `${colors.success}18`, color: colors.success }}>
+                                            Lida
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="text-xs mt-1 leading-5" style={{ color: colors.textSecondary }}>
+                                        {mensagem.mensagem}
+                                      </p>
+                                      <div className="mt-2 flex items-center justify-between gap-2">
+                                        <p className="text-[10px]" style={{ color: colors.textSecondary }}>
+                                          {mensagem.created_at
+                                            ? new Date(mensagem.created_at).toLocaleString("pt-PT")
+                                            : "Sem data"}
+                                        </p>
+                                        {!mensagem.lida && (
+                                          <button
+                                            onClick={() => marcarMensagemComoLida(mensagem.id)}
+                                            className="text-[10px] font-medium transition-all hover:scale-105"
+                                            style={{ color: colors.primary }}>
+                                            Marcar lida
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="py-8 text-center">
+                              <p className="text-xs" style={{ color: colors.textSecondary }}>
+                                Sem mensagens do landlord
+                              </p>
+                            </div>
+                          )
+                        ) : loadingNotificacoes ? (
                           <div className="flex items-center justify-center py-6">
                             <Loader2 className="w-4 h-4 animate-spin" style={{ color: colors.primary }} />
                           </div>
@@ -1177,7 +1310,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                         ) : (
                           <div className="py-8 text-center">
                             <p className="text-xs" style={{ color: colors.textSecondary }}>
-                              {loadingNotificacoes ? "Carregando..." : "Sem alertas"}
+                              Sem alertas
                             </p>
                           </div>
                         )}
@@ -1186,11 +1319,17 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                       {/* Footer */}
                       <div className="p-2 border-t text-center flex-shrink-0" style={{ borderColor: colors.border }}>
                         <button
-                          onClick={() => buscarNotificacoesEstoque(true)}
-                          disabled={loadingNotificacoes}
+                          onClick={() => {
+                            if (abaAtiva === "mensagens") {
+                              void buscarMensagensEmpresa(true);
+                            } else {
+                              void buscarNotificacoesEstoque(true);
+                            }
+                          }}
+                          disabled={loadingNotificacoes || loadingMensagens}
                           className="text-xs font-medium transition-all hover:scale-105 disabled:opacity-50 px-2 py-1"
                           style={{ color: colors.primary }}>
-                          {loadingNotificacoes ? "Atualizando..." : "Atualizar"}
+                          {loadingNotificacoes || loadingMensagens ? "Atualizando..." : "Atualizar"}
                         </button>
                       </div>
                     </div>

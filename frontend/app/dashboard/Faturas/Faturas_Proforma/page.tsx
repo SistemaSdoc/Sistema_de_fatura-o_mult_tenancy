@@ -27,6 +27,7 @@ import { useAuth, getIncompleteEmpresaFields, formatIncompleteFields } from "@/c
 import { useThemeColors } from "@/context/ThemeContext";
 import { emitirDocumentoFiscal, Produto, produtoService, CriarDocumentoFiscalPayload, isServico, formatarPreco } from "@/services/vendas";
 import { ModalDadosIncompletos } from "../../../components/ModalDadosIncompletos";
+import { ToastNotification } from "@/components/ToastNotification";
 
 // Importacao do servico de clientes
 import { clienteService, formatarNIF, type Cliente } from "@/services/clientes";
@@ -68,75 +69,6 @@ interface ThemeColors {
   hover: string;
 }
 
-// --- Componente de Notificacao Toast ---
-interface ToastNotificationProps {
-  message: string;
-  type: "success" | "error" | "warning" | "info";
-  onClose: () => void;
-  colors: ThemeColors;
-}
-
-const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, onClose, colors }) => {
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      onClose();
-    }, 5000);
-
-    return () => clearTimeout(timer);
-  }, [onClose]);
-
-  const getIcon = () => {
-    switch (type) {
-      case "success":
-        return <CheckCircle2 size={24} style={{ color: colors.success }} />;
-      case "error":
-        return <AlertTriangle size={24} style={{ color: colors.danger }} />;
-      case "warning":
-        return <AlertTriangle size={24} style={{ color: colors.warning }} />;
-      case "info":
-        return <CheckCircle2 size={24} style={{ color: colors.primary }} />;
-      default:
-        return <CheckCircle2 size={24} style={{ color: colors.success }} />;
-    }
-  };
-
-  const getBorderColor = () => {
-    switch (type) {
-      case "success":
-        return colors.success;
-      case "error":
-        return colors.danger;
-      case "warning":
-        return colors.warning;
-      case "info":
-        return colors.primary;
-      default:
-        return colors.success;
-    }
-  };
-
-  return (
-    <div
-      className="fixed top-6 right-6 z-50 max-w-md animate-slide-in-right"
-      style={{
-        backgroundColor: colors.card,
-        borderLeft: `4px solid ${getBorderColor()}`,
-        boxShadow: "0 10px 40px rgba(0,0,0,0.15)",
-      }}>
-      <div className="flex items-center gap-4 p-4">
-        <div className="flex-shrink-0">{getIcon()}</div>
-        <div className="flex-1">
-          <p className="text-sm font-medium" style={{ color: colors.text }}>
-            {message}
-          </p>
-        </div>
-        <button onClick={onClose} className="flex-shrink-0 transition-opacity hover:opacity-70" style={{ color: colors.textSecondary }}>
-          <X size={18} />
-        </button>
-      </div>
-    </div>
-  );
-};
 
 /* Linha fiscal */
 function LinhaFiscal({

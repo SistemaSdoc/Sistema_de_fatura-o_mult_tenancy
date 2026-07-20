@@ -70,6 +70,9 @@ Route::prefix('landlord')->group(function () {
         Route::put('/perfil', [LandlordUserController::class, 'atualizarPerfil']);
         Route::put('/perfil/senha', [LandlordUserController::class, 'alterarSenhaPropria']);
 
+        Route::prefix('auditoria')->group(function () {
+    Route::get('/logs', [AuditoriaController::class, 'indexLandlord'])->name('landlord.auditoria.logs');
+});
         // ✅ prefix sem duplicar "landlord"
 Route::prefix('usuarios')->group(function () {
     Route::get('/', [LandlordUserController::class, 'index']);
@@ -114,6 +117,8 @@ Route::prefix('usuarios')->group(function () {
         Route::get('/empresas', [EmpresaController::class, 'index']);
         Route::post('/empresas', [EmpresaController::class, 'store']);
         Route::get('/empresas/{empresa}', [EmpresaController::class, 'show']);
+        Route::get('/empresas/{empresa}/mensagens', [EmpresaController::class, 'mensagens']);
+        Route::post('/empresas/{empresa}/mensagens', [EmpresaController::class, 'enviarMensagem']);
         Route::put('/empresas/{empresa}', [EmpresaController::class, 'update']);
         Route::patch('/empresas/{empresa}/toggle-status', [EmpresaController::class, 'toggleStatusLandlord']);
         Route::post('/minha-empresa', [EmpresaController::class, 'storeParaLandlordAutenticado']);
@@ -181,6 +186,9 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
         Route::post('/logo', [EmpresaController::class, 'uploadLogo']);
         Route::get('/configuracoes-fiscais', [EmpresaController::class, 'configuracoesFiscais']);
         Route::put('/configuracoes-fiscais', [EmpresaController::class, 'atualizarConfiguracoesFiscais']);
+        Route::get('/mensagens', [EmpresaController::class, 'mensagensEmpresa']);
+        Route::patch('/mensagens/{mensagem}/marcar-lida', [EmpresaController::class, 'marcarMensagemComoLida']);
+        Route::delete('/mensagens/{mensagem}', [EmpresaController::class, 'eliminarMensagem']);
     });
 
     // ============================================================

@@ -2,19 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useLandlordAuth } from "@/context/LandlordAuthContext";
-import { useThemeColors } from "@/context/ThemeContext";
+import { useThemeColors } from "@/context/ThemeContext"
 import { analyticsApi } from "@/services/axios";
-import {
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  RefreshCw,
-  AlertCircle,
-  Award,
-  PieChart as PieChartIcon,
-  BarChart3,
-  Coins,
-} from "lucide-react";
+import { pagamentoService } from "@/services/pagamentosplanos";
+import { DollarSign, RefreshCw, AlertCircle, Award, BarChart3, Coins, } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -93,7 +84,7 @@ export default function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
+  const [pendingCount, setPendingCount] = useState<number | null>(null);
   const fetchAnalytics = async () => {
     setLoading(true);
     try {
@@ -107,8 +98,20 @@ export default function AnalyticsPage() {
     }
   };
 
+  const fetchPendingCount = async () => {
+    try {
+      const response = await pagamentoService.listar({ status: "em_analise" });
+      setPendingCount(response.pagamentos?.length || 0);
+    } catch {
+      setPendingCount(0); // evita ficar em "..." para sempre em caso de erro
+    }
+  };
+
   useEffect(() => {
-    if (user) fetchAnalytics();
+    if (user) {
+      fetchAnalytics();
+      fetchPendingCount();
+    }
   }, [user]);
 
   const formatarMoeda = (valor: number) =>
@@ -175,7 +178,7 @@ export default function AnalyticsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight" style={{ color: colors.secondary }}>
-            Painel de Desempenho
+            Dashboard
           </h1>
           <p className="text-xs sm:text-sm lg:text-base mt-1" style={{ color: colors.textSecondary }}>
             Visão geral do desempenho da plataforma
@@ -302,7 +305,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Segunda linha de cards operacionais (com tooltips) */}
-      <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
+      <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
         <div
           className=" p-3 sm:p-4 cursor-help"
           style={{ backgroundColor: colors.card, border: `1px solid ${colors.border}` }}
@@ -314,6 +317,7 @@ export default function AnalyticsPage() {
             {data.subscricoes_ativas}
           </p>
         </div>
+
         <div
           className=" p-3 sm:p-4 cursor-help"
           style={{ backgroundColor: colors.card, border: `1px solid ${colors.border}` }}
@@ -336,6 +340,20 @@ export default function AnalyticsPage() {
           <p className="text-lg sm:text-xl font-bold mt-0.5" style={{ color: colors.secondary }}>
             {formatarPercentagem(data.churn_rate)}
           </p>
+        </div>
+
+        <div
+          className=" p-3 sm:p-4 cursor-help xs:col-span-2 lg:col-span-1"
+          style={{ backgroundColor: colors.card, border: `1px solid ${colors.border}` }}
+          title="Número de pagamentos pendentes de aprovação (em análise) ">
+          <div>
+            <p className="text-[11px] sm:text-xs font-medium truncate" style={{ color: colors.textSecondary }}>
+              Pendentes
+            </p>
+            <p className="text-lg sm:text-xl font-bold mt-0.5" style={{ color: colors.secondary }}>
+              {pendingCount !== null ? pendingCount : "..."}
+            </p>
+          </div>
         </div>
       </div>
 

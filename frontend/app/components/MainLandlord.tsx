@@ -14,6 +14,7 @@ import {
   Sun,
   Moon,
   Menu,
+  Building,
   AlertCircle,
   User,
   CreditCard,
@@ -189,15 +190,25 @@ export default function MainLandlord({ children }: MainLandlordProps) {
   };
 
   const isActive = (path: string) => pathname === path;
-  const isParentActive = (item: MenuItem) => {
-    if (pathname === item.path && !item.isGroup) return true;
-    return item.links.some((link) => pathname === link.path) || pathname?.startsWith(item.path + "/");
-  };
+const isParentActive = (item: MenuItem) => {
+  // Rota exata sempre conta
+  if (pathname === item.path) return true;
+
+  // Se tiver sublinks, verifica se algum está ativo
+  if (item.links.some((link) => pathname === link.path)) return true;
+
+  // Só aplica startsWith a itens que são grupos (têm sublinks)
+  if (item.isGroup) {
+    return pathname?.startsWith(item.path + "/") ?? false;
+  }
+
+  return false;
+};
 
   // ==================== MENU (atualizado com as novas páginas) ====================
   const menuItems: MenuItem[] = [
-    { label: "Dashboard", icon: Home, path: "/landlord/dashboard/empresas", links: [], isGroup: false },
-    { label: "Analytics", icon: BarChart3, path: "/landlord/dashboard/analytics", links: [], isGroup: false },
+    { label: "Dashboard", icon: Home, path: "/landlord/dashboard", links: [], isGroup: false },
+    { label: "Empresas", icon: Building, path: "/landlord/dashboard/empresas", links: [], isGroup: false },
     {
       label: "Pagamentos",
       icon: CreditCard,
@@ -224,7 +235,7 @@ export default function MainLandlord({ children }: MainLandlordProps) {
 
   if (!user) return null;
 
-  const currentPageLabel = menuItems.find((item) => isParentActive(item))?.label || "Dashboard";
+  const currentPageLabel = menuItems.find((item) => isParentActive(item))?.label || "/";
   const itemComSubmenu = menuItems.find((item) => item.label === submenuOpen);
 
   return (

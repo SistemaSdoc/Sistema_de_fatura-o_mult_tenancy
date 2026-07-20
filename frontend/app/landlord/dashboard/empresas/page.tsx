@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useLandlordAuth } from "@/context/LandlordAuthContext";
 import { api } from "@/services/axios";
@@ -18,11 +18,12 @@ import {
     Download,
     ChevronLeft,
     ChevronRight,
+    Eye,
     Mail,
     Phone,
     Globe,
     Hash,
-    ClipboardCheck,
+
 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,7 +38,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { pagamentoService } from '@/services/pagamentosplanos';
 
 interface Empresa {
     id: string;
@@ -59,7 +59,6 @@ export default function EmpresasDashboard() {
     const colors = useThemeColors();
 
     const [empresas, setEmpresas] = useState<Empresa[]>([]);
-    const [filteredEmpresas, setFilteredEmpresas] = useState<Empresa[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -69,7 +68,7 @@ export default function EmpresasDashboard() {
     const [showStatusDialog, setShowStatusDialog] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(10);
-    const [pendingCount, setPendingCount] = useState<number | null>(null);
+
 
     useEffect(() => {
         if (!authLoading && (!user || user.role !== "super_admin")) {
@@ -77,24 +76,36 @@ export default function EmpresasDashboard() {
         }
     }, [user, authLoading, router]);
 
-    const fetchEmpresas = async () => {
+    const getErrorMessage = (error: unknown, fallback: string) => {
+        if (typeof error === "object" && error !== null && "response" in error) {
+            const response = (error as { response?: { data?: { message?: string } } }).response;
+            return response?.data?.message || fallback;
+        }
+
+        if (error instanceof Error) {
+            return error.message || fallback;
+        }
+
+        return fallback;
+    };
+
+    const fetchEmpresas = useCallback(async () => {
         setLoading(true);
         try {
             const response = await api.get("/api/landlord/empresas");
             const data = response.data.data || response.data;
             setEmpresas(data);
-            setFilteredEmpresas(data);
             setError("");
-        } catch (err: any) {
-            const errorMsg = err.response?.data?.message || "Erro ao carregar a lista de empresas";
+        } catch (err: unknown) {
+            const errorMsg = getErrorMessage(err, "Erro ao carregar a lista de empresas");
             setError(errorMsg);
             toast.error(errorMsg);
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
-    const toggleStatus = async (id: string, currentStatus: string) => {
+    const toggleStatus = async (id: string) => {
         setActionLoading(id);
         try {
             const response = await api.patch(`/api/landlord/empresas/${id}/toggle-status`);
@@ -112,8 +123,8 @@ export default function EmpresasDashboard() {
 
             setShowStatusDialog(false);
             setSelectedEmpresa(null);
-        } catch (err: any) {
-            toast.error(err.response?.data?.message || "Erro ao alterar status da empresa");
+        } catch (err: unknown) {
+            toast.error(getErrorMessage(err, "Erro ao alterar status da empresa"));
         } finally {
             setActionLoading(null);
         }
@@ -124,21 +135,17 @@ export default function EmpresasDashboard() {
         setShowStatusDialog(true);
     };
 
-    const fetchPendingCount = async () => {
-        try {
-            const response = await pagamentoService.listar({ status: 'em_analise' });
-            setPendingCount(response.pagamentos?.length || 0);
-        } catch {
-            // Silêncio – não quebra a página
-        }
-    };
-
     useEffect(() => {
-        if (user) fetchEmpresas();
-        fetchPendingCount();
-    }, [user]);
+        if (!user) return;
 
-    useEffect(() => {
+        const timer = window.setTimeout(() => {
+            void fetchEmpresas();
+        }, 0);
+
+        return () => window.clearTimeout(timer);
+    }, [user, fetchEmpresas]);
+
+    const filteredEmpresas = useMemo(() => {
         let filtered = [...empresas];
 
         if (searchTerm) {
@@ -154,12 +161,12 @@ export default function EmpresasDashboard() {
             filtered = filtered.filter((emp) => emp.status === statusFilter);
         }
 
-        setFilteredEmpresas(filtered);
-        setCurrentPage(1);
+        return filtered;
     }, [searchTerm, statusFilter, empresas]);
 
-    const totalPages = Math.ceil(filteredEmpresas.length / itemsPerPage);
-    const startIndex = (currentPage - 1) * itemsPerPage;
+    const totalPages = Math.max(1, Math.ceil(filteredEmpresas.length / itemsPerPage));
+    const safeCurrentPage = Math.min(currentPage, totalPages);
+    const startIndex = (safeCurrentPage - 1) * itemsPerPage;
     const paginatedEmpresas = filteredEmpresas.slice(startIndex, startIndex + itemsPerPage);
 
     const totalEmpresas = empresas.length;
@@ -243,33 +250,8 @@ export default function EmpresasDashboard() {
             </div>
 
             {/* Cards de métricas — unificados num único grid de 4 colunas */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-                {/* Pagamentos Pendentes */}
-                <div
-                    className="relative transition-all duration-300 hover:scale-[1.02] hover:shadow-xl overflow-hidden cursor-pointer"
-                    style={{ backgroundColor: colors.card }}
-                    onClick={() => router.push('/landlord/pagamentos/pendentes')}
-                >
-                    <div
-                        className="absolute left-0 top-0 bottom-0 w-1"
-                        style={{ backgroundColor: colors.secondary }}
-                    />
-                    <div className="p-4 sm:p-5">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium" style={{ color: colors.textSecondary }}>
-                                    Pendentes
-                                </p>
-                                <p className="text-3xl font-bold mt-1" style={{ color: colors.secondary}}>
-                                    {pendingCount !== null ? pendingCount : '...'}
-                                </p>
-                            </div>
-                            <div className="p-3 rounded-full" style={{ backgroundColor: `${colors.secondary}10`  }}>
-                                <ClipboardCheck size={24} style={{ color: colors.secondary  }} />
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+
 
                 {/* Total de Empresas */}
                 <div
@@ -374,7 +356,7 @@ export default function EmpresasDashboard() {
                                 />
                                 <select
                                     value={statusFilter}
-                                    onChange={(e) => setStatusFilter(e.target.value as any)}
+                                    onChange={(e) => setStatusFilter(e.target.value as "todos" | "ativo" | "suspenso")}
                                     className="w-full sm:w-auto pl-9 pr-3 py-2 text-sm border focus:outline-none"
                                     style={{
                                         backgroundColor: colors.background,
@@ -531,11 +513,23 @@ export default function EmpresasDashboard() {
                                             <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                                                 <Button
                                                     size="sm"
+                                                    variant="outline"
+                                                    onClick={() => router.push(`/landlord/dashboard/empresas/${emp.id}`)}
+                                                    style={{
+                                                        color: colors.blue,
+                                                    }}
+                                                    title="Ver detalhes"
+                                                >
+                                                    <Eye size={14} className="mr-1" />
+                                                    
+                                                </Button>
+                                                <Button
+                                                    size="sm"
                                                     onClick={() => confirmStatusChange(emp)}
-                                                    className="rounded-lg transition-all duration-200 hover:scale-105 cursor-pointer"
+                                                    className="transition-all duration-200 hover:scale-105 cursor-pointer"
                                                     style={{
                                                         backgroundColor: emp.status === "ativo" ? colors.secondary : colors.secondary,
-                                                        color: "white",
+                                                        color: colors.blue,
                                                     }}
                                                     disabled={actionLoading === emp.id}
                                                 >
@@ -544,7 +538,7 @@ export default function EmpresasDashboard() {
                                                     ) : (
                                                         <>
                                                             <Power size={14} className="mr-1" />
-                                                            {emp.status === "ativo" ? "Suspender" : "Ativar"}
+                                                            {emp.status === "ativo" }
                                                         </>
                                                     )}
                                                 </Button>
@@ -661,11 +655,11 @@ export default function EmpresasDashboard() {
                                 {filteredEmpresas.length}
                             </div>
                             <div className="flex items-center gap-3">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                                    disabled={currentPage === 1}
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                                        disabled={safeCurrentPage === 1}
                                     className="rounded-lg transition-all duration-200 hover:scale-105 cursor-pointer"
                                     style={{ borderColor: colors.border, color: colors.text, backgroundColor: colors.card }}
                                 >
@@ -676,19 +670,19 @@ export default function EmpresasDashboard() {
                                     {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                                         let pageNum;
                                         if (totalPages <= 5) pageNum = i + 1;
-                                        else if (currentPage <= 3) pageNum = i + 1;
-                                        else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
-                                        else pageNum = currentPage - 2 + i;
+                                        else if (safeCurrentPage <= 3) pageNum = i + 1;
+                                        else if (safeCurrentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                                        else pageNum = safeCurrentPage - 2 + i;
 
                                         return (
                                             <Button
                                                 key={pageNum}
                                                 size="sm"
-                                                variant={currentPage === pageNum ? "default" : "outline"}
+                                                variant={safeCurrentPage === pageNum ? "default" : "outline"}
                                                 onClick={() => setCurrentPage(pageNum)}
                                                 className="rounded-lg transition-all duration-200 cursor-pointer"
                                                 style={
-                                                    currentPage === pageNum
+                                                    safeCurrentPage === pageNum
                                                         ? { backgroundColor: colors.secondary, color: "#fff" }
                                                         : { borderColor: colors.border, color: colors.text, backgroundColor: colors.card }
                                                 }
@@ -699,13 +693,13 @@ export default function EmpresasDashboard() {
                                     })}
                                 </div>
                                 <span className="sm:hidden text-sm font-medium" style={{ color: colors.text }}>
-                                    {currentPage} / {totalPages}
+                                    {safeCurrentPage} / {totalPages}
                                 </span>
                                 <Button
                                     variant="outline"
                                     size="sm"
                                     onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                                    disabled={currentPage === totalPages}
+                                    disabled={safeCurrentPage === totalPages}
                                     className="rounded-lg transition-all duration-200 hover:scale-105 cursor-pointer"
                                     style={{ borderColor: colors.border, color: colors.text, backgroundColor: colors.card }}
                                 >
@@ -762,7 +756,7 @@ export default function EmpresasDashboard() {
                             Cancelar
                         </Button>
                         <Button
-                            onClick={() => selectedEmpresa && toggleStatus(selectedEmpresa.id, selectedEmpresa.status)}
+                            onClick={() => selectedEmpresa && toggleStatus(selectedEmpresa.id)}
                             className="rounded-lg transition-all duration-200 hover:scale-105 w-full sm:w-auto"
                             style={{
                                 backgroundColor: selectedEmpresa?.status === "ativo" ? colors.secondary : colors.secondary,

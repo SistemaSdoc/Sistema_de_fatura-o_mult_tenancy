@@ -15,15 +15,12 @@ import {
   User,
   Lock,
   ArrowLeft,
-  AlertCircle,
-  CheckCircle,
   Loader2,
   ChevronRight,
   Phone,
   MapPin,
   Upload,
   Banknote,
-  X,
   ChevronLeft,
   ChevronDown,
   UserPlus,
@@ -35,13 +32,14 @@ import {
   Server,
   Users,
   Calendar,
+  X,
 } from "lucide-react";
+import { ToastNotification } from "@/components/ToastNotification";
 import { planosService } from "@/services/planos";
 import { subscricaoService } from "@/services/subscricoes";
 
 // --- Tipagem local do tema ---
 interface ThemeColors {
-  blue: Color | undefined;
   primary: string;
   secondary: string;
   background: string;
@@ -52,6 +50,9 @@ interface ThemeColors {
   danger: string;
   hover?: string;
   success: string;
+  blue?: string;
+  warning: string;
+  info?: string;
 }
 
 // --- Tipagem do formulário ---
@@ -185,75 +186,7 @@ const InputField: React.FC<InputFieldProps> = ({
   );
 };
 
-// --- Componente de Notificação Toast ---
-interface ToastNotificationProps {
-  message: string;
-  type: "success" | "error" | "warning" | "info";
-  onClose: () => void;
-  colors: ThemeColors;
-}
 
-const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, onClose, colors }) => {
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      onClose();
-    }, 5000);
-
-    return () => clearTimeout(timer);
-  }, [onClose]);
-
-  const getIcon = () => {
-    switch (type) {
-      case "success":
-        return <CheckCircle size={22} style={{ color: colors.success }} />;
-      case "error":
-        return <AlertCircle size={22} style={{ color: colors.danger }} />;
-      case "warning":
-        return <AlertCircle size={22} style={{ color: colors.secondary }} />;
-      case "info":
-        return <CheckCircle size={22} style={{ color: colors.primary }} />;
-      default:
-        return <CheckCircle size={22} style={{ color: colors.success }} />;
-    }
-  };
-
-  const getBorderColor = () => {
-    switch (type) {
-      case "success":
-        return colors.success;
-      case "error":
-        return colors.danger;
-      case "warning":
-        return colors.secondary;
-      case "info":
-        return colors.primary;
-      default:
-        return colors.success;
-    }
-  };
-
-  return (
-    <div
-      className="fixed top-4 left-4 right-4 sm:top-6 sm:right-6 sm:left-auto z-50 w-auto sm:w-full sm:max-w-md animate-slide-in-right"
-      style={{
-        backgroundColor: colors.card,
-        borderLeft: `4px solid ${getBorderColor()}`,
-        boxShadow: "0 10px 40px rgba(0,0,0,0.15)",
-      }}>
-      <div className="flex items-center gap-3 p-3 sm:gap-4 sm:p-4">
-        <div className="flex-shrink-0">{getIcon()}</div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium break-words" style={{ color: colors.text }}>
-            {message}
-          </p>
-        </div>
-        <button onClick={onClose} className="flex-shrink-0 transition-opacity hover:opacity-70" style={{ color: colors.textSecondary }}>
-          <X size={18} />
-        </button>
-      </div>
-    </div>
-  );
-};
 
 function RegisterCompanyPageContent() {
   const router = useRouter();

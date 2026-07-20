@@ -570,41 +570,53 @@ public function listarSharedUsers()
         return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
     }
 
-    // 1. Buscar utilizadores da base shared
-    $users = DB::connection('shared')
-        ->table('users')
-        ->select('id', 'name', 'email', 'tenant_id', 'role', 'created_at')
-        ->get();
+    try {
+        // 1. Buscar utilizadores da base shared
+        $users = DB::connection('shared')
+            ->table('users')
+            ->select('id', 'name', 'email', 'tenant_id', 'role', 'created_at')
+            ->get();
 
-    // 2. Buscar empresas da base landlord (apenas id e nome)
-    $empresas = DB::connection('landlord')
-        ->table('empresas')
-        ->select('id', 'nome')
-        ->get()
-        ->keyBy('id'); // transforma em array associativo [id => empresa]
+        // 2. Buscar empresas da base landlord (apenas id e nome)
+        $empresas = DB::connection('landlord')
+            ->table('empresas')
+            ->select('id', 'nome')
+            ->get()
+            ->keyBy('id'); // transforma em array associativo [id => empresa]
 
-    // 3. Combinar: adicionar o nome da empresa a cada utilizador
-    $users->transform(function ($user) use ($empresas) {
-        $empresa = $empresas->get($user->tenant_id);
-        $user->empresa_nome = $empresa ? $empresa->nome : null;
-        return $user;
-    });
+        // 3. Combinar: adicionar o nome da empresa a cada utilizador
+        $users->transform(function ($user) use ($empresas) {
+            $empresa = $empresas->get($user->tenant_id);
+            $user->empresa_nome = $empresa ? $empresa->nome : null;
+            return $user;
+        });
 
-    // (Opcional) Mapear role para rótulo legível
-    $roleLabels = [
-        'admin' => 'empresa_admin',
-        'contabilista'     => 'contabilista',
-        'operador'         => 'Operador',
-    ];
-    $users->transform(function ($user) use ($roleLabels) {
-        $user->role_label = $roleLabels[$user->role] ?? $user->role;
-        return $user;
-    });
+        // (Opcional) Mapear role para rótulo legível
+        $roleLabels = [
+            'admin' => 'empresa_admin',
+            'contabilista' => 'contabilista',
+            'operador' => 'Operador',
+        ];
+        $users->transform(function ($user) use ($roleLabels) {
+            $user->role_label = $roleLabels[$user->role] ?? $user->role;
+            return $user;
+        });
 
-    return response()->json([
-        'success' => true,
-        'data' => $users
-    ]);
+        return response()->json([
+            'success' => true,
+            'data' => $users
+        ]);
+    } catch (\Throwable $e) {
+        Log::warning('listarSharedUsers: shared indisponível, devolvendo lista vazia', [
+            'error' => $e->getMessage(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'data' => [],
+            'warning' => 'Base de dados shared indisponível neste ambiente.',
+        ]);
+    }
 }
 
 }

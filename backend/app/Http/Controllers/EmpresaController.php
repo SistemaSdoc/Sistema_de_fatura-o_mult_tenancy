@@ -3,9 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Models\Empresa;
+use App\Models\Shared\Cliente as SharedCliente;
+use App\Models\Shared\DocumentoFiscal as SharedDocumentoFiscal;
+use App\Models\Shared\EmpresaMensagem;
+use App\Models\Shared\Pagamento as SharedPagamento;
+use App\Models\Shared\User as SharedUser;
 use App\Models\Plano;
 use App\Models\Subscricao;
-use App\Models\Shared\User;
+use App\Models\Tenant\Cliente as TenantCliente;
+use App\Models\Tenant\DocumentoFiscal as TenantDocumentoFiscal;
+use App\Models\Tenant\Pagamento as TenantPagamento;
+use App\Models\Tenant\User as TenantUser;
 use App\Services\AuditLogger;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Http\Request;
@@ -14,6 +22,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Schema;
 
 class EmpresaController extends Controller
 { 
@@ -488,10 +497,176 @@ public function store(Request $request)
     // ============================================================
     public function show(Empresa $empresa)
     {
+        $detalhes = $this->montarDetalhesEmpresa($empresa);
+
         return response()->json([
             'success' => true,
-            'data'    => $empresa
+            'data'    => array_merge($empresa->toArray(), [
+                'detalhes' => $detalhes,
+            ]),
         ], 200);
+    }
+
+    public function enviarMensagem(Request $request, Empresa $empresa)
+    {
+        $validated = $request->validate([
+            'mensagem' => 'required|string|min:2|max:2000',
+        ]);
+
+        $landlordUser = auth('landlord_api')->user() ?? auth('landlord')->user();
+
+        $mensagem = EmpresaMensagem::on('shared')->create([
+            'empresa_id' => $empresa->id,
+            'remetente_id' => $landlordUser?->id,
+            'remetente_tipo' => 'landlord',
+            'remetente_nome' => $landlordUser?->name ?? 'Landlord',
+            'remetente_email' => $landlordUser?->email,
+            'mensagem' => $validated['mensagem'],
+            'lida' => false,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Mensagem enviada com sucesso.',
+            'data' => $mensagem,
+        ], 201);
+    }
+
+    private function montarDetalhesEmpresa(Empresa $empresa): array
+    {
+        $isSingular = ($empresa->modo ?? 'colectivo') === 'singular';
+
+        if ($isSingular && ! $empresa->bancoExiste()) {
+            return [
+                'resumo' => [
+                    'total_documentos' => 0,
+                    'total_faturacao' => 0,
+                    'total_recebido' => 0,
+                    'saldo_pendente' => 0,
+                    'total_clientes' => 0,
+                    'total_utilizadores' => 0,
+                    'documentos_por_tipo' => [],
+                ],
+                'documentos' => [
+                    'total' => 0,
+                    'tipos' => ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC', 'FRt'],
+                    'recentes' => [],
+                ],
+                'mensagens' => [],
+                'alerta' => 'A base de dados tenant desta empresa não foi encontrada.',
+            ];
+        }
+
+        if ($isSingular) {
+            $empresa->conectar();
+
+            $documentosQuery = TenantDocumentoFiscal::query();
+            $clientesQuery = TenantCliente::query();
+            $usuariosQuery = TenantUser::query();
+            $pagamentosQuery = TenantPagamento::query();
+        } else {
+            $documentosQuery = SharedDocumentoFiscal::query()->where('tenant_id', $empresa->id);
+            $clientesQuery = SharedCliente::query()->where('tenant_id', $empresa->id);
+            $usuariosQuery = SharedUser::query()->where('tenant_id', $empresa->id);
+            $pagamentosQuery = SharedPagamento::query()->where('tenant_id', $empresa->id);
+        }
+
+        $tiposFaturacao = ['FT', 'FR', 'RC'];
+        $tiposTodos = ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC', 'FRt'];
+
+        $documentosBase = clone $documentosQuery;
+        $documentosFaturacao = (clone $documentosQuery)
+            ->whereIn('tipo_documento', $tiposFaturacao)
+            ->where('estado', '!=', 'cancelado');
+
+        $totalDocumentos = (clone $documentosBase)->count();
+        $totalFaturacao = (float) $documentosFaturacao->sum('total_liquido');
+        $totalRecebido = $this->calcularTotalRecebido($empresa, $isSingular);
+        $totalClientes = (clone $clientesQuery)->count();
+        $totalUsuarios = (clone $usuariosQuery)->count();
+
+        $documentosPorTipo = (clone $documentosBase)
+            ->select('tipo_documento', DB::raw('COUNT(*) as total'))
+            ->groupBy('tipo_documento')
+            ->orderBy('tipo_documento')
+            ->get()
+            ->map(fn ($item) => [
+                'tipo' => $item->tipo_documento,
+                'total' => (int) $item->total,
+            ])
+            ->values();
+
+        $documentosRecentes = (clone $documentosBase)
+            ->orderByDesc('data_emissao')
+            ->orderByDesc('created_at')
+            ->limit(10)
+            ->get()
+            ->map(function ($documento) {
+                return [
+                    'id' => $documento->id,
+                    'numero_documento' => $documento->numero_documento,
+                    'tipo_documento' => $documento->tipo_documento,
+                    'estado' => $documento->estado,
+                    'total_liquido' => (float) $documento->total_liquido,
+                    'data_emissao' => optional($documento->data_emissao)->toDateString(),
+                    'hora_emissao' => $documento->hora_emissao,
+                    'cliente_nome' => $documento->cliente_nome,
+                    'cliente_nif' => $documento->cliente_nif,
+                ];
+            });
+
+        $mensagens = EmpresaMensagem::on('shared')
+            ->where('empresa_id', $empresa->id)
+            ->orderByDesc('created_at')
+            ->limit(20)
+            ->get()
+            ->map(function ($mensagem) {
+                return [
+                    'id' => $mensagem->id,
+                    'mensagem' => $mensagem->mensagem,
+                    'remetente_tipo' => $mensagem->remetente_tipo,
+                    'remetente_nome' => $mensagem->remetente_nome,
+                    'remetente_email' => $mensagem->remetente_email,
+                    'lida' => (bool) $mensagem->lida,
+                    'created_at' => optional($mensagem->created_at)?->toIso8601String(),
+                ];
+            });
+
+        return [
+            'resumo' => [
+                'total_documentos' => $totalDocumentos,
+                'total_faturacao' => $totalFaturacao,
+                'total_recebido' => $totalRecebido,
+                'saldo_pendente' => max(0, $totalFaturacao - $totalRecebido),
+                'total_clientes' => $totalClientes,
+                'total_utilizadores' => $totalUsuarios,
+                'documentos_por_tipo' => $documentosPorTipo,
+            ],
+            'documentos' => [
+                'total' => $totalDocumentos,
+                'tipos' => $tiposTodos,
+                'recentes' => $documentosRecentes,
+            ],
+            'mensagens' => $mensagens,
+        ];
+    }
+
+    private function calcularTotalRecebido(Empresa $empresa, bool $isSingular): float
+    {
+        $connection = $isSingular ? 'tenant' : 'shared';
+
+        if (!Schema::connection($connection)->hasTable('documentos_fiscais')) {
+            return 0.0;
+        }
+
+        $query = $isSingular
+            ? TenantDocumentoFiscal::query()
+            : SharedDocumentoFiscal::query()->where('tenant_id', $empresa->id);
+
+        return (float) $query
+            ->whereIn('tipo_documento', ['FR', 'RC'])
+            ->where('estado', 'paga')
+            ->sum('total_liquido');
     }
 
     // ============================================================
@@ -533,6 +708,97 @@ public function store(Request $request)
                 'sujeito_iva' => (bool) $empresa->sujeito_iva,
             ],
         ], 200);
+    }
+
+    public function mensagensEmpresa(Request $request)
+    {
+        $empresa = $request->attributes->get('current_empresa');
+
+        if (!$empresa) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Empresa não identificada.',
+            ], 400);
+        }
+
+        $mensagens = EmpresaMensagem::on('shared')
+            ->where('empresa_id', $empresa->id)
+            ->where('eliminada_pelo_cliente', false)
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(function ($mensagem) {
+                return [
+                    'id' => $mensagem->id,
+                    'mensagem' => $mensagem->mensagem,
+                    'remetente_tipo' => $mensagem->remetente_tipo,
+                    'remetente_nome' => $mensagem->remetente_nome,
+                    'remetente_email' => $mensagem->remetente_email,
+                    'lida' => (bool) $mensagem->lida,
+                    'lida_em' => optional($mensagem->lida_em)?->toIso8601String(),
+                    'created_at' => optional($mensagem->created_at)?->toIso8601String(),
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'mensagens' => $mensagens,
+                'nao_lidas' => $mensagens->where('lida', false)->count(),
+            ],
+        ]);
+    }
+
+    public function marcarMensagemComoLida(Request $request, EmpresaMensagem $mensagem)
+    {
+        $empresa = $request->attributes->get('current_empresa');
+
+        if (!$empresa || $mensagem->empresa_id !== $empresa->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Mensagem não encontrada para esta empresa.',
+            ], 404);
+        }
+
+        if (!$mensagem->lida) {
+            $mensagem->update([
+                'lida' => true,
+                'lida_em' => now(),
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Mensagem marcada como lida.',
+            'data' => $mensagem->fresh(),
+        ]);
+    }
+
+    public function eliminarMensagem(Request $request, EmpresaMensagem $mensagem)
+    {
+        $empresa = $request->attributes->get('current_empresa');
+
+        if (!$empresa || $mensagem->empresa_id !== $empresa->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Mensagem não encontrada para esta empresa.',
+            ], 404);
+        }
+
+        if ($mensagem->remetente_tipo !== 'landlord') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Apenas mensagens enviadas pelo landlord podem ser eliminadas.',
+            ], 403);
+        }
+
+        $mensagem->update([
+            'eliminada_pelo_cliente' => true,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Mensagem eliminada com sucesso.',
+        ]);
     }
 
     public function atualizarConfiguracoesFiscais(Request $request)

@@ -7,7 +7,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/authprovider";
 import { useThemeColors } from "@/context/ThemeContext";
 import { AxiosError } from "axios";
-import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Loader2, UserPlus, X, CheckCircle } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, UserPlus } from "lucide-react";
+import { ToastNotification } from "@/components/ToastNotification";
 import styles from "./login.module.css";
 
 /* ---------------- TYPES ---------------- */
@@ -102,47 +103,7 @@ const InputField: React.FC<InputFieldProps> = ({
   );
 };
 
-/* ---------------- COMPONENTE TOAST ---------------- */
-interface ToastNotificationProps {
-  message: string;
-  type: "success" | "error";
-  onClose: () => void;
-  colors: ThemeColors;
-}
 
-const ToastNotification: React.FC<ToastNotificationProps> = ({ message, type, onClose, colors }) => {
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      onClose();
-    }, 5000);
-
-    return () => clearTimeout(timer);
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed top-3 right-2 left-2 z-50 max-w-[calc(100vw-1rem)] animate-slide-in-right sm:right-6 sm:left-auto sm:max-w-md"
-      style={{
-        backgroundColor: colors.card,
-        borderLeft: `4px solid ${type === "success" ? colors.success : colors.danger}`,
-        boxShadow: "0 10px 40px rgba(0,0,0,0.15)",
-      }}>
-      <div className="flex items-center gap-4 p-4">
-        <div className="shrink-0">
-          {type === "success" ? <CheckCircle size={24} style={{ color: colors.success }} /> : <AlertCircle size={24} style={{ color: colors.danger }} />}
-        </div>
-        <div className="flex-1">
-          <p className="text-sm font-medium" style={{ color: colors.text }}>
-            {message}
-          </p>
-        </div>
-        <button onClick={onClose} className="shrink-0 transition-opacity hover:opacity-70" style={{ color: colors.textSecondary }}>
-          <X size={18} />
-        </button>
-      </div>
-    </div>
-  );
-};
 
 // ============ COMPONENTE INTERNO (usa useSearchParams) ============
 function LoginContent() {
