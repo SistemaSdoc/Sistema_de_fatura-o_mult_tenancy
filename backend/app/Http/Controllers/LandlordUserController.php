@@ -460,110 +460,86 @@ public function alterarSenhaPropria(Request $request)
  */
 public function listarTenantUsers()
 {
- \Log::info('listarTenantUsers: Iniciando consulta', [
- 'user_id' => Auth::guard('landlord_api')->id()
- ]);
+    \Log::info('listarTenantUsers: Iniciando consulta', [
+        'user_id' => Auth::guard('landlord_api')->id()
+    ]);
 
- $user = Auth::guard('landlord_api')->user();
- if (!$user) {
- return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
- }
+    $authUser = Auth::guard('landlord_api')->user();
+    if (!$authUser) {
+        return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+    }
 
- try {
- // Busca todas as empresas ativas (ou todas, conforme necessidade)
- $empresas = Empresa::on('landlord')->where('status', 'ativo')->get();
- $tenantUsers = [];
+    try {
+        $empresas = Empresa::on('landlord')
+            ->where('status', 'ativo')
+            ->where('modo', 'singular')
+            ->get();
 
- foreach ($empresas as $empresa) {
- $modo = $empresa->modo ?? 'colectivo'; // assume colectivo se não tiver
- $database = $empresa->db_name ?? null;
+        $tenantUsers = [];
 
- \Log::debug('Processando empresa', [
- 'empresa_id' => $empresa->id,
- 'empresa_nome' => $empresa->nome,
- 'modo' => $modo,
- 'database' => $database
- ]);
+        foreach ($empresas as $empresa) {
+            $database = $empresa->db_name;
 
- if ($modo === 'singular' && $database) {
- // -------------------------------
- // MODO SINGULAR: buscar na base tenant dedicada
- // -------------------------------
- try {
- config(['database.connections.tenant.database' => $database]);
- $users = DB::connection('tenant')->table('users')->get();
+            if (empty($database)) {
+                \Log::warning("Empresa {$empresa->nome} sem db_name definido");
+                continue;
+            }
 
- foreach ($users as $user) {
- $user->empresa_nome = $empresa->nome;
- $user->role = $user->role ?? 'user'; // fallback
- $tenantUsers[] = $user;
- }
+            try {
+                // 1. Purga a conexão existente
+                DB::purge('tenant');
 
- \Log::info('Usuários encontrados (singular)', [
- 'empresa' => $empresa->nome,
- 'quantidade' => $users->count()
- ]);
+                // 2. Altera a configuração com o novo database
+                config(['database.connections.tenant.database' => $database]);
 
- } catch (\Exception $e) {
- \Log::error('Erro ao buscar usuários (singular)', [
- 'empresa' => $empresa->nome,
- 'error' => $e->getMessage()
- ]);
- }
+                // 3. Reconecta
+                DB::reconnect('tenant');
 
- } elseif ($modo === 'colectivo') {
- // -------------------------------
- // MODO COLECTIVO: buscar na base shared
- // -------------------------------
- try {
- $users = DB::connection('shared')
- ->table('users')
-->where('tenant_id', $empresa->id) // ajuste o nome da coluna (pode ser 'tenant_id')
- ->get();
+                // 4. Agora executa a consulta
+                $users = DB::connection('tenant')
+                    ->table('users')
+                    ->select('id', 'name', 'email', 'role', 'ativo', 'created_at')
+                    ->get();
 
- foreach ($users as $user) {
- $user->empresa_nome = $empresa->nome;
- $user->role = $user->role ?? 'user'; // fallback
- $tenantUsers[] = $user;
- }
+                foreach ($users as $user) {
+                    $user->empresa_id = $empresa->id;
+                    $user->empresa_nome = $empresa->nome;
+                    $user->modo = 'singular';
+                    $user->role = $user->role ?? 'user';
+                    $tenantUsers[] = $user;
+                }
 
- \Log::info('Usuários encontrados (colectivo)', [
- 'empresa' => $empresa->nome,
- 'quantidade' => $users->count()
- ]);
+                \Log::info("Usuários encontrados (singular)", [
+                    'empresa' => $empresa->nome,
+                    'quantidade' => $users->count()
+                ]);
 
- } catch (\Exception $e) {
- \Log::error('Erro ao buscar usuários (colectivo)', [
- 'empresa' => $empresa->nome,
- 'error' => $e->getMessage()
- ]);
- }
- }
- }
+            } catch (\Exception $e) {
+                \Log::error("Erro ao buscar singulares para {$empresa->nome}", [
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
 
- \Log::info('listarTenantUsers: Consulta concluída', [
- 'total_empresas' => $empresas->count(),
- 'total_usuarios' => count($tenantUsers)
- ]);
+        \Log::info('listarTenantUsers: Consulta concluída', [
+            'total_empresas_singulares' => $empresas->count(),
+            'total_usuarios_singulares' => count($tenantUsers)
+        ]);
 
- return response()->json([
- 'success' => true,
- 'data' => $tenantUsers
- ]);
+        return response()->json(['success' => true, 'data' => $tenantUsers]);
 
- } catch (\Exception $e) {
- \Log::error('listarTenantUsers: Erro geral', [
- 'error' => $e->getMessage(),
- 'trace' => $e->getTraceAsString()
- ]);
+    } catch (\Exception $e) {
+        \Log::error('listarTenantUsers: Erro geral', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
 
- return response()->json([
- 'success' => false,
- 'message' => 'Erro ao processar a requisição: ' . $e->getMessage()
- ], 500);
- }
+        return response()->json([
+            'success' => false,
+            'message' => 'Erro ao processar a requisição: ' . $e->getMessage()
+        ], 500);
+    }
 }
-
 
 
 public function listarSharedUsers()
