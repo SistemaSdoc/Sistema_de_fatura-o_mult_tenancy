@@ -20,6 +20,7 @@ class Notificacao extends Model
         'tipo',
         'lida',
         'user_id',
+        'pagamento_id',
     ];
 
     protected $casts = [

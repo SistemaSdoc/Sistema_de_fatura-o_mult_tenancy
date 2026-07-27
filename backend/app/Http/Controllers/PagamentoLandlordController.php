@@ -7,6 +7,7 @@ use App\Models\Plano;
 use App\Models\Empresa;
 use App\Models\Pagamento;
 use App\Models\Subscricao;
+use App\Models\Notificacao;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
@@ -223,16 +224,42 @@ class PagamentoLandlordController extends Controller
                 Notification::route('mail', $adminEmail)
                     ->notify(new ComprovativoRecebido($pagamento));
                 
-                Log::info('[PagamentoLandlordController::uploadComprovativo] Notificação enviada com sucesso', [
+                Log::info('[PagamentoLandlordController::uploadComprovativo] Notificação email enviada com sucesso', [
                     'para' => $adminEmail,
                     'pagamento_id' => $id
                 ]);
             } catch (\Exception $e) {
-                Log::error('[PagamentoLandlordController::uploadComprovativo] Falha ao enviar notificação', [
+                Log::error('[PagamentoLandlordController::uploadComprovativo] Falha ao enviar email de notificação', [
                     'para' => $adminEmail,
                     'pagamento_id' => $id,
                     'erro' => $e->getMessage(),
                     'trace' => $e->getTraceAsString()
+                ]);
+                // Não falha a requisição, apenas loga o erro
+            }
+
+            // -- GRAVAR NOTIFICAÇÃO IN-APP (sininho do landlord) --
+            try {
+                $nomeEmpresa = $pagamento->empresa?->nome ?? 'Empresa desconhecida';
+                $valorFormatado = number_format($pagamento->valor, 2, ',', '.');
+
+                Notificacao::create([
+                    'titulo'       => 'Novo comprovativo aguarda análise',
+                    'mensagem'     => "A empresa **{$nomeEmpresa}** enviou um comprovativo de pagamento no valor de **{$valorFormatado} AOA**. Analise e aprove ou rejeite.",
+                    'tipo'         => 'info',
+                    'lida'         => false,
+                    'user_id'      => null,
+                    'pagamento_id' => $pagamento->id,
+                ]);
+
+                Log::info('[PagamentoLandlordController::uploadComprovativo] Notificação in-app criada', [
+                    'pagamento_id' => $id,
+                    'empresa'      => $nomeEmpresa,
+                ]);
+            } catch (\Exception $e) {
+                Log::error('[PagamentoLandlordController::uploadComprovativo] Falha ao criar notificação in-app', [
+                    'pagamento_id' => $id,
+                    'erro'         => $e->getMessage(),
                 ]);
                 // Não falha a requisição, apenas loga o erro
             }
@@ -348,6 +375,9 @@ class PagamentoLandlordController extends Controller
 
                 $pagamento->save();
 
+                // Marcar notificação ligada como lida
+                Notificacao::where('pagamento_id', $id)->update(['lida' => true]);
+
                 Log::info('[PagamentoLandlordController::confirmarPagamento] Confirmação concluída com sucesso', [
                     'pagamento_id' => $id,
                     'subscricao_id' => $pagamento->subscricao_id
@@ -413,6 +443,9 @@ class PagamentoLandlordController extends Controller
             $pagamento->status = 'rejeitado';
             $pagamento->motivo_rejeicao = $request->motivo;
             $pagamento->save();
+
+            // Marcar notificação ligada como lida
+            Notificacao::where('pagamento_id', $id)->update(['lida' => true]);
 
             Log::info('[PagamentoLandlordController::rejeitarPagamento] Pagamento rejeitado', [
                 'pagamento_id' => $id,

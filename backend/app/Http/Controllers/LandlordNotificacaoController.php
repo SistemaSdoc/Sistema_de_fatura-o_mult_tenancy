@@ -23,6 +23,7 @@ class LandlordNotificacaoController extends Controller
             $query->whereNull('user_id')      // globais
                   ->orWhere('user_id', $userId); // específicas
         })
+        ->where('lida', false)          // só as não lidas
         ->orderBy('created_at', 'desc')
         ->get();
 

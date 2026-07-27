@@ -26,7 +26,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useLandlordAuth } from "@/context/LandlordAuthContext";
 import { useTheme, useThemeColors } from "@/context/ThemeContext";
 import { toast } from "sonner";
-import { color } from "motion-dom";
+import { notificacoesApi } from "@/services/notificacao";
 
 interface DropdownLink {
   label: string;
@@ -86,7 +86,47 @@ export default function MainLandlord({ children }: MainLandlordProps) {
   const userInitial = userName.charAt(0).toUpperCase();
 
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
-  const totalNotificacoes = notificacoes.filter((n) => !n.lida).length;
+  const totalNotificacoes = notificacoes.length; // backend já devolve só não lidas
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ==================== BUSCAR NOTIFICAÇÕES ====================
+  const buscarNotificacoes = useCallback(async () => {
+    try {
+      const data = await notificacoesApi.listar();
+      setNotificacoes(data?.data ?? []);
+    } catch (err) {
+      console.error("[MainLandlord] Erro ao buscar notificações:", err);
+    }
+  }, []);
+
+  // Polling a cada 30 segundos
+  useEffect(() => {
+    void buscarNotificacoes();
+    intervalRef.current = setInterval(() => void buscarNotificacoes(), 30_000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [buscarNotificacoes]);
+
+  const marcarLida = useCallback(async (id: string) => {
+    try {
+      await notificacoesApi.marcarComoLida(id);
+      // Remove da lista imediatamente — backend só devolve não lidas
+      setNotificacoes((prev) => prev.filter((n) => n.id !== id));
+    } catch (err) {
+      console.error("[MainLandlord] Erro ao marcar notificação como lida:", err);
+    }
+  }, []);
+
+  const marcarTodasLidas = useCallback(async () => {
+    try {
+      await notificacoesApi.marcarTodasComoLidas();
+      // Limpa a lista toda imediatamente
+      setNotificacoes([]);
+    } catch (err) {
+      console.error("[MainLandlord] Erro ao marcar todas como lidas:", err);
+    }
+  }, []);
 
   // ==================== RESPONSIVE ====================
   useEffect(() => {
@@ -141,7 +181,7 @@ export default function MainLandlord({ children }: MainLandlordProps) {
     setSubmenuOpen(null);
   };
 
-  const toggleNotificacoes = () => {
+  const toggleNotificacoes = async () => {
     if (!user || userLoading) {
       toast.info("Aguarde, autenticando...");
       return;
@@ -150,6 +190,9 @@ export default function MainLandlord({ children }: MainLandlordProps) {
       setNotificacoesAberto(true);
       setPanelAnimating(true);
       setTimeout(() => setPanelAnimating(false), 10);
+      setLoadingNotificacoes(true);
+      await buscarNotificacoes();
+      setLoadingNotificacoes(false);
     } else {
       setPanelAnimating(true);
       setTimeout(() => {
@@ -471,6 +514,7 @@ const isParentActive = (item: MenuItem) => {
                         <div className="flex items-center gap-1">
                           {totalNotificacoes > 0 && (
                             <button
+                              onClick={marcarTodasLidas}
                               className="text-[11px] font-medium rounded-md px-2 py-1 transition-all hover:scale-105"
                               style={{ color: colors.primary }}>
                               Marcar todas
@@ -497,12 +541,14 @@ const isParentActive = (item: MenuItem) => {
                           {notificacoes.map((notif, idx) => (
                             <div
                               key={notif.id}
-                              className="p-3 transition-all duration-200 hover:translate-x-1 cursor-pointer"
+                              className="p-3 transition-all duration-200 hover:translate-x-1 cursor-pointer group"
                               style={{
                                 animation: `fadeIn 0.2s ease-out ${idx * 0.03}s forwards`,
                                 opacity: notif.lida ? 0.6 : 1,
-                              }}>
-                              <div className="flex gap-2">
+                                backgroundColor: notif.lida ? 'transparent' : `${colors.primary}05`,
+                              }}
+                              onClick={() => !notif.lida && marcarLida(notif.id)}>
+                              <div className="flex gap-2 items-start">
                                 <div
                                   className="p-1.5 rounded-lg shrink-0"
                                   style={{
@@ -515,12 +561,16 @@ const isParentActive = (item: MenuItem) => {
                                   <p className="text-xs font-semibold truncate" style={{ color: colors.text }}>
                                     {notif.titulo}
                                   </p>
-                                  <p className="text-xs truncate" style={{ color: colors.textSecondary }}>
-                                    {notif.mensagem}
-                                  </p>
+                                  <p
+                                    className="text-xs mt-0.5"
+                                    style={{ color: colors.textSecondary }}
+                                    dangerouslySetInnerHTML={{
+                                      __html: notif.mensagem.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                    }}
+                                  />
                                   {!notif.lida && (
-                                    <span className="text-[10px]" style={{ color: colors.secondary }}>
-                                      Nova
+                                    <span className="text-[10px] font-medium" style={{ color: colors.secondary }}>
+                                      • Nova
                                     </span>
                                   )}
                                 </div>
@@ -538,6 +588,11 @@ const isParentActive = (item: MenuItem) => {
                     </div>
                     <div className="p-2 border-t text-center" style={{ borderColor: colors.border }}>
                       <button
+                        onClick={async () => {
+                          setLoadingNotificacoes(true);
+                          await buscarNotificacoes();
+                          setLoadingNotificacoes(false);
+                        }}
                         disabled={loadingNotificacoes}
                         className="text-xs font-medium rounded-md transition-all hover:scale-105 disabled:opacity-50 px-2 py-1"
                         style={{ color: colors.blue }}>
