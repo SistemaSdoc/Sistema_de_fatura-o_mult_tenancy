@@ -80,6 +80,15 @@ export default function PlanosPage() {
     const [featuresSelecionadas, setFeaturesSelecionadas] = useState<Record<string, FeatureSelecionada>>({});
     const [salvando, setSalvando] = useState(false);
 
+    const [featureModalOpen, setFeatureModalOpen] = useState(false);
+    const [featureForm, setFeatureForm] = useState({
+        nome: "",
+        descricao: "",
+        icone: "",
+        ativo: true,
+    });
+    const [salvandoFeature, setSalvandoFeature] = useState(false);
+
     const [confirmarRemocao, setConfirmarRemocao] = useState<Plano | null>(null);
     const [removendo, setRemovendo] = useState(false);
 
@@ -90,8 +99,11 @@ export default function PlanosPage() {
                 planosCrudApi.listar(),
                 featuresApi.listar(),
             ]);
+            const featuresOrdenadas = (resFeatures.data || []).sort((a: Feature, b: Feature) =>
+                a.nome.localeCompare(b.nome)
+            );
             setPlanos(resPlanos.data || []);
-            setFeatures(resFeatures.data || []);
+            setFeatures(featuresOrdenadas);
         } catch {
             toast.error("Erro ao carregar planos");
         } finally {
@@ -103,13 +115,13 @@ export default function PlanosPage() {
         carregar();
     }, [carregar]);
 
-    const featuresVaziasSelecionadas = (): Record<string, FeatureSelecionada> => {
+    const featuresVaziasSelecionadas = useCallback((): Record<string, FeatureSelecionada> => {
         const base: Record<string, FeatureSelecionada> = {};
         features.forEach((f) => {
             base[f.id] = { selecionada: false, quantidade: "", unidade: "" };
         });
         return base;
-    };
+    }, [features]);
 
     const abrirCriar = () => {
         setEditando(null);
@@ -148,6 +160,60 @@ export default function PlanosPage() {
         setFeaturesSelecionadas({});
     };
 
+    const abrirCriarFeature = () => {
+        setFeatureForm({ nome: "", descricao: "", icone: "", ativo: true });
+        setFeatureModalOpen(true);
+    };
+
+    const fecharFeatureModal = () => {
+        setFeatureModalOpen(false);
+        setFeatureForm({ nome: "", descricao: "", icone: "", ativo: true });
+    };
+
+    // FUNÇÃO CORRIGIDA – não envia null, apenas campos preenchidos
+    const salvarFeature = async () => {
+        if (!featureForm.nome.trim()) {
+            toast.error("O nome da feature é obrigatório");
+            return;
+        }
+
+        setSalvandoFeature(true);
+        try {
+            const payload: { nome: string; descricao?: string; icone?: string; ativo: boolean } = {
+                nome: featureForm.nome.trim(),
+                ativo: featureForm.ativo,
+            };
+
+            const descricaoTrim = featureForm.descricao.trim();
+            if (descricaoTrim) payload.descricao = descricaoTrim;
+
+            const iconeTrim = featureForm.icone.trim();
+            if (iconeTrim) payload.icone = iconeTrim;
+
+            const response = await featuresApi.criar(payload);
+            const novaFeature = response.data;
+
+            toast.success("Feature criada com sucesso");
+
+            setFeatures((prev) => [...prev, novaFeature].sort((a, b) => a.nome.localeCompare(b.nome)));
+
+            if (modalOpen) {
+                setFeaturesSelecionadas((prev) => ({
+                    ...prev,
+                    [novaFeature.id]: { selecionada: true, quantidade: "1", unidade: "" },
+                }));
+            }
+
+            fecharFeatureModal();
+        } catch (err: any) {
+            const mensagens = err?.response?.data?.errors;
+            const primeiraMsg = mensagens ? (Object.values(mensagens)[0] as string[])[0] : null;
+            toast.error(primeiraMsg || err?.response?.data?.message || "Erro ao criar feature");
+        } finally {
+            setSalvandoFeature(false);
+        }
+    };
+
     const toggleFeature = (featureId: string) => {
         setFeaturesSelecionadas((prev) => ({
             ...prev,
@@ -168,7 +234,7 @@ export default function PlanosPage() {
                 try {
                     await planosCrudApi.detachFeature(planoId, pf.id);
                 } catch {
-                    // segue mesmo se já não existir a associação
+                    // Ignorar
                 }
             }
         }
@@ -254,6 +320,7 @@ export default function PlanosPage() {
 
     return (
         <div className="space-y-4 md:space-y-6">
+            {/* Cabeçalho – igual */}
             <div className="flex items-center justify-between gap-2">
                 <div>
                     <h2 className="text-lg font-bold md:text-xl" style={{ color: colors.text }}>Planos</h2>
@@ -271,6 +338,7 @@ export default function PlanosPage() {
                 </button>
             </div>
 
+            {/* Lista de planos – igual */}
             {planos.length === 0 ? (
                 <div
                     className="flex flex-col items-center justify-center py-16 rounded-xl border"
@@ -287,6 +355,7 @@ export default function PlanosPage() {
                             className="p-4 rounded-xl border flex flex-col"
                             style={{ backgroundColor: colors.card, borderColor: colors.border, opacity: plano.ativo ? 1 : 0.6 }}
                         >
+                            {/* ... conteúdo do card ... */}
                             <div className="flex items-start justify-between gap-2">
                                 <div>
                                     <h3 className="text-sm font-bold" style={{ color: colors.text }}>{plano.nome}</h3>
@@ -342,7 +411,7 @@ export default function PlanosPage() {
                                 <button
                                     onClick={() => abrirEditar(plano)}
                                     className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all hover:scale-105 active:scale-95"
-                                    style={{ backgroundColor: colors.primary, color: colors.blue }}
+                                    style={{ backgroundColor: colors.primary, color: "#fff" }}
                                 >
                                     <Pencil size={13} /> Editar
                                 </button>
@@ -359,7 +428,7 @@ export default function PlanosPage() {
                 </div>
             )}
 
-            {/* Modal criar/editar */}
+            {/* Modal de plano – igual */}
             {modalOpen && (
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
@@ -371,7 +440,6 @@ export default function PlanosPage() {
                         style={{ backgroundColor: colors.card, maxHeight: "min(90vh, 720px)" }}
                         onClick={(e) => e.stopPropagation()}
                     >
-                        {/* Header fixo */}
                         <div
                             className="flex items-center justify-between px-4 py-3.5 sm:px-5 border-b shrink-0"
                             style={{ borderColor: colors.border }}
@@ -388,7 +456,6 @@ export default function PlanosPage() {
                             </button>
                         </div>
 
-                        {/* Corpo com scroll */}
                         <div className="px-4 py-4 sm:px-5 space-y-5 overflow-y-auto flex-1 min-h-0">
                             <div className="space-y-3">
                                 <div>
@@ -461,7 +528,19 @@ export default function PlanosPage() {
                             </div>
 
                             <div className="pt-4 border-t" style={{ borderColor: colors.border }}>
-                                <h4 className="text-xs font-semibold mb-2" style={{ color: colors.text }}>Features do plano</h4>
+                                <div className="flex items-center justify-between mb-2">
+                                    <h4 className="text-xs font-semibold" style={{ color: colors.text }}>
+                                        Features do plano
+                                    </h4>
+                                    <button
+                                        onClick={abrirCriarFeature}
+                                        className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition hover:scale-105 active:scale-95"
+                                        style={{ backgroundColor: colors.primary, color: "#fff" }}
+                                    >
+                                        <Plus size={12} /> Nova Feature
+                                    </button>
+                                </div>
+
                                 {features.length === 0 ? (
                                     <p className="text-xs" style={{ color: colors.textSecondary }}>
                                         Nenhuma feature cadastrada ainda.
@@ -515,7 +594,6 @@ export default function PlanosPage() {
                             </div>
                         </div>
 
-                        {/* Footer fixo */}
                         <div
                             className="flex gap-2 px-4 py-3.5 sm:px-5 border-t shrink-0"
                             style={{ backgroundColor: colors.card, borderColor: colors.border }}
@@ -541,7 +619,97 @@ export default function PlanosPage() {
                 </div>
             )}
 
-            {/* Confirmar remoção */}
+            {/* Modal de criação de feature – igual */}
+            {featureModalOpen && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
+                    style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+                    onClick={fecharFeatureModal}
+                >
+                    <div
+                        className="w-full max-w-md rounded-xl shadow-xl"
+                        style={{ backgroundColor: colors.card }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: colors.border }}>
+                            <h3 className="text-sm font-bold" style={{ color: colors.text }}>Nova Feature</h3>
+                            <button
+                                onClick={fecharFeatureModal}
+                                className="p-1.5 rounded-lg hover:scale-110 transition-transform"
+                                style={{ backgroundColor: `${colors.textSecondary}10` }}
+                            >
+                                <X size={18} style={{ color: colors.textSecondary }} />
+                            </button>
+                        </div>
+
+                        <div className="p-4 space-y-3">
+                            <div>
+                                <label className="text-xs font-medium" style={{ color: colors.text }}>Nome *</label>
+                                <input
+                                    type="text"
+                                    value={featureForm.nome}
+                                    onChange={(e) => setFeatureForm({ ...featureForm, nome: e.target.value })}
+                                    className="w-full mt-1 px-3 py-2 rounded-lg text-sm border outline-none"
+                                    style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
+                                    placeholder="Ex: Armazenamento"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-medium" style={{ color: colors.text }}>Descrição</label>
+                                <input
+                                    type="text"
+                                    value={featureForm.descricao}
+                                    onChange={(e) => setFeatureForm({ ...featureForm, descricao: e.target.value })}
+                                    className="w-full mt-1 px-3 py-2 rounded-lg text-sm border outline-none"
+                                    style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
+                                    placeholder="Opcional"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-medium" style={{ color: colors.text }}>Ícone (nome do ícone)</label>
+                                <input
+                                    type="text"
+                                    value={featureForm.icone}
+                                    onChange={(e) => setFeatureForm({ ...featureForm, icone: e.target.value })}
+                                    className="w-full mt-1 px-3 py-2 rounded-lg text-sm border outline-none"
+                                    style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
+                                    placeholder="Ex: hard-drive"
+                                />
+                            </div>
+                            <label className="flex items-center gap-2 cursor-pointer pt-1">
+                                <input
+                                    type="checkbox"
+                                    checked={featureForm.ativo}
+                                    onChange={(e) => setFeatureForm({ ...featureForm, ativo: e.target.checked })}
+                                    className="w-4 h-4"
+                                />
+                                <span className="text-xs font-medium" style={{ color: colors.text }}>Feature activa</span>
+                            </label>
+                        </div>
+
+                        <div className="flex gap-2 px-4 py-3 border-t" style={{ borderColor: colors.border }}>
+                            <button
+                                onClick={fecharFeatureModal}
+                                className="flex-1 py-2 rounded-lg text-xs font-medium"
+                                style={{ backgroundColor: `${colors.textSecondary}15`, color: colors.text }}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={salvarFeature}
+                                disabled={salvandoFeature}
+                                className="flex-1 py-2 rounded-lg text-xs font-medium text-white flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                style={{ backgroundColor: colors.primary }}
+                            >
+                                {salvandoFeature && <Loader2 size={13} className="animate-spin" />}
+                                Criar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Confirmar remoção – igual */}
             {confirmarRemocao && (
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center p-4"

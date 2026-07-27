@@ -91,11 +91,11 @@ class LandlordAuthController extends Controller
         ]);
 
         $user = LandlordUser::create([
-            'id' => (string) Str::uuid(), // ✅ corrigido
+            'id' => (string) Str::uuid(), 
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'role' => 'super_admin', // ou 'suporte' conforme necessidade
+            'role' => 'super_admin',
             'ativo' => true,
         ]);
 

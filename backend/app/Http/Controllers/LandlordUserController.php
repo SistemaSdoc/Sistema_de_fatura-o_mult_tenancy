@@ -349,7 +349,7 @@ public function vincularEmpresa(Request $request, LandlordUser $landlordUser)
 
         $landlordUser->update([
             'empresa_id' => null,
-            'role' => LandlordUser::ROLE_SUPORTE, // ou mantém role anterior
+            'role' => LandlordUser::ROLE_ADMIN_EMPRESA, // ou mantém role anterior
         ]);
 
         return response()->json([
@@ -453,6 +453,8 @@ public function alterarSenhaPropria(Request $request)
     ]);
 }
 
+
+
 /**
  * Lista todos os utilizadores do tenant (de todas as empresas)
  */
@@ -462,92 +464,69 @@ public function listarTenantUsers()
         'user_id' => Auth::guard('landlord_api')->id()
     ]);
 
-    $user = Auth::guard('landlord_api')->user();
-    if (!$user) {
+    $authUser = Auth::guard('landlord_api')->user();
+    if (!$authUser) {
         return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
     }
 
     try {
-        // Busca todas as empresas ativas (ou todas, conforme necessidade)
-        $empresas = Empresa::on('landlord')->where('status', 'ativo')->get();
+        $empresas = Empresa::on('landlord')
+            ->where('status', 'ativo')
+            ->where('modo', 'singular')
+            ->get();
+
         $tenantUsers = [];
 
         foreach ($empresas as $empresa) {
-            $modo = $empresa->modo ?? 'colectivo'; // assume colectivo se não tiver
-            $database = $empresa->db_name ?? null;
+            $database = $empresa->db_name;
 
-            \Log::debug('Processando empresa', [
-                'empresa_id' => $empresa->id,
-                'empresa_nome' => $empresa->nome,
-                'modo' => $modo,
-                'database' => $database
-            ]);
+            if (empty($database)) {
+                \Log::warning("Empresa {$empresa->nome} sem db_name definido");
+                continue;
+            }
 
-            if ($modo === 'singular' && $database) {
-                // -------------------------------
-                // MODO SINGULAR: buscar na base tenant dedicada
-                // -------------------------------
-                try {
-                    config(['database.connections.tenant.database' => $database]);
-                    $users = DB::connection('tenant')->table('users')->get();
+            try {
+                // 1. Purga a conexão existente
+                DB::purge('tenant');
 
-                    foreach ($users as $user) {
-                        $user->empresa_nome = $empresa->nome;
-                        $user->role = $user->role ?? 'user'; // fallback
-                        $tenantUsers[] = $user;
-                    }
+                // 2. Altera a configuração com o novo database
+                config(['database.connections.tenant.database' => $database]);
 
-                    \Log::info('Usuários encontrados (singular)', [
-                        'empresa' => $empresa->nome,
-                        'quantidade' => $users->count()
-                    ]);
+                // 3. Reconecta
+                DB::reconnect('tenant');
 
-                } catch (\Exception $e) {
-                    \Log::error('Erro ao buscar usuários (singular)', [
-                        'empresa' => $empresa->nome,
-                        'error' => $e->getMessage()
-                    ]);
+                // 4. Agora executa a consulta
+                $users = DB::connection('tenant')
+                    ->table('users')
+                    ->select('id', 'name', 'email', 'role', 'ativo', 'created_at')
+                    ->get();
+
+                foreach ($users as $user) {
+                    $user->empresa_id = $empresa->id;
+                    $user->empresa_nome = $empresa->nome;
+                    $user->modo = 'singular';
+                    $user->role = $user->role ?? 'user';
+                    $tenantUsers[] = $user;
                 }
 
-            } elseif ($modo === 'colectivo') {
-                // -------------------------------
-                // MODO COLECTIVO: buscar na base shared
-                // -------------------------------
-                try {
-                    $users = DB::connection('shared')
-                        ->table('users')
-                        ->where('empresa_id', $empresa->id) // ajuste o nome da coluna (pode ser 'tenant_id')
-                        ->get();
+                \Log::info("Usuários encontrados (singular)", [
+                    'empresa' => $empresa->nome,
+                    'quantidade' => $users->count()
+                ]);
 
-                    foreach ($users as $user) {
-                        $user->empresa_nome = $empresa->nome;
-                        $user->role = $user->role ?? 'user'; // fallback
-                        $tenantUsers[] = $user;
-                    }
-
-                    \Log::info('Usuários encontrados (colectivo)', [
-                        'empresa' => $empresa->nome,
-                        'quantidade' => $users->count()
-                    ]);
-
-                } catch (\Exception $e) {
-                    \Log::error('Erro ao buscar usuários (colectivo)', [
-                        'empresa' => $empresa->nome,
-                        'error' => $e->getMessage()
-                    ]);
-                }
+            } catch (\Exception $e) {
+                \Log::error("Erro ao buscar singulares para {$empresa->nome}", [
+                    'error' => $e->getMessage()
+                ]);
             }
         }
 
         \Log::info('listarTenantUsers: Consulta concluída', [
-            'total_empresas' => $empresas->count(),
-            'total_usuarios' => count($tenantUsers)
+            'total_empresas_singulares' => $empresas->count(),
+            'total_usuarios_singulares' => count($tenantUsers)
         ]);
 
-        return response()->json([
-            'success' => true,
-            'data' => $tenantUsers
-        ]);
+        return response()->json(['success' => true, 'data' => $tenantUsers]);
 
     } catch (\Exception $e) {
         \Log::error('listarTenantUsers: Erro geral', [

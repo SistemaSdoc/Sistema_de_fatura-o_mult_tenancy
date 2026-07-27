@@ -343,7 +343,7 @@ export default function PerfilPage() {
                   border: `1px solid ${colors.secondary}30`,
                 }}>
                 <Shield size={12} className="mr-1" />
-                {user.role === "super_admin" ? "Super Admin" : "Suporte"}
+                {user.role === "super_admin" ? "Super Admin" : "admin_empresa"}
               </Badge>
             </div>
           </div>

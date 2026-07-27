@@ -14,6 +14,7 @@ class Feature extends Model
     protected $keyType = 'string';
     protected $connection = 'landlord'; 
     protected $fillable = [
+        'id',
         'nome', 
         'descricao', 
         'icone', 

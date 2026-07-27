@@ -24,11 +24,11 @@ class LandlordUser extends Authenticatable implements MustVerifyEmail
     protected $keyType = 'string';
 
     public const ROLE_SUPER_ADMIN = 'super_admin';
-    public const ROLE_SUPORTE = 'suporte';
+    public const ROLE_ADMIN_EMPRESA = 'admin_empresa';
 
     protected $fillable = [
         'id',
-        'empresa_id',           // Empresa vinculada (se suporte fixo)
+        'empresa_id',           // Empresa vinculada (se admin_empresa fixo)
         'empresa_id_atual',     // Modo atendimento atual
         'name',
         'email',
@@ -82,9 +82,9 @@ class LandlordUser extends Authenticatable implements MustVerifyEmail
         return $this->role === self::ROLE_SUPER_ADMIN;
     }
 
-    public function ehSuporte(): bool
+    public function ehAdminEmpresa(): bool
     {
-        return $this->role === self::ROLE_SUPORTE;
+        return $this->role === self::ROLE_ADMIN_EMPRESA;
     }
 
     /**
@@ -97,7 +97,11 @@ class LandlordUser extends Authenticatable implements MustVerifyEmail
         }
 
         // Suporte pode acessar se estiver em modo atendimento
-        if ($this->ehSuporte()) {
+        if ($this->ROLE_ADMIN_EMPRESA === $this->role && $this->empresa_id_atual) {
+            return true;
+        }
+
+        if ($this->ehAdminEmpresa()) {
             return $this->empresa_id_atual === $empresaId;
         }
 
@@ -122,9 +126,9 @@ class LandlordUser extends Authenticatable implements MustVerifyEmail
         return TenantUser::firstOrCreate(
             ['landlord_user_id' => $this->id],
             [
-                'nome' => $this->ehSuporte() ? '[SUPORTE] ' . $this->name : $this->name,
+                'nome' => $this->ehAdminEmpresa() ? '[Admin] ' . $this->name : $this->name,
                 'email' => $this->email,
-                'role' => $this->ehSuporte() ? 'suporte' : 'admin',
+                'role' => $this->ehAdminEmpresa() ? 'Admin' : 'admin',
                 'ativo' => $this->ativo,
             ]
         );
