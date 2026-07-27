@@ -139,7 +139,7 @@ function ActionMenu({
                   onEditar(cliente);
                 }}
                 className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:opacity-70"
-                style={{ color: colors.secondary }}
+                style={{ color: colors.blue }}
               >
                 <Edit2 className="w-3.5 h-3.5" />
                 Editar
@@ -179,18 +179,7 @@ function ActionMenu({
 }
 
 // ─── Modal de Confirmação ──────────────────────────────────────────
-function ConfirmModal({
-  isOpen,
-  onClose,
-  onConfirm,
-  title,
-  message,
-  confirmText,
-  cancelText,
-  loading,
-  colors,
-  type = "warning" as const,
-}: {
+interface ConfirmModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
@@ -200,23 +189,33 @@ function ConfirmModal({
   cancelText: string;
   loading?: boolean;
   colors: ThemeColors;
-  type?: "warning" | "danger" | "info";
-}) {
+  type: "warning" | "danger" | "info";
+}
+
+function ConfirmModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  title,
+  message,
+  confirmText,
+  cancelText,
+  loading = false,
+  colors,
+  type,
+}: ConfirmModalProps) {
   if (!isOpen) return null;
 
-  const btnColor =
+  const iconClr =
     type === "danger"
       ? colors.danger
       : type === "info"
-      ? colors.primary
+      ? colors.secondary
       : colors.warning;
-  const iconBg =
-    type === "danger"
-      ? `${colors.danger}20`
-      : type === "info"
-      ? `${colors.secondary}20`
-      : `${colors.warning}20`;
-  const iconClr =
+
+  const iconBg = iconClr;
+
+  const btnColor =
     type === "danger"
       ? colors.danger
       : type === "info"

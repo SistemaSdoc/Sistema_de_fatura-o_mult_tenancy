@@ -130,7 +130,6 @@ function LinhaFiscal({
   );
 }
 
-
 export default function NovaFaturaReciboPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
@@ -775,8 +774,8 @@ export default function NovaFaturaReciboPage() {
             {/* ── Cliente ── */}
             <div className="flex flex-col sm:flex-row min-h-[44px]">
               <div className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-28 shrink-0" style={{ backgroundColor: colors.hover }}>
-                <User size={13} style={{ color: colors.text }} />
-                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>
+                <User size={13} style={{ color: colors.blue }} />
+                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.blue }}>
                   Cliente
                 </span>
               </div>
@@ -850,7 +849,7 @@ export default function NovaFaturaReciboPage() {
                               style={{
                                 backgroundColor: clienteSelecionado?.id === c.id ? `${colors.primary}10` : "transparent",
                                 borderColor: colors.border,
-                                color: colors.text,
+                                color: colors.blue,
                               }}
                               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = colors.hover)}
                               onMouseLeave={(e) =>
@@ -889,7 +888,7 @@ export default function NovaFaturaReciboPage() {
                         className="w-full px-3 py-1.5 text-sm outline-none"
                         style={{
                           ...inp,
-                          borderColor: nifError ? colors.danger : inp.borderColor,
+                          borderColor: nifError ? colors.secondary : inp.borderColor,
                         }}
                         value={clienteAvulsoNif}
                         onChange={handleNifChange}
@@ -908,8 +907,8 @@ export default function NovaFaturaReciboPage() {
             {/* ── Produto e Serviços ── */}
             <div className="flex flex-col sm:flex-row min-h-[44px]">
               <div className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-28 shrink-0" style={{ backgroundColor: colors.hover }}>
-                <Package size={13} style={{ color: colors.text }} />
-                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>
+                <Package size={13} style={{ color: colors.blue }} />
+                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.blue }}>
                   Itens
                 </span>
               </div>
@@ -1013,7 +1012,7 @@ export default function NovaFaturaReciboPage() {
                                   formItem.produto_id === item.id ? `${colors.primary}10` : "transparent")
                               }>
                               <div className="flex-1 min-w-0">
-                                <span className="font-medium" style={{ color: colors.text }}>
+                                <span className="font-medium" style={{ color: colors.blue }}>
                                   {item.nome}
                                 </span>
                                 {item.codigo && (
@@ -1030,14 +1029,9 @@ export default function NovaFaturaReciboPage() {
                                   <span
                                     className="text-xs ml-2"
                                     style={{
-                                      color: item.estoque_atual <= ESTOQUE_MINIMO ? colors.warning : colors.textSecondary,
+                                      color: item.estoque_atual <= ESTOQUE_MINIMO ? colors.secondary : colors.textSecondary,
                                     }}>
                                     Stock: {item.estoque_atual}
-                                  </span>
-                                )}
-                                {item.tipo === "servico" && item.taxa_retencao && (
-                                  <span className="text-xs ml-2" style={{ color: colors.warning }}>
-                                    Ret: {item.taxa_retencao}%
                                   </span>
                                 )}
                               </div>
@@ -1067,7 +1061,7 @@ export default function NovaFaturaReciboPage() {
                   {produtoSel && produtoSel.tipo === "produto" && (
                     <span
                       className="text-xs shrink-0"
-                      style={{ color: produtoSel.estoque_atual <= ESTOQUE_MINIMO ? colors.warning : colors.textSecondary }}>
+                      style={{ color: produtoSel.estoque_atual <= ESTOQUE_MINIMO ? colors.secondary : colors.textSecondary }}>
                       disp.: {produtoSel.estoque_atual}
                     </span>
                   )}
@@ -1078,8 +1072,8 @@ export default function NovaFaturaReciboPage() {
             {/* ── Observações ── */}
             <div className="flex flex-col sm:flex-row min-h-[44px]">
               <div className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-28 shrink-0" style={{ backgroundColor: colors.hover }}>
-                <FileText size={13} style={{ color: colors.text }} />
-                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>
+                <FileText size={13} style={{ color: colors.blue }} />
+                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.blue }}>
                   Obs.
                 </span>
               </div>
@@ -1163,7 +1157,7 @@ export default function NovaFaturaReciboPage() {
                           backgroundColor: idx % 2 !== 0 ? `${colors.hover}60` : "transparent",
                         }}>
                         <td className="px-3 py-2.5">
-                          <span className="font-medium truncate max-w-[120px] sm:max-w-[180px] block" style={{ color: colors.text }}>
+                          <span className="font-medium truncate max-w-[120px] sm:max-w-[180px] block" style={{ color: colors.blue }}>
                             {item.descricao}
                           </span>
                         </td>
@@ -1175,7 +1169,7 @@ export default function NovaFaturaReciboPage() {
                               className="w-6 h-6 flex items-center justify-center disabled:opacity-30"
                               style={{ backgroundColor: colors.hover }}
                               disabled={item.quantidade <= 1}>
-                              <Minus size={11} style={{ color: colors.text }} />
+                              <Minus size={11} style={{ color: colors.blue }} />
                             </button>
                             <input
                               type="number"
@@ -1202,7 +1196,7 @@ export default function NovaFaturaReciboPage() {
                               className="w-12 text-center text-sm font-medium outline-none border rounded"
                               style={{
                                 backgroundColor: colors.card,
-                                color: colors.text,
+                                color: colors.blue,
                                 borderColor: colors.border,
                               }}
                             />
@@ -1211,7 +1205,7 @@ export default function NovaFaturaReciboPage() {
                               className="w-6 h-6 flex items-center justify-center disabled:opacity-30"
                               style={{ backgroundColor: colors.hover }}
                               disabled={item.quantidade >= maxEst}>
-                              <Plus size={11} style={{ color: colors.text }} />
+                              <Plus size={11} style={{ color: colors.blue }} />
                             </button>
                           </div>
                         </td>
@@ -1246,7 +1240,7 @@ export default function NovaFaturaReciboPage() {
                               className="w-20 text-center text-sm font-medium outline-none border rounded px-2"
                               style={{
                                 backgroundColor: colors.card,
-                                color: colors.text,
+                                color: colors.blue,
                                 borderColor: colors.border,
                               }}
                               placeholder="0"
@@ -1257,13 +1251,13 @@ export default function NovaFaturaReciboPage() {
                         <td className="px-3 py-2.5 text-right hidden sm:table-cell" style={{ color: colors.textSecondary }}>
                           {formatarPreco(item.preco_venda)}
                         </td>
-                        <td className="px-3 py-2.5 text-right hidden md:table-cell" style={{ color: colors.text }}>
+                        <td className="px-3 py-2.5 text-right hidden md:table-cell" style={{ color: colors.blue }}>
                           {formatarPreco(item.valor_iva)}
                         </td>
                         <td
                           className="px-3 py-2.5 text-right hidden lg:table-cell"
                           style={{
-                            color: item.valor_retencao > 0 ? colors.danger : colors.textSecondary,
+                            color: item.valor_retencao > 0 ? colors.secondary : colors.textSecondary,
                           }}>
                           {item.valor_retencao > 0 ? `−${formatarPreco(item.valor_retencao)}` : "—"}
                         </td>
@@ -1271,8 +1265,11 @@ export default function NovaFaturaReciboPage() {
                           {formatarPreco(item.subtotal)}
                         </td>
                         <td className="px-2 py-2.5 text-center">
-                          <button onClick={() => removerItem(item.id)} className="p-1 hover:opacity-70" style={{ color: colors.danger }}>
-                            <Trash2 size={14} />
+                          <button
+                            onClick={() => removerItem(item.id)}
+                            className="w-7 h-7 flex items-center justify-center rounded hover:opacity-70 transition-opacity"
+                            style={{ color: colors.secondary }}>
+                            <Trash2 size={16} />
                           </button>
                         </td>
                       </tr>
@@ -1292,7 +1289,7 @@ export default function NovaFaturaReciboPage() {
                   <LinhaFiscal label="Subtotal bruto" valor={formatarPreco(subtotalBruto)} colors={colors} />
                   <LinhaFiscal label="Base tributável" valor={formatarPreco(totalBase)} colors={colors} />
                   <LinhaFiscal label="Desconto" valor={`${percentualDesconto.toFixed(2)}%`} cor={colors.textSecondary} colors={colors} />
-                  <LinhaFiscal label="Troco" valor={formatarPreco(troco)} cor={colors.success} colors={colors} />
+                  <LinhaFiscal label="Troco" valor={formatarPreco(troco)} cor={colors.blue} colors={colors} />
                 </div>
                 <div className="flex-1 px-4 py-3">
                   <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: colors.textSecondary }}>
@@ -1300,10 +1297,11 @@ export default function NovaFaturaReciboPage() {
                   </p>
                   <LinhaFiscal label="IVA" valor={formatarPreco(totalIva)} colors={colors} />
                   {totalRetencao > 0 && (
-                    <LinhaFiscal label="Retenção" valor={`−${formatarPreco(totalRetencao)}`} cor={colors.danger} colors={colors} />
+                    <LinhaFiscal label="Retenção" valor={`−${formatarPreco(totalRetencao)}`} cor={colors.secondary} colors={colors} />
                   )}
 
                   <div className="mt-2 pt-2 border-t" style={{ borderColor: colors.border }}>
+                    
                     <LinhaFiscal label="Total" valor={formatarPreco(totalLiquido)} cor={colors.secondary} negrito colors={colors} />
                   </div>
                 </div>
@@ -1389,8 +1387,8 @@ export default function NovaFaturaReciboPage() {
                       style={{
                         ...inp,
                         borderWidth: 2,
-                        borderColor: falta > 0 ? colors.danger : pagamentoSuficiente ? colors.success : inp.borderColor,
-                        color: pagamentoSuficiente ? colors.success : colors.text,
+                        borderColor: falta > 0 ? colors.danger : pagamentoSuficiente ? colors.border : inp.borderColor,
+                        color: pagamentoSuficiente ? colors.blue : colors.secondary,
                       }}
                     />
                   </div>

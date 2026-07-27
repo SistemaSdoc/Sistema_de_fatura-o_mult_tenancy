@@ -87,7 +87,7 @@ export function DashboardCharts({
           className="p-3 sm:p-4 shadow border"
           style={{ backgroundColor: colors.card, borderColor: colors.border }}
         >
-          <h2 className="text-sm sm:text-base font-semibold mb-3 flex items-center gap-2" style={{ color: colors.text }}>
+          <h2 className="text-sm sm:text-base font-semibold mb-3 flex items-center gap-2" style={{ color: colors.blue }}>
             <Package style={{ color: colors.secondary }} size={18} />
             Top Produtos
           </h2>
@@ -127,7 +127,7 @@ export function DashboardCharts({
           className="p-3 sm:p-4 shadow border"
           style={{ backgroundColor: colors.card, borderColor: colors.border }}
         >
-          <h2 className="text-sm sm:text-base font-semibold mb-3 flex items-center gap-2" style={{ color: colors.text }}>
+          <h2 className="text-sm sm:text-base font-semibold mb-3 flex items-center gap-2" style={{ color: colors.blue }}>
             <TrendingUp style={{ color: colors.secondary }} size={18} />
             Evolução Mensal
           </h2>
@@ -162,7 +162,7 @@ export function DashboardCharts({
           className="p-3 sm:p-4 shadow border"
           style={{ backgroundColor: colors.card, borderColor: colors.border }}
         >
-          <h2 className="text-sm sm:text-base font-semibold mb-3 flex items-center gap-2" style={{ color: colors.text }}>
+          <h2 className="text-sm sm:text-base font-semibold mb-3 flex items-center gap-2" style={{ color: colors.blue }}>
             <Receipt style={{ color: colors.secondary }} size={18} />
             Docs por Tipo
           </h2>
@@ -194,7 +194,7 @@ export function DashboardCharts({
                       return [String(value ?? 0), name || ""];
                     }}
                   />
-                  <Bar yAxisId="left" dataKey="quantidade" fill={colors.primary} name="Qtd" radius={[3, 3, 0, 0]} barSize={12} />
+                  <Bar yAxisId="left" dataKey="quantidade" fill={colors.blue}  name="Qtd" radius={[3, 3, 0, 0]} barSize={12} />
                   <Bar yAxisId="right" dataKey="valor" fill={colors.secondary} name="Valor" radius={[3, 3, 0, 0]} barSize={12} />
                 </BarChart>
               </ResponsiveContainer>
@@ -210,7 +210,7 @@ export function DashboardCharts({
           className="p-3 sm:p-4 shadow border"
           style={{ backgroundColor: colors.card, borderColor: colors.border }}
         >
-          <h2 className="text-sm sm:text-base font-semibold mb-3 flex items-center gap-2" style={{ color: colors.text }}>
+          <h2 className="text-sm sm:text-base font-semibold mb-3 flex items-center gap-2" style={{ color: colors.blue  }}>
             <FileText style={{ color: colors.secondary }} size={18} />
             Docs por Estado
           </h2>
@@ -249,7 +249,7 @@ export function DashboardCharts({
               {documentosPorEstado.map((item, i) => (
                 <div key={i} className="flex items-center gap-1.5">
                   <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: pieColors[i % pieColors.length] }} />
-                  <span className="text-xs" style={{ color: colors.textSecondary }}>
+                  <span className="text-xs" style={{ color: colors.blue }}>
                     {item.estado}: {formatNumber(item.quantidade)}
                   </span>
                 </div>

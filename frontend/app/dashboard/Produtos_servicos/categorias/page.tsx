@@ -13,8 +13,6 @@ import {
   PencilLine,
   Trash2,
   History,
-  X,
-  Percent,
   MoreVertical,
 } from "lucide-react";
 import MainEmpresa from "../../../components/MainEmpresa";
@@ -38,7 +36,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { ToastNotification } from "@/components/ToastNotification";
-
 
 /* ─── Tipos ──────────────────────────────────────────────────────── */
 interface FormCategoriaData {
@@ -261,8 +258,8 @@ export default function CategoriasPage() {
     }
 
     return {
-      backgroundColor: `${colors.primary}`,
-      color: "text-[#FFFFFF]",
+      //backgroundColor: `${colors.border}`,
+      color: colors.blue,
     };
   };
 
@@ -400,19 +397,13 @@ export default function CategoriasPage() {
       icon: LayoutGrid,
       label: "Total",
       value: categorias.length,
-      color: colors.text,
+      color: colors.blue,
     },
     {
       icon: CheckCircle,
       label: "Ativos",
       value: categorias.filter((c) => c.status === "ativo").length,
-      color: colors.secondary,
-    },
-    {
-      icon: Package,
-      label: "Produtos",
-      value: categorias.length,
-      color: colors.textSecondary,
+      color: colors.blue,
     },
     {
       icon: Trash2,
@@ -501,7 +492,7 @@ export default function CategoriasPage() {
         {loading ? (
           <LoadingStats colors={colors} />
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {stats.map(({ icon: Icon, label, value, color }) => (
               <div
                 key={label}
@@ -515,7 +506,7 @@ export default function CategoriasPage() {
                     <Icon className="w-5 h-5" style={{ color }} />
                   </div>
                   <div>
-                    <p className="text-xl font-bold leading-none" style={{ color: colors.text }}>
+                    <p className="text-xl font-bold leading-none" style={{ color: colors.blue }}>
                       {value}
                     </p>
                     <p className="text-sm mt-0.5" style={{ color: colors.textSecondary }}>
@@ -578,9 +569,9 @@ export default function CategoriasPage() {
                           <div
                             className="w-9 h-9 flex items-center justify-center flex-shrink-0"
                             style={{
-                              backgroundColor: `${colors.textSecondary}20`,
+                              backgroundColor: `${colors.primary}10`,
                             }}>
-                            <Package className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                            <Package className="w-4 h-4" style={{ color: colors.secondary }} />
                           </div>
                           <div className="min-w-0">
                             <div className="font-medium text-sm truncate" style={{ color: colors.text }}>
@@ -652,15 +643,15 @@ export default function CategoriasPage() {
                                   <DropdownMenuItem
                                     onClick={() => handleEditar(c)}
                                     className="gap-2 cursor-pointer text-xs py-2"
-                                    style={{ color: colors.text }}>
-                                    <PencilLine className="h-3.5 w-3.5" />
+                                    style={{ color: colors.blue }}>
+                                    <PencilLine className="h-3.5 w-3.5" style={{ color: colors.blue }} />
                                     Editar
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     onClick={() => handleConfirmarDelete(c)}
                                     className="gap-2 cursor-pointer text-xs py-2"
-                                    style={{ color: colors.warning }}>
-                                    <Trash2 className="h-3.5 w-3.5" style={{ color: colors.warning }} />
+                                    style={{ color: colors.secondary }}>
+                                    <Trash2 className="h-3.5 w-3.5" style={{ color: colors.secondary }} />
                                     Mover para lixeira
                                   </DropdownMenuItem>
                                 </>
@@ -723,32 +714,32 @@ export default function CategoriasPage() {
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="p-4 space-y-3">
-            <div className="space-y-1">
-              <Label className="text-xs" style={{ color: colors.text }}>
-                Nome <span style={{ color: colors.danger }}>*</span>
-              </Label>
-              <Input
-                name="nome"
-                value={formData.nome}
-                onChange={handleInputChange}
-                placeholder="Ex: Eletrônicos"
-                className="h-8 text-xs"
-                style={{
-                  backgroundColor: colors.card,
-                  borderColor: errors.nome ? colors.danger : colors.border,
-                  color: colors.text,
-                }}
-              />
-              {errors.nome && (
-                <p className="text-xs" style={{ color: colors.danger }}>
-                  {errors.nome}
-                </p>
-              )}
-            </div>
-
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
-                <Label className="text-xs" style={{ color: colors.text }}>
+                <Label className="text-xs" style={{ color: colors.blue }}>
+                  Nome
+                </Label>
+                <Input
+                  name="nome"
+                  value={formData.nome}
+                  onChange={handleInputChange}
+                  placeholder="Ex: Eletrônicos"
+                  className="h-8 text-xs"
+                  style={{
+                    backgroundColor: colors.card,
+                    borderColor: errors.nome ? colors.danger : colors.border,
+                    color: colors.text,
+                  }}
+                />
+                {errors.nome && (
+                  <p className="text-xs" style={{ color: colors.danger }}>
+                    {errors.nome}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs" style={{ color: colors.blue }}>
                   Status
                 </Label>
                 <Select value={formData.status} onValueChange={(v) => handleSelectChange("status", v)}>
@@ -779,25 +770,25 @@ export default function CategoriasPage() {
             {/* Configuração de IVA */}
             <div className="space-y-3 pt-2 border-t" style={{ borderColor: colors.border }}>
               <div className="flex items-center justify-between">
-                <Label className="text-xs font-medium flex items-center gap-1" style={{ color: colors.text }}>
+                <Label className="text-xs font-medium flex items-center gap-1" style={{ color: colors.blue }}>
                   Configuração de IVA
                 </Label>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs" style={{ color: colors.textSecondary }}>
+                  <span className="text-xs" style={{ color: colors.blue }}>
                     {formData.sujeito_iva ? "Sujeito a IVA" : "Isento de IVA"}
                   </span>
                   <Switch
                     checked={formData.sujeito_iva}
                     onCheckedChange={handleSujeitoIVAChange}
                     style={{
-                      backgroundColor: formData.sujeito_iva ? colors.primary : colors.border,
+                      backgroundColor: formData.sujeito_iva ? colors.secondary : colors.textSecondary,
                     }}
                   />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs" style={{ color: colors.text }}>
+                <Label className="text-xs" style={{ color: colors.blue }}>
                   Taxa de IVA
                 </Label>
                 <Input
@@ -822,8 +813,8 @@ export default function CategoriasPage() {
 
               {!formData.sujeito_iva && (
                 <div className="space-y-1">
-                  <Label className="text-xs" style={{ color: colors.text }}>
-                    Código de Isenção <span style={{ color: colors.danger }}>*</span>
+                  <Label className="text-xs" style={{ color: colors.blue }}>
+                    Código de Isenção 
                   </Label>
                   <Select value={formData.codigo_isencao} onValueChange={(v) => handleSelectChange("codigo_isencao", v)}>
                     <SelectTrigger
@@ -875,7 +866,7 @@ export default function CategoriasPage() {
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs" style={{ color: colors.text }}>
+              <Label className="text-xs" style={{ color: colors.blue }}>
                 Descrição
               </Label>
               <Textarea

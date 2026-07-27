@@ -7,8 +7,6 @@ import { useThemeColors } from "@/context/ThemeContext";
 interface FiltrosEstoqueProps {
     busca: string;
     onBuscaChange: (value: string) => void;
-    tipoFiltro: "todos" | "produto" | "servico";
-    onTipoFiltroChange: (value: "todos" | "produto" | "servico") => void;
     categoriaFiltro: string;
     onCategoriaFiltroChange: (value: string) => void;
     filtroEstoque: "todos" | "baixo" | "zerado";
@@ -23,8 +21,6 @@ interface FiltrosEstoqueProps {
 export function FiltrosEstoque({
     busca,
     onBuscaChange,
-    tipoFiltro,
-    onTipoFiltroChange,
     categoriaFiltro,
     onCategoriaFiltroChange,
     filtroEstoque,
@@ -42,14 +38,14 @@ export function FiltrosEstoque({
         }, 300); // Debounce de 300ms para busca
 
         return () => clearTimeout(timeoutId);
-    }, [busca, tipoFiltro, categoriaFiltro, filtroEstoque, onAplicarFiltros]);
+    }, [busca, categoriaFiltro, filtroEstoque, onAplicarFiltros]);
 
     const limparBusca = () => {
         onBuscaChange("");
     };
 
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_160px_180px] gap-3 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_180px] gap-3 mb-6">
             {/* Busca */}
             <div className="relative w-full sm:col-span-2 lg:col-span-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: colors.textSecondary }} />
@@ -76,23 +72,8 @@ export function FiltrosEstoque({
                 )}
             </div>
 
-            {/* Tipo */}
-            <select
-                value={tipoFiltro}
-                onChange={(e) => onTipoFiltroChange(e.target.value as unknown as "todos" | "produto" | "servico")}
-                className="w-full px-3 py-2.5 sm:py-2 text-sm border outline-none"
-                style={{
-                    backgroundColor: colors.card,
-                    borderColor: colors.border,
-                    color: colors.text
-                }}
-            >
-                <option value="todos">Todos os tipos</option>
-                <option value="produto">Apenas Produtos</option>
-                <option value="servico">Apenas Serviços</option>
-            </select>
 
-            {/* Categoria */}
+            {/* Categoria 
             <select
                 value={categoriaFiltro}
                 onChange={(e) => onCategoriaFiltroChange(e.target.value)}
@@ -107,7 +88,7 @@ export function FiltrosEstoque({
                 {categorias.map((cat) => (
                     <option key={cat.id} value={cat.id}>{cat.nome}</option>
                 ))}
-            </select>
+            </select>*/}
         </div>
     );
 }

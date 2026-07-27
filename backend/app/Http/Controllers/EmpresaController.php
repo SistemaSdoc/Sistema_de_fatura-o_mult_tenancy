@@ -515,7 +515,7 @@ public function store(Request $request)
 
         $landlordUser = auth('landlord_api')->user() ?? auth('landlord')->user();
 
-        $mensagem = EmpresaMensagem::on('shared')->create([
+        $mensagem = EmpresaMensagem::on('landlord')->create([
             'empresa_id' => $empresa->id,
             'remetente_id' => $landlordUser?->id,
             'remetente_tipo' => 'landlord',
@@ -615,7 +615,7 @@ public function store(Request $request)
                 ];
             });
 
-        $mensagens = EmpresaMensagem::on('shared')
+        $mensagens = EmpresaMensagem::on('landlord')
             ->where('empresa_id', $empresa->id)
             ->orderByDesc('created_at')
             ->limit(20)
@@ -721,31 +721,46 @@ public function store(Request $request)
             ], 400);
         }
 
-        $mensagens = EmpresaMensagem::on('shared')
-            ->where('empresa_id', $empresa->id)
-            ->where('eliminada_pelo_cliente', false)
-            ->orderByDesc('created_at')
-            ->get()
-            ->map(function ($mensagem) {
-                return [
-                    'id' => $mensagem->id,
-                    'mensagem' => $mensagem->mensagem,
-                    'remetente_tipo' => $mensagem->remetente_tipo,
-                    'remetente_nome' => $mensagem->remetente_nome,
-                    'remetente_email' => $mensagem->remetente_email,
-                    'lida' => (bool) $mensagem->lida,
-                    'lida_em' => optional($mensagem->lida_em)?->toIso8601String(),
-                    'created_at' => optional($mensagem->created_at)?->toIso8601String(),
-                ];
-            });
+        try {
+            $mensagens = EmpresaMensagem::on('landlord')
+                ->where('empresa_id', $empresa->id)
+                ->where('eliminada_pelo_cliente', false)
+                ->orderByDesc('created_at')
+                ->get()
+                ->map(function ($mensagem) {
+                    return [
+                        'id' => $mensagem->id,
+                        'mensagem' => $mensagem->mensagem,
+                        'remetente_tipo' => $mensagem->remetente_tipo,
+                        'remetente_nome' => $mensagem->remetente_nome,
+                        'remetente_email' => $mensagem->remetente_email,
+                        'lida' => (bool) $mensagem->lida,
+                        'lida_em' => optional($mensagem->lida_em)?->toIso8601String(),
+                        'created_at' => optional($mensagem->created_at)?->toIso8601String(),
+                    ];
+                });
 
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'mensagens' => $mensagens,
-                'nao_lidas' => $mensagens->where('lida', false)->count(),
-            ],
-        ]);
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'mensagens' => $mensagens,
+                    'nao_lidas' => $mensagens->where('lida', false)->count(),
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('[mensagensEmpresa] Erro ao carregar mensagens:', [
+                'empresa_id' => $empresa->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'mensagens' => [],
+                    'nao_lidas' => 0,
+                ],
+            ]);
+        }
     }
 
     public function marcarMensagemComoLida(Request $request, EmpresaMensagem $mensagem)

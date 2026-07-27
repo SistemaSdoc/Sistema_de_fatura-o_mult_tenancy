@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Trash2, Layers, Plus, Percent, PencilLine, MoreVertical } from "lucide-react";
-import { Produto, formatarPreco, getTipoBadge, isServico } from "@/services/produtos";
+import { Produto, formatarPreco, getTipoBadge } from "@/services/produtos";
 import { getTaxaIVALabel } from "@/services/categorias";
 import { StatusEstoqueBadge } from "./StatusEstoqueBadge";
 import { useThemeColors, LIGHT_COLORS } from "@/context/ThemeContext";
@@ -84,33 +84,26 @@ export function TabelaItens({
         const menuWidth = 176;
         const menuHeight = 150;
 
-        // ✅ Posicionar o menu abaixo do botão, alinhado à esquerda
         let left = rect.left;
 
-        // Se o menu ultrapassar a borda direita, alinhar à direita do botão
         if (left + menuWidth > windowWidth - 10) {
             left = rect.right - menuWidth;
         }
 
-        // Se ultrapassar a borda esquerda, ajustar
         if (left < 10) {
             left = 10;
         }
 
-        // Tentar abrir para baixo primeiro
         let top = rect.bottom + 6;
 
-        // Se não houver espaço abaixo, abrir para cima
         if (top + menuHeight > windowHeight - 10) {
             top = rect.top - menuHeight - 6;
         }
 
-        // Se ainda assim não houver espaço, centralizar na tela
         if (top < 10) {
             top = (windowHeight - menuHeight) / 2;
         }
 
-        // Garantir que o menu não saia da tela
         top = Math.max(10, Math.min(top, windowHeight - menuHeight - 10));
         left = Math.max(10, Math.min(left, windowWidth - menuWidth - 10));
 
@@ -138,19 +131,11 @@ export function TabelaItens({
     }
 
     const getIVADisplay = (item: Produto) => {
-        const isServicoItem = isServico(item);
-        if (isServicoItem) {
-            return {
-                label: getTaxaIVALabel(item.taxa_iva || 0, item.sujeito_iva ?? true),
-                cor: item.sujeito_iva ? colors.secondary : colors.textSecondary,
-                isento: !item.sujeito_iva
-            };
-        }
         const categoria = item.categoria;
         if (categoria) {
             return {
                 label: getTaxaIVALabel(categoria.taxa_iva || 0, categoria.sujeito_iva ?? true),
-                cor: categoria.sujeito_iva ? colors.secondary : colors.textSecondary,
+                cor: categoria.sujeito_iva ? colors.secondary : colors.blue,
                 isento: !categoria.sujeito_iva
             };
         }
@@ -178,7 +163,6 @@ export function TabelaItens({
                     <tbody className="divide-y" style={{ borderColor: colors.border }}>
                         {itens.map((item) => {
                             const tipoBadge = getTipoBadge(item.tipo);
-                            const isServicoItem = isServico(item);
                             const ivaDisplay = getIVADisplay(item);
 
                             return (
@@ -200,11 +184,7 @@ export function TabelaItens({
                                         </span>
                                     </td>
                                     <td className="py-2.5 px-3 text-center font-medium">
-                                        {isServicoItem ? (
-                                            <span style={{ color: colors.textSecondary }}>—</span>
-                                        ) : (
-                                            <span style={{ color: colors.text }}>{item.estoque_atual}</span>
-                                        )}
+                                        <span style={{ color: colors.text }}>{item.estoque_atual}</span>
                                     </td>
                                     <td className="py-2.5 px-3 text-right font-medium whitespace-nowrap" style={{ color: colors.text }}>
                                         {formatarPreco(item.preco_venda)}
@@ -241,7 +221,6 @@ export function TabelaItens({
             <div className="md:hidden space-y-2.5">
                 {itens.map((item) => {
                     const tipoBadge = getTipoBadge(item.tipo);
-                    const isServicoItem = isServico(item);
                     const ivaDisplay = getIVADisplay(item);
 
                     return (
@@ -275,7 +254,7 @@ export function TabelaItens({
                             <div className="flex items-center justify-between mt-2.5 pt-2 border-t" style={{ borderColor: colors.border }}>
                                 <div className="text-xs" style={{ color: colors.textSecondary }}>
                                     Stock: <span className="font-medium" style={{ color: colors.text }}>
-                                        {isServicoItem ? "—" : item.estoque_atual}
+                                        {item.estoque_atual}
                                     </span>
                                 </div>
                                 <div className="text-sm font-semibold" style={{ color: colors.text }}>
@@ -327,29 +306,27 @@ export function TabelaItens({
                         Editar
                     </button>
 
-                    {!isServico(menuItem) && (
-                        <button
-                            onClick={() => handleMenuItemClick(onRegistrarEntrada, menuItem)}
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                width: '100%',
-                                padding: '10px 16px',
-                                textAlign: 'left',
-                                fontSize: '14px',
-                                backgroundColor: 'transparent',
-                                border: 'none',
-                                color: colors.text,
-                                cursor: 'pointer'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = colors.hover}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                        >
-                            <Plus className="w-4 h-4" />
-                            Entrada
-                        </button>
-                    )}
+                    <button
+                        onClick={() => handleMenuItemClick(onRegistrarEntrada, menuItem)}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            width: '100%',
+                            padding: '10px 16px',
+                            textAlign: 'left',
+                            fontSize: '14px',
+                            backgroundColor: 'transparent',
+                            border: 'none',
+                            color: colors.text,
+                            cursor: 'pointer'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = colors.hover}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                    >
+                        <Plus className="w-4 h-4" />
+                        Entrada
+                    </button>
 
                     <button
                         onClick={() => handleMenuItemClick(onMoverParaLixeira, menuItem)}

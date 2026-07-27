@@ -9,7 +9,7 @@ class EmpresaMensagem extends Model
 {
     use HasUuids;
 
-    protected $connection = 'shared';
+    protected $connection = 'landlord';
     protected $table = 'empresa_mensagens';
 
     public $incrementing = false;

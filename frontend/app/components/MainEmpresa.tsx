@@ -3,29 +3,30 @@
 import React, { ReactNode, useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
-    Home,
-    FileText,
-    Users,
-    BarChart2,
-    LogOut,
-    ChevronDown,
-    Package,
-    Archive,
-    Truck,
-    ChevronLeft,
-    Settings,
-    Bell,
-    Loader2,
-    X,
-    Sun,
-    Moon,
-    Menu,
-    AlertCircle,
-    TrendingDown,
-    User,
-    HelpCircle,
-    Crown,
-    MessageSquare,
+  Home,
+  FileText,
+  Users,
+  BarChart2,
+  LogOut,
+  ChevronDown,
+  Package,
+  Archive,
+  Truck,
+  ChevronLeft,
+  Settings,
+  Bell,
+  Loader2,
+  X,
+  Sun,
+  Moon,
+  Menu,
+  AlertCircle,
+  TrendingDown,
+  User,
+  HelpCircle,
+  Crown,
+  MessageSquare,
+  Briefcase,
 } from "lucide-react";
 import { LucideIcon } from "lucide-react";
 import Image from "next/image";
@@ -163,7 +164,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
   const getAllowedRoutesForRole = useCallback((role: string): string[] => {
     switch (role) {
       case "admin":
-        return ["/dashboard" , "/dashboard/ajuda"];
+        return ["/dashboard", "/dashboard/ajuda"];
       case "operador":
         return [
           "/dashboard/Vendas",
@@ -594,22 +595,28 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
       roles: ["admin", "operador", "gestor"],
     },
     {
-      label: "Gestão de Stock",
+      label: "Gestão de estoque",
       icon: Package,
       path: "/dashboard/Produtos_servicos",
       links: [
         {
           label: "Stock",
           path: "/dashboard/Produtos_servicos/Stock",
-          icon: Package,
         },
         {
           label: "Categorias",
           path: "/dashboard/Produtos_servicos/categorias",
-          icon: Archive,
         },
       ],
       isGroup: true,
+      roles: ["admin", "gestor"],
+    },
+        {
+      label: "Serviços",
+      icon: Briefcase,
+      path: "/dashboard/Servicos",
+      links: [],
+      isGroup: false,
       roles: ["admin", "gestor"],
     },
     {
@@ -645,7 +652,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
       icon: HelpCircle,
       path: "/dashboard/ajuda",
       links: [],
-      roles: ["admin", "gestor","operador","contablista"],
+      roles: ["admin", "gestor", "operador", "contablista"],
     },
   ];
 
@@ -716,14 +723,14 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
             />
           ) : (
             <div
-              className="flex items-center justify-center w-10 h-10 text-xs font-bold text-white  flex-shrink-0"
-              style={{ backgroundColor: colors.primary }}>
+              className="flex items-center justify-center w-10 h-10 text-xs font-bold  flex-shrink-0"
+              style={{ backgroundColor: colors.primary, color:colors.blue }}>
               {nomeEmpresa.charAt(0).toUpperCase()}
             </div>
           )}
           {sidebarOpen && (
             <>
-              <span className="text-sm font-semibold truncate flex-1" style={{ color: colors.text }}>
+              <span className="text-sm font-semibold truncate flex-1" style={{ color: colors.blue }}>
                 {nomeEmpresa}
               </span>
               {isMobile && (
@@ -754,7 +761,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                       className="flex items-center justify-between px-3 py-2.5 transition-all duration-200 cursor-pointer select-none group"
                       style={{
                         backgroundColor: active ? colors.secondary : "transparent",
-                        color: active ? "white" : colors.text,
+                        color: active ? colors.blue : colors.blue,
                       }}
                       onClick={(e) => handleMainItemClick(item, e)}
                       title={!sidebarOpen ? item.label : ""}
@@ -764,7 +771,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                         <item.icon
                           size={19}
                           style={{
-                            color: active ? "white" : colors.secondary,
+                            color: active ? colors.blue : colors.secondary,
                             flexShrink: 0,
                           }}
                           className="transition-colors duration-200"
@@ -772,7 +779,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                         {sidebarOpen && (
                           <span
                             className="text-sm font-medium truncate transition-colors duration-200"
-                            style={{ color: active ? "white" : colors.text }}>
+                            style={{ color: active ? colors.blue : colors.blue }}>
                             {item.label}
                           </span>
                         )}
@@ -787,7 +794,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                           <ChevronDown
                             size={15}
                             style={{
-                              color: active ? "white" : colors.textSecondary,
+                              color: active ? colors.blue : colors.blue,
                             }}
                           />
                         </div>
@@ -806,7 +813,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                       className="flex items-center justify-between px-3 py-2.5 transition-all duration-200 cursor-pointer select-none group w-full"
                       style={{
                         backgroundColor: active ? colors.secondary : "transparent",
-                        color: active ? "white" : colors.text,
+                        color: active ? colors.blue : colors.blue,
                       }}
                       onClick={handleLinkClick}
                       title={!sidebarOpen ? item.label : ""}>
@@ -822,7 +829,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                         {sidebarOpen && (
                           <span
                             className="text-sm font-medium truncate transition-colors duration-200"
-                            style={{ color: active ? "white" : colors.text }}>
+                            style={{ color: active ? colors.blue : colors.blue}}>
                             {item.label}
                           </span>
                         )}
@@ -938,7 +945,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                   backgroundColor: subscricaoAberta ? colors.hover : "transparent",
                 }}
                 title="Minha Subscrição">
-                <Crown size={16} style={{ color: colors.secondary }} />
+                <Crown size={16} style={{ color: colors.blue }} />
                 {!subscricaoAtiva && subscricao && (
                   <span
                     className="absolute -top-1 -right-1 text-[10px] font-bold flex items-center justify-center px-1.5 py-0.5 text-white animate-pulse shadow-md"
@@ -978,7 +985,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                     <div className="p-3 border-b md:p-4 flex-shrink-0" style={{ borderColor: colors.border }}>
                       <div className="flex items-center justify-between">
                         <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: colors.text }}>
-                          <Crown size={15} style={{ color: colors.primary }} />
+                          <Crown size={15} style={{ color: colors.blue }} />
                           Minha Subscrição
                         </h3>
                         <button
@@ -1022,9 +1029,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                           {subscricao.data_fim && (
                             <div className="flex items-center justify-between text-xs">
                               <span style={{ color: colors.textSecondary }}>Vencimento</span>
-                              <span style={{ color: colors.text }}>
-                                {new Date(subscricao.data_fim).toLocaleDateString("pt-PT")}
-                              </span>
+                              <span style={{ color: colors.text }}>{new Date(subscricao.data_fim).toLocaleDateString("pt-PT")}</span>
                             </div>
                           )}
 
@@ -1065,7 +1070,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                         onClick={() => buscarSubscricao(true)}
                         disabled={loadingSubscricao}
                         className="text-xs font-medium transition-all hover:scale-105 disabled:opacity-50 px-2 py-1"
-                        style={{ color: colors.primary }}>
+                        style={{ color: colors.blue }}>
                         {loadingSubscricao ? "Atualizando..." : "Atualizar"}
                       </button>
                     </div>
@@ -1228,9 +1233,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                                       </p>
                                       <div className="mt-2 flex items-center justify-between gap-2">
                                         <p className="text-[10px]" style={{ color: colors.textSecondary }}>
-                                          {mensagem.created_at
-                                            ? new Date(mensagem.created_at).toLocaleString("pt-PT")
-                                            : "Sem data"}
+                                          {mensagem.created_at ? new Date(mensagem.created_at).toLocaleString("pt-PT") : "Sem data"}
                                         </p>
                                         {!mensagem.lida && (
                                           <button
@@ -1328,7 +1331,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                           }}
                           disabled={loadingNotificacoes || loadingMensagens}
                           className="text-xs font-medium transition-all hover:scale-105 disabled:opacity-50 px-2 py-1"
-                          style={{ color: colors.primary }}>
+                          style={{ color: colors.blue }}>
                           {loadingNotificacoes || loadingMensagens ? "Atualizando..." : "Atualizar"}
                         </button>
                       </div>
@@ -1351,7 +1354,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                 }}
                 title="Menu do usuário">
                 <div className="hidden text-right md:block">
-                  <p className="text-xs font-semibold leading-tight" style={{ color: colors.text }}>
+                  <p className="text-xs font-semibold leading-tight" style={{ color: colors.blue }}>
                     {userName.split(" ")[0]}
                   </p>
                   <p className="text-[10px]" style={{ color: colors.textSecondary }}>
@@ -1362,7 +1365,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                   className="flex items-center justify-center w-7 h-7 text-xl font-boldmd:w-8 md:h-8 transition-transform rounded"
                   style={{
                     background: `${colors.secondary}`,
-                    color: `${colors.primary}`,
+                    color: `${colors.blue}`,
                   }}>
                   {userInitial}
                 </div>
@@ -1391,12 +1394,12 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                           className="flex items-center justify-center w-10 h-10 rounded-xl text-sm font-bold flex-shrink-0"
                           style={{
                             background: `${colors.secondary}`,
-                            color: `${colors.primary}`,
+                            color: `${colors.blue}`,
                           }}>
                           {userInitial}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold truncate" style={{ color: colors.text }}>
+                          <p className="text-sm font-semibold truncate" style={{ color: colors.blue }}>
                             {userName}
                           </p>
                           <p className="text-xs truncate" style={{ color: colors.textSecondary }}>
@@ -1416,6 +1419,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                     </div>
 
                     {/* Menu Items - APENAS PARA ADMIN */}
+
                     {userRole === "admin" && (
                       <>
                         <div className="py-1">
@@ -1423,7 +1427,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
                             <div
                               className="flex items-center gap-3 px-4 py-2.5 text-xs font-medium transition-all duration-200 hover:translate-x-1"
                               style={{
-                                color: colors.text,
+                                color: colors.blue,
                                 backgroundColor: "transparent",
                               }}>
                               <User size={14} />

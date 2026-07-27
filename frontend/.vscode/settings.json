@@ -1,4 +1,5 @@
 {
+  "typescript.tsserver.maxTsServerMemory": 512,
   "css.lint.unknownAtRules": "ignore",
   "css.validate": false,
   "tailwindCSS.experimental.configFile": null

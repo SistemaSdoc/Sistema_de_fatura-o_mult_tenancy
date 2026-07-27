@@ -1,8 +1,19 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import { Modal } from "@/app/components/Clientes/Modal";
 import { createPortal } from "react-dom";
-import { Upload, X, CheckCircle2, AlertCircle, FileSpreadsheet, Loader2, Download } from "lucide-react";
+import {
+  Upload,
+  X,
+  CheckCircle2,
+  AlertCircle,
+  FileSpreadsheet,
+  Loader2,
+  Download,
+  RefreshCcw,
+  AlertTriangle,
+} from "lucide-react";
 import type { ImportarClientesResponse } from "@/services/clientes";
 
 interface ModalImportarProps {
@@ -24,29 +35,12 @@ export const ModalImportar: React.FC<ModalImportarProps> = ({
   const [carregando, setCarregando] = useState(false);
   const [resultado, setResultado] = useState<ImportarClientesResponse | null>(null);
   const [erroGeral, setErroGeral] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false); // ← novo
+  const [mounted, setMounted] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Garante que só usamos document.body no client
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  // Trava o scroll da página de fundo enquanto o modal está aberto
-  useEffect(() => {
-    if (isOpen) {
-      const scrollY = window.scrollY;
-      document.body.style.position = "fixed";
-      document.body.style.top = `-${scrollY}px`;
-      document.body.style.width = "100%";
-      return () => {
-        document.body.style.position = "";
-        document.body.style.top = "";
-        document.body.style.width = "";
-        window.scrollTo(0, scrollY);
-      };
-    }
-  }, [isOpen]);
 
   if (!isOpen || !mounted) return null;
 
@@ -107,84 +101,81 @@ export const ModalImportar: React.FC<ModalImportarProps> = ({
   };
 
   const modalContent = (
-    <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[9999] p-2 sm:p-4 animate-in fade-in-0 duration-200"
-      style={{ height: "100dvh" }} // ← garante altura correta em mobile (barra de endereço)
-    >
-      <div
-        className="shadow-2xl max-w-lg w-full max-h-[85dvh] overflow-hidden animate-in zoom-in-95 fade-in-0 duration-300 flex flex-col"
-        style={{ backgroundColor: colors.card }}
-      >
-        {/* Header */}
-        <div
-          className="flex items-center justify-between px-5 py-4 border-b shrink-0"
-          style={{ borderColor: colors.border }}
-        >
-          <div className="flex items-center gap-2">
-            <h2 className="text-base sm:text-lg font-semibold" style={{ color: colors.secondary }}>
-              Importar Clientes
-            </h2>
-          </div>
-          <button onClick={handleClose} className="p-1 hover:opacity-70 transition-opacity" disabled={carregando}>
-            <X className="w-5 h-5" style={{ color: colors.textSecondary }} />
-          </button>
-        </div>
-
+    <Modal isOpen={isOpen} onClose={handleClose} title="Importar Clientes" colors={colors}>
+      <div className="flex flex-col">
         {/* Body */}
-        <div className="p-5 overflow-y-auto space-y-4">
-          {!resultado && (
+        <div className="px-5 py-4 space-y-4">
+          {!resultado ? (
             <>
-              <p className="text-sm" style={{ color: colors.textSecondary }}>
-                Carrega o ficheiro Excel preenchido para criar vários clientes de uma vez.
-              </p>
-
-              <label
-                htmlFor="arquivo-importacao"
-                className="flex flex-col items-center justify-center gap-2 border-2 border-dashed py-8 px-4 cursor-pointer transition-colors hover:opacity-80"
-                style={{ borderColor: colors.border }}
-              >
-                <Upload className="w-8 h-8" style={{ color: colors.primary }} />
-                <span className="text-sm font-medium" style={{ color: colors.secondary }}>
-                  {arquivo ? arquivo.name : "Clique para escolher o ficheiro .xlsx"}
-                </span>
-                <span className="text-xs" style={{ color: colors.textSecondary }}>
-                  Tamanho máximo: 5MB
-                </span>
-                <input
-                  id="arquivo-importacao"
-                  ref={inputRef}
-                  type="file"
-                  accept=".xlsx,.xls"
-                  className="hidden"
-                  onChange={handleArquivo}
-                  disabled={carregando}
-                />
-              </label>
-
-              <a
-                href="/templates/template_importacao_clientes.xlsx"
-                download
-                className="flex items-center gap-1.5 text-xs font-medium w-fit transition-colors hover:opacity-70"
-                style={{ color: colors.secondary }}
-              >
-                <Download className="w-3.5 h-3.5" />
-                Baixar modelo de planilha
-              </a>
+              {!arquivo ? (
+                <label
+                  className="flex flex-col items-center justify-center gap-2 border-2 border-dashed cursor-pointer py-10 px-4 text-center transition-colors hover:opacity-80"
+                  style={{ borderColor: colors.border }}
+                >
+                  <Upload className="w-8 h-8" style={{ color: colors.textSecondary }} />
+                  <p className="text-sm font-medium" style={{ color: colors.text }}>
+                    Clica para escolher um ficheiro
+                  </p>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>
+                    Formatos aceites: .xlsx, .xls
+                  </p>
+                  <input
+                    ref={inputRef}
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="hidden"
+                    onChange={handleArquivo}
+                  />
+                </label>
+              ) : (
+                <div
+                  className="flex items-center justify-between gap-2 p-3 border"
+                  style={{ borderColor: colors.border }}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FileSpreadsheet className="w-5 h-5 shrink-0" style={{ color: colors.primary }} />
+                    <span className="text-sm truncate" style={{ color: colors.text }}>
+                      {arquivo.name}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setArquivo(null);
+                      if (inputRef.current) inputRef.current.value = "";
+                    }}
+                    disabled={carregando}
+                    className="shrink-0 hover:opacity-70"
+                  >
+                    <X className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                  </button>
+                </div>
+              )}
 
               {erroGeral && (
-                <div className="flex items-start gap-2 p-3 text-sm bg-red-50 text-red-700 border border-red-200">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>{erroGeral}</span>
+                <div className="flex items-center gap-2 p-3" style={{ background: colors.primary }}>
+                  <AlertTriangle className="w-4 h-4 shrink-0" style={{ color: colors.secondary }} />
+                  <p className="text-xs" style={{ color: colors.secondary }}>
+                    {erroGeral}
+                  </p>
                 </div>
               )}
             </>
-          )}
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                {resultado.total_sucesso > 0 ? (
+                  <CheckCircle2 className="w-5 h-5" style={{ color: colors.primary }} />
+                ) : (
+                  <AlertCircle className="w-5 h-5" style={{ color: colors.secondary }} />
+                )}
+                <p className="text-sm font-medium" style={{ color: colors.text }}>
+                  {resultado.message}
+                </p>
+              </div>
 
-          {resultado && (
-            <div className="space-y-4">
               <div className="grid grid-cols-2 gap-2">
                 <div className="flex items-center gap-2 p-3" style={{ background: colors.primary }}>
-                  <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: colors.text }} />
+                  <CheckCircle2 className="w-5 h-5" style={{ color: colors.text }} />
                   <div>
                     <p className="text-lg font-bold" style={{ color: colors.text }}>
                       {resultado.total_sucesso}
@@ -247,7 +238,10 @@ export const ModalImportar: React.FC<ModalImportarProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t shrink-0" style={{ borderColor: colors.border }}>
+        <div
+          className="flex items-center justify-end gap-2 px-5 py-4 border-t shrink-0"
+          style={{ borderColor: colors.border }}
+        >
           {!resultado ? (
             <>
               <button
@@ -288,7 +282,7 @@ export const ModalImportar: React.FC<ModalImportarProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 
   return createPortal(modalContent, document.body);

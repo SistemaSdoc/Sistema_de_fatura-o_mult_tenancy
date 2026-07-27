@@ -340,7 +340,7 @@ export default function InvoiceTable({
           onClick={() => onGerarRecibo(doc)}
           disabled={gerandoRecibo === doc.id}
           title="Gerar Recibo"
-          color={colors.success}
+          color={colors.primary}
         >
           {gerandoRecibo === doc.id ? <Spinner color={colors.success} /> : <FileText size={16} />}
         </IconBtn>

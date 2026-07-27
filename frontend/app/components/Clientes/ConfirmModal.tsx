@@ -65,7 +65,7 @@ export function ConfirmModal({
                             style={{ backgroundColor: btnColor }}
                         >
                             {loading ? (
-                                <><div className="w-4 h-4 border-2 rounded-full border-white border-t-transparent animate-spin" />Processando…</>
+                                <><div className="w-4 h-4 border-2  border-white border-t-transparent animate-spin" />Processando…</>
                             ) : confirmText}
                         </button>
                     </div>

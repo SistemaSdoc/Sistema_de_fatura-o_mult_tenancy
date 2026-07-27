@@ -32,9 +32,9 @@ const getApiError = (error: unknown): ApiError =>
 const getCollection = <T,>(value: T[] | PaginatedResponse<T>): T[] =>
     Array.isArray(value) ? value : value.data || [];
 
-export function useEstoque() {
+export function useServicos() {
     const [loading, setLoading] = useState(true);
-    const [resumo, setResumo] = useState<ResumoStockResponse | null>(null);
+    const [isInitialLoad, setIsInitialLoad] = useState(true);
     const [itens, setItens] = useState<Produto[]>([]);
     const [itensDeletados, setItensDeletados] = useState<Produto[]>([]);
     const [categorias, setCategorias] = useState<Categoria[]>([]);
@@ -61,19 +61,17 @@ export function useEstoque() {
     const carregarDados = useCallback(async () => {
         setLoading(true);
         try {
-            const [resumoData, itensData, cats] = await Promise.all([
-                movimentoStockService.resumo(),
-                produtoService.listarProdutos({ tipo: "produto" }),
+            const [itensData, cats] = await Promise.all([
+                produtoService.listarProdutos({ tipo: "servico" }),
                 produtoService.listarCategorias(),
             ]);
-
-            setResumo(resumoData);
             setItens(getCollection(itensData.produtos));
             setCategorias(cats);
         } catch (error) {
             console.error("Erro ao carregar dados:", error);
         } finally {
             setLoading(false);
+            setIsInitialLoad(false);
         }
     }, []);
 
@@ -93,11 +91,11 @@ export function useEstoque() {
         try {
             const response = await produtoService.listarDeletados({ 
                 paginar: false, 
-                tipo: "produto" 
+                tipo: "servico" 
             });
-            // Filtrar apenas produtos (garantia extra)
+            // Filtrar apenas serviços (garantia extra)
             const deletados = getCollection(response.produtos);
-            setItensDeletados(deletados.filter(item => item.tipo === "produto"));
+            setItensDeletados(deletados.filter(item => item.tipo === "servico"));
         } catch (error) {
             console.error("Erro ao carregar itens deletados:", error);
         }
@@ -106,7 +104,7 @@ export function useEstoque() {
     const aplicarFiltros = useCallback(async () => {
         setLoading(true);
         try {
-            const filtros: Parameters<typeof produtoService.listarProdutos>[0] = { tipo: "produto" };
+            const filtros: Parameters<typeof produtoService.listarProdutos>[0] = { tipo: "servico" };
             if (busca) filtros.busca = busca;
             if (categoriaFiltro) filtros.categoria_id = categoriaFiltro;
             if (filtroEstoque === "baixo") filtros.estoque_baixo = true;
@@ -140,17 +138,19 @@ export function useEstoque() {
         }
         
         try {
-            // Prepara os dados para atualização (apenas produtos)
+            // Prepara os dados para atualização (apenas serviços)
             const dadosAtualizacao = {
                 nome: dados.nome,
                 descricao: dados.descricao,
                 preco_venda: dados.preco_venda,
                 status: dados.status,
-                categoria_id: dados.categoria_id || null,
-                codigo: dados.codigo,
-                preco_compra: dados.preco_compra,
-                estoque_minimo: dados.estoque_minimo,
-                fornecedor_id: dados.fornecedor_id || null,
+                // Serviços mantêm próprio IVA
+                taxa_iva: dados.taxa_iva,
+                sujeito_iva: dados.sujeito_iva,
+                taxa_retencao: dados.taxa_retencao,
+                duracao_estimada: dados.duracao_estimada,
+                unidade_medida: dados.unidade_medida,
+                codigo_isencao: dados.codigo_isencao,
             };
 
             await produtoService.atualizarProduto(itemSelecionado.id, dadosAtualizacao);
@@ -189,8 +189,9 @@ export function useEstoque() {
     }, [modalConfirmacao.produto, carregarDeletados]);
 
     const abrirModalEntrada = useCallback((item: Produto) => {
-        setItemSelecionado(item);
-        setModalEntradaAberto(true);
+        // Serviços não têm controle de estoque
+        alert("Serviços não têm controle de estoque");
+        return;
     }, []);
 
     const abrirModalEditar = useCallback((item: Produto) => {
@@ -220,7 +221,7 @@ export function useEstoque() {
     return {
         // Estados
         loading,
-        resumo,
+        isInitialLoad,
         itens,
         itensDeletados,
         categorias,
@@ -233,7 +234,6 @@ export function useEstoque() {
         modalEdicaoAberto,
         itemSelecionado,
         modalConfirmacao,
-        produtos: itens, // Todos os itens são produtos
 
         // Setters
         setBusca,

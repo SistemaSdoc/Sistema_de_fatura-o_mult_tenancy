@@ -3,6 +3,12 @@
 import React, { useState, useRef } from "react";
 import { Upload, X, CheckCircle2, AlertCircle,  Loader2, Download } from "lucide-react";
 import produtoService, { ImportarProdutosResponse } from "@/services/produtos";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface ModalImportacaoProps {
   isOpen: boolean;
@@ -17,8 +23,6 @@ export function ModalImportacao({ isOpen, onClose, onSuccess, colors }: ModalImp
   const [resultado, setResultado] = useState<ImportarProdutosResponse | null>(null);
   const [erroGeral, setErroGeral] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  if (!isOpen) return null;
 
   const resetar = () => {
     setFicheiro(null);
@@ -78,25 +82,26 @@ export function ModalImportacao({ isOpen, onClose, onSuccess, colors }: ModalImp
   const todosOsIgnorados = resultado ? [...resultado.produtos.ignorados, ...resultado.servicos.ignorados] : [];
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60] p-2 sm:p-4 animate-in fade-in-0 duration-200">
-      <div
-        className="shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden animate-in zoom-in-95 fade-in-0 duration-300 flex flex-col"
-        style={{ backgroundColor: colors.card }}
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!enviando && !open) handleClose(); }}>
+      <DialogContent
+        className="sm:max-w-lg p-0 flex flex-col max-h-[90vh] overflow-hidden"
+        style={{ backgroundColor: colors.card, borderColor: colors.border }}
+        showCloseButton={false}
       >
         {/* Header */}
-        <div
-          className="flex items-center justify-between px-5 py-4 border-b"
+        <DialogHeader
+          className="flex flex-row items-center justify-between px-5 py-4 border-b space-y-0"
           style={{ borderColor: colors.border }}
         >
           <div className="flex items-center gap-2">
-            <h2 className="text-base sm:text-lg font-semibold" style={{ color: colors.secondary }}>
+            <DialogTitle className="text-base sm:text-lg font-semibold" style={{ color: colors.secondary }}>
               Importar Produtos e Serviços
-            </h2>
+            </DialogTitle>
           </div>
           <button onClick={handleClose} className="p-1 hover:opacity-70 transition-opacity" disabled={enviando}>
             <X className="w-5 h-5" style={{ color: colors.textSecondary }} />
           </button>
-        </div>
+        </DialogHeader>
 
         {/* Body */}
         <div className="p-5 overflow-y-auto space-y-4">
@@ -111,7 +116,7 @@ export function ModalImportacao({ isOpen, onClose, onSuccess, colors }: ModalImp
                 className="flex flex-col items-center justify-center gap-2 border-2 border-dashed py-8 px-4 cursor-pointer transition-colors hover:opacity-80"
                 style={{ borderColor: colors.border }}
               >
-                <Upload className="w-8 h-8" style={{ color: colors.primary }} />
+                <Upload className="w-8 h-8" style={{ color: colors.blue }} />
                 <span className="text-sm font-medium" style={{ color: colors.secondary }}>
                   {ficheiro ? ficheiro.name : "Clique para escolher o ficheiro .xlsx"}
                 </span>
@@ -298,7 +303,7 @@ export function ModalImportacao({ isOpen, onClose, onSuccess, colors }: ModalImp
             </>
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

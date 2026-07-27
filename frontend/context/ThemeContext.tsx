@@ -54,21 +54,25 @@ export const DARK_COLORS = {
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   const [theme, setTheme] = useState<Theme>("dark"); // Começa com dark por padrão
 
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
     // Recuperar tema salvo no localStorage
     const savedTheme = localStorage.getItem("theme") as Theme | null;
 
     if (savedTheme) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTheme(savedTheme);
     } else {
       // Verificar preferência do sistema
       const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
       setTheme(systemPrefersDark ? "dark" : "light");
     }
+    setMounted(true);
   }, []);
 
   useEffect(() => {
+    if (!mounted) return;
+    
     // Salvar tema no localStorage quando mudar
     localStorage.setItem("theme", theme);
 
@@ -78,7 +82,7 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
     } else {
       document.documentElement.classList.remove("dark");
     }
-  }, [theme]);
+  }, [theme, mounted]);
 
   const toggleTheme = () => {
     setTheme((prev) => (prev === "light" ? "dark" : "light"));

@@ -1,4 +1,4 @@
-import { Produto, isServico, estaSemEstoque, estaEstoqueBaixo } from "@/services/produtos";
+import { Produto, estaSemEstoque, estaEstoqueBaixo } from "@/services/produtos";
 
 export interface StatusEstoque {
     label: string;
@@ -7,13 +7,7 @@ export interface StatusEstoque {
 }
 
 export function getStatusEstoque(item: Produto): StatusEstoque {
-    if (isServico(item)) {
-        return {
-            label: "Serviço",
-            cor: "bg-[#E5E7EB] text-[#4B5563]",
-            icone: "Wrench",
-        };
-    }
+
     if (estaSemEstoque(item)) {
         return {
             label: "Sem stock",

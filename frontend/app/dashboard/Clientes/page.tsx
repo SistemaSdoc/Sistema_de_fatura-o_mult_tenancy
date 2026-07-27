@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import MainEmpresa from "../../components/MainEmpresa";
 import { clienteService, formatarNIF, getTipoClienteLabel, getStatusClienteLabel } from "@/services/clientes";
 import type { Cliente, CriarClienteInput, AtualizarClienteInput } from "@/services/clientes";
-import { Users, Plus, Search, Building2, X, Upload, CheckCircle, XCircle } from "lucide-react";
+import { Users, Plus, Search, Building2, Upload, CheckCircle, XCircle } from "lucide-react";
 import { ToastNotification } from "@/components/ToastNotification";
 import { useThemeColors } from "@/context/ThemeContext";
 import { Modal } from "@/app/components/Clientes/Modal";

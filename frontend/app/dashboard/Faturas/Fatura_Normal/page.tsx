@@ -70,7 +70,6 @@ interface ThemeColors {
   hover: string;
 }
 
-
 function LinhaFiscal({
   label,
   valor,
@@ -132,7 +131,7 @@ export default function NovaFaturaNormalPage() {
   const [modalDadosIncompletosOpen, setModalDadosIncompletosOpen] = useState(false);
   const [camposFaltantes, setCamposFaltantes] = useState<string[]>([]);
 
-  // ✅ Estados para dados bancários
+  // Estados para dados bancários
   const [nomeBanco, setNomeBanco] = useState("");
   const [iban, setIban] = useState("");
   const [numeroConta, setNumeroConta] = useState("");
@@ -294,18 +293,18 @@ export default function NovaFaturaNormalPage() {
   };
 
   // Filtrar itens baseado no tipo selecionado e na busca
-const itensFiltrados = produtos.filter((p) => {
-  if (p.status !== "ativo") return false;
-  if (tipoItemSelecionado === "produto" && p.tipo !== "produto") return false;
-  if (tipoItemSelecionado === "servico" && p.tipo !== "servico") return false;
+  const itensFiltrados = produtos.filter((p) => {
+    if (p.status !== "ativo") return false;
+    if (tipoItemSelecionado === "produto" && p.tipo !== "produto") return false;
+    if (tipoItemSelecionado === "servico" && p.tipo !== "servico") return false;
 
-  //  NOVO: esconde produtos (não serviços) sem stock
-  if (p.tipo === "produto" && p.estoque_atual <= 0) return false;
+    //  NOVO: esconde produtos (não serviços) sem stock
+    if (p.tipo === "produto" && p.estoque_atual <= 0) return false;
 
-  if (buscaItem.trim() === "") return true;
-  const buscaLower = buscaItem.toLowerCase();
-  return p.nome.toLowerCase().includes(buscaLower) || (p.codigo && p.codigo.toLowerCase().includes(buscaLower));
-});
+    if (buscaItem.trim() === "") return true;
+    const buscaLower = buscaItem.toLowerCase();
+    return p.nome.toLowerCase().includes(buscaLower) || (p.codigo && p.codigo.toLowerCase().includes(buscaLower));
+  });
 
   // FUNCAO PARA ADICIONAR ITEM AUTOMATICAMENTE AO CARRINHO
   const adicionarItemAutomaticamente = (produto: Produto, quantidade: number = 1) => {
@@ -335,22 +334,22 @@ const itensFiltrados = produtos.filter((p) => {
   };
 
   // FUNCAO PARA BUSCAR PRODUTO POR CODIGO
-const buscarProdutoPorCodigo = (codigo: string) => {
-  if (!codigo.trim()) return null;
+  const buscarProdutoPorCodigo = (codigo: string) => {
+    if (!codigo.trim()) return null;
 
-  let produto = produtos.find((p) => p.codigo === codigo.trim());
+    let produto = produtos.find((p) => p.codigo === codigo.trim());
 
-  if (!produto) {
-    produto = produtos.find((p) => p.codigo?.includes(codigo.trim()));
-  }
+    if (!produto) {
+      produto = produtos.find((p) => p.codigo?.includes(codigo.trim()));
+    }
 
-  // ignora produto (não serviço) sem stock
-  if (produto && produto.tipo === "produto" && produto.estoque_atual <= 0) {
-    return null;
-  }
+    // ignora produto (não serviço) sem stock
+    if (produto && produto.tipo === "produto" && produto.estoque_atual <= 0) {
+      return null;
+    }
 
-  return produto;
-};
+    return produto;
+  };
 
   // HANDLER PARA SELECIONAR ITEM DO DROPDOWN
   const handleSelectItem = (produto: Produto) => {
@@ -377,7 +376,7 @@ const buscarProdutoPorCodigo = (codigo: string) => {
     }
   };
 
-  // CORRIGIDO: calcularItem com taxa de retencao dinamica
+  // calcularItem com taxa de retencao dinamica
   const calcularItem = (p: Produto, qtd: number, desc: number, id = uuidv4()): ItemVendaUI => {
     const ehServico = isServico(p);
     const base = arredondar(arredondar(p.preco_venda * qtd) - desc);
@@ -503,7 +502,7 @@ const buscarProdutoPorCodigo = (codigo: string) => {
 
       if (observacoes.trim()) payload.observacoes = observacoes.trim();
 
-      // ✅ ADICIONAR DADOS BANCÁRIOS AO PAYLOAD
+      // ADICIONAR DADOS BANCÁRIOS AO PAYLOAD
       if (nomeBanco && nomeBanco.trim()) {
         payload.nome_banco = nomeBanco.trim();
       }
@@ -514,8 +513,8 @@ const buscarProdutoPorCodigo = (codigo: string) => {
         payload.numero_conta = numeroConta.trim();
       }
 
-      // ✅ Log para debug
-      console.log('[Finalizar Venda] Payload com dados bancários:', {
+      // Log para debug
+      console.log("[Finalizar Venda] Payload com dados bancários:", {
         nome_banco: payload.nome_banco,
         iban: payload.iban,
         numero_conta: payload.numero_conta,
@@ -577,10 +576,10 @@ const buscarProdutoPorCodigo = (codigo: string) => {
             className="p-3 border text-sm flex items-start gap-2"
             style={{
               backgroundColor: `${colors.warning}12`,
-              borderColor: `${colors.warning}50`,
+              borderColor: `${colors.secondary}50`,
             }}>
-            <AlertTriangle size={15} className="shrink-0 mt-0.5" style={{ color: colors.warning }} />
-            <span style={{ color: colors.warning }}>
+            <AlertTriangle size={15} className="shrink-0 mt-0.5" style={{ color: colors.secondary }} />
+            <span style={{ color: colors.secondary }}>
               <strong>Estoque baixo: </strong>
               <span style={{ color: colors.textSecondary }}>
                 {produtosEstoqueBaixo.map((p) => `${p.nome} (${p.estoque_atual})`).join(" · ")}
@@ -599,11 +598,9 @@ const buscarProdutoPorCodigo = (codigo: string) => {
           <div className="divide-y" style={{ borderColor: colors.border }}>
             {/* Cliente */}
             <div className="flex flex-col sm:flex-row min-h-[44px]">
-              <div
-                className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-28 shrink-0"
-                style={{ backgroundColor: colors.hover }}>
-                <User size={13} style={{ color: colors.text }} />
-                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>
+              <div className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-28 shrink-0" style={{ backgroundColor: colors.hover }}>
+                <User size={13} style={{ color: colors.blue }} />
+                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.blue }}>
                   Cliente
                 </span>
               </div>
@@ -636,9 +633,7 @@ const buscarProdutoPorCodigo = (codigo: string) => {
                       onClick={() => setClienteDropdownAberto((v) => !v)}
                       className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-sm outline-none text-left"
                       style={inp}>
-                      <span
-                        className="truncate"
-                        style={{ color: clienteSelecionado ? colors.text : colors.textSecondary }}>
+                      <span className="truncate" style={{ color: clienteSelecionado ? colors.text : colors.textSecondary }}>
                         {clienteSelecionado
                           ? `${clienteSelecionado.nome}${clienteSelecionado.nif ? ` (${formatarNIF(clienteSelecionado.nif)})` : ""}`
                           : "Selecione um cliente…"}
@@ -679,7 +674,7 @@ const buscarProdutoPorCodigo = (codigo: string) => {
                               style={{
                                 backgroundColor: clienteSelecionado?.id === c.id ? `${colors.primary}10` : "transparent",
                                 borderColor: colors.border,
-                                color: colors.text,
+                                color: colors.blue,
                               }}
                               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = colors.hover)}
                               onMouseLeave={(e) =>
@@ -736,11 +731,9 @@ const buscarProdutoPorCodigo = (codigo: string) => {
 
             {/* Produto e Servico */}
             <div className="flex flex-col sm:flex-row min-h-[44px]">
-              <div
-                className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-28 shrink-0"
-                style={{ backgroundColor: colors.hover }}>
-                <Package size={13} style={{ color: colors.text }} />
-                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>
+              <div className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-28 shrink-0" style={{ backgroundColor: colors.hover }}>
+                <Package size={13} style={{ color: colors.blue }} />
+                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.blue }}>
                   Itens
                 </span>
               </div>
@@ -844,7 +837,7 @@ const buscarProdutoPorCodigo = (codigo: string) => {
                                   formItem.produto_id === item.id ? `${colors.primary}10` : "transparent")
                               }>
                               <div className="flex-1 min-w-0">
-                                <span className="font-medium" style={{ color: colors.text }}>
+                                <span className="font-medium" style={{ color: colors.blue }}>
                                   {item.nome}
                                 </span>
                                 {item.codigo && (
@@ -860,11 +853,6 @@ const buscarProdutoPorCodigo = (codigo: string) => {
                                 {item.tipo === "produto" && (
                                   <span className="text-xs ml-2" style={{ color: colors.textSecondary }}>
                                     Stock: {item.estoque_atual}
-                                  </span>
-                                )}
-                                {item.tipo === "servico" && item.taxa_retencao && (
-                                  <span className="text-xs ml-2" style={{ color: colors.warning }}>
-                                    Ret: {item.taxa_retencao}%
                                   </span>
                                 )}
                               </div>
@@ -972,52 +960,14 @@ const buscarProdutoPorCodigo = (codigo: string) => {
                     </span>
                   )}
                 </div>
-
-                {/* Preview do item */}
-                {previewItem && (
-                  <div className="mt-2 px-3 py-2 flex flex-wrap gap-x-4 gap-y-1 text-sm" style={{ backgroundColor: colors.hover }}>
-                    {[
-                      {
-                        label: "Base",
-                        val: formatarPreco(previewItem.base_tributavel),
-                        clr: colors.text,
-                      },
-                      {
-                        label: "IVA",
-                        val: formatarPreco(previewItem.valor_iva),
-                        clr: colors.text,
-                      },
-                      ...(previewItem.valor_retencao > 0
-                        ? [
-                            {
-                              label: "Ret.",
-                              val: `-${formatarPreco(previewItem.valor_retencao)}`,
-                              clr: colors.danger,
-                            },
-                          ]
-                        : []),
-                      {
-                        label: "Total",
-                        val: formatarPreco(previewItem.subtotal),
-                        clr: colors.secondary,
-                      },
-                    ].map(({ label, val, clr }) => (
-                      <span key={label} style={{ color: colors.textSecondary }}>
-                        {label}: <strong style={{ color: clr }}>{val}</strong>
-                      </span>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
 
             {/* Observacoes */}
             <div className="flex flex-col sm:flex-row min-h-[44px]">
-              <div
-                className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-28 shrink-0"
-                style={{ backgroundColor: colors.hover }}>
-                <FileText size={13} style={{ color: colors.text }} />
-                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>
+              <div className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-28 shrink-0" style={{ backgroundColor: colors.hover }}>
+                <FileText size={13} style={{ color: colors.blue }} />
+                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.blue }}>
                   Obs.
                 </span>
               </div>
@@ -1033,24 +983,18 @@ const buscarProdutoPorCodigo = (codigo: string) => {
               </div>
             </div>
 
-            {/* ✅ Dados Bancários */}
+            {/* Dados Bancários */}
             <div className="flex flex-col sm:flex-row min-h-[44px]">
-              <div
-                className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-28 shrink-0"
-                style={{ backgroundColor: colors.hover }}>
-                <Building2 size={13} style={{ color: colors.text }} />
-                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>
+              <div className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-28 shrink-0" style={{ backgroundColor: colors.hover }}>
+                <Building2 size={13} style={{ color: colors.blue }} />
+                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.blue }}>
                   Banco
                 </span>
               </div>
               <div className="flex-1 px-3 py-2.5">
                 <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2">
                   <div className="relative w-full sm:flex-1 sm:min-w-[120px]">
-                    <Building2
-                      size={13}
-                      className="absolute left-3 top-1/2 -translate-y-1/2"
-                      style={{ color: colors.textSecondary }}
-                    />
+                    <Building2 size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: colors.textSecondary }} />
                     <input
                       type="text"
                       placeholder="Nome do banco (opcional)"
@@ -1061,11 +1005,7 @@ const buscarProdutoPorCodigo = (codigo: string) => {
                     />
                   </div>
                   <div className="relative w-full sm:flex-1 sm:min-w-[120px]">
-                    <Hash
-                      size={13}
-                      className="absolute left-3 top-1/2 -translate-y-1/2"
-                      style={{ color: colors.textSecondary }}
-                    />
+                    <Hash size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: colors.textSecondary }} />
                     <input
                       type="text"
                       placeholder="Nº conta (opcional)"
@@ -1076,11 +1016,7 @@ const buscarProdutoPorCodigo = (codigo: string) => {
                     />
                   </div>
                   <div className="relative w-full sm:flex-1 sm:min-w-[150px]">
-                    <Globe
-                      size={13}
-                      className="absolute left-3 top-1/2 -translate-y-1/2"
-                      style={{ color: colors.textSecondary }}
-                    />
+                    <Globe size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: colors.textSecondary }} />
                     <input
                       type="text"
                       placeholder="IBAN (opcional)"
@@ -1163,19 +1099,9 @@ const buscarProdutoPorCodigo = (codigo: string) => {
                         }}>
                         <td className="px-3 py-2.5">
                           <div className="flex items-center gap-1.5">
-                            <span className="font-medium truncate max-w-[100px] sm:max-w-[160px]" style={{ color: colors.text }}>
+                            <span className="font-medium truncate max-w-[100px] sm:max-w-[160px]" style={{ color: colors.blue }}>
                               {item.descricao}
                             </span>
-                            {p && isServico(p) && (
-                              <span
-                                className="text-[10px] px-1.5 py-0.5 font-bold shrink-0"
-                                style={{
-                                  backgroundColor: `${colors.primary}20`,
-                                  color: colors.primary,
-                                }}>
-                                S
-                              </span>
-                            )}
                           </div>
                         </td>
                         <td className="px-3 py-2.5">
@@ -1185,7 +1111,7 @@ const buscarProdutoPorCodigo = (codigo: string) => {
                               className="w-6 h-6 flex items-center justify-center disabled:opacity-30"
                               style={{ backgroundColor: colors.hover }}
                               disabled={item.quantidade <= 1}>
-                              <Minus size={11} style={{ color: colors.text }} />
+                              <Minus size={11} style={{ color: colors.blue }} />
                             </button>
                             <input
                               type="number"
@@ -1212,7 +1138,7 @@ const buscarProdutoPorCodigo = (codigo: string) => {
                               className="w-12 text-center text-sm font-medium outline-none border rounded"
                               style={{
                                 backgroundColor: colors.card,
-                                color: colors.text,
+                                color: colors.blue,
                                 borderColor: colors.border,
                               }}
                             />
@@ -1221,7 +1147,7 @@ const buscarProdutoPorCodigo = (codigo: string) => {
                               className="w-6 h-6 flex items-center justify-center disabled:opacity-30"
                               style={{ backgroundColor: colors.hover }}
                               disabled={item.quantidade >= maxEst}>
-                              <Plus size={11} style={{ color: colors.text }} />
+                              <Plus size={11} style={{ color: colors.blue }} />
                             </button>
                           </div>
                         </td>
@@ -1256,7 +1182,7 @@ const buscarProdutoPorCodigo = (codigo: string) => {
                               className="w-20 text-center text-sm font-medium outline-none border rounded px-2"
                               style={{
                                 backgroundColor: colors.card,
-                                color: colors.text,
+                                color: colors.blue,
                                 borderColor: colors.border,
                               }}
                               placeholder="0"
@@ -1266,13 +1192,13 @@ const buscarProdutoPorCodigo = (codigo: string) => {
                         <td className="px-3 py-2.5 text-right hidden sm:table-cell" style={{ color: colors.textSecondary }}>
                           {formatarPreco(item.preco_venda)}
                         </td>
-                        <td className="px-3 py-2.5 text-right hidden md:table-cell" style={{ color: colors.text }}>
+                        <td className="px-3 py-2.5 text-right hidden md:table-cell" style={{ color: colors.blue }}>
                           {formatarPreco(item.valor_iva)}
                         </td>
                         <td
                           className="px-3 py-2.5 text-right hidden lg:table-cell"
                           style={{
-                            color: item.valor_retencao > 0 ? colors.danger : colors.textSecondary,
+                            color: item.valor_retencao > 0 ? colors.secondary : colors.textSecondary,
                           }}>
                           {item.valor_retencao > 0 ? `-${formatarPreco(item.valor_retencao)}` : "—"}
                         </td>
@@ -1280,8 +1206,11 @@ const buscarProdutoPorCodigo = (codigo: string) => {
                           {formatarPreco(item.subtotal)}
                         </td>
                         <td className="px-2 py-2.5 text-center">
-                          <button onClick={() => removerItem(item.id)} className="p-1 hover:opacity-70" style={{ color: colors.danger }}>
-                            <Trash2 size={14} />
+                          <button
+                            onClick={() => removerItem(item.id)}
+                            className="w-7 h-7 flex items-center justify-center rounded hover:opacity-70 transition-opacity"
+                            style={{ color: colors.secondary }}>
+                            <Trash2 size={16} />
                           </button>
                         </td>
                       </tr>

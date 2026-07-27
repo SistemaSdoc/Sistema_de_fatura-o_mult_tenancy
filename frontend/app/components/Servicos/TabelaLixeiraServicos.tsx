@@ -1,24 +1,20 @@
-// src/app/(empresa)/estoque/components/TabelaLixeira.tsx
 import React from "react";
-import { Package, RotateCcw, Archive } from "lucide-react";
-import { Produto, getTipoBadge } from "@/services/produtos";
+import { Wrench, RotateCcw, Archive } from "lucide-react";
+import { Produto } from "@/services/produtos";
 import { useThemeColors } from "@/context/ThemeContext";
 
-interface TabelaLixeiraProps {
+interface TabelaLixeiraServicosProps {
     itens: Produto[];
     onRestaurar: (item: Produto) => void;
     onDeletarPermanentemente: (item: Produto) => void;
     colors?: any;
 }
 
-export function TabelaLixeira({ itens, onRestaurar, onDeletarPermanentemente, colors: propColors }: TabelaLixeiraProps) {
+export function TabelaLixeiraServicos({ itens, onRestaurar, colors: propColors }: TabelaLixeiraServicosProps) {
     const contextColors = useThemeColors();
     const colors = propColors || contextColors;
 
-    // Filtrar apenas produtos (excluir serviços)
-    const produtos = itens.filter(item => item.tipo === "produto");
-
-    if (produtos.length === 0) {
+    if (itens.length === 0) {
         return (
             <div className="text-center py-10 sm:py-12">
                 <Archive className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-3" style={{ color: colors.border }} />
@@ -27,12 +23,9 @@ export function TabelaLixeira({ itens, onRestaurar, onDeletarPermanentemente, co
         );
     }
 
-    // Cores para o tipo badge baseadas no tema
     const badgeStyle = {
-        produto: {
-            bg: `${colors.primary}20`,
-            text: colors.primary
-        }
+        bg: `${colors.secondary}20`,
+        text: colors.secondary
     };
 
     return (
@@ -42,23 +35,19 @@ export function TabelaLixeira({ itens, onRestaurar, onDeletarPermanentemente, co
                 <table className="w-full text-sm">
                     <thead>
                         <tr className="border-b" style={{ borderColor: colors.border, backgroundColor: colors.hover }}>
-                            <th className="py-2.5 px-3 text-left font-medium" style={{ color: colors.text }}>Item</th>
+                            <th className="py-2.5 px-3 text-left font-medium" style={{ color: colors.text }}>Serviço</th>
                             <th className="py-2.5 px-3 text-left font-medium" style={{ color: colors.text }}>Tipo</th>
-                            <th className="py-2.5 px-3 text-left font-medium" style={{ color: colors.textSecondary }}>Categoria</th>
                             <th className="py-2.5 px-3 text-center font-medium" style={{ color: colors.textSecondary }}>Ações</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y" style={{ borderColor: colors.border }}>
-                        {produtos.map((item) => {
-                            const tipoBadge = getTipoBadge(item.tipo);
-                            const style = badgeStyle.produto;
-
+                        {itens.map((item) => {
                             return (
                                 <tr
                                     key={item.id}
                                     className="transition-colors"
                                     style={{
-                                        backgroundColor: `${colors.warning}08`,
+                                        backgroundColor: `${colors.warning}08`, 
                                     }}
                                 >
                                     <td className="py-2.5 px-3 max-w-[220px]">
@@ -70,24 +59,21 @@ export function TabelaLixeira({ itens, onRestaurar, onDeletarPermanentemente, co
                                         <span
                                             className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded whitespace-nowrap"
                                             style={{
-                                                backgroundColor: style.bg,
-                                                color: style.text,
+                                                backgroundColor: badgeStyle.bg,
+                                                color: badgeStyle.text,
                                                 opacity: 0.75
                                             }}
                                         >
-                                            <Package className="w-3 h-3" />
-                                            {tipoBadge.texto}
+                                            <Wrench className="w-3 h-3" />
+                                            Serviço
                                         </span>
-                                    </td>
-                                    <td className="py-2.5 px-3 truncate" style={{ color: colors.textSecondary }}>
-                                        {item.categoria?.nome || "-"}
                                     </td>
                                     <td className="py-2.5 px-3">
                                         <div className="flex items-center justify-center gap-2">
                                             <button
                                                 onClick={() => onRestaurar(item)}
                                                 className="p-1.5 hover:opacity-70 transition-colors rounded"
-                                                style={{ color: colors.success }}
+                                                style={{ color: colors.blue }}
                                                 title="Restaurar"
                                             >
                                                 <RotateCcw className="w-4 h-4" />
@@ -103,10 +89,7 @@ export function TabelaLixeira({ itens, onRestaurar, onDeletarPermanentemente, co
 
             {/* ===== Cards (mobile) ===== */}
             <div className="md:hidden space-y-2.5">
-                {produtos.map((item) => {
-                    const tipoBadge = getTipoBadge(item.tipo);
-                    const style = badgeStyle.produto;
-
+                {itens.map((item) => {
                     return (
                         <div
                             key={item.id}
@@ -118,23 +101,20 @@ export function TabelaLixeira({ itens, onRestaurar, onDeletarPermanentemente, co
                                     <p className="text-sm font-medium truncate line-through" style={{ color: colors.textSecondary }}>
                                         {item.nome}
                                     </p>
-                                    <p className="text-xs mt-0.5 truncate" style={{ color: colors.textSecondary }}>
-                                        {item.categoria?.nome || "-"}
-                                    </p>
                                 </div>
                                 <span
                                     className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded shrink-0"
-                                    style={{ backgroundColor: style.bg, color: style.text, opacity: 0.75 }}
+                                    style={{ backgroundColor: badgeStyle.bg, color: badgeStyle.text, opacity: 0.75 }}
                                 >
-                                    <Package className="w-3 h-3" />
-                                    {tipoBadge.texto}
+                                    <Wrench className="w-3 h-3" />
+                                    Serviço
                                 </span>
                             </div>
                             <div className="flex justify-end mt-2.5 pt-2 border-t" style={{ borderColor: colors.border }}>
                                 <button
                                     onClick={() => onRestaurar(item)}
                                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-opacity hover:opacity-80"
-                                    style={{ color: colors.success, backgroundColor: `${colors.success}18` }}
+                                    style={{ color: colors.blue, backgroundColor: `${colors.blue}18` }}
                                 >
                                     <RotateCcw className="w-3.5 h-3.5" />
                                     Restaurar

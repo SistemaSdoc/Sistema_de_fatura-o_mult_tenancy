@@ -69,7 +69,6 @@ interface ThemeColors {
   hover: string;
 }
 
-
 /* Linha fiscal */
 function LinhaFiscal({
   label,
@@ -262,36 +261,36 @@ export default function NovaFaturaProformaPage() {
   };
 
   // Filtrar itens baseado no tipo selecionado e na busca
-const itensFiltrados = produtos.filter((p) => {
-  if (p.status !== "ativo") return false;
-  if (tipoItemSelecionado === "produto" && p.tipo !== "produto") return false;
-  if (tipoItemSelecionado === "servico" && p.tipo !== "servico") return false;
+  const itensFiltrados = produtos.filter((p) => {
+    if (p.status !== "ativo") return false;
+    if (tipoItemSelecionado === "produto" && p.tipo !== "produto") return false;
+    if (tipoItemSelecionado === "servico" && p.tipo !== "servico") return false;
 
-  // esconde produtos (não serviços) sem stock
-  if (p.tipo === "produto" && p.estoque_atual <= 0) return false;
+    // esconde produtos (não serviços) sem stock
+    if (p.tipo === "produto" && p.estoque_atual <= 0) return false;
 
-  if (buscaItem.trim() === "") return true;
-  const buscaLower = buscaItem.toLowerCase();
-  return p.nome.toLowerCase().includes(buscaLower) || (p.codigo && p.codigo.toLowerCase().includes(buscaLower));
-});
+    if (buscaItem.trim() === "") return true;
+    const buscaLower = buscaItem.toLowerCase();
+    return p.nome.toLowerCase().includes(buscaLower) || (p.codigo && p.codigo.toLowerCase().includes(buscaLower));
+  });
 
   // Funcao para buscar produto por codigo
-const buscarProdutoPorCodigo = (codigo: string) => {
-  if (!codigo.trim()) return null;
+  const buscarProdutoPorCodigo = (codigo: string) => {
+    if (!codigo.trim()) return null;
 
-  let produto = produtos.find((p) => p.codigo === codigo.trim());
+    let produto = produtos.find((p) => p.codigo === codigo.trim());
 
-  if (!produto) {
-    produto = produtos.find((p) => p.codigo?.includes(codigo.trim()));
-  }
+    if (!produto) {
+      produto = produtos.find((p) => p.codigo?.includes(codigo.trim()));
+    }
 
-  // ignora produto (não serviço) sem stock
-  if (produto && produto.tipo === "produto" && produto.estoque_atual <= 0) {
-    return null;
-  }
+    // ignora produto (não serviço) sem stock
+    if (produto && produto.tipo === "produto" && produto.estoque_atual <= 0) {
+      return null;
+    }
 
-  return produto;
-};
+    return produto;
+  };
   // Funcao para adicionar item automaticamente ao carrinho
   const adicionarItemAutomaticamente = (produto: Produto, quantidade: number = 1) => {
     const idx = itens.findIndex((i) => i.produto_id === produto.id);
@@ -462,68 +461,68 @@ const buscarProdutoPorCodigo = (codigo: string) => {
   };
 
   /* Finalizar */
-const finalizarProforma = async () => {
+  const finalizarProforma = async () => {
     if (bloquearSeDadosIncompletos()) return;
     if (!podeFinalizar()) return;
     setLoading(true);
     try {
-        const payload: CriarDocumentoFiscalPayload = {
-            tipo_documento: "FP",
-            itens: itens.map((item) => ({
-                produto_id: item.produto_id,
-                descricao: item.descricao,
-                quantidade: item.quantidade,
-                preco_unitario: arredondar(item.preco_unitario),
-                taxa_iva: item.taxa_iva,
-            })),
-        };
+      const payload: CriarDocumentoFiscalPayload = {
+        tipo_documento: "FP",
+        itens: itens.map((item) => ({
+          produto_id: item.produto_id,
+          descricao: item.descricao,
+          quantidade: item.quantidade,
+          preco_unitario: arredondar(item.preco_unitario),
+          taxa_iva: item.taxa_iva,
+        })),
+      };
 
-        if (modoCliente === "cadastrado" && clienteSelecionado) {
-            payload.cliente_id = clienteSelecionado.id;
-        } else if (modoCliente === "avulso") {
-            if (clienteAvulso.trim()) {
-                payload.cliente_nome = clienteAvulso.trim();
-            } else {
-                payload.cliente_nome = "Consumidor Final";
-            }
-
-            if (clienteAvulsoNif.trim() && clienteAvulsoNif.length >= 10) {
-                payload.cliente_nif = clienteAvulsoNif.trim();
-            } else {
-                payload.cliente_nif = "9999999999";
-            }
+      if (modoCliente === "cadastrado" && clienteSelecionado) {
+        payload.cliente_id = clienteSelecionado.id;
+      } else if (modoCliente === "avulso") {
+        if (clienteAvulso.trim()) {
+          payload.cliente_nome = clienteAvulso.trim();
+        } else {
+          payload.cliente_nome = "Consumidor Final";
         }
 
-        if (observacoes.trim()) payload.motivo = observacoes.trim();
-
-        // ✅ ADICIONAR DADOS BANCÁRIOS AO PAYLOAD
-        // IMPORTANTE: Usar os nomes corretos dos campos
-        if (nomeBanco && nomeBanco.trim()) {
-            payload.nome_banco = nomeBanco.trim();
+        if (clienteAvulsoNif.trim() && clienteAvulsoNif.length >= 10) {
+          payload.cliente_nif = clienteAvulsoNif.trim();
+        } else {
+          payload.cliente_nif = "9999999999";
         }
-        if (iban && iban.trim()) {
-            payload.iban = iban.trim();
-        }
-        if (numeroConta && numeroConta.trim()) {
-            payload.numero_conta = numeroConta.trim();
-        }
+      }
 
-        // ✅ Log para debug
-        console.log('[Finalizar Proforma] Payload com dados bancários:', {
-            nome_banco: payload.nome_banco,
-            iban: payload.iban,
-            numero_conta: payload.numero_conta,
-        });
+      if (observacoes.trim()) payload.motivo = observacoes.trim();
 
-        await emitirDocumentoFiscal(payload);
-        showToast("Proforma criada com sucesso! Redirecionando...", "success");
-        setTimeout(() => router.push("/dashboard/Faturas/DC"), 1500);
+      // ADICIONAR DADOS BANCÁRIOS AO PAYLOAD
+      // IMPORTANTE: Usar os nomes corretos dos campos
+      if (nomeBanco && nomeBanco.trim()) {
+        payload.nome_banco = nomeBanco.trim();
+      }
+      if (iban && iban.trim()) {
+        payload.iban = iban.trim();
+      }
+      if (numeroConta && numeroConta.trim()) {
+        payload.numero_conta = numeroConta.trim();
+      }
+
+      // Log para debug
+      console.log("[Finalizar Proforma] Payload com dados bancários:", {
+        nome_banco: payload.nome_banco,
+        iban: payload.iban,
+        numero_conta: payload.numero_conta,
+      });
+
+      await emitirDocumentoFiscal(payload);
+      showToast("Proforma criada com sucesso! Redirecionando...", "success");
+      setTimeout(() => router.push("/dashboard/Faturas/DC"), 1500);
     } catch (err: unknown) {
-        showToast(err instanceof AxiosError ? err.response?.data?.message || "Erro ao salvar proforma" : "Erro ao salvar proforma", "error");
+      showToast(err instanceof AxiosError ? err.response?.data?.message || "Erro ao salvar proforma" : "Erro ao salvar proforma", "error");
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
-};
+  };
 
   const produtoSel = produtos.find((p) => p.id === formItem.produto_id);
 
@@ -561,9 +560,9 @@ const finalizarProforma = async () => {
         {produtosEstoqueBaixo.length > 0 && (
           <div
             className="p-3 border text-sm flex items-start gap-2"
-            style={{ backgroundColor: `${colors.warning}12`, borderColor: `${colors.warning}50` }}>
-            <AlertTriangle size={15} className="shrink-0 mt-0.5" style={{ color: colors.warning }} />
-            <span style={{ color: colors.warning }}>
+            style={{ backgroundColor: `${colors.secondary}12`, borderColor: `${colors.secondary}50` }}>
+            <AlertTriangle size={15} className="shrink-0 mt-0.5" style={{ color: colors.secondary }} />
+            <span style={{ color: colors.secondary }}>
               <strong>Estoque baixo: </strong>
               <span style={{ color: colors.textSecondary }}>
                 {produtosEstoqueBaixo.map((p) => `${p.nome} (${p.estoque_atual})`).join(" · ")}
@@ -585,8 +584,8 @@ const finalizarProforma = async () => {
               <div
                 className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-24 md:w-28 sm:shrink-0"
                 style={{ backgroundColor: colors.hover }}>
-                <User size={13} style={{ color: colors.text }} />
-                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>
+                <User size={13} style={{ color: colors.blue }} />
+                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.blue }}>
                   Cliente
                 </span>
               </div>
@@ -621,9 +620,7 @@ const finalizarProforma = async () => {
                       onClick={() => setClienteDropdownAberto((prev) => !prev)}
                       className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-sm outline-none text-left"
                       style={inp}>
-                      <span
-                        className="truncate"
-                        style={{ color: clienteSelecionado ? colors.text : colors.textSecondary }}>
+                      <span className="truncate" style={{ color: clienteSelecionado ? colors.text : colors.textSecondary }}>
                         {clienteSelecionado
                           ? `${clienteSelecionado.nome}${clienteSelecionado.nif ? ` — ${formatarNIF(clienteSelecionado.nif)}` : ""}`
                           : "Selecione um cliente…"}
@@ -666,7 +663,7 @@ const finalizarProforma = async () => {
                             style={{
                               backgroundColor: clienteSelecionado?.id === c.id ? `${colors.primary}10` : "transparent",
                               borderColor: colors.border,
-                              color: colors.text,
+                              color: colors.blue,
                             }}
                             onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = colors.hover)}
                             onMouseLeave={(e) =>
@@ -721,8 +718,8 @@ const finalizarProforma = async () => {
               <div
                 className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-24 md:w-28 sm:shrink-0"
                 style={{ backgroundColor: colors.hover }}>
-                <Package size={13} style={{ color: colors.text }} />
-                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>
+                <Package size={13} style={{ color: colors.blue }} />
+                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.blue }}>
                   Itens
                 </span>
               </div>
@@ -814,7 +811,7 @@ const finalizarProforma = async () => {
                                   formItem.produto_id === item.id ? `${colors.primary}10` : "transparent")
                               }>
                               <div className="flex-1 min-w-0">
-                                <span className="font-medium" style={{ color: colors.text }}>
+                                <span className="font-medium" style={{ color: colors.blue }}>
                                   {item.nome}
                                 </span>
                                 {item.codigo && (
@@ -830,11 +827,6 @@ const finalizarProforma = async () => {
                                 {item.tipo === "produto" && (
                                   <span className="text-xs ml-2" style={{ color: colors.textSecondary }}>
                                     Stock: {item.estoque_atual}
-                                  </span>
-                                )}
-                                {item.tipo === "servico" && item.taxa_retencao && (
-                                  <span className="text-xs ml-2" style={{ color: colors.warning }}>
-                                    Ret: {item.taxa_retencao}%
                                   </span>
                                 )}
                               </div>
@@ -911,24 +903,6 @@ const finalizarProforma = async () => {
                     </span>
                   )}
                 </div>
-
-                {/* Preview calculo */}
-                {previewItem && (
-                  <div className="mt-2 px-3 py-2 flex flex-wrap gap-x-4 gap-y-1 text-sm" style={{ backgroundColor: colors.hover }}>
-                    {[
-                      { label: "Base", val: formatarPreco(previewItem.base_tributavel), clr: colors.text },
-                      { label: "IVA", val: formatarPreco(previewItem.valor_iva), clr: colors.text },
-                      ...(previewItem.valor_retencao > 0
-                        ? [{ label: "Ret.", val: `-${formatarPreco(previewItem.valor_retencao)}`, clr: colors.danger }]
-                        : []),
-                      { label: "Total", val: formatarPreco(previewItem.subtotal), clr: colors.secondary },
-                    ].map(({ label, val, clr }) => (
-                      <span key={label} style={{ color: colors.textSecondary }}>
-                        {label}: <strong style={{ color: clr }}>{val}</strong>
-                      </span>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
 
@@ -937,8 +911,8 @@ const finalizarProforma = async () => {
               <div
                 className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-24 md:w-28 sm:shrink-0"
                 style={{ backgroundColor: colors.hover }}>
-                <FileText size={13} style={{ color: colors.text }} />
-                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>
+                <FileText size={13} style={{ color: colors.blue }} />
+                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.blue }}>
                   Obs.
                 </span>
               </div>
@@ -959,19 +933,15 @@ const finalizarProforma = async () => {
               <div
                 className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-24 md:w-28 sm:shrink-0"
                 style={{ backgroundColor: colors.hover }}>
-                <Building2 size={13} style={{ color: colors.text }} />
-                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.text }}>
+                <Building2 size={13} style={{ color: colors.blue }} />
+                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.blue }}>
                   Banco
                 </span>
               </div>
               <div className="flex-1 px-3 py-2.5">
                 <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2">
                   <div className="relative w-full sm:flex-1 sm:min-w-[120px]">
-                    <Building2
-                      size={13}
-                      className="absolute left-3 top-1/2 -translate-y-1/2"
-                      style={{ color: colors.textSecondary }}
-                    />
+                    <Building2 size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: colors.textSecondary }} />
                     <input
                       type="text"
                       placeholder="Nome do banco (opcional)"
@@ -982,11 +952,7 @@ const finalizarProforma = async () => {
                     />
                   </div>
                   <div className="relative w-full sm:flex-1 sm:min-w-[120px]">
-                    <Hash
-                      size={13}
-                      className="absolute left-3 top-1/2 -translate-y-1/2"
-                      style={{ color: colors.textSecondary }}
-                    />
+                    <Hash size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: colors.textSecondary }} />
                     <input
                       type="text"
                       placeholder="Nº conta (opcional)"
@@ -997,11 +963,7 @@ const finalizarProforma = async () => {
                     />
                   </div>
                   <div className="relative w-full sm:flex-1 sm:min-w-[150px]">
-                    <Globe
-                      size={13}
-                      className="absolute left-3 top-1/2 -translate-y-1/2"
-                      style={{ color: colors.textSecondary }}
-                    />
+                    <Globe size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: colors.textSecondary }} />
                     <input
                       type="text"
                       placeholder="IBAN (opcional)"
@@ -1082,16 +1044,9 @@ const finalizarProforma = async () => {
                         }}>
                         <td className="px-3 py-2.5">
                           <div className="flex items-center gap-1.5">
-                            <span className="font-medium truncate max-w-[100px] sm:max-w-[160px]" style={{ color: colors.text }}>
+                            <span className="font-medium truncate max-w-[100px] sm:max-w-[160px]" style={{ color: colors.blue }}>
                               {item.descricao}
                             </span>
-                            {p && isServico(p) && (
-                              <span
-                                className="text-[10px] px-1.5 py-0.5 font-bold shrink-0"
-                                style={{ backgroundColor: `${colors.primary}20`, color: colors.primary }}>
-                                S
-                              </span>
-                            )}
                           </div>
                         </td>
                         <td className="px-3 py-2.5">
@@ -1101,7 +1056,7 @@ const finalizarProforma = async () => {
                               className="w-6 h-6 flex items-center justify-center disabled:opacity-30"
                               style={{ backgroundColor: colors.hover }}
                               disabled={item.quantidade <= 1}>
-                              <Minus size={11} style={{ color: colors.text }} />
+                              <Minus size={11} style={{ color: colors.blue }} />
                             </button>
                             <input
                               type="number"
@@ -1128,7 +1083,7 @@ const finalizarProforma = async () => {
                               className="w-12 text-center text-sm font-medium outline-none border rounded"
                               style={{
                                 backgroundColor: colors.card,
-                                color: colors.text,
+                                color: colors.blue,
                                 borderColor: colors.border,
                               }}
                             />
@@ -1137,27 +1092,30 @@ const finalizarProforma = async () => {
                               className="w-6 h-6 flex items-center justify-center disabled:opacity-30"
                               style={{ backgroundColor: colors.hover }}
                               disabled={item.quantidade >= maxEst}>
-                              <Plus size={11} style={{ color: colors.text }} />
+                              <Plus size={11} style={{ color: colors.blue }} />
                             </button>
                           </div>
                         </td>
                         <td className="px-3 py-2.5 text-right hidden sm:table-cell" style={{ color: colors.textSecondary }}>
                           {formatarPreco(item.preco_unitario)}
                         </td>
-                        <td className="px-3 py-2.5 text-right hidden md:table-cell" style={{ color: colors.text }}>
+                        <td className="px-3 py-2.5 text-right hidden md:table-cell" style={{ color: colors.blue }}>
                           {formatarPreco(item.valor_iva)}
                         </td>
                         <td
                           className="px-3 py-2.5 text-right hidden lg:table-cell"
-                          style={{ color: item.valor_retencao > 0 ? colors.danger : colors.textSecondary }}>
+                          style={{ color: item.valor_retencao > 0 ? colors.secondary : colors.textSecondary }}>
                           {item.valor_retencao > 0 ? `-${formatarPreco(item.valor_retencao)}` : "—"}
                         </td>
                         <td className="px-3 py-2.5 text-right font-bold" style={{ color: colors.secondary }}>
                           {formatarPreco(item.subtotal)}
                         </td>
                         <td className="px-2 py-2.5 text-center">
-                          <button onClick={() => removerItem(item.id)} className="p-1 hover:opacity-70" style={{ color: colors.danger }}>
-                            <Trash2 size={14} />
+                          <button
+                            onClick={() => removerItem(item.id)}
+                            className="w-7 h-7 flex items-center justify-center rounded hover:opacity-70 transition-opacity"
+                            style={{ color: colors.secondary }}>
+                            <Trash2 size={16} />
                           </button>
                         </td>
                       </tr>

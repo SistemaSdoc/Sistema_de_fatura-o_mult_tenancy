@@ -77,26 +77,26 @@ const formatDate = (value?: string): string => {
 
 /* ==================== SKELETONS ==================== */
 const SkeletonCard = ({ colors }: SkeletonProps) => (
-  <div className="p-3 sm:p-4 rounded-xl shadow border animate-pulse" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg mb-2 sm:mb-3" style={{ background: colors.border }} />
-    <div className="h-3 sm:h-4 rounded w-16 sm:w-20 mb-1 sm:mb-2" style={{ background: colors.border }} />
-    <div className="h-4 sm:h-6 rounded w-20 sm:w-24" style={{ background: colors.border }} />
+  <div className="p-3 sm:p-4  shadow border animate-pulse" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+    <div className="w-8 h-8 sm:w-10 sm:h-10 mb-2 sm:mb-3" style={{ background: colors.border }} />
+    <div className="h-3 sm:h-4  w-16 sm:w-20 mb-1 sm:mb-2" style={{ background: colors.border }} />
+    <div className="h-4 sm:h-6  w-20 sm:w-24" style={{ background: colors.border }} />
   </div>
 );
 
 const SkeletonChart = ({ colors, tall = false }: SkeletonProps) => (
-  <div className="p-3 sm:p-4 rounded-xl shadow border animate-pulse" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-    <div className="h-5 sm:h-6 rounded w-32 sm:w-40 mb-3 sm:mb-4" style={{ backgroundColor: colors.border }} />
-    <div className={`rounded ${tall ? "h-56 sm:h-72" : "h-48 sm:h-60"}`} style={{ background: colors.hover }} />
+  <div className="p-3 sm:p-4 shadow border animate-pulse" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+    <div className="h-5 sm:h-6 w-32 sm:w-40 mb-3 sm:mb-4" style={{ backgroundColor: colors.border }} />
+    <div className={` ${tall ? "h-56 sm:h-72" : "h-48 sm:h-60"}`} style={{ background: colors.hover }} />
   </div>
 );
 
 const SkeletonTable = ({ colors }: SkeletonProps) => (
-  <div className="p-3 sm:p-4 rounded-xl shadow border animate-pulse" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-    <div className="h-5 sm:h-6 rounded w-24 sm:w-32 mb-3 sm:mb-4" style={{ backgroundColor: colors.border }} />
+  <div className="p-3 sm:p-4  shadow border animate-pulse" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+    <div className="h-5 sm:h-6 w-24 sm:w-32 mb-3 sm:mb-4" style={{ backgroundColor: colors.border }} />
     <div className="space-y-2 sm:space-y-3">
       {[...Array(5)].map((_, i) => (
-        <div key={i} className="h-6 sm:h-8 rounded" style={{ background: colors.hover }} />
+        <div key={i} className="h-6 sm:h-8 " style={{ background: colors.hover }} />
       ))}
     </div>
   </div>
@@ -126,7 +126,7 @@ const statusMap: Record<string, { label: string; variant: BadgeVariant }> = {
 const StatusBadge = ({ status, theme }: { status: string; theme: string }) => {
   const entry = statusMap[status] ?? { label: status || "-", variant: "gray" as BadgeVariant };
   const cls = badgeClasses[entry.variant];
-  return <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${theme === "dark" ? cls.dark : cls.light}`}>{entry.label}</span>;
+  return <span className={`px-1.5 py-0.5 text-[10px] font-medium ${theme === "dark" ? cls.dark : cls.light}`}>{entry.label}</span>;
 };
 
 /* ==================== MAIN COMPONENT ==================== */
@@ -317,8 +317,8 @@ export default function DashboardPage() {
   };
 
   const gridStroke = theme === "dark" ? "#404040" : "#E5E7EB";
-  const tickStyle = { fill: colors.textSecondary, fontSize: 11 };
-  const pieColors = [colors.primary, colors.secondary, "#95a5a6", "#f39c12", "#e74c3c"];
+  const tickStyle = { fill: colors.blue, fontSize: 11 };
+  const pieColors = [colors.primary, colors.secondary,colors.blue, "#95a5a6", "#f39c12", "#e74c3c"];
 
   const kpiCards: Array<{
     href: string;
@@ -414,7 +414,7 @@ export default function DashboardPage() {
                     <div className="text-xs sm:text-sm truncate" style={{ color: colors.textSecondary }}>
                       {label}
                     </div>
-                    <div className="text-sm sm:text-xl font-bold truncate" style={{ color: colors.text }}>
+                    <div className="text-sm sm:text-xl font-bold truncate" style={{ color: colors.blue }}>
                       {value}
                     </div>
                     {helper && (
@@ -450,7 +450,7 @@ export default function DashboardPage() {
         {/* Row 3: Tabelas */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="p-3 sm:p-4 shadow border overflow-hidden" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-            <h2 className="text-sm sm:text-base font-semibold mb-3" style={{ color: colors.text }}>
+            <h2 className="text-sm sm:text-base font-semibold mb-3" style={{ color: colors.blue }}>
               Últimas Vendas
             </h2>
             <div className="overflow-x-auto -mx-1 px-1">
@@ -503,7 +503,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="p-3 sm:p-4 shadow border overflow-hidden" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-            <h2 className="text-sm sm:text-base font-semibold mb-3" style={{ color: colors.text }}>
+            <h2 className="text-sm sm:text-base font-semibold mb-3" style={{ color: colors.blue }}>
               Últimos Documentos
             </h2>
             <div className="overflow-x-auto -mx-1 px-1">

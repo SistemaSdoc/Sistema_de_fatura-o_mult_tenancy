@@ -1,6 +1,6 @@
 // src/app/(empresa)/estoque/components/ModalEntrada.tsx
 import React, { useState } from "react";
-import { ArrowUpCircle, AlertCircle, RefreshCcw, Plus } from "lucide-react";
+import { ArrowUpCircle, AlertCircle, RefreshCcw } from "lucide-react";
 import { Produto } from "@/services/produtos";
 import { useThemeColors } from "@/context/ThemeContext";
 import {
@@ -51,8 +51,7 @@ export function ModalEntrada({ isOpen, onClose, produto, onConfirm, colors: prop
             >
                 <DialogHeader className="p-4 border-b" style={{ borderColor: colors.border }}>
                     <DialogTitle className="flex items-center gap-2 text-base" style={{ color: colors.secondary }}>
-                        <Plus className="w-4 h-4" />
-                        Registrar Entrada
+                        Registrar Entrada dos produtos
                     </DialogTitle>
                 </DialogHeader>
 
@@ -61,7 +60,7 @@ export function ModalEntrada({ isOpen, onClose, produto, onConfirm, colors: prop
                         <div className="p-3" style={{ backgroundColor: colors.hover }}>
                             <p className="font-medium text-sm" style={{ color: colors.text }}>{produto.nome}</p>
                             <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
-                                Stock atual: <span className="font-semibold" style={{ color: colors.primary }}>{produto.estoque_atual}</span> unidades
+                                Stock atual: <span className="font-semibold" style={{ color: colors.blue }}>{produto.estoque_atual}</span> unidades
                             </p>
                         </div>
                     )}

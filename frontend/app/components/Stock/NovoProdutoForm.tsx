@@ -18,7 +18,6 @@ import {
 import { categoriaService, getTaxaIVALabel } from "@/services/categorias";
 import {
   Package,
-  Wrench,
   Save,
   ArrowLeft,
   Calculator,
@@ -29,11 +28,9 @@ import {
   DollarSign,
   Tag,
   HelpCircle,
-  Percent,
-  Receipt,
 } from "lucide-react";
 import { useThemeColors } from "@/context/ThemeContext";
-import { motion, AnimatePresence, color } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface FormData {
   tipo: TipoProduto;
@@ -50,17 +47,8 @@ interface FormData {
   markup: string;
   preco_venda: string;
 
-  //REMOVIDO: taxa_iva e sujeito_iva para produtos (vem da categoria)
-  // Apenas para serviços
-  taxa_iva: string;
-  sujeito_iva: boolean;
-
   estoque_atual: string;
   estoque_minimo: string;
-  taxa_retencao: string;
-  duracao_estimada: string;
-  unidade_medida: UnidadeMedida;
-  codigo_isencao: CodigoIsencao | "";
 }
 
 interface FormErrors {
@@ -72,19 +60,6 @@ interface NovoProdutoFormProps {
   onCancel?: () => void;
   initialTipo?: TipoProduto;
 }
-
-// CONSTANTES PARA CÓDIGOS DE ISENÇÃO
-const OPCOES_ISENCAO = [
-  { value: "", label: "Sem isenção" },
-  { value: "M00", label: "Sujeito a IVA (normal)" },
-  { value: "M01", label: "Isento (Art. 12 - Operações isentas)" },
-  { value: "M02", label: "Isento (Art. 13 - Exportações)" },
-  { value: "M03", label: "Isento (Art. 14 - Serviços financeiros)" },
-  { value: "M04", label: "Isento (Art. 15 - Operações imobiliárias)" },
-  { value: "M05", label: "Isento (Art. 16 - Serviços de saúde)" },
-  { value: "M06", label: "Isento (Art. 17 - Educação)" },
-  { value: "M99", label: "Outras isenções" },
-] as const;
 
 export function NovoProdutoForm({ onSuccess, onCancel, initialTipo = "produto" }: NovoProdutoFormProps) {
   const router = useRouter();
@@ -112,19 +87,11 @@ export function NovoProdutoForm({ onSuccess, onCancel, initialTipo = "produto" }
     markup: "33",
     preco_venda: "",
 
-    // Apenas para serviços
-    taxa_iva: "0",
-    sujeito_iva: true,
-
     estoque_atual: "0",
     estoque_minimo: "5",
-    taxa_retencao: "0",
-    duracao_estimada: "1",
-    unidade_medida: "hora",
-    codigo_isencao: "",
   });
 
-  // ✅ NOVO: Carregar categorias com dados de IVA
+  // Carregar categorias com dados de IVA
   useEffect(() => {
     async function carregarCategorias() {
       try {
@@ -139,7 +106,7 @@ export function NovoProdutoForm({ onSuccess, onCancel, initialTipo = "produto" }
     carregarCategorias();
   }, []);
 
-  // ✅ NOVO: Atualizar categoria selecionada quando mudar
+  // Atualizar categoria selecionada quando mudar
   useEffect(() => {
     if (formData.categoria_id) {
       const cat = categorias.find((c) => c.id === formData.categoria_id);
@@ -149,15 +116,9 @@ export function NovoProdutoForm({ onSuccess, onCancel, initialTipo = "produto" }
     }
   }, [formData.categoria_id, categorias]);
 
-  const isServico = formData.tipo === "servico";
-
   // ===== CÁLCULOS AUTOMÁTICOS =====
 
   const precoVendaCalculado = useMemo(() => {
-    if (isServico) {
-      return parseFloat(formData.preco_venda) || 0;
-    }
-
     const compra = parseFloat(formData.preco_compra) || 0;
     const despesas = parseFloat(formData.despesas_adicionais) || 0;
     const base = compra + despesas;
@@ -183,23 +144,21 @@ export function NovoProdutoForm({ onSuccess, onCancel, initialTipo = "produto" }
     formData.margem_lucro,
     formData.markup,
     formData.preco_venda,
-    isServico,
   ]);
 
   useEffect(() => {
-    if (!isServico && formData.tipo_preco !== "fixo") {
+    if (formData.tipo_preco !== "fixo") {
       const calculado = Math.round(precoVendaCalculado * 100) / 100;
       setFormData((prev) => ({
         ...prev,
         preco_venda: calculado.toString(),
       }));
     }
-  }, [precoVendaCalculado, formData.tipo_preco, isServico]);
+  }, [precoVendaCalculado, formData.tipo_preco]);
 
   const custoTotal = useMemo(() => {
-    if (isServico) return 0;
     return (parseFloat(formData.preco_compra) || 0) + (parseFloat(formData.despesas_adicionais) || 0);
-  }, [formData.preco_compra, formData.despesas_adicionais, isServico]);
+  }, [formData.preco_compra, formData.despesas_adicionais]);
 
   const lucroBruto = useMemo(() => {
     const venda = parseFloat(formData.preco_venda) || 0;
@@ -217,22 +176,14 @@ export function NovoProdutoForm({ onSuccess, onCancel, initialTipo = "produto" }
     return (lucroBruto / custoTotal) * 100;
   }, [lucroBruto, custoTotal]);
 
-  // ✅ NOVO: IVA vem da categoria para produtos
+  // IVA vem da categoria
   const taxaIVA = useMemo(() => {
-    if (isServico) {
-      return parseFloat(formData.taxa_iva) || 0;
-    }
-    // Produto: IVA da categoria
     return categoriaSelecionada?.taxa_iva || 0;
-  }, [isServico, formData.taxa_iva, categoriaSelecionada]);
+  }, [categoriaSelecionada]);
 
   const sujeitoIVA = useMemo(() => {
-    if (isServico) {
-      return formData.sujeito_iva;
-    }
-    // Produto: sujeito_iva da categoria
     return categoriaSelecionada?.sujeito_iva ?? true;
-  }, [isServico, formData.sujeito_iva, categoriaSelecionada]);
+  }, [categoriaSelecionada]);
 
   const precoComIva = useMemo(() => {
     const venda = parseFloat(formData.preco_venda) || 0;
@@ -240,32 +191,11 @@ export function NovoProdutoForm({ onSuccess, onCancel, initialTipo = "produto" }
     return venda * (1 + taxaIVA / 100);
   }, [formData.preco_venda, taxaIVA, sujeitoIVA]);
 
-  const valorRetencao = useMemo(() => {
-    if (!isServico) return 0;
-    const venda = parseFloat(formData.preco_venda) || 0;
-    const taxaRetencao = parseFloat(formData.taxa_retencao) || 0;
-    return venda * (taxaRetencao / 100);
-  }, [formData.preco_venda, formData.taxa_retencao, isServico]);
-
-  const valorLiquido = useMemo(() => {
-    const venda = parseFloat(formData.preco_venda) || 0;
-    return isServico ? venda - valorRetencao : venda;
-  }, [formData.preco_venda, valorRetencao, isServico]);
-
   // ===== HANDLERS =====
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
     const checked = (e.target as HTMLInputElement).checked;
-
-    // ✅ VALIDAÇÃO: Retenção não pode ser menor que 0
-    if (name === "taxa_retencao") {
-      const numValue = parseFloat(value);
-      if (!isNaN(numValue) && numValue < 0) {
-        // Se for menor que 0, não atualiza
-        return;
-      }
-    }
 
     setFormData((prev) => ({
       ...prev,
@@ -273,25 +203,6 @@ export function NovoProdutoForm({ onSuccess, onCancel, initialTipo = "produto" }
     }));
 
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: "" }));
-  };
-
-  const handleTipoChange = (tipo: TipoProduto) => {
-    setFormData((prev) => ({
-      ...prev,
-      tipo,
-      categoria_id: tipo === "servico" ? "" : prev.categoria_id,
-      preco_compra: tipo === "servico" ? "0" : prev.preco_compra,
-      estoque_atual: tipo === "servico" ? "0" : prev.estoque_atual,
-      estoque_minimo: tipo === "servico" ? "0" : prev.estoque_minimo,
-      taxa_retencao: tipo === "produto" ? "0" : prev.taxa_retencao,
-      tipo_preco: tipo === "servico" ? "fixo" : prev.tipo_preco,
-      // Reset IVA para padrão de serviço
-      taxa_iva: "0",
-      sujeito_iva: tipo === "servico" ? true : false,
-      // Reset código de isenção
-      codigo_isencao: tipo === "servico" ? "" : "",
-    }));
-    setErrors({});
   };
 
   const handleTipoPrecoChange = (tipoPreco: TipoPreco) => {
@@ -311,25 +222,17 @@ export function NovoProdutoForm({ onSuccess, onCancel, initialTipo = "produto" }
       newErrors.preco_venda = "Preço de venda obrigatório";
     }
 
-    // ✅ VALIDAÇÃO: Retenção não pode ser menor que 0
-    const retencao = parseFloat(formData.taxa_retencao);
-    if (!isNaN(retencao) && retencao < 0) {
-      newErrors.taxa_retencao = "Retenção não pode ser menor que 0";
+    if (!formData.categoria_id) newErrors.categoria_id = "Categoria obrigatória";
+
+    const precoCompra = parseFloat(formData.preco_compra);
+    if (precoCompra === undefined || precoCompra < 0) {
+      newErrors.preco_compra = "Preço de compra obrigatório";
     }
 
-    if (!isServico) {
-      if (!formData.categoria_id) newErrors.categoria_id = "Categoria obrigatória";
-
-      const precoCompra = parseFloat(formData.preco_compra);
-      if (precoCompra === undefined || precoCompra < 0) {
-        newErrors.preco_compra = "Preço de compra obrigatório";
-      }
-
-      if (formData.tipo_preco === "margem") {
-        const margem = parseFloat(formData.margem_lucro);
-        if (!margem || margem <= 0 || margem >= 100) {
-          newErrors.margem_lucro = "Margem deve ser entre 0.01% e 99.99%";
-        }
+    if (formData.tipo_preco === "margem") {
+      const margem = parseFloat(formData.margem_lucro);
+      if (!margem || margem <= 0 || margem >= 100) {
+        newErrors.margem_lucro = "Margem deve ser entre 0.01% e 99.99%";
       }
     }
 
@@ -344,79 +247,27 @@ export function NovoProdutoForm({ onSuccess, onCancel, initialTipo = "produto" }
     setLoading(true);
     try {
       const dados: CriarProdutoInput = {
-        tipo: formData.tipo,
+        tipo: "produto",
         nome: formData.nome.trim(),
         preco_venda: parseFloat(formData.preco_venda),
         status: "ativo",
+        categoria_id: formData.categoria_id || null,
+        codigo: formData.codigo.trim() || null,
+        preco_compra: parseFloat(formData.preco_compra) || 0,
+        estoque_atual: parseInt(formData.estoque_atual) || 0,
+        estoque_minimo: parseInt(formData.estoque_minimo) || 0,
+        tipo_preco: formData.tipo_preco,
+        despesas_adicionais: parseFloat(formData.despesas_adicionais) || 0,
       };
 
-      if (isServico) {
-        // ============================================================
-        // ✅ SERVIÇO: Só envia IVA se o checkbox estiver marcado
-        // ============================================================
-        if (formData.sujeito_iva) {
-          // Usuário quer IVA - envia o valor configurado
-          dados.taxa_iva = parseFloat(formData.taxa_iva) || 0;
-          dados.sujeito_iva = true;
-        } else {
-          // ✅ CORRIGIDO: Usuário NÃO quer IVA - envia undefined (não null)
-          dados.taxa_iva = undefined;
-          dados.sujeito_iva = false;
-        }
-
-        // ============================================================
-        // ✅ RETENÇÃO: Aceita 0 ou valores positivos, envia como número
-        // ============================================================
-        const retencao = parseFloat(formData.taxa_retencao) || 0;
-        // Garante que não seja menor que 0
-        dados.taxa_retencao = Math.max(0, retencao);
-
-        // ============================================================
-        // ✅ CÓDIGO DE ISENÇÃO: Só envia se tiver valor
-        // ============================================================
-        dados.codigo_isencao = formData.codigo_isencao || undefined;
-
-        // Campos específicos de serviço
-        dados.duracao_estimada = `${formData.duracao_estimada} ${formData.unidade_medida}`;
-        dados.unidade_medida = formData.unidade_medida;
-        dados.categoria_id = null;
-        dados.codigo = null;
-        dados.preco_compra = 0;
-        dados.estoque_atual = 0;
-        dados.estoque_minimo = 0;
-
-        // ============================================================
-        // 📝 LOG para debug - ver o que está sendo enviado
-        // ============================================================
-        console.log("📤 Enviando serviço:", {
-          taxa_iva: dados.taxa_iva,
-          sujeito_iva: dados.sujeito_iva,
-          taxa_retencao: dados.taxa_retencao,
-          codigo_isencao: dados.codigo_isencao,
-        });
-      } else {
-        // ============================================================
-        // ✅ PRODUTO: NÃO envia taxa_iva e sujeito_iva (vem da categoria)
-        // ============================================================
-        dados.categoria_id = formData.categoria_id || null;
-        dados.codigo = formData.codigo.trim() || null;
-        dados.preco_compra = parseFloat(formData.preco_compra) || 0;
-        dados.estoque_atual = parseInt(formData.estoque_atual) || 0;
-        dados.estoque_minimo = parseInt(formData.estoque_minimo) || 0;
-
-        // Campos de cálculo
-        dados.tipo_preco = formData.tipo_preco;
-        dados.despesas_adicionais = parseFloat(formData.despesas_adicionais) || 0;
-
-        if (formData.tipo_preco === "margem") {
-          dados.margem_lucro = parseFloat(formData.margem_lucro) || 0;
-        } else if (formData.tipo_preco === "markup") {
-          dados.markup = parseFloat(formData.markup) || 0;
-        }
-
-        // NÃO enviar taxa_iva e sujeito_iva para produtos
-        // O backend usa os valores da categoria
+      if (formData.tipo_preco === "margem") {
+        dados.margem_lucro = parseFloat(formData.margem_lucro) || 0;
+      } else if (formData.tipo_preco === "markup") {
+        dados.markup = parseFloat(formData.markup) || 0;
       }
+
+      // NÃO enviar taxa_iva e sujeito_iva para produtos
+      // O backend usa os valores da categoria
 
       await produtoService.criarProduto(dados);
       setSuccess(true);
@@ -452,8 +303,6 @@ export function NovoProdutoForm({ onSuccess, onCancel, initialTipo = "produto" }
     }
   };
 
-  // ===== RENDER =====
-
   return (
     <div className="transition-colors duration-300 w-full">
       {/* Header */}
@@ -464,17 +313,17 @@ export function NovoProdutoForm({ onSuccess, onCancel, initialTipo = "produto" }
           </button>
           <div>
             <h1 className="text-xl md:text-2xl font-bold" style={{ color: colors.secondary }}>
-              Novo {isServico ? "Serviço" : "Produto"}
+              Novo Produto
             </h1>
             <p className="text-sm" style={{ color: colors.textSecondary }}>
-              Preencha os dados para cadastrar um novo {isServico ? "serviço" : "produto"}
+              Preencha os dados para cadastrar um novo produto
             </p>
           </div>
         </div>
       ) : (
         <div className="mb-6">
           <h2 className="text-lg font-semibold" style={{ color: colors.secondary }}>
-            Novo {isServico ? "Serviço" : "Produto"}
+            Novo Produto
           </h2>
           <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
             Preencha os dados abaixo
@@ -512,41 +361,6 @@ export function NovoProdutoForm({ onSuccess, onCancel, initialTipo = "produto" }
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Tipo */}
-        <div
-          className="p-1 "
-          style={{
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-          }}>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => handleTipoChange("produto")}
-              className="flex items-center  justify-center gap-2 p-2 border-2 transition-all"
-              style={{
-                borderColor: !isServico ? colors.primary : colors.border,
-                backgroundColor: !isServico ? `${colors.primary}10` : "transparent",
-                color: !isServico ? colors.textSecondary : colors.textSecondary,
-              }}>
-              <Package className="w-5 h-5" style={{ color: colors.secondary }} />
-              <span className="font-medium">Produto</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTipoChange("servico")}
-              className="flex items-center justify-center gap-2 p-3 border-2 transition-all"
-              style={{
-                borderColor: isServico ? colors.secondary : colors.border,
-                backgroundColor: isServico ? `${colors.secondary}10` : "transparent",
-                color: isServico ? colors.secondary : colors.textSecondary,
-              }}>
-              <Wrench className="w-5 h-5" style={{ color: colors.secondary }} />
-              <span className="font-medium">Serviço</span>
-            </button>
-          </div>
-        </div>
-
         {/* Informações Principais */}
         <div
           className="p-4 space-y-4"
@@ -554,17 +368,17 @@ export function NovoProdutoForm({ onSuccess, onCancel, initialTipo = "produto" }
             backgroundColor: colors.card,
             borderColor: colors.border,
           }}>
-          {isServico && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
-                Nome do serviço
+                Nome do Produto *
               </label>
               <input
                 type="text"
                 name="nome"
                 value={formData.nome}
                 onChange={handleChange}
-                placeholder="Insira o nome do serviço"
+                placeholder="Insira o nome do produto"
                 className="w-full px-3 py-2 border outline-none transition-all"
                 style={{
                   backgroundColor: colors.card,
@@ -578,83 +392,74 @@ export function NovoProdutoForm({ onSuccess, onCancel, initialTipo = "produto" }
                 </p>
               )}
             </div>
-          )}
-
-          {!isServico && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Nome do produto */}
-              <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
-                  Nome do {isServico ? "serviço" : "produto"}
-                </label>
-                <input
-                  type="text"
-                  name="nome"
-                  value={formData.nome}
-                  onChange={handleChange}
-                  placeholder={isServico ? "Insira o nome do serviço" : "Insira o nome do produto"}
-                  className="w-full px-3 py-2 border outline-none transition-all"
-                  style={{
-                    backgroundColor: colors.card,
-                    borderColor: errors.nome ? colors.danger : colors.border,
-                    color: colors.text,
-                  }}
-                />
-                {errors.nome && (
-                  <p className="mt-1 text-xs" style={{ color: colors.danger }}>
-                    {errors.nome}
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
-                  Categoria
-                </label>
-                <select
-                  name="categoria_id"
-                  value={formData.categoria_id}
-                  onChange={handleChange}
-                  disabled={loadingCategorias}
-                  className="w-full px-3 py-2 border outline-none"
-                  style={{
-                    backgroundColor: colors.card,
-                    borderColor: errors.categoria_id ? colors.danger : colors.border,
-                    color: colors.text,
-                  }}>
-                  <option value="">{loadingCategorias ? "Carregando..." : "Selecione a categoria"}</option>
-                  {categorias.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.nome} {cat.label_iva ? `(${cat.label_iva})` : ""}
-                    </option>
-                  ))}
-                </select>
-                {errors.categoria_id && (
-                  <p className="mt-1 text-xs" style={{ color: colors.danger }}>
-                    {errors.categoria_id}
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
-                  Código/SKU
-                </label>
-                <input
-                  type="text"
-                  name="codigo"
-                  value={formData.codigo}
-                  onChange={handleChange}
-                  placeholder="PROD-001"
-                  className="w-full px-3 py-2 border outline-none"
-                  style={{
-                    backgroundColor: colors.card,
-                    borderColor: colors.border,
-                    color: colors.text,
-                  }}
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
+                Categoria *
+              </label>
+              <select
+                name="categoria_id"
+                value={formData.categoria_id}
+                onChange={handleChange}
+                disabled={loadingCategorias}
+                className="w-full px-3 py-2 border outline-none"
+                style={{
+                  backgroundColor: colors.card,
+                  borderColor: errors.categoria_id ? colors.danger : colors.border,
+                  color: colors.text,
+                }}>
+                <option value="">{loadingCategorias ? "Carregando..." : "Selecione a categoria"}</option>
+                {categorias.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.nome} {cat.label_iva ? `(${cat.label_iva})` : ""}
+                  </option>
+                ))}
+              </select>
+              {errors.categoria_id && (
+                <p className="mt-1 text-xs" style={{ color: colors.danger }}>
+                  {errors.categoria_id}
+                </p>
+              )}
             </div>
-          )}
+            <div>
+              <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
+                Código/SKU
+              </label>
+              <input
+                type="text"
+                name="codigo"
+                value={formData.codigo}
+                onChange={handleChange}
+                placeholder="PROD-001"
+                className="w-full px-3 py-2 border outline-none"
+                style={{
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  color: colors.text,
+                }}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
+              Descrição
+            </label>
+            <textarea
+              name="descricao"
+              rows={3}
+              value={formData.descricao}
+              onChange={handleChange}
+              placeholder="Descrição do produto..."
+              className="w-full px-3 py-2 border outline-none transition-all resize-none"
+              style={{
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                color: colors.text,
+              }}
+            />
+          </div>
         </div>
+
         {/* Seção de Preço */}
         <div
           className="p-4 shadow-sm border"
@@ -663,478 +468,303 @@ export function NovoProdutoForm({ onSuccess, onCancel, initialTipo = "produto" }
             borderColor: colors.border,
           }}>
           <div className="flex items-center gap-3 mb-4 pb-2 border-b" style={{ borderColor: colors.border }}>
-            <Calculator className="w-5 h-5" style={{ color: colors.secondary }} />
             <h3 className="font-semibold" style={{ color: colors.text }}>
               Configuração de Preço
             </h3>
           </div>
 
-          {/* Seletor de Tipo de Preço (apenas para produtos) */}
-          {!isServico && (
-            <div className="mb-4">
-              <div className="grid grid-cols-3 gap-2">
-                {(["fixo", "margem", "markup"] as TipoPreco[]).map((tipo) => (
-                  <button
-                    key={tipo}
-                    type="button"
-                    onClick={() => handleTipoPrecoChange(tipo)}
-                    className="flex flex-col items-center gap-1 p-1 border-2 transition-all "
-                    style={{
-                      borderColor: formData.tipo_preco === tipo ? colors.secondary : colors.border,
-                      backgroundColor: formData.tipo_preco === tipo ? `${colors.secondary}10` : "transparent",
-                    }}>
-                    {tipo === "fixo" && (
-                      <Tag
-                        className="w-4 h-4"
-                        style={{
-                          color: formData.tipo_preco === tipo ? colors.textSecondary : colors.textSecondary,
-                        }}
-                      />
-                    )}
-                    {tipo === "margem" && (
-                      <TrendingUp
-                        className="w-4 h-4"
-                        style={{
-                          color: formData.tipo_preco === tipo ? colors.textSecondary : colors.textSecondary,
-                        }}
-                      />
-                    )}
-                    {tipo === "markup" && (
-                      <DollarSign
-                        className="w-4 h-4"
-                        style={{
-                          color: formData.tipo_preco === tipo ? colors.textSecondary : colors.textSecondary,
-                        }}
-                      />
-                    )}
-                    <span
-                      className="text-xs font-medium"
+          {/* Seletor de Tipo de Preço */}
+          <div className="mb-4">
+            <div className="grid grid-cols-3 gap-2">
+              {(["fixo", "margem", "markup"] as TipoPreco[]).map((tipo) => (
+                <button
+                  key={tipo}
+                  type="button"
+                  onClick={() => handleTipoPrecoChange(tipo)}
+                  className="flex flex-col items-center gap-1 p-1 border-2 transition-all"
+                  style={{
+                    borderColor: formData.tipo_preco === tipo ? colors.secondary : colors.border,
+                    backgroundColor: formData.tipo_preco === tipo ? `${colors.secondary}10` : "transparent",
+                  }}>
+                  {tipo === "fixo" && (
+                    <Tag
+                      className="w-4 h-4"
                       style={{
-                        color: formData.tipo_preco === tipo ? colors.textSecondary : colors.text,
-                      }}>
-                      {getTipoPrecoLabel(tipo)}
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <p className="mt-2 text-xs" style={{ color: colors.textSecondary }}>
-                <HelpCircle className="w-3 h-3 inline mr-1" />
-                {getFormulaDescricao(formData.tipo_preco)}
-              </p>
+                        color: formData.tipo_preco === tipo ? colors.textSecondary : colors.textSecondary,
+                      }}
+                    />
+                  )}
+                  {tipo === "margem" && (
+                    <TrendingUp
+                      className="w-4 h-4"
+                      style={{
+                        color: formData.tipo_preco === tipo ? colors.textSecondary : colors.textSecondary,
+                      }}
+                    />
+                  )}
+                  {tipo === "markup" && (
+                    <DollarSign
+                      className="w-4 h-4"
+                      style={{
+                        color: formData.tipo_preco === tipo ? colors.textSecondary : colors.textSecondary,
+                      }}
+                    />
+                  )}
+                  <span
+                    className="text-xs font-medium"
+                    style={{
+                      color: formData.tipo_preco === tipo ? colors.textSecondary : colors.text,
+                    }}>
+                    {getTipoPrecoLabel(tipo)}
+                  </span>
+                </button>
+              ))}
             </div>
-          )}
+            <p className="mt-2 text-xs" style={{ color: colors.textSecondary }}>
+              <HelpCircle className="w-3 h-3 inline mr-1" />
+              {getFormulaDescricao(formData.tipo_preco)}
+            </p>
+          </div>
 
           {/* Campos de Custo */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            {!isServico && (
-              <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
-                  Preço de Compra (Kz)
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: colors.textSecondary }}>
-                    Kz
-                  </span>
-                  <input
-                    type="number"
-                    name="preco_compra"
-                    value={formData.preco_compra}
-                    onChange={handleChange}
-                    min="0"
-                    step="1"
-                    className="w-full pl-10 pr-3 py-2 border outline-none"
-                    style={{
-                      backgroundColor: colors.card,
-                      borderColor: errors.preco_compra ? colors.danger : colors.border,
-                      color: colors.text,
-                    }}
-                  />
-                </div>
-                {errors.preco_compra && (
-                  <p className="mt-1 text-xs" style={{ color: colors.danger }}>
-                    {errors.preco_compra}
-                  </p>
-                )}
+            <div>
+              <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
+                Preço de Compra (Kz) *
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: colors.textSecondary }}>
+                  Kz
+                </span>
+                <input
+                  type="number"
+                  name="preco_compra"
+                  value={formData.preco_compra}
+                  onChange={handleChange}
+                  min="0"
+                  step="1"
+                  className="w-full pl-10 pr-3 py-2 border outline-none"
+                  style={{
+                    backgroundColor: colors.card,
+                    borderColor: errors.preco_compra ? colors.danger : colors.border,
+                    color: colors.text,
+                  }}
+                />
               </div>
-            )}
+              {errors.preco_compra && (
+                <p className="mt-1 text-xs" style={{ color: colors.danger }}>
+                  {errors.preco_compra}
+                </p>
+              )}
+            </div>
 
-            {!isServico && (
-              <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
-                  Despesas Adicionais (Kz)
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: colors.textSecondary }}>
-                    Kz
-                  </span>
-                  <input
-                    type="number"
-                    name="despesas_adicionais"
-                    value={formData.despesas_adicionais}
-                    onChange={handleChange}
-                    min="0"
-                    step="1"
-                    placeholder="Transporte, taxas, etc"
-                    className="w-full pl-10 pr-3 py-2 border outline-none"
-                    style={{
-                      backgroundColor: colors.card,
-                      borderColor: colors.border,
-                      color: colors.text,
-                    }}
-                  />
-                </div>
+            <div>
+              <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
+                Despesas Adicionais (Kz)
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: colors.textSecondary }}>
+                  Kz
+                </span>
+                <input
+                  type="number"
+                  name="despesas_adicionais"
+                  value={formData.despesas_adicionais}
+                  onChange={handleChange}
+                  min="0"
+                  step="1"
+                  placeholder="Transporte, taxas, etc"
+                  className="w-full pl-10 pr-3 py-2 border outline-none"
+                  style={{
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    color: colors.text,
+                  }}
+                />
               </div>
-            )}
-            {!isServico && (
-              <AnimatePresence mode="wait">
-                {!isServico && formData.tipo_preco === "margem" && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="mb-4">
-                    <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
-                      Margem de Lucro (%)
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        name="margem_lucro"
-                        value={formData.margem_lucro}
-                        onChange={handleChange}
-                        min="1"
-                        max="99.99"
-                        step="0.01"
-                        className="flex-1 px-3 py-2 border outline-none"
-                        style={{
-                          backgroundColor: colors.card,
-                          borderColor: errors.margem_lucro ? colors.danger : colors.border,
-                          color: colors.text,
-                        }}
-                      />
-                    </div>
-                    {errors.margem_lucro && (
-                      <p className="mt-1 text-xs" style={{ color: colors.danger }}>
-                        {errors.margem_lucro}
-                      </p>
-                    )}
-                  </motion.div>
-                )}
+            </div>
 
-                {!isServico && formData.tipo_preco === "markup" && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="mb-4">
-                    <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
-                      Markup (%)
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        name="markup"
-                        value={formData.markup}
-                        onChange={handleChange}
-                        min="0"
-                        step="0.01"
-                        className="flex-1 px-3 py-2 border outline-none"
-                        style={{
-                          backgroundColor: colors.card,
-                          borderColor: colors.border,
-                          color: colors.text,
-                        }}
-                      />
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            )}
-            {!isServico && (
-              <div className={`${isServico ? "md:col-span-2" : ""}`}>
-                <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
-                  Preço de Venda (Kz) {formData.tipo_preco !== "fixo" && !isServico && "(Calculado)"}
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: colors.textSecondary }}>
-                    Kz
-                  </span>
-                  <input
-                    type="number"
-                    name="preco_venda"
-                    value={formData.preco_venda}
-                    onChange={handleChange}
-                    min="0.01"
-                    step="0.01"
-                    readOnly={!isServico && formData.tipo_preco !== "fixo"}
-                    className={`w-full pl-10 pr-3 py-2 border outline-none ${
-                      !isServico && formData.tipo_preco !== "fixo" ? "bg-muted/50" : ""
-                    }`}
-                    style={{
-                      backgroundColor: !isServico && formData.tipo_preco !== "fixo" ? `${colors.hover}` : colors.card,
-                      borderColor: errors.preco_venda ? colors.danger : colors.border,
-                      color: colors.text,
-                    }}
-                  />
-                </div>
-                {errors.preco_venda && (
-                  <p className="mt-1 text-xs" style={{ color: colors.danger }}>
-                    {errors.preco_venda}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* ✅ IVA - Apenas para Serviços */}
-          {isServico && (
-            <div className="mt-4 p-3 grid grid-cols-1 md:grid-cols-2 gap-4" style={{ backgroundColor: colors.hover }}>
-              <div className="flex items-center gap-4 mb-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    name="sujeito_iva"
-                    checked={formData.sujeito_iva}
-                    onChange={handleChange}
-                    className="w-4 h-4"
-                    style={{ accentColor: colors.primary }}
-                  />
-                  <span className="text-sm font-medium" style={{ color: colors.text }}>
-                    Sujeito a IVA
-                  </span>
-                </label>
-
-                {formData.sujeito_iva && (
+            <AnimatePresence mode="wait">
+              {formData.tipo_preco === "margem" && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="mb-4">
+                  <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
+                    Margem de Lucro (%)
+                  </label>
                   <div className="flex items-center gap-2">
-                    
                     <input
                       type="number"
-                      name="taxa_iva"
-                      value={formData.taxa_iva}
+                      name="margem_lucro"
+                      value={formData.margem_lucro}
+                      onChange={handleChange}
+                      min="1"
+                      max="99.99"
+                      step="0.01"
+                      className="flex-1 px-3 py-2 border outline-none"
+                      style={{
+                        backgroundColor: colors.card,
+                        borderColor: errors.margem_lucro ? colors.danger : colors.border,
+                        color: colors.text,
+                      }}
+                    />
+                  </div>
+                  {errors.margem_lucro && (
+                    <p className="mt-1 text-xs" style={{ color: colors.danger }}>
+                      {errors.margem_lucro}
+                    </p>
+                  )}
+                </motion.div>
+              )}
+
+              {formData.tipo_preco === "markup" && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="mb-4">
+                  <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
+                    Markup (%)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      name="markup"
+                      value={formData.markup}
                       onChange={handleChange}
                       min="0"
-                      max="100"
-                      step="1"
-                      className="w-20 px-2 py-1 border text-sm"
+                      step="0.01"
+                      className="flex-1 px-3 py-2 border outline-none"
                       style={{
                         backgroundColor: colors.card,
                         borderColor: colors.border,
                         color: colors.text,
                       }}
                     />
-                    <span className="text-sm" style={{ color: colors.textSecondary }}>
-                      %
-                    </span>
                   </div>
-                )}
-              </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-              {/* ✅ RETENÇÃO - Aceita 0 ou valores positivos com vírgula */}
-              <div className="flex items-center gap-4" style={{ borderColor: colors.border }}>
-                <span className="text-sm font-medium" style={{ color: colors.text }}>
-                  Retenção:
+            <div>
+              <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
+                Preço de Venda (Kz) {formData.tipo_preco !== "fixo" && "(Calculado)"}
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: colors.textSecondary }}>
+                  Kz
                 </span>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    name="taxa_retencao"
-                    value={formData.taxa_retencao}
-                    onChange={handleChange}
-                    min="0"
-                    max="100"
-                    step="0.5"
-                    className="w-20 px-2 py-1 border text-sm"
-                    style={{
-                      backgroundColor: colors.card,
-                      borderColor: errors.taxa_retencao ? colors.danger : colors.border,
-                      color: colors.text,
-                    }}
-                  />
-                  <span className="text-sm" style={{ color: colors.textSecondary }}>
-                    %
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {errors.taxa_retencao && (
-            <p className="mt-1 text-xs" style={{ color: colors.danger }}>
-              {errors.taxa_retencao}
-            </p>
-          )}
-
-          {/* Preview de Cálculos */}
-          {!isServico && (
-            <div className="mt-4 p-3  space-y-2" style={{ backgroundColor: colors.hover }}>
-              <div className="flex justify-between text-sm">
-                <span style={{ color: colors.textSecondary }}>Custo Total:</span>
-                <span className="font-medium" style={{ color: colors.text }}>
-                  {formatarPreco(custoTotal)}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span style={{ color: colors.textSecondary }}>Lucro Bruto:</span>
-                <span className={`font-medium `}>{formatarPreco(lucroBruto)}</span>
-              </div>
-              <div className="grid grid-cols-2 gap-4 text-xs" style={{ color: colors.textSecondary }}>
-                <div>Margem Real: {margemReal.toFixed(2)}%</div>
-                <div>Markup Real: {markupReal.toFixed(2)}%</div>
-              </div>
-              <div className="border-t pt-2 mt-2" style={{ borderColor: colors.border }}>
-                <div className="flex justify-between items-center">
-                  <span className="font-semibold" style={{ color: colors.text }}>
-                    Preço Final {sujeitoIVA ? `+ IVA (${taxaIVA}%)` : "(Isento)"}:
-                  </span>
-                  <span className="text-lg font-bold" style={{ color: colors.text }}>
-                    {formatarPreco(precoComIva)}
-                  </span>
-                </div>
-                {categoriaSelecionada && !categoriaSelecionada.sujeito_iva && (
-                  <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
-                    Isento segundo código {categoriaSelecionada.codigo_isencao || "M00"}
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Preview Serviço */}
-          {isServico && valorRetencao > 0 && (
-            <div className="mt-4 p-3 " style={{ backgroundColor: colors.hover }}>
-              <div className="flex justify-between items-center">
-                <span style={{ color: colors.textSecondary }}>Valor Líquido (após retenção):</span>
-                <span className="text-lg font-bold" style={{ color: colors.secondary }}>
-                  {formatarPreco(valorLiquido)}
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Campos Específicos - Produto */}
-        {!isServico && (
-          <div
-            className="p-4 shadow-sm border"
-            style={{
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-            }}>
-            <h3 className="font-semibold mb-4 text-sm" style={{ color: colors.text }}>
-              Estoque
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
-                  Estoque Atual
-                </label>
                 <input
                   type="number"
-                  name="estoque_atual"
-                  value={formData.estoque_atual}
+                  name="preco_venda"
+                  value={formData.preco_venda}
                   onChange={handleChange}
-                  min="0"
-                  className="w-full px-3 py-2 border outline-none"
+                  min="0.01"
+                  step="0.01"
+                  readOnly={formData.tipo_preco !== "fixo"}
+                  className={`w-full pl-10 pr-3 py-2 border outline-none ${
+                    formData.tipo_preco !== "fixo" ? "bg-muted/50" : ""
+                  }`}
                   style={{
-                    backgroundColor: colors.card,
-                    borderColor: colors.border,
+                    backgroundColor: formData.tipo_preco !== "fixo" ? `${colors.hover}` : colors.card,
+                    borderColor: errors.preco_venda ? colors.danger : colors.border,
                     color: colors.text,
                   }}
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
-                  Estoque Mínimo
-                </label>
-                <input
-                  type="number"
-                  name="estoque_minimo"
-                  value={formData.estoque_minimo}
-                  onChange={handleChange}
-                  min="0"
-                  className="w-full px-3 py-2 border outline-none"
-                  style={{
-                    backgroundColor: colors.card,
-                    borderColor: colors.border,
-                    color: colors.text,
-                  }}
-                />
-              </div>
+              {errors.preco_venda && (
+                <p className="mt-1 text-xs" style={{ color: colors.danger }}>
+                  {errors.preco_venda}
+                </p>
+              )}
             </div>
           </div>
-        )}
 
-        {/* Campos Específicos - Serviço */}
-        {isServico && (
-          <div
-            className="p-4 shadow-sm border space-y-4"
-            style={{
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-            }}>
-            <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
-                Duração Estimada
-              </label>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <input
-                  type="number"
-                  name="duracao_estimada"
-                  value={formData.duracao_estimada}
-                  onChange={handleChange}
-                  min="1"
-                  className="flex-1 px-3 py-2 border outline-none"
-                  style={{
-                    backgroundColor: colors.card,
-                    borderColor: colors.border,
-                    color: colors.text,
-                  }}
-                />
-                <select
-                  name="unidade_medida"
-                  value={formData.unidade_medida}
-                  onChange={handleChange}
-                  className="px-3 py-2 border outline-none"
-                  style={{
-                    backgroundColor: colors.card,
-                    borderColor: colors.border,
-                    color: colors.text,
-                  }}>
-                  <option value="hora">Hora(s)</option>
-                  <option value="dia">Dia(s)</option>
-                  <option value="semana">Semana(s)</option>
-                  <option value="mes">Mês(es)</option>
-                </select>
-              </div>
+          {/* Preview de Cálculos */}
+          <div className="mt-4 p-3 space-y-2" style={{ backgroundColor: colors.hover }}>
+            <div className="flex justify-between text-sm">
+              <span style={{ color: colors.textSecondary }}>Custo Total:</span>
+              <span className="font-medium" style={{ color: colors.text }}>
+                {formatarPreco(custoTotal)}
+              </span>
             </div>
+            <div className="flex justify-between text-sm">
+              <span style={{ color: colors.textSecondary }}>Lucro Bruto:</span>
+              <span className={`font-medium `}>{formatarPreco(lucroBruto)}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-4 text-xs" style={{ color: colors.textSecondary }}>
+              <div>Margem Real: {margemReal.toFixed(2)}%</div>
+              <div>Markup Real: {markupReal.toFixed(2)}%</div>
+            </div>
+            <div className="border-t pt-2 mt-2" style={{ borderColor: colors.border }}>
+              <div className="flex justify-between items-center">
+                <span className="font-semibold" style={{ color: colors.text }}>
+                  Preço Final {sujeitoIVA ? `+ IVA (${taxaIVA}%)` : "(Isento)"}:
+                </span>
+                <span className="text-lg font-bold" style={{ color: colors.text }}>
+                  {formatarPreco(precoComIva)}
+                </span>
+              </div>
+              {categoriaSelecionada && !categoriaSelecionada.sujeito_iva && (
+                <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+                  Isento segundo código {categoriaSelecionada.codigo_isencao || "M00"}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
 
-            {/*Código de Isenção para serviços */}
+        {/* Campos de Estoque */}
+        <div
+          className="p-4 shadow-sm border"
+          style={{
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+          }}>
+          <h3 className="font-semibold mb-4 text-sm" style={{ color: colors.text }}>
+            Estoque
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
-                Código de Isenção de IVA (opcional)
+                Estoque Atual
               </label>
-              <select
-                name="codigo_isencao"
-                value={formData.codigo_isencao}
+              <input
+                type="number"
+                name="estoque_atual"
+                value={formData.estoque_atual}
                 onChange={handleChange}
+                min="0"
                 className="w-full px-3 py-2 border outline-none"
                 style={{
                   backgroundColor: colors.card,
                   borderColor: colors.border,
                   color: colors.text,
-                }}>
-                {OPCOES_ISENCAO.map(({ value, label }) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-xs" style={{ color: colors.textSecondary }}>
-                Código de isenção conforme Código do IVA de Angola
-              </p>
+                }}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1" style={{ color: colors.text }}>
+                Estoque Mínimo
+              </label>
+              <input
+                type="number"
+                name="estoque_minimo"
+                value={formData.estoque_minimo}
+                onChange={handleChange}
+                min="0"
+                className="w-full px-3 py-2 border outline-none"
+                style={{
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  color: colors.text,
+                }}
+              />
             </div>
           </div>
-        )}
+        </div>
 
         {/* Botões */}
         <div className="flex items-center justify-end gap-3 pt-4">

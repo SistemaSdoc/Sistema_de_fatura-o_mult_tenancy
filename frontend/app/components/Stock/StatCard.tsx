@@ -11,6 +11,7 @@ interface ColorScheme {
     text: string;
     textSecondary: string;
     secondary: string
+    blue:string
 }
 
 interface StatCardProps {
@@ -24,7 +25,7 @@ interface StatCardProps {
 export function StatCard({ icon, label, value, trend = "neutral", colors }: StatCardProps) {
     const getTrendColor = () => {
         switch (trend) {
-            case "up": return colors.success;
+            case "up": return colors.primary;
             case "down": return colors.warning;
             default: return colors.secondary;
         }
@@ -47,7 +48,7 @@ export function StatCard({ icon, label, value, trend = "neutral", colors }: Stat
                 >
                     <div style={{ color: trendColor }}>{icon}</div>
                 </div>
-                <span className="text-lg sm:text-2xl font-bold truncate" style={{ color: colors.text }}>{value}</span>
+                <span className="text-lg sm:text-2xl font-bold truncate" style={{ color: colors.blue }}>{value}</span>
             </div>
             <p className="mt-1.5 sm:mt-2 text-xs sm:text-sm truncate" style={{ color: colors.textSecondary }}>{label}</p>
         </div>
