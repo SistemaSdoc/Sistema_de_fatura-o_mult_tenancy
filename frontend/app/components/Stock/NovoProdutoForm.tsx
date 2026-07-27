@@ -241,6 +241,16 @@ export function NovoProdutoForm({ onSuccess, onCancel, initialTipo = "produto" }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  console.log("🚀 Submetendo formulário...");
+  console.log("Dados atuais:", formData);
+
+  if (!validate()) {
+    console.log("❌ Validação falhou. Erros:", errors);
+    return;
+  }
+  console.log("✅ Validação OK, chamando API...");
+
     e.preventDefault();
     if (!validate()) return;
 

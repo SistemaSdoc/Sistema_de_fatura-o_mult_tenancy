@@ -38,8 +38,8 @@ public function store(Request $request)
         // Valida o array de features (opcional)
         'features' => 'nullable|array',
         'features.*.feature_id' => 'required|exists:features,id',
-        'features.*.quantidade' => 'required|integer|min:0',
-        'features.*.unidade' => 'nullable|string|max:20',
+        'features.*.quantidade' => 'required|integer|min:-1',
+        'features.*.unidade' => 'nullable|string|max:100',
     ]);
 
     // Cria o plano
@@ -116,7 +116,7 @@ public function store(Request $request)
         $plano = Plano::findOrFail($planoId);
         $validated = $request->validate([
             'feature_id' => 'required|exists:features,id',
-            'quantidade' => 'required|integer|min:0',
+            'quantidade' => 'required|integer|min:-1',
             'unidade' => 'nullable|string|max:20',
         ]);
 

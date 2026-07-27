@@ -306,7 +306,12 @@ export default function MinhaSubscricaoPage() {
                     <div key={index} className="flex items-center gap-2 text-sm" style={{ color: colors.text }}>
                       <CheckCircle className="w-4 h-4" style={{ color: colors.secondary }} />
                       <span>
-                        {feature.pivot?.quantidade > 0 ? `${feature.pivot.quantidade} ${feature.pivot.unidade || ""} ` : ""}
+                        {(() => {
+  const qtd = feature.pivot?.quantidade;
+  if (qtd === -1) return 'Ilimitado ';
+  if (qtd > 0) return `${qtd} ${feature.pivot?.unidade || ''} `;
+  return '';
+})()}
                         {feature.nome}
                       </span>
                     </div>

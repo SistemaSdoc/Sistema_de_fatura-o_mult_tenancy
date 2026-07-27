@@ -68,6 +68,14 @@ function formatarKz(valor: number) {
     return new Intl.NumberFormat("pt-AO", { style: "currency", currency: "AOA", maximumFractionDigits: 0 }).format(valor);
 }
 
+// ✅ Função para formatar quantidade (ilimitado = -1)
+function formatarQuantidade(quantidade: number, unidade: string | null): string {
+    if (quantidade === -1) {
+        return 'Ilimitado';
+    }
+    return `${quantidade}${unidade ? ` ${unidade}` : ''}`;
+}
+
 export default function PlanosPage() {
     const colors = useThemeColors();
     const [planos, setPlanos] = useState<Plano[]>([]);
@@ -170,7 +178,6 @@ export default function PlanosPage() {
         setFeatureForm({ nome: "", descricao: "", icone: "", ativo: true });
     };
 
-    // FUNÇÃO CORRIGIDA – não envia null, apenas campos preenchidos
     const salvarFeature = async () => {
         if (!featureForm.nome.trim()) {
             toast.error("O nome da feature é obrigatório");
@@ -320,7 +327,7 @@ export default function PlanosPage() {
 
     return (
         <div className="space-y-4 md:space-y-6">
-            {/* Cabeçalho – igual */}
+            {/* Cabeçalho */}
             <div className="flex items-center justify-between gap-2">
                 <div>
                     <h2 className="text-lg font-bold md:text-xl" style={{ color: colors.text }}>Planos</h2>
@@ -338,7 +345,7 @@ export default function PlanosPage() {
                 </button>
             </div>
 
-            {/* Lista de planos – igual */}
+            {/* Lista de planos */}
             {planos.length === 0 ? (
                 <div
                     className="flex flex-col items-center justify-center py-16 rounded-xl border"
@@ -355,7 +362,6 @@ export default function PlanosPage() {
                             className="p-4 rounded-xl border flex flex-col"
                             style={{ backgroundColor: colors.card, borderColor: colors.border, opacity: plano.ativo ? 1 : 0.6 }}
                         >
-                            {/* ... conteúdo do card ... */}
                             <div className="flex items-start justify-between gap-2">
                                 <div>
                                     <h3 className="text-sm font-bold" style={{ color: colors.text }}>{plano.nome}</h3>
@@ -398,7 +404,7 @@ export default function PlanosPage() {
                                                 {f.nome}
                                                 {f.pivot && (
                                                     <span style={{ color: colors.textSecondary }}>
-                                                        {" "}— {f.pivot.quantidade}{f.pivot.unidade ? ` ${f.pivot.unidade}` : ""}
+                                                        {" "}— {formatarQuantidade(f.pivot.quantidade, f.pivot.unidade)}
                                                     </span>
                                                 )}
                                             </span>
@@ -428,7 +434,7 @@ export default function PlanosPage() {
                 </div>
             )}
 
-            {/* Modal de plano – igual */}
+            {/* Modal de plano */}
             {modalOpen && (
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
@@ -568,14 +574,19 @@ export default function PlanosPage() {
                                                     </label>
                                                     {sel.selecionada && (
                                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 sm:pl-6">
-                                                            <input
-                                                                type="number"
-                                                                value={sel.quantidade}
-                                                                onChange={(e) => atualizarFeature(feature.id, "quantidade", e.target.value)}
-                                                                placeholder="Quantidade"
-                                                                className="px-2.5 py-2 rounded-md text-xs border outline-none"
-                                                                style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
-                                                            />
+                                                            <div>
+                                                                <input
+                                                                    type="number"
+                                                                    value={sel.quantidade}
+                                                                    onChange={(e) => atualizarFeature(feature.id, "quantidade", e.target.value)}
+                                                                    placeholder="Quantidade"
+                                                                    className="px-2.5 py-2 rounded-md text-xs border outline-none w-full"
+                                                                    style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
+                                                                />
+                                                                <p className="text-[10px] mt-0.5" style={{ color: colors.textSecondary }}>
+                                                                    Use <strong>-1</strong> para ilimitado
+                                                                </p>
+                                                            </div>
                                                             <input
                                                                 type="text"
                                                                 value={sel.unidade}
@@ -619,7 +630,7 @@ export default function PlanosPage() {
                 </div>
             )}
 
-            {/* Modal de criação de feature – igual */}
+            {/* Modal de criação de feature */}
             {featureModalOpen && (
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
@@ -709,7 +720,7 @@ export default function PlanosPage() {
                 </div>
             )}
 
-            {/* Confirmar remoção – igual */}
+            {/* Confirmar remoção */}
             {confirmarRemocao && (
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center p-4"

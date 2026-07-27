@@ -12,19 +12,13 @@ import {
   AlertCircle,
   Search,
   Power,
-  KeyRound,
-  Link2,
-  Link2Off,
-  Building2,
   Mail,
   Shield,
-  Loader2,
-  Eye,
-  EyeOff,
-  User,
-  UsersRound,
-  Headset,
   Database,
+  Building2,
+  EyeOff,
+  Eye,
+
 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
@@ -55,7 +49,7 @@ interface LandlordUserItem {
   id: string;
   name: string;
   email: string;
-  role: "super_admin" | "suporte" | "admin_empresa";
+  role: "super_admin" | "admin_empresa";
   ativo: boolean;
   empresa_id: string | null;
   empresa?: Empresa | null;
@@ -92,7 +86,6 @@ type UserItem = LandlordUserItem | TenantUserItem | SharedUserItem;
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: "Super Admin",
-  suporte: "Suporte",
   admin_empresa: "Admin de Empresa",
   user: "Utilizador",
 };
@@ -123,14 +116,9 @@ export default function UsuariosLandlordPage() {
   const [formEmail, setFormEmail] = useState("");
   const [formSenha, setFormSenha] = useState("");
   const [formSenhaConfirm, setFormSenhaConfirm] = useState("");
-  const [formRole, setFormRole] = useState<"super_admin" | "suporte">("suporte");
+  const [formRole, setFormRole] = useState<"super_admin">("super_admin");
   const [showSenha, setShowSenha] = useState(false);
   const [formError, setFormError] = useState("");
-
-  const [showVincularModal, setShowVincularModal] = useState(false);
-  const [usuarioParaVincular, setUsuarioParaVincular] = useState<LandlordUserItem | null>(null);
-  const [empresaSelecionada, setEmpresaSelecionada] = useState("");
-  const [vinculando, setVinculando] = useState(false);
 
   const [showResetModal, setShowResetModal] = useState(false);
   const [usuarioParaReset, setUsuarioParaReset] = useState<LandlordUserItem | null>(null);
@@ -295,36 +283,7 @@ export default function UsuariosLandlordPage() {
     }
   };
 
-  // ===== VINCULAR =====
-  const handleVincular = async () => {
-    if (!usuarioParaVincular || !empresaSelecionada) return;
-    setVinculando(true);
-    try {
-      await landlordUsersApi.vincularEmpresa(usuarioParaVincular.id, empresaSelecionada);
-      toast.success("Utilizador vinculado à empresa");
-      setShowVincularModal(false);
-      await fetchUsuarios();
-      await fetchEmpresas();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Erro ao vincular empresa");
-    } finally {
-      setVinculando(false);
-    }
-  };
-
-  const handleDesvincular = async (u: LandlordUserItem) => {
-    setActionLoading(u.id);
-    try {
-      await landlordUsersApi.desvincularEmpresa(u.id);
-      toast.success("Vínculo removido");
-      await fetchUsuarios();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Erro ao remover vínculo");
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
+  // ===== RESET PASSWORD =====
   const handleReset = async () => {
     if (!usuarioParaReset) return;
     if (novaSenhaReset.length < 8) {
@@ -397,21 +356,15 @@ export default function UsuariosLandlordPage() {
           onClick={() => setShowCreateModal(true)}
           className="rounded-lg w-full sm:w-auto"
           style={{ backgroundColor: colors.primary, color: "#fff" }}
-        >  <Link
-                            href="/landlord/register"
-                            className="group inline-flex items-center gap-2 transition-colors font-medium"
-                            style={{ color: colors.secondary }}
-                        >
-
+        >
           <UserPlus size={16} className="mr-2" />
           Novo Super Admin
-          </Link>
         </Button>
       </div>
 
       {/* Cards de métricas (4 cards) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        {/* Card Total Geral */}
+        {/* Total Geral */}
         <div
           className="relative overflow-hidden cursor-pointer transition-all hover:scale-[1.02]"
           style={{ backgroundColor: colors.card }}
@@ -427,7 +380,7 @@ export default function UsuariosLandlordPage() {
           </div>
         </div>
 
-        {/* Card Super Admin */}
+        {/* Super Admin */}
         <div
           className="relative overflow-hidden cursor-pointer transition-all hover:scale-[1.02]"
           style={{ backgroundColor: colors.card }}
@@ -443,7 +396,7 @@ export default function UsuariosLandlordPage() {
           </div>
         </div>
 
-        {/* Card Base de Dados Dedicada */}
+        {/* Base Dedicada */}
         <div
           className="relative overflow-hidden cursor-pointer transition-all hover:scale-[1.02]"
           style={{ backgroundColor: colors.card }}
@@ -459,7 +412,7 @@ export default function UsuariosLandlordPage() {
           </div>
         </div>
 
-        {/* Card Base de Dados Compartilhada */}
+        {/* Base Compartilhada */}
         <div
           className="relative overflow-hidden cursor-pointer transition-all hover:scale-[1.02]"
           style={{ backgroundColor: colors.card }}
@@ -525,9 +478,6 @@ export default function UsuariosLandlordPage() {
               currentUser={currentUser}
               actionLoading={actionLoading}
               onToggleStatus={(u) => { setUsuarioParaStatus(u); setShowStatusDialog(true); }}
-              onVincular={(u) => { setUsuarioParaVincular(u); setShowVincularModal(true); }}
-              onDesvincular={handleDesvincular}
-              empresas={empresas}
             />
           )}
         </TabsContent>
@@ -549,14 +499,115 @@ export default function UsuariosLandlordPage() {
         </TabsContent>
       </Tabs>
 
-      {/* ===== MODAIS (mantidos) ===== */}
-      {/* ... (os modais permanecem exatamente como estavam) ... */}
+      {/* ===== MODAL DE CRIAÇÃO ===== */}
+      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+        <DialogContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+          <DialogHeader>
+            <DialogTitle style={{ color: colors.text }}>Criar novo Super Admin</DialogTitle>
+            <DialogDescription style={{ color: colors.textSecondary }}>
+              Preenche os dados para criar um novo utilizador com permissões de super administrador.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium" style={{ color: colors.text }}>Nome completo *</label>
+              <Input
+                value={formNome}
+                onChange={(e) => setFormNome(e.target.value)}
+                placeholder="Ex: João Silva"
+                style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium" style={{ color: colors.text }}>Email *</label>
+              <Input
+                type="email"
+                value={formEmail}
+                onChange={(e) => setFormEmail(e.target.value)}
+                placeholder="exemplo@dominio.com"
+                style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium" style={{ color: colors.text }}>Senha *</label>
+              <div className="relative">
+                <Input
+                  type={showSenha ? "text" : "password"}
+                  value={formSenha}
+                  onChange={(e) => setFormSenha(e.target.value)}
+                  placeholder="Mínimo 8 caracteres"
+                  style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSenha(!showSenha)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2"
+                  style={{ color: colors.textSecondary }}
+                >
+                  {showSenha ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium" style={{ color: colors.text }}>Confirmar senha *</label>
+              <Input
+                type="password"
+                value={formSenhaConfirm}
+                onChange={(e) => setFormSenhaConfirm(e.target.value)}
+                placeholder="Repete a senha"
+                style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
+              />
+            </div>
+
+            {formError && (
+              <div className="text-sm text-red-500 flex items-center gap-1">
+                <AlertCircle size={16} />
+                {formError}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreateModal(false)} disabled={creating}>
+              Cancelar
+            </Button>
+            <Button onClick={handleCriar} disabled={creating} style={{ backgroundColor: colors.primary, color: "#fff" }}>
+              {creating ? <RefreshCw size={16} className="animate-spin mr-2" /> : null}
+              Criar Utilizador
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ===== MODAL DE CONFIRMAÇÃO DE STATUS ===== */}
+      <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
+        <DialogContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+          <DialogHeader>
+            <DialogTitle style={{ color: colors.text }}>
+              {usuarioParaStatus?.ativo ? "Desativar" : "Ativar"} utilizador
+            </DialogTitle>
+            <DialogDescription style={{ color: colors.textSecondary }}>
+              Tem a certeza que pretende {usuarioParaStatus?.ativo ? "desativar" : "ativar"} o utilizador <strong>{usuarioParaStatus?.name}</strong>?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowStatusDialog(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleToggleStatus} style={{ backgroundColor: colors.primary, color: "#fff" }}>
+              {actionLoading === usuarioParaStatus?.id ? <RefreshCw size={16} className="animate-spin mr-2" /> : null}
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
 // ============================================================
-// COMPONENTES AUXILIARES (mantidos)
+// COMPONENTES AUXILIARES
 // ============================================================
 
 function EmptyState({ icon, message }: { icon: React.ReactNode; message: string }) {
@@ -573,7 +624,10 @@ function EmptyState({ icon, message }: { icon: React.ReactNode; message: string 
 }
 
 // ============================================================
-// TABELA LANDLORD (Super Admin)
+// TABELA LANDLORD (Super Admin) – SEM VÍNCULO
+// ============================================================
+// ============================================================
+// TABELA LANDLORD (Super Admin) – COM MAIS INFORMAÇÃO
 // ============================================================
 function UserTable({
   users,
@@ -581,17 +635,12 @@ function UserTable({
   currentUser,
   actionLoading,
   onToggleStatus,
-  onVincular,
-  onDesvincular,
 }: {
   users: LandlordUserItem[];
   colors: any;
   currentUser: any;
   actionLoading: string | null;
   onToggleStatus: (u: LandlordUserItem) => void;
-  onVincular: (u: LandlordUserItem) => void;
-  onDesvincular: (u: LandlordUserItem) => void;
-  empresas: Empresa[];
 }) {
   return (
     <>
@@ -601,7 +650,8 @@ function UserTable({
           <thead style={{ backgroundColor: colors.primary }}>
             <tr>
               <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>Utilizador</th>
-              <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>Empresa Vinculada</th>
+              <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>Empresa</th>
+              <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>Criado em</th>
               <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>Status</th>
               <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>Ações</th>
             </tr>
@@ -618,30 +668,33 @@ function UserTable({
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   {u.empresa ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm" style={{ color: colors.text }}>{u.empresa.nome}</span>
-                      <button onClick={() => onDesvincular(u)} disabled={actionLoading === u.id} title="Remover vínculo" className="p-1 rounded-md transition-all hover:scale-110" style={{ color: colors.danger }}>
-                        <Link2Off size={14} />
-                      </button>
-                    </div>
+                    <Badge style={{ backgroundColor: `${colors.primary}15`, color: colors.primary, border: `1px solid ${colors.primary}30` }}>
+                      <Building2 size={12} className="mr-1" />
+                      {u.empresa.nome}
+                    </Badge>
                   ) : (
-                    <button onClick={() => onVincular(u)} className="text-xs font-medium flex items-center gap-1 rounded-md px-2 py-1 transition-all hover:scale-105" style={{ color: colors.blue, backgroundColor: `${colors.primary}10` }}>
-                      <Link2 size={12} />
-                      Vincular
-                    </button>
+                    <span className="text-sm" style={{ color: colors.textSecondary }}>—</span>
                   )}
                 </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm" style={{ color: colors.textSecondary }}>
+                  {u.created_at ? new Date(u.created_at).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <Badge style={{ backgroundColor: u.ativo ? `${colors.secondary}` : `${colors.danger}15`, color: u.ativo ? colors.blue : colors.danger}} className="font-medium">
+                  <Badge style={{ backgroundColor: u.ativo ? `${colors.success}15` : `${colors.danger}15`, color: u.ativo ? colors.success : colors.danger, border: `1px solid ${u.ativo ? colors.success : colors.danger}30` }} className="font-medium">
                     {u.ativo ? "Ativo" : "Inativo"}
                   </Badge>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={() => onToggleStatus(u)} disabled={actionLoading === u.id || u.id === currentUser?.id} className="rounded-lg" style={{ backgroundColor: u.ativo ? colors.secondary : colors.success, color: colors.blue }} title={u.id === currentUser?.id ? "Não podes alterar o teu próprio status" : ""}>
-                      {actionLoading === u.id ? <RefreshCw size={14} className="animate-spin" /> : <Power size={14} />}
-                    </Button>
-                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => onToggleStatus(u)}
+                    disabled={actionLoading === u.id || u.id === currentUser?.id}
+                    className="rounded-lg"
+                    style={{ backgroundColor: u.ativo ? colors.danger : colors.success, color: '#fff' }}
+                    title={u.id === currentUser?.id ? "Não podes alterar o teu próprio status" : ""}
+                  >
+                    {actionLoading === u.id ? <RefreshCw size={14} className="animate-spin" /> : <Power size={14} />}
+                  </Button>
                 </td>
               </tr>
             ))}
@@ -666,12 +719,23 @@ function UserTable({
                   {u.ativo ? "Ativo" : "Inativo"}
                 </Badge>
               </div>
-              
-              <div className="flex gap-2 pt-1">
-                <Button size="sm" onClick={() => onToggleStatus(u)} disabled={actionLoading === u.id || u.id === currentUser?.id} className="flex-1 rounded-lg" style={{ backgroundColor: u.ativo ? colors.danger : colors.success, color: "white" }}>
-                  {actionLoading === u.id ? <RefreshCw size={14} className="animate-spin" /> : <><Power size={14} className="mr-1" />{u.ativo ? "Desativar" : "Ativar"}</>}
-                </Button>
+              <div className="grid grid-cols-2 gap-2 text-xs" style={{ color: colors.textSecondary }}>
+                <div>
+                  <span className="font-medium" style={{ color: colors.text }}>Empresa:</span> {u.empresa?.nome || '—'}
+                </div>
+                <div>
+                  <span className="font-medium" style={{ color: colors.text }}>Criado:</span> {u.created_at ? new Date(u.created_at).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                </div>
               </div>
+              <Button
+                size="sm"
+                onClick={() => onToggleStatus(u)}
+                disabled={actionLoading === u.id || u.id === currentUser?.id}
+                className="w-full rounded-lg"
+                style={{ backgroundColor: u.ativo ? colors.danger : colors.success, color: '#fff' }}
+              >
+                {actionLoading === u.id ? <RefreshCw size={14} className="animate-spin" /> : <><Power size={14} className="mr-1" />{u.ativo ? "Desativar" : "Ativar"}</>}
+              </Button>
             </CardContent>
           </Card>
         ))}
@@ -760,7 +824,7 @@ function SharedTable({ users, colors }: { users: SharedUserItem[]; colors: any }
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
                 <Badge style={{ backgroundColor: `${colors.primary}15`, color: colors.primary, border: `1px solid ${colors.primary}30` }}>
-                  <UsersRound size={12} className="mr-1" />
+                  <Building2 size={12} className="mr-1" />
                   {u.empresa_nome || "N/A"}
                 </Badge>
               </td>

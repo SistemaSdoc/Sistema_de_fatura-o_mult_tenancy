@@ -187,26 +187,46 @@ class PlanoService
         // ... (adaptar conforme necessário)
     }
 
-    /**
-     * Conta utilizadores da empresa.
-     *
-     * NOTA: Diferente de Subscricao, os utilizadores (Shared\User /
-     * Tenant\User) SÃO dados por modo — no modo colectivo residem no
-     * banco `shared`, no modo singular residem no banco `tenant`.
-     * Por isso este método mantém a lógica baseada em `$modo`.
-     */
-    public function contarUtilizadores($empresaId, $apenasAtivos = true, $modo = 'colectivo')
-    {
-        $connection = $modo === 'colectivo' ? 'shared' : 'tenant';
-        $model = $modo === 'colectivo' ? SharedUser::class : TenantUser::class;
+/**
+ * Conta utilizadores da empresa.
+ *
+ * NOTA: Diferente de Subscricao, os utilizadores (Shared\User /
+ * Tenant\User) SÃO dados por modo — no modo colectivo residem no
+ * banco `shared`, no modo singular residem no banco `tenant`.
+ * Por isso este método mantém a lógica baseada em `$modo`.
+ */
+public function contarUtilizadores($empresaId, $apenasAtivos = true, $modo = 'colectivo')
+{
+    Log::debug('[PlanoService::contarUtilizadores] Iniciando', [
+        'empresa_id' => $empresaId,
+        'apenas_ativos' => $apenasAtivos,
+        'modo' => $modo,
+    ]);
 
-        $query = $model::on($connection)
-            ->where('empresa_id', $empresaId);
+    $connection = $modo === 'colectivo' ? 'shared' : 'tenant';
+    $model = $modo === 'colectivo' ? SharedUser::class : TenantUser::class;
 
-        if ($apenasAtivos) {
-            $query->where('ativo', true);
-        }
+    $query = $model::on($connection);
 
-        return $query->count();
+    //  CORREÇÃO: usar tenant_id no modo colectivo, empresa_id no singular
+    if ($modo === 'colectivo') {
+        $query->where('tenant_id', $empresaId);
+    } else {
+        $query->where('empresa_id', $empresaId);
     }
+
+    if ($apenasAtivos) {
+        $query->where('ativo', true);
+    }
+
+    $count = $query->count();
+
+    Log::info('[PlanoService::contarUtilizadores] Resultado', [
+        'empresa_id' => $empresaId,
+        'count' => $count,
+        'modo' => $modo,
+    ]);
+
+    return $count;
+}
 }
