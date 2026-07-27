@@ -18,8 +18,8 @@ import { useThemeColors } from '@/context/ThemeContext';
 import { pagamentoService } from '@/services/pagamentosplanos';
 
 
-const IBAN_EMPRESA = process.env.NEXT_PUBLIC_IBAN_EMPRESA || '';
-const NOME_BENEFICIARIO = process.env.NEXT_PUBLIC_NOME_BENEFICIARIO || '';
+const IBAN_EMPRESA = process.env.NEXT_PUBLIC_IBAN_EMPRESA || 'AO006384738574748574868475';
+const NOME_BENEFICIARIO = process.env.NEXT_PUBLIC_NOME_BENEFICIARIO || 'Tunganetu';
 
 type PagamentoEstado = 'pendente' | 'em_analise' | 'pago' | 'rejeitado' | 'desconhecido';
 

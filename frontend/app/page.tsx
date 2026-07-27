@@ -352,27 +352,7 @@ const PricingCard: React.FC<PricingCardProps> = ({ plan, index, colors, periodo 
   );
 };
 
-// DADOS
-const allFeaturesData = [
-  {
-    title: "Emissão de Facturas",
-    description: "Crie facturas, notas de crédito e recibos rapidamente, associe clientes, produtos e impostos.",
-  },
-  { title: "Gestão de Clientes", description: "Cadastre e administre os seus clientes, de forma simples e rápida." },
-  {
-    title: "Controle de Produtos",
-    description: "Gerencie produtos e serviços, preços e stock em tempo real, directamente ligados às facturas.",
-  },
-  {
-    title: "Relatórios Financeiros",
-    description: "Visualize relatórios detalhados sobre vendas, facturamento e desempenho financeiro da sua empresa.",
-  },
-  {
-    title: "Gestão de Utilizadores",
-    description: "Adicione membros da equipa com permissões diferentes, garantindo controlo e colaboração eficiente.",
-  },
-];
-
+// DADOS ESTÁTICOS PARA PROCESSO E FAQ
 const processSteps = [
   {
     number: 1,
@@ -456,7 +436,7 @@ export default function App() {
     const fetchPlanos = async () => {
       try {
         const data = await planosService.listarAtivos();
-        console.log(" Planos recebidos:", JSON.stringify(data, null, 2));
+        console.log("📦 Planos recebidos:", JSON.stringify(data, null, 2));
 
         const planosFormatados = data.map((plano: any) => ({
           id: plano.id,
@@ -473,9 +453,11 @@ export default function App() {
           isPopular: plano.nome === "Pro" || plano.nome === "Empresa",
           features: plano.features.map((f: any) => {
             let featureText = f.nome;
-            if (f.pivot?.quantidade && f.pivot?.quantidade > 0) {
-              const qtd = f.pivot.quantidade === 0 ? "Ilimitados" : f.pivot.quantidade;
-              const unidade = f.pivot.unidade || "";
+            const qtd = f.pivot?.quantidade;
+            if (qtd === -1) {
+              featureText = `Ilimitado ${f.nome}`;
+            } else if (qtd && qtd > 0) {
+              const unidade = f.pivot.unidade || '';
               featureText = `${qtd} ${unidade} ${f.nome}`;
             }
             return featureText;
@@ -592,7 +574,7 @@ export default function App() {
               Entrar
             </Link>
             <Link
-              href={registerLink} // Link dinâmico com plano gratuito
+              href={registerLink}
               className="px-4 py-2 rounded-full font-semibold text-sm transition duration-300 ease-in-out transform hover:scale-[1.05]"
               style={{ backgroundColor: colors.secondary, color: "white" }}>
               Cadastro
@@ -625,7 +607,7 @@ export default function App() {
               </button>
             ))}
             <Link
-              href="/login" //  Link dinâmico com plano gratuito
+              href="/login"
               onClick={() => setIsMenuOpen(false)}
               className="w-full text-center py-2 px-4 text-sm cursor-pointer mt-2 block rounded-full font-semibold"
               style={{ backgroundColor: colors.primary, color: "white" }}>
@@ -656,7 +638,7 @@ export default function App() {
                 <AnimatedSection animation="fade-up" delay={400}>
                   <div className="flex flex-col sm:flex-row justify-center lg:justify-start gap-4">
                     <Link
-                      href={registerLink} //  Link dinâmico com plano gratuito
+                      href={registerLink}
                       className="group relative px-8 py-3.5 rounded-full font-bold text-white transition-all duration-300 transform hover:scale-105 hover:shadow-xl overflow-hidden"
                       style={{ backgroundColor: colors.primary }}>
                       <span className="relative z-10 flex items-center gap-2">Comece a faturar</span>
@@ -676,7 +658,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* FUNCIONALIDADES */}
+        {/* FUNCIONALIDADES - DINÂMICAS */}
         <section id="funcionalidades" className="py-16 md:py-24" style={{ backgroundColor: colors.card }}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <AnimatedSection animation="fade-up">
@@ -688,11 +670,43 @@ export default function App() {
               </p>
             </AnimatedSection>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {allFeaturesData.map((feature, index) => (
-                <FeatureCard key={index} title={feature.title} description={feature.description} delay={index * 100} colors={colors} />
-              ))}
-            </div>
+            {loadingFeatures ? (
+              <div className="text-center py-10">
+                <div
+                  className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2"
+                  style={{ borderColor: colors.primary }}></div>
+                <p className="mt-4" style={{ color: colors.textSecondary }}>
+                  Carregando funcionalidades...
+                </p>
+              </div>
+            ) : errorFeatures ? (
+              <div className="text-center py-10 text-red-500">
+                <p>{errorFeatures}</p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="mt-4 px-6 py-2 rounded-full text-white"
+                  style={{ backgroundColor: colors.primary }}>
+                  Tentar novamente
+                </button>
+              </div>
+            ) : features.length === 0 ? (
+              <div className="text-center py-10" style={{ color: colors.textSecondary }}>
+                Nenhuma funcionalidade disponível no momento.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {features.map((feature, index) => (
+                  <FeatureCard
+                    key={feature.id}
+                    Icon={() => <CheckIcon color={colors.secondary} />}
+                    title={feature.nome}
+                    description={feature.descricao || ''}
+                    delay={index * 100}
+                    colors={colors}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </section>
 

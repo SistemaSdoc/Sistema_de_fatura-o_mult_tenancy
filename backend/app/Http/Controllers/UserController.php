@@ -506,11 +506,14 @@ class UserController extends Controller
         }
     }
 
+/**
+ * Criar um novo utilizador (apenas admin)
+ */
 public function store(Request $request)
 {
     $modo = $this->getModo();
 
-    Log::info('[UserController::store] Criando utilizador', [
+    Log::info('[UserController::store] Iniciando criação de utilizador', [
         'user_id' => $this->getUserId(),
         'modo' => $modo,
         'ip' => $request->ip(),
@@ -545,42 +548,111 @@ public function store(Request $request)
         ]);
 
         // ============================================================
-        // 3. VERIFICAR LIMITE DE UTILIZADORES (apenas activos)
+        // 3. VERIFICAR LIMITE DE UTILIZADORES
         // ============================================================
         try {
             $planoService = app(\App\Services\PlanoService::class);
 
-            // ✅ Obtém o limite com o modo correto
-            $limite = $planoService->getLimiteUtilizadores($empresaId, $modo);
+            // 🔍 Passo 1: Verificar subscrição activa
+            Log::debug('[UserController::store] A verificar subscrição activa...');
+            $subscricao = $planoService->getSubscricaoAtiva($empresaId, $modo);
 
-            // ✅ Contagem de utilizadores activos
-            // ⚠️ A queryUsers() já aplica doTenant() que filtra por tenant_id
-            //    NÃO adicionar where('empresa_id') porque a coluna não existe no modo colectivo
-            $contagemAtual = $this->queryUsers()
-                ->where('ativo', true)
-                ->count();
-
-            Log::info('[UserController::store] Verificação de limite', [
-                'empresa_id' => $empresaId,
-                'limite' => $limite,
-                'utilizadores_activos' => $contagemAtual,
-                'modo' => $modo,
-            ]);
-
-            // ✅ Verificar se o limite foi atingido
-            if ($limite !== null && $contagemAtual >= $limite) {
-                Log::warning('[UserController::store] Limite de utilizadores atingido', [
+            if (!$subscricao) {
+                Log::warning('[UserController::store] Empresa sem subscrição activa', [
                     'empresa_id' => $empresaId,
-                    'limite' => $limite,
-                    'contagem_atual' => $contagemAtual,
-                    'modo' => $modo,
                 ]);
                 return response()->json([
                     'success' => false,
-                    'message' => "Limite de utilizadores activos do seu plano atingido ({$limite}). Faça upgrade ou desactive utilizadores existentes.",
+                    'message' => 'A empresa não tem uma subscrição activa. Contacte o administrador.',
                     'modo' => $modo,
                 ], 403);
             }
+
+            Log::info('[UserController::store] Subscrição activa encontrada', [
+                'subscricao_id' => $subscricao->id,
+                'plano_id' => $subscricao->plano_id,
+                'plano_nome' => $subscricao->plano?->nome,
+            ]);
+
+            // 🔍 Passo 2: Obter limite de utilizadores
+            Log::debug('[UserController::store] A obter limite de utilizadores...');
+            $limite = $planoService->getLimiteUtilizadores($empresaId, $modo);
+
+            Log::info('[UserController::store] Limite de utilizadores obtido', [
+                'limite_raw' => $limite,
+                'limite_interpretado' => $limite === null ? 'ilimitado' : $limite,
+                'tipo' => gettype($limite),
+            ]);
+
+            // 🔍 Passo 3: Verificar se o limite é 0 (sem permissão)
+            if ($limite === 0) {
+                Log::warning('[UserController::store] Limite de utilizadores é 0 (zero)', [
+                    'empresa_id' => $empresaId,
+                    'plano_id' => $subscricao->plano_id,
+                ]);
+
+                // Verificar se a feature está associada ao plano (pode ser que não exista)
+                $featureExiste = $planoService->temFeature($empresaId, 'Utilizadores', $modo);
+                Log::debug('[UserController::store] Feature Utilizadores existe no plano?', [
+                    'feature_existe' => $featureExiste,
+                ]);
+
+                if (!$featureExiste) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'O plano actual não possui a funcionalidade "Utilizadores". Contacte o administrador.',
+                        'modo' => $modo,
+                    ], 403);
+                }
+
+                // Se a feature existe mas a quantidade é 0, significa bloqueado
+                return response()->json([
+                    'success' => false,
+                    'message' => 'O plano actual está configurado com 0 utilizadores. Contacte o administrador.',
+                    'modo' => $modo,
+                ], 403);
+            }
+
+            // ✅ Se limite for null (ilimitado), não há restrição
+            if ($limite === null) {
+                Log::info('[UserController::store] Plano com utilizadores ilimitados, sem restrições.');
+                // Não fazemos verificação de contagem, salta para a criação
+                // (não precisamos de contar utilizadores)
+                // Mas, por segurança, podemos apenas continuar.
+                // Contudo, para manter consistência, vamos deixar o fluxo normal
+                // e a contagem não será verificada porque a condição abaixo não será executada.
+            }
+
+            // 🔍 Passo 4: Contar utilizadores activos (só se limite não for null)
+            $contagemAtual = null;
+            if ($limite !== null) {
+                $contagemAtual = $this->queryUsers()
+                    ->where('ativo', true)
+                    ->count();
+
+                Log::info('[UserController::store] Contagem de utilizadores activos', [
+                    'contagem_atual' => $contagemAtual,
+                    'limite' => $limite,
+                ]);
+
+                // Verificar se o limite foi atingido
+                if ($contagemAtual >= $limite) {
+                    Log::warning('[UserController::store] Limite de utilizadores atingido', [
+                        'empresa_id' => $empresaId,
+                        'limite' => $limite,
+                        'contagem_atual' => $contagemAtual,
+                        'modo' => $modo,
+                    ]);
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Limite de utilizadores activos do seu plano atingido ({$limite}). Faça upgrade ou desactive utilizadores existentes.",
+                        'modo' => $modo,
+                    ], 403);
+                }
+            } else {
+                Log::info('[UserController::store] Utilizadores ilimitados, ignorando contagem.');
+            }
+
         } catch (\Exception $e) {
             Log::error('[UserController::store] Falha na verificação de limite', [
                 'error' => $e->getMessage(),
@@ -658,6 +730,7 @@ public function store(Request $request)
             'data' => $user,
             'modo' => $modo,
         ], 201);
+
     } catch (\Illuminate\Validation\ValidationException $e) {
         Log::warning('[UserController::store] Erro de validação', [
             'errors' => $e->errors(),
@@ -685,152 +758,206 @@ public function store(Request $request)
     }
 }
 
-    public function update(Request $request, $id)
-    {
-        $modo = $this->getModo();
+/**
+ * Atualizar dados de um utilizador (incluindo reativação)
+ */
+public function update(Request $request, $id)
+{
+    $modo = $this->getModo();
 
-        Log::info('[UserController::update] Atualizando utilizador', [
-            'user_id' => $id,
-            'current_user_id' => $this->getUserId(),
-            'modo' => $modo,
-        ]);
+    Log::info('[UserController::update] Iniciando atualização de utilizador', [
+        'user_id' => $id,
+        'current_user_id' => $this->getUserId(),
+        'modo' => $modo,
+    ]);
 
-        try {
-            $this->verificarAcessoUsuario();
+    try {
+        $this->verificarAcessoUsuario();
 
-            $currentUser = $this->tenantUser;
-            $user = $this->buscarUserOrFail($id);
+        $currentUser = $this->tenantUser;
+        $user = $this->buscarUserOrFail($id);
 
-            if (!$this->isAdmin($currentUser) && $currentUser->id !== $user->id) {
+        if (!$this->isAdmin($currentUser) && $currentUser->id !== $user->id) {
+            Log::warning('[UserController::update] Acesso negado (não é admin e não é o próprio utilizador)');
+            return response()->json([
+                'success' => false,
+                'message' => 'Acesso negado',
+                'modo' => $modo,
+            ], 403);
+        }
+
+        // ============================================================
+        // VERIFICAR LIMITE SE FOR REATIVAÇÃO
+        // ============================================================
+        if ($request->has('ativo') && $request->boolean('ativo') === true && !$user->ativo) {
+            Log::info('[UserController::update] Tentativa de reativação do utilizador', [
+                'user_id' => $id,
+                'modo' => $modo,
+            ]);
+
+            $empresaId = $this->empresa->id;
+            $planoService = app(\App\Services\PlanoService::class);
+
+            // 🔍 Verificar subscrição activa
+            Log::debug('[UserController::update] A verificar subscrição activa para reativação...');
+            $subscricao = $planoService->getSubscricaoAtiva($empresaId, $modo);
+
+            if (!$subscricao) {
+                Log::warning('[UserController::update] Reativação bloqueada: empresa sem subscrição activa', [
+                    'empresa_id' => $empresaId,
+                ]);
                 return response()->json([
                     'success' => false,
-                    'message' => 'Acesso negado',
+                    'message' => 'A empresa não tem uma subscrição activa. Não é possível reativar utilizadores.',
                     'modo' => $modo,
                 ], 403);
             }
 
-            // ============================================================
-            // VERIFICAR LIMITE SE FOR REATIVAÇÃO
-            // ============================================================
-            if ($request->has('ativo') && $request->boolean('ativo') === true && !$user->ativo) {
-                $empresaId = $this->empresa->id;
-                $limite = $this->getLimite('Utilizadores');
+            // 🔍 Obter limite
+            $limite = $planoService->getLimiteUtilizadores($empresaId, $modo);
+            Log::info('[UserController::update] Limite de utilizadores para reativação', [
+                'limite_raw' => $limite,
+                'limite_interpretado' => $limite === null ? 'ilimitado' : $limite,
+                'tipo' => gettype($limite),
+            ]);
 
-                Log::info('[UserController::update] Tentativa de reativação', [
-                    'user_id' => $id,
+            // 🔍 Se limite for 0, verificar a feature
+            if ($limite === 0) {
+                Log::warning('[UserController::update] Limite de utilizadores é 0 (zero)', [
                     'empresa_id' => $empresaId,
+                    'plano_id' => $subscricao->plano_id,
+                ]);
+
+                $featureExiste = $planoService->temFeature($empresaId, 'Utilizadores', $modo);
+                if (!$featureExiste) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'O plano actual não possui a funcionalidade "Utilizadores". Contacte o administrador.',
+                        'modo' => $modo,
+                    ], 403);
+                }
+                return response()->json([
+                    'success' => false,
+                    'message' => 'O plano actual está configurado com 0 utilizadores. Contacte o administrador.',
+                    'modo' => $modo,
+                ], 403);
+            }
+
+            // ✅ Se limite for null, é ilimitado
+            if ($limite === null) {
+                Log::info('[UserController::update] Plano com utilizadores ilimitados, permitindo reativação sem restrições.');
+                // Não fazemos verificação de contagem
+            } else {
+                // 🔍 Contar utilizadores activos
+                $ativosAtuais = $this->queryUsers()
+                    ->where('ativo', true)
+                    ->count();
+
+                Log::info('[UserController::update] Contagem de utilizadores activos para reativação', [
+                    'ativos_atuais' => $ativosAtuais,
                     'limite' => $limite,
                 ]);
 
-                if ($limite !== null) {
-                    $ativosAtuais = $this->queryUsers()
-                        ->where('empresa_id', $empresaId)
-                        ->where('ativo', true)
-                        ->count();
-
-                    Log::info('[UserController::update] Reativação - contagem atual', [
+                if ($ativosAtuais >= $limite) {
+                    Log::warning('[UserController::update] Reativação bloqueada: limite de utilizadores excedido', [
                         'ativos_atuais' => $ativosAtuais,
                         'limite' => $limite,
+                        'user_id' => $id,
                     ]);
-
-                    if ($ativosAtuais >= $limite) {
-                        Log::warning('[UserController::update] Limite de utilizadores excedido na reativação', [
-                            'ativos_atuais' => $ativosAtuais,
-                            'limite' => $limite,
-                            'user_id' => $id,
-                        ]);
-                        return response()->json([
-                            'success' => false,
-                            'message' => "Limite de utilizadores activos do plano atingido ({$limite}). Não é possível reativar este utilizador.",
-                            'modo' => $modo,
-                        ], 403);
-                    }
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Limite de utilizadores activos do plano atingido ({$limite}). Não é possível reativar este utilizador.",
+                        'modo' => $modo,
+                    ], 403);
                 }
             }
-            // ============================================================
-
-            $dados = $request->validate([
-                'name' => 'sometimes|required|string|max:255',
-                'email' => [
-                    'sometimes',
-                    'required',
-                    'email',
-                    function ($attribute, $value, $fail) use ($user) {
-                        $exists = $this->queryUsers()
-                            ->where('email', $value)
-                            ->where('id', '!=', $user->id)
-                            ->exists();
-                        if ($exists) {
-                            $fail('Este email já está cadastrado.');
-                        }
-                    },
-                ],
-                'password' => 'nullable|string|min:6',
-                'role' => ['sometimes', 'required', Rule::in(['admin', 'operador', 'contablista', 'gestor'])],
-                'ativo' => 'nullable|boolean',
-                'printer_ip' => 'nullable|string|max:255',
-            ]);
-
-            if (isset($dados['role']) && !$this->isAdmin($currentUser)) {
-                unset($dados['role']);
-            }
-
-            if (!empty($dados['password'])) {
-                $dados['password'] = Hash::make($dados['password']);
-            } else {
-                unset($dados['password']);
-            }
-
-            $user->update($dados);
-
-            Log::info('[UserController::update] Utilizador atualizado com sucesso', [
-                'user_id' => $user->id,
-                'modo' => $modo,
-            ]);
-
-            AuditLogger::log('Utilizador Editado', '✏️', ['area' => 'Utilizadores', 'detalhes' => ['user_id' => $user->id, 'campos_alterados' => array_keys($dados)]]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Utilizador atualizado com sucesso',
-                'data' => $user->fresh(),
-                'modo' => $modo,
-            ]);
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            Log::warning('[UserController::update] Utilizador não encontrado', ['id' => $id]);
-            return response()->json([
-                'success' => false,
-                'message' => 'Utilizador não encontrado',
-                'error' => 'not_found',
-                'modo' => $modo,
-            ], 404);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            Log::warning('[UserController::update] Erro de validação', [
-                'errors' => $e->errors(),
-                'modo' => $modo,
-            ]);
-            return response()->json([
-                'success' => false,
-                'message' => 'Erro de validação',
-                'errors' => $e->errors(),
-                'modo' => $modo,
-            ], 422);
-        } catch (\Exception $e) {
-            Log::error('[UserController::update] Erro', [
-                'user_id' => $id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'modo' => $modo,
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Erro ao atualizar utilizador',
-                'error' => $e->getMessage(),
-                'modo' => $modo,
-            ], 500);
         }
+        // ============================================================
+
+        // 4. Validar dados de entrada (já existente)
+        $dados = $request->validate([
+            'name' => 'sometimes|required|string|max:255',
+            'email' => [
+                'sometimes',
+                'required',
+                'email',
+                function ($attribute, $value, $fail) use ($user) {
+                    $exists = $this->queryUsers()
+                        ->where('email', $value)
+                        ->where('id', '!=', $user->id)
+                        ->exists();
+                    if ($exists) {
+                        $fail('Este email já está cadastrado.');
+                    }
+                },
+            ],
+            'password' => 'nullable|string|min:6',
+            'role' => ['sometimes', 'required', Rule::in(['admin', 'operador', 'contablista', 'gestor'])],
+            'ativo' => 'nullable|boolean',
+            'printer_ip' => 'nullable|string|max:255',
+        ]);
+
+        if (isset($dados['role']) && !$this->isAdmin($currentUser)) {
+            unset($dados['role']);
+        }
+
+        if (!empty($dados['password'])) {
+            $dados['password'] = Hash::make($dados['password']);
+        } else {
+            unset($dados['password']);
+        }
+
+        $user->update($dados);
+
+        Log::info('[UserController::update] Utilizador atualizado com sucesso', [
+            'user_id' => $user->id,
+            'modo' => $modo,
+        ]);
+
+        AuditLogger::log('Utilizador Editado', '✏️', ['area' => 'Utilizadores', 'detalhes' => ['user_id' => $user->id, 'campos_alterados' => array_keys($dados)]]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Utilizador atualizado com sucesso',
+            'data' => $user->fresh(),
+            'modo' => $modo,
+        ]);
+
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        Log::warning('[UserController::update] Utilizador não encontrado', ['id' => $id]);
+        return response()->json([
+            'success' => false,
+            'message' => 'Utilizador não encontrado',
+            'error' => 'not_found',
+            'modo' => $modo,
+        ], 404);
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        Log::warning('[UserController::update] Erro de validação', [
+            'errors' => $e->errors(),
+            'modo' => $modo,
+        ]);
+        return response()->json([
+            'success' => false,
+            'message' => 'Erro de validação',
+            'errors' => $e->errors(),
+            'modo' => $modo,
+        ], 422);
+    } catch (\Exception $e) {
+        Log::error('[UserController::update] Erro inesperado', [
+            'user_id' => $id,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
+            'modo' => $modo,
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Erro ao atualizar utilizador',
+            'error' => $e->getMessage(),
+            'modo' => $modo,
+        ], 500);
     }
+}
 
     public function destroy($id)
     {

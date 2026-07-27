@@ -61,7 +61,6 @@ class LandlordUserController extends Controller
      */
     public function show(LandlordUser $landlordUser)
     {
-        $this->authorize('view', $landlordUser);
 
         return response()->json([
             'success' => true,
@@ -94,7 +93,7 @@ class LandlordUserController extends Controller
 
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:landlord.users,email',
+            'email' => 'required|email|unique:landlord.users_landlord,email',
             'password' => 'required|string|min:8|confirmed',
             'role' => ['required', Rule::in([
                 LandlordUser::ROLE_SUPER_ADMIN
@@ -143,14 +142,10 @@ class LandlordUserController extends Controller
         ], 201);
     }
 
-    // ================= ATUALIZAÇÃO =================
+    // ================= EXCLUSÃO =================
 
-    /**
-     * Atualiza usuário
-     */
-public function update(Request $request, LandlordUser $landlordUser)
+    public function update(Request $request, LandlordUser $landlordUser)
 {
-    $this->authorize('update', $landlordUser);
 
     $validator = Validator::make($request->all(), [
         'name' => 'sometimes|required|string|max:255',
@@ -186,14 +181,11 @@ public function update(Request $request, LandlordUser $landlordUser)
     ]);
 }
 
-    // ================= EXCLUSÃO =================
-
     /**
      * Remove usuário (soft delete)
      */
     public function destroy(LandlordUser $landlordUser)
     {
-        $this->authorize('delete', $landlordUser);
 
         $user = Auth::guard('landlord')->user();
 
@@ -234,7 +226,6 @@ public function update(Request $request, LandlordUser $landlordUser)
      */
     public function toggleStatus(LandlordUser $landlordUser)
     {
-        $this->authorize('update', $landlordUser);
 
         // Não pode desativar a si mesmo
         if ($landlordUser->id === Auth::guard('landlord')->id()) {
@@ -294,7 +285,6 @@ public function update(Request $request, LandlordUser $landlordUser)
      */
 public function vincularEmpresa(Request $request, LandlordUser $landlordUser)
 {
-    $this->authorize('update', $landlordUser);
 
     $request->validate([
         'empresa_id' => 'required|uuid|exists:landlord.empresas,id',
@@ -303,7 +293,7 @@ public function vincularEmpresa(Request $request, LandlordUser $landlordUser)
     // ✅ Faltava isto — vincular a empresa antes de sincronizar
     $landlordUser->update([
         'empresa_id' => $request->empresa_id,
-        'role' => LandlordUser::ROLE_ADMIN_EMPRESA ?? $landlordUser->role, // ajusta à tua constante real, se existir
+        'role' => LandlordUser::ROLE_SUPER_ADMIN ?? $landlordUser->role, // ajusta à tua constante real, se existir
     ]);
 
     try {
@@ -327,7 +317,6 @@ public function vincularEmpresa(Request $request, LandlordUser $landlordUser)
      */
     public function desvincularEmpresa(LandlordUser $landlordUser)
     {
-        $this->authorize('update', $landlordUser);
 
         if (!$landlordUser->empresa_id) {
             return response()->json([
@@ -391,8 +380,18 @@ public function vincularEmpresa(Request $request, LandlordUser $landlordUser)
  */
 public function atualizarPerfil(Request $request)
 {
-    $user = Auth::guard('landlord')->user();
+    // 1. Obtém o utilizador autenticado
+    $user = Auth::guard('landlord_api')->user(); // ou 'landlord' se usares session
 
+    // 2. Verifica se está autenticado
+    if (!$user) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Não autenticado. Faça login novamente.'
+        ], 401);
+    }
+
+    // 3. Validação
     $validator = Validator::make($request->all(), [
         'name' => 'required|string|max:255',
     ]);
@@ -404,6 +403,7 @@ public function atualizarPerfil(Request $request)
         ], 422);
     }
 
+    // 4. Atualiza
     $user->update([
         'name' => $request->name,
     ]);
@@ -420,8 +420,15 @@ public function atualizarPerfil(Request $request)
  */
 public function alterarSenhaPropria(Request $request)
 {
-    $user = Auth::guard('landlord')->user();
+    $user = Auth::guard('landlord_api')->user();
 
+       if (!$user) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Não autenticado. Faça login novamente.'
+        ], 401);
+    }
+    
     $validator = Validator::make($request->all(), [
         'senha_atual' => 'required|string',
         'nova_senha' => 'required|string|min:8|confirmed',
