@@ -2226,28 +2226,29 @@ class CompletoVendasSheet implements FromArray, WithHeadings, WithTitle, WithSty
 
     public function headings(): array
     {
-        return ['ID', 'Nº Documento', 'Cliente', 'Data', 'Hora', 'Base Tributável', 'IVA', 'Total', 'Estado Pagamento'];
+        return ['Nº de ordem', 'Nº Documento', 'Cliente', 'Data', 'Hora', 'Base Tributável', 'IVA', 'Total', 'Estado Pagamento'];
     }
 
     public function array(): array
-    {
-        $linhas = [];
-        foreach (($this->vendas['vendas'] ?? []) as $v) {
-            $linhas[] = [
-                $v['id'] ?? '',
-                $v['numero_documento'] ?? '',
-                $v['cliente'] ?? '',
-                $v['data'] ?? '',
-                $v['hora'] ?? '',
-                $v['base_tributavel'] ?? 0,
-                $v['total_iva'] ?? 0,
-                $v['total'] ?? 0,
-                $v['estado_pagamento'] ?? '',
-            ];
-        }
-        return $linhas;
+{
+    $linhas = [];
+    $numero = 1; // começa em 1
+    foreach (($this->vendas['vendas'] ?? []) as $v) {
+        $linhas[] = [
+            $numero, // número sequencial
+            $v['numero_documento'] ?? '',
+            $v['cliente'] ?? '',
+            $v['data'] ?? '',
+            $v['hora'] ?? '',
+            $v['base_tributavel'] ?? 0,
+            $v['total_iva'] ?? 0,
+            $v['total'] ?? 0,
+            $v['estado_pagamento'] ?? '',
+        ];
+        $numero++; // incrementa corretamente
     }
-
+    return $linhas;
+}
     public function styles(Worksheet $sheet): array
     {
         $sheet->getParent()->getDefaultStyle()->getFont()->setName('Times New Roman');
