@@ -1,0 +1,11 @@
+
+> faturaja-frontend@9.3.3 dev
+> next dev --turbo
+
+▲ Next.js 16.1.1 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.1.199:3000
+- Experiments (use with caution):
+  · optimizePackageImports
+
+✓ Starting...

@@ -1599,63 +1599,7 @@ public function emitir(Request $request): JsonResponse
         }
     }
 
-    public function exportarExcel(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
-    {
-        try {
-            $this->verificarAcessoUsuario();
 
-            $filtros = $request->validate([
-                'tipo'              => 'nullable|in:FT,FR,FP,FA,NC,ND,RC,FRt',
-                'estado'            => 'nullable|in:emitido,paga,parcialmente_paga,cancelado,expirado',
-                'cliente_id'        => 'nullable|uuid|exists:clientes,id',
-                'data_inicio'       => 'nullable|date',
-                'data_fim'          => 'nullable|date',
-                'apenas_vendas'     => 'nullable|in:0,1,true,false',
-                'apenas_nao_vendas' => 'nullable|in:0,1,true,false',
-            ]);
-
-            $dados = $this->documentoService->dadosParaExcel($filtros);
-            $cabecalho = $dados['cabecalho'];
-            $linhas    = $dados['linhas'];
-
-            $spreadsheet = new Spreadsheet();
-            $sheet       = $spreadsheet->getActiveSheet();
-            $sheet->setTitle('Documentos Fiscais');
-            $sheet->fromArray([$cabecalho], null, 'A1');
-
-            $ultimaColuna = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($cabecalho));
-
-            $sheet->getStyle("A1:{$ultimaColuna}1")->applyFromArray([
-                'font'      => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
-                'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1a1a2e']],
-                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
-            ]);
-
-            if (!empty($linhas)) {
-                $sheet->fromArray($linhas, null, 'A2');
-            }
-
-            foreach (range(1, count($cabecalho)) as $col) {
-                $sheet->getColumnDimension(
-                    \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col)
-                )->setAutoSize(true);
-            }
-
-            $sheet->freezePane('A2');
-            $nomeArquivo = 'documentos-fiscais-' . now()->format('Y-m-d') . '.xlsx';
-
-            return response()->streamDownload(function () use ($spreadsheet) {
-                (new Xlsx($spreadsheet))->save('php://output');
-            }, $nomeArquivo, [
-                'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                'Content-Disposition' => "attachment; filename=\"{$nomeArquivo}\"",
-                'Cache-Control'       => 'max-age=0',
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Erro ao exportar Excel', ['error' => $e->getMessage()]);
-            abort(500, 'Erro ao exportar Excel: ' . $e->getMessage());
-        }
-    }
 
     public function converterProforma(Request $request, string $proformaId): JsonResponse
     {

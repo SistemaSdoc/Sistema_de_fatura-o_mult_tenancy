@@ -310,22 +310,47 @@ export default function RelatoriosPage() {
     }
   };
 
-  const handleExportExcel = async () => {
-    const dados = getDadosAtivos();
-    if (!dados) {
-      showToast("Sem dados", "error", "Não há dados disponíveis para exportar");
-      return;
+const handleExportarCompleto = async () => {
+  setExportLoading(true);
+  try {
+    const params = new URLSearchParams();
+    // usar o período da aba ativa ou um período global
+    if (activeTab === 'vendas') {
+      params.append('data_inicio', periodoVendas.data_inicio);
+      params.append('data_fim', periodoVendas.data_fim);
+    } else if (activeTab === 'documentos') {
+      params.append('data_inicio', periodoDocumentos.data_inicio);
+      params.append('data_fim', periodoDocumentos.data_fim);
+    } else if (activeTab === 'movimentos_stock') {
+      params.append('data_inicio', periodoMovimentos.data_inicio);
+      params.append('data_fim', periodoMovimentos.data_fim);
+    } else {
+      params.append('data_inicio', getPeriodoPredefinido("este_mes").data_inicio);
+      params.append('data_fim', getPeriodoPredefinido("este_mes").data_fim);
     }
-    setExportLoading(true);
-    try {
-      await exportarExcel(activeTab, dados, getPeriodoAtivo());
-      showToast("Excel exportado", "success", "Ficheiro Excel exportado com sucesso");
-    } catch {
-      showToast("Erro ao exportar", "error", "Não foi possível gerar o ficheiro Excel");
-    } finally {
-      setExportLoading(false);
-    }
-  };
+
+    const response = await api.get('/api/relatorios/exportar-completo', {
+      params,
+      responseType: 'blob',
+    });
+    const blob = new Blob([response.data], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `relatorio_completo_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    showToast("Relatório completo exportado", "success", "Excel com todas as folhas gerado com sucesso");
+  } catch (error) {
+    showToast("Erro ao exportar", "error", "Não foi possível gerar o ficheiro completo");
+  } finally {
+    setExportLoading(false);
+  }
+};
 
   const handleExportarSaft = async () => {
     setExportandoSaft(true);
@@ -431,7 +456,7 @@ export default function RelatoriosPage() {
                 SAF-T
               </button>
               <button
-                onClick={handleExportExcel}
+                onClick={handleExportarCompleto}
                 disabled={exportLoading || !getDadosAtivos()}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 transition-all"
                 style={{ backgroundColor: colors.secondary, borderRadius: 4 }}>

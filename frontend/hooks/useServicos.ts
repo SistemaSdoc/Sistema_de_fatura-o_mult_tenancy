@@ -56,7 +56,7 @@ export function useServicos() {
     });
 
     // Tabs
-    const [abaAtiva, setAbaAtiva] = useState<"itens" | "movimentacoes" | "deletados">("itens");
+    const [abaAtiva, setAbaAtiva] = useState<"itens"  | "deletados">("itens");
 
     const carregarDados = useCallback(async () => {
         setLoading(true);

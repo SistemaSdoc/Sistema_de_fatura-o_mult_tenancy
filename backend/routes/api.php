@@ -73,7 +73,7 @@ Route::prefix('landlord')->group(function () {
         Route::prefix('auditoria')->group(function () {
     Route::get('/logs', [AuditoriaController::class, 'indexLandlord'])->name('landlord.auditoria.logs');
 });
-        // ✅ prefix sem duplicar "landlord"
+        //  prefix sem duplicar "landlord"
 Route::prefix('usuarios')->group(function () {
     Route::get('/', [LandlordUserController::class, 'index']);
     Route::post('/', [LandlordUserController::class, 'store']);
@@ -88,7 +88,7 @@ Route::prefix('usuarios')->group(function () {
     Route::delete('/{landlordUser}/desvincular-empresa', [LandlordUserController::class, 'desvincularEmpresa']);
 });
 
-        // ✅ NOVO: CRUD completo de planos, dentro do landlord
+        // NOVO: CRUD completo de planos, dentro do landlord
         Route::prefix('planos')->group(function () {
             Route::get('/', [PlanoController::class, 'index']);
             Route::post('/', [PlanoController::class, 'store']);
@@ -99,7 +99,7 @@ Route::prefix('usuarios')->group(function () {
             Route::delete('/{plano}/features/{feature}', [PlanoController::class, 'detachFeature']);
         });
 
-        // ✅ NOVO: gestão de features pelo landlord (create/update/delete)
+        //  NOVO: gestão de features pelo landlord (create/update/delete)
         Route::prefix('features')->group(function () {
             Route::get('/', [FeatureController::class, 'index']);
             Route::post('/', [FeatureController::class, 'store']);
@@ -327,7 +327,6 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
 
         // ---------- DOCUMENTOS FISCAIS ----------
         Route::prefix('documentos-fiscais')->group(function () use ($uuidPattern) {
-            Route::get('/exportar-excel', [DocumentoFiscalController::class, 'exportarExcel'])->name('documentos.exportar-excel');
             Route::get('/adiantamentos-pendentes', [DocumentoFiscalController::class, 'adiantamentosPendentes'])->name('documentos.adiantamentos-pendentes');
             Route::get('/proformas-pendentes', [DocumentoFiscalController::class, 'proformasPendentes'])->name('documentos.proformas-pendentes');
             Route::get('/alertas', [DocumentoFiscalController::class, 'alertas'])->name('documentos.alertas');
@@ -371,6 +370,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
 
         // ---------- RELATÓRIOS ----------
         Route::prefix('relatorios')->group(function () {
+            Route::get('/exportar-completo', [RelatoriosController::class, 'exportarCompleto']);
             Route::get('/debug', [RelatoriosController::class, 'debug'])->name('relatorios.debug');
             Route::get('/dashboard', [RelatoriosController::class, 'dashboard'])->middleware('log.panel')->name('relatorios.dashboard');
             Route::get('/vendas', [RelatoriosController::class, 'vendas'])->name('relatorios.vendas');

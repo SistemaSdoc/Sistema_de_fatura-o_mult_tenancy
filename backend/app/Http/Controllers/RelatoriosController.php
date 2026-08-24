@@ -20,7 +20,7 @@ use App\Models\Shared\User as SharedUser;
 use App\Models\Tenant\User as TenantUser;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Auth;  
 use App\Services\SaftService;
 use App\Services\SaftAlertService;
 
@@ -253,6 +253,16 @@ class RelatoriosController extends Controller
         ]);
     }
 
+
+public function exportarCompleto(Request $request)
+{
+    $dataInicio = $request->input('data_inicio');
+    $dataFim    = $request->input('data_fim');
+
+    return $this->relatoriosService->exportarCompleto($dataInicio, $dataFim);
+}
+
+
     /* =====================================================================
      | HELPERS: Models e Queries
      | ================================================================== */
@@ -367,10 +377,10 @@ class RelatoriosController extends Controller
     {
         $modo = $this->getModo();
         
-        // ✅ 1. Verificar acesso (carrega tenantUser)
+        //   1. Verificar acesso (carrega tenantUser)
         $this->verificarAcessoUsuario();
         
-        // ✅ 2. Autorizar role
+        //   2. Autorizar role
         $this->authorizeRelatorio('basico');
 
         try {
@@ -543,10 +553,10 @@ class RelatoriosController extends Controller
     {
         $modo = $this->getModo();
         
-        // ✅ 1. Verificar acesso (carrega tenantUser)
+        //   1. Verificar acesso (carrega tenantUser)
         $this->verificarAcessoUsuario();
         
-        // ✅ 2. Autorizar role
+        //   2. Autorizar role
         $this->authorizeRelatorio('basico');
 
         try {
@@ -562,7 +572,7 @@ class RelatoriosController extends Controller
             $dataInicio = $dados['data_inicio'] ?? now()->startOfMonth()->toDateString();
             $dataFim = $dados['data_fim'] ?? now()->toDateString();
 
-            // ⭐ USAR O SERVICE
+            //   USAR O SERVICE
             $relatorio = $this->relatoriosService->relatorioVendas($dataInicio, $dataFim, $dados);
 
             return response()->json([
@@ -594,10 +604,10 @@ class RelatoriosController extends Controller
     {
         $modo = $this->getModo();
         
-        // ✅ 1. Verificar acesso (carrega tenantUser)
+        //   1. Verificar acesso (carrega tenantUser)
         $this->verificarAcessoUsuario();
         
-        // ✅ 2. Autorizar role
+        //   2. Autorizar role
         $this->authorizeRelatorio('basico');
 
         try {
@@ -616,7 +626,7 @@ class RelatoriosController extends Controller
             $dataInicio = $dados['data_inicio'] ?? now()->startOfMonth()->toDateString();
             $dataFim = $dados['data_fim'] ?? now()->toDateString();
 
-            // ⭐ QUERY COM SCOPE
+            //   QUERY COM SCOPE
             $query = $this->queryDocumentosFiscais()->with(['cliente'])
                 ->whereBetween('data_emissao', [$dataInicio, $dataFim]);
 
@@ -705,10 +715,10 @@ class RelatoriosController extends Controller
     {
         $modo = $this->getModo();
         
-        // ✅ 1. Verificar acesso (carrega tenantUser)
+        //   1. Verificar acesso (carrega tenantUser)
         $this->verificarAcessoUsuario();
         
-        // ✅ 2. Autorizar role
+        //   2. Autorizar role
         $this->authorizeRelatorio('basico');
 
         try {
@@ -726,7 +736,7 @@ class RelatoriosController extends Controller
             $dataInicio = $dados['data_inicio'] ?? now()->startOfMonth()->toDateString();
             $dataFim = $dados['data_fim'] ?? now()->toDateString();
 
-            // ⭐ USAR O SERVICE
+            //   USAR O SERVICE
             $relatorio = $this->relatoriosService->relatorioMovimentosStock($dataInicio, $dataFim, $dados);
 
             return response()->json([
@@ -758,14 +768,14 @@ class RelatoriosController extends Controller
     {
         $modo = $this->getModo();
         
-        // ✅ 1. Verificar acesso (carrega tenantUser)
+        //   1. Verificar acesso (carrega tenantUser)
         $this->verificarAcessoUsuario();
         
-        // ✅ 2. Autorizar role (AVANCADO)
+        //   2. Autorizar role (AVANCADO)
         $this->authorizeRelatorio('avancado');
 
         try {
-            // ⭐ USAR O SERVICE
+            //   USAR O SERVICE
             $relatorio = $this->relatoriosService->relatorioPagamentosPendentes();
 
             return response()->json([
@@ -872,10 +882,10 @@ class RelatoriosController extends Controller
     {
         $modo = $this->getModo();
         
-        // ✅ 1. Verificar acesso (carrega tenantUser)
+        //   1. Verificar acesso (carrega tenantUser)
         $this->verificarAcessoUsuario();
         
-        // ✅ 2. Autorizar role
+        //   2. Autorizar role
         $this->authorizeRelatorio('basico');
 
         try {
@@ -889,7 +899,7 @@ class RelatoriosController extends Controller
             $dataInicio = $dados['data_inicio'] ?? now()->startOfMonth()->toDateString();
             $dataFim = $dados['data_fim'] ?? now()->toDateString();
 
-            // ⭐ USAR O SERVICE
+            //   USAR O SERVICE
             $relatorio = $this->relatoriosService->relatorioProformas(
                 $dataInicio, 
                 $dataFim, 
@@ -926,16 +936,16 @@ class RelatoriosController extends Controller
     {
         $modo = $this->getModo();
         
-        // ✅ 1. Verificar acesso (carrega tenantUser)
+        //   1. Verificar acesso (carrega tenantUser)
         $this->verificarAcessoUsuario();
         
-        // ✅ 2. Autorizar role
+        //   2. Autorizar role
         $this->authorizeRelatorio('basico');
 
         try {
             $filtros = $request->only(['categoria_id', 'apenas_ativos', 'estoque_baixo', 'sem_estoque']);
             
-            // ⭐ USAR O SERVICE
+            //   USAR O SERVICE
             $relatorio = $this->relatoriosService->relatorioStock($filtros);
 
             return response()->json([
@@ -961,10 +971,10 @@ class RelatoriosController extends Controller
     {
         $modo = $this->getModo();
         
-        // ✅ 1. Verificar acesso (carrega tenantUser)
+        //   1. Verificar acesso (carrega tenantUser)
         $this->verificarAcessoUsuario();
         
-        // ✅ 2. Autorizar role
+        //   2. Autorizar role
         $this->authorizeRelatorio('basico');
 
         try {
@@ -972,7 +982,7 @@ class RelatoriosController extends Controller
             $dataFim = $request->input('data_fim', now()->toDateString());
             $fornecedorId = $request->input('fornecedor_id');
 
-            // ⭐ USAR O SERVICE
+            //   USAR O SERVICE
             $relatorio = $this->relatoriosService->relatorioCompras($dataInicio, $dataFim, $fornecedorId);
 
             return response()->json([
@@ -998,17 +1008,17 @@ class RelatoriosController extends Controller
     {
         $modo = $this->getModo();
         
-        // ✅ 1. Verificar acesso (carrega tenantUser)
+        //   1. Verificar acesso (carrega tenantUser)
         $this->verificarAcessoUsuario();
         
-        // ✅ 2. Autorizar role
+        //   2. Autorizar role
         $this->authorizeRelatorio('basico');
 
         try {
             $dataInicio = $request->input('data_inicio', now()->startOfMonth()->toDateString());
             $dataFim = $request->input('data_fim', now()->toDateString());
 
-            // ⭐ QUERY COM SCOPE
+            //   QUERY COM SCOPE
             $query = $this->queryDocumentosFiscais()
                 ->whereBetween('data_emissao', [$dataInicio, $dataFim])
                 ->where('total_retencao', '>', 0)
@@ -1070,10 +1080,10 @@ class RelatoriosController extends Controller
     {
         $modo = $this->getModo();
         
-        // ✅ 1. Verificar acesso (carrega tenantUser)
+        //   1. Verificar acesso (carrega tenantUser)
         $this->verificarAcessoUsuario();
         
-        // ✅ 2. Autorizar role (AVANCADO)
+        //   2. Autorizar role (AVANCADO)
         $this->authorizeRelatorio('avancado');
 
         try {
@@ -1119,10 +1129,10 @@ class RelatoriosController extends Controller
     {
         $modo = $this->getModo();
         
-        // ✅ 1. Verificar acesso (carrega tenantUser)
+        //   1. Verificar acesso (carrega tenantUser)
         $this->verificarAcessoUsuario();
         
-        // ✅ 2. Autorizar role (AVANCADO)
+        //   2. Autorizar role (AVANCADO)
         $this->authorizeRelatorio('avancado');
 
         try {

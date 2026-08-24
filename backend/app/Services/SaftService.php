@@ -9,14 +9,14 @@ use App\Models\LandlordUser;
 use App\Models\Shared\User as SharedUser;
 use App\Models\Tenant\User as TenantUser;
 
-// ⭐ MODELS SHARED (para modo colectivo)
+//   MODELS SHARED (para modo colectivo)
 use App\Models\Shared\Cliente as SharedCliente;
 use App\Models\Shared\Produto as SharedProduto;
 use App\Models\Shared\DocumentoFiscal as SharedDocumentoFiscal;
 use App\Models\Shared\MovimentoStock as SharedMovimentoStock;
 use App\Models\Shared\Categoria as SharedCategoria;
 
-// ⭐ MODELS TENANT (para modo singular)
+//   MODELS TENANT (para modo singular)
 use App\Models\Tenant\Cliente as TenantCliente;
 use App\Models\Tenant\Produto as TenantProduto;
 use App\Models\Tenant\DocumentoFiscal as TenantDocumentoFiscal;
@@ -34,7 +34,7 @@ use Carbon\Carbon;
 /**
  * SaftService
  *
- * ✅ SUPORTA AMBOS OS MODOS:
+ *   SUPORTA AMBOS OS MODOS:
  * - 'colectivo' → Shared DB (com tenant_id)
  * - 'singular' → Tenant DB (banco dedicado)
  */
@@ -46,7 +46,7 @@ class SaftService
 
     public function __construct()
     {
-        // ✅ Obtém da sessão (prioridade)
+        //   Obtém da sessão (prioridade)
         $this->empresa = app('current.empresa');
         $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
         
@@ -95,7 +95,7 @@ class SaftService
     }
 
     /* =====================================================================
-     | VERIFICAÇÃO DE ACESSO ✅
+     | VERIFICAÇÃO DE ACESSO  
      | ================================================================== */
 
     protected function verificarAcessoUsuario(): void
@@ -570,11 +570,11 @@ class SaftService
                 $customerTaxID = $doc->cliente->nif ?? '';
                 $customerName  = $doc->cliente->nome ?? '';
                 if (empty($customerTaxID)) {
-                    $customerTaxID = '999999990';
+                    $customerTaxID = '999999999';
                 }
             } else {
                 $customerId = '0';
-                $customerTaxID = '999999990';
+                $customerTaxID = '999999999';
                 $customerName  = 'Consumidor Final';
             }
 

@@ -139,7 +139,7 @@ function ActionMenu({
                   onEditar(cliente);
                 }}
                 className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:opacity-70"
-                style={{ color: colors.blue }}
+                style={{ color: colors.primary }}
               >
                 <Edit2 className="w-3.5 h-3.5" />
                 Editar

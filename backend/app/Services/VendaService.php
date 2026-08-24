@@ -48,10 +48,10 @@ class VendaService
         $this->empresa = app('current.empresa');
         $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
 
-        Log::debug('[VendaService] Inicializado', [
-            'modo' => $this->modo,
-            'empresa_id' => $this->empresa?->id,
-        ]);
+       Log::debug('[VendaService] Inicializado', [
+    'modo' => $this->modo,
+    'empresa_id' => $this->empresa?->id ?? 'not_yet_set',
+]);
     }
 
     /* =====================================================================
