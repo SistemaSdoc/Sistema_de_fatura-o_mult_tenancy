@@ -45,7 +45,6 @@ return Application::configure(basePath: dirname(__DIR__))
     $middleware->prependToGroup('api', [
         EncryptCookies::class,
         AddQueuedCookiesToResponse::class,
-        StartSession::class,
         \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
     ]);
 

@@ -503,7 +503,7 @@ class ImpressoraTermicaService
     {
         $this->printer->setJustification(Printer::JUSTIFY_CENTER);
 
-        // ⭐ LOGO
+        //  LOGO
         $logoPath = $empresa['logo'] ?? $this->logo;
         if (!empty($logoPath)) {
             $fileExists = false;
@@ -531,7 +531,7 @@ class ImpressoraTermicaService
         }
 
         // Nome da empresa
-        $nomeEmpresa = $empresa['nome'] ?? 'MWAMBA COMERCIAL';
+        $nomeEmpresa = $empresa['nome'];
         $this->printer->setEmphasis(true);
         $this->printer->setTextSize(2, 1);
         $this->printer->text(mb_strtoupper($nomeEmpresa, 'UTF-8') . "\n");

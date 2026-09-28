@@ -12,7 +12,9 @@ use Illuminate\Support\Str;
  * Tabela: series_fiscais
  * 
  * Formato do número: {TIPO} {SERIE}/{ANO}/{NUMERO}
- * Exemplo: FR LOJA1/2026/0542
+ * 
+ *  SÉRIE FIXA POR TIPO DE DOCUMENTO (ex: FT, FR, FP, FA, NC, ND, RC, FRT)
+ * Exemplo de número gerado: FT FT/2026/0001
  */
 class SerieFiscal extends Model
 {
@@ -99,7 +101,7 @@ class SerieFiscal extends Model
 
     /**
      * Gera o número do documento formatado
-     * Exemplo: FR LOJA1/2026/0001
+     * Exemplo: FT FT/2026/0001
      */
     public function gerarNumeroDocumento(): string
     {

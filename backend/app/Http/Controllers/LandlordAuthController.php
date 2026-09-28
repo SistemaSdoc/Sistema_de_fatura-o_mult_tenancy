@@ -278,15 +278,18 @@ class LandlordAuthController extends Controller
                 }
             }
             return redirect()->away($redirectFrontend);
-        } catch (\Exception $e) {
-            Log::error('[GOOGLE AUTH] Erro no callback', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
+        } catch (\Throwable $e) {
+    Log::error('[GOOGLE AUTH] Erro no callback', [
+        'message'    => $e->getMessage(),
+        'class'      => get_class($e),
+        'prev_message' => $e->getPrevious()?->getMessage(),
+        'prev_class'   => $e->getPrevious() ? get_class($e->getPrevious()) : null,
+        'trace'      => $e->getTraceAsString(),
+    ]);
 
-            $frontendUrl = env('VITE_FRONTEND_URL', 'http://localhost:3000');
-            return redirect()->away($frontendUrl . '/login?error=google_auth_failed');
-        }
+$frontendUrl = config('app.frontend_url');
+    return redirect()->away($frontendUrl . '/login?error=google_auth_failed');
+}
     }
 
     /**

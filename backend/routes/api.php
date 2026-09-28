@@ -54,9 +54,11 @@ Route::get('/planos/{plano}', [PlanoController::class, 'show']);
 Route::prefix('landlord')->group(function () {
     Route::post('/login', [LandlordAuthController::class, 'login']);
     Route::post('/register', [LandlordAuthController::class, 'register']);
+
+    Route::middleware([\Illuminate\Session\Middleware\StartSession::class])->group(function () {
     Route::get('/auth/google', [LandlordAuthController::class, 'redirectToGoogle'])->name('landlord.google.redirect');
     Route::get('/auth/google/callback', [LandlordAuthController::class, 'handleGoogleCallback'])->name('landlord.google.callback');
-
+   });
     Route::get('/notificacoes', [LandlordNotificacaoController::class, 'index']);
     Route::post('/notificacoes/{id}/marcar-lida', [LandlordNotificacaoController::class, 'marcarLida']);
     Route::post('/notificacoes/marcar-todas-lidas', [LandlordNotificacaoController::class, 'marcarTodasLidas']);

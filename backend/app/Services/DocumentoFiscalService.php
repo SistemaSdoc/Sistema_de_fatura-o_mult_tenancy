@@ -32,10 +32,12 @@ use Illuminate\Support\Str;
  * ✅ SUPORTA AMBOS OS MODOS:
  * - 'colectivo' → Shared DB (com tenant_id)
  * - 'singular' → Tenant DB (banco dedicado)
- * 
+ *
  * ✅ NUMERAÇÃO NO FORMATO ANGOLANO:
  * - {TIPO} {SERIE}/{ANO}/{NUMERO}
- * - Exemplo: FR LOJA1/2026/0542
+ * - Exemplo: FT FT/2026/0001
+ *
+ * ✅ SÉRIES FISCAS FIXAS POR TIPO DE DOCUMENTO
  */
 class DocumentoFiscalService
 {
@@ -326,7 +328,6 @@ class DocumentoFiscalService
             'tipo' => $tipo,
             'modo' => $this->getModo(),
             'empresa_id' => $this->empresa->id,
-            // ✅ Log dos dados bancários recebidos
             'nome_banco' => $dados['nome_banco'] ?? null,
             'iban' => $dados['iban'] ?? null,
             'numero_conta' => $dados['numero_conta'] ?? null,
@@ -340,7 +341,6 @@ class DocumentoFiscalService
 
             $this->validarDadosPorTipo($dados, $tipo, $config);
 
-            // Para NC e ND, validações adicionais
             if ($tipo === 'NC') {
                 $this->validarNotaCredito($dados);
             }
@@ -383,8 +383,6 @@ class DocumentoFiscalService
                 'qr_code' => null,
                 'hash_anterior' => null,
                 'referencia_externa' => $dados['referencia_externa'] ?? null,
-
-                // ✅ ADICIONAR DADOS BANCÁRIOS
                 'nome_banco' => $dados['nome_banco'] ?? null,
                 'iban' => $dados['iban'] ?? null,
                 'numero_conta' => $dados['numero_conta'] ?? null,
@@ -411,7 +409,6 @@ class DocumentoFiscalService
                 $documento = TenantDocumentoFiscal::create($documentoData);
             }
 
-            // ✅ Log dos dados bancários salvos
             Log::info('[DocumentoFiscalService] Dados bancários salvos no documento', [
                 'documento_id' => $documento->id,
                 'numero_documento' => $documento->numero_documento,
@@ -566,7 +563,7 @@ class DocumentoFiscalService
     }
 
     /* =====================================================================
-     | NOTA DE CRÉDITO (CORRIGIDO)
+     | NOTA DE CRÉDITO
      | ================================================================== */
 
     public function criarNotaCredito($documentoOrigem, array $dados)
@@ -596,7 +593,6 @@ class DocumentoFiscalService
         $totais = $this->processarItens($dados['itens'], $empresa->sujeito_iva, $empresa->regime_fiscal);
         $valorNova = $totais['liquido'];
 
-        // 7. VALIDAR VALOR MÁXIMO DA NC
         $valorMaximo = (float) $documentoOrigem->total_liquido - $totalJaCreditado;
 
         if ($valorMaximo <= 0.01) {
@@ -615,7 +611,6 @@ class DocumentoFiscalService
             );
         }
 
-        // 8. VALIDAR MOTIVO (obrigatório para NC)
         if (empty($dados['motivo'])) {
             throw new \InvalidArgumentException(
                 "O motivo da Nota de Crédito é obrigatório."
@@ -628,20 +623,16 @@ class DocumentoFiscalService
             );
         }
 
-        // 9. VALIDAR ITENS DA NC VS FATURA ORIGINAL
         $this->validarItensNotaCredito($documentoOrigem, $dados['itens']);
 
-        // 10. PREPARAR DADOS PARA EMISSÃO
         $dados['tipo_documento'] = 'NC';
         $dados['fatura_id'] = $documentoOrigem->id;
         $dados['motivo'] = $dados['motivo'] ?? "Correção de {$documentoOrigem->numero_documento}";
 
         $this->herdarCliente($dados, $documentoOrigem);
 
-        // 11. EMITIR A NOTA DE CRÉDITO
         $nc = $this->emitirDocumento($dados);
 
-        // 12. ATUALIZAR ESTADO DA FATURA ORIGINAL
         $this->atualizarEstadoFaturaAposCredito($documentoOrigem);
 
         Log::info('Nota de Crédito emitida com sucesso', [
@@ -657,15 +648,11 @@ class DocumentoFiscalService
         return $nc->load('documentoOrigem', 'itens', 'cliente');
     }
 
-    /**
-     * Valida se os itens da Nota de Crédito são compatíveis com a fatura original
-     */
     private function validarItensNotaCredito($fatura, array $itensNC): void
     {
         $itensFatura = $fatura->itens()->get();
 
         foreach ($itensNC as $itemNC) {
-            // Se tem produto_id, verifica se existe na fatura
             if (! empty($itemNC['produto_id'])) {
                 $existeNaFatura = $itensFatura->contains('produto_id', $itemNC['produto_id']);
 
@@ -678,14 +665,12 @@ class DocumentoFiscalService
                 }
             }
 
-            // Verifica se a quantidade não excede o que foi faturado
             if (! empty($itemNC['produto_id'])) {
                 $itemFatura = $itensFatura->firstWhere('produto_id', $itemNC['produto_id']);
                 if ($itemFatura) {
                     $quantidadeFaturada = (float) $itemFatura->quantidade;
                     $quantidadeNC = (float) ($itemNC['quantidade'] ?? 0);
 
-                    // Verifica créditos anteriores para este produto
                     $totalCreditadoProduto = $fatura->notasCredito()
                         ->where('estado', '!=', 'cancelado')
                         ->whereHas('itens', function ($q) use ($itemNC) {
@@ -706,9 +691,6 @@ class DocumentoFiscalService
         }
     }
 
-    /**
-     * Atualiza o estado da fatura após emissão de Nota de Crédito
-     */
     public function atualizarEstadoFaturaAposCredito($fatura): void
     {
         $totalJaCreditado = $fatura->notasCredito()
@@ -724,7 +706,6 @@ class DocumentoFiscalService
                 'saldo' => $saldo
             ]);
         } else {
-            // Verifica se já estava paga e agora tem crédito
             $totalPago = $this->calcularTotalPago($fatura);
             if ($totalPago > 0 && $saldo < (float) $fatura->total_liquido) {
                 $fatura->update(['estado' => 'parcialmente_paga']);
@@ -733,7 +714,7 @@ class DocumentoFiscalService
     }
 
     /* =====================================================================
-     | NOTA DE DÉBITO (CORRIGIDO)
+     | NOTA DE DÉBITO
      | ================================================================== */
 
     public function criarNotaDebito($documentoOrigem, array $dados)
@@ -753,24 +734,20 @@ class DocumentoFiscalService
             );
         }
 
-        // 3. VALIDAR SE A FATURA NÃO ESTÁ EXPIRADA
         if ($documentoOrigem->estado === 'expirado') {
             throw new \InvalidArgumentException(
                 "Não é possível emitir Nota de Débito para uma fatura expirada: {$documentoOrigem->numero_documento}"
             );
         }
 
-        // 4. VALIDAR ITENS (obrigatório)
         if (empty($dados['itens'])) {
             throw new \InvalidArgumentException(
                 'A Nota de Débito deve conter pelo menos um item.'
             );
         }
 
-        // 5. VALIDAR SE O DÉBITO É PARA SERVIÇOS
         $this->validarServicosNotaDebito($dados['itens']);
 
-        // 6. VALIDAR PRAZO PARA DÉBITO (até 30 dias após emissão da fatura)
         $dataEmissaoFatura = Carbon::parse($documentoOrigem->data_emissao, 'Africa/Luanda');
         $prazoMaximo = $dataEmissaoFatura->copy()->addDays(30);
         $hoje = Carbon::now('Africa/Luanda');
@@ -783,12 +760,10 @@ class DocumentoFiscalService
             );
         }
 
-        // 7. VERIFICAR SE A FATURA JÁ FOI PAGA
         $valorPago = $this->calcularTotalPago($documentoOrigem);
         $isPaga = $documentoOrigem->estado === 'paga';
 
         if ($isPaga) {
-            // Se a fatura está paga, o débito deve ser claramente para juros ou multa
             $this->validarJurosMultaFaturaPaga($dados['itens']);
 
             Log::info('Nota de Débito para fatura paga - cobrança de juros/multas', [
@@ -797,17 +772,14 @@ class DocumentoFiscalService
             ]);
         }
 
-        // 8. PREPARAR DADOS PARA EMISSÃO
         $dados['tipo_documento'] = 'ND';
         $dados['fatura_id'] = $documentoOrigem->id;
         $dados['motivo'] = $dados['motivo'] ?? "Débito adicional referente à {$documentoOrigem->numero_documento}";
 
         $this->herdarCliente($dados, $documentoOrigem);
 
-        // 9. EMITIR A NOTA DE DÉBITO
         $nd = $this->emitirDocumento($dados);
 
-        // 10. ATUALIZAR ESTADO DA FATURA ORIGINAL
         $this->atualizarEstadoFaturaAposDebito($documentoOrigem, $nd);
 
         Log::info('Nota de Débito emitida com sucesso', [
@@ -822,58 +794,32 @@ class DocumentoFiscalService
         return $nd->load('documentoOrigem', 'itens', 'cliente');
     }
 
-    /**
-     * Valida se os itens da Nota de Débito são serviços
-     */
     private function validarServicosNotaDebito(array $itens): void
     {
         $itensInvalidos = [];
 
         foreach ($itens as $item) {
-            // Verifica se a descrição é detalhada
             if (empty($item['descricao']) || strlen($item['descricao']) < 5) {
                 throw new \InvalidArgumentException(
                     "Cada item da Nota de Débito deve ter uma descrição detalhada."
                 );
             }
 
-            // Verifica se é serviço pelo produto_id
             if (! empty($item['produto_id'])) {
                 $produto = $this->buscarProduto($item['produto_id']);
                 if ($produto && $produto->tipo === 'produto') {
                     $itensInvalidos[] = $item['descricao'];
                 }
             } else {
-                // Item avulso - verifica pela descrição
                 $descricaoLower = strtolower($item['descricao']);
                 $palavrasServico = [
-                    'serviço',
-                    'servico',
-                    'consulta',
-                    'consultoria',
-                    'manutenção',
-                    'manutencao',
-                    'instalação',
-                    'instalacao',
-                    'juro',
-                    'juros',
-                    'multa',
-                    'penalidade',
-                    'taxa',
-                    'comissão',
-                    'comissao',
-                    'honorário',
-                    'honorario',
-                    'assessoria',
-                    'planejamento',
-                    'projeto',
-                    'engenharia',
-                    'design',
-                    'desenvolvimento',
-                    'programação',
-                    'suporte',
-                    'treinamento',
-                    'consulting'
+                    'serviço', 'servico', 'consulta', 'consultoria',
+                    'manutenção', 'manutencao', 'instalação', 'instalacao',
+                    'juro', 'juros', 'multa', 'penalidade', 'taxa',
+                    'comissão', 'comissao', 'honorário', 'honorario',
+                    'assessoria', 'planejamento', 'projeto', 'engenharia',
+                    'design', 'desenvolvimento', 'programação', 'suporte',
+                    'treinamento', 'consulting'
                 ];
 
                 $isServico = false;
@@ -898,9 +844,6 @@ class DocumentoFiscalService
         }
     }
 
-    /**
-     * Valida se os itens são juros ou multas para fatura paga
-     */
     private function validarJurosMultaFaturaPaga(array $itens): void
     {
         $temJuros = false;
@@ -924,17 +867,12 @@ class DocumentoFiscalService
         }
     }
 
-    /**
-     * Validação adicional para Nota de Crédito
-     */
     private function validarNotaCredito(array $dados): void
     {
-        // Verifica se tem fatura_id
         if (empty($dados['fatura_id'])) {
             throw new \InvalidArgumentException('Nota de Crédito deve referenciar uma fatura.');
         }
 
-        // Verifica se tem motivo
         if (empty($dados['motivo'])) {
             throw new \InvalidArgumentException('Motivo da Nota de Crédito é obrigatório.');
         }
@@ -943,45 +881,33 @@ class DocumentoFiscalService
             throw new \InvalidArgumentException('Motivo da Nota de Crédito deve ter pelo menos 10 caracteres.');
         }
 
-        // Verifica se tem itens
         if (empty($dados['itens'])) {
             throw new \InvalidArgumentException('Nota de Crédito deve conter pelo menos um item.');
         }
     }
 
-    /**
-     * Validação adicional para Nota de Débito
-     */
     private function validarNotaDebito(array $dados): void
     {
-        // Verifica se tem fatura_id
         if (empty($dados['fatura_id'])) {
             throw new \InvalidArgumentException('Nota de Débito deve referenciar uma fatura.');
         }
 
-        // Verifica se tem itens
         if (empty($dados['itens'])) {
             throw new \InvalidArgumentException('Nota de Débito deve conter pelo menos um item.');
         }
 
-        // Valida se os itens são serviços
         $this->validarServicosNotaDebito($dados['itens']);
     }
 
-    /**
-     * Atualiza o estado da fatura após emissão de Nota de Débito
-     */
     private function atualizarEstadoFaturaAposDebito($fatura, $nd): void
     {
         $valorDebito = (float) $nd->total_liquido;
         $novoValorTotal = (float) $fatura->total_liquido + $valorDebito;
 
-        // Atualiza o valor total da fatura para refletir o débito
         $fatura->update([
             'total_liquido' => $novoValorTotal
         ]);
 
-        // Se a fatura estava paga, passa a ter saldo pendente
         if ($fatura->estado === 'paga') {
             $fatura->update(['estado' => 'parcialmente_paga']);
             Log::info('Fatura voltou a ficar parcialmente paga após débito', [
@@ -1283,19 +1209,11 @@ class DocumentoFiscalService
         return max(0.0, (float) $documento->total_liquido - $totalPago - $totalAdiantamentos);
     }
 
-    /**
-     * ✅ Wrapper público para expor o valor já pago de um documento.
-     * Necessário porque calcularTotalPago() é privado e o controller
-     * precisa desse valor no fluxo de Nota de Débito.
-     */
     public function calcularValorPago($documento): float
     {
         return $this->calcularTotalPago($documento);
     }
 
-    /**
-     * Calcula o saldo disponível para crédito em uma fatura
-     */
     public function calcularSaldoDisponivel($fatura): float
     {
         if (! in_array($fatura->tipo_documento, ['FT', 'FR'])) {
@@ -1309,12 +1227,8 @@ class DocumentoFiscalService
         return max(0.0, (float) $fatura->total_liquido - $totalCreditado);
     }
 
-    /**
-     * Verifica se pode emitir Nota de Crédito para um documento
-     */
     public function podeEmitirNotaCredito($documento): array
     {
-        // 1. Tipo de documento
         if (! in_array($documento->tipo_documento, ['FT', 'FR'])) {
             return [
                 'pode' => false,
@@ -1322,7 +1236,6 @@ class DocumentoFiscalService
             ];
         }
 
-        // 2. Estado
         if ($documento->estado === 'cancelado') {
             return ['pode' => false, 'motivo' => 'Não é possível emitir Nota de Crédito para uma fatura cancelada.'];
         }
@@ -1330,7 +1243,6 @@ class DocumentoFiscalService
             return ['pode' => false, 'motivo' => 'Não é possível emitir Nota de Crédito para uma fatura expirada.'];
         }
 
-        // 3. Saldo disponível
         $saldo = $this->calcularSaldoDisponivel($documento);
         if ($saldo <= 0.01) {
             return [
@@ -1342,12 +1254,8 @@ class DocumentoFiscalService
         return ['pode' => true];
     }
 
-    /**
-     * Verifica se pode emitir Nota de Débito para um documento
-     */
     public function podeEmitirNotaDebito($documento): array
     {
-        // 1. Tipo de documento (apenas FT)
         if ($documento->tipo_documento !== 'FT') {
             return [
                 'pode' => false,
@@ -1355,7 +1263,6 @@ class DocumentoFiscalService
             ];
         }
 
-        // 2. Estado
         if ($documento->estado === 'cancelado') {
             return ['pode' => false, 'motivo' => 'Não é possível emitir Nota de Débito para uma fatura cancelada.'];
         }
@@ -1363,7 +1270,6 @@ class DocumentoFiscalService
             return ['pode' => false, 'motivo' => 'Não é possível emitir Nota de Débito para uma fatura expirada.'];
         }
 
-        // 3. Prazo de 30 dias
         $dataEmissao = Carbon::parse($documento->data_emissao, 'Africa/Luanda');
         $prazoMaximo = $dataEmissao->copy()->addDays(30);
         $hoje = Carbon::now('Africa/Luanda');
@@ -1379,9 +1285,6 @@ class DocumentoFiscalService
         return ['pode' => true];
     }
 
-    /**
-     * Calcula o total de créditos já emitidos para uma fatura
-     */
     public function calcularTotalCreditosEmitidos($fatura): float
     {
         return (float) $fatura->notasCredito()
@@ -2036,9 +1939,9 @@ class DocumentoFiscalService
 
     /**
      * Gera um novo número de documento fiscal no formato angolano
-     * 
+     *
      * FORMATO: {TIPO} {SERIE}/{ANO}/{NUMERO}
-     * Exemplo: FR LOJA1/2026/0542
+     * Exemplo: FT FT/2026/0001
      */
     private function gerarNumeroDocumento(string $tipo): array
     {
@@ -2047,18 +1950,8 @@ class DocumentoFiscalService
 
         // 2️⃣ GARANTIR QUE É UM OBJETO VÁLIDO
         if (!$serieFiscal || !isset($serieFiscal->serie)) {
-            Log::warning('[DocumentoFiscalService] Série fiscal inválida, usando fallback', [
-                'tipo' => $tipo,
-                'modo' => $this->getModo(),
-            ]);
-
-            $serieFiscal = (object) [
-                'serie' => 'LOJA1',
-                'digitos' => 4,
-                'ultimo_numero' => 0,
-                'ano' => now()->year,
-                'id' => null,
-            ];
+            Log::error('[DocumentoFiscalService] Série fiscal não encontrada para o tipo', ['tipo' => $tipo]);
+            throw new \RuntimeException("Série fiscal não configurada para o tipo {$tipo}. Contacte o administrador.");
         }
 
         // 3️⃣ LOCK PARA EVITAR CONFLITOS
@@ -2128,14 +2021,13 @@ class DocumentoFiscalService
     }
 
     /**
-     * Obtém a série fiscal ativa para um tipo de documento
-     * ✅ CORRIGIDO: Verifica se a coluna tenant_id existe antes de usar
+     * Obtém a série fiscal ativa para um tipo de documento.
+     * Se não existir, cria automaticamente com base no mapa fixo.
      */
     private function obterSerieFiscal(string $tipo): object
     {
         $model = $this->serieFiscalModel();
 
-        // Buscar série ativa para o ano atual
         $query = $model->where('tipo_documento', $tipo)
             ->where('ativa', true)
             ->where(function ($q) {
@@ -2143,22 +2035,32 @@ class DocumentoFiscalService
             })
             ->orderByDesc('padrao');
 
-        // ⚠️ SÓ APLICAR TENANT SE A TABELA TIVER tenant_id
         if ($this->isColectivo() && $this->colunaExiste('series_fiscais', 'tenant_id')) {
             $query = $query->where('tenant_id', $this->empresa->id);
         }
 
         $serie = $query->first();
 
-        // Se não encontrar, criar uma série padrão
         if (!$serie) {
+            // Mapa de séries fixas por tipo
+            $seriesPadrao = [
+                'FT'  => 'FT',
+                'FR'  => 'FR',
+                'FP'  => 'FP',
+                'FA'  => 'FA',
+                'NC'  => 'NC',
+                'ND'  => 'ND',
+                'RC'  => 'RC',
+                'FRt' => 'FRT',
+            ];
+
+            $serieNome = $seriesPadrao[$tipo] ?? 'GERAL';
+
             Log::warning('[DocumentoFiscalService] Nenhuma série fiscal ativa, criando padrão', [
                 'tipo' => $tipo,
+                'serie' => $serieNome,
                 'modo' => $this->getModo(),
             ]);
-
-            $nomeEmpresa = $this->empresa->nome ?? 'LOJA';
-            $serieNome = $this->gerarSerieNome($nomeEmpresa);
 
             $dadosSerie = [
                 'id' => Str::uuid(),
@@ -2172,12 +2074,10 @@ class DocumentoFiscalService
                 'valida_agt' => !in_array($tipo, ['FP', 'RC']),
             ];
 
-            // ⚠️ SÓ ADICIONAR tenant_id SE A TABELA TIVER A COLUNA
             if ($this->isColectivo() && $this->colunaExiste('series_fiscais', 'tenant_id')) {
                 $dadosSerie['tenant_id'] = $this->empresa->id;
             }
 
-            $model = $this->serieFiscalModel();
             $serie = $model->create($dadosSerie);
 
             Log::info('[DocumentoFiscalService] Série fiscal criada automaticamente', [
@@ -2228,17 +2128,6 @@ class DocumentoFiscalService
     }
 
     /**
-     * Gera um nome de série a partir do nome da empresa
-     */
-    private function gerarSerieNome(string $nomeEmpresa): string
-    {
-        // Remover acentos e caracteres especiais
-        $nome = preg_replace('/[^a-zA-Z0-9]/', '', $nomeEmpresa);
-        // Limitar a 10 caracteres e colocar em maiúsculas
-        return strtoupper(substr($nome, 0, 10));
-    }
-
-    /**
      * Verifica se uma coluna existe numa tabela
      */
     private function colunaExiste(string $tabela, string $coluna): bool
@@ -2258,95 +2147,102 @@ class DocumentoFiscalService
     /**
      * Cria séries fiscais padrão se não existirem
      */
-    private function criarSeriesPadrao(): void
-    {
-        $tenantId = $this->empresa?->id;
-        $modo = $this->getModo();
+private function criarSeriesPadrao(): void
+{
+    $tenantId = $this->empresa?->id;
+    $modo = $this->getModo();
 
-        Log::debug('[DocumentoFiscalService] Verificando séries padrão', [
-            'tenant_id' => $tenantId,
-            'modo' => $modo,
-        ]);
+    $tipos = ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC', 'FRt'];
+    $ano = now()->year;
 
-        // ✅ VERIFICAR SE EXISTE SÉRIE PARA O TENANT ATUAL
-        $query = $this->serieFiscalModel()->where('padrao', true);
+    // Mapa de séries fixas por tipo
+    $seriesMap = [
+        'FT'  => 'FT',
+        'FR'  => 'FR',
+        'FP'  => 'FP',
+        'FA'  => 'FA',
+        'NC'  => 'NC',
+        'ND'  => 'ND',
+        'RC'  => 'RC',
+        'FRt' => 'FRT',
+    ];
 
-        // Se tiver tenant_id, filtrar por ele
-        if ($this->isColectivo() && $tenantId && $this->colunaExiste('series_fiscais', 'tenant_id')) {
-            $query = $query->where('tenant_id', $tenantId);
+    $temTenantId = $this->isColectivo() && $tenantId && $this->colunaExiste('series_fiscais', 'tenant_id');
+
+    foreach ($tipos as $tipo) {
+        $serieNome = $seriesMap[$tipo];
+
+        // Verifica se já existe uma série com o nome correcto para este tipo + tenant
+        $queryExisteCorreta = $this->serieFiscalModel()
+            ->where('tipo_documento', $tipo)
+            ->where('serie', $serieNome)
+            ->where('ano', $ano);
+
+        if ($temTenantId) {
+            $queryExisteCorreta = $queryExisteCorreta->where('tenant_id', $tenantId);
         }
 
-        $existeSerie = $query->exists();
+        // Se já existe a série correcta, pula
+        if ($queryExisteCorreta->exists()) {
+            continue;
+        }
 
-        // Se já existir séries, não criar novamente
-        if ($existeSerie) {
-            Log::debug('[DocumentoFiscalService] Séries fiscais já existem', [
-                'tenant_id' => $tenantId,
-                'modo' => $modo,
+        // Senão, procura se existe alguma série para este tipo (mesmo com nome diferente)
+        $queryQualquer = $this->serieFiscalModel()
+            ->where('tipo_documento', $tipo)
+            ->where('ano', $ano);
+
+        if ($temTenantId) {
+            $queryQualquer = $queryQualquer->where('tenant_id', $tenantId);
+        }
+
+        $serieExistente = $queryQualquer->first();
+
+        if ($serieExistente) {
+            // Se existe mas com nome diferente, vamos desativá-la e criar a nova
+            Log::warning('[DocumentoFiscalService] Substituindo série antiga', [
+                'tipo' => $tipo,
+                'serie_antiga' => $serieExistente->serie,
+                'serie_nova' => $serieNome,
+                'id' => $serieExistente->id,
             ]);
-            return;
+
+            $serieExistente->update(['ativa' => false, 'padrao' => false]);
+            // O ultimo_numero da antiga pode ser aproveitado na nova? Opcional.
+            $ultimoNumero = $serieExistente->ultimo_numero;
+        } else {
+            $ultimoNumero = 0;
         }
 
-        $tipos = ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC', 'FRt'];
-        $ano = now()->year;
-        $nomeEmpresa = $this->empresa->nome ?? 'LOJA';
-        $serieNome = $this->gerarSerieNome($nomeEmpresa);
+        // Criar a nova série com o nome fixo
+        $dados = [
+            'id' => Str::uuid(),
+            'tipo_documento' => $tipo,
+            'serie' => $serieNome,
+            'descricao' => "Série padrão — " . $this->getTipoDocumentoNome($tipo),
+            'digitos' => 4,
+            'ultimo_numero' => $ultimoNumero, // mantém a sequência
+            'ativa' => true,
+            'padrao' => true,
+            'ano' => $ano,
+            'valida_agt' => !in_array($tipo, ['FP', 'RC']),
+        ];
 
-        Log::info('[DocumentoFiscalService] Criando séries fiscais padrão', [
+        if ($temTenantId) {
+            $dados['tenant_id'] = $tenantId;
+        }
+
+        $this->serieFiscalModel()->create($dados);
+
+        Log::info('[DocumentoFiscalService] Série padrão criada (substituição)', [
             'tenant_id' => $tenantId,
-            'tipos' => $tipos,
+            'tipo' => $tipo,
             'serie' => $serieNome,
             'ano' => $ano,
             'modo' => $modo,
         ]);
-
-        $temTenantId = $this->isColectivo() && $tenantId && $this->colunaExiste('series_fiscais', 'tenant_id');
-
-        foreach ($tipos as $tipo) {
-            // ✅ VERIFICAR SE JÁ EXISTE PARA ESTE TIPO + TENANT
-            $queryExiste = $this->serieFiscalModel()
-                ->where('tipo_documento', $tipo)
-                ->where('serie', $serieNome)
-                ->where('ano', $ano);
-
-            if ($temTenantId) {
-                $queryExiste = $queryExiste->where('tenant_id', $tenantId);
-            }
-
-            if ($queryExiste->exists()) {
-                continue;
-            }
-
-            // ✅ CRIAR SÉRIE
-            $dados = [
-                'id' => Str::uuid(),
-                'tipo_documento' => $tipo,
-                'serie' => $serieNome,
-                'descricao' => "Série padrão — " . $this->getTipoDocumentoNome($tipo),
-                'digitos' => 4,
-                'ultimo_numero' => 0,
-                'ativa' => true,
-                'padrao' => true,
-                'ano' => $ano,
-                'valida_agt' => !in_array($tipo, ['FP', 'RC']),
-            ];
-
-            // ✅ ADICIONAR TENANT_ID SE EXISTIR
-            if ($temTenantId) {
-                $dados['tenant_id'] = $tenantId;
-            }
-
-            $this->serieFiscalModel()->create($dados);
-
-            Log::info('[DocumentoFiscalService] Série padrão criada', [
-                'tenant_id' => $tenantId,
-                'tipo' => $tipo,
-                'serie' => $serieNome,
-                'ano' => $ano,
-                'modo' => $modo,
-            ]);
-        }
     }
+}
 
     /**
      * Obtém o nome do tipo de documento em português
@@ -2587,18 +2483,17 @@ class DocumentoFiscalService
         $stockService = app(\App\Services\StockService::class);
         $userId = $this->getUserId();
 
-        // Busca os itens do documento (a relação já existe, usada noutros pontos do service)
         $itens = $documento->itens()->get();
 
         foreach ($itens as $item) {
             if (empty($item->produto_id)) {
-                continue; // item avulso sem produto associado — não há stock a movimentar
+                continue;
             }
 
             $produto = $this->buscarProduto($item->produto_id);
 
             if (!$produto || $produto->tipo === 'servico') {
-                continue; // serviços não têm controlo de stock
+                continue;
             }
 
             $quantidade = (int) round((float) $item->quantidade);
@@ -2608,7 +2503,6 @@ class DocumentoFiscalService
 
             try {
                 if (in_array($tipoDocumento, ['FT', 'FR'])) {
-                    // Venda: saída de stock
                     $stockService->movimentar(
                         $item->produto_id,
                         $quantidade,
@@ -2619,7 +2513,6 @@ class DocumentoFiscalService
                         $userId
                     );
                 } elseif ($tipoDocumento === 'NC') {
-                    // Nota de Crédito: devolução do produto -> entrada de stock
                     $stockService->movimentar(
                         $item->produto_id,
                         $quantidade,
@@ -2637,7 +2530,7 @@ class DocumentoFiscalService
                     'tipo'       => $tipoDocumento,
                     'erro'       => $e->getMessage(),
                 ]);
-                throw $e; // se o stock falhar, o documento não deve ficar meio-emitido
+                throw $e;
             }
         }
 

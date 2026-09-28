@@ -37,6 +37,14 @@ use Carbon\Carbon;
  *   SUPORTA AMBOS OS MODOS:
  * - 'colectivo' → Shared DB (com tenant_id)
  * - 'singular' → Tenant DB (banco dedicado)
+ * 
+ * CORREÇÕES APLICADAS (set/2026):
+ * - Coerência do IVA (TaxCode coerente com TaxPercentage) via getTaxaEfectiva() e mapTaxaToCode().
+ * - CustomerTaxID para consumidor final alterado para 999999990.
+ * - SoftwareValidationNumber agora preenchido (fallback 'EM_HOMOLOGACAO').
+ * - ProductGroup com fallback 'Geral'.
+ * - Movimentos de stock usam a mesma lógica de taxa.
+ * - TODO: Integração com webservice solicitarSerie da AGT.
  */
 class SaftService
 {
@@ -46,10 +54,8 @@ class SaftService
 
     public function __construct()
     {
-        //   Obtém da sessão (prioridade)
         $this->empresa = app('current.empresa');
         $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
-        
         Log::debug('[SaftService] Inicializado', [
             'modo' => $this->modo,
             'empresa_id' => $this->empresa?->id,
@@ -92,6 +98,59 @@ class SaftService
     protected function isSingular(): bool
     {
         return $this->getModo() === 'singular';
+    }
+
+    /* =====================================================================
+     | LÓGICA DE IVA (CORRIGIDA)
+     | ================================================================== */
+
+    /**
+     * Obtém a taxa de IVA efectiva para um produto/serviço.
+     * Prioriza: Taxa do produto (se serviço) -> Taxa da categoria (se produto) -> Taxa geral.
+     */
+    protected function getTaxaEfectiva($produto): float
+    {
+        if (!$produto) {
+            return $this->taxaIvaVigente();
+        }
+
+        // Se for serviço, usa a taxa diretamente do produto
+        if ($produto->tipo === 'servico') {
+            return (float) ($produto->taxa_iva ?? 0);
+        }
+
+        // Se for produto e tiver categoria, usa a taxa da categoria
+        if ($produto->categoria_id) {
+            $categoria = $this->isColectivo()
+                ? SharedCategoria::doTenant()->find($produto->categoria_id)
+                : TenantCategoria::find($produto->categoria_id);
+            if ($categoria && isset($categoria->taxa_iva)) {
+                return (float) $categoria->taxa_iva;
+            }
+        }
+
+        // Fallback para a taxa geral da empresa
+        return $this->taxaIvaVigente();
+    }
+
+    /**
+     * Mapeia uma taxa numérica para o código SAF-T.
+     */
+    protected function mapTaxaToCode(float $taxa): string
+    {
+        if ($taxa == 0) return 'ISE';
+        if ($taxa == 5) return 'RED5';
+        if ($taxa == 7) return 'RED7';
+        if ($taxa == 14) return 'NOR';
+        return 'NOR'; // fallback
+    }
+
+    /**
+     * Obtém o código de IVA para o produto (usado no MasterFiles).
+     */
+    protected function getTaxCodeForProduct($produto): string
+    {
+        return $this->mapTaxaToCode($this->getTaxaEfectiva($produto));
     }
 
     /* =====================================================================
@@ -233,6 +292,34 @@ class SaftService
     }
 
     /* =====================================================================
+     | SÉRIES (PENDENTE - INTEGRAÇÃO COM AGT)
+     | ================================================================== */
+
+    /**
+     * TODO: Implementar chamada ao webservice solicitarSerie da AGT.
+     * 
+     * Este método deve:
+     * 1. Verificar se já existe uma série para o tipo/ano na base de dados.
+     * 2. Se não existir, chamar a API da AGT (POST /solicitarSerie) para criar.
+     * 3. Guardar o código da série e o último número utilizado.
+     * 4. Retornar o próximo número no formato "SERIE/ANO/SEQ".
+     */
+    protected function obterProximoNumero(string $tipoDoc, int $ano, Empresa $empresa): string
+    {
+        // Exemplo de estrutura - DEVE SER SUBSTITUÍDO PELA INTEGRAÇÃO REAL
+        // $serie = Serie::where('empresa_id', $empresa->id)->where('tipo', $tipoDoc)->where('ano', $ano)->first();
+        // if (!$serie) { $this->solicitarSerieAGT($tipoDoc, $ano); }
+        // return $serie->codigo . '/' . $ano . '/' . str_pad($serie->proximo_numero, 6, '0', STR_PAD_LEFT);
+
+        // Fallback temporário (para testes, mantém a lógica antiga mas com aviso)
+        Log::warning('[SaftService] Usando série temporária. Integração com AGT pendente.', [
+            'tipo' => $tipoDoc,
+            'ano' => $ano,
+        ]);
+        return 'TEMP-' . $tipoDoc . '/' . $ano . '/000001';
+    }
+
+    /* =====================================================================
      | MÉTODOS PÚBLICOS
      | ================================================================== */
 
@@ -240,7 +327,6 @@ class SaftService
     {
         $this->verificarAcessoUsuario();
         $empresa = $this->obterEmpresa();
-        
         Log::info('[SAFT Service] Iniciando geração SAF-T', [
             'empresa_id' => $empresa->id,
             'ano' => $year,
@@ -319,12 +405,12 @@ class SaftService
         Storage::disk('local')->makeDirectory($directory);
         $path = Storage::disk('local')->path("{$directory}/{$filename}");
         $dom->save($path);
-        
+
         Log::info('[SAFT Service] XML salvo', [
             'path' => $path,
             'modo' => $this->getModo(),
         ]);
-        
+
         return $path;
     }
 
@@ -344,8 +430,11 @@ class SaftService
         $header->appendChild($dom->createElement('FiscalYear', (string) $year));
         $header->appendChild($dom->createElement('TaxEntity', 'Global'));
         $header->appendChild($dom->createElement('ProductCompanyTaxID', $empresa->nif));
-        $header->appendChild($dom->createElement('SoftwareValidationNumber', $empresa->software_validation_number ?? ''));
-        $header->appendChild($dom->createElement('ProductID', 'FaturaJa/1.0'));
+        
+        // CORREÇÃO: SoftwareValidationNumber preenchido
+        $header->appendChild($dom->createElement('SoftwareValidationNumber', $empresa->software_validation_number ?? 'EM_HOMOLOGACAO'));
+        
+        $header->appendChild($dom->createElement('ProductID', 'FaturaJa'));
         $header->appendChild($dom->createElement('ProductVersion', '1.0.0'));
         $header->appendChild($dom->createElement('CompanyName', $empresa->nome));
         $header->appendChild($dom->createElement('BusinessName', $empresa->nome));
@@ -425,39 +514,23 @@ class SaftService
             $product->appendChild($dom->createElement('ProductDescription', $produto->nome));
             $product->appendChild($dom->createElement('ProductType', $produto->tipo === 'servico' ? 'S' : 'P'));
             $product->appendChild($dom->createElement('UnitPrice', number_format($produto->preco_venda, 4, '.', '')));
-            
-            // Buscar código de IVA
+
+            // CORREÇÃO: Usa a nova lógica de IVA
             $taxCode = $this->getTaxCodeForProduct($produto);
-            if ($taxCode) {
-                $product->appendChild($dom->createElement('TaxCode', $taxCode));
-            }
+            $product->appendChild($dom->createElement('TaxCode', $taxCode));
+
+            // CORREÇÃO: ProductGroup com fallback
+            $grupo = 'Geral';
             if ($produto->categoria_id) {
-                $categoria = $this->isColectivo() 
+                $categoria = $this->isColectivo()
                     ? SharedCategoria::doTenant()->find($produto->categoria_id)
                     : TenantCategoria::find($produto->categoria_id);
-                $product->appendChild($dom->createElement('ProductGroup', $categoria->nome ?? 'Geral'));
+                if ($categoria) {
+                    $grupo = $categoria->nome ?? 'Geral';
+                }
             }
+            $product->appendChild($dom->createElement('ProductGroup', $grupo));
         }
-    }
-
-    private function getTaxCodeForProduct($produto): string
-    {
-        $taxa = 0;
-        
-        if ($produto->tipo === 'servico') {
-            $taxa = (float) $produto->taxa_iva;
-        } elseif ($produto->categoria_id) {
-            $categoria = $this->isColectivo() 
-                ? SharedCategoria::doTenant()->find($produto->categoria_id)
-                : TenantCategoria::find($produto->categoria_id);
-            $taxa = $categoria ? (float) $categoria->taxa_iva : $this->taxaIvaVigente();
-        }
-        
-        if ($taxa == 0) return 'ISE';
-        if ($taxa == 5) return 'RED5';
-        if ($taxa == 7) return 'RED7';
-        if ($taxa == 14) return 'NOR';
-        return 'NOR';
     }
 
     private function addTaxTable(DOMDocument $dom, DOMElement $masterFiles): void
@@ -472,7 +545,7 @@ class SaftService
             $taxTable->appendChild($entry);
             $entry->appendChild($dom->createElement('TaxType', 'IVA'));
 
-            $taxCode = $taxa === 0 ? 'ISE' : ($taxa === 14 ? 'NOR' : 'RED' . $taxa);
+            $taxCode = $this->mapTaxaToCode($taxa);
             $entry->appendChild($dom->createElement('TaxCode', $taxCode));
             $entry->appendChild($dom->createElement('Description', $taxa === 0 ? 'Isento' : "IVA a {$taxa}%"));
             $entry->appendChild($dom->createElement('TaxAmount', number_format($taxa, 2, '.', '')));
@@ -498,9 +571,8 @@ class SaftService
         $startDate = sprintf('%04d-%02d-01', $year, $month);
         $endDate = date('Y-m-t', strtotime($startDate));
 
-        // Tipos de documentos SAF-T
         $tiposDocumento = ['FT', 'FR', 'NC', 'ND'];
-        
+
         $documentos = $this->queryDocumentosFiscais()
             ->whereIn('tipo_documento', $tiposDocumento)
             ->whereBetween('data_emissao', [$startDate, $endDate])
@@ -538,7 +610,16 @@ class SaftService
             $invoice = $dom->createElement('Invoice');
             $invoicesNode->appendChild($invoice);
 
-            $invoice->appendChild($dom->createElement('InvoiceNo', $doc->numero_documento));
+            // CORREÇÃO: Número do documento deve vir da série oficial (TODO)
+            // Por enquanto, mantém o que vem da BD, mas com aviso
+            $invoiceNo = $doc->numero_documento;
+            if (strpos($invoiceNo, 'TEMP-') === false && strpos($invoiceNo, '/') === false) {
+                // Se não for temporário, tenta usar a série oficial
+                // $invoiceNo = $this->obterProximoNumero($doc->tipo_documento, $year, $empresa);
+                // Para já, mantém o existente, mas o ideal é integrar o método acima
+                Log::debug('[SAFT] Usando número de documento existente: ' . $invoiceNo);
+            }
+            $invoice->appendChild($dom->createElement('InvoiceNo', $invoiceNo));
             $invoice->appendChild($dom->createElement('InvoiceDate', $doc->data_emissao->format('Y-m-d')));
             $invoice->appendChild($dom->createElement('InvoiceType', $doc->tipo_documento));
 
@@ -569,12 +650,13 @@ class SaftService
                 $customerId = (string) $doc->cliente_id;
                 $customerTaxID = $doc->cliente->nif ?? '';
                 $customerName  = $doc->cliente->nome ?? '';
+                // CORREÇÃO: Se não tiver NIF, usa 999999990 (padrão AGT)
                 if (empty($customerTaxID)) {
-                    $customerTaxID = '999999999';
+                    $customerTaxID = '999999990';
                 }
             } else {
                 $customerId = '0';
-                $customerTaxID = '999999999';
+                $customerTaxID = '999999990'; // CORRIGIDO
                 $customerName  = 'Consumidor Final';
             }
 
@@ -582,7 +664,6 @@ class SaftService
             $invoice->appendChild($dom->createElement('CustomerTaxID', $customerTaxID));
             $invoice->appendChild($dom->createElement('CustomerName', $customerName));
 
-            // ShipTo / ShipFrom
             $this->addShipAddress($dom, $invoice, $doc, $empresa);
 
             // Linhas da fatura
@@ -591,8 +672,13 @@ class SaftService
                     $produto = $item->produto;
                     if (!$produto) continue;
 
-                    $taxaIva = $item->taxa_iva ?? $produto->taxa_iva ?? $this->taxaIvaVigente();
-                    $taxCode = $this->getTaxCodeForProduct($produto);
+                    // CORREÇÃO: Usa a lógica unificada de IVA
+                    $taxaIva = $this->getTaxaEfectiva($produto);
+                    // Permite override se o item tiver uma taxa específica (ex: se o utilizador alterou na linha)
+                    if (isset($item->taxa_iva) && $item->taxa_iva !== null && $item->taxa_iva != 0) {
+                        $taxaIva = (float) $item->taxa_iva;
+                    }
+                    $taxCode = $this->mapTaxaToCode($taxaIva);
                     $isIsento = ($taxaIva == 0);
                     $isNotaCredito = in_array($doc->tipo_documento, ['NC', 'ND']);
 
@@ -630,7 +716,7 @@ class SaftService
                     }
                 }
             } else {
-                // Linha genérica
+                // Linha genérica (fallback)
                 $lineNode = $dom->createElement('Line');
                 $invoice->appendChild($lineNode);
                 $lineNode->appendChild($dom->createElement('LineNumber', '1'));
@@ -787,7 +873,9 @@ class SaftService
             $productCode = $produto ? ($produto->codigo ?? $produto->id) : $mov->produto_id;
 
             $unitPrice = $mov->custo_medio ?? $produto->preco_venda ?? $produto->preco_compra ?? 0;
-            $taxaIva = $produto->taxa_iva ?? $this->taxaIvaVigente();
+            
+            // CORREÇÃO: Usa a mesma lógica de IVA para stock
+            $taxaIva = $produto ? $this->getTaxaEfectiva($produto) : $this->taxaIvaVigente();
 
             $quantidade = abs($mov->quantidade);
             $taxBase = $unitPrice * $quantidade;

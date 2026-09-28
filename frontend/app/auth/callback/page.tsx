@@ -19,7 +19,7 @@ function AuthCallbackContent() {
       return;
     }
 
-    // ✅ Define o tenant ANTES de chamar /api/me
+    // Define o tenant ANTES de chamar /api/me
     setTenant({ id: empresaId, subdomain: subdomain || undefined });
 
     const verifySession = async () => {
