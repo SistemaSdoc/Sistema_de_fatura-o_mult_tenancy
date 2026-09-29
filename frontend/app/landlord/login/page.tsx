@@ -238,26 +238,7 @@ export default function LandlordLoginPage(): React.ReactElement {
                     </form>
 
                     {/* Divisor e link para registo (caso queiras permitir criação de novas contas super_admin) */}
-                    <div className="relative my-6">
-                        <div className="absolute inset-0 flex items-center">
-                            <div className="w-full border-t" style={{ borderColor: colors.border }}></div>
-                        </div>
-                        <div className="relative flex justify-center text-sm">
-                            <span className="px-4" style={{ backgroundColor: colors.card, color: colors.textSecondary }}>ou</span>
-                        </div>
-                    </div>
-
-                    <div className="text-center">
-                        <Link
-                            href="/landlord/register"
-                            className="group inline-flex items-center gap-2 transition-colors font-medium"
-                            style={{ color: colors.secondary }}
-                        >
-                            <UserPlus size={18} />
-                            Não tem conta? Cadastre-se
-                            <ArrowRight size={16} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </Link>
-                    </div>
+                
                 </div>
 
                 {/* Footer */}
