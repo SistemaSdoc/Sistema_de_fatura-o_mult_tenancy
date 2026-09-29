@@ -1,21 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { Loader2, Mail, MessageSquare, CheckCheck, Clock3, Trash2 } from "lucide-react";
 import type { ThemeColors } from "@/context/ThemeContext";
 import { mensagensEmpresaApi, MensagemEmpresa } from "@/services/mensagensEmpresa";
 import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "../Clientes/ConfirmModal";
+import { friendlyError, WithToast } from "./ConfiguracoesComuns";
 
-interface MensagensTabProps {
+export interface MensagensTabProps extends WithToast {
   colors: ThemeColors;
-  showToast: (message: string, type?: "success" | "error" | "warning" | "info", description?: string) => void;
 }
 
 export function MensagensTab({ colors, showToast }: MensagensTabProps) {
   const [mensagens, setMensagens] = useState<MensagemEmpresa[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  //   FIX #1: ref para evitar loop quando showToast muda a cada render
+  const showToastRef = useRef(showToast);
+  useEffect(() => {
+    showToastRef.current = showToast;
+  }, [showToast]);
 
   const carregarMensagens = useCallback(async (force = false) => {
     if (!force) setLoading(true);
@@ -25,30 +32,35 @@ export function MensagensTab({ colors, showToast }: MensagensTabProps) {
       const response = await mensagensEmpresaApi.listar();
       setMensagens(response.data.mensagens || []);
     } catch (error) {
-      console.error("[MensagensTab] Erro ao carregar mensagens:", error);
-      showToast("Erro ao carregar mensagens do landlord", "error");
+      console.error("[MensagensTab] erro ao carregar:", error);
+      showToastRef.current(
+        "Erro",
+        "error",
+        friendlyError(error, "Não foi possível carregar as mensagens."),
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [showToast]);
+  }, []); //   dependências vazias — estável
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void carregarMensagens();
-    }, 0);
-
-    return () => window.clearTimeout(timer);
+    void carregarMensagens();
   }, [carregarMensagens]);
 
   const marcarComoLida = async (id: string) => {
+    setUpdatingId(id);
     try {
       await mensagensEmpresaApi.marcarComoLida(id);
-      setMensagens((prev) => prev.map((mensagem) => (mensagem.id === id ? { ...mensagem, lida: true } : mensagem)));
-      showToast("Mensagem marcada como lida", "success");
+      setMensagens((prev) =>
+        prev.map((m) => (m.id === id ? { ...m, lida: true } : m)),
+      );
+      showToast("Sucesso", "success", "Mensagem marcada como lida.");
     } catch (error) {
-      console.error("[MensagensTab] Erro ao marcar mensagem:", error);
-      showToast("Erro ao marcar mensagem como lida", "error");
+      console.error("[MensagensTab] erro ao marcar:", error);
+      showToast("Erro", "error", friendlyError(error, "Não foi possível marcar a mensagem como lida."));
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -66,11 +78,11 @@ export function MensagensTab({ colors, showToast }: MensagensTabProps) {
     setDeletingId(mensagemParaEliminar);
     try {
       await mensagensEmpresaApi.eliminar(mensagemParaEliminar);
-      setMensagens((prev) => prev.filter((mensagem) => mensagem.id !== mensagemParaEliminar));
-      showToast("Mensagem eliminada com sucesso", "success");
+      setMensagens((prev) => prev.filter((m) => m.id !== mensagemParaEliminar));
+      showToast("Sucesso", "success", "Mensagem eliminada com sucesso.");
     } catch (error) {
-      console.error("[MensagensTab] Erro ao eliminar mensagem:", error);
-      showToast("Erro ao eliminar mensagem", "error");
+      console.error("[MensagensTab] erro ao eliminar:", error);
+      showToast("Erro", "error", friendlyError(error, "Não foi possível eliminar a mensagem."));
     } finally {
       setDeletingId(null);
       setMensagemParaEliminar(null);
@@ -78,7 +90,7 @@ export function MensagensTab({ colors, showToast }: MensagensTabProps) {
     }
   };
 
-  const naoLidas = mensagens.filter((mensagem) => !mensagem.lida).length;
+  const naoLidas = mensagens.filter((m) => !m.lida).length;
 
   return (
     <div className="space-y-6">
@@ -100,9 +112,17 @@ export function MensagensTab({ colors, showToast }: MensagensTabProps) {
           <Button
             variant="outline"
             onClick={() => void carregarMensagens(true)}
-            disabled={refreshing}
-            style={{ borderColor: colors.border, color: colors.text, backgroundColor: colors.card }}>
-            {refreshing ? <Loader2 size={16} className="mr-2 animate-spin" /> : <MessageSquare size={16} className="mr-2" />}
+            disabled={refreshing || loading}
+            style={{
+              borderColor: colors.border,
+              color: colors.text,
+              backgroundColor: colors.card,
+            }}>
+            {refreshing ? (
+              <Loader2 size={16} className="mr-2 animate-spin" />
+            ) : (
+              <MessageSquare size={16} className="mr-2" />
+            )}
             Atualizar
           </Button>
         </div>
@@ -132,46 +152,72 @@ export function MensagensTab({ colors, showToast }: MensagensTabProps) {
                     {!mensagem.lida && (
                       <span
                         className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                        style={{ backgroundColor: `${colors.primary}18`, color: colors.primary }}>
+                        style={{
+                          backgroundColor: `${colors.primary}18`,
+                          color: colors.primary,
+                        }}>
                         Nova
                       </span>
                     )}
                     {mensagem.lida && (
                       <span
                         className="text-[10px] font-medium px-2 py-0.5 rounded-full"
-                        style={{ backgroundColor: `${colors.success}18`, color: colors.success }}>
+                        style={{
+                          backgroundColor: `${colors.success}18`,
+                          color: colors.success,
+                        }}>
                         Lida
                       </span>
                     )}
                   </div>
-                  <p className="mt-3 whitespace-pre-wrap text-sm leading-6" style={{ color: colors.text }}>
+                  <p
+                    className="mt-3 whitespace-pre-wrap text-sm leading-6"
+                    style={{ color: colors.text }}>
                     {mensagem.mensagem}
                   </p>
-                  <div className="mt-3 flex flex-wrap items-center gap-3 text-xs" style={{ color: colors.textSecondary }}>
+                  <div
+                    className="mt-3 flex flex-wrap items-center gap-3 text-xs"
+                    style={{ color: colors.textSecondary }}>
                     <span className="inline-flex items-center gap-1">
                       <Clock3 size={12} />
-                      {mensagem.created_at ? new Date(mensagem.created_at).toLocaleString("pt-PT") : "Sem data"}
+                      {mensagem.created_at
+                        ? new Date(mensagem.created_at).toLocaleString("pt-PT")
+                        : "Sem data"}
                     </span>
                     {mensagem.remetente_email && <span>{mensagem.remetente_email}</span>}
                   </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  {!mensagem.lida ? (
+                  {!mensagem.lida && (
                     <Button
                       onClick={() => void marcarComoLida(mensagem.id)}
+                      disabled={updatingId === mensagem.id || deletingId === mensagem.id}
                       variant="outline"
-                      style={{ borderColor: colors.border, color: colors.text, backgroundColor: colors.card }}>
-                      <CheckCheck size={16} className="mr-2" />
-                      Marcar lida
+                      style={{
+                        borderColor: colors.border,
+                        color: colors.text,
+                        backgroundColor: colors.card,
+                      }}>
+                      {updatingId === mensagem.id ? (
+                        <Loader2 size={16} className="mr-2 animate-spin" />
+                      ) : (
+                        <CheckCheck size={16} className="mr-2" />
+                      )}
+                      {updatingId === mensagem.id ? "A marcar..." : "Marcar lida"}
                     </Button>
-                  ) : null}
+                  )}
                   <Button
-                    onClick={() => void eliminarMensagem(mensagem.id)}
+                    onClick={() => eliminarMensagem(mensagem.id)}
+                    disabled={deletingId === mensagem.id || updatingId === mensagem.id}
                     variant="outline"
                     className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20"
                     style={{ borderColor: colors.border }}>
-                    <Trash2 size={16} className="mr-2" />
+                    {deletingId === mensagem.id ? (
+                      <Loader2 size={16} className="mr-2 animate-spin" />
+                    ) : (
+                      <Trash2 size={16} className="mr-2" />
+                    )}
                     Eliminar
                   </Button>
                 </div>
@@ -180,7 +226,9 @@ export function MensagensTab({ colors, showToast }: MensagensTabProps) {
           ))}
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed p-8 text-center" style={{ borderColor: colors.border, backgroundColor: colors.card }}>
+        <div
+          className="rounded-xl border border-dashed p-8 text-center"
+          style={{ borderColor: colors.border, backgroundColor: colors.card }}>
           <MessageSquare className="mx-auto mb-3" style={{ color: colors.textSecondary }} />
           <p style={{ color: colors.textSecondary }}>Ainda não há mensagens do landlord.</p>
         </div>
@@ -195,12 +243,12 @@ export function MensagensTab({ colors, showToast }: MensagensTabProps) {
         }}
         onConfirm={() => void confirmarEliminacao()}
         title="Eliminar Mensagem"
-        message="Tem certeza que deseja eliminar esta mensagem? Esta ação não poderá ser desfeita e removerá a mensagem do seu painel."
+        message="Tem certeza que deseja eliminar esta mensagem? Esta ação não poderá ser desfeita."
         loading={deletingId !== null}
         confirmText="Eliminar"
         cancelText="Cancelar"
         type="danger"
-        colors={colors as any}
+        colors={colors}
       />
     </div>
   );

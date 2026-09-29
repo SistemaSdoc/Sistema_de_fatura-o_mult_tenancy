@@ -1,18 +1,54 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { Plus, Search, RefreshCcw, Loader2, User, UserCheck, UserX, MoreVertical, Pencil, Trash2, AlertCircle } from "lucide-react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import {
+  Plus,
+  Search,
+  RefreshCcw,
+  Loader2,
+  User,
+  UserCheck,
+  UserX,
+  MoreVertical,
+  Pencil,
+  Trash2,
+  AlertCircle,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { fetchUsers, deleteUser, User as UserType } from "@/services/User";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { ThemeColors, initials, RoleBadge, WithToast } from "./ConfiguracoesComuns";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ThemeColors, initials, RoleBadge, WithToast, friendlyError } from "./ConfiguracoesComuns";
 import { UserModal } from "./UserModal";
 
 export interface UsuariosTabProps extends WithToast {
@@ -21,7 +57,6 @@ export interface UsuariosTabProps extends WithToast {
 }
 
 export function UsuariosTab({ colors, currentUser, showToast }: UsuariosTabProps) {
-  // Inicializa com array vazio
   const [users, setUsers] = useState<UserType[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -32,41 +67,37 @@ export function UsuariosTab({ colors, currentUser, showToast }: UsuariosTabProps
   const [deleteConfirm, setDeleteConfirm] = useState<UserType | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // FIX: usar ref para o showToast — evita loop infinito
+  const showToastRef = useRef(showToast);
+  useEffect(() => {
+    showToastRef.current = showToast;
+  }, [showToast]);
+
   const loadUsers = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
       const data = await fetchUsers();
-      // ✅ Garantir que é um array
       setUsers(Array.isArray(data) ? data : []);
-    } catch (err: unknown) {
-      const errObj = err as {
-        response?: { data?: { message?: string }; status?: number };
-        message?: string;
-      };
-      const status = errObj?.response?.status;
-      const msg =
-        status === 403
-          ? "Sem permissão para listar utilizadores"
-          : status === 401
-            ? "Sessão expirada — faça login novamente"
-            : (errObj?.response?.data?.message ?? errObj?.message ?? "Erro ao carregar utilizadores");
+    } catch (err) {
+      console.error("[UsuariosTab] erro ao carregar:", err);
+      const msg = friendlyError(err, "Não foi possível carregar os utilizadores.");
       setLoadError(msg);
-      showToast("Erro", "error", msg);
-      // ✅ Garantir que users fica como array vazio em caso de erro
+      showToastRef.current("Erro", "error", msg);
       setUsers([]);
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, []); // sem dependências — estável
 
   useEffect(() => {
     void loadUsers();
   }, [loadUsers]);
 
-  // ✅ Garantir que users é sempre um array antes de filter
-  const filtered = (users || []).filter((u) => {
-    const matchSearch = u.name?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase());
+  const filtered = users.filter((u) => {
+    const matchSearch =
+      u.name?.toLowerCase().includes(search.toLowerCase()) ||
+      u.email?.toLowerCase().includes(search.toLowerCase());
     const matchRole = roleFilter === "todos" || u.role === roleFilter;
     return matchSearch && matchRole;
   });
@@ -75,10 +106,12 @@ export function UsuariosTab({ colors, currentUser, showToast }: UsuariosTabProps
     setEditTarget(null);
     setModalOpen(true);
   };
+
   const openEdit = (u: UserType) => {
     setEditTarget(u);
     setModalOpen(true);
   };
+
   const closeModal = () => {
     setModalOpen(false);
     setEditTarget(null);
@@ -92,9 +125,9 @@ export function UsuariosTab({ colors, currentUser, showToast }: UsuariosTabProps
       showToast("Sucesso", "success", "Utilizador removido com sucesso!");
       setDeleteConfirm(null);
       void loadUsers();
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      showToast("Erro", "error", msg ?? "Erro ao remover utilizador");
+    } catch (err) {
+      console.error("[UsuariosTab] erro ao remover:", err);
+      showToast("Erro", "error", friendlyError(err, "Erro ao remover o utilizador."));
     } finally {
       setDeleting(false);
     }
@@ -107,18 +140,28 @@ export function UsuariosTab({ colors, currentUser, showToast }: UsuariosTabProps
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
               <CardTitle style={{ color: colors.secondary }}>Gestão de Utilizadores</CardTitle>
-              <CardDescription style={{ color: colors.textSecondary }}>Crie, edite e gerencie os utilizadores do sistema</CardDescription>
+              <CardDescription style={{ color: colors.textSecondary }}>
+                Crie, edite e gerencie os utilizadores do sistema
+              </CardDescription>
             </div>
-            <Button type="button" onClick={openCreate} className="gap-2 text-white" style={{ backgroundColor: colors.primary }}>
+            <Button
+              type="button"
+              onClick={openCreate}
+              className="gap-2 text-white"
+              style={{ backgroundColor: colors.primary }}>
               <Plus className="w-4 h-4" /> Novo Utilizador
             </Button>
           </div>
         </CardHeader>
 
         <CardContent className="space-y-4">
+          {/* Filtros */}
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: colors.textSecondary }} />
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4"
+                style={{ color: colors.textSecondary }}
+              />
               <Input
                 placeholder="Buscar por nome ou e-mail..."
                 value={search}
@@ -128,23 +171,22 @@ export function UsuariosTab({ colors, currentUser, showToast }: UsuariosTabProps
               />
             </div>
             <Select value={roleFilter} onValueChange={setRoleFilter}>
-              <SelectTrigger className="w-full sm:w-44" style={{ borderColor: colors.border, color: colors.text }}>
+              <SelectTrigger
+                className="w-full sm:w-44"
+                style={{ borderColor: colors.border, color: colors.text }}>
                 <SelectValue placeholder="Função" />
               </SelectTrigger>
-              <SelectContent
-                style={{
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                }}>
+              <SelectContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                 <SelectItem value="todos">Todos</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>
                 <SelectItem value="operador">Operador</SelectItem>
                 <SelectItem value="gestor">Gestor de Stock</SelectItem>
-                <SelectItem value="contablista">Contabilista</SelectItem>
+                <SelectItem value="contabilista">Contabilista</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
+          {/* Erro ao carregar */}
           {loadError && !loading && (
             <div
               className="flex items-center gap-3 p-4 border rounded-lg"
@@ -155,7 +197,7 @@ export function UsuariosTab({ colors, currentUser, showToast }: UsuariosTabProps
               <AlertCircle className="w-5 h-5 shrink-0" style={{ color: colors.danger }} />
               <div className="flex-1">
                 <p className="text-sm font-medium" style={{ color: colors.danger }}>
-                  Erro ao carregar utilizadores
+                  Não foi possível carregar
                 </p>
                 <p className="text-xs mt-0.5" style={{ color: colors.textSecondary }}>
                   {loadError}
@@ -172,6 +214,7 @@ export function UsuariosTab({ colors, currentUser, showToast }: UsuariosTabProps
             </div>
           )}
 
+          {/* Lista */}
           {loading ? (
             <div className="flex justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin" style={{ color: colors.primary }} />
@@ -179,7 +222,11 @@ export function UsuariosTab({ colors, currentUser, showToast }: UsuariosTabProps
           ) : !loadError && filtered.length === 0 ? (
             <div className="text-center py-12" style={{ color: colors.textSecondary }}>
               <User className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p>{(users || []).length === 0 ? "Nenhum utilizador registado" : "Nenhum utilizador encontrado"}</p>
+              <p>
+                {users.length === 0
+                  ? "Nenhum utilizador registado"
+                  : "Nenhum utilizador encontrado"}
+              </p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -206,7 +253,9 @@ export function UsuariosTab({ colors, currentUser, showToast }: UsuariosTabProps
                       </Avatar>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-medium text-sm truncate" style={{ color: colors.text }}>
+                          <p
+                            className="font-medium text-sm truncate"
+                            style={{ color: colors.text }}>
                             {u.name}
                           </p>
                           {u.id === currentUser?.id && (
@@ -247,21 +296,25 @@ export function UsuariosTab({ colors, currentUser, showToast }: UsuariosTabProps
                       </div>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button type="button" variant="ghost" size="icon" className="h-8 w-8" style={{ color: colors.textSecondary }}>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            style={{ color: colors.textSecondary }}>
                             <MoreVertical className="w-4 h-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent
                           align="end"
-                          style={{
-                            backgroundColor: colors.card,
-                            borderColor: colors.border,
-                          }}>
+                          style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                           <DropdownMenuItem onClick={() => openEdit(u)} style={{ color: colors.text }}>
                             <Pencil className="w-4 h-4 mr-2" /> Editar
                           </DropdownMenuItem>
                           {u.id !== currentUser?.id && (
-                            <DropdownMenuItem onClick={() => setDeleteConfirm(u)} style={{ color: colors.danger }}>
+                            <DropdownMenuItem
+                              onClick={() => setDeleteConfirm(u)}
+                              style={{ color: colors.danger }}>
                               <Trash2 className="w-4 h-4 mr-2" /> Remover
                             </DropdownMenuItem>
                           )}
@@ -276,7 +329,7 @@ export function UsuariosTab({ colors, currentUser, showToast }: UsuariosTabProps
 
           {!loading && !loadError && (
             <p className="text-xs text-right" style={{ color: colors.textSecondary }}>
-              {filtered.length} de {(users || []).length} utilizador(es)
+              {filtered.length} de {users.length} utilizador(es)
             </p>
           )}
         </CardContent>
@@ -294,14 +347,15 @@ export function UsuariosTab({ colors, currentUser, showToast }: UsuariosTabProps
       <Dialog
         open={!!deleteConfirm}
         onOpenChange={(v) => {
-          if (!v) setDeleteConfirm(null);
+          if (!v && !deleting) setDeleteConfirm(null);
         }}>
         <DialogContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
           <DialogHeader>
             <DialogTitle style={{ color: colors.danger }}>Remover utilizador</DialogTitle>
             <DialogDescription style={{ color: colors.textSecondary }}>
-              Tem certeza que deseja remover <strong style={{ color: colors.text }}>{deleteConfirm?.name}</strong>? Esta ação não pode ser
-              desfeita.
+              Tem certeza que deseja remover{" "}
+              <strong style={{ color: colors.text }}>{deleteConfirm?.name}</strong>? Esta ação não
+              pode ser desfeita.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -318,10 +372,14 @@ export function UsuariosTab({ colors, currentUser, showToast }: UsuariosTabProps
               onClick={() => void handleDelete()}
               disabled={deleting}
               style={{ backgroundColor: colors.danger, color: "white" }}>
-              {deleting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
-              {deleting ? "Removendo..." : "Remover"}
+              {deleting ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Trash2 className="w-4 h-4 mr-2" />
+              )}
+              {deleting ? "A remover..." : "Remover"}
             </Button>
-          </DialogFooter> 
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

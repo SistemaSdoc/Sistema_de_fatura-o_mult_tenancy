@@ -4,11 +4,9 @@ import { useRouter } from 'next/navigation';
 import React, { useState, useEffect, useRef } from "react";
 import {
   Building2, Hash, AtSign, Phone, MapPin, Globe,
-  Loader2, Camera, Upload, ImageIcon,
-  Crown, Calendar, CreditCard, AlertCircle, CheckCircle, XCircle
+  Loader2, Camera, Upload, ImageIcon
 } from "lucide-react";
 import { useAuth } from "@/context/authprovider";
-import { subscricaoService } from '@/services/subscricoes';
 import { toast } from "sonner";
 import { api } from "@/services/axios";
 import { Button } from "@/components/ui/button";
@@ -20,6 +18,54 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ThemeColors, FormInput, ReadonlyField, SaveButton, getLogoUrl, WithToast } from "./ConfiguracoesComuns";
 
+/* ------------------------------------------------------------------ */
+/*  Helper: mensagens amigáveis (nunca expõe detalhes técnicos)        */
+/* ------------------------------------------------------------------ */
+type ApiLikeError = {
+  response?: { status?: number; data?: { message?: string; errors?: Record<string, string[]> } };
+  code?: string;
+  message?: string;
+};
+
+function friendlyError(error: unknown, fallback = "Ocorreu um erro. Tente novamente."): string {
+  const err = error as ApiLikeError;
+
+  // Sem resposta → problema de rede
+  if (!err?.response) {
+    if (err?.code === "ECONNABORTED") return "O pedido demorou demasiado. Tente novamente.";
+    return "Sem ligação ao servidor. Verifique a sua internet.";
+  }
+
+  const status = err.response.status;
+
+  switch (status) {
+    case 400: return "Dados inválidos. Verifique os campos e tente novamente.";
+    case 401: return "A sua sessão expirou. Inicie sessão novamente.";
+    case 403: return "Não tem permissão para realizar esta ação.";
+    case 404: return "Informação não encontrada.";
+    case 409: return "Os dados foram alterados por outro utilizador. Recarregue a página.";
+    case 422: {
+      const errors = err.response.data?.errors;
+      if (errors) {
+        const first = Object.values(errors)[0]?.[0];
+        if (first) return first;
+      }
+      return "Alguns campos não estão corretos. Verifique e tente novamente.";
+    }
+    case 429: return "Demasiados pedidos. Aguarde um momento e tente novamente.";
+    case 500:
+    case 502:
+    case 503:
+    case 504:
+      return "Serviço temporariamente indisponível. Tente novamente dentro de instantes.";
+    default:
+      return fallback;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Uploader de logo                                                   */
+/* ------------------------------------------------------------------ */
 const LogoUploader = ({
   colors,
   currentLogo,
@@ -43,11 +89,11 @@ const LogoUploader = ({
 
   const handleFile = async (file: File) => {
     if (!file.type.startsWith("image/")) {
-      showToast("Erro", "error", "Selecione uma imagem válida");
+      showToast("Aviso", "warning", "Selecione uma imagem válida (PNG, JPG ou GIF).");
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
-      showToast("Erro", "error", "Imagem deve ter no máximo 2MB");
+      showToast("Aviso", "warning", "A imagem deve ter no máximo 2MB.");
       return;
     }
 
@@ -64,9 +110,9 @@ const LogoUploader = ({
       });
       if (!response.data.success) throw new Error("Upload falhou");
       onUploaded(response.data.logo_url);
-      showToast("Sucesso", "success", "Logo atualizado com sucesso!");
-    } catch {
-      showToast("Erro", "error", "Erro ao fazer upload do logo");
+    } catch (err) {
+      console.error("[LogoUploader] erro no upload:", err);
+      showToast("Erro", "error", friendlyError(err, "Não foi possível enviar o logótipo."));
       setPreview(getLogoUrl(currentLogo));
     } finally {
       setUploading(false);
@@ -150,17 +196,22 @@ const LogoUploader = ({
   );
 };
 
+/* ------------------------------------------------------------------ */
+/*  Componente principal                                               */
+/* ------------------------------------------------------------------ */
 export interface EmpresaTabProps extends WithToast {
   colors: ThemeColors;
 }
 
+type Section = "dados" | "fiscal" | "bancario";
+
 export function EmpresaTab({ colors, showToast }: EmpresaTabProps) {
   const { user, logout, refreshUser } = useAuth();
   const empresa = user?.empresa;
-  const assinatura = user?.empresa?.subscricao || null;
   const router = useRouter();
 
-  const [loading, setLoading] = useState(false);
+  // Loading isolado por secção — só o botão clicado roda
+  const [loadingSection, setLoadingSection] = useState<Section | null>(null);
   const [togglingStatus, setTogglingStatus] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
@@ -201,13 +252,13 @@ export function EmpresaTab({ colors, showToast }: EmpresaTabProps) {
     setForm((p) => ({ ...p, [name]: value }));
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (section: Section) => {
     if (empresa?.status === "suspenso") {
-      showToast("Erro", "error", "Empresa suspensa — não é possível editar os dados.");
+      showToast("Aviso", "warning", "Empresa suspensa — não é possível editar os dados.");
       return;
     }
 
-    setLoading(true);
+    setLoadingSection(section);
     try {
       const response = await api.put("/api/empresa", {
         nome: form.nome,
@@ -224,22 +275,21 @@ export function EmpresaTab({ colors, showToast }: EmpresaTabProps) {
 
       if (response.data.success) {
         await refreshUser();
-        showToast("Sucesso", "success", "Dados da empresa atualizados com sucesso!");
+        showToast("Sucesso", "success", "Dados atualizados com sucesso!");
       } else {
-        showToast("Erro", "error", "Resposta inválida do servidor");
+        showToast("Aviso", "warning", "Não foi possível guardar. Tente novamente.");
       }
-    } catch (error: unknown) {
-      const apiError = error as { response?: { data?: { message?: string } } };
-      console.error(error);
-      showToast("Erro", "error", apiError.response?.data?.message || "Erro ao atualizar empresa");
+    } catch (error) {
+      console.error("[EmpresaTab] erro ao guardar:", error);
+      showToast("Erro", "error", friendlyError(error, "Erro ao atualizar os dados."));
     } finally {
-      setLoading(false);
+      setLoadingSection(null);
     }
   };
 
   const handleToggleStatus = async () => {
     if (!empresa?.id) {
-      showToast("Erro", "error", "Empresa não identificada");
+      showToast("Erro", "error", "Empresa não identificada.");
       return;
     }
 
@@ -247,31 +297,26 @@ export function EmpresaTab({ colors, showToast }: EmpresaTabProps) {
     try {
       const response = await api.patch(`/api/empresa/toggle-status/`);
 
-      showToast("Sucesso", "success", response.data.message);
+      showToast("Sucesso", "success", response.data.message ?? "Estado atualizado.");
       setShowConfirmDialog(false);
-      setTimeout(async () => {
-        await logout();
-      }, 1500);
 
       if (response.data.redirect_to_login) {
         showToast("Info", "info", "Empresa suspensa. A sessão será encerrada...");
+        setTimeout(async () => {
+          await logout();
+        }, 1500);
       }
 
       await refreshUser();
-    } catch (err: unknown) {
-      const error = err as {
-        response?: {
-          status?: number;
-          data?: { message?: string };
-        };
-      };
+    } catch (err) {
+      console.error("[EmpresaTab] erro ao alternar estado:", err);
+      const status = (err as { response?: { status?: number } }).response?.status;
 
-      if (error.response?.status === 409) {
-        showToast("Erro", "error", "Status foi alterado por outro utilizador. Recarregando...");
+      if (status === 409) {
+        showToast("Aviso", "warning", "O estado foi alterado por outro utilizador. A atualizar...");
         await refreshUser();
       } else {
-        const msg = error.response?.data?.message;
-        showToast("Erro", "error", msg ?? "Erro ao alterar status da empresa");
+        showToast("Erro", "error", friendlyError(err, "Erro ao alterar o estado da empresa."));
       }
     } finally {
       setTogglingStatus(false);
@@ -281,11 +326,12 @@ export function EmpresaTab({ colors, showToast }: EmpresaTabProps) {
   const handleLogoUploaded = async (url: string) => {
     setForm((p) => ({ ...p, logo: url }));
     await refreshUser();
-    showToast("Sucesso", "success", "Logo atualizado com sucesso!");
+    showToast("Sucesso", "success", "Logótipo atualizado com sucesso!");
   };
 
   const empresaStatus = empresa?.status ?? "ativo";
   const isSuspended = empresaStatus === "suspenso";
+  const anyLoading = loadingSection !== null;
 
   return (
     <div className="space-y-6">
@@ -302,7 +348,7 @@ export function EmpresaTab({ colors, showToast }: EmpresaTabProps) {
               </p>
               <span
                 className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-                  isSuspended ? "bg-yellow-600  dark:bg-red-900 " : "bg-yellow-600  dark:bg-yellow-600 "
+                  isSuspended ? "bg-yellow-600 dark:bg-red-900" : "bg-yellow-600 dark:bg-yellow-600"
                 }`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${isSuspended ? "bg-red-500" : "bg-green-500"}`}></span>
                 {isSuspended ? "Suspensa" : "Ativa"}
@@ -328,7 +374,7 @@ export function EmpresaTab({ colors, showToast }: EmpresaTabProps) {
           {isSuspended && (
             <div className="mt-4 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
               <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                ⚠️ Empresa suspensa. Algumas funcionalidades podem estar limitadas.
+               Empresa suspensa. Algumas funcionalidades podem estar limitadas.
               </p>
             </div>
           )}
@@ -342,7 +388,7 @@ export function EmpresaTab({ colors, showToast }: EmpresaTabProps) {
         </CardContent>
       </Card>
 
-      {/* Logo */}
+      {/* Logótipo */}
       <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
         <CardHeader>
           <CardTitle style={{ color: colors.secondary }}>Logótipo</CardTitle>
@@ -420,7 +466,12 @@ export function EmpresaTab({ colors, showToast }: EmpresaTabProps) {
           </div>
         </CardContent>
         <CardFooter className="flex justify-end border-t pt-6" style={{ borderColor: colors.border }}>
-          <SaveButton onClick={() => void handleSubmit()} loading={loading} colors={colors} disabled={isSuspended} />
+          <SaveButton
+            onClick={() => void handleSubmit("dados")}
+            loading={loadingSection === "dados"}
+            colors={colors}
+            disabled={isSuspended || (anyLoading && loadingSection !== "dados")}
+          />
         </CardFooter>
       </Card>
 
@@ -487,7 +538,12 @@ export function EmpresaTab({ colors, showToast }: EmpresaTabProps) {
           )}
         </CardContent>
         <CardFooter className="flex justify-end border-t pt-6" style={{ borderColor: colors.border }}>
-          <SaveButton onClick={() => void handleSubmit()} loading={loading} colors={colors} disabled={isSuspended} />
+          <SaveButton
+            onClick={() => void handleSubmit("fiscal")}
+            loading={loadingSection === "fiscal"}
+            colors={colors}
+            disabled={isSuspended || (anyLoading && loadingSection !== "fiscal")}
+          />
         </CardFooter>
       </Card>
 
@@ -535,7 +591,12 @@ export function EmpresaTab({ colors, showToast }: EmpresaTabProps) {
           </div>
         </CardContent>
         <CardFooter className="flex justify-end border-t pt-6" style={{ borderColor: colors.border }}>
-          <SaveButton onClick={() => void handleSubmit()} loading={loading} colors={colors} disabled={isSuspended} />
+          <SaveButton
+            onClick={() => void handleSubmit("bancario")}
+            loading={loadingSection === "bancario"}
+            colors={colors}
+            disabled={isSuspended || (anyLoading && loadingSection !== "bancario")}
+          />
         </CardFooter>
       </Card>
 

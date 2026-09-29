@@ -1,11 +1,16 @@
 "use client";
 
 import React, { useState } from "react";
-import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { ThemeColors, SaveButton } from "./ConfiguracoesComuns";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { ThemeColors, SaveButton, WithToast } from "./ConfiguracoesComuns";
 
 interface NotifForm {
   email_notificacoes: boolean;
@@ -17,7 +22,11 @@ interface NotifForm {
   alertas_pagamentos: boolean;
 }
 
-export function NotificacoesTab({ colors }: { colors: ThemeColors }) {
+export interface NotificacoesTabProps extends WithToast {
+  colors: ThemeColors;
+}
+
+export function NotificacoesTab({ colors, showToast }: NotificacoesTabProps) {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState<NotifForm>({
     email_notificacoes: true,
@@ -55,7 +64,7 @@ export function NotificacoesTab({ colors }: { colors: ThemeColors }) {
     {
       key: "alertas_pagamentos" as const,
       label: "Alertas de pagamento",
-      desc: "Facturas próximas do vencimento",
+      desc: "Faturas próximas do vencimento",
     },
     {
       key: "relatorios_automaticos" as const,
@@ -69,11 +78,28 @@ export function NotificacoesTab({ colors }: { colors: ThemeColors }) {
     },
   ];
 
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      // TODO: integrar com o backend quando o endpoint existir
+      // await api.put("/api/empresa/notificacoes", form);
+      await new Promise((r) => setTimeout(r, 300));
+
+      showToast("Sucesso", "success", "Preferências guardadas com sucesso.");
+    } catch (err) {
+      console.error("[NotificacoesTab] erro ao guardar:", err);
+      showToast("Erro", "error", "Não foi possível guardar as preferências.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Card style={{ backgroundColor: colors.card, borderColor: colors.border }}>
       <CardHeader>
         <CardTitle style={{ color: colors.secondary }}>Preferências de Notificação</CardTitle>
       </CardHeader>
+
       <CardContent className="space-y-6">
         {[
           { title: "Canais", items: canais },
@@ -96,7 +122,11 @@ export function NotificacoesTab({ colors }: { colors: ThemeColors }) {
                         {item.desc}
                       </p>
                     </div>
-                    <Switch checked={form[item.key]} onCheckedChange={(v) => setForm((p) => ({ ...p, [item.key]: v }))} />
+                    <Switch
+                      checked={form[item.key]}
+                      disabled={loading}
+                      onCheckedChange={(v) => setForm((p) => ({ ...p, [item.key]: v }))}
+                    />
                   </div>
                 ))}
               </div>
@@ -104,17 +134,14 @@ export function NotificacoesTab({ colors }: { colors: ThemeColors }) {
           </React.Fragment>
         ))}
       </CardContent>
+
       <CardFooter className="flex justify-end border-t pt-6" style={{ borderColor: colors.border }}>
         <SaveButton
-          onClick={async () => {
-            setLoading(true);
-            await new Promise((r) => setTimeout(r, 10));
-            toast.success("Preferências salvas!");
-            setLoading(false);
-          }}
+          onClick={() => void handleSave()}
           loading={loading}
+          loadingText="A guardar..."
           colors={colors}>
-          Salvar preferências
+          Guardar preferências
         </SaveButton>
       </CardFooter>
     </Card>

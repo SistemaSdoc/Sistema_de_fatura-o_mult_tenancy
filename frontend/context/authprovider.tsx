@@ -43,6 +43,8 @@ export interface User {
   email: string;
   role: string;
   ativo?: boolean;
+  created_at?: string;
+  ultimo_login?: string;
   oauth_verified?: boolean | null;
   empresa?: Empresa;
 }

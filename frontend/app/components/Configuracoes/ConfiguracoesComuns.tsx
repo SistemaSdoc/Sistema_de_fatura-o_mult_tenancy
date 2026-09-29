@@ -5,6 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 
+/* ------------------------------------------------------------------ */
+/*  Tipos                                                              */
+/* ------------------------------------------------------------------ */
 export interface ThemeColors {
   text: string;
   textSecondary: string;
@@ -23,6 +26,25 @@ export interface ThemeColors {
 
 export type RoleType = "admin" | "operador" | "contablista" | "gestor";
 
+export interface ToastState {
+  message: string;
+  type: "success" | "error" | "warning" | "info";
+  description?: string;
+}
+
+export type ShowToastFn = (
+  message: string,
+  type: "success" | "error" | "warning" | "info",
+  description?: string,
+) => void;
+
+export interface WithToast {
+  showToast: ShowToastFn;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
 export const initials = (name: string) =>
   name
     .split(" ")
@@ -33,29 +55,98 @@ export const initials = (name: string) =>
 
 export const formatDate = (d?: string | null) => (d ? new Date(d).toLocaleString("pt-PT") : "—");
 
+function extractLogoFilename(path: string): string {
+  const clean = path.replace(/\\/g, "/");
+  const match = clean.match(/logos\/([^/]+)$/);
+  return match ? match[1] : clean.split("/").pop() || clean;
+}
+
 export const getLogoUrl = (logo?: string | null): string | null => {
-    if (!logo) return null;
-    if (logo.startsWith('http')) return logo;
+  if (!logo) return null;
+  if (logo.startsWith("http")) return logo;
 
-    // Limpa barras invertidas e normaliza
-    let clean = logo.replace(/\\/g, '/');
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL;
 
-    const match = clean.match(/logos\/([^\/]+)$/);
-    const filename = match ? match[1] : clean.split('/').pop() || clean;
+  // Em produção, a variável é obrigatória. Nunca cair em localhost.
+  if (!baseUrl) {
+    if (process.env.NODE_ENV === "production") {
+      console.error(
+        "[getLogoUrl] NEXT_PUBLIC_API_URL não está definida. Logos não vão carregar corretamente.",
+      );
+      return null;
+    }
+    return `http://localhost:8000/storage/logos/${extractLogoFilename(logo)}`;
+  }
 
-    // URL absoluta apontando para o backend, não para o Next.js
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-    return `${baseUrl}/storage/logos/${filename}`;
+  return `${baseUrl}/storage/logos/${extractLogoFilename(logo)}`;
 };
 
+/* ------------------------------------------------------------------ */
+/*  Mensagens de erro amigáveis                                        */
+/* ------------------------------------------------------------------ */
+type ApiLikeError = {
+  response?: { status?: number; data?: { message?: string; errors?: Record<string, string[]> } };
+  code?: string;
+  message?: string;
+};
+
+export function friendlyError(
+  error: unknown,
+  fallback = "Ocorreu um erro. Tente novamente.",
+): string {
+  const err = error as ApiLikeError;
+
+  if (!err?.response) {
+    if (err?.code === "ECONNABORTED") return "O pedido demorou demasiado. Tente novamente.";
+    return "Sem ligação ao servidor. Verifique a sua internet.";
+  }
+
+  switch (err.response.status) {
+    case 400:
+      return "Dados inválidos. Verifique os campos e tente novamente.";
+    case 401:
+      return "A sua sessão expirou. Inicie sessão novamente.";
+    case 403:
+      return "Não tem permissão para realizar esta ação.";
+    case 404:
+      return "Informação não encontrada.";
+    case 409:
+      return "Os dados foram alterados por outro utilizador. Recarregue a página.";
+    case 422: {
+      const errors = err.response.data?.errors;
+      if (errors) {
+        const first = Object.values(errors)[0]?.[0];
+        if (first) return first;
+      }
+      return "Alguns campos não estão corretos. Verifique e tente novamente.";
+    }
+    case 429:
+      return "Demasiados pedidos. Aguarde um momento.";
+    case 500:
+    case 502:
+    case 503:
+    case 504:
+      return "Serviço temporariamente indisponível. Tente novamente dentro de instantes.";
+    default:
+      return fallback;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Componentes                                                        */
+/* ------------------------------------------------------------------ */
 export const RoleBadge = ({ role, colors }: { role: string; colors: ThemeColors }) => {
   const map: Record<string, { label: string; color: string }> = {
+    super_admin: { label: "Super Admin", color: colors.danger },
     admin: { label: "Admin", color: colors.secondary },
     operador: { label: "Operador", color: colors.secondary },
     contablista: { label: "Contabilista", color: colors.success },
     gestor: { label: "Gestor de Stock", color: colors.success },
+    admin_empresa: { label: "Admin Empresa", color: colors.secondary },
   };
+
   const c = map[role] ?? { label: role, color: colors.textSecondary };
+
   return (
     <Badge
       style={{
@@ -132,7 +223,9 @@ export const ReadonlyField = ({
       {Icon && <Icon className="w-3.5 h-3.5" style={{ color: colors.textSecondary }} />}
       {label}
     </Label>
-    <div className="flex items-center min-h-10 px-3 py-2 border " style={{ borderColor: colors.border, backgroundColor: colors.hover }}>
+    <div
+      className="flex items-center min-h-10 px-3 py-2 border"
+      style={{ borderColor: colors.border, backgroundColor: colors.hover }}>
       {children ?? (
         <span className="text-sm" style={{ color: colors.textSecondary }}>
           {value ?? "—"}
@@ -150,6 +243,8 @@ export const PasswordInput = ({
   show,
   setShow,
   colors,
+  disabled,
+  placeholder,
 }: {
   label: string;
   name: string;
@@ -158,6 +253,8 @@ export const PasswordInput = ({
   show: boolean;
   setShow: (v: boolean) => void;
   colors: ThemeColors;
+  disabled?: boolean;
+  placeholder?: string;
 }) => (
   <div className="space-y-2">
     <Label htmlFor={name} style={{ color: colors.text }}>
@@ -170,8 +267,10 @@ export const PasswordInput = ({
         type={show ? "text" : "password"}
         value={value}
         onChange={onChange}
+        disabled={disabled}
+        placeholder={placeholder}
         style={{
-          backgroundColor: colors.card,
+          backgroundColor: disabled ? colors.hover : colors.card,
           borderColor: colors.border,
           color: colors.text,
         }}
@@ -179,7 +278,8 @@ export const PasswordInput = ({
       <button
         type="button"
         onClick={() => setShow(!show)}
-        className="absolute right-3 top-1/2 -translate-y-1/2"
+        disabled={disabled}
+        className="absolute right-3 top-1/2 -translate-y-1/2 disabled:opacity-50"
         style={{ color: colors.textSecondary }}>
         {show ? <EyeOff size={18} /> : <Eye size={18} />}
       </button>
@@ -191,14 +291,18 @@ export const SaveButton = ({
   onClick,
   loading,
   colors,
-  children = "Salvar alterações",
+  children = "Guardar alterações",
+  loadingText = "A guardar...",
   disabled,
+  icon: Icon = Save,
 }: {
   onClick: () => void | Promise<void>;
   loading: boolean;
   colors: ThemeColors;
   children?: string;
+  loadingText?: string;
   disabled?: boolean;
+  icon?: React.ElementType;
 }) => (
   <Button
     type="button"
@@ -206,26 +310,11 @@ export const SaveButton = ({
     disabled={loading || disabled}
     className="gap-2 text-white"
     style={{ backgroundColor: colors.primary }}>
-    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-    {loading ? "Salvando..." : children}
+    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Icon className="w-4 h-4" />}
+    {loading ? loadingText : children}
   </Button>
 );
 
-/* ── Componente de Notificação Toast (re-exportado do componente centralizado) ── */
+/* ── Re-export do Toast centralizado ── */
 export { ToastNotification } from "@/components/ToastNotification";
 export type { ToastNotificationProps } from "@/components/ToastNotification";
-
-
-/* ── Hook para gerenciar Toast ── */
-export interface ToastState {
-  message: string;
-  type: "success" | "error" | "warning" | "info";
-  description?: string;
-}
-
-export type ShowToastFn = (message: string, type: "success" | "error" | "warning" | "info", description?: string) => void;
-
-/* ── Tipo para componentes que recebem showToast como prop ── */
-export interface WithToast {
-  showToast: ShowToastFn;
-}
