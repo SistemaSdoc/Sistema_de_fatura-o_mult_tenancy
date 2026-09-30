@@ -49,14 +49,14 @@ return new class extends Migration
             $table->string('descricao', 255)->nullable();
 
             // Ano fiscal — OBRIGATÓRIO para o formato angolano
-            $table->year('ano')->nullable(false); // ✅ AGORA OBRIGATÓRIO
+            $table->year('ano')->nullable(false); //   AGORA OBRIGATÓRIO
 
             // Último número emitido — actualizado com lockForUpdate()
             $table->unsignedInteger('ultimo_numero')->default(0);
 
             // Número de dígitos no sufixo numérico
             // Padrão angolano: 4 dígitos (0001, 0542, etc.)
-            $table->unsignedTinyInteger('digitos')->default(4); // ✅ ALTERADO PARA 4
+            $table->unsignedTinyInteger('digitos')->default(4); //   ALTERADO PARA 4
 
             // Controlo
             $table->boolean('ativa')->default(true);

@@ -29,15 +29,15 @@ use Illuminate\Support\Str;
 /**
  * DocumentoFiscalService
  *
- * ✅ SUPORTA AMBOS OS MODOS:
+ *   SUPORTA AMBOS OS MODOS:
  * - 'colectivo' → Shared DB (com tenant_id)
  * - 'singular' → Tenant DB (banco dedicado)
  *
- * ✅ NUMERAÇÃO NO FORMATO ANGOLANO:
+ *   NUMERAÇÃO NO FORMATO ANGOLANO:
  * - {TIPO} {SERIE}/{ANO}/{NUMERO}
  * - Exemplo: FT FT/2026/0001
  *
- * ✅ SÉRIES FISCAS FIXAS POR TIPO DE DOCUMENTO
+ *   SÉRIES FISCAS FIXAS POR TIPO DE DOCUMENTO
  */
 class DocumentoFiscalService
 {
@@ -813,13 +813,33 @@ class DocumentoFiscalService
             } else {
                 $descricaoLower = strtolower($item['descricao']);
                 $palavrasServico = [
-                    'serviço', 'servico', 'consulta', 'consultoria',
-                    'manutenção', 'manutencao', 'instalação', 'instalacao',
-                    'juro', 'juros', 'multa', 'penalidade', 'taxa',
-                    'comissão', 'comissao', 'honorário', 'honorario',
-                    'assessoria', 'planejamento', 'projeto', 'engenharia',
-                    'design', 'desenvolvimento', 'programação', 'suporte',
-                    'treinamento', 'consulting'
+                    'serviço',
+                    'servico',
+                    'consulta',
+                    'consultoria',
+                    'manutenção',
+                    'manutencao',
+                    'instalação',
+                    'instalacao',
+                    'juro',
+                    'juros',
+                    'multa',
+                    'penalidade',
+                    'taxa',
+                    'comissão',
+                    'comissao',
+                    'honorário',
+                    'honorario',
+                    'assessoria',
+                    'planejamento',
+                    'projeto',
+                    'engenharia',
+                    'design',
+                    'desenvolvimento',
+                    'programação',
+                    'suporte',
+                    'treinamento',
+                    'consulting'
                 ];
 
                 $isServico = false;
@@ -1934,7 +1954,7 @@ class DocumentoFiscalService
     }
 
     /* =====================================================================
-     | MÉTODOS PRIVADOS — NUMERAÇÃO ✅
+     | MÉTODOS PRIVADOS — NUMERAÇÃO  
      | ================================================================== */
 
     /**
@@ -2145,104 +2165,103 @@ class DocumentoFiscalService
      | ================================================================== */
 
     /**
-     * Cria séries fiscais padrão se não existirem
+     * Cria séries fiscais padrão se não existirem.
+     * Séries curtas seguindo a prática AGT:
+     *   FT=A, FR=A, FP=P, FA=AD, NC=C, ND=D, RC=R
+     * Idempotente + à prova de race condition (multi-tenant).
      */
-private function criarSeriesPadrao(): void
-{
-    $tenantId = $this->empresa?->id;
-    $modo = $this->getModo();
+    private function criarSeriesPadrao(): void
+    {
+        $tenantId = $this->empresa?->id;
+        $modo = $this->getModo();
+        $ano = now()->year;
 
-    $tipos = ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC', 'FRt'];
-    $ano = now()->year;
+        $tipos = ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC'];
 
-    // Mapa de séries fixas por tipo
-    $seriesMap = [
-        'FT'  => 'FT',
-        'FR'  => 'FR',
-        'FP'  => 'FP',
-        'FA'  => 'FA',
-        'NC'  => 'NC',
-        'ND'  => 'ND',
-        'RC'  => 'RC',
-        'FRt' => 'FRT',
-    ];
-
-    $temTenantId = $this->isColectivo() && $tenantId && $this->colunaExiste('series_fiscais', 'tenant_id');
-
-    foreach ($tipos as $tipo) {
-        $serieNome = $seriesMap[$tipo];
-
-        // Verifica se já existe uma série com o nome correcto para este tipo + tenant
-        $queryExisteCorreta = $this->serieFiscalModel()
-            ->where('tipo_documento', $tipo)
-            ->where('serie', $serieNome)
-            ->where('ano', $ano);
-
-        if ($temTenantId) {
-            $queryExisteCorreta = $queryExisteCorreta->where('tenant_id', $tenantId);
-        }
-
-        // Se já existe a série correcta, pula
-        if ($queryExisteCorreta->exists()) {
-            continue;
-        }
-
-        // Senão, procura se existe alguma série para este tipo (mesmo com nome diferente)
-        $queryQualquer = $this->serieFiscalModel()
-            ->where('tipo_documento', $tipo)
-            ->where('ano', $ano);
-
-        if ($temTenantId) {
-            $queryQualquer = $queryQualquer->where('tenant_id', $tenantId);
-        }
-
-        $serieExistente = $queryQualquer->first();
-
-        if ($serieExistente) {
-            // Se existe mas com nome diferente, vamos desativá-la e criar a nova
-            Log::warning('[DocumentoFiscalService] Substituindo série antiga', [
-                'tipo' => $tipo,
-                'serie_antiga' => $serieExistente->serie,
-                'serie_nova' => $serieNome,
-                'id' => $serieExistente->id,
-            ]);
-
-            $serieExistente->update(['ativa' => false, 'padrao' => false]);
-            // O ultimo_numero da antiga pode ser aproveitado na nova? Opcional.
-            $ultimoNumero = $serieExistente->ultimo_numero;
-        } else {
-            $ultimoNumero = 0;
-        }
-
-        // Criar a nova série com o nome fixo
-        $dados = [
-            'id' => Str::uuid(),
-            'tipo_documento' => $tipo,
-            'serie' => $serieNome,
-            'descricao' => "Série padrão — " . $this->getTipoDocumentoNome($tipo),
-            'digitos' => 4,
-            'ultimo_numero' => $ultimoNumero, // mantém a sequência
-            'ativa' => true,
-            'padrao' => true,
-            'ano' => $ano,
-            'valida_agt' => !in_array($tipo, ['FP', 'RC']),
+        //  SÉRIES CURTAS (prática AGT)
+        $seriesMap = [
+            'FT' => 'A',
+            'FR' => 'A',
+            'FP' => 'P',
+            'FA' => 'AD',
+            'NC' => 'C',
+            'ND' => 'D',
+            'RC' => 'R',
         ];
 
-        if ($temTenantId) {
-            $dados['tenant_id'] = $tenantId;
+        $temTenantId = $this->isColectivo()
+            && $tenantId
+            && $this->colunaExiste('series_fiscais', 'tenant_id');
+
+        foreach ($tipos as $tipo) {
+            $serieNome = $seriesMap[$tipo];
+
+            // 1️⃣ Chave lógica
+            $chave = [
+                'tipo_documento' => $tipo,
+                'serie'          => $serieNome,
+                'ano'            => $ano,
+            ];
+            if ($temTenantId) {
+                $chave['tenant_id'] = $tenantId;
+            }
+
+            // 2️⃣ Desativar séries antigas (nomes antigos) do MESMO tenant
+            $queryAntiga = $this->serieFiscalModel()
+                ->where('tipo_documento', $tipo)
+                ->where('ano', $ano)
+                ->where('serie', '!=', $serieNome);
+
+            if ($temTenantId) {
+                $queryAntiga = $queryAntiga->where('tenant_id', $tenantId);
+            }
+
+            $seriesAntigas = $queryAntiga->get();
+
+            foreach ($seriesAntigas as $antiga) {
+                if ($antiga->ativa || $antiga->padrao) {
+                    Log::warning('[DocumentoFiscalService] Desativando série antiga', [
+                        'tipo'         => $tipo,
+                        'serie_antiga' => $antiga->serie,
+                        'serie_nova'   => $serieNome,
+                        'tenant_id'    => $tenantId,
+                        'modo'         => $modo,
+                    ]);
+
+                    $antiga->update([
+                        'ativa'  => false,
+                        'padrao' => false,
+                    ]);
+                }
+            }
+
+            // 3️⃣ Idempotente + à prova de race condition
+            try {
+                $this->serieFiscalModel()->firstOrCreate(
+                    $chave,
+                    [
+                        'id'            => (string) Str::uuid(),
+                        'descricao'     => "Série padrão — " . $this->getTipoDocumentoNome($tipo),
+                        'digitos'       => 4,
+                        'ultimo_numero' => 0,
+                        'ativa'         => true,
+                        'padrao'        => true,
+                        'valida_agt'    => !in_array($tipo, ['FP', 'RC']),
+                    ]
+                );
+            } catch (\Illuminate\Database\QueryException $e) {
+                if ($e->getCode() === '23000') {
+                    Log::info('[DocumentoFiscalService] Série já criada por outro pedido (race)', [
+                        'tipo'      => $tipo,
+                        'serie'     => $serieNome,
+                        'tenant_id' => $tenantId,
+                    ]);
+                } else {
+                    throw $e;
+                }
+            }
         }
-
-        $this->serieFiscalModel()->create($dados);
-
-        Log::info('[DocumentoFiscalService] Série padrão criada (substituição)', [
-            'tenant_id' => $tenantId,
-            'tipo' => $tipo,
-            'serie' => $serieNome,
-            'ano' => $ano,
-            'modo' => $modo,
-        ]);
     }
-}
 
     /**
      * Obtém o nome do tipo de documento em português
