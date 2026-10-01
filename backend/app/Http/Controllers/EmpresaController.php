@@ -448,10 +448,9 @@ BUILDING;
                         'Empresa'    => $empresa->nome,
                         'NIF'        => $empresa->nif,
                         'Subdomínio' => $empresa->subdomain,
-                        'Modo'       => $empresa->modo,
                         'Admin'      => $admin->email,
                     ],
-                    url: "/landlord/empresas/{$empresa->id}",
+                    url: "/dashboard",
                     empresaId: $empresa->id,
                 );
             }
@@ -1148,7 +1147,7 @@ BUILDING;
                     'Status anterior' => $statusAnterior,
                     'Status novo'     => $novoStatus,
                 ],
-                url: "/landlord/empresas/{$empresa->id}",
+                url: "/dashboard",
                 empresaId: $empresa->id,
             );
         }

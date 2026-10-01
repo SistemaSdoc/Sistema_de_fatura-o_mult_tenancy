@@ -159,7 +159,7 @@ class FreelancerController extends Controller
             NotificacaoService::enviar(
                 userId: $landlordUser->id,
                 titulo: 'Empresa criada com sucesso',
-                mensagem: "A sua empresa \"{$empresa->nome}\" foi criada. Já pode começar a emitir faturas.",
+                mensagem: "A sua empresa \"{$empresa->nome}\" foi criada. Já pode começar usar o sistema e emitir faturas.",
                 tipo: 'success',
                 tipoEvento: 'empresa_freelancer_criada',
                 dados: [
@@ -181,7 +181,6 @@ class FreelancerController extends Controller
                     'Empresa'    => $empresa->nome,
                     'Subdomínio' => $empresa->subdomain,
                     'Email'      => $landlordUser->email,
-                    'Modo'       => $modo,
                 ],
                 url: "/login/",
                 empresaId: $empresa->id,
