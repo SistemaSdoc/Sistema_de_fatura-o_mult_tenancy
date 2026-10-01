@@ -19,14 +19,13 @@ import {
   User,
   CreditCard,
   Users,
-  BarChart3,
 } from "lucide-react";
 import { LucideIcon } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useLandlordAuth } from "@/context/LandlordAuthContext";
 import { useTheme, useThemeColors } from "@/context/ThemeContext";
 import { toast } from "sonner";
-import { notificacoesApi } from "@/services/notificacao";
+import { notificacoesApi, type NotificacaoAPI } from "@/services/notificacao";
 
 interface DropdownLink {
   label: string;
@@ -42,17 +41,27 @@ interface MenuItem {
   isGroup?: boolean;
 }
 
-interface Notificacao {
-  id: string;
-  titulo: string;
-  mensagem: string;
-  tipo: "info" | "warning" | "danger";
-  lida: boolean;
-  created_at: string;
-}
-
 interface MainLandlordProps {
   children: ReactNode;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Helper: cor por tipo de notificação                                */
+/* ------------------------------------------------------------------ */
+function corPorTipo(
+  tipo: NotificacaoAPI["tipo"],
+  colors: ReturnType<typeof useThemeColors>
+): string {
+  switch (tipo) {
+    case "danger":
+      return colors.danger;
+    case "warning":
+      return colors.warning;
+    case "success":
+      return colors.success;
+    default:
+      return colors.primary;
+  }
 }
 
 export default function MainLandlord({ children }: MainLandlordProps) {
@@ -85,8 +94,8 @@ export default function MainLandlord({ children }: MainLandlordProps) {
   const userEmail = user?.email || "";
   const userInitial = userName.charAt(0).toUpperCase();
 
-  const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
-  const totalNotificacoes = notificacoes.length; // backend já devolve só não lidas
+  const [notificacoes, setNotificacoes] = useState<NotificacaoAPI[]>([]);
+  const totalNotificacoes = notificacoes.length; // endpoint /nao-lidas só devolve não lidas
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ==================== BUSCAR NOTIFICAÇÕES ====================
@@ -121,10 +130,18 @@ export default function MainLandlord({ children }: MainLandlordProps) {
   const marcarTodasLidas = useCallback(async () => {
     try {
       await notificacoesApi.marcarTodasComoLidas();
-      // Limpa a lista toda imediatamente
       setNotificacoes([]);
     } catch (err) {
       console.error("[MainLandlord] Erro ao marcar todas como lidas:", err);
+    }
+  }, []);
+
+  const eliminarNotificacao = useCallback(async (id: string) => {
+    try {
+      await notificacoesApi.eliminar(id);
+      setNotificacoes((prev) => prev.filter((n) => n.id !== id));
+    } catch (err) {
+      console.error("[MainLandlord] Erro ao eliminar notificação:", err);
     }
   }, []);
 
@@ -163,7 +180,8 @@ export default function MainLandlord({ children }: MainLandlordProps) {
 
   // ==================== HELPERS ====================
   const closeSidebar = () => setSidebarOpen(false);
-  const toggleDropdown = (label: string) => setDropdownOpen((prev) => ({ ...prev, [label]: !prev[label] }));
+  const toggleDropdown = (label: string) =>
+    setDropdownOpen((prev) => ({ ...prev, [label]: !prev[label] }));
 
   const handleMainItemClick = (item: MenuItem, e: React.MouseEvent) => {
     e.preventDefault();
@@ -233,22 +251,16 @@ export default function MainLandlord({ children }: MainLandlordProps) {
   };
 
   const isActive = (path: string) => pathname === path;
-const isParentActive = (item: MenuItem) => {
-  // Rota exata sempre conta
-  if (pathname === item.path) return true;
+  const isParentActive = (item: MenuItem) => {
+    if (pathname === item.path) return true;
+    if (item.links.some((link) => pathname === link.path)) return true;
+    if (item.isGroup) {
+      return pathname?.startsWith(item.path + "/") ?? false;
+    }
+    return false;
+  };
 
-  // Se tiver sublinks, verifica se algum está ativo
-  if (item.links.some((link) => pathname === link.path)) return true;
-
-  // Só aplica startsWith a itens que são grupos (têm sublinks)
-  if (item.isGroup) {
-    return pathname?.startsWith(item.path + "/") ?? false;
-  }
-
-  return false;
-};
-
-  // ==================== MENU (atualizado com as novas páginas) ====================
+  // ==================== MENU ====================
   const menuItems: MenuItem[] = [
     { label: "Dashboard", icon: Home, path: "/landlord/dashboard", links: [], isGroup: false },
     { label: "Empresas", icon: Building, path: "/landlord/dashboard/empresas", links: [], isGroup: false },
@@ -283,10 +295,12 @@ const isParentActive = (item: MenuItem) => {
 
   return (
     <div className="flex w-screen h-screen overflow-hidden" style={{ backgroundColor: colors.background }}>
-      {/* ==================== BACKDROP MOBILE (novo) ==================== */}
-      {isMobile && sidebarOpen && <div className="fixed inset-0 z-30 bg-black/50 md:hidden" onClick={closeSidebar} aria-hidden="true" />}
+      {/* BACKDROP MOBILE */}
+      {isMobile && sidebarOpen && (
+        <div className="fixed inset-0 z-30 bg-black/50 md:hidden" onClick={closeSidebar} aria-hidden="true" />
+      )}
 
-      {/* ==================== SIDEBAR ==================== */}
+      {/* SIDEBAR */}
       <aside
         className="fixed left-0 top-0 z-40 flex flex-col h-screen transition-all duration-300 border-r md:relative md:z-0"
         style={{
@@ -298,10 +312,16 @@ const isParentActive = (item: MenuItem) => {
         {!isMobile && (
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="absolute -right-3 top-8 z-50 p-1.5 text-white transition-all duration-200 hover:scale-110 active:scale-95  shadow-md"
+            className="absolute -right-3 top-8 z-50 p-1.5 text-white transition-all duration-200 hover:scale-110 active:scale-95 shadow-md"
             style={{ backgroundColor: colors.primary }}
             title={sidebarOpen ? "Fechar sidebar" : "Abrir sidebar"}>
-            <ChevronLeft size={14} style={{ transform: sidebarOpen ? "rotate(0)" : "rotate(180deg)", transition: "transform 0.3s" }} />
+            <ChevronLeft
+              size={14}
+              style={{
+                transform: sidebarOpen ? "rotate(0)" : "rotate(180deg)",
+                transition: "transform 0.3s",
+              }}
+            />
           </button>
         )}
 
@@ -314,12 +334,10 @@ const isParentActive = (item: MenuItem) => {
             {userInitial || "A"}
           </div>
 
-          {/* Texto "Faturaja" só aparece quando o sidebar está aberto */}
           {sidebarOpen && (
             <div className="flex-1 min-w-0 overflow-hidden whitespace-nowrap transition-opacity duration-200">
               <h1 className="truncate font-bold text-3xl md:text-1xl lg:text-1xl" style={{ color: colors.primary }}>
-                Fatura
-                <span style={{ color: colors.secondary }}>Ja</span>
+                Fatura<span style={{ color: colors.secondary }}>Ja</span>
               </h1>
             </div>
           )}
@@ -356,7 +374,10 @@ const isParentActive = (item: MenuItem) => {
                       role="button"
                       tabIndex={0}>
                       <div className="flex items-center flex-1 gap-3 min-w-0">
-                        <item.icon size={19} style={{ color: active ? colors.blue : colors.secondary, flexShrink: 0 }} />
+                        <item.icon
+                          size={19}
+                          style={{ color: active ? colors.blue : colors.secondary, flexShrink: 0 }}
+                        />
                         {sidebarOpen && (
                           <span className="text-sm font-medium truncate" style={{ color: active ? colors.blue : colors.blue }}>
                             {item.label}
@@ -368,7 +389,10 @@ const isParentActive = (item: MenuItem) => {
                         <div
                           className="ml-1 transition-transform duration-250"
                           style={{ transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
-                          <ChevronDown size={15} style={{ color: active ? colors.blue : colors.textSecondary }} />
+                          <ChevronDown
+                            size={15}
+                            style={{ color: active ? colors.blue : colors.textSecondary }}
+                          />
                         </div>
                       )}
 
@@ -390,9 +414,12 @@ const isParentActive = (item: MenuItem) => {
                       onClick={handleLinkClick}
                       title={!sidebarOpen ? item.label : ""}>
                       <div className="flex items-center flex-1 gap-3 min-w-0">
-                        <item.icon size={19} style={{ color: active ? "white" : colors.secondary, flexShrink: 0 }} />
+                        <item.icon
+                          size={19}
+                          style={{ color: active ? "white" : colors.secondary, flexShrink: 0 }}
+                        />
                         {sidebarOpen && (
-                          <span className="text-sm font-medium truncate" style={{ color: active ? colors.blue : colors.blue}}>
+                          <span className="text-sm font-medium truncate" style={{ color: active ? colors.blue : colors.blue }}>
                             {item.label}
                           </span>
                         )}
@@ -412,10 +439,15 @@ const isParentActive = (item: MenuItem) => {
                                 borderColor: linkActive ? colors.primary : "transparent",
                                 backgroundColor: linkActive ? `${colors.primary}15` : "transparent",
                               }}>
-                              {link.icon && <link.icon size={15} style={{ color: colors.text, flexShrink: 0 }} />}
+                              {link.icon && (
+                                <link.icon size={15} style={{ color: colors.text, flexShrink: 0 }} />
+                              )}
                               <span
                                 className="text-xs truncate"
-                                style={{ color: linkActive ? colors.text : colors.textSecondary, fontWeight: linkActive ? "600" : "400" }}>
+                                style={{
+                                  color: linkActive ? colors.text : colors.textSecondary,
+                                  fontWeight: linkActive ? "600" : "400",
+                                }}>
                                 {link.label}
                               </span>
                             </div>
@@ -435,13 +467,21 @@ const isParentActive = (item: MenuItem) => {
             className="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all duration-200 hover:translate-x-1 active:scale-98 group"
             title={!sidebarOpen ? "Sair" : ""}
             style={{ backgroundColor: `${colors.secondary}10` }}>
-            <LogOut size={19} className=" transition-transform group-hover:scale-110 shrink-0" style={{ color: colors.secondary }} />
-            {sidebarOpen && <span className="text-sm font-medium " style={{ color: colors.secondary }}>Sair</span>}
+            <LogOut
+              size={19}
+              className="transition-transform group-hover:scale-110 shrink-0"
+              style={{ color: colors.secondary }}
+            />
+            {sidebarOpen && (
+              <span className="text-sm font-medium" style={{ color: colors.secondary }}>
+                Sair
+              </span>
+            )}
           </div>
         </div>
       </aside>
 
-      {/* ==================== MAIN CONTENT ==================== */}
+      {/* MAIN CONTENT */}
       <div className="flex flex-col flex-1 w-full overflow-hidden min-w-0">
         <header
           className="flex items-center justify-between gap-2 px-2 h-14 border-b shadow-sm sm:gap-3 sm:px-3 md:h-16 md:px-6 transition-all duration-200 shrink-0"
@@ -465,7 +505,7 @@ const isParentActive = (item: MenuItem) => {
           <div className="flex items-center gap-0.5 sm:gap-1 md:gap-2 shrink-0">
             <button
               onClick={toggleTheme}
-              className="p-2  transition-all hover:scale-110 active:scale-95"
+              className="p-2 transition-all hover:scale-110 active:scale-95"
               style={{ color: colors.text }}
               title="Alternar tema"
               aria-label="Alternar tema">
@@ -476,10 +516,11 @@ const isParentActive = (item: MenuItem) => {
               )}
             </button>
 
+            {/* ==================== NOTIFICAÇÕES ==================== */}
             <div className="relative" ref={notificacoesRef}>
               <button
                 onClick={toggleNotificacoes}
-                className="relative p-2  transition-all hover:scale-110 active:scale-95"
+                className="relative p-2 transition-all hover:scale-110 active:scale-95"
                 style={{ backgroundColor: notificacoesAberto ? colors.hover : "transparent" }}
                 title="Notificações"
                 aria-label="Notificações">
@@ -487,7 +528,11 @@ const isParentActive = (item: MenuItem) => {
                 {totalNotificacoes > 0 && (
                   <span
                     className="absolute -top-1 -right-1 text-[10px] font-bold flex items-center justify-center px-1.5 py-0.5 text-white animate-pulse shadow-md"
-                    style={{ backgroundColor: notificacoes.some((n) => n.tipo === "danger" && !n.lida) ? colors.danger : "#f59e0b" }}>
+                    style={{
+                      backgroundColor: notificacoes.some((n) => n.tipo === "danger")
+                        ? colors.danger
+                        : "#f59e0b",
+                    }}>
                     {totalNotificacoes > 9 ? "9+" : totalNotificacoes}
                   </span>
                 )}
@@ -496,7 +541,9 @@ const isParentActive = (item: MenuItem) => {
               {notificacoesAberto && (
                 <>
                   <div
-                    className={`fixed sm:absolute left-2 right-2 sm:left-auto sm:right-0 top-16 sm:top-auto z-50 sm:mt-2 overflow-hidden border shadow-xl transition-all duration-200 ${panelAnimating ? "opacity-0 scale-95" : "opacity-100 scale-100"}`}
+                    className={`fixed sm:absolute left-2 right-2 sm:left-auto sm:right-0 top-16 sm:top-auto z-50 sm:mt-2 overflow-hidden border shadow-xl transition-all duration-200 ${
+                      panelAnimating ? "opacity-0 scale-95" : "opacity-100 scale-100"
+                    }`}
                     style={{
                       backgroundColor: colors.card,
                       borderColor: colors.border,
@@ -541,23 +588,19 @@ const isParentActive = (item: MenuItem) => {
                           {notificacoes.map((notif, idx) => (
                             <div
                               key={notif.id}
-                              className="p-3 transition-all duration-200 hover:translate-x-1 cursor-pointer group"
+                              className="p-3 transition-all duration-200 hover:translate-x-1 group relative"
                               style={{
                                 animation: `fadeIn 0.2s ease-out ${idx * 0.03}s forwards`,
-                                opacity: notif.lida ? 0.6 : 1,
-                                backgroundColor: notif.lida ? 'transparent' : `${colors.primary}05`,
-                              }}
-                              onClick={() => !notif.lida && marcarLida(notif.id)}>
-                              <div className="flex gap-2 items-start">
+                              }}>
+                              <div
+                                className="flex gap-2 items-start cursor-pointer"
+                                onClick={() => !notif.lida && marcarLida(notif.id)}>
                                 <div
                                   className="p-1.5 rounded-lg shrink-0"
-                                  style={{
-                                    backgroundColor:
-                                      notif.tipo === "danger" ? colors.danger : notif.tipo === "warning" ? colors.warning : colors.primary,
-                                  }}>
+                                  style={{ backgroundColor: corPorTipo(notif.tipo, colors) }}>
                                   <AlertCircle size={14} className="text-white" />
                                 </div>
-                                <div className="min-w-0 flex-1">
+                                <div className="min-w-0 flex-1 pr-6">
                                   <p className="text-xs font-semibold truncate" style={{ color: colors.text }}>
                                     {notif.titulo}
                                   </p>
@@ -565,16 +608,26 @@ const isParentActive = (item: MenuItem) => {
                                     className="text-xs mt-0.5"
                                     style={{ color: colors.textSecondary }}
                                     dangerouslySetInnerHTML={{
-                                      __html: notif.mensagem.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                      __html: notif.mensagem.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>"),
                                     }}
                                   />
-                                  {!notif.lida && (
-                                    <span className="text-[10px] font-medium" style={{ color: colors.secondary }}>
-                                      • Nova
-                                    </span>
-                                  )}
+                                  <p className="text-[10px] mt-1" style={{ color: colors.textSecondary }}>
+                                    {new Date(notif.created_at).toLocaleString("pt-PT")}
+                                  </p>
                                 </div>
                               </div>
+
+                              {/* Botão eliminar (aparece ao hover) */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void eliminarNotificacao(notif.id);
+                                }}
+                                className="absolute top-2 right-2 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="Eliminar"
+                                aria-label="Eliminar notificação">
+                                <X size={12} style={{ color: colors.danger }} />
+                              </button>
                             </div>
                           ))}
                         </div>
@@ -586,6 +639,7 @@ const isParentActive = (item: MenuItem) => {
                         </div>
                       )}
                     </div>
+
                     <div className="p-2 border-t text-center" style={{ borderColor: colors.border }}>
                       <button
                         onClick={async () => {
@@ -605,10 +659,11 @@ const isParentActive = (item: MenuItem) => {
               )}
             </div>
 
+            {/* ==================== MENU UTILIZADOR ==================== */}
             <div className="relative" ref={userMenuRef}>
               <button
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
-                className="flex items-center gap-2 pl-1 sm:pl-2 border-l  transition-all duration-200 hover:scale-105 active:scale-95 px-1 py-1 sm:px-2"
+                className="flex items-center gap-2 pl-1 sm:pl-2 border-l transition-all duration-200 hover:scale-105 active:scale-95 px-1 py-1 sm:px-2"
                 style={{ backgroundColor: userMenuOpen ? colors.hover : "transparent" }}
                 title="Menu do utilizador"
                 aria-label="Menu do utilizador">
@@ -636,7 +691,9 @@ const isParentActive = (item: MenuItem) => {
                       animation: "slideDown 0.2s ease-out forwards",
                     }}
                     onClick={(e) => e.stopPropagation()}>
-                    <div className="p-3 border-b md:p-4" style={{ backgroundColor: `${colors.primary}10`, borderColor: colors.border }}>
+                    <div
+                      className="p-3 border-b md:p-4"
+                      style={{ backgroundColor: `${colors.primary}10`, borderColor: colors.border }}>
                       <div className="flex items-center gap-3">
                         <div
                           className="flex items-center justify-center w-10 h-10 text-sm font-bold text-white rounded-lg flex-shrink-0"
@@ -695,7 +752,7 @@ const isParentActive = (item: MenuItem) => {
         </main>
       </div>
 
-      {/* ==================== SUBMENU MODAL (Sidebar Fechado) ==================== */}
+      {/* SUBMENU MODAL (Sidebar Fechado) */}
       {submenuOpen && itemComSubmenu && (
         <>
           <div
@@ -704,10 +761,26 @@ const isParentActive = (item: MenuItem) => {
             onClick={() => setSubmenuOpen(null)}
           />
           <div
-            className={`fixed ${isMobile ? "bottom-0 left-0 right-0 rounded-b-none" : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"} z-50 max-h-96 overflow-auto border transition-all duration-200 ${modalAnimating ? (isMobile ? "translate-y-full opacity-0" : "scale-95 opacity-0") : isMobile ? "translate-y-0 opacity-100" : "scale-100 opacity-100"}`}
-            style={{ backgroundColor: colors.card, borderColor: colors.border, width: isMobile ? "100%" : "min(400px, 90vw)" }}
+            className={`fixed ${
+              isMobile ? "bottom-0 left-0 right-0 rounded-b-none" : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+            } z-50 max-h-96 overflow-auto border transition-all duration-200 ${
+              modalAnimating
+                ? isMobile
+                  ? "translate-y-full opacity-0"
+                  : "scale-95 opacity-0"
+                : isMobile
+                ? "translate-y-0 opacity-100"
+                : "scale-100 opacity-100"
+            }`}
+            style={{
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              width: isMobile ? "100%" : "min(400px, 90vw)",
+            }}
             onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 border-b sticky top-0" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+            <div
+              className="p-4 border-b sticky top-0"
+              style={{ backgroundColor: colors.card, borderColor: colors.border }}>
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold" style={{ color: colors.text }}>
                   {itemComSubmenu.label}
@@ -735,7 +808,10 @@ const isParentActive = (item: MenuItem) => {
                       {link.icon && <link.icon size={16} style={{ color: colors.text, flexShrink: 0 }} />}
                       <span
                         className="text-sm transition-all duration-200"
-                        style={{ color: linkActive ? colors.text : colors.textSecondary, fontWeight: linkActive ? "600" : "400" }}>
+                        style={{
+                          color: linkActive ? colors.text : colors.textSecondary,
+                          fontWeight: linkActive ? "600" : "400",
+                        }}>
                         {link.label}
                       </span>
                     </div>
@@ -747,14 +823,18 @@ const isParentActive = (item: MenuItem) => {
         </>
       )}
 
-      {/* ==================== LOGOUT MODAL ==================== */}
+      {/* LOGOUT MODAL */}
       {logoutModalOpen && (
         <div
-          className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-all duration-200 ${modalAnimating ? "opacity-0" : "opacity-100"}`}
+          className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-all duration-200 ${
+            modalAnimating ? "opacity-0" : "opacity-100"
+          }`}
           style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }}
           onClick={fecharModalLogout}>
           <div
-            className={`w-full max-w-sm overflow-hidden shadow-xl transition-all duration-200 ${modalAnimating ? "scale-95 opacity-0" : "scale-100 opacity-100"}`}
+            className={`w-full max-w-sm overflow-hidden shadow-xl transition-all duration-200 ${
+              modalAnimating ? "scale-95 opacity-0" : "scale-100 opacity-100"
+            }`}
             style={{ backgroundColor: colors.card }}
             onClick={(e) => e.stopPropagation()}>
             <div className="p-4 border-b text-center md:p-6 md:pb-4" style={{ borderColor: colors.border }}>
@@ -780,12 +860,15 @@ const isParentActive = (item: MenuItem) => {
 
             <div
               className="p-3 border-b md:p-4"
-              style={{ backgroundColor: theme === "dark" ? "#1a1a1a" : "#f9fafb", borderColor: colors.border }}>
+              style={{
+                backgroundColor: theme === "dark" ? "#1a1a1a" : "#f9fafb",
+                borderColor: colors.border,
+              }}>
               <div className="flex items-center gap-3">
                 <div
                   className="flex items-center justify-center w-8 h-8 text-xs font-bold text-white rounded-lg flex-shrink-0"
                   style={{ background: colors.secondary, color: colors.blue }}>
-                  {userInitial} 
+                  {userInitial}
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs font-medium truncate md:text-sm" style={{ color: colors.text }}>
@@ -803,7 +886,10 @@ const isParentActive = (item: MenuItem) => {
                 onClick={fecharModalLogout}
                 disabled={logoutLoading}
                 className="flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all hover:scale-105 active:scale-95 md:text-sm"
-                style={{ backgroundColor: theme === "dark" ? "#333" : "#e5e7eb", color: colors.text }}>
+                style={{
+                  backgroundColor: theme === "dark" ? "#333" : "#e5e7eb",
+                  color: colors.text,
+                }}>
                 Cancelar
               </button>
               <button
@@ -830,68 +916,28 @@ const isParentActive = (item: MenuItem) => {
 
       <style jsx>{`
         @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
         }
         @keyframes slideDown {
-          from {
-            opacity: 0;
-            transform: scale(0.95) translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: scale(1) translateY(0);
-          }
+          from { opacity: 0; transform: scale(0.95) translateY(-10px); }
+          to { opacity: 1; transform: scale(1) translateY(0); }
         }
         @keyframes shake {
-          0%,
-          100% {
-            transform: translateX(0);
-          }
-          25% {
-            transform: translateX(-5px);
-          }
-          75% {
-            transform: translateX(5px);
-          }
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-5px); }
+          75% { transform: translateX(5px); }
         }
-        .animate-fade-in {
-          animation: fadeIn 0.3s ease-out forwards;
-        }
-        .animate-slide-down {
-          animation: slideDown 0.2s ease-out forwards;
-        }
-        .animate-shake {
-          animation: shake 0.3s ease-in-out;
-        }
-        .hover\\:scale-110:hover {
-          transform: scale(1.1);
-        }
-        .hover\\:scale-105:hover {
-          transform: scale(1.05);
-        }
-        .active\\:scale-95:active {
-          transform: scale(0.95);
-        }
-        .active\\:scale-98:active {
-          transform: scale(0.98);
-        }
-        .hover\\:translate-x-1:hover {
-          transform: translateX(4px);
-        }
-        ::-webkit-scrollbar {
-          width: 6px;
-          height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-          background: transparent;
-        }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        .animate-slide-down { animation: slideDown 0.2s ease-out forwards; }
+        .animate-shake { animation: shake 0.3s ease-in-out; }
+        .hover\\:scale-110:hover { transform: scale(1.1); }
+        .hover\\:scale-105:hover { transform: scale(1.05); }
+        .active\\:scale-95:active { transform: scale(0.95); }
+        .active\\:scale-98:active { transform: scale(0.98); }
+        .hover\\:translate-x-1:hover { transform: translateX(4px); }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb {
           background: var(--scrollbar-color, #cbd5e1);
           border-radius: 3px;
