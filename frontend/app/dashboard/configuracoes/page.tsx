@@ -17,7 +17,6 @@ import { SistemaTab } from "@/app/components/Configuracoes/SistemaTab";
 import { User as UserType } from "@/services/User";
 import { useAuth } from "@/context/authprovider";
 
-
 export default function ConfiguracoesPage() {
   const colors = useThemeColors();
   const { theme, toggleTheme } = useTheme();
@@ -29,7 +28,11 @@ export default function ConfiguracoesPage() {
     description?: string;
   } | null>(null);
 
-  const showToast = (message: string, type: "success" | "error" | "warning" | "info" = "info", description?: string) => {
+  const showToast = (
+    message: string,
+    type: "success" | "error" | "warning" | "info" = "info",
+    description?: string,
+  ) => {
     setToast({ message, type, description });
   };
 
@@ -63,11 +66,17 @@ export default function ConfiguracoesPage() {
       )}
 
       <MainEmpresa>
-        <div className="space-y-6 max-w-7xl mx-auto p-4 md:p-6 min-h-screen" style={{ backgroundColor: colors.background }}>
+        <div
+          className="space-y-6 max-w-7xl mx-auto p-4 md:p-6 min-h-screen"
+          style={{ backgroundColor: colors.background }}
+        >
           <div className="flex items-center gap-3">
             <Settings className="w-8 h-8" style={{ color: colors.secondary }} />
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold" style={{ color: colors.secondary }}>
+              <h1
+                className="text-2xl md:text-3xl font-bold"
+                style={{ color: colors.secondary }}
+              >
                 Configurações
               </h1>
               <p className="text-sm" style={{ color: colors.textSecondary }}>
@@ -76,16 +85,25 @@ export default function ConfiguracoesPage() {
             </div>
           </div>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="space-y-6"
+          >
             <TabsList
               className="w-full justify-start overflow-x-auto flex-nowrap"
-              style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+              style={{
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+              }}
+            >
               {tabs.map((tab) => (
                 <TabsTrigger
                   key={tab.value}
                   value={tab.value}
                   className="data-[state=active]:bg-opacity-20 gap-2"
-                  style={{ color: colors.textSecondary }}>
+                  style={{ color: colors.textSecondary }}
+                >
                   <tab.icon className="w-4 h-4" />
                   {tab.label}
                 </TabsTrigger>
@@ -104,7 +122,11 @@ export default function ConfiguracoesPage() {
             </TabsContent>
             {!isFreelancer && (
               <TabsContent value="usuarios">
-                <UsuariosTab colors={colors} currentUser={user as UserType | null} showToast={showToast} />
+                <UsuariosTab
+                  colors={colors}
+                  currentUser={user as UserType | null}
+                  showToast={showToast}
+                />
               </TabsContent>
             )}
             <TabsContent value="mensagens">
@@ -114,7 +136,12 @@ export default function ConfiguracoesPage() {
                         <NotificacoesTab colors={colors} showToast={showToast} />
                     </TabsContent> */}
             <TabsContent value="sistema">
-              <SistemaTab colors={colors} theme={theme} toggleTheme={toggleTheme} />
+              <SistemaTab
+                colors={colors}
+                theme={theme}
+                toggleTheme={toggleTheme}
+                showToast={showToast}
+              />
             </TabsContent>
           </Tabs>
         </div>

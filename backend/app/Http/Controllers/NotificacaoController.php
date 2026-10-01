@@ -6,9 +6,8 @@ use App\Models\Notificacao;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
-class LandlordNotificacaoController extends Controller
+class NotificacaoController extends Controller
 {
-    /* GET /api/landlord/notificacoes */
     public function index(Request $request)
     {
         $user = $this->user($request);
@@ -23,15 +22,14 @@ class LandlordNotificacaoController extends Controller
 
         return response()->json([
             'success' => true,
-            'data'    => $notificacoes,
-            'meta'    => [
+            'data' => $notificacoes,
+            'meta' => [
                 'nao_lidas' => Notificacao::doUser($user->id)->naoLidas()->count(),
-                'total'     => Notificacao::doUser($user->id)->count(),
+                'total' => Notificacao::doUser($user->id)->count(),
             ],
         ]);
     }
 
-    /* GET /api/landlord/notificacoes/nao-lidas */
     public function naoLidas(Request $request)
     {
         $user = $this->user($request);
@@ -45,37 +43,33 @@ class LandlordNotificacaoController extends Controller
 
         return response()->json([
             'success' => true,
-            'data'    => $notificacoes,
-            'total'   => $notificacoes->count(),
+            'data' => $notificacoes,
+            'total' => $notificacoes->count(),
         ]);
     }
 
-    /* POST /api/landlord/notificacoes/{id}/marcar-lida */
-    public function marcarLida(Request $request, string $id)
+    public function marcarComoLida(Request $request, string $id)
     {
         $user = $this->user($request);
         if (!$user) return response()->json(['message' => 'Não autenticado'], 401);
 
         $notificacao = Notificacao::doUser($user->id)->find($id);
-        if (!$notificacao) {
-            return response()->json(['message' => 'Notificação não encontrada'], 404);
-        }
+        if (!$notificacao) return response()->json(['message' => 'Não encontrada'], 404);
 
         if (!$notificacao->lida) {
             $notificacao->update([
-                'lida'    => true,
+                'lida' => true,
                 'lida_em' => now(),
             ]);
         }
 
         return response()->json([
             'success' => true,
-            'data'    => $notificacao->fresh(),
+            'data' => $notificacao->fresh(),
         ]);
     }
 
-    /* POST /api/landlord/notificacoes/marcar-todas-lidas */
-    public function marcarTodasLidas(Request $request)
+    public function marcarTodasComoLidas(Request $request)
     {
         $user = $this->user($request);
         if (!$user) return response()->json(['message' => 'Não autenticado'], 401);
@@ -83,33 +77,27 @@ class LandlordNotificacaoController extends Controller
         $total = Notificacao::doUser($user->id)
             ->naoLidas()
             ->update([
-                'lida'    => true,
+                'lida' => true,
                 'lida_em' => now(),
             ]);
 
         return response()->json([
-            'success'   => true,
-            'marcadas'  => $total,
+            'success' => true,
+            'marcadas' => $total,
         ]);
     }
 
-    /* DELETE /api/landlord/notificacoes/{id} */
     public function eliminar(Request $request, string $id)
     {
         $user = $this->user($request);
         if (!$user) return response()->json(['message' => 'Não autenticado'], 401);
 
         $notificacao = Notificacao::doUser($user->id)->find($id);
-        if (!$notificacao) {
-            return response()->json(['message' => 'Notificação não encontrada'], 404);
-        }
+        if (!$notificacao) return response()->json(['message' => 'Não encontrada'], 404);
 
         $notificacao->delete();
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Notificação eliminada.',
-        ]);
+        return response()->json(['success' => true, 'message' => 'Notificação eliminada.']);
     }
 
     private function user(Request $request)

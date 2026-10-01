@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\Log;
 /**
  * StockService
  *
- * ✅ SUPORTA AMBOS OS MODOS:
+ *  SUPORTA AMBOS OS MODOS:
  * - 'colectivo' → Shared DB (com tenant_id)
  * - 'singular' → Tenant DB (banco dedicado)
  */
@@ -50,7 +50,7 @@ class StockService
      */
     public function getModo(): string
     {
-        // ✅ PRIORIDADE 1: Sessão (definido pelo ResolveTenant)
+        //   PRIORIDADE 1: Sessão (definido pelo ResolveTenant)
         $sessionModo = session('tenant_modo');
         if ($sessionModo) {
             $this->modo = $sessionModo;
@@ -58,14 +58,14 @@ class StockService
             return $this->modo;
         }
 
-        // ✅ PRIORIDADE 2: Empresa
+        //   PRIORIDADE 2: Empresa
         if ($this->empresa) {
             $this->modo = $this->empresa->modo ?? 'colectivo';
             Log::debug('[StockService] Modo obtido da empresa', ['modo' => $this->modo]);
             return $this->modo;
         }
 
-        // ✅ FALLBACK: Padrão
+        //   FALLBACK: Padrão
         Log::debug('[StockService] Modo padrão', ['modo' => $this->modo]);
         return $this->modo;
     }
@@ -100,14 +100,14 @@ class StockService
     {
         Log::debug('[StockService] Verificando acesso');
 
-        // 1️⃣ Obtém a empresa
+        // 1️ Obtém a empresa
         $this->empresa = app('current.empresa');
         if (!$this->empresa) {
             Log::error('[StockService] Empresa não identificada.');
             throw new \Exception('Empresa não identificada.', 400);
         }
 
-        // ✅ ATUALIZA O MODO com o da empresa
+        //   ATUALIZA O MODO com o da empresa
         $this->modo = $this->empresa->modo ?? 'colectivo';
 
         Log::debug('[StockService] Modo definido pela empresa', [
@@ -115,10 +115,10 @@ class StockService
             'empresa_id' => $this->empresa->id,
         ]);
 
-        // 2️⃣ Obtém o landlord user
+        // 2️ Obtém o landlord user
         $landlordUser = Auth::guard('landlord')->user();
 
-        // 3️⃣ Fallback: tenta obter da sessão
+        // 3️ Fallback: tenta obter da sessão
         if (!$landlordUser) {
             $landlordId = session('landlord_user_id');
             if ($landlordId) {
@@ -131,7 +131,7 @@ class StockService
             throw new \Exception('Usuário não autenticado.', 401);
         }
 
-        // 4️⃣ Busca o TenantUser correspondente
+        // 4️ Busca o TenantUser correspondente
         $tenantUser = $this->buscarUsuario($this->empresa, $landlordUser->email);
         if (!$tenantUser) {
             Log::error('[StockService] Utilizador tenant não encontrado.', [
@@ -292,10 +292,10 @@ class StockService
             'modo_atual' => $this->getModo(),
         ]);
 
-        // ✅ Verifica acesso
+        //   Verifica acesso
         $this->verificarAcessoUsuario();
 
-        // ✅ Garante que o modo está correto após verificação
+        //   Garante que o modo está correto após verificação
         $modo = $this->getModo();
         Log::info('[StockService::dashboard] Modo confirmado', ['modo' => $modo]);
 
@@ -349,10 +349,10 @@ public function movimentar(
     ?string $observacao = null,
     ?string $userId = null,
 ): ?object {
-    // ✅ Verifica acesso
+    //   Verifica acesso
     $this->verificarAcessoUsuario();
 
-    // ✅ Validar tipo de movimento
+    //   Validar tipo de movimento
     if (!in_array($tipoMovimento, self::TIPOS_MOVIMENTO_VALIDOS)) {
         throw new \InvalidArgumentException(
             "Tipo de movimento inválido: {$tipoMovimento}. " .
@@ -380,7 +380,7 @@ public function movimentar(
         $observacao,
         $userId
     ) {
-        // ✅ IDEMPOTÊNCIA: se já existe um movimento para este produto +
+        //   IDEMPOTÊNCIA: se já existe um movimento para este produto +
         // referência (venda/documento) + tipo de movimento, não duplica.
         // Isto evita descontar o stock duas vezes quando o mesmo produto
         // é processado em mais de um ponto do fluxo (ex.: uma vez ao

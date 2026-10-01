@@ -6,10 +6,13 @@ use App\Models\Subscricao;
 use App\Models\Empresa;
 use App\Models\Pagamento;
 use App\Models\Plano;
+use App\Models\Feature;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Auth;
 
 class SubscricaoController extends Controller
 {

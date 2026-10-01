@@ -92,11 +92,11 @@
             </div>
 
             <p style="text-align: center;">
-                <a href="{{ $loginUrl }}" class="btn-login">🔑 Fazer login</a>
+                <a href="{{ $loginUrl }}" class="btn-login">Fazer login</a>
             </p>
 
             <p style="font-size: 14px; color: #7f8c8d;">
-                ⚠️ <strong>Recomendação:</strong> Após o login, altere esta senha no seu perfil.
+                 <strong>Recomendação:</strong> Após o login, altere esta senha no seu perfil.
                 Esta senha é válida até que seja alterada.
             </p>
 

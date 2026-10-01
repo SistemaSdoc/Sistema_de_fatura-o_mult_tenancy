@@ -4,9 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Empresa;
 use App\Models\LandlordUser;
-use App\Models\Plano;
 use App\Models\Shared\User as SharedUser;
 use App\Models\Subscricao;
+use App\Services\NotificacaoService;
+use App\Services\SubscricaoService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -17,14 +18,10 @@ use Illuminate\Support\Str;
 
 class FreelancerController extends Controller
 {
-    /**
-     * Nome do plano gratuito atribuído automaticamente a novos freelancers.
-     * Alterar aqui se um dia renomeares o plano no seeder.
-     */
     private const PLANO_EXPERIMENTAL = 'Experimental';
 
     /* ================================================================== */
-    /*  Criar Empresa Freelancer no modo shared/colectivo                 */
+    /*  Criar Empresa Freelancer                                          */
     /* ================================================================== */
     public function criarEmpresaSingular(Request $request)
     {
@@ -59,6 +56,7 @@ class FreelancerController extends Controller
             );
 
             // 1️ Criar Empresa
+            //   O Observer EmpresaObserver vai atribuir o Experimental automaticamente
             $empresa = Empresa::create([
                 'id' => Str::uuid(),
                 'nome' => $validated['nome'],
@@ -118,13 +116,25 @@ class FreelancerController extends Controller
             Log::info('[FREELANCER::criar] SharedUser criado', ['user_id' => $sharedUser->id]);
 
             // 4️ Atualizar LandlordUser com referência à empresa
+             /** @var LandlordUser|null $landlordUser */
             $landlordUser->update([
                 'empresa_id' => $empresa->id,
                 'empresa_id_atual' => $empresa->id,
             ]);
 
-            // 5️  Criar subscrição no plano "Experimental"
-            $subscricao = $this->criarSubscricaoExperimental($empresa);
+            // 5️  Buscar a subscrição que o Observer já criou
+            //    (fallback defensivo: se por algum motivo não existir, tenta criar)
+            $subscricao = $empresa->subscricoes()
+                ->where('status', 'ativa')
+                ->first();
+
+            if (!$subscricao) {
+                Log::warning('[FREELANCER::criar] Subscrição não foi criada pelo Observer, tentando fallback');
+                $subscricao = SubscricaoService::atribuirExperimentalSeNaoTiver(
+                    $empresa,
+                    $landlordUser->id
+                );
+            }
 
             // 6️ Estabelecer sessão do tenant
             $request->session()->put([
@@ -145,7 +155,39 @@ class FreelancerController extends Controller
                 'modo' => $modo,
             ]);
 
-            // 7️⃣ Resposta com status de onboarding + subscrição
+            // 7️ Notificações
+            NotificacaoService::enviar(
+                userId: $landlordUser->id,
+                titulo: 'Empresa criada com sucesso',
+                mensagem: "A sua empresa \"{$empresa->nome}\" foi criada. Já pode começar a emitir faturas.",
+                tipo: 'success',
+                tipoEvento: 'empresa_freelancer_criada',
+                dados: [
+                    'Empresa'    => $empresa->nome,
+                    'Subdomínio' => $empresa->subdomain,
+                    'Plano'      => $subscricao?->plano?->nome ?? self::PLANO_EXPERIMENTAL,
+                    'Válido até' => $subscricao?->data_fim ?? '—',
+                ],
+                url: '/dashboard',
+                empresaId: $empresa->id,
+            );
+
+            NotificacaoService::enviarParaSuperAdmins(
+                titulo: "Novo freelancer: {$empresa->nome}",
+                mensagem: "Foi criada uma nova empresa.",
+                tipo: 'info',
+                tipoEvento: 'freelancer_registado',
+                dados: [
+                    'Empresa'    => $empresa->nome,
+                    'Subdomínio' => $empresa->subdomain,
+                    'Email'      => $landlordUser->email,
+                    'Modo'       => $modo,
+                ],
+                url: "/login/",
+                empresaId: $empresa->id,
+            );
+
+            // 8️ Resposta
             return response()->json([
                 'success' => true,
                 'message' => 'Empresa criada com sucesso. Complete seu perfil.',
@@ -158,7 +200,7 @@ class FreelancerController extends Controller
                     'required_fields' => ['nif', 'telefone', 'nome_banco', 'numero_conta', 'iban', 'logo'],
                     'subscricao' => $subscricao ? [
                         'id' => $subscricao->id,
-                        'plano_nome' => self::PLANO_EXPERIMENTAL,
+                        'plano_nome' => $subscricao->plano?->nome ?? self::PLANO_EXPERIMENTAL,
                         'status' => $subscricao->status,
                         'data_inicio' => $subscricao->data_inicio,
                         'data_fim' => $subscricao->data_fim,
@@ -171,7 +213,6 @@ class FreelancerController extends Controller
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            // Limpar empresa criada se houve erro (cleanup defensivo)
             try {
                 if (isset($empresa->id)) {
                     $empresa->delete();
@@ -188,65 +229,6 @@ class FreelancerController extends Controller
             ], 500);
         }
     }
-
-    /* ================================================================== */
-    /*   Criar subscrição no plano Experimental                          */
-    /* ================================================================== */
-private function criarSubscricaoExperimental(Empresa $empresa, ?string $landlordUserId = null): ?Subscricao
-{
-    $plano = Plano::where('nome', self::PLANO_EXPERIMENTAL)
-        ->where('ativo', true)
-        ->first();
-
-    // Se o plano não existir, NÃO falha a criação da empresa — apenas loga.
-    if (!$plano) {
-        Log::warning('[FREELANCER::subscricao] Plano Experimental não encontrado. Empresa criada sem subscrição.', [
-            'empresa_id' => $empresa->id,
-        ]);
-        return null;
-    }
-
-    // Evita duplicados (defensivo)
-    $jaExiste = Subscricao::where('empresa_id', $empresa->id)
-        ->where('status', 'ativa')
-        ->exists();
-
-    if ($jaExiste) {
-        Log::info('[FREELANCER::subscricao] Empresa já tem subscrição ativa', [
-            'empresa_id' => $empresa->id,
-        ]);
-        return Subscricao::where('empresa_id', $empresa->id)
-            ->where('status', 'ativa')
-            ->first();
-    }
-
-    // data_inicio e data_fim são DATE (não timestamp) → usar toDateString()
-    $dataInicio = now()->toDateString();
-    $dataFim = now()->addMonths($plano->duracao_meses ?? 1)->toDateString();
-
-    $subscricao = Subscricao::create([
-        'id' => (string) Str::uuid(),
-        'empresa_id' => $empresa->id,
-        'plano_id' => $plano->id,
-        'data_inicio' => $dataInicio,
-        'data_fim' => $dataFim,
-        'status' => 'ativa',
-        'forma_pagamento' => null,
-        'renovacao_automatica' => false, // experimental NÃO renova sozinho
-        'cancelado_em' => null,
-        'criado_por' => $landlordUserId,
-    ]);
-
-    Log::info('[FREELANCER::subscricao] Subscrição Experimental criada', [
-        'empresa_id' => $empresa->id,
-        'plano_id' => $plano->id,
-        'subscricao_id' => $subscricao->id,
-        'data_inicio' => $dataInicio,
-        'data_fim' => $dataFim,
-    ]);
-
-    return $subscricao;
-}
 
     /* ================================================================== */
     /*  Verificar status de onboarding                                    */
@@ -272,7 +254,6 @@ private function criarSubscricaoExperimental(Empresa $empresa, ?string $landlord
             return response()->json(['message' => 'Empresa não encontrada'], 404);
         }
 
-        // Verificar quais campos faltam
         $requiredFields = [];
         if (empty($empresa->nif)) $requiredFields[] = 'nif';
         if (empty($empresa->telefone)) $requiredFields[] = 'telefone';
@@ -283,7 +264,6 @@ private function criarSubscricaoExperimental(Empresa $empresa, ?string $landlord
 
         $isComplete = count($requiredFields) === 0;
 
-        //  Inclui info da subscrição ativa
         $subscricao = Subscricao::with('plano')
             ->where('empresa_id', $empresa->id)
             ->where('status', 'ativa')
@@ -327,7 +307,6 @@ private function criarSubscricaoExperimental(Empresa $empresa, ?string $landlord
             return response()->json(['message' => 'Empresa não encontrada'], 404);
         }
 
-        // Validar campos de perfil freelancer/shared
         $validated = $request->validate([
             'nif' => [
                 'nullable',
@@ -364,7 +343,6 @@ private function criarSubscricaoExperimental(Empresa $empresa, ?string $landlord
                 'campos' => array_keys($validated),
             ]);
 
-            // Verificar se está completo agora
             $requiredFields = [];
             $empresa->refresh();
 
@@ -377,6 +355,23 @@ private function criarSubscricaoExperimental(Empresa $empresa, ?string $landlord
 
             $isComplete = count($requiredFields) === 0;
 
+            // Notificar apenas quando o perfil fica completo
+            if ($isComplete) {
+                NotificacaoService::enviar(
+                    userId: $landlordUser->id,
+                    titulo: 'Perfil completo!',
+                    mensagem: "O perfil da empresa \"{$empresa->nome}\" está completo. Já pode emitir faturas.",
+                    tipo: 'success',
+                    tipoEvento: 'perfil_freelancer_completo',
+                    dados: [
+                        'Empresa'    => $empresa->nome,
+                        'Subdomínio' => $empresa->subdomain,
+                    ],
+                    url: '/dashboard',
+                    empresaId: $empresa->id,
+                );
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => $isComplete
@@ -384,17 +379,9 @@ private function criarSubscricaoExperimental(Empresa $empresa, ?string $landlord
                     : 'Dados atualizados. Complete os campos faltantes.',
                 'data' => [
                     'empresa' => $empresa->only([
-                        'id',
-                        'nome',
-                        'nif',
-                        'telefone',
-                        'email',
-                        'endereco',
-                        'nome_banco',
-                        'numero_conta',
-                        'iban',
-                        'logo',
-                        'subdomain',
+                        'id', 'nome', 'nif', 'telefone', 'email',
+                        'endereco', 'nome_banco', 'numero_conta', 'iban',
+                        'logo', 'subdomain',
                     ]),
                     'status' => $isComplete ? 'complete' : 'pending',
                     'incomplete_fields' => $requiredFields,

@@ -15,6 +15,7 @@ use App\Models\Tenant\DocumentoFiscal as TenantDocumentoFiscal;
 use App\Models\Tenant\Pagamento as TenantPagamento;
 use App\Models\Tenant\User as TenantUser;
 use App\Services\AuditLogger;
+use App\Services\NotificacaoService;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -25,8 +26,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Schema;
 
 class EmpresaController extends Controller
-{ 
-
+{
     private const IVA_PADRAO_DEFAULT = 14.0;
 
     // ------------------------------------------------------------
@@ -105,7 +105,6 @@ SDOCA;
     // ------------------------------------------------------------
     private function getBuildingAscii(string $subdomain, string $dbName, string $adminEmail, ?string $modo = 'colectivo'): string
     {
-        // Garantir que nunca é null
         $modo = $modo ?? 'colectivo';
 
         $modoLabel = $modo === 'colectivo'
@@ -193,290 +192,309 @@ BUILDING;
         }
     }
 
+    private function executarMigracoesComLog(string $database, string $relativePath): int
+    {
+        $fullPath = database_path($relativePath);
+        $this->logPretty('MIGRATE', "Executando migrations para {$database} (path: {$fullPath})", 'info');
 
-private function executarMigracoesComLog(string $database, string $relativePath): int
-{
-    // Caminho completo para verificação
-    $fullPath = database_path($relativePath);
-    $this->logPretty('MIGRATE', "Executando migrations para {$database} (path: {$fullPath})", 'info');
+        if (!is_dir($fullPath)) {
+            $this->logPretty('MIGRATE', "Diretório não encontrado: {$fullPath}", 'error');
+            throw new \Exception("Diretório de migrations não encontrado: {$fullPath}");
+        }
 
-    if (!is_dir($fullPath)) {
-        $this->logPretty('MIGRATE', "Diretório não encontrado: {$fullPath}", 'error');
-        throw new \Exception("Diretório de migrations não encontrado: {$fullPath}");
+        $files = glob($fullPath . '/*.php');
+        $this->logPretty('MIGRATE', "Encontradas " . count($files) . " migrações", 'info');
+
+        $artisanPath = "database/{$relativePath}";
+
+        $exitCode = Artisan::call('migrate', [
+            '--database' => $database,
+            '--path'     => $artisanPath,
+            '--force'    => true,
+        ]);
+
+        $output = Artisan::output();
+        $this->logPretty('MIGRATE', "Exit code: {$exitCode}", $exitCode === 0 ? 'success' : 'error');
+        $this->logPretty('MIGRATE', "Output do Artisan:\n" . $output, 'info');
+
+        return $exitCode;
     }
-
-    // Contar ficheiros
-    $files = glob($fullPath . '/*.php');
-    $this->logPretty('MIGRATE', "Encontradas " . count($files) . " migrações", 'info');
-
-    // Caminho para o Artisan (deve incluir 'database/')
-    $artisanPath = "database/{$relativePath}";
-
-    // Executa as migrações
-    $exitCode = Artisan::call('migrate', [
-        '--database' => $database,
-        '--path'     => $artisanPath,
-        '--force'    => true,
-    ]);
-
-    $output = Artisan::output();
-    $this->logPretty('MIGRATE', "Exit code: {$exitCode}", $exitCode === 0 ? 'success' : 'error');
-    $this->logPretty('MIGRATE', "Output do Artisan:\n" . $output, 'info');
-
-    return $exitCode;
-}
 
     // ============================================================
     // 3. CRIAR EMPRESA (COMPLETO)
     // ============================================================
-public function store(Request $request)
-{
-    Log::channel('single')->info("\n" . $this->getFaturajaAscii() . "\n");
-    Log::channel('single')->info("\n" . $this->getSdocAscii() . "\n");
-    $this->logPretty('INÍCIO', "Criando nova empresa: \"{$request->nome}\" (admin: {$request->admin_email})", 'info');
+    public function store(Request $request)
+    {
+        Log::channel('single')->info("\n" . $this->getFaturajaAscii() . "\n");
+        Log::channel('single')->info("\n" . $this->getSdocAscii() . "\n");
+        $this->logPretty('INÍCIO', "Criando nova empresa: \"{$request->nome}\" (admin: {$request->admin_email})", 'info');
 
-    // ⭐ VALIDAÇÃO (incluindo plano_id opcional)
-    $validated = $request->validate([
-        'nome'           => 'required|string|max:255',
-        'nif'            => 'required|digits:10|unique:landlord.empresas,nif',
-        'email'          => 'required|email|unique:landlord.empresas,email',
-        'telefone'       => 'required|string|max:20',
-        'endereco'       => 'required|string|max:500',
-        'regime_fiscal'  => 'required|in:simplificado,geral',
-        'sujeito_iva'    => 'required|boolean',
-        'iva_padrao'     => 'nullable|numeric|min:0|max:100',
-        'nome_banco'     => 'nullable|string|max:255',
-        'numero_conta'   => 'nullable|string|max:50|unique:landlord.empresas,numero_conta',
-        'iban'           => 'nullable|string|max:34|unique:landlord.empresas,iban',
-        'logo'           => 'required|string|max:255',
-        'subdomain'      => [
-            'required',
-            'string',
-            'max:100',
-            'regex:/^[a-z0-9][a-z0-9-]*[a-z0-9]$/',
-            'unique:landlord.empresas,subdomain'
-        ],
-        'modo'           => 'required|in:colectivo,singular',
-        'admin_name'     => 'required|string|max:255',
-        'admin_email'    => 'required|email',
-        'admin_password' => 'required|string|min:8',
-        'plano_id'       => 'nullable|uuid|exists:landlord.planos,id', // ✅ novo campo opcional
-    ]);
-
-    $this->logPretty('1/6', 'Validação aprovada', 'success');
-
-    // Geração do nome da base de dados
-    $dbNameBase = 'empresa_' . Str::slug($request->nome, '_');
-    $dbName     = $dbNameBase;
-    $counter    = 1;
-    while (!empty(DB::connection('landlord')->select("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?", [$dbName]))) {
-        $dbName = $dbNameBase . '_' . $counter;
-        $counter++;
-    }
-
-    // Criar empresa
-    $empresa = Empresa::on('landlord')->create([
-        'id'            => Str::uuid(),
-        'nome'          => $request->nome,
-        'nif'           => $request->nif,
-        'email'         => $request->email,
-        'telefone'      => $request->telefone,
-        'endereco'      => $request->endereco,
-        'db_name'       => $dbName,
-        'subdomain'     => $request->subdomain,
-        'modo'          => $request->modo,
-        'regime_fiscal' => $request->regime_fiscal,
-        'sujeito_iva'   => $request->sujeito_iva,
-        'iva_padrao'    => $request->regime_fiscal === 'simplificado'
-            ? 0.0
-            : (float) ($request->iva_padrao ?? self::IVA_PADRAO_DEFAULT),
-        'nome_banco'    => $request->nome_banco,
-        'numero_conta'  => $request->numero_conta,
-        'iban'          => $request->iban,
-        'logo'          => $request->logo,
-        'status'        => 'ativo',
-        'data_registro' => now(),
-    ]);
-
-    $this->logPretty('2/6', "Empresa inserida (ID: {$empresa->id}, Subdomínio: {$empresa->subdomain}, Modo: {$empresa->modo})", 'success');
-
-    try {
-        // ⭐============================================================
-        // ⭐ MODO SINGULAR: CRIA BANCO DEDICADO + MIGRATIONS TENANT
-        // ⭐============================================================
-        if ($request->modo === 'singular') {
-            // 1. Criar base de dados
-            DB::connection('landlord')
-                ->statement("CREATE DATABASE `{$empresa->db_name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-            $this->logPretty('3/6', "Base de dados criada: {$empresa->db_name}", 'success');
-
-            // 2. Configurar conexão tenant
-            $this->configurarTenantConnection($empresa->db_name);
-            $this->logPretty('4/6', 'Conexão tenant configurada', 'success');
-
-            // 3. Rodar migrations do tenant (com logs)
-            $exitCode = $this->executarMigracoesComLog('tenant', 'migrations/tenant');
-            if ($exitCode !== 0) {
-                throw new \Exception('Erro ao executar migrations do tenant. Código: ' . $exitCode);
-            }
-            $this->logPretty('5/6', 'Migrations do tenant executadas com sucesso', 'success');
-
-            // ⭐ 4. CRIAR ADMIN NO BANCO TENANT (MODO SINGULAR)
-            $admin = \App\Models\Tenant\User::create([
-                'id'            => (string) Str::uuid(),
-                'name'          => $request->admin_name,
-                'email'         => $request->admin_email,
-                'password'      => Hash::make($request->admin_password),
-                'role'          => 'admin',
-                'ativo'         => true,
-                'email_verified_at' => now(),
-            ]);
-
-            $this->logPretty('6/6', "Admin criado no tenant: {$admin->email}", 'success');
-        }
-        // ⭐============================================================
-        // ⭐ MODO COLECTIVO: USA BANCO SHARED
-        // ⭐============================================================
-        else {
-            // Verifica se a tabela users existe no shared
-            try {
-                $tabelaExiste = DB::connection('shared')->table('users')->exists();
-            } catch (\Exception $e) {
-                $tabelaExiste = false;
-                $this->logPretty('3/6', 'Tabela users não existe no shared. A executar migrations...', 'info');
-            }
-
-            if (!$tabelaExiste) {
-                $this->logPretty('3/6', 'Rodando migrations do shared (primeira vez)', 'info');
-
-                // Executa com logs detalhados
-                $exitCode = $this->executarMigracoesComLog('shared', 'migrations/shared');
-
-                if ($exitCode !== 0) {
-                    throw new \Exception('Erro ao executar migrations do shared. Código: ' . $exitCode);
-                }
-                $this->logPretty('4/6', 'Migrations do shared executadas com sucesso', 'success');
-            } else {
-                $this->logPretty('3/6', 'Migrations do shared já executadas anteriormente', 'info');
-            }
-
-            // ⭐ CRIAR ADMIN NO SHARED (MODO COLECTIVO)
-            $admin = \App\Models\Shared\User::create([
-                'id'            => (string) Str::uuid(),
-                'tenant_id'     => $empresa->id,
-                'name'          => $request->admin_name,
-                'email'         => $request->admin_email,
-                'password'      => Hash::make($request->admin_password),
-                'role'          => 'admin',
-            ]);
-
-            $this->logPretty('5/6', "Admin criado no shared: {$admin->email}", 'success');
-
-            // ⭐ RELACIONAR ADMIN COM O TENANT (pivô user_tenant) - para controle
-            try {
-                DB::connection('shared')->table('user_t')->insert([
-                    'id' => (string) Str::uuid(),
-                    'user_id' => $admin->id,
-                    'tenant_id' => $empresa->id,
-                    'role' => 'admin',
-                    'ativo' => true,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-                $this->logPretty('6/6', "Admin relacionado ao tenant {$empresa->subdomain}", 'success');
-            } catch (\Exception $e) {
-                // Tabela user_tenant pode não existir ainda, criar depois
-                $this->logPretty('6/6', "Relacionamento não criado (tabela opcional): " . $e->getMessage(), 'warning');
-            }
-        }
-
-        // ============================================================
-        // ⭐ CRIA SUBSCRIÇÃO EXPERIMENTAL SE FOR PLANO GRATUITO
-        // ============================================================
-        if ($request->has('plano_id')) {
-            try {
-                $plano = Plano::on('landlord')->find($request->plano_id);
-                if ($plano && $plano->valor_mensal == 0) {
-                    // A subscrição é sempre na base shared (mesmo no modo singular, pois é partilhada)
-                    $subscricao = \App\Models\Subscricao::on('landlord')->create([
-                        'id' => (string) Str::uuid(),
-                        'empresa_id' => $empresa->id,
-                        'plano_id' => $plano->id,
-                        'data_inicio' => now(),
-                        'data_fim' => now()->addMonths($plano->duracao_meses ?? 1),
-                        'status' => 'ativa',
-                        'forma_pagamento' => 'gratuito',
-                        'renovacao_automatica' => false,
-                    ]);
-                    $this->logPretty('7/7', "Subscrição experimental criada para o plano {$plano->nome} (ID: {$subscricao->id})", 'success');
-                } else {
-                    $this->logPretty('7/7', "Plano com ID {$request->plano_id} não é gratuito. Nenhuma subscrição criada.", 'warning');
-                }
-            } catch (\Exception $e) {
-                $this->logPretty('7/7', "Erro ao criar subscrição experimental: " . $e->getMessage(), 'error');
-                // Não interrompe o fluxo, mas loga o erro
-            }
-        }
-
-        // Mover logo temporário
-        if (str_starts_with($empresa->logo, 'temp_logos/')) {
-            $extension = pathinfo($empresa->logo, PATHINFO_EXTENSION) ?: 'png';
-            $newLogoName = 'logos/logo_' . $empresa->id . '_' . time() . '.' . $extension;
-            if (Storage::disk('public')->exists($empresa->logo)) {
-                Storage::disk('public')->move($empresa->logo, $newLogoName);
-                $empresa->update(['logo' => $newLogoName]);
-                $this->logPretty('EXTRA', "Logo movido para: {$newLogoName}", 'success');
-            } else {
-                $this->logPretty('EXTRA', "Logo temporário não encontrado: {$empresa->logo}", 'warning');
-            }
-        }
-
-        // Log final
-        $building = $this->getBuildingAscii(
-            $empresa->subdomain,
-            $empresa->db_name,
-            $admin->email,
-            $empresa->modo ?? 'colectivo'
-        );
-        Log::channel('single')->info("\n" . $building . "\n");
-
-        // Registar criação de empresa na auditoria
-        AuditLogger::log("Empresa Criada", "🏢", [
-            'area' => 'Administração',
-            'detalhes' => [
-                'empresa_id' => $empresa->id,
-                'empresa_nome' => $empresa->nome,
-                'subdomain' => $empresa->subdomain,
-                'modo' => $empresa->modo,
-                'nif' => $empresa->nif,
-                'admin_email' => $admin->email,
+        $validated = $request->validate([
+            'nome'           => 'required|string|max:255',
+            'nif'            => 'required|digits:10|unique:landlord.empresas,nif',
+            'email'          => 'required|email|unique:landlord.empresas,email',
+            'telefone'       => 'required|string|max:20',
+            'endereco'       => 'required|string|max:500',
+            'regime_fiscal'  => 'required|in:simplificado,geral',
+            'sujeito_iva'    => 'required|boolean',
+            'iva_padrao'     => 'nullable|numeric|min:0|max:100',
+            'nome_banco'     => 'nullable|string|max:255',
+            'numero_conta'   => 'nullable|string|max:50|unique:landlord.empresas,numero_conta',
+            'iban'           => 'nullable|string|max:34|unique:landlord.empresas,iban',
+            'logo'           => 'required|string|max:255',
+            'subdomain'      => [
+                'required',
+                'string',
+                'max:100',
+                'regex:/^[a-z0-9][a-z0-9-]*[a-z0-9]$/',
+                'unique:landlord.empresas,subdomain'
             ],
+            'modo'           => 'required|in:colectivo,singular',
+            'admin_name'     => 'required|string|max:255',
+            'admin_email'    => 'required|email',
+            'admin_password' => 'required|string|min:8',
+            'plano_id'       => 'nullable|uuid|exists:landlord.planos,id',
         ]);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Empresa criada com sucesso!',
-            'empresa' => $empresa->fresh(),
-            'admin'   => $admin->only(['name', 'email']),
-            'modo'    => $empresa->modo,
-        ], 201);
-    } catch (\Throwable $e) {
-        $this->logPretty('ERRO', "Falha na criação: {$e->getMessage()}", 'error');
+        $this->logPretty('1/6', 'Validação aprovada', 'success');
 
-        // Rollback
-        $empresa->delete();
-        try {
-            DB::connection('landlord')
-                ->statement("DROP DATABASE IF EXISTS `{$empresa->db_name}`");
-        } catch (\Throwable $ignored) {
+        // Geração do nome da base de dados
+        $dbNameBase = 'empresa_' . Str::slug($request->nome, '_');
+        $dbName     = $dbNameBase;
+        $counter    = 1;
+        while (!empty(DB::connection('landlord')->select("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?", [$dbName]))) {
+            $dbName = $dbNameBase . '_' . $counter;
+            $counter++;
         }
 
-        return response()->json([
-            'success' => false,
-            'message' => 'Falha ao criar empresa: ' . $e->getMessage()
-        ], 500);
+        // Criar empresa
+        $empresa = Empresa::on('landlord')->create([
+            'id'            => Str::uuid(),
+            'nome'          => $request->nome,
+            'nif'           => $request->nif,
+            'email'         => $request->email,
+            'telefone'      => $request->telefone,
+            'endereco'      => $request->endereco,
+            'db_name'       => $dbName,
+            'subdomain'     => $request->subdomain,
+            'modo'          => $request->modo,
+            'regime_fiscal' => $request->regime_fiscal,
+            'sujeito_iva'   => $request->sujeito_iva,
+            'iva_padrao'    => $request->regime_fiscal === 'simplificado'
+                ? 0.0
+                : (float) ($request->iva_padrao ?? self::IVA_PADRAO_DEFAULT),
+            'nome_banco'    => $request->nome_banco,
+            'numero_conta'  => $request->numero_conta,
+            'iban'          => $request->iban,
+            'logo'          => $request->logo,
+            'status'        => 'ativo',
+            'data_registro' => now(),
+        ]);
+
+        $this->logPretty('2/6', "Empresa inserida (ID: {$empresa->id}, Subdomínio: {$empresa->subdomain}, Modo: {$empresa->modo})", 'success');
+
+        try {
+            // ============================================================
+            // MODO SINGULAR: CRIA BANCO DEDICADO + MIGRATIONS TENANT
+            // ============================================================
+            if ($request->modo === 'singular') {
+                DB::connection('landlord')
+                    ->statement("CREATE DATABASE `{$empresa->db_name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+                $this->logPretty('3/6', "Base de dados criada: {$empresa->db_name}", 'success');
+
+                $this->configurarTenantConnection($empresa->db_name);
+                $this->logPretty('4/6', 'Conexão tenant configurada', 'success');
+
+                $exitCode = $this->executarMigracoesComLog('tenant', 'migrations/tenant');
+                if ($exitCode !== 0) {
+                    throw new \Exception('Erro ao executar migrations do tenant. Código: ' . $exitCode);
+                }
+                $this->logPretty('5/6', 'Migrations do tenant executadas com sucesso', 'success');
+
+                $admin = \App\Models\Tenant\User::create([
+                    'id'            => (string) Str::uuid(),
+                    'name'          => $request->admin_name,
+                    'email'         => $request->admin_email,
+                    'password'      => Hash::make($request->admin_password),
+                    'role'          => 'admin',
+                    'ativo'         => true,
+                    'email_verified_at' => now(),
+                ]);
+
+                $this->logPretty('6/6', "Admin criado no tenant: {$admin->email}", 'success');
+            }
+            // ============================================================
+            // MODO COLECTIVO: USA BANCO SHARED
+            // ============================================================
+            else {
+                try {
+                    $tabelaExiste = DB::connection('shared')->table('users')->exists();
+                } catch (\Exception $e) {
+                    $tabelaExiste = false;
+                    $this->logPretty('3/6', 'Tabela users não existe no shared. A executar migrations...', 'info');
+                }
+
+                if (!$tabelaExiste) {
+                    $this->logPretty('3/6', 'Rodando migrations do shared (primeira vez)', 'info');
+                    $exitCode = $this->executarMigracoesComLog('shared', 'migrations/shared');
+
+                    if ($exitCode !== 0) {
+                        throw new \Exception('Erro ao executar migrations do shared. Código: ' . $exitCode);
+                    }
+                    $this->logPretty('4/6', 'Migrations do shared executadas com sucesso', 'success');
+                } else {
+                    $this->logPretty('3/6', 'Migrations do shared já executadas anteriormente', 'info');
+                }
+
+                $admin = \App\Models\Shared\User::create([
+                    'id'            => (string) Str::uuid(),
+                    'tenant_id'     => $empresa->id,
+                    'name'          => $request->admin_name,
+                    'email'         => $request->admin_email,
+                    'password'      => Hash::make($request->admin_password),
+                    'role'          => 'admin',
+                ]);
+
+                $this->logPretty('5/6', "Admin criado no shared: {$admin->email}", 'success');
+
+                try {
+                    DB::connection('shared')->table('user_t')->insert([
+                        'id' => (string) Str::uuid(),
+                        'user_id' => $admin->id,
+                        'tenant_id' => $empresa->id,
+                        'role' => 'admin',
+                        'ativo' => true,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                    $this->logPretty('6/6', "Admin relacionado ao tenant {$empresa->subdomain}", 'success');
+                } catch (\Exception $e) {
+                    $this->logPretty('6/6', "Relacionamento não criado (tabela opcional): " . $e->getMessage(), 'warning');
+                }
+            }
+
+            // ============================================================
+            // CRIA SUBSCRIÇÃO EXPERIMENTAL SE FOR PLANO GRATUITO
+            // ============================================================
+            if ($request->has('plano_id')) {
+                try {
+                    $plano = Plano::on('landlord')->find($request->plano_id);
+                    if ($plano && $plano->valor_mensal == 0) {
+                        $subscricao = \App\Models\Subscricao::on('landlord')->create([
+                            'id' => (string) Str::uuid(),
+                            'empresa_id' => $empresa->id,
+                            'plano_id' => $plano->id,
+                            'data_inicio' => now(),
+                            'data_fim' => now()->addMonths($plano->duracao_meses ?? 1),
+                            'status' => 'ativa',
+                            'forma_pagamento' => 'gratuito',
+                            'renovacao_automatica' => false,
+                        ]);
+                        $this->logPretty('7/7', "Subscrição experimental criada para o plano {$plano->nome} (ID: {$subscricao->id})", 'success');
+                    } else {
+                        $this->logPretty('7/7', "Plano com ID {$request->plano_id} não é gratuito. Nenhuma subscrição criada.", 'warning');
+                    }
+                } catch (\Exception $e) {
+                    $this->logPretty('7/7', "Erro ao criar subscrição experimental: " . $e->getMessage(), 'error');
+                }
+            }
+
+            // Mover logo temporário
+            if (str_starts_with($empresa->logo, 'temp_logos/')) {
+                $extension = pathinfo($empresa->logo, PATHINFO_EXTENSION) ?: 'png';
+                $newLogoName = 'logos/logo_' . $empresa->id . '_' . time() . '.' . $extension;
+                if (Storage::disk('public')->exists($empresa->logo)) {
+                    Storage::disk('public')->move($empresa->logo, $newLogoName);
+                    $empresa->update(['logo' => $newLogoName]);
+                    $this->logPretty('EXTRA', "Logo movido para: {$newLogoName}", 'success');
+                } else {
+                    $this->logPretty('EXTRA', "Logo temporário não encontrado: {$empresa->logo}", 'warning');
+                }
+            }
+
+            // Log final
+            $building = $this->getBuildingAscii(
+                $empresa->subdomain,
+                $empresa->db_name,
+                $admin->email,
+                $empresa->modo ?? 'colectivo'
+            );
+            Log::channel('single')->info("\n" . $building . "\n");
+
+            // Auditoria
+            AuditLogger::log("Empresa Criada", "🏢", [
+                'area' => 'Administração',
+                'detalhes' => [
+                    'empresa_id' => $empresa->id,
+                    'empresa_nome' => $empresa->nome,
+                    'subdomain' => $empresa->subdomain,
+                    'modo' => $empresa->modo,
+                    'nif' => $empresa->nif,
+                    'admin_email' => $admin->email,
+                ],
+            ]);
+
+            //   NOTIFICAÇÕES
+            $landlordAtual = auth('landlord_api')->user();
+
+            if ($landlordAtual) {
+                NotificacaoService::enviar(
+                    userId: $landlordAtual->id,
+                    titulo: "Empresa \"{$empresa->nome}\" criada",
+                    mensagem: "A empresa foi registada com sucesso na plataforma.",
+                    tipo: 'success',
+                    tipoEvento: 'empresa_criada',
+                    dados: [
+                        'Empresa'    => $empresa->nome,
+                        'NIF'        => $empresa->nif,
+                        'Subdomínio' => $empresa->subdomain,
+                        'Modo'       => $empresa->modo,
+                        'Admin'      => $admin->email,
+                    ],
+                    url: "/landlord/empresas/{$empresa->id}",
+                    empresaId: $empresa->id,
+                );
+            }
+
+            NotificacaoService::enviarParaSuperAdmins(
+                titulo: "Nova empresa: {$empresa->nome}",
+                mensagem: "Uma nova empresa foi criada na plataforma.",
+                tipo: 'info',
+                tipoEvento: 'empresa_criada_admin',
+                dados: [
+                    'Empresa'    => $empresa->nome,
+                    'NIF'        => $empresa->nif,
+                    'Subdomínio' => $empresa->subdomain,
+                    'Admin'      => $admin->email,
+                    'Modo'       => $empresa->modo,
+                ],
+                url: "/landlord/empresas/{$empresa->id}",
+                empresaId: $empresa->id,
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Empresa criada com sucesso!',
+                'empresa' => $empresa->fresh(),
+                'admin'   => $admin->only(['name', 'email']),
+                'modo'    => $empresa->modo,
+            ], 201);
+        } catch (\Throwable $e) {
+            $this->logPretty('ERRO', "Falha na criação: {$e->getMessage()}", 'error');
+
+            $empresa->delete();
+            try {
+                DB::connection('landlord')
+                    ->statement("DROP DATABASE IF EXISTS `{$empresa->db_name}`");
+            } catch (\Throwable $ignored) {
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Falha ao criar empresa: ' . $e->getMessage()
+            ], 500);
+        }
     }
-}
 
     // ============================================================
     // 4. CONFIGURAR CONEXÃO TENANT
@@ -485,7 +503,6 @@ public function store(Request $request)
     {
         config(['database.connections.tenant.database' => $database]);
 
-        // Só usar purge em ambiente de desenvolvimento
         if (app()->environment('local', 'testing')) {
             DB::purge('tenant');
             DB::reconnect('tenant');
@@ -524,6 +541,20 @@ public function store(Request $request)
             'mensagem' => $validated['mensagem'],
             'lida' => false,
         ]);
+
+        //   Notificar super admins
+        NotificacaoService::enviarParaSuperAdmins(
+            titulo: "Mensagem enviada para {$empresa->nome}",
+            mensagem: "Foi enviada uma nova mensagem para a empresa {$empresa->nome}.",
+            tipo: 'info',
+            tipoEvento: 'mensagem_enviada',
+            dados: [
+                'Empresa'   => $empresa->nome,
+                'Remetente' => $landlordUser?->name ?? 'Landlord',
+            ],
+            url: "/landlord/empresas/{$empresa->id}",
+            empresaId: $empresa->id,
+        );
 
         return response()->json([
             'success' => true,
@@ -885,7 +916,7 @@ public function store(Request $request)
 
             $empresa->update(['logo' => $path]);
 
-            Log::info('[📸 LOGO] Atualizado', ['empresa_id' => $empresa->id, 'path' => $path]);
+            Log::info('[ LOGO] Atualizado', ['empresa_id' => $empresa->id, 'path' => $path]);
 
             return response()->json([
                 'success'  => true,
@@ -893,7 +924,7 @@ public function store(Request $request)
                 'message'  => 'Logo atualizado com sucesso!'
             ]);
         } catch (\Throwable $e) {
-            Log::error('[❌ LOGO] Falha', ['error' => $e->getMessage()]);
+            Log::error('[ LOGO] Falha', ['error' => $e->getMessage()]);
             return response()->json([
                 'success' => false,
                 'message' => 'Falha ao fazer upload: ' . $e->getMessage()
@@ -925,7 +956,7 @@ public function store(Request $request)
         $request->validate([
             'nome'          => 'sometimes|string|max:255',
             'email'         => 'sometimes|email|unique:landlord.empresas,email,' . $empresa->id,
-            'nif'           => 'sometimes|nullable|string|max:14', // + regra de formato se quiseres
+            'nif'           => 'sometimes|nullable|string|max:14',
             'telefone'      => 'nullable|string|max:20',
             'endereco'      => 'nullable|string|max:500',
             'nome_banco'    => 'nullable|string|max:255',
@@ -1063,7 +1094,7 @@ public function store(Request $request)
             ], 409);
         }
 
-        \Log::info("Empresa status alterado", [
+        Log::info("Empresa status alterado", [
             'empresa_id' => $empresa->id,
             'user_id'    => $user->id,
             'de'         => $statusAnterior,
@@ -1099,6 +1130,43 @@ public function store(Request $request)
             'modo'            => $empresa->modo,
             'alterado_por'    => auth('landlord_api')->id(),
         ]);
+
+        //   NOTIFICAÇÕES
+        $landlordAtual = auth('landlord_api')->user();
+        $acao = $novoStatus === 'ativo' ? 'reativada' : 'suspensa';
+        $tipo = $novoStatus === 'ativo' ? 'success' : 'warning';
+
+        if ($landlordAtual) {
+            NotificacaoService::enviar(
+                userId: $landlordAtual->id,
+                titulo: "Empresa \"{$empresa->nome}\" {$acao}",
+                mensagem: "O estado da empresa foi alterado para {$novoStatus}.",
+                tipo: $tipo,
+                tipoEvento: 'empresa_status_alterado',
+                dados: [
+                    'Empresa'         => $empresa->nome,
+                    'Status anterior' => $statusAnterior,
+                    'Status novo'     => $novoStatus,
+                ],
+                url: "/landlord/empresas/{$empresa->id}",
+                empresaId: $empresa->id,
+            );
+        }
+
+        NotificacaoService::enviarParaSuperAdmins(
+            titulo: "Empresa {$acao}: {$empresa->nome}",
+            mensagem: "O estado da empresa foi alterado de {$statusAnterior} para {$novoStatus}.",
+            tipo: $tipo,
+            tipoEvento: 'empresa_status_alterado_admin',
+            dados: [
+                'Empresa'         => $empresa->nome,
+                'Subdomínio'      => $empresa->subdomain,
+                'Status anterior' => $statusAnterior,
+                'Status novo'     => $novoStatus,
+            ],
+            url: "/landlord/empresas/{$empresa->id}",
+            empresaId: $empresa->id,
+        );
 
         return response()->json([
             'success' => true,

@@ -4,32 +4,24 @@ namespace App\Http\Controllers;
 
 use Illuminate\Support\Facades\DB;
 use App\Models\Plano;
-use App\Models\Empresa;
 use App\Models\Pagamento;
 use App\Models\Subscricao;
 use App\Models\Notificacao;
+use App\Services\NotificacaoService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Storage;
-use App\Notifications\ComprovativoRecebido;
-use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Log;
 
 class PagamentoLandlordController extends Controller
 {
-    /**
-     * Listar pagamentos com filtros
-     */
+    /* ================================================================
+     | LISTAR
+     | ================================================================ */
     public function index(Request $request)
     {
-        Log::info('[PagamentoLandlordController::index] Iniciada listagem', [
-            'filtros' => $request->all(),
-            'usuario' => auth('landlord')->user()?->email ?? 'desconhecido'
-        ]);
-
         try {
-            $query = Pagamento::with(['subscricao', 'empresa']);
+            $query = Pagamento::with(['subscricao', 'empresa', 'plano']);
 
             if ($request->has('subscricao_id')) {
                 $query->where('subscricao_id', $request->subscricao_id);
@@ -41,11 +33,7 @@ class PagamentoLandlordController extends Controller
                 $query->where('status', $request->status);
             }
 
-            $pagamentos = $query->get();
-
-            Log::info('[PagamentoLandlordController::index] Listagem concluída', [
-                'quantidade' => $pagamentos->count()
-            ]);
+            $pagamentos = $query->orderByDesc('created_at')->get();
 
             return response()->json([
                 'pagamentos' => $pagamentos,
@@ -53,30 +41,18 @@ class PagamentoLandlordController extends Controller
         } catch (\Exception $e) {
             Log::error('[PagamentoLandlordController::index] Erro', [
                 'mensagem' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
             ]);
             throw $e;
         }
     }
 
-    /**
-     * Mostrar um pagamento específico (inclui status e motivo de rejeição)
-     */
+    /* ================================================================
+     | MOSTRAR
+     | ================================================================ */
     public function show($id)
     {
-        Log::info('[PagamentoLandlordController::show] Buscando pagamento', [
-            'pagamento_id' => $id,
-            'usuario' => auth('landlord')->user()?->email ?? auth('sanctum')->user()?->email ?? 'desconhecido'
-        ]);
-
         try {
-            $pagamento = Pagamento::with(['subscricao', 'empresa'])->findOrFail($id);
-            
-            Log::info('[PagamentoLandlordController::show] Pagamento encontrado', [
-                'pagamento_id' => $id,
-                'status' => $pagamento->status,
-                'empresa_id' => $pagamento->empresa_id
-            ]);
+            $pagamento = Pagamento::with(['subscricao', 'empresa', 'plano'])->findOrFail($id);
 
             return response()->json([
                 'message' => 'Pagamento encontrado',
@@ -91,37 +67,28 @@ class PagamentoLandlordController extends Controller
                     'status' => $pagamento->status,
                     'motivo_rejeicao' => $pagamento->motivo_rejeicao,
                     'comprovativo_path' => $pagamento->comprovativo_path,
-                    'data_pagamento' => $pagamento->data_pagamento ? $pagamento->data_pagamento->toISOString() : null,
-                    'created_at' => $pagamento->created_at->toISOString(),
-                    'updated_at' => $pagamento->updated_at->toISOString(),
-                ]
+                    'historico_status' => $pagamento->historico_status ?? [],   // 
+                    'data_pagamento' => $pagamento->data_pagamento?->toISOString(),
+                    'created_at' => $pagamento->created_at?->toISOString(),
+                    'updated_at' => $pagamento->updated_at?->toISOString(),
+                ],
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            Log::warning('[PagamentoLandlordController::show] Pagamento não encontrado', ['id' => $id]);
             return response()->json(['message' => 'Pagamento não encontrado'], 404);
         } catch (\Exception $e) {
             Log::error('[PagamentoLandlordController::show] Erro', [
                 'pagamento_id' => $id,
                 'mensagem' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
             ]);
-            return response()->json([
-                'message' => 'Erro interno ao buscar pagamento',
-                'error' => $e->getMessage()
-            ], 500);
+            return response()->json(['message' => 'Erro interno'], 500);
         }
     }
 
-    /**
-     * Store - criar um novo pagamento (chamado pela empresa ao iniciar subscrição)
-     */
+    /* ================================================================
+     | CRIAR
+     | ================================================================ */
     public function store(Request $request)
     {
-        Log::info('[PagamentoLandlordController::store] Iniciando criação', [
-            'dados' => $request->all(),
-            'usuario' => auth('sanctum')->user()?->email ?? 'desconhecido'
-        ]);
-
         try {
             $validated = $request->validate([
                 'empresa_id' => 'required|exists:empresas,id',
@@ -141,12 +108,14 @@ class PagamentoLandlordController extends Controller
                 'status' => 'pendente',
                 'data_pagamento' => null,
                 'subscricao_id' => null,
-            ]);
-
-            Log::info('[PagamentoLandlordController::store] Pagamento criado', [
-                'pagamento_id' => $pagamento->id,
-                'empresa_id' => $pagamento->empresa_id,
-                'valor' => $pagamento->valor
+                'historico_status' => [
+                    [
+                        'status' => 'pendente',
+                        'data'   => now()->toIso8601String(),
+                        'por'    => 'sistema',
+                        'motivo' => 'Pagamento criado',
+                    ],
+                ],
             ]);
 
             return response()->json([
@@ -154,48 +123,30 @@ class PagamentoLandlordController extends Controller
                 'pagamento' => $pagamento,
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            Log::warning('[PagamentoLandlordController::store] Erro de validação', [
-                'errors' => $e->errors()
-            ]);
             throw $e;
         } catch (\Exception $e) {
             Log::error('[PagamentoLandlordController::store] Erro', [
                 'mensagem' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
             ]);
             throw $e;
         }
     }
 
-    /**
-     * Upload do comprovativo (empresa) → envia email para o admin
-     */
+    /* ================================================================
+     | UPLOAD DE COMPROVATIVO
+     | ================================================================ */
     public function uploadComprovativo(Request $request, $id)
     {
-        Log::info('[PagamentoLandlordController::uploadComprovativo] Iniciando upload', [
-            'pagamento_id' => $id,
-            'usuario' => auth('sanctum')->user()?->email ?? 'desconhecido'
-        ]);
-
         try {
             $request->validate([
                 'comprovativo' => 'required|file|mimes:jpg,jpeg,png,pdf|max:5120',
             ]);
 
-            $pagamento = Pagamento::findOrFail($id);
-
-            Log::debug('[PagamentoLandlordController::uploadComprovativo] Pagamento encontrado', [
-                'pagamento_id' => $id,
-                'status_atual' => $pagamento->status
-            ]);
+            $pagamento = Pagamento::with(['empresa', 'plano'])->findOrFail($id);
 
             if (!in_array($pagamento->status, ['pendente', 'rejeitado'])) {
-                Log::warning('[PagamentoLandlordController::uploadComprovativo] Estado inválido', [
-                    'pagamento_id' => $id,
-                    'status' => $pagamento->status
-                ]);
                 return response()->json([
-                    'message' => 'Não é possível enviar comprovativo para este estado.'
+                    'message' => 'Não é possível enviar comprovativo para este estado.',
                 ], 422);
             }
 
@@ -204,64 +155,41 @@ class PagamentoLandlordController extends Controller
             $pagamento->comprovativo_path = $path;
             $pagamento->status = 'em_analise';
             $pagamento->motivo_rejeicao = null;
+
+            //  Histórico
+            $pagamento->registarStatus(
+                'em_analise',
+                por: auth('sanctum')->user()?->email ?? 'empresa',
+                motivo: 'Comprovativo enviado',
+            );
+
             $pagamento->save();
 
-            Log::info('[PagamentoLandlordController::uploadComprovativo] Ficheiro guardado e status atualizado', [
-                'pagamento_id' => $id,
-                'path' => $path,
-                'novo_status' => 'em_analise'
-            ]);
-
-            // -- ENVIAR NOTIFICAÇÃO POR EMAIL AO ADMIN --
-            $adminEmail = config('mail.admin_email');
-            
-            Log::info('[PagamentoLandlordController::uploadComprovativo] Tentando enviar notificação', [
-                'para' => $adminEmail,
-                'pagamento_id' => $id
-            ]);
-
-            try {
-                Notification::route('mail', $adminEmail)
-                    ->notify(new ComprovativoRecebido($pagamento));
-                
-                Log::info('[PagamentoLandlordController::uploadComprovativo] Notificação email enviada com sucesso', [
-                    'para' => $adminEmail,
-                    'pagamento_id' => $id
-                ]);
-            } catch (\Exception $e) {
-                Log::error('[PagamentoLandlordController::uploadComprovativo] Falha ao enviar email de notificação', [
-                    'para' => $adminEmail,
-                    'pagamento_id' => $id,
-                    'erro' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString()
-                ]);
-                // Não falha a requisição, apenas loga o erro
-            }
-
-            // -- GRAVAR NOTIFICAÇÃO IN-APP (sininho do landlord) --
+            //  NOTIFICAÇÃO
             try {
                 $nomeEmpresa = $pagamento->empresa?->nome ?? 'Empresa desconhecida';
                 $valorFormatado = number_format($pagamento->valor, 2, ',', '.');
+                $planoNome = $pagamento->plano?->nome ?? '—';
 
-                Notificacao::create([
-                    'titulo'       => 'Novo comprovativo aguarda análise',
-                    'mensagem'     => "A empresa **{$nomeEmpresa}** enviou um comprovativo de pagamento no valor de **{$valorFormatado} AOA**. Analise e aprove ou rejeite.",
-                    'tipo'         => 'info',
-                    'lida'         => false,
-                    'user_id'      => null,
-                    'pagamento_id' => $pagamento->id,
-                ]);
-
-                Log::info('[PagamentoLandlordController::uploadComprovativo] Notificação in-app criada', [
+                NotificacaoService::enviarParaSuperAdmins(
+                    titulo: "Novo comprovativo: {$nomeEmpresa}",
+                    mensagem: "A empresa \"{$nomeEmpresa}\" enviou um comprovativo de pagamento de {$valorFormatado} AOA (plano {$planoNome}). Aguarda análise.",
+                    tipo: 'warning',
+                    tipoEvento: 'comprovativo_recebido',
+                    dados: [
+                        'Empresa'    => $nomeEmpresa,
+                        'Plano'      => $planoNome,
+                        'Valor'      => "{$valorFormatado} AOA",
+                        'Referência' => $pagamento->codigo_transacao ?? '—',
+                    ],
+                    url: "/landlord/pagamentos-plano/{$pagamento->id}",
+                    empresaId: $pagamento->empresa_id,
+                );
+            } catch (\Throwable $e) {
+                Log::error('[uploadComprovativo] Falha na notificação', [
                     'pagamento_id' => $id,
-                    'empresa'      => $nomeEmpresa,
+                    'erro' => $e->getMessage(),
                 ]);
-            } catch (\Exception $e) {
-                Log::error('[PagamentoLandlordController::uploadComprovativo] Falha ao criar notificação in-app', [
-                    'pagamento_id' => $id,
-                    'erro'         => $e->getMessage(),
-                ]);
-                // Não falha a requisição, apenas loga o erro
             }
 
             return response()->json([
@@ -269,64 +197,43 @@ class PagamentoLandlordController extends Controller
                 'pagamento' => $pagamento,
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            Log::warning('[PagamentoLandlordController::uploadComprovativo] Erro de validação', [
-                'errors' => $e->errors()
-            ]);
             throw $e;
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            Log::warning('[PagamentoLandlordController::uploadComprovativo] Pagamento não encontrado', [
-                'pagamento_id' => $id
-            ]);
             return response()->json(['message' => 'Pagamento não encontrado'], 404);
         } catch (\Exception $e) {
-            Log::error('[PagamentoLandlordController::uploadComprovativo] Erro', [
+            Log::error('[uploadComprovativo] Erro', [
                 'pagamento_id' => $id,
                 'mensagem' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
             ]);
-            return response()->json([
-                'message' => 'Erro ao processar upload',
-                'error' => $e->getMessage()
-            ], 500);
+            return response()->json(['message' => 'Erro ao processar upload'], 500);
         }
     }
 
-    /**
-     * Confirmar pagamento (admin) → cria/renova subscrição
-     */
+    /* ================================================================
+     | CONFIRMAR PAGAMENTO
+     | ================================================================ */
     public function confirmarPagamento($id)
     {
-        Log::info('[PagamentoLandlordController::confirmarPagamento] Iniciando confirmação', [
-            'pagamento_id' => $id,
-            'usuario' => auth('landlord')->user()?->email ?? 'desconhecido'
-        ]);
-
         try {
             $result = DB::transaction(function () use ($id) {
-                $pagamento = Pagamento::lockForUpdate()->findOrFail($id);
-
-                Log::debug('[PagamentoLandlordController::confirmarPagamento] Pagamento encontrado', [
-                    'pagamento_id' => $id,
-                    'status_atual' => $pagamento->status
-                ]);
+                $pagamento = Pagamento::lockForUpdate()->with(['empresa', 'plano'])->findOrFail($id);
 
                 if ($pagamento->status === 'pago') {
-                    Log::info('[PagamentoLandlordController::confirmarPagamento] Pagamento já confirmado', [
-                        'pagamento_id' => $id
-                    ]);
                     return response()->json([
                         'message' => 'Pagamento já confirmado anteriormente',
                         'subscricao_id' => $pagamento->subscricao_id,
                     ]);
                 }
 
-                if ($pagamento->status !== 'em_analise') {
-                    Log::warning('[PagamentoLandlordController::confirmarPagamento] Estado inválido para confirmação', [
-                        'pagamento_id' => $id,
-                        'status' => $pagamento->status
-                    ]);
+                if ($pagamento->status === 'rejeitado') {
                     return response()->json([
-                        'message' => 'Pagamento não pode ser confirmado neste estado'
+                        'message' => 'Pagamento rejeitado não pode ser confirmado. Peça novo upload de comprovativo.',
+                    ], 422);
+                }
+
+                if ($pagamento->status !== 'em_analise') {
+                    return response()->json([
+                        'message' => 'Pagamento não pode ser confirmado neste estado',
                     ], 422);
                 }
 
@@ -334,7 +241,14 @@ class PagamentoLandlordController extends Controller
                 $pagamento->status = 'pago';
                 $pagamento->data_pagamento = now();
 
-                // Se não houver subscrição, cria uma nova
+                //  Histórico
+                $pagamento->registarStatus(
+                    'pago',
+                    por: auth('landlord')->user()?->email ?? 'landlord',
+                    motivo: 'Pagamento confirmado',
+                );
+
+                // Criar ou renovar subscrição
                 if (!$pagamento->subscricao_id) {
                     $plano = Plano::findOrFail($pagamento->plano_id);
                     $duracaoMeses = $plano->duracao_meses ?? 1;
@@ -351,37 +265,52 @@ class PagamentoLandlordController extends Controller
                     ]);
 
                     $pagamento->subscricao_id = $subscricao->id;
-                    
-                    Log::info('[PagamentoLandlordController::confirmarPagamento] Nova subscrição criada', [
-                        'pagamento_id' => $id,
-                        'subscricao_id' => $subscricao->id,
-                        'empresa_id' => $pagamento->empresa_id,
-                        'plano_id' => $plano->id
-                    ]);
                 } else {
-                    // Renovação: estende a data de fim
                     $subscricao = $pagamento->subscricao;
                     $duracaoMeses = $subscricao->plano->duracao_meses ?? 1;
                     $subscricao->data_fim = Carbon::parse($subscricao->data_fim)->addMonths($duracaoMeses);
                     $subscricao->status = 'ativa';
                     $subscricao->save();
-
-                    Log::info('[PagamentoLandlordController::confirmarPagamento] Subscrição renovada', [
-                        'pagamento_id' => $id,
-                        'subscricao_id' => $subscricao->id,
-                        'nova_data_fim' => $subscricao->data_fim->toISOString()
-                    ]);
                 }
 
                 $pagamento->save();
 
-                // Marcar notificação ligada como lida
-                Notificacao::where('pagamento_id', $id)->update(['lida' => true]);
+                // Marcar notificações anteriores como lidas
+                Notificacao::where('empresa_id', $pagamento->empresa_id)
+                    ->where('tipo_evento', 'comprovativo_recebido')
+                    ->where('lida', false)
+                    ->update(['lida' => true, 'lida_em' => now()]);
 
-                Log::info('[PagamentoLandlordController::confirmarPagamento] Confirmação concluída com sucesso', [
-                    'pagamento_id' => $id,
-                    'subscricao_id' => $pagamento->subscricao_id
-                ]);
+                //  NOTIFICAÇÃO
+                try {
+                    $pagamento->loadMissing('empresa', 'plano');
+                    $nomeEmpresa = $pagamento->empresa?->nome ?? '—';
+                    $planoNome = $pagamento->plano?->nome ?? '—';
+                    $valorFormatado = number_format($pagamento->valor, 2, ',', '.');
+                    $dataFim = $subscricao->data_fim
+                        ? Carbon::parse($subscricao->data_fim)->format('d/m/Y')
+                        : '—';
+
+                    NotificacaoService::enviarParaSuperAdmins(
+                        titulo: "Pagamento confirmado: {$nomeEmpresa}",
+                        mensagem: "O pagamento de {$valorFormatado} AOA da empresa \"{$nomeEmpresa}\" foi confirmado. Plano \"{$planoNome}\" ativo até {$dataFim}.",
+                        tipo: 'success',
+                        tipoEvento: 'pagamento_confirmado',
+                        dados: [
+                            'Empresa'    => $nomeEmpresa,
+                            'Plano'      => $planoNome,
+                            'Valor'      => "{$valorFormatado} AOA",
+                            'Válido até' => $dataFim,
+                        ],
+                        url: "/landlord/empresas/{$pagamento->empresa_id}",
+                        empresaId: $pagamento->empresa_id,
+                    );
+                } catch (\Throwable $e) {
+                    Log::error('[confirmarPagamento] Falha na notificação', [
+                        'pagamento_id' => $id,
+                        'erro' => $e->getMessage(),
+                    ]);
+                }
 
                 return response()->json([
                     'message' => 'Pagamento confirmado e assinatura ativada',
@@ -391,151 +320,131 @@ class PagamentoLandlordController extends Controller
 
             return $result;
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            Log::warning('[PagamentoLandlordController::confirmarPagamento] Pagamento não encontrado', [
-                'pagamento_id' => $id
-            ]);
             return response()->json(['message' => 'Pagamento não encontrado'], 404);
         } catch (\Exception $e) {
-            Log::error('[PagamentoLandlordController::confirmarPagamento] Erro', [
+            Log::error('[confirmarPagamento] Erro', [
                 'pagamento_id' => $id,
                 'mensagem' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
             ]);
-            return response()->json([
-                'message' => 'Erro ao confirmar pagamento',
-                'error' => $e->getMessage()
-            ], 500);
+            return response()->json(['message' => 'Erro ao confirmar pagamento'], 500);
         }
     }
 
-    /**
-     * Rejeitar pagamento (admin)
-     */
+    /* ================================================================
+     | REJEITAR PAGAMENTO
+     | ================================================================ */
     public function rejeitarPagamento(Request $request, $id)
     {
-        Log::info('[PagamentoLandlordController::rejeitarPagamento] Iniciando rejeição', [
-            'pagamento_id' => $id,
-            'usuario' => auth('landlord')->user()?->email ?? 'desconhecido',
-            'motivo' => $request->motivo ?? null
-        ]);
-
         try {
             $request->validate([
                 'motivo' => 'required|string|max:500',
             ]);
 
-            $pagamento = Pagamento::findOrFail($id);
-
-            Log::debug('[PagamentoLandlordController::rejeitarPagamento] Pagamento encontrado', [
-                'pagamento_id' => $id,
-                'status_atual' => $pagamento->status
-            ]);
+            $pagamento = Pagamento::with(['empresa', 'plano'])->findOrFail($id);
 
             if ($pagamento->status === 'pago') {
-                Log::warning('[PagamentoLandlordController::rejeitarPagamento] Tentativa de rejeitar pagamento já pago', [
-                    'pagamento_id' => $id
-                ]);
                 return response()->json([
-                    'message' => 'Pagamento já confirmado, não pode ser rejeitado.'
+                    'message' => 'Pagamento já confirmado, não pode ser rejeitado.',
+                ], 422);
+            }
+
+            //  NOVO — bloquear rejeição duplicada
+            if ($pagamento->status === 'rejeitado') {
+                return response()->json([
+                    'message' => 'Este pagamento já foi rejeitado.',
+                    'motivo_rejeicao' => $pagamento->motivo_rejeicao,
                 ], 422);
             }
 
             $pagamento->status = 'rejeitado';
             $pagamento->motivo_rejeicao = $request->motivo;
+
+            //  Histórico
+            $pagamento->registarStatus(
+                'rejeitado',
+                por: auth('landlord')->user()?->email ?? 'landlord',
+                motivo: $request->motivo,
+            );
+
             $pagamento->save();
 
-            // Marcar notificação ligada como lida
-            Notificacao::where('pagamento_id', $id)->update(['lida' => true]);
+            // Marcar notificações de comprovativo como lidas
+            Notificacao::where('empresa_id', $pagamento->empresa_id)
+                ->where('tipo_evento', 'comprovativo_recebido')
+                ->where('lida', false)
+                ->update(['lida' => true, 'lida_em' => now()]);
 
-            Log::info('[PagamentoLandlordController::rejeitarPagamento] Pagamento rejeitado', [
-                'pagamento_id' => $id,
-                'motivo' => $request->motivo
-            ]);
+            //  NOTIFICAÇÃO
+            try {
+                $nomeEmpresa = $pagamento->empresa?->nome ?? '—';
+                $planoNome = $pagamento->plano?->nome ?? '—';
+
+                NotificacaoService::enviarParaSuperAdmins(
+                    titulo: "Pagamento rejeitado: {$nomeEmpresa}",
+                    mensagem: "O pagamento do plano \"{$planoNome}\" da empresa \"{$nomeEmpresa}\" foi rejeitado.\n\nMotivo: {$request->motivo}",
+                    tipo: 'danger',
+                    tipoEvento: 'pagamento_rejeitado',
+                    dados: [
+                        'Empresa' => $nomeEmpresa,
+                        'Plano'   => $planoNome,
+                        'Motivo'  => $request->motivo,
+                    ],
+                    url: "/landlord/empresas/{$pagamento->empresa_id}",
+                    empresaId: $pagamento->empresa_id,
+                );
+            } catch (\Throwable $e) {
+                Log::error('[rejeitarPagamento] Falha na notificação', [
+                    'pagamento_id' => $id,
+                    'erro' => $e->getMessage(),
+                ]);
+            }
 
             return response()->json([
                 'message' => 'Pagamento rejeitado com sucesso.',
                 'pagamento' => $pagamento,
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            Log::warning('[PagamentoLandlordController::rejeitarPagamento] Erro de validação', [
-                'errors' => $e->errors()
-            ]);
             throw $e;
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            Log::warning('[PagamentoLandlordController::rejeitarPagamento] Pagamento não encontrado', [
-                'pagamento_id' => $id
-            ]);
             return response()->json(['message' => 'Pagamento não encontrado'], 404);
         } catch (\Exception $e) {
-            Log::error('[PagamentoLandlordController::rejeitarPagamento] Erro', [
+            Log::error('[rejeitarPagamento] Erro', [
                 'pagamento_id' => $id,
                 'mensagem' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
             ]);
-            return response()->json([
-                'message' => 'Erro ao rejeitar pagamento',
-                'error' => $e->getMessage()
-            ], 500);
+            return response()->json(['message' => 'Erro ao rejeitar pagamento'], 500);
         }
     }
 
-    /**
-     * Delete (apenas se não tiver subscrição activa)
-     */
+    /* ================================================================
+     | ELIMINAR
+     | ================================================================ */
     public function destroy($id)
     {
-        Log::info('[PagamentoLandlordController::destroy] Iniciando exclusão', [
-            'pagamento_id' => $id,
-            'usuario' => auth('landlord')->user()?->email ?? 'desconhecido'
-        ]);
-
         try {
             $pagamento = Pagamento::findOrFail($id);
 
-            if ($pagamento->subscricao_id && $pagamento->subscricao->status === 'ativa') {
-                Log::warning('[PagamentoLandlordController::destroy] Impedido: pagamento com subscrição activa', [
-                    'pagamento_id' => $id,
-                    'subscricao_id' => $pagamento->subscricao_id
-                ]);
+            if ($pagamento->subscricao_id && $pagamento->subscricao?->status === 'ativa') {
                 return response()->json([
-                    'message' => 'Não é possível eliminar um pagamento de uma assinatura activa.'
+                    'message' => 'Não é possível eliminar um pagamento de uma assinatura activa.',
                 ], 422);
             }
 
             $pagamento->delete();
 
-            Log::info('[PagamentoLandlordController::destroy] Pagamento excluído', [
-                'pagamento_id' => $id
-            ]);
-
             return response()->json(null, 204);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            Log::warning('[PagamentoLandlordController::destroy] Pagamento não encontrado', [
-                'pagamento_id' => $id
-            ]);
             return response()->json(['message' => 'Pagamento não encontrado'], 404);
         } catch (\Exception $e) {
-            Log::error('[PagamentoLandlordController::destroy] Erro', [
-                'pagamento_id' => $id,
-                'mensagem' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            return response()->json([
-                'message' => 'Erro ao excluir pagamento',
-                'error' => $e->getMessage()
-            ], 500);
+            return response()->json(['message' => 'Erro ao excluir pagamento'], 500);
         }
     }
 
-    /**
-     * Update genérico (se necessário)
-     */
+    /* ================================================================
+     | UPDATE (não implementado)
+     | ================================================================ */
     public function update(Request $request, $id)
     {
-        Log::info('[PagamentoLandlordController::update] Chamado método update (não implementado)', [
-            'pagamento_id' => $id,
-            'usuario' => auth('landlord')->user()?->email ?? 'desconhecido'
-        ]);
         return response()->json(['message' => 'Use os endpoints específicos'], 405);
     }
 }

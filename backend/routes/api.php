@@ -26,11 +26,10 @@ use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\PagamentoLandlordController;
 use App\Http\Controllers\LandlordNotificacaoController;
 
-
 $uuidPattern = '[0-9a-fA-F-]{36}';
 
 // ================================================================
-// 1. ROTAS PÚBLICAS (sem middleware)
+// 1. ROTAS PÚBLICAS
 // ================================================================
 Route::post('/password/email', [PasswordResetController::class, 'sendResetLink'])
     ->middleware('throttle:5,10');
@@ -38,59 +37,72 @@ Route::post('/password/email', [PasswordResetController::class, 'sendResetLink']
 Route::post('/upload-temp-logo', [EmpresaController::class, 'uploadTempLogo'])->name('upload.temp.logo');
 Route::post('/empresas', [EmpresaController::class, 'store'])->name('empresas.store');
 
-// Planos e features – públicos (landing page, checkout)
+// Planos e features — públicos (landing / checkout)
 Route::get('/planos-ativos', [PlanoController::class, 'ativos']);
-Route::get('/features', [FeatureController::class, 'index']); // ?ativo=1
+Route::get('/features', [FeatureController::class, 'index']);
 Route::get('/features-ativas', [FeatureController::class, 'ativas']);
-
-// Gestão de planos (apenas leitura pública) – necessário para checkout
 Route::get('/planos/{plano}', [PlanoController::class, 'show']);
 
 // ================================================================
-// 2. ROTAS DO LANDLORD (Administração)
+// 2. ROTAS DO LANDLORD
 // ================================================================
-
-
 Route::prefix('landlord')->group(function () {
+
+    /* ── 2.1 Públicas (login / registo) ─────────────────────── */
     Route::post('/login', [LandlordAuthController::class, 'login']);
     Route::post('/register', [LandlordAuthController::class, 'register']);
 
     Route::middleware([\Illuminate\Session\Middleware\StartSession::class])->group(function () {
-    Route::get('/auth/google', [LandlordAuthController::class, 'redirectToGoogle'])->name('landlord.google.redirect');
-    Route::get('/auth/google/callback', [LandlordAuthController::class, 'handleGoogleCallback'])->name('landlord.google.callback');
-   });
-    Route::get('/notificacoes', [LandlordNotificacaoController::class, 'index']);
-    Route::post('/notificacoes/{id}/marcar-lida', [LandlordNotificacaoController::class, 'marcarLida']);
-    Route::post('/notificacoes/marcar-todas-lidas', [LandlordNotificacaoController::class, 'marcarTodasLidas']);
+        Route::get('/auth/google', [LandlordAuthController::class, 'redirectToGoogle'])->name('landlord.google.redirect');
+        Route::get('/auth/google/callback', [LandlordAuthController::class, 'handleGoogleCallback'])->name('landlord.google.callback');
+    });
 
+    /* ── 2.2 Autenticadas (auth:landlord_api) ───────────────── */
     Route::middleware(['auth:landlord_api'])->group(function () {
+
+        // ---------- AUTH ----------
         Route::post('/logout', [LandlordAuthController::class, 'logout']);
         Route::get('/landlordme', [LandlordAuthController::class, 'landlordme']);
-        Route::get('/analytics/resumo', [AnalyticsController::class, 'resumo']);
 
-        // ✅ removido o "/landlord" duplicado
+        // ---------- PERFIL ----------
         Route::put('/perfil', [LandlordUserController::class, 'atualizarPerfil']);
         Route::put('/perfil/senha', [LandlordUserController::class, 'alterarSenhaPropria']);
 
-        Route::prefix('auditoria')->group(function () {
-    Route::get('/logs', [AuditoriaController::class, 'indexLandlord'])->name('landlord.auditoria.logs');
-});
-        //  prefix sem duplicar "landlord"
-Route::prefix('usuarios')->group(function () {
-    Route::get('/', [LandlordUserController::class, 'index']);
-    Route::post('/', [LandlordUserController::class, 'store']);
-    Route::get('/tenant-users', [LandlordUserController::class, 'listarTenantUsers']);
-    Route::get('/shared-users', [LandlordUserController::class, 'listarSharedUsers']);
-    Route::get('/{landlordUser}', [LandlordUserController::class, 'show']);
-    Route::put('/{landlordUser}', [LandlordUserController::class, 'update']);
-    Route::delete('/{landlordUser}', [LandlordUserController::class, 'destroy']);
-    Route::patch('/{landlordUser}/toggle-status', [LandlordUserController::class, 'toggleStatus']);
-    Route::post('/{landlordUser}/reset-password', [LandlordUserController::class, 'resetPassword']);
-    Route::post('/{landlordUser}/vincular-empresa', [LandlordUserController::class, 'vincularEmpresa']);
-    Route::delete('/{landlordUser}/desvincular-empresa', [LandlordUserController::class, 'desvincularEmpresa']);
-});
+        // ---------- ANALYTICS ----------
+        Route::get('/analytics/resumo', [AnalyticsController::class, 'resumo']);
 
-        // NOVO: CRUD completo de planos, dentro do landlord
+        // ---------- NOTIFICAÇÕES   (ordem: rotas fixas antes de {id}) ----------
+        Route::prefix('notificacoes')->group(function () {
+            Route::get('/', [LandlordNotificacaoController::class, 'index']);
+            Route::get('/nao-lidas', [LandlordNotificacaoController::class, 'naoLidas']);
+            Route::post('/marcar-todas-lidas', [LandlordNotificacaoController::class, 'marcarTodasLidas']);
+            Route::post('/{id}/marcar-lida', [LandlordNotificacaoController::class, 'marcarLida'])
+                ->where('id', $uuidPattern ?? '[0-9a-fA-F-]{36}');
+            Route::delete('/{id}', [LandlordNotificacaoController::class, 'eliminar'])
+                ->where('id', '[0-9a-fA-F-]{36}');
+        });
+
+        // ---------- AUDITORIA (landlord) ----------
+        Route::prefix('auditoria')->group(function () {
+            Route::get('/logs', [AuditoriaController::class, 'indexLandlord'])->name('landlord.auditoria.logs');
+        });
+
+        // ---------- UTILIZADORES LANDLORD ----------
+        Route::prefix('usuarios')->group(function () {
+            Route::get('/', [LandlordUserController::class, 'index']);
+            Route::post('/', [LandlordUserController::class, 'store']);
+            Route::get('/tenant-users', [LandlordUserController::class, 'listarTenantUsers']);
+            Route::get('/shared-users', [LandlordUserController::class, 'listarSharedUsers']);
+            Route::get('/{landlordUser}', [LandlordUserController::class, 'show']);
+            Route::put('/{landlordUser}', [LandlordUserController::class, 'update']);
+            Route::delete('/{landlordUser}', [LandlordUserController::class, 'destroy']);
+            Route::patch('/{landlordUser}/toggle-status', [LandlordUserController::class, 'toggleStatus']);
+            Route::post('/{landlordUser}/reset-password', [LandlordUserController::class, 'resetPassword']);
+            Route::post('/{landlordUser}/vincular-empresa', [LandlordUserController::class, 'vincularEmpresa']);
+            Route::delete('/{landlordUser}/desvincular-empresa', [LandlordUserController::class, 'desvincularEmpresa']);
+        });
+
+        // ---------- PLANOS ----------
         Route::prefix('planos')->group(function () {
             Route::get('/', [PlanoController::class, 'index']);
             Route::post('/', [PlanoController::class, 'store']);
@@ -101,7 +113,7 @@ Route::prefix('usuarios')->group(function () {
             Route::delete('/{plano}/features/{feature}', [PlanoController::class, 'detachFeature']);
         });
 
-        //  NOVO: gestão de features pelo landlord (create/update/delete)
+        // ---------- FEATURES ----------
         Route::prefix('features')->group(function () {
             Route::get('/', [FeatureController::class, 'index']);
             Route::post('/', [FeatureController::class, 'store']);
@@ -110,34 +122,40 @@ Route::prefix('usuarios')->group(function () {
             Route::delete('/{feature}', [FeatureController::class, 'destroy']);
         });
 
-        // Freelancer
-        Route::post('/freelancer/empresa', [FreelancerController::class, 'criarEmpresaSingular']);
-        Route::get('/freelancer/onboarding', [FreelancerController::class, 'obterStatusOnboarding']);
-        Route::put('/freelancer/empresa', [FreelancerController::class, 'atualizarDadosEmpresa']);
+        // ---------- FREELANCER ----------
+        Route::prefix('freelancer')->group(function () {
+            Route::post('/empresa', [FreelancerController::class, 'criarEmpresaSingular']);
+            Route::get('/onboarding', [FreelancerController::class, 'obterStatusOnboarding']);
+            Route::put('/empresa', [FreelancerController::class, 'atualizarDadosEmpresa']);
+        });
 
-        // Empresas (landlord)
-        Route::get('/empresas', [EmpresaController::class, 'index']);
-        Route::post('/empresas', [EmpresaController::class, 'store']);
-        Route::get('/empresas/{empresa}', [EmpresaController::class, 'show']);
-        Route::get('/empresas/{empresa}/mensagens', [EmpresaController::class, 'mensagens']);
-        Route::post('/empresas/{empresa}/mensagens', [EmpresaController::class, 'enviarMensagem']);
-        Route::put('/empresas/{empresa}', [EmpresaController::class, 'update']);
-        Route::patch('/empresas/{empresa}/toggle-status', [EmpresaController::class, 'toggleStatusLandlord']);
+        // ---------- EMPRESAS (landlord) ----------
+        Route::prefix('empresas')->group(function () {
+            Route::get('/', [EmpresaController::class, 'index']);
+            Route::post('/', [EmpresaController::class, 'store']);
+            Route::get('/{empresa}', [EmpresaController::class, 'show']);
+            Route::get('/{empresa}/mensagens', [EmpresaController::class, 'mensagens']);
+            Route::post('/{empresa}/mensagens', [EmpresaController::class, 'enviarMensagem']);
+            Route::put('/{empresa}', [EmpresaController::class, 'update']);
+            Route::patch('/{empresa}/toggle-status', [EmpresaController::class, 'toggleStatusLandlord']);
+        });
+
         Route::post('/minha-empresa', [EmpresaController::class, 'storeParaLandlordAutenticado']);
 
+        // ---------- PAGAMENTOS DE PLANO (landlord) ----------
         Route::prefix('pagamentos-plano')->group(function () {
-    Route::get('/', [PagamentoLandlordController::class, 'index']);
-    Route::get('/pendentes', [PagamentoLandlordController::class, 'pendentes']);
-    Route::get('/{id}', [PagamentoLandlordController::class, 'show']);
-    Route::post('{id}/confirmar', [PagamentoLandlordController::class, 'confirmarPagamento']);
-    Route::post('{id}/rejeitar', [PagamentoLandlordController::class, 'rejeitarPagamento']);
-    Route::delete('{id}', [PagamentoLandlordController::class, 'destroy']);
-});
+            Route::get('/', [PagamentoLandlordController::class, 'index']);
+            Route::get('/pendentes', [PagamentoLandlordController::class, 'pendentes']);
+            Route::get('/{id}', [PagamentoLandlordController::class, 'show']);
+            Route::post('/{id}/confirmar', [PagamentoLandlordController::class, 'confirmarPagamento']);
+            Route::post('/{id}/rejeitar', [PagamentoLandlordController::class, 'rejeitarPagamento']);
+            Route::delete('/{id}', [PagamentoLandlordController::class, 'destroy']);
+        });
     });
 });
 
 // ================================================================
-// 3. ROTAS TENANT SEM AUTENTICAÇÃO (apenas resolve.tenant)
+// 3. ROTAS TENANT (públicas — só resolve.tenant)
 // ================================================================
 Route::middleware(['resolve.tenant'])->group(function () use ($uuidPattern) {
     Route::get('/documentos-fiscais/{id}/prova', [DocumentoFiscalController::class, 'publicProof'])
@@ -150,28 +168,22 @@ Route::middleware(['resolve.tenant'])->group(function () use ($uuidPattern) {
 // ================================================================
 Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uuidPattern) {
 
-    // ============================================================
-    // GESTÃO DE PLANOS E FEATURES (escrita)
-    // ============================================================
+    // ---------- PLANOS E FEATURES (escrita) ----------
     Route::post('planos/{plano}/attach-feature', [PlanoController::class, 'attachFeature']);
     Route::delete('planos/{plano}/detach-feature/{feature}', [PlanoController::class, 'detachFeature']);
     Route::apiResource('features', FeatureController::class)->except(['index']);
 
-    // ============================================================
-    // SUBSCRIÇÕES – A ORDEM IMPORTA: 'me' ANTES DE {id}
-    // ============================================================
+    // ---------- SUBSCRIÇÕES ('me' antes de {id}) ----------
     Route::get('subscricoes/me', [SubscricaoController::class, 'me']);
+    Route::post('subscricoes/verificar-feature', [SubscricaoController::class, 'verificarFeature']);
     Route::get('subscricoes', [SubscricaoController::class, 'index']);
     Route::post('subscricoes', [SubscricaoController::class, 'store']);
     Route::get('subscricoes/{id}', [SubscricaoController::class, 'show']);
     Route::put('subscricoes/{id}', [SubscricaoController::class, 'update']);
     Route::patch('subscricoes/{id}/cancel', [SubscricaoController::class, 'cancel']);
     Route::post('subscricoes/{id}/renovar', [SubscricaoController::class, 'renovar']);
-    Route::post('subscricoes/verificar-feature', [SubscricaoController::class, 'verificarFeature']);
 
-    // ============================================================
-    // PAGAMENTOS DE PLANOS (EMPRESA)
-    // ============================================================
+    // ---------- PAGAMENTOS DE PLANO (empresa) ----------
     Route::prefix('pagamentos-plano')->group(function () {
         Route::get('/', [PagamentoLandlordController::class, 'index']);
         Route::post('/', [PagamentoLandlordController::class, 'store']);
@@ -179,9 +191,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
         Route::post('{id}/upload-comprovativo', [PagamentoLandlordController::class, 'uploadComprovativo']);
     });
 
-    // ============================================================
-    // EMPRESA (TENANT)
-    // ============================================================
+    // ---------- EMPRESA ----------
     Route::prefix('empresa')->group(function () {
         Route::get('/', [EmpresaController::class, 'showSelf']);
         Route::put('/', [EmpresaController::class, 'updateTenant']);
@@ -193,15 +203,11 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
         Route::delete('/mensagens/{mensagem}', [EmpresaController::class, 'eliminarMensagem']);
     });
 
-    // ============================================================
-    // UTILIZADORES
-    // ============================================================
+    // ---------- UTILIZADORES ----------
     Route::get('/me', [UserController::class, 'me']);
     Route::apiResource('/users', UserController::class);
 
-    // ============================================================
-    // DASHBOARD
-    // ============================================================
+    // ---------- DASHBOARD ----------
     Route::prefix('dashboard')->group(function () {
         Route::get('/', [DashboardController::class, 'index'])->middleware('log.panel')->name('dashboard.index');
         Route::get('/resumo-documentos-fiscais', [DashboardController::class, 'resumoDocumentosFiscais'])->name('dashboard.resumo-documentos');
@@ -210,9 +216,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
         Route::get('/evolucao-mensal', [DashboardController::class, 'evolucaoMensal'])->name('dashboard.evolucao');
     });
 
-    // ============================================================
-    // ADMIN + GESTOR (rotas com permissões especiais)
-    // ============================================================
+    // ---------- ADMIN + GESTOR ----------
     Route::middleware('role:admin,gestor')->group(function () use ($uuidPattern) {
         Route::post('/users', [UserController::class, 'store']);
         Route::get('/users/create', [UserController::class, 'create']);
@@ -234,24 +238,21 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::post('/{id}/inativar', [ClienteController::class, 'inativar'])->where('id', $uuidPattern)->name('clientes.inativar');
         });
 
-        // Auditoria (admin/gestor)
         Route::prefix('auditoria')->group(function () {
             Route::get('/logs', [AuditoriaController::class, 'index'])->name('auditoria.logs');
             Route::get('/datas', [AuditoriaController::class, 'datasDisponiveis'])->name('auditoria.datas');
         });
     });
 
-    // Auditoria – todos os utilizadores autenticados
+    // ---------- AUDITORIA (todos autenticados) ----------
     Route::prefix('auditoria')->group(function () {
         Route::post('/eventos', [AuditoriaController::class, 'storeEvento'])->name('auditoria.eventos');
     });
 
-    // ============================================================
-    // ADMIN + GESTOR + CONTABLISTA + OPERADOR
-    // ============================================================
+    // ---------- ADMIN + GESTOR + CONTABLISTA + OPERADOR ----------
     Route::middleware('role:admin,gestor,contablista,operador')->group(function () use ($uuidPattern) {
 
-        // ---------- PRODUTOS ----------
+        // PRODUTOS
         Route::prefix('produtos')->group(function () use ($uuidPattern) {
             Route::post('importar', [ProdutoController::class, 'importar']);
             Route::get('/', [ProdutoController::class, 'index'])->middleware('log.panel')->name('produtos.index');
@@ -266,7 +267,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::delete('/{id}', [ProdutoController::class, 'destroy'])->where('id', $uuidPattern)->name('produtos.destroy');
         });
 
-        // ---------- CATEGORIAS ----------
+        // CATEGORIAS
         Route::prefix('categorias')->group(function () use ($uuidPattern) {
             Route::get('/', [CategoriaController::class, 'index'])->middleware('log.panel')->name('categorias.index');
             Route::get('/todas', [CategoriaController::class, 'indexTodas'])->name('categorias.todas');
@@ -280,7 +281,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::delete('/{id}/force', [CategoriaController::class, 'forceDelete'])->where('id', $uuidPattern)->name('categorias.force-delete');
         });
 
-        // ---------- FORNECEDORES ----------
+        // FORNECEDORES
         Route::prefix('fornecedores')->group(function () use ($uuidPattern) {
             Route::get('/todos', [FornecedorController::class, 'indexWithTrashed'])->name('fornecedores.todos');
             Route::get('/trashed', [FornecedorController::class, 'indexOnlyTrashed'])->name('fornecedores.trashed');
@@ -294,7 +295,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::delete('/{id}', [FornecedorController::class, 'destroy'])->where('id', $uuidPattern)->name('fornecedores.destroy');
         });
 
-        // ---------- CLIENTES ----------
+        // CLIENTES
         Route::get('/clientes', [ClienteController::class, 'index'])->middleware('log.panel')->name('clientes.index');
         Route::apiResource('/clientes', ClienteController::class)->except(['destroy', 'index']);
         Route::delete('/clientes/{id}', [ClienteController::class, 'destroy'])->where('id', $uuidPattern)->name('clientes.destroy');
@@ -302,14 +303,14 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
         Route::post('/clientes/{id}/inativar', [ClienteController::class, 'inativar'])->where('id', $uuidPattern)->name('clientes.inativar');
         Route::post('/clientes/importar', [ClienteController::class, 'importar']);
 
-        // ---------- COMPRAS ----------
+        // COMPRAS
         Route::prefix('compras')->group(function () use ($uuidPattern) {
             Route::get('/', [CompraController::class, 'index'])->middleware('log.panel')->name('compras.index');
             Route::post('/', [CompraController::class, 'store'])->name('compras.store');
             Route::get('/{id}', [CompraController::class, 'show'])->where('id', $uuidPattern)->name('compras.show');
         });
 
-        // ---------- MOVIMENTOS DE STOCK ----------
+        // MOVIMENTOS DE STOCK
         Route::prefix('movimentos-stock')->group(function () use ($uuidPattern) {
             Route::get('/', [MovimentoStockController::class, 'index'])->middleware('log.panel')->name('movimentos-stock.index');
             Route::post('/', [MovimentoStockController::class, 'store'])->name('movimentos-stock.store');
@@ -318,7 +319,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::get('/{id}', [MovimentoStockController::class, 'show'])->where('id', $uuidPattern)->name('movimentos-stock.show');
         });
 
-        // ---------- VENDAS ----------
+        // VENDAS
         Route::prefix('vendas')->group(function () use ($uuidPattern) {
             Route::get('/', [VendaController::class, 'index'])->middleware('log.panel')->name('vendas.index');
             Route::post('/', [VendaController::class, 'store'])->name('vendas.store');
@@ -327,7 +328,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::post('/{venda}/recibo', [VendaController::class, 'gerarRecibo'])->where('venda', $uuidPattern)->name('vendas.recibo');
         });
 
-        // ---------- DOCUMENTOS FISCAIS ----------
+        // DOCUMENTOS FISCAIS
         Route::prefix('documentos-fiscais')->group(function () use ($uuidPattern) {
             Route::get('/adiantamentos-pendentes', [DocumentoFiscalController::class, 'adiantamentosPendentes'])->name('documentos.adiantamentos-pendentes');
             Route::get('/proformas-pendentes', [DocumentoFiscalController::class, 'proformasPendentes'])->name('documentos.proformas-pendentes');
@@ -339,29 +340,25 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::get('/', [DocumentoFiscalController::class, 'index'])->middleware('log.panel')->name('documentos.index');
             Route::get('/{documento}', [DocumentoFiscalController::class, 'show'])->where('documento', $uuidPattern)->name('documentos.show');
 
-            // PDF e impressão
             Route::get('/{id}/pdf/download', [DocumentoFiscalController::class, 'downloadPdf'])->where('id', $uuidPattern)->name('documentos.pdf-download');
             Route::get('/{id}/pdf-viewer', [DocumentoFiscalController::class, 'pdfViewer'])->where('id', $uuidPattern)->name('documentos.pdf-viewer');
             Route::get('/{id}/imprimir-termica', [DocumentoFiscalController::class, 'imprimirTermica'])->where('id', $uuidPattern)->name('documentos.imprimir-termica');
             Route::get('/{id}/print-view', [DocumentoFiscalController::class, 'printView'])->where('id', $uuidPattern)->name('documentos.print');
             Route::get('/{id}/print-a4', [DocumentoFiscalController::class, 'printA4'])->where('id', $uuidPattern)->name('documentos.print-view');
 
-            // Notas de Crédito e Débito
             Route::post('/{id}/nota-credito', [DocumentoFiscalController::class, 'criarNotaCredito'])->where('id', $uuidPattern)->name('documentos.nota-credito');
             Route::post('/{id}/nota-debito', [DocumentoFiscalController::class, 'criarNotaDebito'])->where('id', $uuidPattern)->name('documentos.nota-debito');
             Route::get('/{id}/Ver_NC_ND', [DocumentoFiscalController::class, 'show'])->where('id', $uuidPattern)->name('documentos.ver-nc-nd');
             Route::post('/{id}/converter-proforma', [DocumentoFiscalController::class, 'converterProforma'])->where('id', $uuidPattern)->name('documentos.converter-proforma');
 
-            // Recibos
             Route::get('/{documento}/recibos', [DocumentoFiscalController::class, 'listarRecibos'])->where('documento', $uuidPattern)->name('documentos.recibos');
             Route::post('/{id}/recibo', [DocumentoFiscalController::class, 'gerarRecibo'])->where('id', $uuidPattern)->name('documentos.gerar-recibo');
 
-            // Cancelamento e vinculação
             Route::post('/{documento}/cancelar', [DocumentoFiscalController::class, 'cancelar'])->where('documento', $uuidPattern)->name('documentos.cancelar');
             Route::post('/{id}/vincular-adiantamento', [DocumentoFiscalController::class, 'vincularAdiantamento'])->where('id', $uuidPattern)->name('documentos.vincular');
         });
 
-        // ---------- PAGAMENTOS (DE FATURAS) ----------
+        // PAGAMENTOS (faturas)
         Route::prefix('pagamentos')->group(function () use ($uuidPattern) {
             Route::get('/', [PagamentoController::class, 'index'])->middleware('log.panel')->name('pagamentos.index');
             Route::post('/', [PagamentoController::class, 'store'])->name('pagamentos.store');
@@ -370,7 +367,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::delete('/{id}', [PagamentoController::class, 'destroy'])->where('id', $uuidPattern)->name('pagamentos.destroy');
         });
 
-        // ---------- RELATÓRIOS ----------
+        // RELATÓRIOS
         Route::prefix('relatorios')->group(function () {
             Route::get('/exportar-completo', [RelatoriosController::class, 'exportarCompleto']);
             Route::get('/debug', [RelatoriosController::class, 'debug'])->name('relatorios.debug');

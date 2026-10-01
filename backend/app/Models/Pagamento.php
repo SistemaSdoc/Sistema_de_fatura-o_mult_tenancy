@@ -30,12 +30,36 @@ class Pagamento extends Model
         'updated_at',
         'descricao',
         'parcelas',
+        'historico_status',
     ];
 
     protected $casts = [
+        'historico_status' => 'array',
         'data_pagamento' => 'datetime',
         'data_vencimento' => 'date',
     ];
+
+    /**
+     * Regista uma mudança de status no histórico.
+     */
+    public function registarStatus(
+        string $novoStatus,
+        ?string $por = null,
+        ?string $motivo = null,
+        array $extra = []
+    ): void {
+        $historico = $this->historico_status ?? [];
+
+        $historico[] = array_filter([
+            'status'    => $novoStatus,
+            'data'      => now()->toIso8601String(),
+            'por'       => $por,
+            'motivo'    => $motivo,
+            ...$extra,
+        ], fn($v) => $v !== null);
+
+        $this->historico_status = $historico;
+    }
 
     // Relacionamento com Subscricao (só existe depois de confirmado o pagamento)
     public function subscricao()

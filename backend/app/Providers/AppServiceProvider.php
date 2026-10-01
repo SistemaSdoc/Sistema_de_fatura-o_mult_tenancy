@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\DB;
+use App\Observers\EmpresaObserver;
 use Illuminate\Support\Facades\Config;
 use App\Models\Empresa;
 
@@ -29,6 +30,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+
+        Empresa::observe(EmpresaObserver::class);
         // Evita reaplicar tenant em rotas públicas do landlord.
         // Isso impede que uma sessão antiga "contamine" login/Google/onboarding.
         if ($this->isPublicLandlordRequest()) {
