@@ -89,7 +89,9 @@ interface InputFieldProps {
   type?: string;
   placeholder: string;
   value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
+  onChange: (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+  ) => void;
   colors: ThemeColors;
   required?: boolean;
   isSelect?: boolean;
@@ -123,7 +125,10 @@ const InputField: React.FC<InputFieldProps> = ({
         style={{ color: isFocused ? colors.secondary : colors.textSecondary }}
       />
       {prefix && (
-        <div className="absolute left-9 top-1/2 -translate-y-1/2 text-sm pointer-events-none" style={{ color: colors.textSecondary }}>
+        <div
+          className="absolute left-9 top-1/2 -translate-y-1/2 text-sm pointer-events-none"
+          style={{ color: colors.textSecondary }}
+        >
           {prefix}
         </div>
       )}
@@ -143,7 +148,8 @@ const InputField: React.FC<InputFieldProps> = ({
               borderColor: isFocused ? colors.secondary : colors.border,
               color: colors.text,
               cursor: disabled ? "not-allowed" : "pointer",
-            }}>
+            }}
+          >
             <option value="" disabled>
               {placeholder}
             </option>
@@ -186,8 +192,6 @@ const InputField: React.FC<InputFieldProps> = ({
   );
 };
 
-
-
 function RegisterCompanyPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -219,7 +223,10 @@ function RegisterCompanyPageContent() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "warning" | "info" } | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error" | "warning" | "info";
+  } | null>(null);
 
   // --- Plano selecionado (Passo 3) ---
   const [plano, setPlano] = useState<any>(null);
@@ -247,12 +254,20 @@ function RegisterCompanyPageContent() {
       .catch(() => setPlano(null));
   }, [planoId]);
 
-  const showToast = (message: string, type: "success" | "error" | "warning" | "info" = "info") => {
+  const showToast = (
+    message: string,
+    type: "success" | "error" | "warning" | "info" = "info",
+  ) => {
     setToast({ message, type });
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const value = e.target.type === "checkbox" ? (e.target as HTMLInputElement).checked : e.target.value;
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+  ) => {
+    const value =
+      e.target.type === "checkbox"
+        ? (e.target as HTMLInputElement).checked
+        : e.target.value;
     setForm({ ...form, [e.target.name]: value });
   };
 
@@ -265,7 +280,9 @@ function RegisterCompanyPageContent() {
     });
   };
 
-  const handleRegimeChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleRegimeChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+  ) => {
     const value = e.target.value as "simplificado" | "geral";
     setForm({
       ...form,
@@ -352,7 +369,10 @@ function RegisterCompanyPageContent() {
 
     const subdomainRegex = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
     if (!subdomainRegex.test(form.subdomain)) {
-      showToast("Subdomínio inválido. Use apenas letras minúsculas, números e hífen (não pode começar ou terminar com hífen).", "error");
+      showToast(
+        "Subdomínio inválido. Use apenas letras minúsculas, números e hífen (não pode começar ou terminar com hífen).",
+        "error",
+      );
       return false;
     }
 
@@ -445,10 +465,14 @@ function RegisterCompanyPageContent() {
       if (empresaCriada?.id) {
         setTenant({
           id: empresaCriada.id,
-          subdomain: empresaCriada.subdomain ?? form.subdomain.toLowerCase().trim(),
+          subdomain:
+            empresaCriada.subdomain ?? form.subdomain.toLowerCase().trim(),
         });
       } else {
-        setTenant({ id: form.subdomain.toLowerCase().trim(), subdomain: form.subdomain.toLowerCase().trim() });
+        setTenant({
+          id: form.subdomain.toLowerCase().trim(),
+          subdomain: form.subdomain.toLowerCase().trim(),
+        });
       }
 
       // ============================================================
@@ -469,11 +493,15 @@ function RegisterCompanyPageContent() {
       // ============================================================
       if (planoId) {
         try {
-          const planoConfirmado = plano ?? (await planosService.buscarPorId(planoId));
+          const planoConfirmado =
+            plano ?? (await planosService.buscarPorId(planoId));
 
           if (planoConfirmado && Number(planoConfirmado.valor_mensal) === 0) {
             // Plano gratuito → normalmente já fica ativo no backend junto com a empresa
-            showToast("Empresa criada e subscrição experimental ativada! Redirecionando para o dashboard...", "success");
+            showToast(
+              "Empresa criada e subscrição experimental ativada! Redirecionando para o dashboard...",
+              "success",
+            );
             setTimeout(() => router.push("/dashboard"), 2000);
           } else {
             // Plano pago → cria a subscrição com o método/parcelas/data escolhidos no passo 3
@@ -494,19 +522,33 @@ function RegisterCompanyPageContent() {
             }).toString();
 
             showToast("Empresa e subscrição criadas com sucesso!", "success");
-            setTimeout(() => router.push(`/aguardando-pagamento?${query}`), 1500);
+            setTimeout(
+              () => router.push(`/aguardando-pagamento?${query}`),
+              1500,
+            );
           }
         } catch (subErr: any) {
-          console.error("Erro ao criar subscrição:", subErr.response?.status, subErr.response?.data);
-          showToast("Empresa criada, mas houve um problema ao gerar o pagamento. Tente novamente ou contacte o suporte.", "warning");
+          console.error(
+            "Erro ao criar subscrição:",
+            subErr.response?.status,
+            subErr.response?.data,
+          );
+          showToast(
+            "Empresa criada, mas houve um problema ao gerar o pagamento. Tente novamente ou contacte o suporte.",
+            "warning",
+          );
           setLoading(false);
         }
       } else {
-        showToast("Empresa criada com sucesso! Redirecionando para o login...", "success");
+        showToast(
+          "Empresa criada com sucesso! Redirecionando para o login...",
+          "success",
+        );
         setTimeout(() => router.push("/login"), 3000);
       }
     } catch (err: unknown) {
-      let errorMessage = "Erro ao criar empresa. Verifique os dados e tente novamente.";
+      let errorMessage =
+        "Erro ao criar empresa. Verifique os dados e tente novamente.";
       if (err instanceof AxiosError && err.response?.data?.message) {
         errorMessage = err.response.data.message;
       } else if (err instanceof Error) {
@@ -549,9 +591,19 @@ function RegisterCompanyPageContent() {
   const planoEhPago = plano && Number(plano.valor_mensal) > 0;
 
   return (
-    <div className="min-h-screen w-full overflow-x-hidden px-3 py-6 sm:px-4 sm:py-12" style={{ backgroundColor: colors.background }}>
+    <div
+      className="min-h-screen w-full overflow-x-hidden px-3 py-6 sm:px-4 sm:py-12"
+      style={{ backgroundColor: colors.background }}
+    >
       {/* Toast Notification */}
-      {toast && <ToastNotification message={toast.message} type={toast.type} onClose={() => setToast(null)} colors={colors} />}
+      {toast && (
+        <ToastNotification
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+          colors={colors}
+        />
+      )}
 
       <div className="mx-auto w-full max-w-5xl">
         <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-start sm:justify-between">
@@ -559,14 +611,21 @@ function RegisterCompanyPageContent() {
             <button
               onClick={() => router.back()}
               className="shrink-0 p-2 transition-opacity hover:opacity-70"
-              style={{ color: colors.primary }}>
+              style={{ color: colors.primary }}
+            >
               <ArrowLeft size={24} />
             </button>
             <div className="min-w-0">
-              <h1 className="text-xl font-bold sm:text-2xl md:text-3xl" style={{ color: colors.secondary }}>
+              <h1
+                className="text-xl font-bold sm:text-2xl md:text-3xl"
+                style={{ color: colors.secondary }}
+              >
                 Criar nova empresa
               </h1>
-              <p className="mt-1 text-xs sm:mt-2 sm:text-sm md:text-base" style={{ color: colors.textSecondary }}>
+              <p
+                className="mt-1 text-xs sm:mt-2 sm:text-sm md:text-base"
+                style={{ color: colors.textSecondary }}
+              >
                 Preencha os dados abaixo para começar a usar o FaturaJá
               </p>
             </div>
@@ -574,14 +633,22 @@ function RegisterCompanyPageContent() {
         </div>
 
         {/* STEP INDICATOR */}
-        <div className="mb-6 flex flex-row border-b sm:mb-8" style={{ borderColor: colors.border }}>
+        <div
+          className="mb-6 flex flex-row border-b sm:mb-8"
+          style={{ borderColor: colors.border }}
+        >
           <div className="flex-1 py-3 text-center">
             <div
               className={`inline-flex flex-col items-center gap-1 text-xs font-medium sm:flex-row sm:gap-2 sm:text-sm ${step === 1 ? "opacity-100" : "opacity-50"}`}
-              style={{ color: step === 1 ? colors.primary : colors.text }}>
+              style={{ color: step === 1 ? colors.primary : colors.text }}
+            >
               <span
                 className="flex h-6 w-6 items-center justify-center rounded-full text-xs"
-                style={{ backgroundColor: step === 1 ? colors.primary : colors.border, color: step === 1 ? "white" : colors.text }}>
+                style={{
+                  backgroundColor: step === 1 ? colors.primary : colors.border,
+                  color: step === 1 ? "white" : colors.text,
+                }}
+              >
                 1
               </span>
               <span className="leading-tight">Dados da Empresa</span>
@@ -590,10 +657,15 @@ function RegisterCompanyPageContent() {
           <div className="flex-1 py-3 text-center">
             <div
               className={`inline-flex flex-col items-center gap-1 text-xs font-medium sm:flex-row sm:gap-2 sm:text-sm ${step === 2 ? "opacity-100" : "opacity-50"}`}
-              style={{ color: step === 2 ? colors.primary : colors.text }}>
+              style={{ color: step === 2 ? colors.primary : colors.text }}
+            >
               <span
                 className="flex h-6 w-6 items-center justify-center rounded-full text-xs"
-                style={{ backgroundColor: step === 2 ? colors.primary : colors.border, color: step === 2 ? "white" : colors.text }}>
+                style={{
+                  backgroundColor: step === 2 ? colors.primary : colors.border,
+                  color: step === 2 ? "white" : colors.text,
+                }}
+              >
                 2
               </span>
               <span className="leading-tight">Administrador do sistema</span>
@@ -603,10 +675,16 @@ function RegisterCompanyPageContent() {
             <div className="flex-1 py-3 text-center">
               <div
                 className={`inline-flex flex-col items-center gap-1 text-xs font-medium sm:flex-row sm:gap-2 sm:text-sm ${step === 3 ? "opacity-100" : "opacity-50"}`}
-                style={{ color: step === 3 ? colors.primary : colors.text }}>
+                style={{ color: step === 3 ? colors.primary : colors.text }}
+              >
                 <span
                   className="flex h-6 w-6 items-center justify-center rounded-full text-xs"
-                  style={{ backgroundColor: step === 3 ? colors.primary : colors.border, color: step === 3 ? "white" : colors.text }}>
+                  style={{
+                    backgroundColor:
+                      step === 3 ? colors.primary : colors.border,
+                    color: step === 3 ? "white" : colors.text,
+                  }}
+                >
                   3
                 </span>
                 <span className="leading-tight">Confirmar Plano</span>
@@ -615,14 +693,27 @@ function RegisterCompanyPageContent() {
           )}
         </div>
 
-        <div className="border shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-          <form onSubmit={step === 3 || (!planoId && step === 2) ? handleSubmit : handleStep2Next} noValidate>
+        <div
+          className="border shadow-sm"
+          style={{ backgroundColor: colors.card, borderColor: colors.border }}
+        >
+          <form
+            onSubmit={
+              step === 3 || (!planoId && step === 2)
+                ? handleSubmit
+                : handleStep2Next
+            }
+            noValidate
+          >
             <div className="p-4 sm:p-6 md:p-8">
               {step === 1 && (
                 <div className="space-y-6">
                   {/* LOGO */}
                   <div>
-                    <label className="mb-2 block text-sm font-medium" style={{ color: colors.text }}>
+                    <label
+                      className="mb-2 block text-sm font-medium"
+                      style={{ color: colors.text }}
+                    >
                       Logo da Empresa
                     </label>
                     <div className="flex flex-wrap items-center gap-4">
@@ -640,24 +731,40 @@ function RegisterCompanyPageContent() {
                             type="button"
                             onClick={removeLogo}
                             className="absolute -right-2 -top-2 p-1 text-white"
-                            style={{ background: colors.secondary }}>
+                            style={{ background: colors.secondary }}
+                          >
                             <X size={14} />
                           </button>
                         </div>
                       ) : (
                         <label
                           className="hover:border-primary flex h-16 w-16 shrink-0 cursor-pointer flex-col items-center justify-center border-2 border-dashed"
-                          style={{ borderColor: colors.border }}>
+                          style={{ borderColor: colors.border }}
+                        >
                           <Upload size={20} style={{ color: colors.text }} />
-                          <span className="mt-1 text-xs" style={{ color: colors.textSecondary }}>
+                          <span
+                            className="mt-1 text-xs"
+                            style={{ color: colors.textSecondary }}
+                          >
                             Upload
                           </span>
-                          <input type="file" accept="image/*" onChange={handleLogoChange} className="hidden" />
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleLogoChange}
+                            className="hidden"
+                          />
                         </label>
                       )}
                       <div className="flex min-w-0 items-center gap-4">
-                        <div className="hidden h-10 w-px sm:block" style={{ backgroundColor: colors.border }} />
-                        <span className="text-xs" style={{ color: colors.textSecondary }}>
+                        <div
+                          className="hidden h-10 w-px sm:block"
+                          style={{ backgroundColor: colors.border }}
+                        />
+                        <span
+                          className="text-xs"
+                          style={{ color: colors.textSecondary }}
+                        >
                           Adicione a logo da tua empresa (JPG/PNG até 2MB)
                         </span>
                       </div>
@@ -681,7 +788,9 @@ function RegisterCompanyPageContent() {
                       placeholder="NIF (10 dígitos) *"
                       value={form.nif}
                       onChange={(e) => {
-                        const raw = e.target.value.replace(/\D/g, "").slice(0, 10);
+                        const raw = e.target.value
+                          .replace(/\D/g, "")
+                          .slice(0, 10);
                         setForm({ ...form, nif: raw });
                       }}
                       colors={colors}
@@ -722,7 +831,9 @@ function RegisterCompanyPageContent() {
                       placeholder="Número da Conta"
                       value={form.numero_conta ?? ""}
                       onChange={(e) => {
-                        const raw = e.target.value.replace(/\D/g, "").slice(0, 11);
+                        const raw = e.target.value
+                          .replace(/\D/g, "")
+                          .slice(0, 11);
                         setForm({ ...form, numero_conta: raw });
                       }}
                       colors={colors}
@@ -734,7 +845,9 @@ function RegisterCompanyPageContent() {
                       placeholder="Digite os 21 dígitos do IBAN"
                       value={form.iban?.replace(/^AO06/, "") ?? ""}
                       onChange={(e) => {
-                        const raw = e.target.value.replace(/\D/g, "").slice(0, 21);
+                        const raw = e.target.value
+                          .replace(/\D/g, "")
+                          .slice(0, 21);
                         setForm({ ...form, iban: `AO06${raw}` });
                       }}
                       colors={colors}
@@ -764,8 +877,15 @@ function RegisterCompanyPageContent() {
 
                   {/* SELEÇÃO DO MODO */}
                   <div className="mt-6">
-                    <label className="mb-3 block text-sm font-medium" style={{ color: colors.text }}>
-                      <Database size={16} className="mr-2 inline" style={{ color: colors.textSecondary }} />
+                    <label
+                      className="mb-3 block text-sm font-medium"
+                      style={{ color: colors.text }}
+                    >
+                      <Database
+                        size={16}
+                        className="mr-2 inline"
+                        style={{ color: colors.textSecondary }}
+                      />
                       Modo de Funcionamento *
                     </label>
 
@@ -775,9 +895,16 @@ function RegisterCompanyPageContent() {
                         onClick={() => toggleModo("colectivo")}
                         className="cursor-pointer rounded border p-3 transition-colors sm:p-4"
                         style={{
-                          borderColor: form.modo === "colectivo" ? colors.primary : colors.border,
-                          backgroundColor: form.modo === "colectivo" ? `${colors.primary}0D` : "transparent",
-                        }}>
+                          borderColor:
+                            form.modo === "colectivo"
+                              ? colors.primary
+                              : colors.border,
+                          backgroundColor:
+                            form.modo === "colectivo"
+                              ? `${colors.primary}0D`
+                              : "transparent",
+                        }}
+                      >
                         <div className="flex items-start gap-3">
                           <div className="mt-1 flex-shrink-0">
                             <input
@@ -796,9 +923,22 @@ function RegisterCompanyPageContent() {
                               <Users
                                 size={18}
                                 className="shrink-0"
-                                style={{ color: form.modo === "colectivo" ? colors.secondary : colors.textSecondary }}
+                                style={{
+                                  color:
+                                    form.modo === "colectivo"
+                                      ? colors.secondary
+                                      : colors.textSecondary,
+                                }}
                               />
-                              <span className="font-medium" style={{ color: form.modo === "colectivo" ? colors.secondary : colors.text }}>
+                              <span
+                                className="font-medium"
+                                style={{
+                                  color:
+                                    form.modo === "colectivo"
+                                      ? colors.secondary
+                                      : colors.text,
+                                }}
+                              >
                                 Colectivo
                               </span>
                             </div>
@@ -811,9 +951,16 @@ function RegisterCompanyPageContent() {
                         onClick={() => toggleModo("singular")}
                         className="cursor-pointer rounded border p-3 transition-colors sm:p-4"
                         style={{
-                          borderColor: form.modo === "singular" ? colors.primary : colors.border,
-                          backgroundColor: form.modo === "singular" ? `${colors.primary}0D` : "transparent",
-                        }}>
+                          borderColor:
+                            form.modo === "singular"
+                              ? colors.primary
+                              : colors.border,
+                          backgroundColor:
+                            form.modo === "singular"
+                              ? `${colors.primary}0D`
+                              : "transparent",
+                        }}
+                      >
                         <div className="flex items-start gap-3">
                           <div className="mt-1 flex-shrink-0">
                             <input
@@ -832,9 +979,22 @@ function RegisterCompanyPageContent() {
                               <Server
                                 size={18}
                                 className="shrink-0"
-                                style={{ color: form.modo === "singular" ? colors.secondary : colors.textSecondary }}
+                                style={{
+                                  color:
+                                    form.modo === "singular"
+                                      ? colors.secondary
+                                      : colors.textSecondary,
+                                }}
                               />
-                              <span className="font-medium" style={{ color: form.modo === "singular" ? colors.secondary : colors.text }}>
+                              <span
+                                className="font-medium"
+                                style={{
+                                  color:
+                                    form.modo === "singular"
+                                      ? colors.secondary
+                                      : colors.text,
+                                }}
+                              >
                                 Singular
                               </span>
                             </div>
@@ -911,32 +1071,57 @@ function RegisterCompanyPageContent() {
 
               {step === 3 && planoId && (
                 <div className="space-y-6">
-                  <h3 className="text-lg font-semibold" style={{ color: colors.text }}>
+                  <h3
+                    className="text-lg font-semibold"
+                    style={{ color: colors.text }}
+                  >
                     Confirme o plano selecionado
                   </h3>
                   {!plano ? (
-                    <div className="flex items-center gap-2 text-sm" style={{ color: colors.textSecondary }}>
-                      <Loader2 size={16} className="animate-spin" /> A carregar plano...
+                    <div
+                      className="flex items-center gap-2 text-sm"
+                      style={{ color: colors.textSecondary }}
+                    >
+                      <Loader2 size={16} className="animate-spin" /> A carregar
+                      plano...
                     </div>
                   ) : (
                     <>
-                      <div className="border rounded p-4 space-y-3" style={{ borderColor: colors.border }}>
+                      <div
+                        className="border rounded p-4 space-y-3"
+                        style={{ borderColor: colors.border }}
+                      >
                         <div className="flex justify-between items-center">
-                          <span style={{ color: colors.textSecondary }}>Plano</span>
-                          <span className="font-bold text-lg" style={{ color: colors.text }}>
+                          <span style={{ color: colors.textSecondary }}>
+                            Plano
+                          </span>
+                          <span
+                            className="font-bold text-lg"
+                            style={{ color: colors.text }}
+                          >
                             {plano.nome}
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
-                          <span style={{ color: colors.textSecondary }}>Valor mensal</span>
-                          <span className="font-bold" style={{ color: colors.primary }}>
-                            {Number(plano.valor_mensal).toLocaleString("pt-AO")} KZ
+                          <span style={{ color: colors.textSecondary }}>
+                            Valor mensal
+                          </span>
+                          <span
+                            className="font-bold"
+                            style={{ color: colors.primary }}
+                          >
+                            {Number(plano.valor_mensal).toLocaleString("pt-AO")}{" "}
+                            KZ
                           </span>
                         </div>
                         {plano.features?.length > 0 && (
                           <ul className="space-y-1 pt-2">
                             {plano.features.map((f: any, i: number) => (
-                              <li key={i} className="text-sm" style={{ color: colors.text }}>
+                              <li
+                                key={i}
+                                className="text-sm"
+                                style={{ color: colors.text }}
+                              >
                                 • {f.nome}
                               </li>
                             ))}
@@ -946,80 +1131,151 @@ function RegisterCompanyPageContent() {
 
                       {/* DADOS DE PAGAMENTO — igual ao checkout */}
                       {planoEhPago && (
-                        <div className="border rounded p-4 space-y-4" style={{ borderColor: colors.border }}>
+                        <div
+                          className="border rounded p-4 space-y-4"
+                          style={{ borderColor: colors.border }}
+                        >
                           <div className="flex items-center gap-2">
-                            <CreditCard size={18} style={{ color: colors.blue }} />
-                            <h4 className="font-semibold text-sm" style={{ color: colors.blue }}>
+                            <CreditCard
+                              size={18}
+                              style={{ color: colors.blue }}
+                            />
+                            <h4
+                              className="font-semibold text-sm"
+                              style={{ color: colors.blue }}
+                            >
                               Dados de pagamento
                             </h4>
                           </div>
 
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div className="space-y-1.5">
-                              <label className="text-sm" style={{ color: colors.textSecondary }}>
+                              <label
+                                className="text-sm"
+                                style={{ color: colors.textSecondary }}
+                              >
                                 Método de pagamento
                               </label>
                               <select
                                 value={pagamento.metodo}
-                                onChange={(e) => setPagamento((prev) => ({ ...prev, metodo: e.target.value }))}
+                                onChange={(e) =>
+                                  setPagamento((prev) => ({
+                                    ...prev,
+                                    metodo: e.target.value,
+                                  }))
+                                }
                                 className="w-full px-3 py-2.5 border text-sm outline-none"
-                                style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text }}>
-                                <option value="transferencia">Transferência bancária</option>
-                                <option value="multicaixa">Multicaixa</option>
-                                <option value="cartao_credito">Cartão de crédito</option>
+                                style={{
+                                  backgroundColor: colors.card,
+                                  borderColor: colors.border,
+                                  color: colors.text,
+                                }}
+                              >
+                                <option value="">Selecione o método...</option>
+
+                                {/* Dinheiro */}
+                                <option value="dinheiro">Dinheiro</option>
+
+                                {/* Bancos */}
+                                <option value="transferencia">
+                                  Transferência Bancária
+                                </option>
+                                <option value="deposito">
+                                  Depósito Bancário
+                                </option>
+                                <option value="cheque">Cheque</option>
+
+                                {/* Multicaixa (família) */}
+                                <option value="multicaixa">
+                                  Multicaixa (TPA)
+                                </option>
+                                <option value="multicaixa_express">
+                                  Multicaixa Express
+                                </option>
+                                <option value="referencia_multicaixa">
+                                  Referência Multicaixa
+                                </option>
+
+                              
+
+                                {/* Mobile money */}
+                                <option value="unitel_money">
+                                  Unitel Money
+                                </option>
+                                <option value="africell_money">
+                                  Africell Money
+                                </option>
+
+                                {/* Fallback */}
+                                <option value="outro">Outro</option>
                               </select>
                             </div>
 
                             <div className="space-y-1.5">
-                              <label className="text-sm" style={{ color: colors.textSecondary }}>
-                                Número de parcelas
-                              </label>
-                              <select
-                                value={String(pagamento.parcelas)}
-                                onChange={(e) => setPagamento((prev) => ({ ...prev, parcelas: parseInt(e.target.value) }))}
-                                className="w-full px-3 py-2.5 border text-sm outline-none"
-                                style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text }}>
-                                {[1, 2, 3, 4, 5, 6].map((n) => (
-                                  <option key={n} value={n}>
-                                    {n}x sem juros
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-
-                            <div className="space-y-1.5">
-                              <label className="text-sm" style={{ color: colors.textSecondary }}>
-                                <Calendar size={14} className="inline mr-1" style={{ color: colors.textSecondary }} />
+                              <label
+                                className="text-sm"
+                                style={{ color: colors.textSecondary }}
+                              >
+                                <Calendar
+                                  size={14}
+                                  className="inline mr-1"
+                                  style={{ color: colors.textSecondary }}
+                                />
                                 Data de vencimento
                               </label>
                               <input
                                 type="date"
                                 value={pagamento.data_vencimento}
                                 disabled
-                                onChange={(e) => setPagamento((prev) => ({ ...prev, data_vencimento: e.target.value }))}
+                                onChange={(e) =>
+                                  setPagamento((prev) => ({
+                                    ...prev,
+                                    data_vencimento: e.target.value,
+                                  }))
+                                }
                                 className="w-full px-3 py-2.5 border text-sm outline-none"
-                                style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text }}
+                                style={{
+                                  backgroundColor: colors.card,
+                                  borderColor: colors.border,
+                                  color: colors.text,
+                                }}
                               />
                             </div>
                           </div>
 
-                          <div className="p-3 rounded" style={{ backgroundColor: colors.hover }}>
+                          <div
+                            className="p-3 rounded"
+                            style={{ backgroundColor: colors.hover }}
+                          >
                             <div className="flex justify-between items-center">
-                              <span style={{ color: colors.textSecondary }}>Total a pagar:</span>
-                              <span className="text-lg font-bold" style={{ color: colors.secondary }}>
-                                {Number(plano.valor_mensal).toLocaleString("pt-AO")} KZ
+                              <span style={{ color: colors.textSecondary }}>
+                                Total a pagar:
+                              </span>
+                              <span
+                                className="text-lg font-bold"
+                                style={{ color: colors.secondary }}
+                              >
+                                {Number(plano.valor_mensal).toLocaleString(
+                                  "pt-AO",
+                                )}{" "}
+                                KZ
                               </span>
                             </div>
                             {pagamento.parcelas > 1 && (
-                              <div className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+                              <div
+                                className="text-xs mt-1"
+                                style={{ color: colors.textSecondary }}
+                              >
                                 {pagamento.parcelas}x de{" "}
-                                {(Number(plano.valor_mensal) / pagamento.parcelas).toLocaleString("pt-AO", {
+                                {(
+                                  Number(plano.valor_mensal) /
+                                  pagamento.parcelas
+                                ).toLocaleString("pt-AO", {
                                   minimumFractionDigits: 2,
                                 })}{" "}
                                 KZ
                               </div>
                             )}
-          
                           </div>
                         </div>
                       )}
@@ -1031,13 +1287,18 @@ function RegisterCompanyPageContent() {
 
             <div
               className="flex flex-col gap-4 border-t p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6"
-              style={{ borderColor: colors.border }}>
+              style={{ borderColor: colors.border }}
+            >
               <Link
                 href="/login"
                 className="group inline-flex items-center justify-center gap-2 text-sm font-medium transition-colors sm:justify-start"
-                style={{ color: colors.secondary }}>
+                style={{ color: colors.secondary }}
+              >
                 <UserPlus size={18} /> Já tenho conta{" "}
-                <ArrowRight size={16} className="opacity-0 transition-opacity group-hover:opacity-100" />
+                <ArrowRight
+                  size={16}
+                  className="opacity-0 transition-opacity group-hover:opacity-100"
+                />
               </Link>
               <div className="flex flex-col-reverse gap-3 sm:flex-row sm:gap-4">
                 {(step === 2 || step === 3) && (
@@ -1045,7 +1306,8 @@ function RegisterCompanyPageContent() {
                     type="button"
                     onClick={handlePrevStep}
                     className="flex w-full items-center justify-center gap-2 px-6 py-2.5 text-sm font-medium transition-opacity hover:opacity-70 sm:w-auto"
-                    style={{ color: colors.textSecondary }}>
+                    style={{ color: colors.textSecondary }}
+                  >
                     <ChevronLeft size={18} /> Voltar
                   </button>
                 )}
@@ -1054,14 +1316,16 @@ function RegisterCompanyPageContent() {
                     type="button"
                     onClick={handleNextStep}
                     className="flex w-full items-center justify-center gap-2 px-6 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-80 sm:w-auto"
-                    style={{ backgroundColor: colors.primary }}>
+                    style={{ backgroundColor: colors.primary }}
+                  >
                     Próximo <ChevronRight size={18} />
                   </button>
                 ) : step === 2 && planoId ? (
                   <button
                     type="submit"
                     className="flex w-full items-center justify-center gap-2 px-6 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-80 sm:w-auto"
-                    style={{ backgroundColor: colors.primary }}>
+                    style={{ backgroundColor: colors.primary }}
+                  >
                     Próximo <ChevronRight size={18} />
                   </button>
                 ) : (
@@ -1069,7 +1333,8 @@ function RegisterCompanyPageContent() {
                     type="submit"
                     disabled={loading || uploadingLogo}
                     className="flex w-full items-center justify-center gap-2 px-6 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-80 disabled:opacity-50 sm:w-auto"
-                    style={{ backgroundColor: colors.primary }}>
+                    style={{ backgroundColor: colors.primary }}
+                  >
                     {loading && <Loader2 size={18} className="animate-spin" />}
                     {loading ? "Criando empresa..." : "Criar empresa"}
                   </button>
@@ -1087,10 +1352,14 @@ export default function RegisterCompanyPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#f2f2f2" }}>
+        <div
+          className="min-h-screen flex items-center justify-center"
+          style={{ backgroundColor: "#f2f2f2" }}
+        >
           A carregar...
         </div>
-      }>
+      }
+    >
       <RegisterCompanyPageContent />
     </Suspense>
   );

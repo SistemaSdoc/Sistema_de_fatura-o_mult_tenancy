@@ -467,7 +467,7 @@ BUILDING;
                     'Admin'      => $admin->email,
                     'Modo'       => $empresa->modo,
                 ],
-                url: "/landlord/empresas/{$empresa->id}",
+                url: "/landlord/dashboard/empresas/{$empresa->id}",
                 empresaId: $empresa->id,
             );
 
@@ -551,7 +551,7 @@ BUILDING;
                 'Empresa'   => $empresa->nome,
                 'Remetente' => $landlordUser?->name ?? 'Landlord',
             ],
-            url: "/landlord/empresas/{$empresa->id}",
+            url: "/landlord/dashboard/empresas/{$empresa->id}",
             empresaId: $empresa->id,
         );
 
@@ -1163,7 +1163,7 @@ BUILDING;
                 'Status anterior' => $statusAnterior,
                 'Status novo'     => $novoStatus,
             ],
-            url: "/landlord/empresas/{$empresa->id}",
+            url: "/landlord/dashboard/empresas/{$empresa->id}",
             empresaId: $empresa->id,
         );
 
