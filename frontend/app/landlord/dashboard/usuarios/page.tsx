@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useEffect, useState, useMemo } from "react";
 import { useLandlordAuth } from "@/context/LandlordAuthContext";
 import { useThemeColors } from "@/context/ThemeContext";
 import { landlordUsersApi, landlordApi } from "@/services/axios";
@@ -18,7 +17,7 @@ import {
   Building2,
   EyeOff,
   Eye,
-
+  Crown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
@@ -64,7 +63,7 @@ interface TenantUserItem {
   empresa_id: string;
   empresa_nome: string;
   role?: string;
-  modo?: 'singular' | 'colectivo';
+  modo?: "singular" | "colectivo";
   ativo?: boolean;
   created_at?: string;
   tipo: "tenant";
@@ -87,6 +86,11 @@ type UserItem = LandlordUserItem | TenantUserItem | SharedUserItem;
 const ROLE_LABELS: Record<string, string> = {
   super_admin: "Super Admin",
   admin_empresa: "Admin de Empresa",
+  admin: "Admin",
+  operador: "Operador",
+  contablista: "Contabilista",
+  contabilista: "Contabilista",
+  gestor: "Gestor de Stock",
   user: "Utilizador",
 };
 
@@ -108,6 +112,7 @@ export default function UsuariosLandlordPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"landlord" | "tenant" | "shared">("landlord");
   const [searchTerm, setSearchTerm] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"todos" | "super_admin" | "admin_empresa">("todos");
 
   // ===== MODAIS =====
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -116,7 +121,7 @@ export default function UsuariosLandlordPage() {
   const [formEmail, setFormEmail] = useState("");
   const [formSenha, setFormSenha] = useState("");
   const [formSenhaConfirm, setFormSenhaConfirm] = useState("");
-  const [formRole, setFormRole] = useState<"super_admin">("super_admin");
+  const [formRole] = useState<"super_admin">("super_admin");
   const [showSenha, setShowSenha] = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -132,7 +137,6 @@ export default function UsuariosLandlordPage() {
   // ===== FUNÇÕES DE BUSCA =====
 
   const fetchUsuarios = async () => {
-    setLoading(true);
     try {
       const response = await landlordUsersApi.listar({ per_page: 100 });
       const data = response.data.data?.data || response.data.data || [];
@@ -140,8 +144,6 @@ export default function UsuariosLandlordPage() {
       setError("");
     } catch (err: any) {
       setError(err.response?.data?.message || "Erro ao carregar utilizadores landlord");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -169,11 +171,13 @@ export default function UsuariosLandlordPage() {
     try {
       const response = await landlordApi.get("/api/landlord/usuarios/shared-users");
       const data = response.data.data || [];
-      setSharedUsers(data.map((u: any) => ({
-        ...u,
-        tipo: "shared" as const,
-        role: u.role || "user"
-      })));
+      setSharedUsers(
+        data.map((u: any) => ({
+          ...u,
+          tipo: "shared" as const,
+          role: u.role || "user",
+        }))
+      );
     } catch (err) {
       console.error("Erro ao buscar shared users:", err);
       toast.error("Falha ao carregar utilizadores compartilhados");
@@ -195,14 +199,38 @@ export default function UsuariosLandlordPage() {
     if (currentUser) {
       fetchAll();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
+
+// ===== MÉTRICAS (com deduplicação por email) =====
+const totalSuperAdmins = usuarios.filter((u) => u.role === "super_admin").length;
+const totalAdminEmpresa = usuarios.filter((u) => u.role === "admin_empresa").length;
+const totalTenant = tenantUsers.length;
+const totalShared = sharedUsers.length;
+
+// Total: emails ÚNICOS em todas as fontes
+// (o mesmo utilizador pode estar em users_landlord + users shared)
+const totalGeral = useMemo(() => {
+  const emails = new Set<string>();
+
+  usuarios.forEach((u) => u.email && emails.add(u.email.toLowerCase().trim()));
+  tenantUsers.forEach((u) => u.email && emails.add(u.email.toLowerCase().trim()));
+  sharedUsers.forEach((u) => u.email && emails.add(u.email.toLowerCase().trim()));
+
+  return emails.size;
+}, [usuarios, tenantUsers, sharedUsers]);
 
   // ===== FILTROS =====
 
-  const getFilteredUsers = () => {
+  const filteredUsers = useMemo(() => {
     let list: UserItem[] = [];
+
     if (activeTab === "landlord") {
-      list = usuarios.filter((u) => u.role === "super_admin");
+      // ⭐ Mostra super_admin + admin_empresa
+      list = usuarios.filter((u) => {
+        if (roleFilter !== "todos" && u.role !== roleFilter) return false;
+        return true;
+      });
     } else if (activeTab === "tenant") {
       list = tenantUsers;
     } else {
@@ -210,22 +238,16 @@ export default function UsuariosLandlordPage() {
     }
 
     if (searchTerm) {
-      list = list.filter((u) =>
-        u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        u.email.toLowerCase().includes(searchTerm.toLowerCase())
+      const termo = searchTerm.toLowerCase();
+      list = list.filter(
+        (u) =>
+          u.name.toLowerCase().includes(termo) ||
+          u.email.toLowerCase().includes(termo)
       );
     }
 
     return list;
-  };
-
-  const filteredUsers = getFilteredUsers();
-
-  // ===== MÉTRICAS =====
-  const totalSuperAdmins = usuarios.filter((u) => u.role === "super_admin").length;
-  const totalTenant = tenantUsers.length;
-  const totalShared = sharedUsers.length;
-  const totalGeral = totalSuperAdmins + totalTenant + totalShared;
+  }, [activeTab, usuarios, tenantUsers, sharedUsers, searchTerm, roleFilter]);
 
   // ===== CRIAÇÃO =====
   const handleCriar = async () => {
@@ -255,6 +277,10 @@ export default function UsuariosLandlordPage() {
       });
       toast.success("Utilizador criado com sucesso");
       setShowCreateModal(false);
+      setFormNome("");
+      setFormEmail("");
+      setFormSenha("");
+      setFormSenhaConfirm("");
       await fetchUsuarios();
     } catch (err: any) {
       const msg = err.response?.data?.errors
@@ -272,7 +298,9 @@ export default function UsuariosLandlordPage() {
     setActionLoading(usuarioParaStatus.id);
     try {
       await landlordUsersApi.toggleStatus(usuarioParaStatus.id);
-      toast.success(usuarioParaStatus.ativo ? "Utilizador desativado" : "Utilizador ativado");
+      toast.success(
+        usuarioParaStatus.ativo ? "Utilizador desativado" : "Utilizador ativado"
+      );
       setShowStatusDialog(false);
       setUsuarioParaStatus(null);
       await fetchUsuarios();
@@ -302,6 +330,8 @@ export default function UsuariosLandlordPage() {
       });
       toast.success("Senha resetada com sucesso");
       setShowResetModal(false);
+      setNovaSenhaReset("");
+      setNovaSenhaResetConfirm("");
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Erro ao resetar senha");
     } finally {
@@ -314,7 +344,10 @@ export default function UsuariosLandlordPage() {
     return (
       <div className="flex items-center justify-center min-h-[70vh]">
         <div className="text-center">
-          <RefreshCw className="animate-spin w-10 h-10 mx-auto mb-4" style={{ color: colors.primary }} />
+          <RefreshCw
+            className="animate-spin w-10 h-10 mx-auto mb-4"
+            style={{ color: colors.primary }}
+          />
           <p style={{ color: colors.textSecondary }}>A carregar utilizadores...</p>
         </div>
       </div>
@@ -323,13 +356,19 @@ export default function UsuariosLandlordPage() {
 
   if (error) {
     return (
-      <Card className="rounded-xl" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+      <Card
+        className="rounded-xl"
+        style={{ backgroundColor: colors.card, borderColor: colors.border }}>
         <CardContent className="p-4 sm:p-5">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <AlertCircle className="text-red-500 shrink-0" size={24} />
             <div className="flex-1">
-              <p className="font-semibold mb-1" style={{ color: colors.text }}>Erro ao carregar utilizadores</p>
-              <p className="text-sm" style={{ color: colors.textSecondary }}>{error}</p>
+              <p className="font-semibold mb-1" style={{ color: colors.text }}>
+                Erro ao carregar utilizadores
+              </p>
+              <p className="text-sm" style={{ color: colors.textSecondary }}>
+                {error}
+              </p>
             </div>
             <Button onClick={fetchAll} style={{ backgroundColor: colors.primary, color: "#fff" }}>
               Tentar novamente
@@ -345,120 +384,247 @@ export default function UsuariosLandlordPage() {
       {/* Cabeçalho */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: colors.secondary }}>
+          <h1
+            className="text-2xl sm:text-3xl font-bold tracking-tight"
+            style={{ color: colors.secondary }}>
             Gestão de Utilizadores
           </h1>
           <p className="text-sm sm:text-base mt-1" style={{ color: colors.textSecondary }}>
-            Super administradores, utilizadores com base de dados dedicada e base de dados compartilhada
+            Super admins, admins de empresa, base de dados dedicada e compartilhada
           </p>
         </div>
         <Button
           onClick={() => setShowCreateModal(true)}
           className="rounded-lg w-full sm:w-auto"
-          style={{ backgroundColor: colors.primary, color: "#fff" }}
-        >
+          style={{ backgroundColor: colors.primary, color: "#fff" }}>
           <UserPlus size={16} className="mr-2" />
           Novo Super Admin
         </Button>
       </div>
 
-      {/* Cards de métricas (4 cards) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+      {/* ===== MÉTRICAS (5 cards) ===== */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
         {/* Total Geral */}
-        <div
-          className="relative overflow-hidden cursor-pointer transition-all hover:scale-[1.02]"
-          style={{ backgroundColor: colors.card }}
-          onClick={() => { setActiveTab("landlord"); setSearchTerm(""); }}
-        >
+        <button
+          type="button"
+          className="relative overflow-hidden text-left transition-all hover:scale-[1.02] rounded-xl border"
+          style={{ backgroundColor: colors.card, borderColor: colors.border }}
+          onClick={() => {
+            setActiveTab("landlord");
+            setSearchTerm("");
+            setRoleFilter("todos");
+          }}>
           <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: colors.text }} />
-          <div className="p-4 sm:p-5 flex items-center justify-between">
+          <div className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium" style={{ color: colors.text }}>Total de Utilizadores</p>
-              <p className="text-3xl font-bold mt-1" style={{ color: colors.text }}>{totalGeral}</p>
+              <p className="text-xs sm:text-sm font-medium" style={{ color: colors.textSecondary }}>
+                Total
+              </p>
+              <p className="text-2xl sm:text-3xl font-bold mt-1" style={{ color: colors.text }}>
+                {totalGeral}
+              </p>
             </div>
-            <Users size={28} style={{ color: colors.text }} />
+            <Users size={26} style={{ color: colors.text }} />
           </div>
-        </div>
+        </button>
 
         {/* Super Admin */}
-        <div
-          className="relative overflow-hidden cursor-pointer transition-all hover:scale-[1.02]"
-          style={{ backgroundColor: colors.card }}
-          onClick={() => { setActiveTab("landlord"); setSearchTerm(""); }}
-        >
-          <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: colors.secondary }} />
-          <div className="p-4 sm:p-5 flex items-center justify-between">
+        <button
+          type="button"
+          className="relative overflow-hidden text-left transition-all hover:scale-[1.02] rounded-xl border"
+          style={{ backgroundColor: colors.card, borderColor: colors.border }}
+          onClick={() => {
+            setActiveTab("landlord");
+            setSearchTerm("");
+            setRoleFilter("super_admin");
+          }}>
+          <div
+            className="absolute left-0 top-0 bottom-0 w-1"
+            style={{ backgroundColor: colors.secondary }}
+          />
+          <div className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium" style={{ color: colors.secondary }}>Super Admin</p>
-              <p className="text-3xl font-bold mt-1" style={{ color: colors.secondary }}>{totalSuperAdmins}</p>
+              <p className="text-xs sm:text-sm font-medium" style={{ color: colors.secondary }}>
+                Super Admin
+              </p>
+              <p className="text-2xl sm:text-3xl font-bold mt-1" style={{ color: colors.secondary }}>
+                {totalSuperAdmins}
+              </p>
             </div>
-            <Shield size={28} style={{ color: colors.secondary }} />
+            <Crown size={26} style={{ color: colors.secondary }} />
           </div>
-        </div>
+        </button>
+
+        {/* Admin Empresa */}
+        <button
+          type="button"
+          className="relative overflow-hidden text-left transition-all hover:scale-[1.02] rounded-xl border"
+          style={{ backgroundColor: colors.card, borderColor: colors.border }}
+          onClick={() => {
+            setActiveTab("landlord");
+            setSearchTerm("");
+            setRoleFilter("admin_empresa");
+          }}>
+          <div
+            className="absolute left-0 top-0 bottom-0 w-1"
+            style={{ backgroundColor: colors.warning }}
+          />
+          <div className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs sm:text-sm font-medium" style={{ color: colors.warning }}>
+                Admin Empresa
+              </p>
+              <p className="text-2xl sm:text-3xl font-bold mt-1" style={{ color: colors.warning }}>
+                {totalAdminEmpresa}
+              </p>
+            </div>
+            <Shield size={26} style={{ color: colors.warning }} />
+          </div>
+        </button>
 
         {/* Base Dedicada */}
-        <div
-          className="relative overflow-hidden cursor-pointer transition-all hover:scale-[1.02]"
-          style={{ backgroundColor: colors.card }}
-          onClick={() => { setActiveTab("tenant"); setSearchTerm(""); }}
-        >
-          <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: colors.primary }} />
-          <div className="p-4 sm:p-5 flex items-center justify-between">
+        <button
+          type="button"
+          className="relative overflow-hidden text-left transition-all hover:scale-[1.02] rounded-xl border"
+          style={{ backgroundColor: colors.card, borderColor: colors.border }}
+          onClick={() => {
+            setActiveTab("tenant");
+            setSearchTerm("");
+          }}>
+          <div
+            className="absolute left-0 top-0 bottom-0 w-1"
+            style={{ backgroundColor: colors.primary }}
+          />
+          <div className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium" style={{ color: colors.primary }}>Base Dados Dedicada</p>
-              <p className="text-3xl font-bold mt-1" style={{ color: colors.primary }}>{totalTenant}</p>
+              <p className="text-xs sm:text-sm font-medium" style={{ color: colors.primary }}>
+                Dedicada
+              </p>
+              <p className="text-2xl sm:text-3xl font-bold mt-1" style={{ color: colors.primary }}>
+                {totalTenant}
+              </p>
             </div>
-            <Database size={28} style={{ color: colors.primary }} />
+            <Database size={26} style={{ color: colors.primary }} />
           </div>
-        </div>
+        </button>
 
         {/* Base Compartilhada */}
-        <div
-          className="relative overflow-hidden cursor-pointer transition-all hover:scale-[1.02]"
-          style={{ backgroundColor: colors.card }}
-          onClick={() => { setActiveTab("shared"); setSearchTerm(""); }}
-        >
-          <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: colors.blue }} />
-          <div className="p-4 sm:p-5 flex items-center justify-between">
+        <button
+          type="button"
+          className="relative overflow-hidden text-left transition-all hover:scale-[1.02] rounded-xl border"
+          style={{ backgroundColor: colors.card, borderColor: colors.border }}
+          onClick={() => {
+            setActiveTab("shared");
+            setSearchTerm("");
+          }}>
+          <div
+            className="absolute left-0 top-0 bottom-0 w-1"
+            style={{ backgroundColor: colors.blue }}
+          />
+          <div className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium" style={{ color: colors.blue }}>Base Dados Compartilhada</p>
-              <p className="text-3xl font-bold mt-1" style={{ color: colors.blue }}>{totalShared}</p>
+              <p className="text-xs sm:text-sm font-medium" style={{ color: colors.blue }}>
+                Compartilhada
+              </p>
+              <p className="text-2xl sm:text-3xl font-bold mt-1" style={{ color: colors.blue }}>
+                {totalShared}
+              </p>
             </div>
-            <Building2 size={28} style={{ color: colors.blue }} />
+            <Building2 size={26} style={{ color: colors.blue }} />
           </div>
-        </div>
+        </button>
       </div>
 
       {/* Tabs e Toolbar */}
       <Card className="shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
         <CardContent className="p-4 sm:p-5">
           <div className="flex flex-col lg:flex-row gap-4">
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="flex-1">
+            <Tabs
+              value={activeTab}
+              onValueChange={(v) => {
+                setActiveTab(v as any);
+                setRoleFilter("todos");
+              }}
+              className="flex-1">
               <TabsList className="grid w-full grid-cols-3" style={{ backgroundColor: colors.background }}>
-                <TabsTrigger value="landlord" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                  <Shield size={14} className="mr-2" />
-                  Super Admin
+                <TabsTrigger
+                  value="landlord"
+                  className="data-[state=active]:shadow-sm gap-2"
+                  style={{ color: colors.textSecondary }}>
+                  <Crown size={14} />
+                  <span className="hidden sm:inline">Landlord</span>
+                  <span className="sm:hidden">LL</span>
                 </TabsTrigger>
-                <TabsTrigger value="tenant" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                  <Database size={14} className="mr-2" />
-                  Dedicada
+                <TabsTrigger
+                  value="tenant"
+                  className="data-[state=active]:shadow-sm gap-2"
+                  style={{ color: colors.textSecondary }}>
+                  <Database size={14} />
+                  <span className="hidden sm:inline">Dedicada</span>
+                  <span className="sm:hidden">DB</span>
                 </TabsTrigger>
-                <TabsTrigger value="shared" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                  <Building2 size={14} className="mr-2" />
-                  Compartilhada
+                <TabsTrigger
+                  value="shared"
+                  className="data-[state=active]:shadow-sm gap-2"
+                  style={{ color: colors.textSecondary }}>
+                  <Building2 size={14} />
+                  <span className="hidden sm:inline">Compartilhada</span>
+                  <span className="sm:hidden">SH</span>
                 </TabsTrigger>
               </TabsList>
             </Tabs>
 
             <div className="flex flex-col sm:flex-row gap-3 lg:ml-auto">
+              {/* Filtro de role — só na tab landlord */}
+              {activeTab === "landlord" && (
+                <div className="flex gap-2">
+                  {(["todos", "super_admin", "admin_empresa"] as const).map((r) => {
+                    const ativo = roleFilter === r;
+                    return (
+                      <button
+                        key={r}
+                        onClick={() => setRoleFilter(r)}
+                        className="px-3 py-1.5 rounded-full text-xs font-medium border transition-colors whitespace-nowrap"
+                        style={
+                          ativo
+                            ? {
+                                backgroundColor: colors.primary,
+                                color: "#fff",
+                                borderColor: colors.primary,
+                              }
+                            : {
+                                backgroundColor: "transparent",
+                                color: colors.textSecondary,
+                                borderColor: colors.border,
+                              }
+                        }>
+                        {r === "todos"
+                          ? "Todos"
+                          : r === "super_admin"
+                          ? "Super Admin"
+                          : "Admin Empresa"}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
               <div className="relative flex-1 sm:w-48">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2" size={16} style={{ color: colors.textSecondary }} />
+                <Search
+                  className="absolute left-3 top-1/2 -translate-y-1/2"
+                  size={16}
+                  style={{ color: colors.textSecondary }}
+                />
                 <Input
                   placeholder="Buscar..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-9"
-                  style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
+                  style={{
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                    color: colors.text,
+                  }}
                 />
               </div>
             </div>
@@ -470,21 +636,30 @@ export default function UsuariosLandlordPage() {
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
         <TabsContent value="landlord">
           {filteredUsers.length === 0 ? (
-            <EmptyState icon={<Shield size={48} />} message="Nenhum Super Admin encontrado" />
+            <EmptyState
+              icon={<Crown size={48} />}
+              message="Nenhum utilizador landlord encontrado"
+            />
           ) : (
             <UserTable
               users={filteredUsers as LandlordUserItem[]}
               colors={colors}
               currentUser={currentUser}
               actionLoading={actionLoading}
-              onToggleStatus={(u) => { setUsuarioParaStatus(u); setShowStatusDialog(true); }}
+              onToggleStatus={(u) => {
+                setUsuarioParaStatus(u);
+                setShowStatusDialog(true);
+              }}
             />
           )}
         </TabsContent>
 
         <TabsContent value="tenant">
           {filteredUsers.length === 0 ? (
-            <EmptyState icon={<Database size={48} />} message="Nenhum utilizador com base dedicada encontrado" />
+            <EmptyState
+              icon={<Database size={48} />}
+              message="Nenhum utilizador com base dedicada encontrado"
+            />
           ) : (
             <TenantTable users={filteredUsers as TenantUserItem[]} colors={colors} />
           )}
@@ -492,14 +667,17 @@ export default function UsuariosLandlordPage() {
 
         <TabsContent value="shared">
           {filteredUsers.length === 0 ? (
-            <EmptyState icon={<Building2 size={48} />} message="Nenhum utilizador com base compartilhada encontrado" />
+            <EmptyState
+              icon={<Building2 size={48} />}
+              message="Nenhum utilizador com base compartilhada encontrado"
+            />
           ) : (
             <SharedTable users={filteredUsers as SharedUserItem[]} colors={colors} />
           )}
         </TabsContent>
       </Tabs>
 
-      {/* ===== MODAL DE CRIAÇÃO ===== */}
+      {/* MODAL DE CRIAÇÃO */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
         <DialogContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
           <DialogHeader>
@@ -511,52 +689,75 @@ export default function UsuariosLandlordPage() {
 
           <div className="space-y-4 py-4">
             <div>
-              <label className="text-sm font-medium" style={{ color: colors.text }}>Nome completo *</label>
+              <label className="text-sm font-medium" style={{ color: colors.text }}>
+                Nome completo *
+              </label>
               <Input
                 value={formNome}
                 onChange={(e) => setFormNome(e.target.value)}
                 placeholder="Ex: João Silva"
-                style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
+                style={{
+                  backgroundColor: colors.background,
+                  borderColor: colors.border,
+                  color: colors.text,
+                }}
               />
             </div>
             <div>
-              <label className="text-sm font-medium" style={{ color: colors.text }}>Email *</label>
+              <label className="text-sm font-medium" style={{ color: colors.text }}>
+                Email *
+              </label>
               <Input
                 type="email"
                 value={formEmail}
                 onChange={(e) => setFormEmail(e.target.value)}
                 placeholder="exemplo@dominio.com"
-                style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
+                style={{
+                  backgroundColor: colors.background,
+                  borderColor: colors.border,
+                  color: colors.text,
+                }}
               />
             </div>
             <div>
-              <label className="text-sm font-medium" style={{ color: colors.text }}>Senha *</label>
+              <label className="text-sm font-medium" style={{ color: colors.text }}>
+                Senha *
+              </label>
               <div className="relative">
                 <Input
                   type={showSenha ? "text" : "password"}
                   value={formSenha}
                   onChange={(e) => setFormSenha(e.target.value)}
                   placeholder="Mínimo 8 caracteres"
-                  style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
+                  style={{
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                    color: colors.text,
+                  }}
                 />
                 <button
                   type="button"
                   onClick={() => setShowSenha(!showSenha)}
                   className="absolute right-3 top-1/2 -translate-y-1/2"
-                  style={{ color: colors.textSecondary }}
-                >
+                  style={{ color: colors.textSecondary }}>
                   {showSenha ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium" style={{ color: colors.text }}>Confirmar senha *</label>
+              <label className="text-sm font-medium" style={{ color: colors.text }}>
+                Confirmar senha *
+              </label>
               <Input
                 type="password"
                 value={formSenhaConfirm}
                 onChange={(e) => setFormSenhaConfirm(e.target.value)}
                 placeholder="Repete a senha"
-                style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
+                style={{
+                  backgroundColor: colors.background,
+                  borderColor: colors.border,
+                  color: colors.text,
+                }}
               />
             </div>
 
@@ -569,10 +770,16 @@ export default function UsuariosLandlordPage() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateModal(false)} disabled={creating}>
+            <Button
+              variant="outline"
+              onClick={() => setShowCreateModal(false)}
+              disabled={creating}>
               Cancelar
             </Button>
-            <Button onClick={handleCriar} disabled={creating} style={{ backgroundColor: colors.primary, color: "#fff" }}>
+            <Button
+              onClick={handleCriar}
+              disabled={creating}
+              style={{ backgroundColor: colors.primary, color: "#fff" }}>
               {creating ? <RefreshCw size={16} className="animate-spin mr-2" /> : null}
               Criar Utilizador
             </Button>
@@ -580,7 +787,7 @@ export default function UsuariosLandlordPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ===== MODAL DE CONFIRMAÇÃO DE STATUS ===== */}
+      {/* MODAL DE CONFIRMAÇÃO DE STATUS */}
       <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
         <DialogContent style={{ backgroundColor: colors.card, borderColor: colors.border }}>
           <DialogHeader>
@@ -588,15 +795,21 @@ export default function UsuariosLandlordPage() {
               {usuarioParaStatus?.ativo ? "Desativar" : "Ativar"} utilizador
             </DialogTitle>
             <DialogDescription style={{ color: colors.textSecondary }}>
-              Tem a certeza que pretende {usuarioParaStatus?.ativo ? "desativar" : "ativar"} o utilizador <strong>{usuarioParaStatus?.name}</strong>?
+              Tem a certeza que pretende{" "}
+              {usuarioParaStatus?.ativo ? "desativar" : "ativar"} o utilizador{" "}
+              <strong>{usuarioParaStatus?.name}</strong>?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowStatusDialog(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleToggleStatus} style={{ backgroundColor: colors.primary, color: "#fff" }}>
-              {actionLoading === usuarioParaStatus?.id ? <RefreshCw size={16} className="animate-spin mr-2" /> : null}
+            <Button
+              onClick={handleToggleStatus}
+              style={{ backgroundColor: colors.primary, color: "#fff" }}>
+              {actionLoading === usuarioParaStatus?.id ? (
+                <RefreshCw size={16} className="animate-spin mr-2" />
+              ) : null}
               Confirmar
             </Button>
           </DialogFooter>
@@ -615,8 +828,12 @@ function EmptyState({ icon, message }: { icon: React.ReactNode; message: string 
   return (
     <Card className="shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
       <CardContent className="p-12 text-center">
-        <div className="mx-auto mb-4" style={{ color: colors.textSecondary }}>{icon}</div>
-        <p className="text-lg font-medium mb-1" style={{ color: colors.text }}>{message}</p>
+        <div className="mx-auto mb-4" style={{ color: colors.textSecondary }}>
+          {icon}
+        </div>
+        <p className="text-lg font-medium mb-1" style={{ color: colors.text }}>
+          {message}
+        </p>
         <p style={{ color: colors.textSecondary }}>Tenta ajustar os filtros de busca</p>
       </CardContent>
     </Card>
@@ -624,10 +841,7 @@ function EmptyState({ icon, message }: { icon: React.ReactNode; message: string 
 }
 
 // ============================================================
-// TABELA LANDLORD (Super Admin) – SEM VÍNCULO
-// ============================================================
-// ============================================================
-// TABELA LANDLORD (Super Admin) – COM MAIS INFORMAÇÃO
+// TABELA LANDLORD (Super Admin + Admin Empresa)
 // ============================================================
 function UserTable({
   users,
@@ -642,45 +856,127 @@ function UserTable({
   actionLoading: string | null;
   onToggleStatus: (u: LandlordUserItem) => void;
 }) {
+  const roleBadgeStyle = (role: string) => {
+    if (role === "super_admin") {
+      return {
+        backgroundColor: `${colors.secondary}15`,
+        color: colors.secondary,
+        border: `1px solid ${colors.secondary}30`,
+      };
+    }
+    return {
+      backgroundColor: `${colors.warning}15`,
+      color: colors.warning,
+      border: `1px solid ${colors.warning}30`,
+    };
+  };
+
   return (
     <>
       {/* Desktop */}
-      <div className="hidden lg:block overflow-x-auto border shadow-sm" style={{ borderColor: colors.border }}>
+      <div
+        className="hidden lg:block overflow-x-auto border shadow-sm rounded-xl"
+        style={{ borderColor: colors.border }}>
         <table className="min-w-full divide-y" style={{ borderColor: colors.border }}>
           <thead style={{ backgroundColor: colors.primary }}>
             <tr>
-              <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>Utilizador</th>
-              <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>Empresa</th>
-              <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>Criado em</th>
-              <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>Status</th>
-              <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>Ações</th>
+              <th
+                className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider"
+                style={{ color: "#fff" }}>
+                Utilizador
+              </th>
+              <th
+                className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider"
+                style={{ color: "#fff" }}>
+                Role
+              </th>
+              <th
+                className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider"
+                style={{ color: "#fff" }}>
+                Empresa
+              </th>
+              <th
+                className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider"
+                style={{ color: "#fff" }}>
+                Criado em
+              </th>
+              <th
+                className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider"
+                style={{ color: "#fff" }}>
+                Status
+              </th>
+              <th
+                className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider"
+                style={{ color: "#fff" }}>
+                Ações
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y" style={{ borderColor: colors.border }}>
             {users.map((u) => (
               <tr key={u.id} style={{ backgroundColor: colors.card }}>
                 <td className="px-6 py-4">
-                  <p className="font-semibold" style={{ color: colors.text }}>{u.name}</p>
-                  <div className="flex items-center gap-1 text-xs mt-0.5" style={{ color: colors.textSecondary }}>
+                  <p className="font-semibold" style={{ color: colors.text }}>
+                    {u.name}
+                  </p>
+                  <div
+                    className="flex items-center gap-1 text-xs mt-0.5"
+                    style={{ color: colors.textSecondary }}>
                     <Mail size={11} />
                     {u.email}
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
+                  <Badge style={roleBadgeStyle(u.role)} className="font-medium">
+                    {u.role === "super_admin" ? (
+                      <>
+                        <Crown size={12} className="mr-1" />
+                        Super Admin
+                      </>
+                    ) : (
+                      <>
+                        <Shield size={12} className="mr-1" />
+                        Admin Empresa
+                      </>
+                    )}
+                  </Badge>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
                   {u.empresa ? (
-                    <Badge style={{ backgroundColor: `${colors.primary}15`, color: colors.primary, border: `1px solid ${colors.primary}30` }}>
+                    <Badge
+                      style={{
+                        backgroundColor: `${colors.primary}15`,
+                        color: colors.primary,
+                        border: `1px solid ${colors.primary}30`,
+                      }}>
                       <Building2 size={12} className="mr-1" />
                       {u.empresa.nome}
                     </Badge>
                   ) : (
-                    <span className="text-sm" style={{ color: colors.textSecondary }}>—</span>
+                    <span className="text-sm" style={{ color: colors.textSecondary }}>
+                      —
+                    </span>
                   )}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm" style={{ color: colors.textSecondary }}>
-                  {u.created_at ? new Date(u.created_at).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                <td
+                  className="px-6 py-4 whitespace-nowrap text-sm"
+                  style={{ color: colors.textSecondary }}>
+                  {u.created_at
+                    ? new Date(u.created_at).toLocaleDateString("pt-PT", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })
+                    : "—"}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <Badge style={{ backgroundColor: u.ativo ? `${colors.success}15` : `${colors.danger}15`, color: u.ativo ? colors.success : colors.danger, border: `1px solid ${u.ativo ? colors.success : colors.danger}30` }} className="font-medium">
+                  <Badge
+                    style={{
+                      backgroundColor: u.ativo ? `${colors.success}15` : `${colors.danger}15`,
+                      color: u.ativo ? colors.success : colors.danger,
+                      border: `1px solid ${u.ativo ? colors.success : colors.danger}30`,
+                    }}
+                    className="font-medium">
                     {u.ativo ? "Ativo" : "Inativo"}
                   </Badge>
                 </td>
@@ -690,10 +986,18 @@ function UserTable({
                     onClick={() => onToggleStatus(u)}
                     disabled={actionLoading === u.id || u.id === currentUser?.id}
                     className="rounded-lg"
-                    style={{ backgroundColor: u.ativo ? colors.danger : colors.success, color: '#fff' }}
-                    title={u.id === currentUser?.id ? "Não podes alterar o teu próprio status" : ""}
-                  >
-                    {actionLoading === u.id ? <RefreshCw size={14} className="animate-spin" /> : <Power size={14} />}
+                    style={{
+                      backgroundColor: u.ativo ? colors.danger : colors.success,
+                      color: "#fff",
+                    }}
+                    title={
+                      u.id === currentUser?.id ? "Não podes alterar o teu próprio status" : ""
+                    }>
+                    {actionLoading === u.id ? (
+                      <RefreshCw size={14} className="animate-spin" />
+                    ) : (
+                      <Power size={14} />
+                    )}
                   </Button>
                 </td>
               </tr>
@@ -705,36 +1009,76 @@ function UserTable({
       {/* Mobile */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:hidden">
         {users.map((u) => (
-          <Card key={u.id} className="rounded-xl shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+          <Card
+            key={u.id}
+            className="rounded-xl shadow-sm"
+            style={{ backgroundColor: colors.card, borderColor: colors.border }}>
             <CardContent className="p-4 space-y-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="font-semibold truncate" style={{ color: colors.text }}>{u.name}</p>
-                  <p className="text-xs truncate flex items-center gap-1" style={{ color: colors.textSecondary }}>
+                  <p className="font-semibold truncate" style={{ color: colors.text }}>
+                    {u.name}
+                  </p>
+                  <p
+                    className="text-xs truncate flex items-center gap-1"
+                    style={{ color: colors.textSecondary }}>
                     <Mail size={11} className="shrink-0" />
                     {u.email}
                   </p>
                 </div>
-                <Badge style={{ backgroundColor: u.ativo ? `${colors.success}15` : `${colors.danger}15`, color: u.ativo ? colors.success : colors.danger, border: `1px solid ${u.ativo ? colors.success : colors.danger}30` }} className="font-medium shrink-0">
+                <Badge
+                  style={{
+                    backgroundColor: u.ativo ? `${colors.success}15` : `${colors.danger}15`,
+                    color: u.ativo ? colors.success : colors.danger,
+                    border: `1px solid ${u.ativo ? colors.success : colors.danger}30`,
+                  }}
+                  className="font-medium shrink-0">
                   {u.ativo ? "Ativo" : "Inativo"}
                 </Badge>
               </div>
+
+              <Badge style={roleBadgeStyle(u.role)} className="font-medium">
+                {u.role === "super_admin" ? "Super Admin" : "Admin Empresa"}
+              </Badge>
+
               <div className="grid grid-cols-2 gap-2 text-xs" style={{ color: colors.textSecondary }}>
                 <div>
-                  <span className="font-medium" style={{ color: colors.text }}>Empresa:</span> {u.empresa?.nome || '—'}
+                  <span className="font-medium" style={{ color: colors.text }}>
+                    Empresa:
+                  </span>{" "}
+                  {u.empresa?.nome || "—"}
                 </div>
                 <div>
-                  <span className="font-medium" style={{ color: colors.text }}>Criado:</span> {u.created_at ? new Date(u.created_at).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                  <span className="font-medium" style={{ color: colors.text }}>
+                    Criado:
+                  </span>{" "}
+                  {u.created_at
+                    ? new Date(u.created_at).toLocaleDateString("pt-PT", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })
+                    : "—"}
                 </div>
               </div>
+
               <Button
                 size="sm"
                 onClick={() => onToggleStatus(u)}
                 disabled={actionLoading === u.id || u.id === currentUser?.id}
                 className="w-full rounded-lg"
-                style={{ backgroundColor: u.ativo ? colors.danger : colors.success, color: '#fff' }}
-              >
-                {actionLoading === u.id ? <RefreshCw size={14} className="animate-spin" /> : <><Power size={14} className="mr-1" />{u.ativo ? "Desativar" : "Ativar"}</>}
+                style={{
+                  backgroundColor: u.ativo ? colors.danger : colors.success,
+                  color: "#fff",
+                }}>
+                {actionLoading === u.id ? (
+                  <RefreshCw size={14} className="animate-spin" />
+                ) : (
+                  <>
+                    <Power size={14} className="mr-1" />
+                    {u.ativo ? "Desativar" : "Ativar"}
+                  </>
+                )}
               </Button>
             </CardContent>
           </Card>
@@ -749,38 +1093,74 @@ function UserTable({
 // ============================================================
 function TenantTable({ users, colors }: { users: TenantUserItem[]; colors: any }) {
   return (
-    <div className="overflow-x-auto rounded-xl border shadow-sm" style={{ borderColor: colors.border }}>
+    <div
+      className="overflow-x-auto rounded-xl border shadow-sm"
+      style={{ borderColor: colors.border }}>
       <table className="min-w-full divide-y" style={{ borderColor: colors.border }}>
         <thead style={{ backgroundColor: colors.primary }}>
           <tr>
-            <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>Utilizador</th>
-            <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>Empresa</th>
-            <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>Status</th>
-            <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>Criado em</th>
+            <th
+              className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider"
+              style={{ color: "#fff" }}>
+              Utilizador
+            </th>
+            <th
+              className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider"
+              style={{ color: "#fff" }}>
+              Empresa
+            </th>
+            <th
+              className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider"
+              style={{ color: "#fff" }}>
+              Status
+            </th>
+            <th
+              className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider"
+              style={{ color: "#fff" }}>
+              Criado em
+            </th>
           </tr>
         </thead>
         <tbody className="divide-y" style={{ borderColor: colors.border }}>
           {users.map((u) => (
             <tr key={u.id} style={{ backgroundColor: colors.card }}>
               <td className="px-6 py-4">
-                <p className="font-semibold" style={{ color: colors.text }}>{u.name}</p>
-                <div className="flex items-center gap-1 text-xs mt-0.5" style={{ color: colors.textSecondary }}>
+                <p className="font-semibold" style={{ color: colors.text }}>
+                  {u.name}
+                </p>
+                <div
+                  className="flex items-center gap-1 text-xs mt-0.5"
+                  style={{ color: colors.textSecondary }}>
                   <Mail size={11} />
                   {u.email}
                 </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <Badge style={{ backgroundColor: `${colors.primary}15`, color: colors.primary, border: `1px solid ${colors.primary}30` }}>
+                <Badge
+                  style={{
+                    backgroundColor: `${colors.primary}15`,
+                    color: colors.primary,
+                    border: `1px solid ${colors.primary}30`,
+                  }}>
                   <Building2 size={12} className="mr-1" />
                   {u.empresa_nome || "N/A"}
                 </Badge>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <Badge style={{ backgroundColor: u.ativo !== false ? `${colors.success}15` : `${colors.danger}15`, color: u.ativo !== false ? colors.success : colors.danger, border: `1px solid ${u.ativo !== false ? colors.success : colors.danger}30` }} className="font-medium">
+                <Badge
+                  style={{
+                    backgroundColor:
+                      u.ativo !== false ? `${colors.success}15` : `${colors.danger}15`,
+                    color: u.ativo !== false ? colors.success : colors.danger,
+                    border: `1px solid ${u.ativo !== false ? colors.success : colors.danger}30`,
+                  }}
+                  className="font-medium">
                   {u.ativo !== false ? "Ativo" : "Inativo"}
                 </Badge>
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm" style={{ color: colors.textSecondary }}>
+              <td
+                className="px-6 py-4 whitespace-nowrap text-sm"
+                style={{ color: colors.textSecondary }}>
                 {u.created_at ? new Date(u.created_at).toLocaleDateString() : "N/A"}
               </td>
             </tr>
@@ -796,44 +1176,90 @@ function TenantTable({ users, colors }: { users: TenantUserItem[]; colors: any }
 // ============================================================
 function SharedTable({ users, colors }: { users: SharedUserItem[]; colors: any }) {
   return (
-    <div className="overflow-x-auto rounded-xl border shadow-sm" style={{ borderColor: colors.border }}>
+    <div
+      className="overflow-x-auto rounded-xl border shadow-sm"
+      style={{ borderColor: colors.border }}>
       <table className="min-w-full divide-y" style={{ borderColor: colors.border }}>
         <thead style={{ backgroundColor: colors.secondary }}>
           <tr>
-            <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>Utilizador</th>
-            <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>Role</th>
-            <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>Empresa</th>
-            <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>Status</th>
-            <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#fff' }}>Criado em</th>
+            <th
+              className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider"
+              style={{ color: "#fff" }}>
+              Utilizador
+            </th>
+            <th
+              className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider"
+              style={{ color: "#fff" }}>
+              Role
+            </th>
+            <th
+              className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider"
+              style={{ color: "#fff" }}>
+              Empresa
+            </th>
+            <th
+              className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider"
+              style={{ color: "#fff" }}>
+              Status
+            </th>
+            <th
+              className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider"
+              style={{ color: "#fff" }}>
+              Criado em
+            </th>
           </tr>
         </thead>
         <tbody className="divide-y" style={{ borderColor: colors.border }}>
           {users.map((u) => (
             <tr key={u.id} style={{ backgroundColor: colors.card }}>
               <td className="px-6 py-4">
-                <p className="font-semibold" style={{ color: colors.text }}>{u.name}</p>
-                <div className="flex items-center gap-1 text-xs mt-0.5" style={{ color: colors.textSecondary }}>
+                <p className="font-semibold" style={{ color: colors.text }}>
+                  {u.name}
+                </p>
+                <div
+                  className="flex items-center gap-1 text-xs mt-0.5"
+                  style={{ color: colors.textSecondary }}>
                   <Mail size={11} />
                   {u.email}
                 </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <Badge className="font-medium" style={{ backgroundColor: `${colors.secondary}15`, color: colors.secondary, border: `1px solid ${colors.secondary}30` }}>
+                <Badge
+                  className="font-medium"
+                  style={{
+                    backgroundColor: `${colors.secondary}15`,
+                    color: colors.secondary,
+                    border: `1px solid ${colors.secondary}30`,
+                  }}>
                   {ROLE_LABELS[u.role] || u.role || "Utilizador"}
                 </Badge>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <Badge style={{ backgroundColor: `${colors.primary}15`, color: colors.primary, border: `1px solid ${colors.primary}30` }}>
+                <Badge
+                  style={{
+                    backgroundColor: `${colors.primary}15`,
+                    color: colors.primary,
+                    border: `1px solid ${colors.primary}30`,
+                  }}>
                   <Building2 size={12} className="mr-1" />
                   {u.empresa_nome || "N/A"}
                 </Badge>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <Badge style={{ backgroundColor: u.ativo !== false ? `${colors.success}15` : `${colors.danger}15`, color: u.ativo !== false ? colors.success : colors.danger, border: `1px solid ${u.ativo !== false ? colors.success : colors.danger}30` }} className="font-medium">
+                <Badge
+                  style={{
+                    backgroundColor:
+                      u.ativo !== false ? `${colors.success}15` : `${colors.danger}15`,
+                    color: u.ativo !== false ? colors.success : colors.danger,
+                    border: `1px solid ${u.ativo !== false ? colors.success : colors.danger}30`,
+                  }}
+                  className="font-medium">
                   {u.ativo !== false ? "Ativo" : "Inativo"}
                 </Badge>
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm" style={{ color: colors.textSecondary }}>
+              <td
+                className="px-6 py-4 whitespace-nowrap text-sm"
+                style={{ color: colors.textSecondary }}>
                 {u.created_at ? new Date(u.created_at).toLocaleDateString() : "N/A"}
               </td>
             </tr>

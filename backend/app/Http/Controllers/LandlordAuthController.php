@@ -197,7 +197,7 @@ class LandlordAuthController extends Controller
                     'google_avatar' => $googleUser->getAvatar(),
                     'oauth_verified' => true,
                     'ativo' => true,
-                    'role' => 'super_admin', // ✅ Novo usuário recebe role super_admin
+                    'role' => 'admin_empresa', // ✅ Novo usuário recebe role admin_empresa
                 ]);
 
                 // ✅ Marca como email verificado automaticamente
