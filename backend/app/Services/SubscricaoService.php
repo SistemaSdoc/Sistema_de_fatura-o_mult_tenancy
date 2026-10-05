@@ -11,6 +11,12 @@ use Illuminate\Support\Str;
 class SubscricaoService
 {
     /**
+     *   Flag temporária: quando true, o Observer NÃO cria Experimental.
+     * Usado quando o controller decide criar a subscrição com um plano específico.
+     */
+    public static bool $skipExperimental = false;
+
+    /**
      * Atribui o plano Experimental a uma empresa que não tem subscrição ativa.
      * Idempotente — se já tiver, devolve a existente.
      * Nunca rebenta — só loga se o plano não existir.
@@ -58,6 +64,56 @@ class SubscricaoService
 
         Log::info('[SubscricaoService] Empresa ganhou plano Experimental', [
             'empresa_id'    => $empresa->id,
+            'subscricao_id' => $subscricao->id,
+            'data_fim'      => $dataFim,
+        ]);
+
+        return $subscricao;
+    }
+
+    /**
+     * Cria uma subscrição com um plano específico (gratuito).
+     * Devolve null se já existir subscrição ativa.
+     */
+    public static function criarComPlano(
+        Empresa $empresa,
+        Plano $plano,
+        ?string $landlordUserId = null,
+        string $formaPagamento = 'gratuito'
+    ): ?Subscricao {
+        // Já tem subscrição ativa? Não duplica.
+        $existente = Subscricao::where('empresa_id', $empresa->id)
+            ->where('status', 'ativa')
+            ->first();
+
+        if ($existente) {
+            Log::info('[SubscricaoService] Empresa já tem subscrição ativa — não cria nova', [
+                'empresa_id'    => $empresa->id,
+                'subscricao_id' => $existente->id,
+            ]);
+            return $existente;
+        }
+
+        $dataInicio = now()->toDateString();
+        $dataFim    = now()->addMonths($plano->duracao_meses ?? 1)->toDateString();
+
+        $subscricao = Subscricao::create([
+            'id'                   => (string) Str::uuid(),
+            'empresa_id'           => $empresa->id,
+            'plano_id'             => $plano->id,
+            'data_inicio'          => $dataInicio,
+            'data_fim'             => $dataFim,
+            'status'               => 'ativa',
+            'forma_pagamento'      => $formaPagamento,
+            'renovacao_automatica' => false,
+            'cancelado_em'         => null,
+            'criado_por'           => $landlordUserId,
+        ]);
+
+        Log::info('[SubscricaoService] Subscrição criada com plano específico', [
+            'empresa_id'    => $empresa->id,
+            'plano_id'      => $plano->id,
+            'plano_nome'    => $plano->nome,
             'subscricao_id' => $subscricao->id,
             'data_fim'      => $dataFim,
         ]);

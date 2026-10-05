@@ -14,6 +14,7 @@ use App\Models\Tenant\Cliente as TenantCliente;
 use App\Models\Tenant\DocumentoFiscal as TenantDocumentoFiscal;
 use App\Models\Tenant\Pagamento as TenantPagamento;
 use App\Models\Tenant\User as TenantUser;
+use App\Services\SubscricaoService;
 use App\Services\AuditLogger;
 use App\Services\NotificacaoService;
 use Illuminate\Support\Facades\Hash;
@@ -29,9 +30,9 @@ class EmpresaController extends Controller
 {
     private const IVA_PADRAO_DEFAULT = 14.0;
 
-    // ------------------------------------------------------------
-    // LOGS VISUAIS (emojis + formatação)
-    // ------------------------------------------------------------
+    /* ================================================================
+     | LOGS VISUAIS
+     | ================================================================ */
     private function logPretty(string $step, string $message, string $status = 'info'): void
     {
         $emoji = match ($status) {
@@ -41,19 +42,17 @@ class EmpresaController extends Controller
             default   => 'ℹ️',
         };
 
-        $formatted = sprintf(
+        Log::channel('single')->info(sprintf(
             "[%s %s] %s",
             $emoji,
             str_pad($step, 12, ' ', STR_PAD_BOTH),
             $message
-        );
-
-        Log::channel('single')->info($formatted);
+        ));
     }
 
-    // ------------------------------------------------------------
-    // ARTE ASCII: FATURAJA
-    // ------------------------------------------------------------
+    /* ================================================================
+     | ARTE ASCII: FATURAJA
+     | ================================================================ */
     private function getFaturajaAscii(): string
     {
         return "\033[38;5;18m
@@ -73,9 +72,9 @@ class EmpresaController extends Controller
 \033[0m";
     }
 
-    // ------------------------------------------------------------
-    // ARTE ASCII: SDOCA
-    // ------------------------------------------------------------
+    /* ================================================================
+     | ARTE ASCII: SDOCA
+     | ================================================================ */
     private function getSdocAscii(): string
     {
         return <<<SDOCA
@@ -100,9 +99,9 @@ class EmpresaController extends Controller
 SDOCA;
     }
 
-    // ------------------------------------------------------------
-    // ARTE ASCII: PRÉDIO MULTI‑TENANT
-    // ------------------------------------------------------------
+    /* ================================================================
+     | ARTE ASCII: PRÉDIO MULTI-TENANT
+     | ================================================================ */
     private function getBuildingAscii(string $subdomain, string $dbName, string $adminEmail, ?string $modo = 'colectivo'): string
     {
         $modo = $modo ?? 'colectivo';
@@ -147,29 +146,29 @@ SDOCA;
 BUILDING;
     }
 
-    // ============================================================
-    // 1. LISTAGEM (landlord)
-    // ============================================================
+    /* ================================================================
+     | 1. LISTAGEM (landlord)
+     | ================================================================ */
     public function index()
     {
         $empresas = Empresa::on('landlord')->get();
 
         return response()->json([
             'success' => true,
-            'data'    => $empresas
+            'data'    => $empresas,
         ], 200);
     }
 
-    // ============================================================
-    // 2. UPLOAD TEMPORÁRIO DE LOGO
-    // ============================================================
+    /* ================================================================
+     | 2. UPLOAD TEMPORÁRIO DE LOGO
+     | ================================================================ */
     public function uploadTempLogo(Request $request)
     {
         $this->logPretty('UPLOAD', 'Iniciando upload temporário do logo', 'info');
 
         try {
             $request->validate([
-                'logo' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048'
+                'logo' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
             ]);
 
             $file = $request->file('logo');
@@ -181,17 +180,20 @@ BUILDING;
             return response()->json([
                 'success'  => true,
                 'logo_url' => $path,
-                'message'  => 'Upload temporário realizado com sucesso'
+                'message'  => 'Upload temporário realizado com sucesso',
             ]);
         } catch (\Throwable $e) {
             $this->logPretty('UPLOAD', "Erro: {$e->getMessage()}", 'error');
             return response()->json([
                 'success' => false,
-                'message' => 'Falha ao fazer upload: ' . $e->getMessage()
+                'message' => 'Falha ao fazer upload: ' . $e->getMessage(),
             ], 500);
         }
     }
 
+    /* ================================================================
+     | Helper: executar migrations com log
+     | ================================================================ */
     private function executarMigracoesComLog(string $database, string $relativePath): int
     {
         $fullPath = database_path($relativePath);
@@ -220,9 +222,9 @@ BUILDING;
         return $exitCode;
     }
 
-    // ============================================================
-    // 3. CRIAR EMPRESA (COMPLETO)
-    // ============================================================
+    /* ================================================================
+     | 3. CRIAR EMPRESA — ATÓMICO
+     | ================================================================ */
     public function store(Request $request)
     {
         Log::channel('single')->info("\n" . $this->getFaturajaAscii() . "\n");
@@ -247,7 +249,7 @@ BUILDING;
                 'string',
                 'max:100',
                 'regex:/^[a-z0-9][a-z0-9-]*[a-z0-9]$/',
-                'unique:landlord.empresas,subdomain'
+                'unique:landlord.empresas,subdomain',
             ],
             'modo'           => 'required|in:colectivo,singular',
             'admin_name'     => 'required|string|max:255',
@@ -258,48 +260,91 @@ BUILDING;
 
         $this->logPretty('1/6', 'Validação aprovada', 'success');
 
+        // ============================================================
+        // DECIDIR PLANO ANTES DE CRIAR EMPRESA
+        // ============================================================
+        $plano = null;
+        $temPlano = !empty($validated['plano_id']);
+
+        if ($temPlano) {
+            $plano = Plano::on('landlord')->find($validated['plano_id']);
+            if (!$plano) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Plano selecionado não existe.',
+                ], 422);
+            }
+            SubscricaoService::$skipExperimental = true;
+            $this->logPretty('PLANO', "Plano selecionado: {$plano->nome} (valor: {$plano->valor_mensal} Kz)", 'info');
+        } else {
+            $this->logPretty('PLANO', 'Sem plano — Experimental será aplicado automaticamente', 'info');
+        }
+
+        // ============================================================
+        // VARIÁVEIS PARA CLEANUP EM CASO DE ERRO
+        // ============================================================
+        $empresa = null;
+        $admin = null;
+        $databaseCriada = false;
+        $logoMoved = false;
+        $logoOriginalPath = null;
+        $logoNovoPath = null;
+
         // Geração do nome da base de dados
         $dbNameBase = 'empresa_' . Str::slug($request->nome, '_');
         $dbName     = $dbNameBase;
         $counter    = 1;
-        while (!empty(DB::connection('landlord')->select("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?", [$dbName]))) {
+        while (!empty(DB::connection('landlord')->select(
+            "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?",
+            [$dbName]
+        ))) {
             $dbName = $dbNameBase . '_' . $counter;
             $counter++;
         }
 
-        // Criar empresa
-        $empresa = Empresa::on('landlord')->create([
-            'id'            => Str::uuid(),
-            'nome'          => $request->nome,
-            'nif'           => $request->nif,
-            'email'         => $request->email,
-            'telefone'      => $request->telefone,
-            'endereco'      => $request->endereco,
-            'db_name'       => $dbName,
-            'subdomain'     => $request->subdomain,
-            'modo'          => $request->modo,
-            'regime_fiscal' => $request->regime_fiscal,
-            'sujeito_iva'   => $request->sujeito_iva,
-            'iva_padrao'    => $request->regime_fiscal === 'simplificado'
-                ? 0.0
-                : (float) ($request->iva_padrao ?? self::IVA_PADRAO_DEFAULT),
-            'nome_banco'    => $request->nome_banco,
-            'numero_conta'  => $request->numero_conta,
-            'iban'          => $request->iban,
-            'logo'          => $request->logo,
-            'status'        => 'ativo',
-            'data_registro' => now(),
-        ]);
-
-        $this->logPretty('2/6', "Empresa inserida (ID: {$empresa->id}, Subdomínio: {$empresa->subdomain}, Modo: {$empresa->modo})", 'success');
-
         try {
             // ============================================================
-            // MODO SINGULAR: CRIA BANCO DEDICADO + MIGRATIONS TENANT
+            // ABRIR TRANSAÇÃO NO LANDLORD
+            // ============================================================
+            DB::connection('landlord')->beginTransaction();
+
+            // Criar empresa
+            $empresa = Empresa::on('landlord')->create([
+                'id'            => Str::uuid(),
+                'nome'          => $request->nome,
+                'nif'           => $request->nif,
+                'email'         => $request->email,
+                'telefone'      => $request->telefone,
+                'endereco'      => $request->endereco,
+                'db_name'       => $dbName,
+                'subdomain'     => $request->subdomain,
+                'modo'          => $request->modo,
+                'regime_fiscal' => $request->regime_fiscal,
+                'sujeito_iva'   => $request->sujeito_iva,
+                'iva_padrao'    => $request->regime_fiscal === 'simplificado'
+                    ? 0.0
+                    : (float) ($request->iva_padrao ?? self::IVA_PADRAO_DEFAULT),
+                'nome_banco'    => $request->nome_banco,
+                'numero_conta'  => $request->numero_conta,
+                'iban'          => $request->iban,
+                'logo'          => $request->logo,
+                'status'        => 'ativo',
+                'data_registro' => now(),
+            ]);
+
+            $this->logPretty('2/6', "Empresa inserida (ID: {$empresa->id})", 'success');
+
+            // Resetar flag
+            SubscricaoService::$skipExperimental = false;
+
+            // ============================================================
+            // MODO SINGULAR: BANCO DEDICADO + MIGRATIONS TENANT
             // ============================================================
             if ($request->modo === 'singular') {
-                DB::connection('landlord')
-                    ->statement("CREATE DATABASE `{$empresa->db_name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+                DB::connection('landlord')->statement(
+                    "CREATE DATABASE `{$empresa->db_name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+                );
+                $databaseCriada = true;
                 $this->logPretty('3/6', "Base de dados criada: {$empresa->db_name}", 'success');
 
                 $this->configurarTenantConnection($empresa->db_name);
@@ -309,108 +354,130 @@ BUILDING;
                 if ($exitCode !== 0) {
                     throw new \Exception('Erro ao executar migrations do tenant. Código: ' . $exitCode);
                 }
-                $this->logPretty('5/6', 'Migrations do tenant executadas com sucesso', 'success');
+                $this->logPretty('5/6', 'Migrations do tenant executadas', 'success');
 
                 $admin = \App\Models\Tenant\User::create([
-                    'id'            => (string) Str::uuid(),
-                    'name'          => $request->admin_name,
-                    'email'         => $request->admin_email,
-                    'password'      => Hash::make($request->admin_password),
-                    'role'          => 'admin',
-                    'ativo'         => true,
+                    'id'                => (string) Str::uuid(),
+                    'name'              => $request->admin_name,
+                    'email'             => $request->admin_email,
+                    'password'          => Hash::make($request->admin_password),
+                    'role'              => 'admin',
+                    'ativo'             => true,
                     'email_verified_at' => now(),
                 ]);
 
                 $this->logPretty('6/6', "Admin criado no tenant: {$admin->email}", 'success');
             }
             // ============================================================
-            // MODO COLECTIVO: USA BANCO SHARED
+            // MODO COLECTIVO: SHARED
             // ============================================================
             else {
                 try {
                     $tabelaExiste = DB::connection('shared')->table('users')->exists();
                 } catch (\Exception $e) {
                     $tabelaExiste = false;
-                    $this->logPretty('3/6', 'Tabela users não existe no shared. A executar migrations...', 'info');
+                    $this->logPretty('3/6', 'Tabela users não existe no shared', 'info');
                 }
 
                 if (!$tabelaExiste) {
-                    $this->logPretty('3/6', 'Rodando migrations do shared (primeira vez)', 'info');
+                    $this->logPretty('3/6', 'Rodando migrations do shared', 'info');
                     $exitCode = $this->executarMigracoesComLog('shared', 'migrations/shared');
-
                     if ($exitCode !== 0) {
                         throw new \Exception('Erro ao executar migrations do shared. Código: ' . $exitCode);
                     }
-                    $this->logPretty('4/6', 'Migrations do shared executadas com sucesso', 'success');
+                    $this->logPretty('4/6', 'Migrations do shared executadas', 'success');
                 } else {
-                    $this->logPretty('3/6', 'Migrations do shared já executadas anteriormente', 'info');
+                    $this->logPretty('3/6', 'Migrations do shared já executadas', 'info');
                 }
 
+                // Transação no shared
+                DB::connection('shared')->beginTransaction();
+
                 $admin = \App\Models\Shared\User::create([
-                    'id'            => (string) Str::uuid(),
-                    'tenant_id'     => $empresa->id,
-                    'name'          => $request->admin_name,
-                    'email'         => $request->admin_email,
-                    'password'      => Hash::make($request->admin_password),
-                    'role'          => 'admin',
+                    'id'        => (string) Str::uuid(),
+                    'tenant_id' => $empresa->id,
+                    'name'      => $request->admin_name,
+                    'email'     => $request->admin_email,
+                    'password'  => Hash::make($request->admin_password),
+                    'role'      => 'admin',
                 ]);
 
                 $this->logPretty('5/6', "Admin criado no shared: {$admin->email}", 'success');
 
                 try {
                     DB::connection('shared')->table('user_t')->insert([
-                        'id' => (string) Str::uuid(),
-                        'user_id' => $admin->id,
-                        'tenant_id' => $empresa->id,
-                        'role' => 'admin',
-                        'ativo' => true,
+                        'id'         => (string) Str::uuid(),
+                        'user_id'    => $admin->id,
+                        'tenant_id'  => $empresa->id,
+                        'role'       => 'admin',
+                        'ativo'      => true,
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]);
-                    $this->logPretty('6/6', "Admin relacionado ao tenant {$empresa->subdomain}", 'success');
+                    $this->logPretty('6/6', 'Admin relacionado ao tenant', 'success');
                 } catch (\Exception $e) {
-                    $this->logPretty('6/6', "Relacionamento não criado (tabela opcional): " . $e->getMessage(), 'warning');
+                    // tabela opcional — não aborta
+                    $this->logPretty('6/6', 'Relacionamento não criado (tabela opcional)', 'warning');
                 }
             }
 
             // ============================================================
-            // CRIA SUBSCRIÇÃO EXPERIMENTAL SE FOR PLANO GRATUITO
+            // SUBSCRIÇÃO
             // ============================================================
-            if ($request->has('plano_id')) {
-                try {
-                    $plano = Plano::on('landlord')->find($request->plano_id);
-                    if ($plano && $plano->valor_mensal == 0) {
-                        $subscricao = \App\Models\Subscricao::on('landlord')->create([
-                            'id' => (string) Str::uuid(),
-                            'empresa_id' => $empresa->id,
-                            'plano_id' => $plano->id,
-                            'data_inicio' => now(),
-                            'data_fim' => now()->addMonths($plano->duracao_meses ?? 1),
-                            'status' => 'ativa',
-                            'forma_pagamento' => 'gratuito',
-                            'renovacao_automatica' => false,
-                        ]);
-                        $this->logPretty('7/7', "Subscrição experimental criada para o plano {$plano->nome} (ID: {$subscricao->id})", 'success');
-                    } else {
-                        $this->logPretty('7/7', "Plano com ID {$request->plano_id} não é gratuito. Nenhuma subscrição criada.", 'warning');
+            if ($temPlano && $plano) {
+                if ($plano->valor_mensal == 0) {
+                    $subscricao = SubscricaoService::criarComPlano(
+                        $empresa,
+                        $plano,
+                        auth('landlord_api')->id(),
+                        'gratuito'
+                    );
+                    if ($subscricao) {
+                        $this->logPretty('7/7', "Subscrição GRATUITA criada: {$plano->nome} (ID: {$subscricao->id})", 'success');
                     }
-                } catch (\Exception $e) {
-                    $this->logPretty('7/7', "Erro ao criar subscrição experimental: " . $e->getMessage(), 'error');
+                } else {
+                    $this->logPretty('7/7', "Plano PAGO ({$plano->nome}) — subscrição aguarda confirmação de pagamento.", 'info');
+                }
+            } else {
+                $subscricao = SubscricaoService::atribuirExperimentalSeNaoTiver(
+                    $empresa,
+                    auth('landlord_api')->id()
+                );
+                if ($subscricao) {
+                    $this->logPretty('7/7', "Experimental aplicado automaticamente (ID: {$subscricao->id})", 'success');
+                } else {
+                    $this->logPretty('7/7', 'Sem plano e Experimental indisponível.', 'warning');
                 }
             }
 
-            // Mover logo temporário
+            // ============================================================
+            // LOGO — antes do commit
+            // ============================================================
             if (str_starts_with($empresa->logo, 'temp_logos/')) {
                 $extension = pathinfo($empresa->logo, PATHINFO_EXTENSION) ?: 'png';
                 $newLogoName = 'logos/logo_' . $empresa->id . '_' . time() . '.' . $extension;
+
                 if (Storage::disk('public')->exists($empresa->logo)) {
+                    $logoOriginalPath = $empresa->logo;
+                    $logoNovoPath = $newLogoName;
+
                     Storage::disk('public')->move($empresa->logo, $newLogoName);
+                    $logoMoved = true;
+
                     $empresa->update(['logo' => $newLogoName]);
                     $this->logPretty('EXTRA', "Logo movido para: {$newLogoName}", 'success');
                 } else {
                     $this->logPretty('EXTRA', "Logo temporário não encontrado: {$empresa->logo}", 'warning');
                 }
             }
+
+            // ============================================================
+            // COMMIT
+            // ============================================================
+            if ($request->modo !== 'singular') {
+                DB::connection('shared')->commit();
+            }
+            DB::connection('landlord')->commit();
 
             // Log final
             $building = $this->getBuildingAscii(
@@ -422,26 +489,26 @@ BUILDING;
             Log::channel('single')->info("\n" . $building . "\n");
 
             // Auditoria
-            AuditLogger::log("Empresa Criada", "🏢", [
+            AuditLogger::log('Empresa Criada', '🏢', [
                 'area' => 'Administração',
                 'detalhes' => [
-                    'empresa_id' => $empresa->id,
+                    'empresa_id'   => $empresa->id,
                     'empresa_nome' => $empresa->nome,
-                    'subdomain' => $empresa->subdomain,
-                    'modo' => $empresa->modo,
-                    'nif' => $empresa->nif,
-                    'admin_email' => $admin->email,
+                    'subdomain'    => $empresa->subdomain,
+                    'modo'         => $empresa->modo,
+                    'nif'          => $empresa->nif,
+                    'admin_email'  => $admin->email,
                 ],
             ]);
 
-            //   NOTIFICAÇÕES
+            // Notificações
             $landlordAtual = auth('landlord_api')->user();
 
             if ($landlordAtual) {
                 NotificacaoService::enviar(
                     userId: $landlordAtual->id,
                     titulo: "Empresa \"{$empresa->nome}\" criada",
-                    mensagem: "A empresa foi registada com sucesso na plataforma.",
+                    mensagem: 'A empresa foi registada com sucesso na plataforma.',
                     tipo: 'success',
                     tipoEvento: 'empresa_criada',
                     dados: [
@@ -450,14 +517,14 @@ BUILDING;
                         'Subdomínio' => $empresa->subdomain,
                         'Admin'      => $admin->email,
                     ],
-                    url: "/dashboard",
+                    url: '/dashboard',
                     empresaId: $empresa->id,
                 );
             }
 
             NotificacaoService::enviarParaSuperAdmins(
                 titulo: "Nova empresa: {$empresa->nome}",
-                mensagem: "Uma nova empresa foi criada na plataforma.",
+                mensagem: 'Uma nova empresa foi criada na plataforma.',
                 tipo: 'info',
                 tipoEvento: 'empresa_criada_admin',
                 dados: [
@@ -479,25 +546,89 @@ BUILDING;
                 'modo'    => $empresa->modo,
             ], 201);
         } catch (\Throwable $e) {
-            $this->logPretty('ERRO', "Falha na criação: {$e->getMessage()}", 'error');
+            // Garantir que a flag é limpa mesmo em erro
+            SubscricaoService::$skipExperimental = false;
 
-            $empresa->delete();
+            $this->logPretty('ERRO', "Falha na criação: {$e->getMessage()}", 'error');
+            Log::error('[EMPRESA::store] Erro — abortando missão', [
+                'erro'            => $e->getMessage(),
+                'trace'           => $e->getTraceAsString(),
+                'empresa_id'      => $empresa?->id,
+                'database_criada' => $databaseCriada,
+                'logo_moved'      => $logoMoved,
+            ]);
+
+            // ============================================================
+            // ROLLBACK
+            // ============================================================
+
+            // 1. Rollback transação shared
             try {
-                DB::connection('landlord')
-                    ->statement("DROP DATABASE IF EXISTS `{$empresa->db_name}`");
-            } catch (\Throwable $ignored) {
+                if ($request->modo !== 'singular') {
+                    DB::connection('shared')->rollBack();
+                    $this->logPretty('ROLLBACK', 'Transação shared revertida', 'warning');
+                }
+            } catch (\Throwable $rb) {
+                Log::error('[EMPRESA::store] Erro rollback shared', ['erro' => $rb->getMessage()]);
+            }
+
+            // 2. Rollback transação landlord
+            try {
+                DB::connection('landlord')->rollBack();
+                $this->logPretty('ROLLBACK', 'Transação landlord revertida', 'warning');
+            } catch (\Throwable $rb) {
+                Log::error('[EMPRESA::store] Erro rollback landlord', ['erro' => $rb->getMessage()]);
+            }
+
+            // 3. Remover ficheiro de logo
+            if ($logoMoved && $logoNovoPath) {
+                try {
+                    if (Storage::disk('public')->exists($logoNovoPath)) {
+                        Storage::disk('public')->delete($logoNovoPath);
+                        $this->logPretty('ROLLBACK', 'Logo novo removido', 'warning');
+                    }
+                    if ($logoOriginalPath && !Storage::disk('public')->exists($logoOriginalPath)) {
+                        Storage::disk('public')->move($logoNovoPath, $logoOriginalPath);
+                    }
+                } catch (\Throwable $logoErr) {
+                    Log::error('[EMPRESA::store] Erro ao reverter logo', ['erro' => $logoErr->getMessage()]);
+                }
+            }
+
+            // 4. Dropar base de dados
+            if ($databaseCriada && $empresa?->db_name) {
+                try {
+                    DB::connection('landlord')->statement("DROP DATABASE IF EXISTS `{$empresa->db_name}`");
+                    $this->logPretty('ROLLBACK', "Base de dados removida: {$empresa->db_name}", 'warning');
+                } catch (\Throwable $dropErr) {
+                    Log::error('[EMPRESA::store] Erro ao dropar base', ['erro' => $dropErr->getMessage()]);
+                }
+            }
+
+            // 5. Cleanup defensivo
+            if ($empresa?->id) {
+                try {
+                    $existe = Empresa::on('landlord')->find($empresa->id);
+                    if ($existe) {
+                        $existe->forceDelete();
+                        $this->logPretty('ROLLBACK', 'Empresa removida (cleanup defensivo)', 'warning');
+                    }
+                } catch (\Throwable $cleanErr) {
+                    Log::error('[EMPRESA::store] Erro cleanup empresa', ['erro' => $cleanErr->getMessage()]);
+                }
             }
 
             return response()->json([
                 'success' => false,
-                'message' => 'Falha ao criar empresa: ' . $e->getMessage()
+                'message' => 'Não foi possível criar a empresa. Nada foi criado — pode tentar novamente.',
+                'erro'    => config('app.debug') ? $e->getMessage() : null,
             ], 500);
         }
     }
 
-    // ============================================================
-    // 4. CONFIGURAR CONEXÃO TENANT
-    // ============================================================
+    /* ================================================================
+     | 4. CONFIGURAR CONEXÃO TENANT
+     | ================================================================ */
     private function configurarTenantConnection(string $database): void
     {
         config(['database.connections.tenant.database' => $database]);
@@ -508,9 +639,9 @@ BUILDING;
         }
     }
 
-    // ============================================================
-    // 5. MOSTRAR EMPRESA POR ID (landlord)
-    // ============================================================
+    /* ================================================================
+     | 5. MOSTRAR EMPRESA POR ID (landlord)
+     | ================================================================ */
     public function show(Empresa $empresa)
     {
         $detalhes = $this->montarDetalhesEmpresa($empresa);
@@ -532,16 +663,15 @@ BUILDING;
         $landlordUser = auth('landlord_api')->user() ?? auth('landlord')->user();
 
         $mensagem = EmpresaMensagem::on('landlord')->create([
-            'empresa_id' => $empresa->id,
-            'remetente_id' => $landlordUser?->id,
-            'remetente_tipo' => 'landlord',
-            'remetente_nome' => $landlordUser?->name ?? 'Landlord',
+            'empresa_id'      => $empresa->id,
+            'remetente_id'    => $landlordUser?->id,
+            'remetente_tipo'  => 'landlord',
+            'remetente_nome'  => $landlordUser?->name ?? 'Landlord',
             'remetente_email' => $landlordUser?->email,
-            'mensagem' => $validated['mensagem'],
-            'lida' => false,
+            'mensagem'        => $validated['mensagem'],
+            'lida'            => false,
         ]);
 
-        //   Notificar super admins
         NotificacaoService::enviarParaSuperAdmins(
             titulo: "Mensagem enviada para {$empresa->nome}",
             mensagem: "Foi enviada uma nova mensagem para a empresa {$empresa->nome}.",
@@ -558,7 +688,7 @@ BUILDING;
         return response()->json([
             'success' => true,
             'message' => 'Mensagem enviada com sucesso.',
-            'data' => $mensagem,
+            'data'    => $mensagem,
         ], 201);
     }
 
@@ -566,24 +696,24 @@ BUILDING;
     {
         $isSingular = ($empresa->modo ?? 'colectivo') === 'singular';
 
-        if ($isSingular && ! $empresa->bancoExiste()) {
+        if ($isSingular && !$empresa->bancoExiste()) {
             return [
                 'resumo' => [
-                    'total_documentos' => 0,
-                    'total_faturacao' => 0,
-                    'total_recebido' => 0,
-                    'saldo_pendente' => 0,
-                    'total_clientes' => 0,
-                    'total_utilizadores' => 0,
+                    'total_documentos'    => 0,
+                    'total_faturacao'     => 0,
+                    'total_recebido'      => 0,
+                    'saldo_pendente'      => 0,
+                    'total_clientes'      => 0,
+                    'total_utilizadores'  => 0,
                     'documentos_por_tipo' => [],
                 ],
                 'documentos' => [
-                    'total' => 0,
-                    'tipos' => ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC', 'FRt'],
+                    'total'    => 0,
+                    'tipos'    => ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC', 'FRt'],
                     'recentes' => [],
                 ],
                 'mensagens' => [],
-                'alerta' => 'A base de dados tenant desta empresa não foi encontrada.',
+                'alerta'    => 'A base de dados tenant desta empresa não foi encontrada.',
             ];
         }
 
@@ -591,29 +721,29 @@ BUILDING;
             $empresa->conectar();
 
             $documentosQuery = TenantDocumentoFiscal::query();
-            $clientesQuery = TenantCliente::query();
-            $usuariosQuery = TenantUser::query();
+            $clientesQuery   = TenantCliente::query();
+            $usuariosQuery   = TenantUser::query();
             $pagamentosQuery = TenantPagamento::query();
         } else {
             $documentosQuery = SharedDocumentoFiscal::query()->where('tenant_id', $empresa->id);
-            $clientesQuery = SharedCliente::query()->where('tenant_id', $empresa->id);
-            $usuariosQuery = SharedUser::query()->where('tenant_id', $empresa->id);
+            $clientesQuery   = SharedCliente::query()->where('tenant_id', $empresa->id);
+            $usuariosQuery   = SharedUser::query()->where('tenant_id', $empresa->id);
             $pagamentosQuery = SharedPagamento::query()->where('tenant_id', $empresa->id);
         }
 
         $tiposFaturacao = ['FT', 'FR', 'RC'];
-        $tiposTodos = ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC', 'FRt'];
+        $tiposTodos     = ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC', 'FRt'];
 
-        $documentosBase = clone $documentosQuery;
+        $documentosBase      = clone $documentosQuery;
         $documentosFaturacao = (clone $documentosQuery)
             ->whereIn('tipo_documento', $tiposFaturacao)
             ->where('estado', '!=', 'cancelado');
 
         $totalDocumentos = (clone $documentosBase)->count();
-        $totalFaturacao = (float) $documentosFaturacao->sum('total_liquido');
-        $totalRecebido = $this->calcularTotalRecebido($empresa, $isSingular);
-        $totalClientes = (clone $clientesQuery)->count();
-        $totalUsuarios = (clone $usuariosQuery)->count();
+        $totalFaturacao  = (float) $documentosFaturacao->sum('total_liquido');
+        $totalRecebido   = $this->calcularTotalRecebido($empresa, $isSingular);
+        $totalClientes   = (clone $clientesQuery)->count();
+        $totalUsuarios   = (clone $usuariosQuery)->count();
 
         $documentosPorTipo = (clone $documentosBase)
             ->select('tipo_documento', DB::raw('COUNT(*) as total'))
@@ -621,7 +751,7 @@ BUILDING;
             ->orderBy('tipo_documento')
             ->get()
             ->map(fn ($item) => [
-                'tipo' => $item->tipo_documento,
+                'tipo'  => $item->tipo_documento,
                 'total' => (int) $item->total,
             ])
             ->values();
@@ -633,15 +763,15 @@ BUILDING;
             ->get()
             ->map(function ($documento) {
                 return [
-                    'id' => $documento->id,
+                    'id'               => $documento->id,
                     'numero_documento' => $documento->numero_documento,
-                    'tipo_documento' => $documento->tipo_documento,
-                    'estado' => $documento->estado,
-                    'total_liquido' => (float) $documento->total_liquido,
-                    'data_emissao' => optional($documento->data_emissao)->toDateString(),
-                    'hora_emissao' => $documento->hora_emissao,
-                    'cliente_nome' => $documento->cliente_nome,
-                    'cliente_nif' => $documento->cliente_nif,
+                    'tipo_documento'   => $documento->tipo_documento,
+                    'estado'           => $documento->estado,
+                    'total_liquido'    => (float) $documento->total_liquido,
+                    'data_emissao'     => optional($documento->data_emissao)->toDateString(),
+                    'hora_emissao'     => $documento->hora_emissao,
+                    'cliente_nome'     => $documento->cliente_nome,
+                    'cliente_nif'      => $documento->cliente_nif,
                 ];
             });
 
@@ -652,29 +782,29 @@ BUILDING;
             ->get()
             ->map(function ($mensagem) {
                 return [
-                    'id' => $mensagem->id,
-                    'mensagem' => $mensagem->mensagem,
-                    'remetente_tipo' => $mensagem->remetente_tipo,
-                    'remetente_nome' => $mensagem->remetente_nome,
+                    'id'              => $mensagem->id,
+                    'mensagem'        => $mensagem->mensagem,
+                    'remetente_tipo'  => $mensagem->remetente_tipo,
+                    'remetente_nome'  => $mensagem->remetente_nome,
                     'remetente_email' => $mensagem->remetente_email,
-                    'lida' => (bool) $mensagem->lida,
-                    'created_at' => optional($mensagem->created_at)?->toIso8601String(),
+                    'lida'            => (bool) $mensagem->lida,
+                    'created_at'      => optional($mensagem->created_at)?->toIso8601String(),
                 ];
             });
 
         return [
             'resumo' => [
-                'total_documentos' => $totalDocumentos,
-                'total_faturacao' => $totalFaturacao,
-                'total_recebido' => $totalRecebido,
-                'saldo_pendente' => max(0, $totalFaturacao - $totalRecebido),
-                'total_clientes' => $totalClientes,
-                'total_utilizadores' => $totalUsuarios,
+                'total_documentos'    => $totalDocumentos,
+                'total_faturacao'     => $totalFaturacao,
+                'total_recebido'      => $totalRecebido,
+                'saldo_pendente'      => max(0, $totalFaturacao - $totalRecebido),
+                'total_clientes'      => $totalClientes,
+                'total_utilizadores'  => $totalUsuarios,
                 'documentos_por_tipo' => $documentosPorTipo,
             ],
             'documentos' => [
-                'total' => $totalDocumentos,
-                'tipos' => $tiposTodos,
+                'total'    => $totalDocumentos,
+                'tipos'    => $tiposTodos,
                 'recentes' => $documentosRecentes,
             ],
             'mensagens' => $mensagens,
@@ -699,9 +829,9 @@ BUILDING;
             ->sum('total_liquido');
     }
 
-    // ============================================================
-    // 6. MOSTRAR PRÓPRIA EMPRESA (tenant autenticado)
-    // ============================================================
+    /* ================================================================
+     | 6. MOSTRAR PRÓPRIA EMPRESA (tenant autenticado)
+     | ================================================================ */
     public function showSelf(Request $request)
     {
         $empresa = $request->attributes->get('current_empresa');
@@ -709,13 +839,13 @@ BUILDING;
         if (!$empresa) {
             return response()->json([
                 'success' => false,
-                'message' => 'Empresa não identificada.'
+                'message' => 'Empresa não identificada.',
             ], 400);
         }
 
         return response()->json([
             'success' => true,
-            'data'    => $empresa
+            'data'    => $empresa,
         ], 200);
     }
 
@@ -726,7 +856,7 @@ BUILDING;
         if (!$empresa) {
             return response()->json([
                 'success' => false,
-                'message' => 'Empresa não identificada.'
+                'message' => 'Empresa não identificada.',
             ], 400);
         }
 
@@ -734,8 +864,8 @@ BUILDING;
             'success' => true,
             'configuracoes' => [
                 'serie_padrao_fatura' => 'FT',
-                'regime_fiscal' => $empresa->regime_fiscal ?? 'simplificado',
-                'sujeito_iva' => (bool) $empresa->sujeito_iva,
+                'regime_fiscal'       => $empresa->regime_fiscal ?? 'simplificado',
+                'sujeito_iva'         => (bool) $empresa->sujeito_iva,
             ],
         ], 200);
     }
@@ -759,28 +889,28 @@ BUILDING;
                 ->get()
                 ->map(function ($mensagem) {
                     return [
-                        'id' => $mensagem->id,
-                        'mensagem' => $mensagem->mensagem,
-                        'remetente_tipo' => $mensagem->remetente_tipo,
-                        'remetente_nome' => $mensagem->remetente_nome,
+                        'id'              => $mensagem->id,
+                        'mensagem'        => $mensagem->mensagem,
+                        'remetente_tipo'  => $mensagem->remetente_tipo,
+                        'remetente_nome'  => $mensagem->remetente_nome,
                         'remetente_email' => $mensagem->remetente_email,
-                        'lida' => (bool) $mensagem->lida,
-                        'lida_em' => optional($mensagem->lida_em)?->toIso8601String(),
-                        'created_at' => optional($mensagem->created_at)?->toIso8601String(),
+                        'lida'            => (bool) $mensagem->lida,
+                        'lida_em'         => optional($mensagem->lida_em)?->toIso8601String(),
+                        'created_at'      => optional($mensagem->created_at)?->toIso8601String(),
                     ];
                 });
 
             return response()->json([
                 'success' => true,
                 'data' => [
-                    'mensagens' => $mensagens,
-                    'nao_lidas' => $mensagens->where('lida', false)->count(),
+                    'mensagens'  => $mensagens,
+                    'nao_lidas'  => $mensagens->where('lida', false)->count(),
                 ],
             ]);
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('[mensagensEmpresa] Erro ao carregar mensagens:', [
+            Log::error('[mensagensEmpresa] Erro ao carregar mensagens', [
                 'empresa_id' => $empresa->id,
-                'error' => $e->getMessage(),
+                'error'      => $e->getMessage(),
             ]);
 
             return response()->json([
@@ -806,7 +936,7 @@ BUILDING;
 
         if (!$mensagem->lida) {
             $mensagem->update([
-                'lida' => true,
+                'lida'    => true,
                 'lida_em' => now(),
             ]);
         }
@@ -814,7 +944,7 @@ BUILDING;
         return response()->json([
             'success' => true,
             'message' => 'Mensagem marcada como lida.',
-            'data' => $mensagem->fresh(),
+            'data'    => $mensagem->fresh(),
         ]);
     }
 
@@ -836,9 +966,7 @@ BUILDING;
             ], 403);
         }
 
-        $mensagem->update([
-            'eliminada_pelo_cliente' => true,
-        ]);
+        $mensagem->update(['eliminada_pelo_cliente' => true]);
 
         return response()->json([
             'success' => true,
@@ -853,13 +981,13 @@ BUILDING;
         if (!$empresa) {
             return response()->json([
                 'success' => false,
-                'message' => 'Empresa não identificada.'
+                'message' => 'Empresa não identificada.',
             ], 400);
         }
 
         $validated = $request->validate([
             'regime_fiscal' => 'sometimes|in:simplificado,geral',
-            'sujeito_iva' => 'sometimes|boolean',
+            'sujeito_iva'   => 'sometimes|boolean',
         ]);
 
         if (array_key_exists('regime_fiscal', $validated)) {
@@ -868,7 +996,7 @@ BUILDING;
 
         if (($empresa->regime_fiscal ?? 'geral') === 'simplificado') {
             $empresa->sujeito_iva = false;
-            $empresa->iva_padrao = 0.0;
+            $empresa->iva_padrao  = 0.0;
         } else {
             $empresa->sujeito_iva = true;
         }
@@ -880,15 +1008,15 @@ BUILDING;
             'message' => 'Configurações fiscais atualizadas com sucesso.',
             'configuracoes' => [
                 'serie_padrao_fatura' => 'FT',
-                'regime_fiscal' => $empresa->regime_fiscal ?? 'simplificado',
-                'sujeito_iva' => (bool) $empresa->sujeito_iva,
+                'regime_fiscal'       => $empresa->regime_fiscal ?? 'simplificado',
+                'sujeito_iva'         => (bool) $empresa->sujeito_iva,
             ],
         ], 200);
     }
 
-    // ============================================================
-    // 7. UPLOAD DE LOGO (tenant autenticado)
-    // ============================================================
+    /* ================================================================
+     | 7. UPLOAD DE LOGO (tenant autenticado)
+     | ================================================================ */
     public function uploadLogo(Request $request)
     {
         $empresa = $request->attributes->get('current_empresa');
@@ -896,12 +1024,12 @@ BUILDING;
         if (!$empresa) {
             return response()->json([
                 'success' => false,
-                'message' => 'Empresa não identificada.'
+                'message' => 'Empresa não identificada.',
             ], 400);
         }
 
         $request->validate([
-            'logo' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048'
+            'logo' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
         try {
@@ -915,25 +1043,25 @@ BUILDING;
 
             $empresa->update(['logo' => $path]);
 
-            Log::info('[ LOGO] Atualizado', ['empresa_id' => $empresa->id, 'path' => $path]);
+            Log::info('[LOGO] Atualizado', ['empresa_id' => $empresa->id, 'path' => $path]);
 
             return response()->json([
                 'success'  => true,
                 'logo_url' => $path,
-                'message'  => 'Logo atualizado com sucesso!'
+                'message'  => 'Logo atualizado com sucesso!',
             ]);
         } catch (\Throwable $e) {
-            Log::error('[ LOGO] Falha', ['error' => $e->getMessage()]);
+            Log::error('[LOGO] Falha', ['error' => $e->getMessage()]);
             return response()->json([
                 'success' => false,
-                'message' => 'Falha ao fazer upload: ' . $e->getMessage()
+                'message' => 'Falha ao fazer upload: ' . $e->getMessage(),
             ], 500);
         }
     }
 
-    // ============================================================
-    // 8. ATUALIZAR EMPRESA (tenant autenticado)
-    // ============================================================
+    /* ================================================================
+     | 8. ATUALIZAR EMPRESA (tenant autenticado)
+     | ================================================================ */
     public function updateTenant(Request $request)
     {
         $empresa = $request->attributes->get('current_empresa');
@@ -941,14 +1069,14 @@ BUILDING;
         if (!$empresa) {
             return response()->json([
                 'success' => false,
-                'message' => 'Empresa não identificada.'
+                'message' => 'Empresa não identificada.',
             ], 400);
         }
 
         if ($empresa->status === 'suspenso') {
             return response()->json([
                 'success' => false,
-                'message' => 'Empresa suspensa — não é possível editar os dados.'
+                'message' => 'Empresa suspensa — não é possível editar os dados.',
             ], 403);
         }
 
@@ -977,13 +1105,13 @@ BUILDING;
             'iban',
             'regime_fiscal',
             'sujeito_iva',
-            'modo'
+            'modo',
         ]));
 
         if (($empresa->regime_fiscal ?? 'geral') === 'simplificado') {
             $empresa->update([
                 'sujeito_iva' => false,
-                'iva_padrao' => 0.0,
+                'iva_padrao'  => 0.0,
             ]);
         } elseif (!$empresa->iva_padrao) {
             $empresa->update(['iva_padrao' => self::IVA_PADRAO_DEFAULT]);
@@ -991,35 +1119,35 @@ BUILDING;
 
         Log::info('[EMPRESA] Dados atualizados pelo tenant', [
             'empresa_id' => $empresa->id,
-            'modo' => $empresa->modo,
+            'modo'       => $empresa->modo,
         ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Empresa atualizada!',
-            'data'    => $empresa->fresh()
+            'data'    => $empresa->fresh(),
         ], 200);
     }
 
-    // ============================================================
-    // 9. ATUALIZAR EMPRESA (landlord)
-    // ============================================================
+    /* ================================================================
+     | 9. ATUALIZAR EMPRESA (landlord)
+     | ================================================================ */
     public function update(Request $request, Empresa $empresa)
     {
         $request->validate([
-            'nome'         => 'sometimes|string|max:255',
-            'email'        => 'sometimes|email|unique:landlord.empresas,email,' . $empresa->id,
-            'telefone'     => 'nullable|string',
-            'endereco'     => 'nullable|string',
-            'nome_banco'   => 'nullable|string|max:255',
-            'numero_conta' => 'nullable|string|unique:landlord.empresas,numero_conta|max:50',
-            'iban'         => 'nullable|string|max:34|unique:landlord.empresas,iban',
-            'logo'         => 'nullable|string|max:255',
-            'status'       => 'sometimes|in:ativo,suspenso',
-            'subdomain'    => 'sometimes|string|unique:landlord.empresas,subdomain,' . $empresa->id,
-            'modo'         => 'sometimes|in:colectivo,singular',
+            'nome'          => 'sometimes|string|max:255',
+            'email'         => 'sometimes|email|unique:landlord.empresas,email,' . $empresa->id,
+            'telefone'      => 'nullable|string',
+            'endereco'      => 'nullable|string',
+            'nome_banco'    => 'nullable|string|max:255',
+            'numero_conta'  => 'nullable|string|unique:landlord.empresas,numero_conta|max:50',
+            'iban'          => 'nullable|string|max:34|unique:landlord.empresas,iban',
+            'logo'          => 'nullable|string|max:255',
+            'status'        => 'sometimes|in:ativo,suspenso',
+            'subdomain'     => 'sometimes|string|unique:landlord.empresas,subdomain,' . $empresa->id,
+            'modo'          => 'sometimes|in:colectivo,singular',
             'regime_fiscal' => 'sometimes|in:simplificado,geral',
-            'sujeito_iva'  => 'sometimes|boolean',
+            'sujeito_iva'   => 'sometimes|boolean',
         ]);
 
         $empresa->update($request->only([
@@ -1035,13 +1163,13 @@ BUILDING;
             'subdomain',
             'modo',
             'regime_fiscal',
-            'sujeito_iva'
+            'sujeito_iva',
         ]));
 
         if (($empresa->regime_fiscal ?? 'geral') === 'simplificado') {
             $empresa->update([
                 'sujeito_iva' => false,
-                'iva_padrao' => 0.0,
+                'iva_padrao'  => 0.0,
             ]);
         } elseif (!$empresa->iva_padrao) {
             $empresa->update(['iva_padrao' => self::IVA_PADRAO_DEFAULT]);
@@ -1049,33 +1177,34 @@ BUILDING;
 
         Log::info('[LANDLORD] Empresa atualizada', [
             'empresa_id' => $empresa->id,
-            'modo' => $empresa->modo,
+            'modo'       => $empresa->modo,
         ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Empresa atualizada!',
-            'data'    => $empresa->fresh()
+            'data'    => $empresa->fresh(),
         ], 200);
     }
 
-    // ============================================================
-    // 10. ALTERAR PRÓPRIO STATUS (tenant autenticado)
-    // ============================================================
+    /* ================================================================
+     | 10. ALTERAR PRÓPRIO STATUS (tenant autenticado)
+     | ================================================================ */
     public function toggleSelfStatus(Request $request)
     {
         $empresa = $request->attributes->get('current_empresa');
+
         if (!$empresa) {
             return response()->json([
                 'success' => false,
-                'message' => 'Tenant não resolvido.'
+                'message' => 'Tenant não resolvido.',
             ], 400);
         }
 
         $user = $request->user();
 
         $statusAnterior = $empresa->status;
-        $novoStatus = $statusAnterior === 'ativo' ? 'suspenso' : 'ativo';
+        $novoStatus     = $statusAnterior === 'ativo' ? 'suspenso' : 'ativo';
 
         $afetados = DB::connection('landlord')
             ->table('empresas')
@@ -1093,7 +1222,7 @@ BUILDING;
             ], 409);
         }
 
-        Log::info("Empresa status alterado", [
+        Log::info('Empresa status alterado', [
             'empresa_id' => $empresa->id,
             'user_id'    => $user->id,
             'de'         => $statusAnterior,
@@ -1112,9 +1241,9 @@ BUILDING;
         ]);
     }
 
-    // ============================================================
-    // 11. ALTERAR STATUS POR LANDLORD
-    // ============================================================
+    /* ================================================================
+     | 11. ALTERAR STATUS POR LANDLORD
+     | ================================================================ */
     public function toggleStatusLandlord(Request $request, Empresa $empresa)
     {
         $statusAnterior = $empresa->status;
@@ -1130,7 +1259,6 @@ BUILDING;
             'alterado_por'    => auth('landlord_api')->id(),
         ]);
 
-        //   NOTIFICAÇÕES
         $landlordAtual = auth('landlord_api')->user();
         $acao = $novoStatus === 'ativo' ? 'reativada' : 'suspensa';
         $tipo = $novoStatus === 'ativo' ? 'success' : 'warning';
@@ -1147,7 +1275,7 @@ BUILDING;
                     'Status anterior' => $statusAnterior,
                     'Status novo'     => $novoStatus,
                 ],
-                url: "/dashboard",
+                url: '/dashboard',
                 empresaId: $empresa->id,
             );
         }

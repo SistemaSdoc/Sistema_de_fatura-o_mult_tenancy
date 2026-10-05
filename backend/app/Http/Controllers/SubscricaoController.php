@@ -17,12 +17,12 @@ use Illuminate\Support\Facades\Auth;
 class SubscricaoController extends Controller
 {
     public function clearCache($empresaId)
-{
-    $features = Feature::pluck('nome');
-    foreach ($features as $nome) {
-        Cache::forget("plano_feature_{$empresaId}_{$nome}");
+    {
+        $features = Feature::pluck('nome');
+        foreach ($features as $nome) {
+            Cache::forget("plano_feature_{$empresaId}_{$nome}");
+        }
     }
-}
     /**
      * Listar assinaturas (filtradas por empresa se houver tenant na sessão)
      */
@@ -47,85 +47,116 @@ class SubscricaoController extends Controller
     /**
      * Criar uma nova assinatura para a empresa autenticada (via sessão/tenant)
      */
-public function store(Request $request)
-{
-    $user = $request->user();
+    public function store(Request $request)
+    {
+        $user = $request->user();
 
-    if (!$user) {
-        return response()->json(['message' => 'Não autenticado'], 401);
-    }
+        if (!$user) {
+            return response()->json(['message' => 'Não autenticado'], 401);
+        }
 
-    $empresaId = $user->empresa_id ?: session('tenant_id');
+        //   Validar primeiro para podermos usar o empresa_id do body
+        $validated = $request->validate([
+            'empresa_id'      => 'nullable|uuid|exists:landlord.empresas,id',   //   novo
+            'plano_id'        => 'required|exists:landlord.planos,id',
+            'forma_pagamento' => 'nullable|string|max:50',
+            'data_vencimento' => 'nullable|date',
+            'renovacao'       => 'nullable|boolean',
+        ]);
 
-    if (!$empresaId) {
-        return response()->json(['message' => 'Empresa não identificada'], 401);
-    }
+        //   Tentar múltiplas fontes, por ordem de prioridade:
+        // 1. empresa_id do body (mais fiável — o frontend sabe qual é)
+        // 2. current_empresa do middleware resolve.tenant (funciona para ambos os modos)
+        // 3. empresa_id do user (landlord user)
+        // 4. tenant_id do user (shared user)
+        // 5. session('tenant_id') (último recurso)
+        $empresaId = ($validated['empresa_id'] ?? null)                   //   ?? null
+    ?? $request->attributes->get('current_empresa')?->id
+    ?? ($user->empresa_id ?? null)
+    ?? ($user->tenant_id ?? null)
+    ?? session('tenant_id');
 
-    $validated = $request->validate([
-        'plano_id' => 'required|exists:landlord.planos,id',
-        'forma_pagamento' => 'nullable|string|max:50',
-        'data_vencimento' => 'nullable|date',
-        'renovacao' => 'nullable|boolean', //  Novo campo
-    ]);
+        if (!$empresaId) {
+            Log::warning('[SubscricaoController::store] Empresa não identificada', [
+                'user_id'         => $user->id,
+                'user_email'      => $user->email,
+                'user_class'      => get_class($user),
+                'user_empresa_id' => $user->empresa_id ?? null,
+                'user_tenant_id'  => $user->tenant_id ?? null,
+                'session_tenant'  => session('tenant_id'),
+                'body_empresa_id' => $validated['empresa_id'] ?? null,
+            ]);
 
-    $empresa = Empresa::findOrFail($empresaId);
-    $plano = Plano::findOrFail($validated['plano_id']);
-    $renovacao = $validated['renovacao'] ?? false;
+            return response()->json([
+                'message' => 'Empresa não identificada. Faça login novamente.',
+            ], 401);
+        }
 
-    // Buscar subscrição ativa (se existir)
-    $subscricaoAtiva = $empresa->subscricoes()->where('status', 'ativa')->first();
+        $empresa = Empresa::findOrFail($empresaId);
+        $plano = Plano::findOrFail($validated['plano_id']);
+        $renovacao = $validated['renovacao'] ?? false;
 
-    //  Se NÃO for renovação e já tiver subscrição ativa, bloqueia
-    if (!$renovacao && $subscricaoAtiva) {
-        return response()->json(['message' => 'Já existe uma assinatura ativa.'], 422);
-    }
+        // Buscar subscrição ativa (se existir)
+        $subscricaoAtiva = $empresa->subscricoes()->where('status', 'ativa')->first();
 
-    // Reutilizar pagamento pendente existente (se houver)
-    $pagamentoPendente = Pagamento::where('empresa_id', $empresa->id)
-        ->where('status', 'pendente')
-        ->where('data_vencimento', '>=', Carbon::now())
-        ->first();
+        // Se NÃO for renovação e já tiver subscrição ativa, bloqueia
+        if (!$renovacao && $subscricaoAtiva) {
+            return response()->json(['message' => 'Já existe uma assinatura ativa.'], 422);
+        }
 
-    if ($pagamentoPendente) {
+        // Reutilizar pagamento pendente existente (se houver)
+        $pagamentoPendente = Pagamento::where('empresa_id', $empresa->id)
+            ->where('status', 'pendente')
+            ->where('data_vencimento', '>=', Carbon::now())
+            ->first();
+
+        if ($pagamentoPendente) {
+            return response()->json([
+                'message' => 'Já existe um pagamento pendente para esta empresa.',
+                'pagamento_id' => $pagamentoPendente->id,
+                'referencia' => $pagamentoPendente->codigo_transacao,
+                'valor' => $pagamentoPendente->valor,
+                'metodo' => $pagamentoPendente->metodo_pagamento,
+                'data_vencimento' => $pagamentoPendente->data_vencimento,
+                'renovacao' => $renovacao,
+            ], 200);
+        }
+
+        // Cria novo pedido de pagamento
+        $pagamento = Pagamento::create([
+            'id' => (string) Str::uuid(),
+            'subscricao_id' => $subscricaoAtiva ? $subscricaoAtiva->id : null,
+            'empresa_id' => $empresa->id,
+            'plano_id' => $plano->id,
+            'valor' => $plano->valor_mensal,
+            'data_pagamento' => now(),
+            'data_vencimento' => $validated['data_vencimento'] ?? Carbon::now()->addDays(5),
+            'status' => 'pendente',
+            'metodo_pagamento' => $validated['forma_pagamento'] ?? null,
+            'codigo_transacao' => 'REF-' . strtoupper(Str::random(8)),
+            'descricao' => $renovacao
+                ? "Renovação do plano {$plano->nome}"
+                : "Assinatura do plano {$plano->nome}",
+            'parcelas' => 1,
+        ]);
+
+        Log::info('[SubscricaoController::store] Pagamento criado', [
+            'empresa_id' => $empresa->id,
+            'pagamento_id' => $pagamento->id,
+            'plano_id' => $plano->id,
+            'fonte_empresa_id' => !empty($validated['empresa_id']) ? 'body' : 'outro',
+        ]);
+
         return response()->json([
-            'message' => 'Já existe um pagamento pendente para esta empresa.',
-            'pagamento_id' => $pagamentoPendente->id,
-            'referencia' => $pagamentoPendente->codigo_transacao,
-            'valor' => $pagamentoPendente->valor,
-            'metodo' => $pagamentoPendente->metodo_pagamento,
-            'data_vencimento' => $pagamentoPendente->data_vencimento,
+            'pagamento_id' => $pagamento->id,
+            'status' => $pagamento->status,
+            'referencia' => $pagamento->codigo_transacao,
+            'valor' => $pagamento->valor,
+            'metodo' => $pagamento->metodo_pagamento,
+            'data_vencimento' => $pagamento->data_vencimento,
             'renovacao' => $renovacao,
-        ], 200);
+        ], 201);
     }
-
-    // Cria novo pedido de pagamento
-    $pagamento = Pagamento::create([
-        'id' => (string) Str::uuid(),
-        'subscricao_id' => $subscricaoAtiva ? $subscricaoAtiva->id : null,
-        'empresa_id' => $empresa->id,
-        'plano_id' => $plano->id,
-        'valor' => $plano->valor_mensal,
-        'data_pagamento' => now(),
-        'data_vencimento' => $validated['data_vencimento'] ?? Carbon::now()->addDays(5),
-        'status' => 'pendente',
-        'metodo_pagamento' => $validated['forma_pagamento'] ?? null,
-        'codigo_transacao' => 'REF-' . strtoupper(Str::random(8)),
-        'descricao' => $renovacao
-            ? "Renovação do plano {$plano->nome}"
-            : "Assinatura do plano {$plano->nome}",
-        'parcelas' => 1,
-    ]);
-
-    return response()->json([
-        'pagamento_id' => $pagamento->id,
-        'status' => $pagamento->status,
-        'referencia' => $pagamento->codigo_transacao,
-        'valor' => $pagamento->valor,
-        'metodo' => $pagamento->metodo_pagamento,
-        'data_vencimento' => $pagamento->data_vencimento,
-        'renovacao' => $renovacao,
-    ], 201);
-}
     /**
      * Exibir detalhes de uma assinatura
      */
@@ -257,81 +288,80 @@ public function store(Request $request)
     }
 
 
-/**
- * Obter a subscrição activa da empresa autenticada
- */
-public function me(Request $request)
-{
-    // ✅ Obtém o utilizador do guard correto
-    $user = $request->user('landlord_api') ?? Auth::guard('landlord_api')->user();
+    /**
+     * Obter a subscrição activa da empresa autenticada
+     */
+    public function me(Request $request)
+    {
+        // ✅ Obtém o utilizador do guard correto
+        $user = $request->user('landlord_api') ?? Auth::guard('landlord_api')->user();
 
-    Log::info('[SubscricaoController::me] Iniciando requisição', [
-        'user_id' => $user?->id,
-        'ip' => $request->ip(),
-    ]);
-
-    try {
-        if (!$user) {
-            Log::warning('[SubscricaoController::me] Utilizador não autenticado');
-            return response()->json(['message' => 'Não autenticado'], 401);
-        }
-
-        $empresaId = $user->empresa_id ?: session('tenant_id');
-        Log::debug('[SubscricaoController::me] Identificando empresa', [
-            'user_id' => $user->id,
-            'user_email' => $user->email,
-            'empresa_id_from_user' => $user->empresa_id,
-            'empresa_id_from_session' => session('tenant_id'),
-            'empresa_id_final' => $empresaId,
-        ]);
-
-        if (!$empresaId) {
-            Log::warning('[SubscricaoController::me] Empresa não identificada', [
-                'user_id' => $user->id,
-            ]);
-            return response()->json(['message' => 'Empresa não identificada'], 401);
-        }
-
-        // Buscar subscrição activa (com plano e features)
-        $subscricao = Subscricao::where('empresa_id', $empresaId)
-            ->where('status', 'ativa')
-            ->with(['plano' => function ($query) {
-                $query->with('features');
-            }])
-            ->first();
-
-        if (!$subscricao) {
-            Log::info('[SubscricaoController::me] Nenhuma subscrição activa encontrada', [
-                'empresa_id' => $empresaId,
-                'user_id' => $user->id,
-            ]);
-            return response()->json(null, 404);
-        }
-
-        Log::info('[SubscricaoController::me] Subscrição activa encontrada', [
-            'empresa_id' => $empresaId,
-            'subscricao_id' => $subscricao->id,
-            'plano_id' => $subscricao->plano_id,
-            'plano_nome' => $subscricao->plano?->nome,
-            'status' => $subscricao->status,
-            'data_inicio' => $subscricao->data_inicio,
-            'data_fim' => $subscricao->data_fim,
-        ]);
-
-        return response()->json([
-            'subscricao' => $subscricao
-        ]);
-
-    } catch (\Exception $e) {
-        Log::error('[SubscricaoController::me] Erro ao buscar subscrição', [
-            'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString(),
+        Log::info('[SubscricaoController::me] Iniciando requisição', [
             'user_id' => $user?->id,
+            'ip' => $request->ip(),
         ]);
-        return response()->json([
-            'message' => 'Erro ao buscar subscrição',
-            'error' => $e->getMessage(),
-        ], 500);
+
+        try {
+            if (!$user) {
+                Log::warning('[SubscricaoController::me] Utilizador não autenticado');
+                return response()->json(['message' => 'Não autenticado'], 401);
+            }
+
+            $empresaId = $user->empresa_id ?: session('tenant_id');
+            Log::debug('[SubscricaoController::me] Identificando empresa', [
+                'user_id' => $user->id,
+                'user_email' => $user->email,
+                'empresa_id_from_user' => $user->empresa_id,
+                'empresa_id_from_session' => session('tenant_id'),
+                'empresa_id_final' => $empresaId,
+            ]);
+
+            if (!$empresaId) {
+                Log::warning('[SubscricaoController::me] Empresa não identificada', [
+                    'user_id' => $user->id,
+                ]);
+                return response()->json(['message' => 'Empresa não identificada'], 401);
+            }
+
+            // Buscar subscrição activa (com plano e features)
+            $subscricao = Subscricao::where('empresa_id', $empresaId)
+                ->where('status', 'ativa')
+                ->with(['plano' => function ($query) {
+                    $query->with('features');
+                }])
+                ->first();
+
+            if (!$subscricao) {
+                Log::info('[SubscricaoController::me] Nenhuma subscrição activa encontrada', [
+                    'empresa_id' => $empresaId,
+                    'user_id' => $user->id,
+                ]);
+                return response()->json(null, 404);
+            }
+
+            Log::info('[SubscricaoController::me] Subscrição activa encontrada', [
+                'empresa_id' => $empresaId,
+                'subscricao_id' => $subscricao->id,
+                'plano_id' => $subscricao->plano_id,
+                'plano_nome' => $subscricao->plano?->nome,
+                'status' => $subscricao->status,
+                'data_inicio' => $subscricao->data_inicio,
+                'data_fim' => $subscricao->data_fim,
+            ]);
+
+            return response()->json([
+                'subscricao' => $subscricao
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[SubscricaoController::me] Erro ao buscar subscrição', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'user_id' => $user?->id,
+            ]);
+            return response()->json([
+                'message' => 'Erro ao buscar subscrição',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
-}
 }

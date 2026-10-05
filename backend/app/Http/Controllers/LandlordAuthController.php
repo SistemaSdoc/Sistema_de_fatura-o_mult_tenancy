@@ -125,7 +125,7 @@ class LandlordAuthController extends Controller
     /**
      * Redireciona o usuário para o Google
      *
-     * ⚠️ IMPORTANTE: a redirect_uri é definida explicitamente aqui a partir
+     * IMPORTANTE: a redirect_uri é definida explicitamente aqui a partir
      * do config('services.google.redirect'), que vem do .env
      * (GOOGLE_REDIRECT_URI). Isso garante que a URL enviada ao Google seja
      * SEMPRE idêntica à cadastrada no Google Cloud Console, independente
@@ -150,7 +150,7 @@ class LandlordAuthController extends Controller
      * - Se usuário existe: faz login
      * - Se não existe: cria novo usuário e redireciona para onboarding
      *
-     * ⚠️ A mesma redirect_uri usada no redirect precisa ser usada aqui
+     *  A mesma redirect_uri usada no redirect precisa ser usada aqui
      * também, pois o Google valida a consistência entre as duas chamadas.
      */
     public function handleGoogleCallback()
@@ -172,15 +172,15 @@ class LandlordAuthController extends Controller
                 'name' => $googleUser->getName(),
             ]);
 
-            // 1️⃣ Procura usuário existente por google_id
+            // 1️ Procura usuário existente por google_id
             $user = LandlordUser::where('google_id', $googleUser->getId())->first();
 
-            // 2️⃣ Se não encontrou por google_id, procura por email
+            // 2️ Se não encontrou por google_id, procura por email
             if (!$user) {
                 $user = LandlordUser::where('email', $googleUser->getEmail())->first();
             }
 
-            // 3️⃣ Se usuário não existe, cria novo
+            // 3️ Se usuário não existe, cria novo
             if (!$user) {
                 Log::info('[GOOGLE AUTH] Novo usuário via Google', [
                     'email' => $googleUser->getEmail(),
@@ -188,7 +188,7 @@ class LandlordAuthController extends Controller
                 ]);
 
                 $user = LandlordUser::create([
-                    'id' => (string) Str::uuid(), // ✅ corrigido: string, não objeto
+                    'id' => (string) Str::uuid(), //corrigido: string, não objeto
                     'name' => $googleUser->getName() ?? $googleUser->getEmail(),
                     'email' => $googleUser->getEmail(),
                     'password' => Hash::make(Str::random(32)), // Senha aleatória (não usada)
@@ -197,15 +197,15 @@ class LandlordAuthController extends Controller
                     'google_avatar' => $googleUser->getAvatar(),
                     'oauth_verified' => true,
                     'ativo' => true,
-                    'role' => 'admin_empresa', // ✅ Novo usuário recebe role admin_empresa
+                    'role' => 'admin_empresa', //Novo usuário recebe role admin_empresa
                 ]);
 
-                // ✅ Marca como email verificado automaticamente
+                //Marca como email verificado automaticamente
                 $user->update(['email_verified_at' => now()]);
 
                 Log::info('[GOOGLE AUTH] Novo usuário criado', ['user_id' => $user->id]);
             } else {
-                // 4️⃣ Se existe, atualiza dados do Google
+                // 4️ Se existe, atualiza dados do Google
                 Log::info('[GOOGLE AUTH] Atualizando dados do Google', ['user_id' => $user->id]);
 
                 $user->update([
@@ -217,17 +217,17 @@ class LandlordAuthController extends Controller
                 ]);
             }
 
-            // 5️⃣ Faz login do usuário
+            // 5️ Faz login do usuário
             Auth::guard('landlord_api')->login($user);
             Auth::guard('landlord')->login($user);
-            request()->session()->regenerate(); // ✅ adicionado: evita fixation e força sessão nova
+            request()->session()->regenerate(); //adicionado: evita fixation e força sessão nova
 
             Log::info('[GOOGLE AUTH] Login realizado', ['user_id' => $user->id]);
 
-            // 6️⃣ Determina para onde redirecionar
+            // 6️ Determina para onde redirecionar
             $frontendUrl = env('VITE_FRONTEND_URL', 'http://localhost:3000');
 
-            // ✅ Se novo usuário (sem empresa), vai para onboarding de freelancer
+            //Se novo usuário (sem empresa), vai para onboarding de freelancer
             // O fluxo Google deve iniciar no shared/faturaja.
             if (!$user->empresa_id) {
                 $this->limparContextoTenantSessao();
@@ -236,7 +236,7 @@ class LandlordAuthController extends Controller
                     'user_id' => $user->id,
                 ]);
             } else {
-                // ✅ Usuário existente com empresa -> callback intermediário
+                //Usuário existente com empresa -> callback intermediário
                 // (o frontend precisa guardar o tenant_id ANTES de chamar /me)
                 $empresa = \App\Models\Empresa::on('landlord')->find($user->empresa_id);
 
@@ -251,7 +251,7 @@ class LandlordAuthController extends Controller
                         ? config('database.connections.shared.database', env('DB_SHARED_DATABASE', 'faturaja_shared'))
                         : $empresa->db_name;
 
-                    // 🔑 ESTABELECER SESSÃO DO TENANT (padrão do FreelancerController)
+                    //  ESTABELECER SESSÃO DO TENANT (padrão do FreelancerController)
                     request()->session()->put([
                         'tenant_id'      => $empresa->id,
                         'tenant_db'      => $tenantDatabase,
