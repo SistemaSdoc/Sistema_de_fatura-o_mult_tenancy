@@ -13,6 +13,7 @@ class DatabaseSeeder extends Seeder
     {
         // Chama o seeder de planos e features
         $this->call(PlanosFeaturesSeeder::class);
+        $this->call([EmpresaSeeder::class]);
         $this->call([SuperAdminSeeder::class]);
     }
 }
