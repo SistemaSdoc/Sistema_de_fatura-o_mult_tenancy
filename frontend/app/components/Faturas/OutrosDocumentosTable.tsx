@@ -18,6 +18,9 @@ const TIPO_LABEL: Partial<Record<TipoDocumento, string>> = {
   NC: "Nota de Crédito",
   ND: "Nota de Débito",
   FRt: "Factura de Retificação",
+  FGEN: "Factura Genérica",
+  AC: "Aviso de Cobrança",
+  ACR: "Aviso de Cobrança-Recibo",
 };
 
 const ESTADO_LABEL: Record<string, string> = {
@@ -29,11 +32,13 @@ const ESTADO_LABEL: Record<string, string> = {
 };
 
 /* ─── Tipos de aba ────────────────────────────────────────────────────────── */
-type TabAtiva = "proforma" | "credito_debito" | "retificacao";
+type TabAtiva = "proforma" | "credito_debito" | "retificacao" | "sectoriais";
 
 const TABS: { key: TabAtiva; label: string; tipos: TipoDocumento[] }[] = [
   { key: "proforma", label: "Proformas ", tipos: ["FP", "FA"] },
   { key: "credito_debito", label: "Notas Crédito/Débito", tipos: ["NC", "ND"] },
+  { key: "retificacao", label: "Retificações", tipos: ["FRt"] },
+  { key: "sectoriais", label: "Documentos sectoriais", tipos: ["FGEN", "AC", "ACR"] },
 ];
 
 /* ─── Theme ───────────────────────────────────────────────────────────────── */
@@ -263,6 +268,7 @@ export default function OutrosDocumentosTable({
     proforma: 1,
     credito_debito: 1,
     retificacao: 1,
+    sectoriais: 1,
   });
 
   const setPagina = (tab: TabAtiva, p: number) =>

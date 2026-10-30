@@ -440,6 +440,9 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
                 ->name('documentos.processar-expirados');
             Route::post('/emitir', [DocumentoFiscalController::class, 'emitir'])
                 ->name('documentos.emitir');
+            Route::post('factura-global',  [DocumentoFiscalController::class, 'emitirFacturaGlobal']);
+            Route::post('talao-venda',     [DocumentoFiscalController::class, 'emitirTalaoVenda']);
+            Route::post('auto-facturacao', [DocumentoFiscalController::class, 'emitirAutoFacturacao']);
 
             Route::get('/', [DocumentoFiscalController::class, 'index'])
                 ->middleware('log.panel')->name('documentos.index');
@@ -455,8 +458,8 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
                 ->where('id', $uuidPattern)->name('documentos.imprimir-termica');
             Route::get('/{id}/print-view', [DocumentoFiscalController::class, 'printView'])
                 ->where('id', $uuidPattern)->name('documentos.print');
-            Route::get('/{id}/print-a4', [DocumentoFiscalController::class, 'printA4'])
-                ->where('id', $uuidPattern)->name('documentos.print-view');
+            Route::get('/{id}/print-a4', [DocumentoFiscalController::class, 'pdfViewer'])
+                ->where('id', $uuidPattern)->name('documentos.print-a4');
 
             // Notas de crédito/débito
             Route::post('/{id}/nota-credito', [DocumentoFiscalController::class, 'criarNotaCredito'])

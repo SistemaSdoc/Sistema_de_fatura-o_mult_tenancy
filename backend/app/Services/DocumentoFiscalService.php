@@ -7,19 +7,20 @@ use App\Models\Shared\ItemDocumentoFiscal as SharedItemDocumentoFiscal;
 use App\Models\Shared\Venda as SharedVenda;
 use App\Models\Shared\SerieFiscal as SharedSerieFiscal;
 use App\Models\Shared\Produto as SharedProduto;
+use App\Models\Shared\FacturaGlobalAnexo as SharedFacturaGlobalAnexo;
 
 use App\Models\Tenant\DocumentoFiscal as TenantDocumentoFiscal;
 use App\Models\Tenant\ItemDocumentoFiscal as TenantItemDocumentoFiscal;
 use App\Models\Tenant\Venda as TenantVenda;
 use App\Models\Tenant\SerieFiscal as TenantSerieFiscal;
 use App\Models\Tenant\Produto as TenantProduto;
+use App\Models\Tenant\FacturaGlobalAnexo as TenantFacturaGlobalAnexo;
 
 use App\Models\Empresa;
 use App\Models\LandlordUser;
 use App\Models\Shared\User as SharedUser;
 use App\Models\Tenant\User as TenantUser;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -29,25 +30,14 @@ use Illuminate\Support\Str;
 /**
  * DocumentoFiscalService
  *
- *   SUPORTA AMBOS OS MODOS:
- * - 'colectivo' → Shared DB (com tenant_id)
- * - 'singular' → Tenant DB (banco dedicado)
- *
- *   NUMERAÇÃO NO FORMATO ANGOLANO:
- * - {TIPO} {SERIE}/{ANO}/{NUMERO}
- * - Exemplo: FT FT/2026/0001
- *
- *   SÉRIES FISCAS FIXAS POR TIPO DE DOCUMENTO
+ * Suporta modos 'colectivo' (shared DB) e 'singular' (tenant DB).
+ * Conforme DP 71/25 (Regime Jurídico das Facturas).
  */
 class DocumentoFiscalService
 {
     protected ?Empresa $empresa = null;
     protected string $modo = 'colectivo';
     protected ?object $tenantUser = null;
-
-    /* =====================================================================
-     | TAXAS DE IVA ANGOLA
-     | ================================================================== */
 
     public const IVA_GERAL    = 14.0;
     public const IVA_REDUZIDA = 5.0;
@@ -88,7 +78,7 @@ class DocumentoFiscalService
             'requer_assinatura'     => true,
         ],
         'FP' => [
-            'nome'                  => 'Fatura Proforma',
+            'nome'                  => 'Factura Proforma',
             'afeta_stock'           => false,
             'eh_venda'              => false,
             'gera_recibo'           => true,
@@ -143,7 +133,7 @@ class DocumentoFiscalService
             'requer_assinatura'     => false,
         ],
         'FRt' => [
-            'nome'                  => 'Factura de Retificação',
+            'nome'                  => 'Factura de Retificação (depreciado)',
             'afeta_stock'           => false,
             'eh_venda'              => false,
             'gera_recibo'           => false,
@@ -153,26 +143,92 @@ class DocumentoFiscalService
             'pode_ter_adiantamento' => false,
             'requer_assinatura'     => true,
         ],
+
+        // ─── DP 71/25 ─────────────────────────────────────────
+        'FG' => [
+            'nome'                  => 'Factura Global',
+            'afeta_stock'           => true,
+            'eh_venda'              => true,
+            'gera_recibo'           => false,
+            'estado_inicial'        => 'emitido',
+            'exige_cliente'         => true,
+            'aceita_pagamento'      => false,
+            'pode_ter_adiantamento' => false,
+            'requer_assinatura'     => true,
+            'exige_periodo_ref'     => true,
+            'exige_anexos'          => true,
+        ],
+        'FGR' => [
+            'nome'                  => 'Factura Global-Recibo',
+            'afeta_stock'           => true,
+            'eh_venda'              => true,
+            'gera_recibo'           => false,
+            'estado_inicial'        => 'paga',
+            'exige_cliente'         => true,
+            'aceita_pagamento'      => false,
+            'pode_ter_adiantamento' => false,
+            'requer_assinatura'     => true,
+            'exige_periodo_ref'     => true,
+            'exige_anexos'          => true,
+        ],
+        'TV' => [
+            'nome'                  => 'Talão de Venda',
+            'afeta_stock'           => true,
+            'eh_venda'              => true,
+            'gera_recibo'           => false,
+            'estado_inicial'        => 'paga',
+            'exige_cliente'         => false,
+            'aceita_pagamento'      => false,
+            'pode_ter_adiantamento' => false,
+            'requer_assinatura'     => false,
+        ],
+        'FGEN' => [
+            'nome'                  => 'Factura Genérica',
+            'afeta_stock'           => false,
+            'eh_venda'              => true,
+            'gera_recibo'           => false,
+            'estado_inicial'        => 'emitido',
+            'exige_cliente'         => true,
+            'aceita_pagamento'      => false,
+            'pode_ter_adiantamento' => false,
+            'requer_assinatura'     => true,
+            'sectorial'             => 'financeiro',
+        ],
+        'AC' => [
+            'nome'                  => 'Aviso de Cobrança',
+            'afeta_stock'           => false,
+            'eh_venda'              => false,
+            'gera_recibo'           => true,
+            'estado_inicial'        => 'emitido',
+            'exige_cliente'         => true,
+            'aceita_pagamento'      => false,
+            'pode_ter_adiantamento' => false,
+            'requer_assinatura'     => true,
+            'sectorial'             => 'segurador',
+        ],
+        'ACR' => [
+            'nome'                  => 'Aviso de Cobrança-Recibo',
+            'afeta_stock'           => false,
+            'eh_venda'              => false,
+            'gera_recibo'           => false,
+            'estado_inicial'        => 'paga',
+            'exige_cliente'         => true,
+            'aceita_pagamento'      => false,
+            'pode_ter_adiantamento' => false,
+            'requer_assinatura'     => true,
+            'sectorial'             => 'segurador',
+        ],
     ];
 
     /* =====================================================================
-     | CONSTRUTOR
+     | CONSTRUTOR E HELPERS
      | ================================================================== */
 
     public function __construct()
     {
         $this->empresa = app('current.empresa');
         $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
-
-        Log::debug('[DocumentoFiscalService] Inicializado', [
-            'modo' => $this->modo,
-            'empresa_id' => $this->empresa?->id,
-        ]);
     }
-
-    /* =====================================================================
-     | HELPERS: Modo e Models
-     | ================================================================== */
 
     protected function getModo(): string
     {
@@ -215,67 +271,36 @@ class DocumentoFiscalService
         return $this->isColectivo() ? new SharedProduto() : new TenantProduto();
     }
 
-    protected function aplicarScopeTenant($query)
+    protected function facturaGlobalAnexoModel()
     {
-        if ($this->isColectivo()) {
-            return $query->doTenant();
-        }
-        return $query;
+        return $this->isColectivo() ? new SharedFacturaGlobalAnexo() : new TenantFacturaGlobalAnexo();
     }
-
-    protected function adicionarTenantId(array $dados): array
-    {
-        if ($this->isColectivo() && $this->empresa) {
-            $dados['tenant_id'] = $this->empresa->id;
-        }
-        return $dados;
-    }
-
-    /* =====================================================================
-     | VERIFICAÇÃO DE ACESSO
-     | ================================================================== */
 
     protected function verificarAcessoUsuario(): void
     {
-        Log::debug('[DocumentoFiscalService] Verificando acesso');
-
         $this->empresa = app('current.empresa');
         if (!$this->empresa) {
-            Log::error('[DocumentoFiscalService] Empresa não identificada.');
             throw new \Exception('Empresa não identificada.', 400);
         }
 
         $this->modo = $this->empresa->modo ?? 'colectivo';
 
         $landlordUser = Auth::guard('landlord')->user();
-
         if (!$landlordUser) {
             $landlordId = session('landlord_user_id');
             if ($landlordId) {
                 $landlordUser = LandlordUser::find($landlordId);
             }
         }
-
         if (!$landlordUser) {
-            Log::error('[DocumentoFiscalService] Utilizador landlord não autenticado.');
             throw new \Exception('Usuário não autenticado.', 401);
         }
 
         $tenantUser = $this->buscarUsuario($this->empresa, $landlordUser->email);
         if (!$tenantUser) {
-            Log::error('[DocumentoFiscalService] Utilizador tenant não encontrado.', [
-                'email' => $landlordUser->email,
-            ]);
             throw new \Exception('Usuário não tem permissão para aceder a esta empresa.', 403);
         }
-
         $this->tenantUser = $tenantUser;
-
-        Log::info('[DocumentoFiscalService] Acesso verificado com sucesso', [
-            'modo' => $this->modo,
-            'user_id' => $tenantUser->id,
-            'email' => $tenantUser->email,
-        ]);
     }
 
     protected function buscarUsuario(Empresa $empresa, string $email): ?object
@@ -308,7 +333,7 @@ class DocumentoFiscalService
     }
 
     /* =====================================================================
-     | EMISSÃO DE DOCUMENTOS
+     | EMISSÃO
      | ================================================================== */
 
     public function emitirDocumento(array $dados)
@@ -322,18 +347,16 @@ class DocumentoFiscalService
             throw new \InvalidArgumentException("Tipo de documento {$tipo} não suportado.");
         }
 
+        if ($tipo === 'FRt') {
+            throw new \InvalidArgumentException(
+                "Factura de Retificação (FRt) foi descontinuada pelo DP 71/25. Use Nota de Crédito (NC)."
+            );
+        }
+
         $config = $this->configuracoesTipo[$tipo];
+        $autoFaturacao = !empty($dados['auto_faturacao']);
 
-        Log::info("Iniciando emissão de {$config['nome']}", [
-            'tipo' => $tipo,
-            'modo' => $this->getModo(),
-            'empresa_id' => $this->empresa->id,
-            'nome_banco' => $dados['nome_banco'] ?? null,
-            'iban' => $dados['iban'] ?? null,
-            'numero_conta' => $dados['numero_conta'] ?? null,
-        ]);
-
-        return DB::transaction(function () use ($dados, $tipo, $config) {
+        return DB::transaction(function () use ($dados, $tipo, $config, $autoFaturacao) {
 
             $empresa = $this->obterEmpresa();
             $aplicaIva = $empresa->sujeito_iva;
@@ -344,19 +367,28 @@ class DocumentoFiscalService
             if ($tipo === 'NC') {
                 $this->validarNotaCredito($dados);
             }
-
             if ($tipo === 'ND') {
                 $this->validarNotaDebito($dados);
             }
 
-            [$numero, $numeroDocumento, $serieFiscal] = $this->gerarNumeroDocumento($tipo);
+            [$numero, $numeroDocumento, $serieFiscal] = $this->gerarNumeroDocumento($tipo, $autoFaturacao);
 
             $agoraAngola = Carbon::now('Africa/Luanda');
             $dataEmissao = $agoraAngola->toDateString();
             $horaEmissao = $agoraAngola->toTimeString();
 
             $dataVencimento = $this->calcularDataVencimento($tipo, $dados, $agoraAngola);
-            $totais = $this->processarItens($dados['itens'] ?? [], $aplicaIva, $regime);
+            $taxaRetencaoAuto = null;
+            if ($autoFaturacao) {
+                $taxaRetencaoAuto = (float) config(
+                    ($dados['tipo_bem'] ?? 'bem') === 'servico'
+                        ? 'agt.retencao_servicos'
+                        : 'agt.retencao_bens',
+                    6.5
+                );
+            }
+
+            $totais = $this->processarItens($dados['itens'] ?? [], $aplicaIva, $regime, $taxaRetencaoAuto);
             $clienteId = $this->resolverCliente($dados, $tipo);
 
             $documentoData = [
@@ -386,6 +418,13 @@ class DocumentoFiscalService
                 'nome_banco' => $dados['nome_banco'] ?? null,
                 'iban' => $dados['iban'] ?? null,
                 'numero_conta' => $dados['numero_conta'] ?? null,
+                // DP 71/25
+                'periodo_referencia_inicio' => $dados['periodo_referencia_inicio'] ?? null,
+                'periodo_referencia_fim' => $dados['periodo_referencia_fim'] ?? null,
+                'auto_faturacao' => $autoFaturacao,
+                'motivo_auto_faturacao' => $dados['motivo_auto_faturacao'] ?? null,
+                'software_certificacao_numero' => ($empresa->software_validation_number ?? config('agt.numero_certificado')) ?: null,
+                'print_count' => 0,
             ];
 
             if ($this->isColectivo()) {
@@ -395,7 +434,6 @@ class DocumentoFiscalService
             if ($clienteId) {
                 $documentoData['cliente_id'] = $clienteId;
             }
-
             if (!$clienteId && !empty($dados['cliente_nome'])) {
                 $documentoData['cliente_nome'] = $dados['cliente_nome'];
                 if (!empty($dados['cliente_nif'])) {
@@ -409,16 +447,13 @@ class DocumentoFiscalService
                 $documento = TenantDocumentoFiscal::create($documentoData);
             }
 
-            Log::info('[DocumentoFiscalService] Dados bancários salvos no documento', [
-                'documento_id' => $documento->id,
-                'numero_documento' => $documento->numero_documento,
-                'nome_banco_salvo' => $documento->nome_banco ?? null,
-                'iban_salvo' => $documento->iban ?? null,
-                'numero_conta_salvo' => $documento->numero_conta ?? null,
-            ]);
-
             if (!empty($totais['itens_processados'])) {
                 $this->criarItensDocumento($documento, $totais['itens_processados']);
+            }
+
+            // Anexos da Factura Global (Art. 8.º n.º 2)
+            if (in_array($tipo, ['FG', 'FGR'], true) && !empty($dados['anexos'])) {
+                $this->criarAnexosFacturaGlobal($documento, $dados['anexos']);
             }
 
             $this->executarAcoesPosCriacao($documento, $dados, $tipo);
@@ -426,9 +461,7 @@ class DocumentoFiscalService
             if ($config['requer_assinatura']) {
                 $this->assinarDocumento($documento);
             } else {
-                $documento->update([
-                    'hash_fiscal' => $this->gerarHashSimples($documento),
-                ]);
+                $documento->update(['hash_fiscal' => $this->gerarHashSimples($documento)]);
             }
 
             if ($tipo === 'FT' && !empty($dados['dados_pagamento'])) {
@@ -440,40 +473,33 @@ class DocumentoFiscalService
                 ]);
             }
 
-            if ($tipo === 'FR' && !empty($dados['dados_pagamento'])) {
+            if (in_array($tipo, ['FR', 'FGR', 'TV'], true) && !empty($dados['dados_pagamento'])) {
                 $documento->update([
                     'metodo_pagamento' => $dados['dados_pagamento']['metodo'],
                     'referencia_pagamento' => $dados['dados_pagamento']['referencia'] ?? null,
                 ]);
             }
 
-            Log::info("{$config['nome']} emitida com sucesso", [
-                'documento_id' => $documento->id,
-                'numero' => $numeroDocumento,
-                'modo' => $this->getModo(),
-                'tem_dados_bancarios' => !empty($documento->nome_banco) || !empty($documento->iban) || !empty($documento->numero_conta),
-            ]);
-
-            return $documento->load('itens.produto', 'cliente', 'documentoOrigem');
+            return $documento->load('itens.produto', 'cliente', 'documentoOrigem', 'anexos');
         });
     }
 
     /* =====================================================================
-     | RECIBO
+     | RECIBO / NC / ND / ADIANTAMENTO (mantidos)
      | ================================================================== */
 
     public function gerarRecibo($documentoOrigem, array $dados)
     {
         $this->verificarAcessoUsuario();
 
-        if (!in_array($documentoOrigem->tipo_documento, ['FT', 'FA', 'FP'])) {
+        if (!in_array($documentoOrigem->tipo_documento, ['FT', 'FA', 'FP', 'FG'])) {
             throw new \InvalidArgumentException(
-                "Apenas FT, FA e FP podem receber recibo. Tipo atual: {$documentoOrigem->tipo_documento}"
+                "Apenas FT, FA, FP e FG podem receber recibo. Tipo atual: {$documentoOrigem->tipo_documento}"
             );
         }
 
         if (in_array($documentoOrigem->estado, ['cancelado'])) {
-            throw new \InvalidArgumentException("Documento cancelado. Não é possível gerar recibo.");
+            throw new \InvalidArgumentException("Documento cancelado.");
         }
 
         if ($documentoOrigem->tipo_documento === 'FT' && $documentoOrigem->estado === 'paga') {
@@ -483,20 +509,15 @@ class DocumentoFiscalService
         return DB::transaction(function () use ($documentoOrigem, $dados) {
             $valorPago = (float) ($dados['valor'] ?? 0);
 
-            if ($documentoOrigem->tipo_documento === 'FP') {
-                $valorPendente = (float) $documentoOrigem->total_liquido;
-            } else {
-                $valorPendente = $this->calcularValorPendente($documentoOrigem);
-            }
+            $valorPendente = $documentoOrigem->tipo_documento === 'FP'
+                ? (float) $documentoOrigem->total_liquido
+                : $this->calcularValorPendente($documentoOrigem);
 
             if ($valorPago <= 0) {
-                throw new \InvalidArgumentException("O valor do pagamento deve ser maior que zero.");
+                throw new \InvalidArgumentException("Valor deve ser maior que zero.");
             }
-
             if ($valorPago > $valorPendente + 0.01) {
-                throw new \InvalidArgumentException(
-                    "Valor do pagamento ({$valorPago}) excede o valor pendente ({$valorPendente})."
-                );
+                throw new \InvalidArgumentException("Valor ({$valorPago}) excede pendente ({$valorPendente}).");
             }
 
             [$numero, $numeroDocumento, $serieFiscal] = $this->gerarNumeroDocumento('RC');
@@ -526,6 +547,8 @@ class DocumentoFiscalService
                 'rsa_versao_chave' => null,
                 'qr_code' => null,
                 'hash_anterior' => null,
+                'auto_faturacao' => false,
+                'print_count' => 0,
             ];
 
             if ($this->isColectivo()) {
@@ -539,11 +562,9 @@ class DocumentoFiscalService
                 $reciboData['cliente_nif'] = $documentoOrigem->cliente_nif ?? null;
             }
 
-            if ($this->isColectivo()) {
-                $recibo = SharedDocumentoFiscal::create($reciboData);
-            } else {
-                $recibo = TenantDocumentoFiscal::create($reciboData);
-            }
+            $recibo = $this->isColectivo()
+                ? SharedDocumentoFiscal::create($reciboData)
+                : TenantDocumentoFiscal::create($reciboData);
 
             if ($documentoOrigem->tipo_documento !== 'FP') {
                 $this->actualizarEstadoAposPagamento($documentoOrigem, $valorPago);
@@ -551,36 +572,22 @@ class DocumentoFiscalService
 
             $recibo->update(['hash_fiscal' => $this->gerarHashSimples($recibo)]);
 
-            Log::info('Recibo gerado com sucesso', [
-                'recibo_id' => $recibo->id,
-                'numero' => $recibo->numero_documento,
-                'modo' => $this->getModo(),
-                'valor' => $valorPago,
-            ]);
-
             return $recibo->load('documentoOrigem', 'cliente');
         });
     }
-
-    /* =====================================================================
-     | NOTA DE CRÉDITO
-     | ================================================================== */
 
     public function criarNotaCredito($documentoOrigem, array $dados)
     {
         $this->verificarAcessoUsuario();
 
-        if (!in_array($documentoOrigem->tipo_documento, ['FT', 'FR'])) {
+        if (!in_array($documentoOrigem->tipo_documento, ['FT', 'FR', 'FG', 'FGR'])) {
             throw new \InvalidArgumentException(
-                "Nota de Crédito só pode ser gerada a partir de Fatura (FT) ou Fatura-Recibo (FR). " .
-                    "Tipo atual: {$documentoOrigem->tipo_documento}"
+                "Nota de Crédito só pode ser gerada a partir de FT, FR, FG ou FGR. Tipo: {$documentoOrigem->tipo_documento}"
             );
         }
 
         if ($documentoOrigem->estado === 'cancelado') {
-            throw new \InvalidArgumentException(
-                "Não é possível gerar Nota de Crédito de documento cancelado: {$documentoOrigem->numero_documento}"
-            );
+            throw new \InvalidArgumentException("Documento cancelado.");
         }
 
         $notasCredito = $this->isColectivo()
@@ -594,33 +601,16 @@ class DocumentoFiscalService
         $valorNova = $totais['liquido'];
 
         $valorMaximo = (float) $documentoOrigem->total_liquido - $totalJaCreditado;
-
         if ($valorMaximo <= 0.01) {
-            throw new \InvalidArgumentException(
-                "Esta fatura já possui créditos emitidos que cobrem todo o seu valor. " .
-                    "Saldo disponível: 0.00 Kz"
-            );
+            throw new \InvalidArgumentException("Saldo disponível: 0.00 Kz");
         }
-
         if ($valorNova > $valorMaximo + 0.01) {
             throw new \InvalidArgumentException(
-                "O valor da Nota de Crédito (" . number_format($valorNova, 2) . " Kz) " .
-                    "excede o saldo disponível (" . number_format($valorMaximo, 2) . " Kz). " .
-                    "Total da fatura: " . number_format($documentoOrigem->total_liquido, 2) . " Kz, " .
-                    "Créditos já emitidos: " . number_format($totalJaCreditado, 2) . " Kz"
+                "Valor ({$valorNova}) excede saldo disponível ({$valorMaximo})."
             );
         }
-
-        if (empty($dados['motivo'])) {
-            throw new \InvalidArgumentException(
-                "O motivo da Nota de Crédito é obrigatório."
-            );
-        }
-
-        if (strlen($dados['motivo']) < 10) {
-            throw new \InvalidArgumentException(
-                "O motivo da Nota de Crédito deve ter pelo menos 10 caracteres."
-            );
+        if (empty($dados['motivo']) || strlen($dados['motivo']) < 10) {
+            throw new \InvalidArgumentException("Motivo obrigatório (min. 10 caracteres).");
         }
 
         $this->validarItensNotaCredito($documentoOrigem, $dados['itens']);
@@ -632,18 +622,7 @@ class DocumentoFiscalService
         $this->herdarCliente($dados, $documentoOrigem);
 
         $nc = $this->emitirDocumento($dados);
-
         $this->atualizarEstadoFaturaAposCredito($documentoOrigem);
-
-        Log::info('Nota de Crédito emitida com sucesso', [
-            'nc_id'              => $nc->id,
-            'nc_numero'          => $nc->numero_documento,
-            'fatura_id'          => $documentoOrigem->id,
-            'fatura_numero'      => $documentoOrigem->numero_documento,
-            'valor_credito'      => $valorNova,
-            'total_creditado'    => $totalJaCreditado + $valorNova,
-            'saldo_restante'     => (float) $documentoOrigem->total_liquido - ($totalJaCreditado + $valorNova),
-        ]);
 
         return $nc->load('documentoOrigem', 'itens', 'cliente');
     }
@@ -653,19 +632,7 @@ class DocumentoFiscalService
         $itensFatura = $fatura->itens()->get();
 
         foreach ($itensNC as $itemNC) {
-            if (! empty($itemNC['produto_id'])) {
-                $existeNaFatura = $itensFatura->contains('produto_id', $itemNC['produto_id']);
-
-                if (! $existeNaFatura) {
-                    Log::warning('Item da Nota de Crédito não encontrado na fatura original', [
-                        'produto_id' => $itemNC['produto_id'],
-                        'fatura_id'  => $fatura->id,
-                        'descricao'  => $itemNC['descricao'] ?? 'sem descrição'
-                    ]);
-                }
-            }
-
-            if (! empty($itemNC['produto_id'])) {
+            if (!empty($itemNC['produto_id'])) {
                 $itemFatura = $itensFatura->firstWhere('produto_id', $itemNC['produto_id']);
                 if ($itemFatura) {
                     $quantidadeFaturada = (float) $itemFatura->quantidade;
@@ -678,12 +645,9 @@ class DocumentoFiscalService
                         })
                         ->sum('quantidade');
 
-                    $quantidadeTotalCreditada = $totalCreditadoProduto + $quantidadeNC;
-
-                    if ($quantidadeTotalCreditada > $quantidadeFaturada + 0.01) {
+                    if ($totalCreditadoProduto + $quantidadeNC > $quantidadeFaturada + 0.01) {
                         throw new \InvalidArgumentException(
-                            "Quantidade creditada para o produto '{$itemNC['descricao']}' " .
-                                "({$quantidadeTotalCreditada}) excede a quantidade faturada ({$quantidadeFaturada})."
+                            "Quantidade creditada excede a faturada para '{$itemNC['descricao']}'."
                         );
                     }
                 }
@@ -701,10 +665,6 @@ class DocumentoFiscalService
 
         if ($saldo <= 0.01) {
             $fatura->update(['estado' => 'paga']);
-            Log::info('Fatura marcada como paga após crédito total', [
-                'fatura_id' => $fatura->id,
-                'saldo' => $saldo
-            ]);
         } else {
             $totalPago = $this->calcularTotalPago($fatura);
             if ($totalPago > 0 && $saldo < (float) $fatura->total_liquido) {
@@ -713,63 +673,32 @@ class DocumentoFiscalService
         }
     }
 
-    /* =====================================================================
-     | NOTA DE DÉBITO
-     | ================================================================== */
-
     public function criarNotaDebito($documentoOrigem, array $dados)
     {
         $this->verificarAcessoUsuario();
 
-        if (!in_array($documentoOrigem->tipo_documento, ['FT', 'FR'])) {
-            throw new \InvalidArgumentException(
-                "Nota de Débito só pode ser gerada a partir de Fatura (FT). " .
-                    "Tipo atual: {$documentoOrigem->tipo_documento}"
-            );
+        if (!in_array($documentoOrigem->tipo_documento, ['FT', 'FG'])) {
+            throw new \InvalidArgumentException("Nota de Débito só pode ser gerada a partir de FT ou FG.");
         }
 
-        if ($documentoOrigem->estado === 'cancelado') {
-            throw new \InvalidArgumentException(
-                "Não é possível gerar Nota de Débito de documento cancelado: {$documentoOrigem->numero_documento}"
-            );
-        }
-
-        if ($documentoOrigem->estado === 'expirado') {
-            throw new \InvalidArgumentException(
-                "Não é possível emitir Nota de Débito para uma fatura expirada: {$documentoOrigem->numero_documento}"
-            );
+        if (in_array($documentoOrigem->estado, ['cancelado', 'expirado'])) {
+            throw new \InvalidArgumentException("Documento cancelado ou expirado.");
         }
 
         if (empty($dados['itens'])) {
-            throw new \InvalidArgumentException(
-                'A Nota de Débito deve conter pelo menos um item.'
-            );
+            throw new \InvalidArgumentException('Nota de Débito exige itens.');
         }
 
         $this->validarServicosNotaDebito($dados['itens']);
 
         $dataEmissaoFatura = Carbon::parse($documentoOrigem->data_emissao, 'Africa/Luanda');
         $prazoMaximo = $dataEmissaoFatura->copy()->addDays(30);
-        $hoje = Carbon::now('Africa/Luanda');
-
-        if ($hoje->gt($prazoMaximo)) {
-            throw new \InvalidArgumentException(
-                "O prazo para emitir Nota de Débito é de até 30 dias após a emissão da fatura. " .
-                    "Fatura emitida em: {$dataEmissaoFatura->format('d/m/Y')}, " .
-                    "Prazo máximo: {$prazoMaximo->format('d/m/Y')}."
-            );
+        if (Carbon::now('Africa/Luanda')->gt($prazoMaximo)) {
+            throw new \InvalidArgumentException("Prazo de 30 dias excedido.");
         }
 
-        $valorPago = $this->calcularTotalPago($documentoOrigem);
-        $isPaga = $documentoOrigem->estado === 'paga';
-
-        if ($isPaga) {
+        if ($documentoOrigem->estado === 'paga') {
             $this->validarJurosMultaFaturaPaga($dados['itens']);
-
-            Log::info('Nota de Débito para fatura paga - cobrança de juros/multas', [
-                'fatura_id' => $documentoOrigem->id,
-                'valor_pago' => $valorPago
-            ]);
         }
 
         $dados['tipo_documento'] = 'ND';
@@ -779,110 +708,43 @@ class DocumentoFiscalService
         $this->herdarCliente($dados, $documentoOrigem);
 
         $nd = $this->emitirDocumento($dados);
-
         $this->atualizarEstadoFaturaAposDebito($documentoOrigem, $nd);
-
-        Log::info('Nota de Débito emitida com sucesso', [
-            'nd_id'              => $nd->id,
-            'nd_numero'          => $nd->numero_documento,
-            'fatura_id'          => $documentoOrigem->id,
-            'fatura_numero'      => $documentoOrigem->numero_documento,
-            'valor_debito'       => $nd->total_liquido,
-            'novo_valor_total'   => (float) $documentoOrigem->total_liquido + (float) $nd->total_liquido,
-        ]);
 
         return $nd->load('documentoOrigem', 'itens', 'cliente');
     }
 
     private function validarServicosNotaDebito(array $itens): void
     {
-        $itensInvalidos = [];
-
         foreach ($itens as $item) {
             if (empty($item['descricao']) || strlen($item['descricao']) < 5) {
-                throw new \InvalidArgumentException(
-                    "Cada item da Nota de Débito deve ter uma descrição detalhada."
-                );
+                throw new \InvalidArgumentException("Cada item deve ter descrição (min. 5 caracteres).");
             }
 
-            if (! empty($item['produto_id'])) {
+            if (!empty($item['produto_id'])) {
                 $produto = $this->buscarProduto($item['produto_id']);
                 if ($produto && $produto->tipo === 'produto') {
-                    $itensInvalidos[] = $item['descricao'];
-                }
-            } else {
-                $descricaoLower = strtolower($item['descricao']);
-                $palavrasServico = [
-                    'serviço',
-                    'servico',
-                    'consulta',
-                    'consultoria',
-                    'manutenção',
-                    'manutencao',
-                    'instalação',
-                    'instalacao',
-                    'juro',
-                    'juros',
-                    'multa',
-                    'penalidade',
-                    'taxa',
-                    'comissão',
-                    'comissao',
-                    'honorário',
-                    'honorario',
-                    'assessoria',
-                    'planejamento',
-                    'projeto',
-                    'engenharia',
-                    'design',
-                    'desenvolvimento',
-                    'programação',
-                    'suporte',
-                    'treinamento',
-                    'consulting'
-                ];
-
-                $isServico = false;
-                foreach ($palavrasServico as $palavra) {
-                    if (strpos($descricaoLower, $palavra) !== false) {
-                        $isServico = true;
-                        break;
-                    }
-                }
-
-                if (!$isServico) {
-                    $itensInvalidos[] = $item['descricao'];
+                    throw new \InvalidArgumentException(
+                        "Nota de Débito só para serviços. Item '{$item['descricao']}' é produto."
+                    );
                 }
             }
-        }
-
-        if (!empty($itensInvalidos)) {
-            throw new \InvalidArgumentException(
-                "Nota de Débito só pode ser usada para serviços.\n" .
-                    "Os seguintes itens não são serviços: " . implode(', ', $itensInvalidos)
-            );
         }
     }
 
     private function validarJurosMultaFaturaPaga(array $itens): void
     {
-        $temJuros = false;
-        $temMulta = false;
-
+        $temJurosOuMulta = false;
         foreach ($itens as $item) {
-            $descricao = strtolower($item['descricao']);
-            if (strpos($descricao, 'juro') !== false || strpos($descricao, 'juros') !== false) {
-                $temJuros = true;
-            }
-            if (strpos($descricao, 'multa') !== false || strpos($descricao, 'penalidade') !== false) {
-                $temMulta = true;
+            $d = strtolower($item['descricao']);
+            if (strpos($d, 'juro') !== false || strpos($d, 'multa') !== false || strpos($d, 'penalidade') !== false) {
+                $temJurosOuMulta = true;
+                break;
             }
         }
 
-        if (!$temJuros && !$temMulta) {
+        if (!$temJurosOuMulta) {
             throw new \InvalidArgumentException(
-                "A fatura já está paga. Nota de Débito para fatura paga deve ser " .
-                    "exclusivamente para cobrança de juros de mora ou multas contratuais."
+                "Fatura paga — ND apenas para juros de mora ou multas contratuais."
             );
         }
     }
@@ -890,108 +752,60 @@ class DocumentoFiscalService
     private function validarNotaCredito(array $dados): void
     {
         if (empty($dados['fatura_id'])) {
-            throw new \InvalidArgumentException('Nota de Crédito deve referenciar uma fatura.');
+            throw new \InvalidArgumentException('NC deve referenciar fatura.');
         }
-
-        if (empty($dados['motivo'])) {
-            throw new \InvalidArgumentException('Motivo da Nota de Crédito é obrigatório.');
+        if (empty($dados['motivo']) || strlen($dados['motivo']) < 10) {
+            throw new \InvalidArgumentException('Motivo obrigatório (min. 10 caracteres).');
         }
-
-        if (strlen($dados['motivo']) < 10) {
-            throw new \InvalidArgumentException('Motivo da Nota de Crédito deve ter pelo menos 10 caracteres.');
-        }
-
         if (empty($dados['itens'])) {
-            throw new \InvalidArgumentException('Nota de Crédito deve conter pelo menos um item.');
+            throw new \InvalidArgumentException('NC deve conter itens.');
         }
     }
 
     private function validarNotaDebito(array $dados): void
     {
         if (empty($dados['fatura_id'])) {
-            throw new \InvalidArgumentException('Nota de Débito deve referenciar uma fatura.');
+            throw new \InvalidArgumentException('ND deve referenciar fatura.');
         }
-
         if (empty($dados['itens'])) {
-            throw new \InvalidArgumentException('Nota de Débito deve conter pelo menos um item.');
+            throw new \InvalidArgumentException('ND deve conter itens.');
         }
-
-        $this->validarServicosNotaDebito($dados['itens']);
     }
 
     private function atualizarEstadoFaturaAposDebito($fatura, $nd): void
     {
-        $valorDebito = (float) $nd->total_liquido;
-        $novoValorTotal = (float) $fatura->total_liquido + $valorDebito;
-
-        $fatura->update([
-            'total_liquido' => $novoValorTotal
-        ]);
+        $novoValor = (float) $fatura->total_liquido + (float) $nd->total_liquido;
+        $fatura->update(['total_liquido' => $novoValor]);
 
         if ($fatura->estado === 'paga') {
             $fatura->update(['estado' => 'parcialmente_paga']);
-            Log::info('Fatura voltou a ficar parcialmente paga após débito', [
-                'fatura_id' => $fatura->id,
-                'valor_debito' => $valorDebito,
-                'novo_valor' => $novoValorTotal
-            ]);
         }
     }
-
-    /* =====================================================================
-     | ADIANTAMENTO
-     | ================================================================== */
 
     public function vincularAdiantamento($adiantamento, $fatura, float $valor): array
     {
         $this->verificarAcessoUsuario();
 
         if ($adiantamento->tipo_documento !== 'FA') {
-            throw new \InvalidArgumentException(
-                "Apenas FA pode ser vinculada. Tipo: {$adiantamento->tipo_documento}"
-            );
+            throw new \InvalidArgumentException("Apenas FA pode ser vinculada.");
         }
-
         if ($adiantamento->estado !== 'emitido') {
-            throw new \InvalidArgumentException(
-                "Adiantamento deve estar emitido. Estado: {$adiantamento->estado}"
-            );
+            throw new \InvalidArgumentException("Adiantamento deve estar emitido.");
         }
-
         if ($fatura->tipo_documento !== 'FT') {
-            throw new \InvalidArgumentException(
-                "Apenas FT pode receber adiantamentos. Tipo: {$fatura->tipo_documento}"
-            );
+            throw new \InvalidArgumentException("Apenas FT pode receber adiantamentos.");
         }
-
         if (in_array($fatura->estado, ['cancelado', 'paga'])) {
-            throw new \InvalidArgumentException(
-                "Factura cancelada ou paga não pode receber adiantamentos. Estado: {$fatura->estado}"
-            );
+            throw new \InvalidArgumentException("Fatura cancelada ou paga.");
         }
-
-        $clienteAdiantamento = $adiantamento->cliente_id ?? $adiantamento->cliente_nome;
-        $clienteFatura = $fatura->cliente_id ?? $fatura->cliente_nome;
-
-        if ($clienteAdiantamento && $clienteFatura && $clienteAdiantamento !== $clienteFatura) {
-            throw new \InvalidArgumentException('O cliente do adiantamento não coincide com o cliente da fatura.');
-        }
-
         if ($valor > (float) $adiantamento->total_liquido) {
-            throw new \InvalidArgumentException(
-                "Valor ({$valor}) excede o total do adiantamento ({$adiantamento->total_liquido})."
-            );
+            throw new \InvalidArgumentException("Valor excede o adiantamento.");
         }
-
-        $valorPendenteFatura = $this->calcularValorPendente($fatura);
-        if ($valor > $valorPendenteFatura + 0.01) {
-            throw new \InvalidArgumentException(
-                "Valor ({$valor}) excede o pendente da fatura ({$valorPendenteFatura})."
-            );
+        if ($valor > $this->calcularValorPendente($fatura) + 0.01) {
+            throw new \InvalidArgumentException("Valor excede o pendente da fatura.");
         }
 
         return DB::transaction(function () use ($adiantamento, $fatura, $valor) {
-
             DB::table('adiantamento_fatura')->insert([
                 'id' => Str::uuid(),
                 'adiantamento_id' => $adiantamento->id,
@@ -1016,17 +830,8 @@ class DocumentoFiscalService
             $totalPago = $this->calcularTotalPago($fatura);
             $valorPendente = (float) $fatura->total_liquido - $totalPago - (float) $totalAdiantamentos;
 
-            if ($valorPendente <= 0.01) {
-                $fatura->update(['estado' => 'paga']);
-            } else {
-                $fatura->update(['estado' => 'parcialmente_paga']);
-            }
-
-            Log::info('Adiantamento vinculado', [
-                'adiantamento_id' => $adiantamento->id,
-                'fatura_id' => $fatura->id,
-                'valor' => $valor,
-                'modo' => $this->getModo(),
+            $fatura->update([
+                'estado' => $valorPendente <= 0.01 ? 'paga' : 'parcialmente_paga',
             ]);
 
             return [
@@ -1036,60 +841,29 @@ class DocumentoFiscalService
         });
     }
 
-    /* =====================================================================
-     | CANCELAMENTO
-     | ================================================================== */
-
     public function cancelarDocumento($documento, string $motivo)
     {
         $this->verificarAcessoUsuario();
 
         if ($documento->estado === 'cancelado') {
-            throw new \InvalidArgumentException('Documento já se encontra cancelado.');
+            throw new \InvalidArgumentException('Documento já cancelado.');
         }
 
-        $derivadosActivos = $documento->documentosDerivados()
-            ->where('estado', '!=', 'cancelado')
-            ->count();
-
-        if ($derivadosActivos > 0) {
-            throw new \InvalidArgumentException(
-                "Documento possui {$derivadosActivos} documentos derivados activos. Cancele-os primeiro."
-            );
+        $derivados = $documento->documentosDerivados()->where('estado', '!=', 'cancelado')->count();
+        if ($derivados > 0) {
+            throw new \InvalidArgumentException("Documento possui {$derivados} derivados activos.");
         }
 
         return DB::transaction(function () use ($documento, $motivo) {
-
-            if ($this->configuracoesTipo[$documento->tipo_documento]['afeta_stock']) {
+            if ($this->configuracoesTipo[$documento->tipo_documento]['afeta_stock'] ?? false) {
                 $this->reverterStock($documento);
             }
-
-            if (in_array($documento->tipo_documento, ['FT', 'FA'])) {
-                $recibosActivos = $documento->recibos()
-                    ->where('estado', '!=', 'cancelado')
-                    ->count();
-
-                if ($recibosActivos > 0) {
-                    throw new \InvalidArgumentException(
-                        "Documento possui {$recibosActivos} recibos activos. Cancele-os primeiro."
-                    );
-                }
-            }
-
-            $agoraAngola = Carbon::now('Africa/Luanda');
 
             $documento->update([
                 'estado' => 'cancelado',
                 'motivo_cancelamento' => $motivo,
-                'data_cancelamento' => $agoraAngola,
+                'data_cancelamento' => Carbon::now('Africa/Luanda'),
                 'user_cancelamento_id' => $this->getUserId(),
-            ]);
-
-            Log::info('Documento cancelado', [
-                'id' => $documento->id,
-                'numero' => $documento->numero_documento,
-                'motivo' => $motivo,
-                'modo' => $this->getModo(),
             ]);
 
             return $documento->fresh();
@@ -1097,64 +871,175 @@ class DocumentoFiscalService
     }
 
     /* =====================================================================
-     | LISTAGEM E BUSCA
+     | MÉTODOS PÚBLICOS NOVOS (DP 71/25)
+     | ================================================================== */
+
+    /**
+     * Emite Factura Global (FG) ou Factura Global-Recibo (FGR).
+     * Art. 3.º al. j), Art. 8.º n.º 2.
+     */
+    public function emitirFacturaGlobal(array $dados)
+    {
+        $this->verificarAcessoUsuario();
+
+        $tipo = $dados['tipo_documento'] ?? 'FG';
+        if (!in_array($tipo, ['FG', 'FGR'], true)) {
+            throw new \InvalidArgumentException("Tipo inválido para factura global: {$tipo}.");
+        }
+
+        $dados['tipo_documento'] = $tipo;
+        return $this->emitirDocumento($dados);
+    }
+
+    /**
+     * Emite Talão de Venda (TV). Art. 5.º n.º 2-3.
+     */
+    public function emitirTalaoVenda(array $dados)
+    {
+        $this->verificarAcessoUsuario();
+
+        $dados['tipo_documento'] = 'TV';
+
+        if (!empty($dados['cliente_nif'])) {
+            throw new \InvalidArgumentException(
+                'Talão de Venda é para adquirente sem NIF. Se tiver NIF, emita FR.'
+            );
+        }
+
+        return $this->emitirDocumento($dados);
+    }
+
+    /**
+     * Emite Factura-Recibo em regime de Auto-Facturação (Art. 11.º-14.º).
+     */
+    public function emitirAutoFacturacao(array $dados)
+    {
+        $this->verificarAcessoUsuario();
+
+        $dados['tipo_documento'] = 'FR';
+        $dados['auto_faturacao'] = true;
+
+        if (empty($dados['motivo_auto_faturacao'])) {
+            throw new \InvalidArgumentException(
+                'Auto-facturação exige motivo (Art. 12.º n.º 1).'
+            );
+        }
+
+        $this->validarLimiteAutoFacturacao($dados);
+
+        $documento = $this->emitirDocumento($dados);
+        return $documento;
+    }
+
+    private function validarLimiteAutoFacturacao(array $dados): void
+    {
+        $totalCustos = $this->calcularCustosAno();
+        $totalAutoFact = $this->calcularTotalAutoFacturacaoAno();
+
+        $percentagemMax = !empty($dados['bens_essenciais']) ? 0.40 : 0.20;
+        $limite = $totalCustos * $percentagemMax;
+        $valorNovo = $this->calcularTotalDocumento($dados);
+
+        if ($totalCustos > 0 && ($totalAutoFact + $valorNovo) > $limite) {
+            throw new \InvalidArgumentException(sprintf(
+                'Auto-facturação excederia limite de %.0f%% (Art. 13.º). Usado: %.2f de %.2f Kz.',
+                $percentagemMax * 100,
+                $totalAutoFact,
+                $limite
+            ));
+        }
+    }
+
+    private function calcularCustosAno(): float
+    {
+        $query = $this->documentoFiscalModel()
+            ->whereYear('data_emissao', now()->year)
+            ->whereIn('tipo_documento', ['FT', 'FR', 'FG', 'FGR'])
+            ->where('estado', '!=', 'cancelado');
+
+        if ($this->isColectivo()) {
+            $query->where('tenant_id', $this->empresa->id);
+        }
+
+        return (float) $query->sum('base_tributavel');
+    }
+
+    private function calcularTotalAutoFacturacaoAno(): float
+    {
+        $query = $this->documentoFiscalModel()
+            ->where('tipo_documento', 'FR')
+            ->where('auto_faturacao', true)
+            ->whereYear('data_emissao', now()->year)
+            ->where('estado', '!=', 'cancelado');
+
+        if ($this->isColectivo()) {
+            $query->where('tenant_id', $this->empresa->id);
+        }
+
+        return (float) $query->sum('base_tributavel');
+    }
+
+    private function calcularTotalDocumento(array $dados): float
+    {
+        $total = 0.0;
+        foreach ($dados['itens'] ?? [] as $item) {
+            $sub = ($item['quantidade'] ?? 1) * ($item['preco_venda'] ?? $item['preco_unitario'] ?? 0);
+            $total += $sub;
+        }
+        return $total;
+    }
+
+    /* =====================================================================
+     | LISTAGEM / BUSCA
      | ================================================================== */
 
     public function listarDocumentos(array $filtros = []): \Illuminate\Contracts\Pagination\LengthAwarePaginator
     {
         $this->verificarAcessoUsuario();
 
-        if ($this->isColectivo()) {
-            $query = SharedDocumentoFiscal::doTenant()->with('cliente', 'venda', 'itens.produto');
-        } else {
-            $query = TenantDocumentoFiscal::with('cliente', 'venda', 'itens.produto');
-        }
+        $query = $this->isColectivo()
+            ? SharedDocumentoFiscal::doTenant()->with('cliente', 'venda', 'itens.produto', 'anexos')
+            : TenantDocumentoFiscal::with('cliente', 'venda', 'itens.produto', 'anexos');
 
         if (!empty($filtros['tipo'])) {
             $query->where('tipo_documento', $filtros['tipo']);
         }
-
         if (!empty($filtros['estado'])) {
             $query->where('estado', $filtros['estado']);
         }
-
         if (!empty($filtros['cliente_id'])) {
             $query->where('cliente_id', $filtros['cliente_id']);
         }
-
         if (!empty($filtros['cliente_nome'])) {
             $query->where('cliente_nome', 'like', '%' . $filtros['cliente_nome'] . '%');
         }
-
         if (!empty($filtros['data_inicio'])) {
             $query->whereDate('data_emissao', '>=', $filtros['data_inicio']);
         }
-
         if (!empty($filtros['data_fim'])) {
             $query->whereDate('data_emissao', '<=', $filtros['data_fim']);
         }
-
         if (!empty($filtros['apenas_vendas'])) {
-            $query->whereIn('tipo_documento', ['FT', 'FR', 'RC']);
+            $query->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'FG', 'FGR', 'TV']);
         }
-
         if (!empty($filtros['apenas_nao_vendas'])) {
-            $query->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FRt']);
+            $query->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FRt', 'FGEN', 'AC', 'ACR']);
         }
-
+        if (!empty($filtros['apenas_globais'])) {
+            $query->whereIn('tipo_documento', ['FG', 'FGR']);
+        }
+        if (!empty($filtros['apenas_auto_facturacao'])) {
+            $query->where('auto_faturacao', true);
+        }
         if (!empty($filtros['pendentes'])) {
             $query->where('tipo_documento', 'FT')
                 ->whereIn('estado', ['emitido', 'parcialmente_paga']);
         }
-
         if (!empty($filtros['adiantamentos_pendentes'])) {
-            $query->where('tipo_documento', 'FA')
-                ->where('estado', 'emitido');
+            $query->where('tipo_documento', 'FA')->where('estado', 'emitido');
         }
-
         if (!empty($filtros['proformas_pendentes'])) {
-            $query->where('tipo_documento', 'FP')
-                ->where('estado', 'emitido');
+            $query->where('tipo_documento', 'FP')->where('estado', 'emitido');
         }
 
         return $query->orderBy('data_emissao', 'desc')
@@ -1168,29 +1053,10 @@ class DocumentoFiscalService
         $this->verificarAcessoUsuario();
 
         if (!Str::isUuid($documentoId)) {
-            throw new \InvalidArgumentException('ID inválido. Formato UUID esperado.');
+            throw new \InvalidArgumentException('ID inválido.');
         }
 
-        if ($this->isColectivo()) {
-            return SharedDocumentoFiscal::doTenant()
-                ->with([
-                    'cliente',
-                    'venda',
-                    'itens.produto',
-                    'documentoOrigem',
-                    'documentosDerivados',
-                    'recibos',
-                    'notasCredito',
-                    'notasDebito',
-                    'faturasAdiantamento',
-                    'faturasVinculadas',
-                    'user',
-                    'userCancelamento',
-                ])
-                ->findOrFail($documentoId);
-        }
-
-        return TenantDocumentoFiscal::with([
+        $with = [
             'cliente',
             'venda',
             'itens.produto',
@@ -1203,7 +1069,12 @@ class DocumentoFiscalService
             'faturasVinculadas',
             'user',
             'userCancelamento',
-        ])->findOrFail($documentoId);
+            'anexos',
+        ];
+
+        return $this->isColectivo()
+            ? SharedDocumentoFiscal::doTenant()->with($with)->findOrFail($documentoId)
+            : TenantDocumentoFiscal::with($with)->findOrFail($documentoId);
     }
 
     /* =====================================================================
@@ -1212,7 +1083,7 @@ class DocumentoFiscalService
 
     public function calcularValorPendente($documento): float
     {
-        if (!in_array($documento->tipo_documento, ['FT', 'FA'])) {
+        if (!in_array($documento->tipo_documento, ['FT', 'FA', 'FG'])) {
             return 0.0;
         }
 
@@ -1236,7 +1107,7 @@ class DocumentoFiscalService
 
     public function calcularSaldoDisponivel($fatura): float
     {
-        if (! in_array($fatura->tipo_documento, ['FT', 'FR'])) {
+        if (!in_array($fatura->tipo_documento, ['FT', 'FR', 'FG', 'FGR'])) {
             return 0.0;
         }
 
@@ -1249,57 +1120,30 @@ class DocumentoFiscalService
 
     public function podeEmitirNotaCredito($documento): array
     {
-        if (! in_array($documento->tipo_documento, ['FT', 'FR'])) {
-            return [
-                'pode' => false,
-                'motivo' => "Apenas Fatura (FT) ou Fatura-Recibo (FR) podem originar Nota de Crédito. Tipo atual: {$documento->tipo_documento}"
-            ];
+        if (!in_array($documento->tipo_documento, ['FT', 'FR', 'FG', 'FGR'])) {
+            return ['pode' => false, 'motivo' => "NC apenas de FT, FR, FG ou FGR."];
         }
-
-        if ($documento->estado === 'cancelado') {
-            return ['pode' => false, 'motivo' => 'Não é possível emitir Nota de Crédito para uma fatura cancelada.'];
+        if (in_array($documento->estado, ['cancelado', 'expirado'])) {
+            return ['pode' => false, 'motivo' => 'Documento cancelado/expirado.'];
         }
-        if ($documento->estado === 'expirado') {
-            return ['pode' => false, 'motivo' => 'Não é possível emitir Nota de Crédito para uma fatura expirada.'];
+        if ($this->calcularSaldoDisponivel($documento) <= 0.01) {
+            return ['pode' => false, 'motivo' => 'Sem saldo disponível.'];
         }
-
-        $saldo = $this->calcularSaldoDisponivel($documento);
-        if ($saldo <= 0.01) {
-            return [
-                'pode' => false,
-                'motivo' => 'Esta fatura não possui saldo disponível para crédito.'
-            ];
-        }
-
         return ['pode' => true];
     }
 
     public function podeEmitirNotaDebito($documento): array
     {
-        if ($documento->tipo_documento !== 'FT') {
-            return [
-                'pode' => false,
-                'motivo' => "Apenas Fatura (FT) pode originar Nota de Débito. Tipo atual: {$documento->tipo_documento}"
-            ];
+        if (!in_array($documento->tipo_documento, ['FT', 'FG'])) {
+            return ['pode' => false, 'motivo' => "ND apenas de FT ou FG."];
+        }
+        if (in_array($documento->estado, ['cancelado', 'expirado'])) {
+            return ['pode' => false, 'motivo' => 'Documento cancelado/expirado.'];
         }
 
-        if ($documento->estado === 'cancelado') {
-            return ['pode' => false, 'motivo' => 'Não é possível emitir Nota de Débito para uma fatura cancelada.'];
-        }
-        if ($documento->estado === 'expirado') {
-            return ['pode' => false, 'motivo' => 'Não é possível emitir Nota de Débito para uma fatura expirada.'];
-        }
-
-        $dataEmissao = Carbon::parse($documento->data_emissao, 'Africa/Luanda');
-        $prazoMaximo = $dataEmissao->copy()->addDays(30);
-        $hoje = Carbon::now('Africa/Luanda');
-
-        if ($hoje->gt($prazoMaximo)) {
-            return [
-                'pode' => false,
-                'motivo' => "O prazo para emitir Nota de Débito é de até 30 dias após a emissão da fatura.\n" .
-                    "Prazo máximo: {$prazoMaximo->format('d/m/Y')}"
-            ];
+        $prazo = Carbon::parse($documento->data_emissao, 'Africa/Luanda')->addDays(30);
+        if (Carbon::now('Africa/Luanda')->gt($prazo)) {
+            return ['pode' => false, 'motivo' => "Prazo de 30 dias excedido (max: {$prazo->format('d/m/Y')})."];
         }
 
         return ['pode' => true];
@@ -1322,31 +1166,19 @@ class DocumentoFiscalService
 
         $agoraAngola = Carbon::now('Africa/Luanda');
 
-        if ($this->isColectivo()) {
-            $expirados = SharedDocumentoFiscal::doTenant()
-                ->where('tipo_documento', 'FA')
-                ->where('estado', 'emitido')
-                ->where('data_vencimento', '<', $agoraAngola->toDateString())
-                ->get();
-        } else {
-            $expirados = TenantDocumentoFiscal::where('tipo_documento', 'FA')
-                ->where('estado', 'emitido')
-                ->where('data_vencimento', '<', $agoraAngola->toDateString())
-                ->get();
-        }
+        $query = $this->isColectivo()
+            ? SharedDocumentoFiscal::doTenant()
+            : TenantDocumentoFiscal::query();
+
+        $expirados = $query->where('tipo_documento', 'FA')
+            ->where('estado', 'emitido')
+            ->where('data_vencimento', '<', $agoraAngola->toDateString())
+            ->get();
 
         $count = 0;
-
         foreach ($expirados as $fa) {
             $fa->update(['estado' => 'expirado']);
             $count++;
-
-            Log::info('Adiantamento expirado', [
-                'id' => $fa->id,
-                'numero' => $fa->numero_documento,
-                'data_vencimento' => $fa->data_vencimento,
-                'modo' => $this->getModo(),
-            ]);
         }
 
         return $count;
@@ -1363,56 +1195,37 @@ class DocumentoFiscalService
         $hoje = Carbon::now('Africa/Luanda');
         $inicioMes = $hoje->copy()->startOfMonth();
 
-        if ($this->isColectivo()) {
-            $query = SharedDocumentoFiscal::doTenant();
-        } else {
-            $query = TenantDocumentoFiscal::query();
-        }
+        $query = $this->isColectivo()
+            ? SharedDocumentoFiscal::doTenant()
+            : TenantDocumentoFiscal::query();
 
         $faturasPendentes = (clone $query)
-            ->where('tipo_documento', 'FT')
+            ->whereIn('tipo_documento', ['FT', 'FG'])
             ->whereIn('estado', ['emitido', 'parcialmente_paga'])
             ->with('recibos')
             ->get();
 
-        $totalPendenteCobranca = $faturasPendentes->sum(function ($fatura) {
-            return $this->calcularValorPendente($fatura);
-        });
+        $totalPendenteCobranca = $faturasPendentes->sum(fn($f) => $this->calcularValorPendente($f));
 
         return [
-            'faturas_emitidas_mes' => (clone $query)
-                ->where('tipo_documento', 'FT')
-                ->whereBetween('data_emissao', [$inicioMes->toDateString(), $hoje->toDateString()])
-                ->count(),
-
+            'faturas_emitidas_mes' => (clone $query)->whereIn('tipo_documento', ['FT', 'FG'])
+                ->whereBetween('data_emissao', [$inicioMes->toDateString(), $hoje->toDateString()])->count(),
             'faturas_pendentes' => $faturasPendentes->count(),
-
             'total_pendente_cobranca' => round($totalPendenteCobranca, 2),
-
-            'adiantamentos_pendentes_pagamento' => (clone $query)
-                ->where('tipo_documento', 'FA')
-                ->where('estado', 'emitido')
-                ->count(),
-
-            'proformas_em_aberto' => (clone $query)
-                ->where('tipo_documento', 'FP')
-                ->where('estado', 'emitido')
-                ->count(),
-
-            'documentos_cancelados_mes' => (clone $query)
-                ->where('estado', 'cancelado')
-                ->whereBetween('data_cancelamento', [$inicioMes, $hoje])
-                ->count(),
-
-            'total_vendas_mes' => (clone $query)
-                ->whereIn('tipo_documento', ['FT', 'FR', 'RC'])
-                ->whereBetween('data_emissao', [$inicioMes->toDateString(), $hoje->toDateString()])
-                ->count(),
-
-            'total_nao_vendas_mes' => (clone $query)
-                ->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FRt'])
-                ->whereBetween('data_emissao', [$inicioMes->toDateString(), $hoje->toDateString()])
-                ->count(),
+            'adiantamentos_pendentes_pagamento' => (clone $query)->where('tipo_documento', 'FA')
+                ->where('estado', 'emitido')->count(),
+            'proformas_em_aberto' => (clone $query)->where('tipo_documento', 'FP')
+                ->where('estado', 'emitido')->count(),
+            'documentos_cancelados_mes' => (clone $query)->where('estado', 'cancelado')
+                ->whereBetween('data_cancelamento', [$inicioMes, $hoje])->count(),
+            'total_vendas_mes' => (clone $query)->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'FG', 'FGR', 'TV'])
+                ->whereBetween('data_emissao', [$inicioMes->toDateString(), $hoje->toDateString()])->count(),
+            'total_nao_vendas_mes' => (clone $query)->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FRt', 'FGEN', 'AC', 'ACR'])
+                ->whereBetween('data_emissao', [$inicioMes->toDateString(), $hoje->toDateString()])->count(),
+            'auto_facturacao_mes' => (clone $query)->where('auto_faturacao', true)
+                ->whereBetween('data_emissao', [$inicioMes->toDateString(), $hoje->toDateString()])->count(),
+            'facturas_globais_mes' => (clone $query)->whereIn('tipo_documento', ['FG', 'FGR'])
+                ->whereBetween('data_emissao', [$inicioMes->toDateString(), $hoje->toDateString()])->count(),
         ];
     }
 
@@ -1420,45 +1233,29 @@ class DocumentoFiscalService
     {
         $this->verificarAcessoUsuario();
 
+        $query = $this->isColectivo()
+            ? SharedDocumentoFiscal::doTenant()
+            : TenantDocumentoFiscal::query();
+
         $evolucao = [];
-
-        if ($this->isColectivo()) {
-            $query = SharedDocumentoFiscal::doTenant();
-        } else {
-            $query = TenantDocumentoFiscal::query();
-        }
-
         for ($mes = 1; $mes <= 12; $mes++) {
-            $inicioMes = Carbon::create($ano, $mes, 1, 0, 0, 0, 'Africa/Luanda')->startOfMonth();
-            $fimMes = Carbon::create($ano, $mes, 1, 0, 0, 0, 'Africa/Luanda')->endOfMonth();
-
-            $totalVendas = (clone $query)
-                ->whereIn('tipo_documento', ['FT', 'FR', 'RC'])
-                ->whereBetween('data_emissao', [$inicioMes->toDateString(), $fimMes->toDateString()])
-                ->where('estado', '!=', 'cancelado')
-                ->sum('total_liquido');
-
-            $totalNaoVendas = (clone $query)
-                ->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FRt'])
-                ->whereBetween('data_emissao', [$inicioMes->toDateString(), $fimMes->toDateString()])
-                ->where('estado', '!=', 'cancelado')
-                ->sum('total_liquido');
-
-            $totalPendente = (clone $query)
-                ->whereIn('tipo_documento', ['FT', 'FA'])
-                ->whereIn('estado', ['emitido', 'parcialmente_paga'])
-                ->where('data_emissao', '<=', $fimMes->toDateString())
-                ->sum('total_liquido');
+            $inicio = Carbon::create($ano, $mes, 1, 0, 0, 0, 'Africa/Luanda')->startOfMonth();
+            $fim = $inicio->copy()->endOfMonth();
 
             $evolucao[] = [
                 'mes' => $mes,
                 'ano' => $ano,
-                'total_vendas' => (float) $totalVendas,
-                'total_nao_vendas' => (float) $totalNaoVendas,
-                'total_pendente' => (float) $totalPendente,
+                'total_vendas' => (float) (clone $query)->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'FG', 'FGR', 'TV'])
+                    ->whereBetween('data_emissao', [$inicio->toDateString(), $fim->toDateString()])
+                    ->where('estado', '!=', 'cancelado')->sum('total_liquido'),
+                'total_nao_vendas' => (float) (clone $query)->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FRt', 'FGEN', 'AC', 'ACR'])
+                    ->whereBetween('data_emissao', [$inicio->toDateString(), $fim->toDateString()])
+                    ->where('estado', '!=', 'cancelado')->sum('total_liquido'),
+                'total_pendente' => (float) (clone $query)->whereIn('tipo_documento', ['FT', 'FA', 'FG'])
+                    ->whereIn('estado', ['emitido', 'parcialmente_paga'])
+                    ->where('data_emissao', '<=', $fim->toDateString())->sum('total_liquido'),
             ];
         }
-
         return $evolucao;
     }
 
@@ -1470,39 +1267,29 @@ class DocumentoFiscalService
         $inicioMes = $hoje->copy()->startOfMonth();
         $inicioAno = $hoje->copy()->startOfYear();
 
-        if ($this->isColectivo()) {
-            $query = SharedDocumentoFiscal::doTenant();
-        } else {
-            $query = TenantDocumentoFiscal::query();
-        }
+        $query = $this->isColectivo()
+            ? SharedDocumentoFiscal::doTenant()
+            : TenantDocumentoFiscal::query();
 
-        $porMetodo = (clone $query)
-            ->whereIn('tipo_documento', ['RC', 'FR'])
+        $porMetodo = (clone $query)->whereIn('tipo_documento', ['RC', 'FR', 'FGR', 'TV', 'ACR'])
             ->where('estado', '!=', 'cancelado')
             ->whereBetween('data_emissao', [$inicioMes->toDateString(), $hoje->toDateString()])
-            ->select(
-                'metodo_pagamento',
-                DB::raw('COUNT(*) as quantidade'),
-                DB::raw('SUM(total_liquido) as total')
-            )
+            ->select('metodo_pagamento', DB::raw('COUNT(*) as quantidade'), DB::raw('SUM(total_liquido) as total'))
             ->groupBy('metodo_pagamento')
             ->get()
-            ->mapWithKeys(function ($item) {
-                $metodo = $item->metodo_pagamento ?? 'nao_informado';
-                return [$metodo => [
+            ->mapWithKeys(fn($item) => [
+                $item->metodo_pagamento ?? 'nao_informado' => [
                     'quantidade' => $item->quantidade,
                     'total' => (float) $item->total,
-                ]];
-            });
+                ],
+            ]);
 
-        $totalPagoMes = (clone $query)
-            ->whereIn('tipo_documento', ['RC', 'FR'])
+        $totalPagoMes = (clone $query)->whereIn('tipo_documento', ['RC', 'FR', 'FGR', 'TV', 'ACR'])
             ->where('estado', '!=', 'cancelado')
             ->whereBetween('data_emissao', [$inicioMes->toDateString(), $hoje->toDateString()])
             ->sum('total_liquido');
 
-        $totalPagoAno = (clone $query)
-            ->whereIn('tipo_documento', ['RC', 'FR'])
+        $totalPagoAno = (clone $query)->whereIn('tipo_documento', ['RC', 'FR', 'FGR', 'TV', 'ACR'])
             ->where('estado', '!=', 'cancelado')
             ->whereBetween('data_emissao', [$inicioAno->toDateString(), $hoje->toDateString()])
             ->sum('total_liquido');
@@ -1521,113 +1308,55 @@ class DocumentoFiscalService
 
         $hoje = Carbon::now('Africa/Luanda');
 
-        if ($this->isColectivo()) {
-            $query = SharedDocumentoFiscal::doTenant();
-        } else {
-            $query = TenantDocumentoFiscal::query();
-        }
-
-        $adiantamentosVencidos = (clone $query)
-            ->where('tipo_documento', 'FA')
-            ->where('estado', 'emitido')
-            ->whereNotNull('data_vencimento')
-            ->where('data_vencimento', '<', $hoje->toDateString())
-            ->with('cliente')
-            ->orderBy('data_vencimento')
-            ->limit(10)
-            ->get();
-
-        $faturasComAdiantamentosPendentes = (clone $query)
-            ->where('tipo_documento', 'FT')
-            ->whereIn('estado', ['emitido', 'parcialmente_paga'])
-            ->whereHas('faturasAdiantamento', function ($q) {
-                $q->whereIn('estado', ['emitido', 'parcialmente_paga']);
-            })
-            ->with(['cliente', 'faturasAdiantamento' => function ($q) {
-                $q->whereIn('estado', ['emitido', 'parcialmente_paga']);
-            }])
-            ->orderByDesc('data_emissao')
-            ->limit(10)
-            ->get();
-
-        $proformasEmAberto = (clone $query)
-            ->where('tipo_documento', 'FP')
-            ->where('estado', 'emitido')
-            ->where('data_emissao', '<', $hoje->copy()->subDays(7)->toDateString())
-            ->with('cliente')
-            ->orderBy('data_emissao')
-            ->limit(10)
-            ->get();
-
-        $faturasVencidas = (clone $query)
-            ->where('tipo_documento', 'FT')
-            ->whereIn('estado', ['emitido', 'parcialmente_paga'])
-            ->whereNotNull('data_vencimento')
-            ->where('data_vencimento', '<', $hoje->toDateString())
-            ->with('cliente')
-            ->orderBy('data_vencimento')
-            ->limit(10)
-            ->get();
+        $query = $this->isColectivo()
+            ? SharedDocumentoFiscal::doTenant()
+            : TenantDocumentoFiscal::query();
 
         return [
             'adiantamentos_vencidos' => [
-                'total' => (clone $query)
-                    ->where('tipo_documento', 'FA')
-                    ->where('estado', 'emitido')
-                    ->whereNotNull('data_vencimento')
-                    ->where('data_vencimento', '<', $hoje->toDateString())
-                    ->count(),
-                'items' => $adiantamentosVencidos,
+                'total' => (clone $query)->where('tipo_documento', 'FA')->where('estado', 'emitido')
+                    ->whereNotNull('data_vencimento')->where('data_vencimento', '<', $hoje->toDateString())->count(),
+                'items' => (clone $query)->where('tipo_documento', 'FA')->where('estado', 'emitido')
+                    ->whereNotNull('data_vencimento')->where('data_vencimento', '<', $hoje->toDateString())
+                    ->with('cliente')->orderBy('data_vencimento')->limit(10)->get(),
             ],
-
             'faturas_com_adiantamentos_pendentes' => [
-                'total' => (clone $query)
-                    ->where('tipo_documento', 'FT')
+                'total' => (clone $query)->where('tipo_documento', 'FT')
                     ->whereIn('estado', ['emitido', 'parcialmente_paga'])
-                    ->whereHas('faturasAdiantamento', function ($q) {
-                        $q->whereIn('estado', ['emitido', 'parcialmente_paga']);
-                    })
-                    ->count(),
-                'items' => $faturasComAdiantamentosPendentes,
+                    ->whereHas('faturasAdiantamento', fn($q) => $q->whereIn('estado', ['emitido', 'parcialmente_paga']))->count(),
+                'items' => (clone $query)->where('tipo_documento', 'FT')
+                    ->whereIn('estado', ['emitido', 'parcialmente_paga'])
+                    ->whereHas('faturasAdiantamento', fn($q) => $q->whereIn('estado', ['emitido', 'parcialmente_paga']))
+                    ->with(['cliente', 'faturasAdiantamento'])->orderByDesc('data_emissao')->limit(10)->get(),
             ],
-
             'proformas_em_aberto' => [
-                'total' => (clone $query)
-                    ->where('tipo_documento', 'FP')
-                    ->where('estado', 'emitido')
+                'total' => (clone $query)->where('tipo_documento', 'FP')->where('estado', 'emitido')
+                    ->where('data_emissao', '<', $hoje->copy()->subDays(7)->toDateString())->count(),
+                'items' => (clone $query)->where('tipo_documento', 'FP')->where('estado', 'emitido')
                     ->where('data_emissao', '<', $hoje->copy()->subDays(7)->toDateString())
-                    ->count(),
-                'items' => $proformasEmAberto,
+                    ->with('cliente')->orderBy('data_emissao')->limit(10)->get(),
             ],
-
             'faturas_vencidas' => [
-                'total' => (clone $query)
-                    ->where('tipo_documento', 'FT')
+                'total' => (clone $query)->whereIn('tipo_documento', ['FT', 'FG'])
                     ->whereIn('estado', ['emitido', 'parcialmente_paga'])
-                    ->whereNotNull('data_vencimento')
-                    ->where('data_vencimento', '<', $hoje->toDateString())
-                    ->count(),
-                'items' => $faturasVencidas,
+                    ->whereNotNull('data_vencimento')->where('data_vencimento', '<', $hoje->toDateString())->count(),
+                'items' => (clone $query)->whereIn('tipo_documento', ['FT', 'FG'])
+                    ->whereIn('estado', ['emitido', 'parcialmente_paga'])
+                    ->whereNotNull('data_vencimento')->where('data_vencimento', '<', $hoje->toDateString())
+                    ->with('cliente')->orderBy('data_vencimento')->limit(10)->get(),
             ],
         ];
     }
 
     /* =====================================================================
-     | EXPORTAÇÃO — PDF e Excel
+     | PDF / EXCEL
      | ================================================================== */
 
     public function dadosParaPdf($documento): array
     {
         $this->verificarAcessoUsuario();
 
-        $documento->loadMissing([
-            'itens.produto',
-            'cliente',
-            'documentoOrigem',
-            'recibos',
-            'user',
-        ]);
-
+        $documento->loadMissing(['itens.produto', 'cliente', 'documentoOrigem', 'recibos', 'user', 'anexos']);
         $empresa = $this->obterEmpresa();
 
         return [
@@ -1638,10 +1367,12 @@ class DocumentoFiscalService
                 'telefone' => $empresa->telefone,
                 'email' => $empresa->email,
                 'logo' => $empresa->logo,
+                'regime_fiscal' => $empresa->regime_fiscal,
                 'certificado_agt' => $empresa->software_validation_number ?? null,
             ],
             'documento' => $documento,
             'itens' => $documento->itens,
+            'anexos' => $documento->anexos,
             'cliente' => [
                 'nome' => $documento->cliente_nome ?? $documento->cliente?->nome ?? 'Consumidor Final',
                 'nif' => $documento->cliente_nif ?? $documento->cliente?->nif ?? '',
@@ -1654,11 +1385,9 @@ class DocumentoFiscalService
     {
         $this->verificarAcessoUsuario();
 
-        if ($this->isColectivo()) {
-            $query = SharedDocumentoFiscal::doTenant()->with('cliente', 'itens');
-        } else {
-            $query = TenantDocumentoFiscal::with('cliente', 'itens');
-        }
+        $query = $this->isColectivo()
+            ? SharedDocumentoFiscal::doTenant()->with('cliente', 'itens')
+            : TenantDocumentoFiscal::with('cliente', 'itens');
 
         $documentos = (clone $query)
             ->when(!empty($filtros['tipo']), fn($q) => $q->where('tipo_documento', $filtros['tipo']))
@@ -1666,11 +1395,10 @@ class DocumentoFiscalService
             ->when(!empty($filtros['cliente_id']), fn($q) => $q->where('cliente_id', $filtros['cliente_id']))
             ->when(!empty($filtros['data_inicio']), fn($q) => $q->whereDate('data_emissao', '>=', $filtros['data_inicio']))
             ->when(!empty($filtros['data_fim']), fn($q) => $q->whereDate('data_emissao', '<=', $filtros['data_fim']))
-            ->when(!empty($filtros['apenas_vendas']), fn($q) => $q->whereIn('tipo_documento', ['FT', 'FR', 'RC']))
-            ->when(!empty($filtros['apenas_nao_vendas']), fn($q) => $q->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FRt']))
-            ->orderBy('data_emissao', 'desc')
-            ->orderBy('hora_emissao', 'desc')
-            ->orderBy('numero', 'desc')
+            ->when(!empty($filtros['apenas_vendas']), fn($q) => $q->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'FG', 'FGR', 'TV']))
+            ->when(!empty($filtros['apenas_nao_vendas']), fn($q) => $q->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FRt', 'FGEN', 'AC', 'ACR']))
+            ->when(!empty($filtros['apenas_auto_facturacao']), fn($q) => $q->where('auto_faturacao', true))
+            ->orderBy('data_emissao', 'desc')->orderBy('hora_emissao', 'desc')->orderBy('numero', 'desc')
             ->get();
 
         $cabecalho = [
@@ -1687,37 +1415,33 @@ class DocumentoFiscalService
             'Estado',
             'Método Pagamento',
             'Vencimento',
+            'Auto-Facturação',
             'Hash Fiscal',
         ];
 
-        $linhas = $documentos->map(function ($doc) {
-            return [
-                $doc->numero_documento,
-                $doc->tipo_documento_nome ?? $doc->tipo_documento,
-                $doc->data_emissao ? date('d/m/Y', strtotime($doc->data_emissao)) : '',
-                $doc->hora_emissao ?? '',
-                $doc->cliente_nome ?? $doc->cliente?->nome ?? 'Consumidor Final',
-                $doc->cliente_nif ?? $doc->cliente?->nif ?? '',
-                number_format((float) $doc->base_tributavel, 2, ',', '.'),
-                number_format((float) $doc->total_iva, 2, ',', '.'),
-                number_format((float) $doc->total_retencao, 2, ',', '.'),
-                number_format((float) $doc->total_liquido, 2, ',', '.'),
-                $doc->estado,
-                $doc->metodo_pagamento ?? '—',
-                $doc->data_vencimento ? date('d/m/Y', strtotime($doc->data_vencimento)) : '—',
-                $doc->hash_fiscal ?? '—',
-            ];
-        })->toArray();
+        $linhas = $documentos->map(fn($doc) => [
+            $doc->numero_documento,
+            $doc->tipo_documento_nome ?? $doc->tipo_documento,
+            $doc->data_emissao ? date('d/m/Y', strtotime($doc->data_emissao)) : '',
+            $doc->hora_emissao ?? '',
+            $doc->cliente_nome ?? $doc->cliente?->nome ?? 'Consumidor Final',
+            $doc->cliente_nif ?? $doc->cliente?->nif ?? '',
+            number_format((float) $doc->base_tributavel, 2, ',', '.'),
+            number_format((float) $doc->total_iva, 2, ',', '.'),
+            number_format((float) $doc->total_retencao, 2, ',', '.'),
+            number_format((float) $doc->total_liquido, 2, ',', '.'),
+            $doc->estado,
+            $doc->metodo_pagamento ?? '—',
+            $doc->data_vencimento ? date('d/m/Y', strtotime($doc->data_vencimento)) : '—',
+            $doc->auto_faturacao ? 'SIM' : 'NÃO',
+            $doc->hash_fiscal ?? '—',
+        ])->toArray();
 
-        return [
-            'cabecalho' => $cabecalho,
-            'linhas' => $linhas,
-            'documentos' => $documentos,
-        ];
+        return ['cabecalho' => $cabecalho, 'linhas' => $linhas, 'documentos' => $documentos];
     }
 
     /* =====================================================================
-     | MÉTODOS PRIVADOS — ASSINATURA RSA (AGT)
+     | ASSINATURA RSA (AGT)
      | ================================================================== */
 
     private function assinarDocumento($documento): void
@@ -1727,38 +1451,25 @@ class DocumentoFiscalService
         $numeroCertificado = config('agt.numero_certificado', '');
 
         if (!$chavePrivadaPath || !file_exists($chavePrivadaPath)) {
-            Log::error('[AGT] Chave privada RSA não encontrada', [
-                'path' => $chavePrivadaPath,
-            ]);
-            throw new \RuntimeException(
-                'Chave privada RSA para assinatura AGT não configurada.'
-            );
+            throw new \RuntimeException('Chave privada RSA para assinatura AGT não configurada.');
         }
 
         $chavePrivada = openssl_pkey_get_private(file_get_contents($chavePrivadaPath));
-
         if (!$chavePrivada) {
-            throw new \RuntimeException('Erro ao carregar chave privada RSA: ' . openssl_error_string());
+            throw new \RuntimeException('Erro ao carregar chave RSA: ' . openssl_error_string());
         }
 
         $hashAnterior = '0';
+        $queryHash = $this->isColectivo()
+            ? SharedDocumentoFiscal::doTenant()
+            : TenantDocumentoFiscal::query();
 
-        if ($this->isColectivo()) {
-            $hashAnterior = SharedDocumentoFiscal::doTenant()
-                ->where('serie', $documento->serie)
-                ->where('tipo_documento', $documento->tipo_documento)
-                ->where('numero', '<', $documento->numero)
-                ->whereNotNull('hash_fiscal')
-                ->orderByDesc('numero')
-                ->value('hash_fiscal') ?? '0';
-        } else {
-            $hashAnterior = TenantDocumentoFiscal::where('serie', $documento->serie)
-                ->where('tipo_documento', $documento->tipo_documento)
-                ->where('numero', '<', $documento->numero)
-                ->whereNotNull('hash_fiscal')
-                ->orderByDesc('numero')
-                ->value('hash_fiscal') ?? '0';
-        }
+        $hashAnterior = $queryHash->where('serie', $documento->serie)
+            ->where('tipo_documento', $documento->tipo_documento)
+            ->where('numero', '<', $documento->numero)
+            ->whereNotNull('hash_fiscal')
+            ->orderByDesc('numero')
+            ->value('hash_fiscal') ?? '0';
 
         $dadosAssinatura = implode(';', [
             $documento->data_emissao,
@@ -1769,37 +1480,26 @@ class DocumentoFiscalService
         ]);
 
         $assinatura = '';
-        $resultado = openssl_sign($dadosAssinatura, $assinatura, $chavePrivada, OPENSSL_ALGO_SHA256);
-
-        if (!$resultado) {
-            throw new \RuntimeException('Erro ao gerar assinatura RSA: ' . openssl_error_string());
+        if (!openssl_sign($dadosAssinatura, $assinatura, $chavePrivada, OPENSSL_ALGO_SHA256)) {
+            throw new \RuntimeException('Erro ao gerar assinatura: ' . openssl_error_string());
         }
 
         $hashFiscal = hash('sha256', $dadosAssinatura);
-        $qrCodeConteudo = $this->gerarConteudoQrCode($documento, $hashFiscal, $numeroCertificado);
+        $qrCode = $this->gerarConteudoQrCode($documento, $hashFiscal, $numeroCertificado);
 
         $documento->update([
             'hash_fiscal' => $hashFiscal,
             'rsa_assinatura' => base64_encode($assinatura),
             'rsa_versao_chave' => $versaoChave,
             'hash_anterior' => $hashAnterior,
-            'qr_code' => $qrCodeConteudo,
-        ]);
-
-        Log::info('[AGT] Documento assinado com sucesso', [
-            'documento_id' => $documento->id,
-            'numero' => $documento->numero_documento,
-            'rsa_versao_chave' => $versaoChave,
+            'qr_code' => $qrCode,
         ]);
     }
 
     private function gerarConteudoQrCode($documento, string $hashFiscal, string $numeroCertificado): string
     {
         $empresa = $this->obterEmpresa();
-        $nifCliente = $documento->cliente?->nif
-            ?? $documento->cliente_nif
-            ?? 'CF';
-
+        $nifCliente = $documento->cliente?->nif ?? $documento->cliente_nif ?? 'CF';
         $hash4 = strtoupper(substr($hashFiscal, 0, 4));
 
         return implode('*', [
@@ -1824,15 +1524,19 @@ class DocumentoFiscalService
             $documento->cliente_id ?? $documento->cliente_nome ?? 'CF',
             config('app.key'),
         ]);
-
         return hash('sha256', $dados);
     }
 
     /* =====================================================================
-     | MÉTODOS PRIVADOS — PROCESSAMENTO DE ITENS
+     | PROCESSAMENTO DE ITENS
      | ================================================================== */
 
-    private function processarItens(array $itens, bool $aplicaIva, string $regime): array
+    private function processarItens(
+        array $itens,
+        bool $aplicaIva,
+        string $regime,
+        ?float $taxaRetencaoAuto = null
+    ): array
     {
         $totalBase = 0.0;
         $totalIva = 0.0;
@@ -1840,9 +1544,7 @@ class DocumentoFiscalService
         $itensProcessados = [];
 
         foreach ($itens as $item) {
-            $produto = !empty($item['produto_id'])
-                ? $this->buscarProduto($item['produto_id'])
-                : null;
+            $produto = !empty($item['produto_id']) ? $this->buscarProduto($item['produto_id']) : null;
 
             $quantidade = (float) ($item['quantidade'] ?? 1);
             $precoUnitario = (float) ($item['preco_venda'] ?? $item['preco_unitario'] ?? 0);
@@ -1850,11 +1552,9 @@ class DocumentoFiscalService
             $taxaDesconto = (float) ($item['taxa_desconto'] ?? 0);
 
             $valorBruto = $quantidade * $precoUnitario;
-
             if ($taxaDesconto > 0) {
                 $desconto += $valorBruto * $taxaDesconto / 100;
             }
-
             $desconto = min($desconto, $valorBruto);
             $baseTributavel = max($valorBruto - $desconto, 0.0);
 
@@ -1865,8 +1565,7 @@ class DocumentoFiscalService
             if ($aplicaIva) {
                 if ($regime === 'geral') {
                     $taxaIva = (float) ($item['taxa_iva'] ?? $produto?->taxa_iva ?? $this->taxaIvaVigente());
-
-                    if ($taxaIva === 0.0 || $taxaIva === self::IVA_ZERO) {
+                    if ($taxaIva === 0.0) {
                         $codigoIsencao = $item['codigo_isencao'] ?? $produto?->codigo_isencao ?? 'M00';
                         $motivoIsencao = self::MOTIVOS_ISENCAO[$codigoIsencao] ?? 'Isento';
                     }
@@ -1884,16 +1583,12 @@ class DocumentoFiscalService
 
             $valorRetencao = 0.0;
             $taxaRetencaoUsada = 0.0;
-
             $isProdutoServico = $produto && $produto->tipo === 'servico';
-            $temRetencao = $isProdutoServico && $aplicaIva;
-
-            if ($temRetencao) {
-                $taxaRetencaoUsada = (float) (
-                    $item['taxa_retencao']
-                    ?? $produto?->taxa_retencao
-                    ?? 6.5
-                );
+            if ($taxaRetencaoAuto !== null) {
+                $taxaRetencaoUsada = $taxaRetencaoAuto;
+                $valorRetencao = round($baseTributavel * $taxaRetencaoUsada / 100, 2);
+            } elseif ($isProdutoServico && $aplicaIva) {
+                $taxaRetencaoUsada = (float) ($item['taxa_retencao'] ?? $produto?->taxa_retencao ?? 6.5);
                 $valorRetencao = round($baseTributavel * $taxaRetencaoUsada / 100, 2);
             }
 
@@ -1927,15 +1622,6 @@ class DocumentoFiscalService
         $totalRetencao = round($totalRetencao, 2);
         $totalLiquido = round($totalBase + $totalIva - $totalRetencao, 2);
 
-        $somaLinhas = round(array_sum(array_column($itensProcessados, 'total_linha')), 2);
-        if (abs($somaLinhas - $totalLiquido) > 0.01) {
-            Log::warning('[AGT] Diferença de arredondamento ajustada', [
-                'soma_linhas' => $somaLinhas,
-                'total_calculado' => $totalLiquido,
-            ]);
-            $totalLiquido = $somaLinhas;
-        }
-
         return [
             'base' => $totalBase,
             'iva' => $totalIva,
@@ -1947,142 +1633,96 @@ class DocumentoFiscalService
 
     private function buscarProduto(string $produtoId)
     {
-        if ($this->isColectivo()) {
-            return SharedProduto::doTenant()->where('id', $produtoId)->first();
-        }
-        return TenantProduto::where('id', $produtoId)->first();
+        return $this->isColectivo()
+            ? SharedProduto::doTenant()->where('id', $produtoId)->first()
+            : TenantProduto::where('id', $produtoId)->first();
     }
 
     /* =====================================================================
-     | MÉTODOS PRIVADOS — NUMERAÇÃO  
+     | NUMERAÇÃO (com suporte a auto-facturação)
      | ================================================================== */
 
-    /**
-     * Gera um novo número de documento fiscal no formato angolano
-     *
-     * FORMATO: {TIPO} {SERIE}/{ANO}/{NUMERO}
-     * Exemplo: FT FT/2026/0001
-     */
-    private function gerarNumeroDocumento(string $tipo): array
+    private function gerarNumeroDocumento(string $tipo, bool $autoFaturacao = false): array
     {
-        // 1️⃣ OBTER SÉRIE FISCAL ATIVA
-        $serieFiscal = $this->obterSerieFiscal($tipo);
+        $serieFiscal = $this->obterSerieFiscal($tipo, $autoFaturacao);
 
-        // 2️⃣ GARANTIR QUE É UM OBJETO VÁLIDO
         if (!$serieFiscal || !isset($serieFiscal->serie)) {
-            Log::error('[DocumentoFiscalService] Série fiscal não encontrada para o tipo', ['tipo' => $tipo]);
-            throw new \RuntimeException("Série fiscal não configurada para o tipo {$tipo}. Contacte o administrador.");
+            throw new \RuntimeException("Série fiscal não configurada para o tipo {$tipo}.");
         }
 
-        // 3️⃣ LOCK PARA EVITAR CONFLITOS
         if (isset($serieFiscal->id) && $serieFiscal->id) {
+            $conn = $this->isColectivo() ? 'shared' : 'tenant';
+            $q = DB::connection($conn)->table('series_fiscais')->where('id', $serieFiscal->id);
             if ($this->isColectivo()) {
-                DB::table('series_fiscais')
-                    ->where('id', $serieFiscal->id)
-                    ->where('tenant_id', $this->empresa->id)
-                    ->lockForUpdate()
-                    ->first();
-            } else {
-                DB::table('series_fiscais')
-                    ->where('id', $serieFiscal->id)
-                    ->lockForUpdate()
-                    ->first();
+                $q->where('tenant_id', $this->empresa->id);
             }
+            $q->lockForUpdate()->first();
         }
 
-        // 4️⃣ DETERMINAR O ANO
         $ano = $serieFiscal->ano ?? now()->year;
-
-        // 5️⃣ BUSCAR ÚLTIMO NÚMERO REAL PARA O ANO
         $ultimoNumeroReal = $this->buscarUltimoNumeroPorAno($tipo, $serieFiscal->serie, $ano);
+        $numero = max($serieFiscal->ultimo_numero ?? 0, $ultimoNumeroReal ?? 0) + 1;
 
-        // 6️⃣ CALCULAR PRÓXIMO NÚMERO
-        $numeroBase = max($serieFiscal->ultimo_numero ?? 0, $ultimoNumeroReal ?? 0);
-        $numero = $numeroBase + 1;
-
-        // 7️⃣ GERAR NÚMERO DO DOCUMENTO NO FORMATO ANGOLANO
         $digitos = $serieFiscal->digitos ?? 4;
-        $numeroComPadding = str_pad($numero, $digitos, '0', STR_PAD_LEFT);
-        $numeroDocumento = $tipo . ' ' . $serieFiscal->serie . '/' . $ano . '/' . $numeroComPadding;
+        $numeroDoc = $tipo . ' ' . $serieFiscal->serie . '/' . $ano . '/' . str_pad($numero, $digitos, '0', STR_PAD_LEFT);
 
-        // 8️⃣ VERIFICAR SE NÚMERO JÁ EXISTE (SEGURANÇA)
         $tentativas = 0;
-        while ($this->numeroDocumentoExiste($tipo, $numeroDocumento) && $tentativas < 100) {
+        while ($this->numeroDocumentoExiste($tipo, $numeroDoc) && $tentativas < 100) {
             $tentativas++;
             $numero++;
-            $numeroComPadding = str_pad($numero, $digitos, '0', STR_PAD_LEFT);
-            $numeroDocumento = $tipo . ' ' . $serieFiscal->serie . '/' . $ano . '/' . $numeroComPadding;
+            $numeroDoc = $tipo . ' ' . $serieFiscal->serie . '/' . $ano . '/' . str_pad($numero, $digitos, '0', STR_PAD_LEFT);
         }
 
         if ($tentativas >= 100) {
-            throw new \RuntimeException(
-                "Não foi possível gerar número único para {$tipo} após 100 tentativas."
-            );
+            throw new \RuntimeException("Não foi possível gerar número único para {$tipo}.");
         }
 
-        // 9️⃣ ATUALIZAR O NÚMERO DA SÉRIE
         if (isset($serieFiscal->id) && $serieFiscal->id) {
-            $serieFiscal->update([
-                'ultimo_numero' => $numero,
-                'ano' => $ano,
-            ]);
+            $serieFiscal->update(['ultimo_numero' => $numero, 'ano' => $ano]);
         }
 
-        Log::info('[DocumentoFiscalService] Número de documento gerado', [
-            'tipo' => $tipo,
-            'numero_documento' => $numeroDocumento,
-            'serie' => $serieFiscal->serie,
-            'ano' => $ano,
-            'numero' => $numero,
-            'modo' => $this->getModo(),
-        ]);
-
-        return [$numero, $numeroDocumento, $serieFiscal];
+        return [$numero, $numeroDoc, $serieFiscal];
     }
 
-    /**
-     * Obtém a série fiscal ativa para um tipo de documento.
-     * Se não existir, cria automaticamente com base no mapa fixo.
-     */
-    private function obterSerieFiscal(string $tipo): object
+    private function obterSerieFiscal(string $tipo, bool $autoFaturacao = false): object
     {
         $model = $this->serieFiscalModel();
-
         $query = $model->where('tipo_documento', $tipo)
             ->where('ativa', true)
-            ->where(function ($q) {
-                $q->whereNull('ano')->orWhere('ano', now()->year);
-            })
+            ->where(fn($q) => $q->whereNull('ano')->orWhere('ano', now()->year))
             ->orderByDesc('padrao');
 
+        if ($this->colunaExiste('series_fiscais', 'auto_faturacao')) {
+            $query->where('auto_faturacao', $autoFaturacao);
+        }
+
         if ($this->isColectivo() && $this->colunaExiste('series_fiscais', 'tenant_id')) {
-            $query = $query->where('tenant_id', $this->empresa->id);
+            $query->where('tenant_id', $this->empresa->id);
         }
 
         $serie = $query->first();
 
         if (!$serie) {
-            // Mapa de séries fixas por tipo
             $seriesPadrao = [
-                'FT'  => 'FT',
-                'FR'  => 'FR',
-                'FP'  => 'FP',
-                'FA'  => 'FA',
-                'NC'  => 'NC',
-                'ND'  => 'ND',
-                'RC'  => 'RC',
+                'FT' => 'A',
+                'FR' => 'A',
+                'FP' => 'P',
+                'FA' => 'AD',
+                'NC' => 'C',
+                'ND' => 'D',
+                'RC' => 'R',
                 'FRt' => 'FRT',
+                'FG' => 'G',
+                'FGR' => 'GR',
+                'TV' => 'T',
+                'FGEN' => 'GF',
+                'AC' => 'AC',
+                'ACR' => 'AR',
             ];
 
-            $serieNome = $seriesPadrao[$tipo] ?? 'GERAL';
+            $serieNome = $autoFaturacao ? 'AF' : ($seriesPadrao[$tipo] ?? 'GERAL');
 
-            Log::warning('[DocumentoFiscalService] Nenhuma série fiscal ativa, criando padrão', [
-                'tipo' => $tipo,
-                'serie' => $serieNome,
-                'modo' => $this->getModo(),
-            ]);
-
-            $dadosSerie = [
+            $dados = [
                 'id' => Str::uuid(),
                 'tipo_documento' => $tipo,
                 'serie' => $serieNome,
@@ -2091,65 +1731,45 @@ class DocumentoFiscalService
                 'ativa' => true,
                 'padrao' => true,
                 'ano' => now()->year,
-                'valida_agt' => !in_array($tipo, ['FP', 'RC']),
+                'valida_agt' => !in_array($tipo, ['FP', 'RC'], true),
             ];
 
+            if ($this->colunaExiste('series_fiscais', 'auto_faturacao')) {
+                $dados['auto_faturacao'] = $autoFaturacao;
+            }
             if ($this->isColectivo() && $this->colunaExiste('series_fiscais', 'tenant_id')) {
-                $dadosSerie['tenant_id'] = $this->empresa->id;
+                $dados['tenant_id'] = $this->empresa->id;
             }
 
-            $serie = $model->create($dadosSerie);
-
-            Log::info('[DocumentoFiscalService] Série fiscal criada automaticamente', [
-                'tipo' => $tipo,
-                'serie' => $serie->serie,
-                'id' => $serie->id,
-                'modo' => $this->getModo(),
-            ]);
+            $serie = $model->create($dados);
         }
 
         return $serie;
     }
 
-    /**
-     * Busca o último número real utilizado para um ano específico
-     */
     private function buscarUltimoNumeroPorAno(string $tipo, string $serie, int $ano): int
     {
-        if ($this->isColectivo()) {
-            $doc = SharedDocumentoFiscal::doTenant()
-                ->where('tipo_documento', $tipo)
-                ->where('numero_documento', 'like', $tipo . ' ' . $serie . '/' . $ano . '/%')
-                ->orderBy('numero', 'desc')
-                ->first();
-        } else {
-            $doc = TenantDocumentoFiscal::where('tipo_documento', $tipo)
-                ->where('numero_documento', 'like', $tipo . ' ' . $serie . '/' . $ano . '/%')
-                ->orderBy('numero', 'desc')
-                ->first();
-        }
+        $query = $this->isColectivo()
+            ? SharedDocumentoFiscal::doTenant()
+            : TenantDocumentoFiscal::query();
+
+        $doc = $query->where('tipo_documento', $tipo)
+            ->where('numero_documento', 'like', $tipo . ' ' . $serie . '/' . $ano . '/%')
+            ->orderBy('numero', 'desc')
+            ->first();
 
         return $doc ? (int) $doc->numero : 0;
     }
 
-    /**
-     * Verifica se o número do documento já existe
-     */
-    private function numeroDocumentoExiste(string $tipo, string $numeroDocumento): bool
+    private function numeroDocumentoExiste(string $tipo, string $numeroDoc): bool
     {
-        if ($this->isColectivo()) {
-            return SharedDocumentoFiscal::doTenant()
-                ->where('numero_documento', $numeroDocumento)
-                ->exists();
-        }
+        $query = $this->isColectivo()
+            ? SharedDocumentoFiscal::doTenant()
+            : TenantDocumentoFiscal::query();
 
-        return TenantDocumentoFiscal::where('numero_documento', $numeroDocumento)
-            ->exists();
+        return $query->where('numero_documento', $numeroDoc)->exists();
     }
 
-    /**
-     * Verifica se uma coluna existe numa tabela
-     */
     private function colunaExiste(string $tabela, string $coluna): bool
     {
         try {
@@ -2161,24 +1781,17 @@ class DocumentoFiscalService
     }
 
     /* =====================================================================
-     | MÉTODOS PRIVADOS — SÉRIES PADRÃO
+     | SÉRIES PADRÃO
      | ================================================================== */
 
-    /**
-     * Cria séries fiscais padrão se não existirem.
-     * Séries curtas seguindo a prática AGT:
-     *   FT=A, FR=A, FP=P, FA=AD, NC=C, ND=D, RC=R
-     * Idempotente + à prova de race condition (multi-tenant).
-     */
     private function criarSeriesPadrao(): void
     {
         $tenantId = $this->empresa?->id;
         $modo = $this->getModo();
         $ano = now()->year;
 
-        $tipos = ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC'];
+        $tipos = ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC', 'FG', 'FGR', 'TV'];
 
-        //  SÉRIES CURTAS (prática AGT)
         $seriesMap = [
             'FT' => 'A',
             'FR' => 'A',
@@ -2187,88 +1800,95 @@ class DocumentoFiscalService
             'NC' => 'C',
             'ND' => 'D',
             'RC' => 'R',
+            'FG' => 'G',
+            'FGR' => 'GR',
+            'TV' => 'T',
         ];
 
-        $temTenantId = $this->isColectivo()
-            && $tenantId
-            && $this->colunaExiste('series_fiscais', 'tenant_id');
+        $temTenantId = $this->isColectivo() && $tenantId && $this->colunaExiste('series_fiscais', 'tenant_id');
+        $temAutoFact = $this->colunaExiste('series_fiscais', 'auto_faturacao');
 
         foreach ($tipos as $tipo) {
             $serieNome = $seriesMap[$tipo];
 
-            // 1️⃣ Chave lógica
-            $chave = [
-                'tipo_documento' => $tipo,
-                'serie'          => $serieNome,
-                'ano'            => $ano,
-            ];
-            if ($temTenantId) {
-                $chave['tenant_id'] = $tenantId;
-            }
+            $chave = ['tipo_documento' => $tipo, 'serie' => $serieNome, 'ano' => $ano];
+            if ($temTenantId) $chave['tenant_id'] = $tenantId;
+            if ($temAutoFact) $chave['auto_faturacao'] = false;
 
-            // 2️⃣ Desativar séries antigas (nomes antigos) do MESMO tenant
-            $queryAntiga = $this->serieFiscalModel()
-                ->where('tipo_documento', $tipo)
-                ->where('ano', $ano)
-                ->where('serie', '!=', $serieNome);
+            // Desativar séries antigas com nomes diferentes
+            $q = $this->serieFiscalModel()->where('tipo_documento', $tipo)
+                ->where('ano', $ano)->where('serie', '!=', $serieNome);
+            if ($temTenantId) $q->where('tenant_id', $tenantId);
+            if ($temAutoFact) $q->where('auto_faturacao', false);
 
-            if ($temTenantId) {
-                $queryAntiga = $queryAntiga->where('tenant_id', $tenantId);
-            }
-
-            $seriesAntigas = $queryAntiga->get();
-
-            foreach ($seriesAntigas as $antiga) {
+            foreach ($q->get() as $antiga) {
                 if ($antiga->ativa || $antiga->padrao) {
-                    Log::warning('[DocumentoFiscalService] Desativando série antiga', [
-                        'tipo'         => $tipo,
-                        'serie_antiga' => $antiga->serie,
-                        'serie_nova'   => $serieNome,
-                        'tenant_id'    => $tenantId,
-                        'modo'         => $modo,
-                    ]);
-
-                    $antiga->update([
-                        'ativa'  => false,
-                        'padrao' => false,
-                    ]);
+                    $antiga->update(['ativa' => false, 'padrao' => false]);
                 }
             }
 
-            // 3️⃣ Idempotente + à prova de race condition
             try {
-                $this->serieFiscalModel()->firstOrCreate(
-                    $chave,
-                    [
-                        'id'            => (string) Str::uuid(),
-                        'descricao'     => "Série padrão — " . $this->getTipoDocumentoNome($tipo),
-                        'digitos'       => 4,
-                        'ultimo_numero' => 0,
-                        'ativa'         => true,
-                        'padrao'        => true,
-                        'valida_agt'    => !in_array($tipo, ['FP', 'RC']),
-                    ]
-                );
+                $this->serieFiscalModel()->firstOrCreate($chave, [
+                    'id' => (string) Str::uuid(),
+                    'descricao' => "Série padrão — " . $this->getTipoDocumentoNome($tipo),
+                    'digitos' => 4,
+                    'ultimo_numero' => 0,
+                    'ativa' => true,
+                    'padrao' => true,
+                    'valida_agt' => !in_array($tipo, ['FP', 'RC'], true),
+                ]);
             } catch (\Illuminate\Database\QueryException $e) {
-                if ($e->getCode() === '23000') {
-                    Log::info('[DocumentoFiscalService] Série já criada por outro pedido (race)', [
-                        'tipo'      => $tipo,
-                        'serie'     => $serieNome,
-                        'tenant_id' => $tenantId,
-                    ]);
-                } else {
-                    throw $e;
-                }
+                if ($e->getCode() !== '23000') throw $e;
             }
         }
+
+        // Série especial AF (auto-facturação)
+// Série especial AF (auto-facturação)
+if ($temAutoFact) {
+    // Chave REAL da unique (não inclui auto_faturacao)
+    $chaveReal = [
+        'tipo_documento' => 'FR',
+        'serie'          => 'AF',
+        'ano'            => $ano,
+    ];
+    if ($temTenantId) $chaveReal['tenant_id'] = $tenantId;
+
+    $existente = $this->serieFiscalModel()->where($chaveReal)->first();
+
+    if ($existente) {
+        // Já existe — garantir auto_faturacao=true e activa
+        if (!$existente->auto_faturacao || !$existente->ativa) {
+            $existente->update([
+                'auto_faturacao' => true,
+                'ativa'          => true,
+                'padrao'         => true,
+            ]);
+        }
+    } else {
+        try {
+            $dadosAF = array_merge($chaveReal, [
+                'id'             => (string) Str::uuid(),
+                'descricao'      => 'Série Auto-Facturação — Faturas-Recibo',
+                'digitos'        => 4,
+                'ultimo_numero'  => 0,
+                'ativa'          => true,
+                'padrao'         => true,
+                'valida_agt'     => true,
+                'auto_faturacao' => true,
+            ]);
+
+            $this->serieFiscalModel()->create($dadosAF);
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Race condition: já foi criada por outro request
+            if ($e->getCode() !== '23000') throw $e;
+        }
+    }
+}
     }
 
-    /**
-     * Obtém o nome do tipo de documento em português
-     */
     private function getTipoDocumentoNome(string $tipo): string
     {
-        $map = [
+        return [
             'FT' => 'Faturas',
             'FR' => 'Faturas-Recibo',
             'FP' => 'Faturas Proforma',
@@ -2276,24 +1896,31 @@ class DocumentoFiscalService
             'NC' => 'Notas de Crédito',
             'ND' => 'Notas de Débito',
             'RC' => 'Recibos',
-            'FRt' => 'Faturas de Retificação',
-        ];
-
-        return $map[$tipo] ?? $tipo;
+            'FRt' => 'Faturas de Retificação (legado)',
+            'FG' => 'Faturas Globais',
+            'FGR' => 'Faturas Globais-Recibo',
+            'TV' => 'Talões de Venda',
+            'FGEN' => 'Faturas Genéricas',
+            'AC' => 'Avisos de Cobrança',
+            'ACR' => 'Avisos de Cobrança-Recibo',
+        ][$tipo] ?? $tipo;
     }
 
     /* =====================================================================
-     | MÉTODOS PRIVADOS — AUXILIARES
+     | VALIDAÇÕES
      | ================================================================== */
 
     private function validarDadosPorTipo(array $dados, string $tipo, array $config): void
     {
-        if ($config['exige_cliente']) {
+        if ($config['exige_cliente'] ?? false) {
             $temCliente = !empty($dados['cliente_id']) || !empty($dados['cliente_nome']);
+            $clienteGenerico = $tipo === 'FR'
+                && empty($dados['cliente_id'])
+                && Str::lower(trim((string) ($dados['cliente_nome'] ?? ''))) === 'consumidor final';
 
-            if (!$temCliente) {
+            if (!$temCliente || $clienteGenerico) {
                 throw new \InvalidArgumentException(
-                    "{$config['nome']} requer um cliente (cadastrado ou avulso)."
+                    "{$config['nome']} requer a identificação do cliente; Consumidor Final não é válido para uma Fatura-Recibo."
                 );
             }
         }
@@ -2304,51 +1931,77 @@ class DocumentoFiscalService
             'RC' => ['fatura_id'],
             'NC' => ['fatura_id', 'motivo', 'itens'],
             'ND' => ['fatura_id', 'itens'],
-            'FRt' => ['fatura_id', 'motivo'],
+            'FG' => ['periodo_referencia_inicio', 'periodo_referencia_fim', 'anexos', 'itens'],
+            'FGR' => ['periodo_referencia_inicio', 'periodo_referencia_fim', 'anexos', 'itens'],
+            'TV' => ['itens'],
         ];
 
         foreach ($regras[$tipo] ?? [] as $campo) {
             if (empty($dados[$campo])) {
-                throw new \InvalidArgumentException(
-                    "Campo '{$campo}' é obrigatório para {$config['nome']}."
-                );
+                throw new \InvalidArgumentException("Campo '{$campo}' obrigatório para {$config['nome']}.");
             }
         }
 
-        if (!empty($dados['fatura_id'])) {
-            if ($this->isColectivo()) {
-                $origem = SharedDocumentoFiscal::doTenant()->find($dados['fatura_id']);
-            } else {
-                $origem = TenantDocumentoFiscal::find($dados['fatura_id']);
+        // Factura Global: validar período
+        if (in_array($tipo, ['FG', 'FGR'], true)) {
+            $inicio = Carbon::parse($dados['periodo_referencia_inicio']);
+            $fim = Carbon::parse($dados['periodo_referencia_fim']);
+
+            if ($inicio->gt($fim)) {
+                throw new \InvalidArgumentException('Período de referência inválido.');
             }
+            if ($inicio->diffInDays($fim) > 31) {
+                throw new \InvalidArgumentException('Factura Global não pode exceder 31 dias (Art. 3.º al. j)).');
+            }
+            foreach ($dados['anexos'] as $i => $anexo) {
+                if (empty($anexo['referencia']) || empty($anexo['data_anexo']) || empty($anexo['tipo_anexo'])) {
+                    throw new \InvalidArgumentException("Anexo #{$i} inválido.");
+                }
+            }
+        }
+
+        // Talão de Venda: sem NIF
+        if ($tipo === 'TV' && !empty($dados['cliente_nif'])) {
+            throw new \InvalidArgumentException(
+                'Talão de Venda é para adquirente sem NIF (Art. 5.º n.º 4).'
+            );
+        }
+
+        // Auto-facturação
+        if (!empty($dados['auto_faturacao']) && $tipo !== 'FR') {
+            throw new \InvalidArgumentException('Auto-facturação só se aplica a FR (Art. 12.º n.º 1).');
+        }
+
+        // Verificar origem para NC/ND/RC
+        if (!empty($dados['fatura_id'])) {
+            $origem = $this->isColectivo()
+                ? SharedDocumentoFiscal::doTenant()->find($dados['fatura_id'])
+                : TenantDocumentoFiscal::find($dados['fatura_id']);
 
             if (!$origem) {
                 throw new \InvalidArgumentException('Documento de origem não encontrado.');
             }
 
-            if (in_array($tipo, ['NC', 'ND']) && !in_array($origem->tipo_documento, ['FT', 'FR'])) {
-                throw new \InvalidArgumentException(
-                    "NC/ND só podem ser geradas a partir de FT ou FR. Tipo: {$origem->tipo_documento}"
-                );
+            if (in_array($tipo, ['NC'], true) && !in_array($origem->tipo_documento, ['FT', 'FR', 'FG', 'FGR'], true)) {
+                throw new \InvalidArgumentException("NC só de FT/FR/FG/FGR. Tipo: {$origem->tipo_documento}");
             }
-
-            if ($tipo === 'RC' && !in_array($origem->tipo_documento, ['FT', 'FA', 'FP'])) {
-                throw new \InvalidArgumentException(
-                    "Recibo só pode ser gerado a partir de FT, FA ou FP. Tipo: {$origem->tipo_documento}"
-                );
+            if ($tipo === 'ND' && !in_array($origem->tipo_documento, ['FT', 'FG'], true)) {
+                throw new \InvalidArgumentException("ND só de FT ou FG. Tipo: {$origem->tipo_documento}");
+            }
+            if ($tipo === 'RC' && !in_array($origem->tipo_documento, ['FT', 'FA', 'FP', 'FG'], true)) {
+                throw new \InvalidArgumentException("RC só de FT/FA/FP/FG. Tipo: {$origem->tipo_documento}");
             }
         }
     }
 
     private function calcularDataVencimento(string $tipo, array $dados, Carbon $dataEmissao): ?string
     {
-        if (in_array($tipo, ['RC', 'NC', 'FRt', 'FP'])) {
+        if (in_array($tipo, ['RC', 'NC', 'FRt', 'FP', 'TV', 'FGR', 'FGEN', 'ACR'], true)) {
             return null;
         }
 
-        if ($tipo === 'FA') {
-            return $dados['data_vencimento']
-                ?? $dataEmissao->copy()->addDays(30)->toDateString();
+        if ($tipo === 'FA' || $tipo === 'FG') {
+            return $dados['data_vencimento'] ?? $dataEmissao->copy()->addDays(30)->toDateString();
         }
 
         if (!empty($dados['data_vencimento'])) {
@@ -2364,11 +2017,11 @@ class DocumentoFiscalService
         return $dataEmissao->copy()->addDays($prazoDias)->toDateString();
     }
 
-    private function criarItensDocumento($documento, array $itensProcessados): void
+    private function criarItensDocumento($documento, array $itens): void
     {
         $agora = Carbon::now('Africa/Luanda');
 
-        $registos = array_map(function ($item, $index) use ($documento, $agora) {
+        $registos = array_map(function ($item, $i) use ($documento, $agora) {
             $data = [
                 'id' => (string) Str::uuid(),
                 'documento_fiscal_id' => $documento->id,
@@ -2385,17 +2038,15 @@ class DocumentoFiscalService
                 'taxa_retencao' => $item['taxa_retencao'],
                 'desconto' => $item['desconto'],
                 'total_linha' => $item['total_linha'],
-                'ordem' => $index + 1,
+                'ordem' => $i + 1,
                 'created_at' => $agora,
                 'updated_at' => $agora,
             ];
-
             if ($this->isColectivo()) {
                 $data['tenant_id'] = $this->empresa->id;
             }
-
             return $data;
-        }, $itensProcessados, array_keys($itensProcessados));
+        }, $itens, array_keys($itens));
 
         if ($this->isColectivo()) {
             SharedItemDocumentoFiscal::insert($registos);
@@ -2404,49 +2055,62 @@ class DocumentoFiscalService
         }
     }
 
+    private function criarAnexosFacturaGlobal($documento, array $anexos): void
+    {
+        foreach ($anexos as $anexo) {
+            $dados = [
+                'id' => (string) Str::uuid(),
+                'documento_fiscal_id' => $documento->id,
+                'tipo_anexo' => $anexo['tipo_anexo'],
+                'referencia' => $anexo['referencia'],
+                'data_anexo' => $anexo['data_anexo'],
+                'valor_total' => $anexo['valor_total'] ?? null,
+                'observacoes' => $anexo['observacoes'] ?? null,
+            ];
+            if ($this->isColectivo()) {
+                $dados['tenant_id'] = $this->empresa->id;
+                SharedFacturaGlobalAnexo::create($dados);
+            } else {
+                TenantFacturaGlobalAnexo::create($dados);
+            }
+        }
+    }
+
     private function executarAcoesPosCriacao($documento, array $dados, string $tipo): void
     {
-        if ($this->configuracoesTipo[$tipo]['afeta_stock']) {
+        if ($this->configuracoesTipo[$tipo]['afeta_stock'] ?? false) {
             $this->movimentarStock($documento, $tipo);
         }
 
-        if (in_array($tipo, ['FT', 'FR']) && !empty($dados['venda_id'])) {
+        if (in_array($tipo, ['FT', 'FR', 'FG', 'FGR'], true) && !empty($dados['venda_id'])) {
             $this->atualizarVenda($dados['venda_id'], $documento);
         }
     }
 
     private function calcularTotalPago($documento): float
     {
-        if ($this->isColectivo()) {
-            return (float) SharedDocumentoFiscal::doTenant()
-                ->where('fatura_id', $documento->id)
-                ->where('tipo_documento', 'RC')
-                ->where('estado', '!=', 'cancelado')
-                ->sum('total_liquido');
-        }
+        $query = $this->isColectivo()
+            ? SharedDocumentoFiscal::doTenant()
+            : TenantDocumentoFiscal::query();
 
-        return (float) TenantDocumentoFiscal::where('fatura_id', $documento->id)
-            ->where('tipo_documento', 'RC')
+        return (float) $query->where('fatura_id', $documento->id)
+            ->whereIn('tipo_documento', ['RC'])
             ->where('estado', '!=', 'cancelado')
             ->sum('total_liquido');
     }
 
     private function actualizarEstadoAposPagamento($documentoOrigem, float $valorPago): void
     {
-        $totalPagoActualizado = $this->calcularTotalPago($documentoOrigem) + $valorPago;
+        $totalPago = $this->calcularTotalPago($documentoOrigem) + $valorPago;
 
         if ($documentoOrigem->tipo_documento === 'FA') {
-            $estadoFinal = $totalPagoActualizado >= (float) $documentoOrigem->total_liquido
-                ? 'paga'
-                : 'parcialmente_paga';
+            $estadoFinal = $totalPago >= (float) $documentoOrigem->total_liquido ? 'paga' : 'parcialmente_paga';
         } else {
             $totalAdiantamentos = (float) DB::table('adiantamento_fatura')
                 ->where('fatura_id', $documentoOrigem->id)
                 ->sum('valor_utilizado');
-
-            $estadoFinal = ($totalPagoActualizado + $totalAdiantamentos) >= (float) $documentoOrigem->total_liquido
-                ? 'paga'
-                : 'parcialmente_paga';
+            $estadoFinal = ($totalPago + $totalAdiantamentos) >= (float) $documentoOrigem->total_liquido
+                ? 'paga' : 'parcialmente_paga';
         }
 
         $documentoOrigem->update(['estado' => $estadoFinal]);
@@ -2454,34 +2118,21 @@ class DocumentoFiscalService
 
     private function resolverCliente(array $dados, string $tipo): ?string
     {
-        if (!empty($dados['cliente_id'])) {
-            return $dados['cliente_id'];
-        }
-
-        if (!empty($dados['cliente_nome'])) {
-            return null;
-        }
+        if (!empty($dados['cliente_id'])) return $dados['cliente_id'];
+        if (!empty($dados['cliente_nome'])) return null;
 
         if (!empty($dados['fatura_id'])) {
-            if ($this->isColectivo()) {
-                $origem = SharedDocumentoFiscal::doTenant()->find($dados['fatura_id']);
-            } else {
-                $origem = TenantDocumentoFiscal::find($dados['fatura_id']);
-            }
-            if ($origem) {
-                return $origem->cliente_id;
-            }
+            $origem = $this->isColectivo()
+                ? SharedDocumentoFiscal::doTenant()->find($dados['fatura_id'])
+                : TenantDocumentoFiscal::find($dados['fatura_id']);
+            if ($origem) return $origem->cliente_id;
         }
 
         if (!empty($dados['venda_id'])) {
-            if ($this->isColectivo()) {
-                $venda = SharedVenda::doTenant()->find($dados['venda_id']);
-            } else {
-                $venda = TenantVenda::find($dados['venda_id']);
-            }
-            if ($venda) {
-                return $venda->cliente_id;
-            }
+            $venda = $this->isColectivo()
+                ? SharedVenda::doTenant()->find($dados['venda_id'])
+                : TenantVenda::find($dados['venda_id']);
+            if ($venda) return $venda->cliente_id;
         }
 
         return null;
@@ -2501,27 +2152,34 @@ class DocumentoFiscalService
     {
         $stockService = app(\App\Services\StockService::class);
         $userId = $this->getUserId();
-
         $itens = $documento->itens()->get();
+        $autoFacturacao = (bool) ($documento->auto_faturacao ?? false);
 
         foreach ($itens as $item) {
-            if (empty($item->produto_id)) {
-                continue;
-            }
+            if (empty($item->produto_id)) continue;
 
             $produto = $this->buscarProduto($item->produto_id);
-
-            if (!$produto || $produto->tipo === 'servico') {
-                continue;
-            }
+            if (!$produto || $produto->tipo === 'servico') continue;
 
             $quantidade = (int) round((float) $item->quantidade);
-            if ($quantidade <= 0) {
-                continue;
-            }
+            if ($quantidade <= 0) continue;
 
             try {
-                if (in_array($tipoDocumento, ['FT', 'FR'])) {
+                if ($autoFacturacao) {
+                    // Compra de produtor → stock ENTRA
+                    $stockService->movimentar(
+                        $item->produto_id,
+                        $quantidade,
+                        'entrada',
+                        'auto_facturacao',
+                        $documento->numero_documento,
+                        "Auto-facturação — aquisição de {$documento->numero_documento}",
+                        $userId
+                    );
+                    continue;
+                }
+
+                if (in_array($tipoDocumento, ['FT', 'FR', 'FG', 'FGR', 'TV'], true)) {
                     $stockService->movimentar(
                         $item->produto_id,
                         $quantidade,
@@ -2543,42 +2201,28 @@ class DocumentoFiscalService
                     );
                 }
             } catch (\Exception $e) {
-                Log::error('[DocumentoFiscalService] Falha ao movimentar stock', [
-                    'documento'  => $documento->numero_documento ?? $documento->id,
-                    'produto_id' => $item->produto_id,
-                    'tipo'       => $tipoDocumento,
-                    'erro'       => $e->getMessage(),
+                Log::error('[DocumentoFiscalService] Falha stock', [
+                    'documento' => $documento->numero_documento,
+                    'tipo' => $tipoDocumento,
+                    'auto_fact' => $autoFacturacao,
+                    'erro' => $e->getMessage(),
                 ]);
                 throw $e;
             }
         }
-
-        Log::info("Movimentação de stock processada: {$tipoDocumento}", [
-            'documento'   => $documento->numero_documento ?? $documento->id,
-            'tipo'        => $documento->tipo_documento ?? 'unknown',
-            'total_itens' => $itens->count(),
-            'modo'        => $this->getModo(),
-        ]);
     }
 
     private function reverterStock($documento): void
     {
-        Log::info("Reversão de stock", [
-            'documento' => $documento->numero_documento,
-            'tipo'      => $documento->tipo_documento,
-        ]);
-
         app(StockService::class)->reverterDocumentoFiscal($documento);
     }
 
     private function atualizarVenda(string $vendaId, $documento): void
     {
         try {
-            if ($this->isColectivo()) {
-                $venda = SharedVenda::doTenant()->find($vendaId);
-            } else {
-                $venda = TenantVenda::find($vendaId);
-            }
+            $venda = $this->isColectivo()
+                ? SharedVenda::doTenant()->find($vendaId)
+                : TenantVenda::find($vendaId);
 
             if ($venda) {
                 $venda->update([
@@ -2588,10 +2232,7 @@ class DocumentoFiscalService
                 ]);
             }
         } catch (\Exception $e) {
-            Log::error('Erro ao actualizar venda', [
-                'venda_id' => $vendaId,
-                'error' => $e->getMessage(),
-            ]);
+            Log::error('Erro ao actualizar venda', ['venda_id' => $vendaId, 'error' => $e->getMessage()]);
         }
     }
 }

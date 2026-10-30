@@ -6,6 +6,7 @@ import {
   Eye,
   FileText,
   Printer,
+  Receipt,
   Download,
   ChevronLeft,
   ChevronRight,
@@ -20,6 +21,12 @@ const TIPO_LABEL: Record<TipoDocumento, string> = {
   ND: "Nota de Débito",
   RC: "Recibo",
   FRt: "Factura de Retificação",
+  FG: "Factura Global",
+  FGR: "Factura Global-Recibo",
+  TV: "Talão de Venda",
+  FGEN: "Factura Genérica",
+  AC: "Aviso de Cobrança",
+  ACR: "Aviso de Cobrança-Recibo",
 };
 
 const ESTADO_LABEL: Record<string, string> = {
@@ -54,7 +61,7 @@ interface InvoiceTableProps {
   onVerDetalhes: (doc: DocumentoFiscal) => void;
   onGerarRecibo: (doc: DocumentoFiscal) => Promise<DocumentoFiscal | void> | void;
   onImprimirA4: (doc: DocumentoFiscal) => void;
-  onImprimirPdf: (doc: DocumentoFiscal) => void;
+  onImprimir80mm: (doc: DocumentoFiscal) => void;
   onImprimirTermica: (doc: DocumentoFiscal) => Promise<void>;
   onBaixarPdf: (doc: DocumentoFiscal) => Promise<void>;
   formatKz: (v: number | string | undefined) => string;
@@ -257,11 +264,12 @@ export default function InvoiceTable({
   gerandoRecibo,
   baixandoPdf,
   imprimindo,
-  
+  imprimindoTermica,
   onVerDetalhes,
   onGerarRecibo,
-  onImprimirPdf,
-  
+  onImprimirA4,
+  onImprimir80mm,
+  onImprimirTermica,
   onBaixarPdf,
   formatKz,
   documentoFiscalService,
@@ -272,8 +280,8 @@ export default function InvoiceTable({
   const [paginaFT, setPaginaFT] = useState(1);
 
   /* ── Separação por aba ── */
-  const docsFR = documentos.filter((d) => ["FR", "RC"].includes(d.tipo_documento));
-  const docsFT = documentos.filter((d) => d.tipo_documento === "FT");
+  const docsFR = documentos.filter((d) => ["FR", "RC", "FGR", "TV"].includes(d.tipo_documento));
+  const docsFT = documentos.filter((d) => ["FT", "FG"].includes(d.tipo_documento));
 
   const totalPagesFR = Math.max(Math.ceil(docsFR.length / POR_PAGINA), 1);
   const totalPagesFT = Math.max(Math.ceil(docsFT.length / POR_PAGINA), 1);
@@ -303,21 +311,29 @@ export default function InvoiceTable({
         <Eye size={16} />
       </IconBtn>
       <IconBtn
-        onClick={() => onImprimirPdf(doc)}
+        onClick={() => onImprimir80mm(doc)}
         disabled={imprimindo === doc.id}
-        title="Imprimir PDF"
+        title="Talão 80mm"
+        color={colors.teal || colors.primary}
+      >
+        {imprimindo === doc.id ? <Spinner color={colors.teal || colors.primary} /> : <Receipt size={16} />}
+      </IconBtn>
+      <IconBtn
+        onClick={() => onImprimirA4(doc)}
+        disabled={imprimindo === doc.id}
+        title="Imprimir A4"
         color={colors.secondary}
       >
         {imprimindo === doc.id ? <Spinner color={colors.secondary} /> : <Printer size={16} />}
       </IconBtn>
-      {/*<IconBtn
+      <IconBtn
         onClick={() => onImprimirTermica(doc)}
         disabled={imprimindoTermica === doc.id}
-        title="Imprimir Térmica"
-        color={colors.secondary}
+        title="Imprimir na impressora térmica"
+        color={colors.success}
       >
-        {imprimindoTermica === doc.id ? <Spinner color={colors.secondary} /> : <Printer size={16} />}
-      </IconBtn>*/}
+        {imprimindoTermica === doc.id ? <Spinner color={colors.success} /> : <Printer size={16} />}
+      </IconBtn>
       <IconBtn
         onClick={() => onBaixarPdf(doc)}
         disabled={baixandoPdf === doc.id}
@@ -346,21 +362,29 @@ export default function InvoiceTable({
         </IconBtn>
       )}
       <IconBtn
-        onClick={() => onImprimirPdf(doc)}
+        onClick={() => onImprimir80mm(doc)}
         disabled={imprimindo === doc.id}
-        title="Imprimir PDF"
+        title="Talão 80mm"
+        color={colors.teal || colors.primary}
+      >
+        {imprimindo === doc.id ? <Spinner color={colors.teal || colors.primary} /> : <Receipt size={16} />}
+      </IconBtn>
+      <IconBtn
+        onClick={() => onImprimirA4(doc)}
+        disabled={imprimindo === doc.id}
+        title="Imprimir A4"
         color={colors.secondary}
       >
         {imprimindo === doc.id ? <Spinner color={colors.secondary} /> : <Printer size={16} />}
       </IconBtn>
-      {/*<IconBtn
+      <IconBtn
         onClick={() => onImprimirTermica(doc)}
         disabled={imprimindoTermica === doc.id}
-        title="Imprimir Térmica"
+        title="Imprimir na impressora térmica"
         color={colors.success}
       >
-        {imprimindoTermica === doc.id ? <Spinner color={colors.success} /> : <Receipt size={16} />}
-      </IconBtn>*/}
+        {imprimindoTermica === doc.id ? <Spinner color={colors.success} /> : <Printer size={16} />}
+      </IconBtn>
       <IconBtn
         onClick={() => onBaixarPdf(doc)}
         disabled={baixandoPdf === doc.id}
@@ -602,7 +626,7 @@ export default function InvoiceTable({
             marginBottom: -1,
           }}
         >
-          Facturas-Recibo &amp; Recibos
+          Facturas-Recibo, globais e talões
           {docsFR.length > 0 && (
             <span
               className="px-1.5 py-0.5 text-xs font-semibold"

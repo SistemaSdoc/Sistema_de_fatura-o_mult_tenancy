@@ -162,23 +162,27 @@ export default function FaturasPage() {
     async (documento: DocumentoFiscal) => {
       if (!documento.id) return;
       try {
-        await abrirUrlAutenticada(`${baseUrl}/api/documentos-fiscais/${documento.id}/print-view`, "html");
+        setImprimindo(documento.id);
+        await abrirUrlAutenticada(`${baseUrl}/api/documentos-fiscais/${documento.id}/print-a4`, "html");
       } catch (err: unknown) {
         alert(err instanceof Error ? err.message : "Erro ao abrir visualização de impressão");
+      } finally {
+        setImprimindo(null);
       }
     },
     [baseUrl]
   );
 
-  /* ── PDF Viewer autenticado ── */
-  const imprimirPdfNavegador = useCallback(
+  /* ── Talão POS autenticado (80mm) ── */
+  const imprimir80mm = useCallback(
     async (documento: DocumentoFiscal) => {
       if (!documento.id) return;
       try {
         setImprimindo(documento.id);
-        await abrirUrlAutenticada(`${baseUrl}/api/documentos-fiscais/${documento.id}/pdf-viewer`, "pdf");
+        setImprimindo(documento.id);
+        await abrirUrlAutenticada(`${baseUrl}/api/documentos-fiscais/${documento.id}/print-view`, "html");
       } catch (err: unknown) {
-        alert(err instanceof Error ? err.message : "Erro ao abrir PDF");
+        alert(err instanceof Error ? err.message : "Erro ao abrir talão POS");
       } finally {
         setImprimindo(null);
       }
@@ -254,7 +258,7 @@ export default function FaturasPage() {
       };
       const recibo = await documentoFiscalService.gerarRecibo(doc.id, dados);
       await carregarDocumentos();
-      if (recibo?.id) await imprimirPdfNavegador(recibo);
+      if (recibo?.id) await imprimir80mm(recibo);
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Erro");
     } finally {
@@ -319,6 +323,23 @@ export default function FaturasPage() {
                   <div className="font-medium">Gerar factura-recibo</div>
                   <div style={{ color: colors.text, opacity: 0.7 }} className="text-xs">
                     Registar uma nova venda
+                  </div>
+                </div>
+              </button>
+
+              {/* Auto-facturação */}
+              <button
+                onClick={() => {
+                  router.push("/dashboard/Faturas/AutoFacturacao");
+                  setDropdownAberto(false);
+                }}
+                className="flex items-center gap-3 w-full px-4 py-3 text-sm transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+                style={{ color: colors.text, borderBottom: `0.5px solid ${colors.border}` }}>
+                <FileText size={16} style={{ color: colors.secondary }} />
+                <div className="text-left">
+                  <div className="font-medium">Auto-facturação</div>
+                  <div style={{ color: colors.text, opacity: 0.7 }} className="text-xs">
+                    Aquisição a produtor primário
                   </div>
                 </div>
               </button>
@@ -408,7 +429,7 @@ export default function FaturasPage() {
         onVerDetalhes={verDetalhes}
         onGerarRecibo={gerarRecibo}
         onImprimirA4={imprimirA4}
-        onImprimirPdf={imprimirPdfNavegador}
+        onImprimir80mm={imprimir80mm}
         onImprimirTermica={imprimirTermicaDocumento}
         onBaixarPdf={baixarPdf}
         formatKz={formatKz}

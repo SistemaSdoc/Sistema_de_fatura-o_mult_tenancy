@@ -6,17 +6,15 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Model DocumentoFiscal
+ * Model DocumentoFiscal (Tenant DB)
  *
- * Alterações AGT:
- *  - $fillable actualizado com os novos campos: rsa_assinatura, rsa_versao_chave,
- *    qr_code, hash_anterior (adicionados pelo DocumentoFiscalService)
- *  - $casts actualizado para os mesmos campos
- *  - Boot: removida a recalculação automática de total_retencao em saved()
- *    (causava queries extras e pode sobrescrever o valor calculado pelo service)
- *  - Acessores: apenas leitura de atributos já carregados, sem queries adicionais
- *  - Métodos de estado: mutações simples, sem lógica de negócio (que está no service)
- *  - taxa_retencao removido do fillable (já está no service)
+ * Alterações DP 71/25:
+ *  - Novos tipos: FG, FGR, TV, FGEN, AC, ACR
+ *  - FRt marcado como depreciado (mantido para legado)
+ *  - Novos campos: periodo_referencia_inicio/fim, auto_faturacao,
+ *    motivo_auto_faturacao, software_certificacao_numero, print_count
+ *  - Nova relação: anexos() (Factura Global)
+ *  - Novos helpers: ehFacturaGlobal, ehTalaoVenda, ehAutoFacturacao
  */
 class DocumentoFiscal extends TenantModel
 {
@@ -48,7 +46,7 @@ class DocumentoFiscal extends TenantModel
         'estado',
         'motivo',
         'motivo_cancelamento',
-        // AGT: campos de assinatura e integridade — imutáveis após emissão
+        // AGT: assinatura e integridade
         'hash_fiscal',
         'hash_anterior',
         'rsa_assinatura',
@@ -62,22 +60,33 @@ class DocumentoFiscal extends TenantModel
         'nome_banco',
         'iban',
         'numero_conta',
+        // DP 71/25 — novos campos
+        'periodo_referencia_inicio',
+        'periodo_referencia_fim',
+        'auto_faturacao',
+        'motivo_auto_faturacao',
+        'software_certificacao_numero',
+        'print_count',
     ];
 
     protected $casts = [
-        'data_emissao'      => 'date',
-        'data_vencimento'   => 'date',
-        'data_cancelamento' => 'date',
-        'created_at'        => 'datetime',
-        'updated_at'        => 'datetime',
-        'base_tributavel'   => 'decimal:2',
-        'total_iva'         => 'decimal:2',
-        'total_retencao'    => 'decimal:2',
-        'total_liquido'     => 'decimal:2',
-        'rsa_versao_chave'  => 'integer',
-        'nome_banco'        => 'string',
-        'iban'              => 'string',
-        'numero_conta'      => 'string',
+        'data_emissao'              => 'date',
+        'data_vencimento'           => 'date',
+        'data_cancelamento'         => 'date',
+        'periodo_referencia_inicio' => 'date',
+        'periodo_referencia_fim'    => 'date',
+        'created_at'                => 'datetime',
+        'updated_at'                => 'datetime',
+        'base_tributavel'           => 'decimal:2',
+        'total_iva'                 => 'decimal:2',
+        'total_retencao'            => 'decimal:2',
+        'total_liquido'             => 'decimal:2',
+        'rsa_versao_chave'          => 'integer',
+        'auto_faturacao'            => 'boolean',
+        'print_count'               => 'integer',
+        'nome_banco'                => 'string',
+        'iban'                      => 'string',
+        'numero_conta'              => 'string',
     ];
 
     /* =====================================================================
@@ -91,7 +100,46 @@ class DocumentoFiscal extends TenantModel
     const TIPO_NOTA_CREDITO        = 'NC';
     const TIPO_NOTA_DEBITO         = 'ND';
     const TIPO_RECIBO              = 'RC';
-    const TIPO_FATURA_RETIFICACAO  = 'FRt';
+    const TIPO_FATURA_RETIFICACAO  = 'FRt'; // @deprecated
+
+    // DP 71/25
+    const TIPO_FACTURA_GLOBAL         = 'FG';
+    const TIPO_FACTURA_GLOBAL_RECIBO  = 'FGR';
+    const TIPO_TALAO_VENDA            = 'TV';
+    const TIPO_FACTURA_GENERICA       = 'FGEN';
+    const TIPO_AVISO_COBRANCA         = 'AC';
+    const TIPO_AVISO_COBRANCA_RECIBO  = 'ACR';
+
+    const TIPOS_VENDA = [
+        self::TIPO_FATURA,
+        self::TIPO_FATURA_RECIBO,
+        self::TIPO_RECIBO,
+        self::TIPO_FACTURA_GLOBAL,
+        self::TIPO_FACTURA_GLOBAL_RECIBO,
+        self::TIPO_TALAO_VENDA,
+    ];
+
+    const TIPOS_NAO_VENDA = [
+        self::TIPO_FATURA_PROFORMA,
+        self::TIPO_FATURA_ADIANTAMENTO,
+        self::TIPO_NOTA_CREDITO,
+        self::TIPO_NOTA_DEBITO,
+        self::TIPO_FATURA_RETIFICACAO,
+        self::TIPO_FACTURA_GENERICA,
+        self::TIPO_AVISO_COBRANCA,
+        self::TIPO_AVISO_COBRANCA_RECIBO,
+    ];
+
+    const TIPOS_GLOBAIS = [
+        self::TIPO_FACTURA_GLOBAL,
+        self::TIPO_FACTURA_GLOBAL_RECIBO,
+    ];
+
+    const TIPOS_SECTORIAIS = [
+        self::TIPO_FACTURA_GENERICA,
+        self::TIPO_AVISO_COBRANCA,
+        self::TIPO_AVISO_COBRANCA_RECIBO,
+    ];
 
     const ESTADO_EMITIDO           = 'emitido';
     const ESTADO_PAGA              = 'paga';
@@ -112,11 +160,6 @@ class DocumentoFiscal extends TenantModel
                 $model->id = (string) Str::uuid();
             }
         });
-
-        // NOTA: a recalculação automática de total_retencao em saved() foi
-        // removida — o DocumentoFiscalService calcula e persiste correctamente
-        // os totais na criação. Recalcular no evento saved() causava queries
-        // extras e podia sobrescrever o valor já correcto.
     }
 
     /* =====================================================================
@@ -143,19 +186,11 @@ class DocumentoFiscal extends TenantModel
         return $this->belongsTo(User::class, 'user_cancelamento_id');
     }
 
-    /**
-     * Documento de origem — para NC, ND, RC, FRt
-     * Usa fatura_id para referenciar o documento original
-     */
     public function documentoOrigem()
     {
         return $this->belongsTo(DocumentoFiscal::class, 'fatura_id');
     }
 
-    /**
-     * Documentos derivados deste (NC, ND, RC, FRt)
-     * Inclui todos os tipos de documentos que podem ser gerados a partir deste
-     */
     public function documentosDerivados()
     {
         return $this->hasMany(DocumentoFiscal::class, 'fatura_id')
@@ -167,34 +202,35 @@ class DocumentoFiscal extends TenantModel
             ]);
     }
 
-    /** Itens do documento */
     public function itens()
     {
         return $this->hasMany(ItemDocumentoFiscal::class, 'documento_fiscal_id');
     }
 
-    /** Recibos associados — apenas para FT e FA */
+    /** Anexos da Factura Global (Art. 8.º n.º 2 DP 71/25) */
+    public function anexos()
+    {
+        return $this->hasMany(FacturaGlobalAnexo::class, 'documento_fiscal_id');
+    }
+
     public function recibos()
     {
         return $this->hasMany(DocumentoFiscal::class, 'fatura_id')
             ->where('tipo_documento', self::TIPO_RECIBO);
     }
 
-    /** Notas de crédito associadas */
     public function notasCredito()
     {
         return $this->hasMany(DocumentoFiscal::class, 'fatura_id')
             ->where('tipo_documento', self::TIPO_NOTA_CREDITO);
     }
 
-    /** Notas de débito associadas */
     public function notasDebito()
     {
         return $this->hasMany(DocumentoFiscal::class, 'fatura_id')
             ->where('tipo_documento', self::TIPO_NOTA_DEBITO);
     }
 
-    /** Faturas de adiantamento vinculadas a esta FT */
     public function faturasAdiantamento()
     {
         return $this->belongsToMany(
@@ -208,7 +244,6 @@ class DocumentoFiscal extends TenantModel
             ->withTimestamps();
     }
 
-    /** Faturas a que esta FA está vinculada */
     public function faturasVinculadas()
     {
         return $this->belongsToMany(
@@ -273,22 +308,22 @@ class DocumentoFiscal extends TenantModel
 
     public function scopeVendas($query)
     {
-        return $query->whereIn('tipo_documento', [
-            self::TIPO_FATURA,
-            self::TIPO_FATURA_RECIBO,
-            self::TIPO_RECIBO,
-        ]);
+        return $query->whereIn('tipo_documento', self::TIPOS_VENDA);
     }
 
     public function scopeNaoVendas($query)
     {
-        return $query->whereIn('tipo_documento', [
-            self::TIPO_FATURA_PROFORMA,
-            self::TIPO_FATURA_ADIANTAMENTO,
-            self::TIPO_NOTA_CREDITO,
-            self::TIPO_NOTA_DEBITO,
-            self::TIPO_FATURA_RETIFICACAO,
-        ]);
+        return $query->whereIn('tipo_documento', self::TIPOS_NAO_VENDA);
+    }
+
+    public function scopeGlobais($query)
+    {
+        return $query->whereIn('tipo_documento', self::TIPOS_GLOBAIS);
+    }
+
+    public function scopeAutoFacturacao($query)
+    {
+        return $query->where('auto_faturacao', true);
     }
 
     public function scopeVencidos($query)
@@ -320,20 +355,26 @@ class DocumentoFiscal extends TenantModel
     }
 
     /* =====================================================================
-     | ACESSORES — leitura de atributos já carregados, sem queries extras
+     | ACESSORES
      | ================================================================== */
 
     public function getTipoDocumentoNomeAttribute(): string
     {
         return [
-            self::TIPO_FATURA              => 'Factura',
-            self::TIPO_FATURA_RECIBO       => 'Factura-Recibo',
-            self::TIPO_FATURA_PROFORMA     => 'Factura Proforma',
-            self::TIPO_FATURA_ADIANTAMENTO => 'Factura de Adiantamento',
-            self::TIPO_NOTA_CREDITO        => 'Nota de Crédito',
-            self::TIPO_NOTA_DEBITO         => 'Nota de Débito',
-            self::TIPO_RECIBO              => 'Recibo',
-            self::TIPO_FATURA_RETIFICACAO  => 'Factura de Retificação',
+            self::TIPO_FATURA                 => 'Factura',
+            self::TIPO_FATURA_RECIBO          => 'Factura-Recibo',
+            self::TIPO_FATURA_PROFORMA        => 'Factura Proforma',
+            self::TIPO_FATURA_ADIANTAMENTO    => 'Factura de Adiantamento',
+            self::TIPO_NOTA_CREDITO           => 'Nota de Crédito',
+            self::TIPO_NOTA_DEBITO            => 'Nota de Débito',
+            self::TIPO_RECIBO                 => 'Recibo',
+            self::TIPO_FATURA_RETIFICACAO     => '⚠️ Factura de Retificação (depreciado)',
+            self::TIPO_FACTURA_GLOBAL         => 'Factura Global',
+            self::TIPO_FACTURA_GLOBAL_RECIBO  => 'Factura Global-Recibo',
+            self::TIPO_TALAO_VENDA            => 'Talão de Venda',
+            self::TIPO_FACTURA_GENERICA       => 'Factura Genérica',
+            self::TIPO_AVISO_COBRANCA         => 'Aviso de Cobrança',
+            self::TIPO_AVISO_COBRANCA_RECIBO  => 'Aviso de Cobrança-Recibo',
         ][$this->tipo_documento] ?? 'Desconhecido';
     }
 
@@ -354,11 +395,7 @@ class DocumentoFiscal extends TenantModel
 
     public function getEhVendaAttribute(): bool
     {
-        return in_array($this->tipo_documento, [
-            self::TIPO_FATURA,
-            self::TIPO_FATURA_RECIBO,
-            self::TIPO_RECIBO,
-        ]);
+        return in_array($this->tipo_documento, self::TIPOS_VENDA, true);
     }
 
     public function getEstaPagaAttribute(): bool
@@ -389,33 +426,39 @@ class DocumentoFiscal extends TenantModel
 
     public function getPodeGerarReciboAttribute(): bool
     {
-        return in_array($this->tipo_documento, [self::TIPO_FATURA, self::TIPO_FATURA_ADIANTAMENTO, self::TIPO_FATURA_PROFORMA])
+        return in_array($this->tipo_documento, [
+            self::TIPO_FATURA,
+            self::TIPO_FATURA_ADIANTAMENTO,
+            self::TIPO_FATURA_PROFORMA,
+            self::TIPO_FACTURA_GLOBAL,
+        ])
             && in_array($this->estado, [self::ESTADO_EMITIDO, self::ESTADO_PARCIALMENTE_PAGA]);
     }
 
-    /**
-     * CORRIGIDO: Nota de Crédito só pode ser emitida a partir de FT ou FR
-     */
     public function getPodeGerarNotaCreditoAttribute(): bool
     {
-        return in_array($this->tipo_documento, [self::TIPO_FATURA, self::TIPO_FATURA_RECIBO])
+        return in_array($this->tipo_documento, [
+            self::TIPO_FATURA,
+            self::TIPO_FATURA_RECIBO,
+            self::TIPO_FACTURA_GLOBAL,
+            self::TIPO_FACTURA_GLOBAL_RECIBO,
+        ])
             && in_array($this->estado, [
                 self::ESTADO_EMITIDO,
                 self::ESTADO_PARCIALMENTE_PAGA,
             ]);
     }
 
-    /**
-     * CORRIGIDO: Nota de Débito só pode ser emitida a partir de FT (NÃO FR)
-     * De acordo com a lei angolana
-     */
     public function getPodeGerarNotaDebitoAttribute(): bool
     {
-        return $this->tipo_documento === self::TIPO_FATURA
+        return in_array($this->tipo_documento, [
+            self::TIPO_FATURA,
+            self::TIPO_FACTURA_GLOBAL,
+        ])
             && in_array($this->estado, [
                 self::ESTADO_EMITIDO,
                 self::ESTADO_PARCIALMENTE_PAGA,
-                self::ESTADO_PAGA, // Permite ND para fatura paga (juros/multas)
+                self::ESTADO_PAGA,
             ]);
     }
 
@@ -440,19 +483,24 @@ class DocumentoFiscal extends TenantModel
     public function getCorTipoAttribute(): string
     {
         return match ($this->tipo_documento) {
-            self::TIPO_FATURA              => 'blue',
-            self::TIPO_FATURA_RECIBO       => 'green',
-            self::TIPO_FATURA_PROFORMA     => 'orange',
-            self::TIPO_FATURA_ADIANTAMENTO => 'purple',
-            self::TIPO_NOTA_CREDITO        => 'red',
-            self::TIPO_NOTA_DEBITO         => 'amber',
-            self::TIPO_RECIBO              => 'teal',
-            self::TIPO_FATURA_RETIFICACAO  => 'pink',
-            default                        => 'gray',
+            self::TIPO_FATURA                 => 'blue',
+            self::TIPO_FATURA_RECIBO          => 'green',
+            self::TIPO_FATURA_PROFORMA        => 'orange',
+            self::TIPO_FATURA_ADIANTAMENTO    => 'purple',
+            self::TIPO_NOTA_CREDITO           => 'red',
+            self::TIPO_NOTA_DEBITO            => 'amber',
+            self::TIPO_RECIBO                 => 'teal',
+            self::TIPO_FATURA_RETIFICACAO     => 'pink',
+            self::TIPO_FACTURA_GLOBAL         => 'indigo',
+            self::TIPO_FACTURA_GLOBAL_RECIBO  => 'indigo',
+            self::TIPO_TALAO_VENDA            => 'slate',
+            self::TIPO_FACTURA_GENERICA       => 'cyan',
+            self::TIPO_AVISO_COBRANCA         => 'rose',
+            self::TIPO_AVISO_COBRANCA_RECIBO  => 'rose',
+            default                           => 'gray',
         };
     }
 
-    /** Percentual médio de retenção — calculado a partir dos valores já persistidos */
     public function getPercentualRetencaoAttribute(): float
     {
         if ((float) $this->base_tributavel <= 0) {
@@ -462,7 +510,6 @@ class DocumentoFiscal extends TenantModel
         return round(((float) $this->total_retencao / (float) $this->base_tributavel) * 100, 2);
     }
 
-    /** Resumo para relatórios — usa apenas atributos já presentes no modelo */
     public function getResumoAttribute(): array
     {
         return [
@@ -476,15 +523,57 @@ class DocumentoFiscal extends TenantModel
             'retencao'            => $this->total_retencao,
             'percentual_retencao' => $this->percentual_retencao,
             'estado'              => $this->estado,
-            // AGT: campos de auditoria
             'hash_fiscal'         => $this->hash_fiscal,
             'qr_code'             => $this->qr_code,
+            'auto_faturacao'      => $this->auto_faturacao,
         ];
     }
 
+    public function getSaldoDisponivelAttribute(): float
+    {
+        if (! in_array($this->tipo_documento, [
+            self::TIPO_FATURA,
+            self::TIPO_FATURA_RECIBO,
+            self::TIPO_FACTURA_GLOBAL,
+            self::TIPO_FACTURA_GLOBAL_RECIBO,
+        ])) {
+            return 0.0;
+        }
+
+        $totalCreditado = $this->notasCredito()
+            ->where('estado', '!=', self::ESTADO_CANCELADO)
+            ->sum('total_liquido');
+
+        return max(0.0, (float) $this->total_liquido - $totalCreditado);
+    }
+
+    public function getSaldoPendenteAttribute(): float
+    {
+        if (! in_array($this->tipo_documento, [
+            self::TIPO_FATURA,
+            self::TIPO_FATURA_ADIANTAMENTO,
+            self::TIPO_FACTURA_GLOBAL,
+        ])) {
+            return 0.0;
+        }
+
+        $totalPago = $this->recibos()
+            ->where('estado', '!=', self::ESTADO_CANCELADO)
+            ->sum('total_liquido');
+
+        if ($this->tipo_documento === self::TIPO_FATURA) {
+            $totalAdiantamentos = DB::table('adiantamento_fatura')
+                ->where('fatura_id', $this->id)
+                ->sum('valor_utilizado');
+
+            return max(0.0, (float) $this->total_liquido - $totalPago - $totalAdiantamentos);
+        }
+
+        return max(0.0, (float) $this->total_liquido - $totalPago);
+    }
+
     /* =====================================================================
-     | MÉTODOS DE ESTADO — mutações simples, sem lógica de negócio
-     | A lógica de negócio (validações, derivados, etc.) está no service.
+     | MÉTODOS DE ESTADO
      | ================================================================== */
 
     public function marcarComoPaga(): void
@@ -497,10 +586,6 @@ class DocumentoFiscal extends TenantModel
         $this->update(['estado' => self::ESTADO_PARCIALMENTE_PAGA]);
     }
 
-    /**
-     * AGT: cancelamento lógico — hash_fiscal, rsa_assinatura e qr_code
-     * são preservados e NUNCA actualizados após emissão.
-     */
     public function marcarComoCancelado(?string $motivo = null, ?string $userId = null): void
     {
         $this->update(array_filter([
@@ -517,7 +602,7 @@ class DocumentoFiscal extends TenantModel
     }
 
     /* =====================================================================
-     | MÉTODOS DE VERIFICAÇÃO — sem queries
+     | HELPERS DE TIPO
      | ================================================================== */
 
     public function eh(string $tipo): bool
@@ -529,42 +614,66 @@ class DocumentoFiscal extends TenantModel
     {
         return $this->tipo_documento === self::TIPO_FATURA;
     }
+
     public function ehFaturaRecibo(): bool
     {
         return $this->tipo_documento === self::TIPO_FATURA_RECIBO;
     }
+
     public function ehFaturaProforma(): bool
     {
         return $this->tipo_documento === self::TIPO_FATURA_PROFORMA;
     }
+
     public function ehFaturaAdiantamento(): bool
     {
         return $this->tipo_documento === self::TIPO_FATURA_ADIANTAMENTO;
     }
+
     public function ehNotaCredito(): bool
     {
         return $this->tipo_documento === self::TIPO_NOTA_CREDITO;
     }
+
     public function ehNotaDebito(): bool
     {
         return $this->tipo_documento === self::TIPO_NOTA_DEBITO;
     }
+
     public function ehRecibo(): bool
     {
         return $this->tipo_documento === self::TIPO_RECIBO;
     }
+
     public function ehFaturaRetificacao(): bool
     {
         return $this->tipo_documento === self::TIPO_FATURA_RETIFICACAO;
     }
 
+    public function ehFacturaGlobal(): bool
+    {
+        return in_array($this->tipo_documento, self::TIPOS_GLOBAIS, true);
+    }
+
+    public function ehTalaoVenda(): bool
+    {
+        return $this->tipo_documento === self::TIPO_TALAO_VENDA;
+    }
+
+    public function ehAutoFacturacao(): bool
+    {
+        return $this->tipo_documento === self::TIPO_FATURA_RECIBO
+            && $this->auto_faturacao === true;
+    }
+
+    public function exigePeriodoReferencia(): bool
+    {
+        return $this->ehFacturaGlobal();
+    }
+
     public function ehVenda(): bool
     {
-        return in_array($this->tipo_documento, [
-            self::TIPO_FATURA,
-            self::TIPO_FATURA_RECIBO,
-            self::TIPO_RECIBO,
-        ]);
+        return in_array($this->tipo_documento, self::TIPOS_VENDA, true);
     }
 
     public function afetaStock(): bool
@@ -573,7 +682,10 @@ class DocumentoFiscal extends TenantModel
             self::TIPO_FATURA,
             self::TIPO_FATURA_RECIBO,
             self::TIPO_NOTA_CREDITO,
-        ]);
+            self::TIPO_FACTURA_GLOBAL,
+            self::TIPO_FACTURA_GLOBAL_RECIBO,
+            self::TIPO_TALAO_VENDA,
+        ], true);
     }
 
     public function temRetencaoServicos(): bool
@@ -600,50 +712,8 @@ class DocumentoFiscal extends TenantModel
         return $this->data_vencimento && $this->data_vencimento->isPast();
     }
 
-    /**
-     * Verifica se o documento tem saldo disponível para crédito
-     * Útil para validar se pode emitir NC
-     */
-    public function getSaldoDisponivelAttribute(): float
-    {
-        if (! in_array($this->tipo_documento, [self::TIPO_FATURA, self::TIPO_FATURA_RECIBO])) {
-            return 0.0;
-        }
-
-        $totalCreditado = $this->notasCredito()
-            ->where('estado', '!=', self::ESTADO_CANCELADO)
-            ->sum('total_liquido');
-
-        return max(0.0, (float) $this->total_liquido - $totalCreditado);
-    }
-
-    /**
-     * Verifica se o documento tem saldo pendente
-     * Útil para validar se pode emitir recibo
-     */
-    public function getSaldoPendenteAttribute(): float
-    {
-        if (! in_array($this->tipo_documento, [self::TIPO_FATURA, self::TIPO_FATURA_ADIANTAMENTO])) {
-            return 0.0;
-        }
-
-        $totalPago = $this->recibos()
-            ->where('estado', '!=', self::ESTADO_CANCELADO)
-            ->sum('total_liquido');
-
-        if ($this->tipo_documento === self::TIPO_FATURA) {
-            $totalAdiantamentos = DB::table('adiantamento_fatura')
-                ->where('fatura_id', $this->id)
-                ->sum('valor_utilizado');
-
-            return max(0.0, (float) $this->total_liquido - $totalPago - $totalAdiantamentos);
-        }
-
-        return max(0.0, (float) $this->total_liquido - $totalPago);
-    }
-
     /* =====================================================================
-     | MÉTODOS ESTÁTICOS — agregações para relatórios
+     | MÉTODOS ESTÁTICOS
      | ================================================================== */
 
     public static function totalRetencaoNoPeriodo($inicio, $fim): float
@@ -668,10 +738,6 @@ class DocumentoFiscal extends TenantModel
             ->get();
     }
 
-    /**
-     * Dados para converter uma FP em FT — devolve array para o service usar.
-     * A conversão efectiva é feita pelo DocumentoFiscalService::emitirDocumento().
-     */
     public function converterParaFatura(?array $dadosPagamento = null): array
     {
         if (! $this->ehFaturaProforma()) {
@@ -687,7 +753,7 @@ class DocumentoFiscal extends TenantModel
             'cliente_id'      => $this->cliente_id,
             'cliente_nome'    => $this->cliente_nome,
             'cliente_nif'     => $this->cliente_nif,
-            'itens'           => $this->itens->map(fn($item) => [
+            'itens'           => $this->itens->map(fn ($item) => [
                 'produto_id'     => $item->produto_id,
                 'descricao'      => $item->descricao,
                 'quantidade'     => $item->quantidade,

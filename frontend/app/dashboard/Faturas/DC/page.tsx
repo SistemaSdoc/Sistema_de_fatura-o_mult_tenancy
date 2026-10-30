@@ -127,14 +127,14 @@ export default function OutrosDocumentosPage() {
     [baseUrl]
   );
 
-  /* ── PDF Viewer autenticado (talão térmico para PDF) ── */
-  const imprimirPdfNavegador = useCallback(
+  /* ── Talão POS autenticado (80mm) ── */
+  const imprimir80mm = useCallback(
     async (documento: DocumentoFiscal) => {
       if (!documento.id) return;
       try {
-        await abrirUrlAutenticada(`${baseUrl}/api/documentos-fiscais/${documento.id}/pdf-viewer`, "html");
+        await abrirUrlAutenticada(`${baseUrl}/api/documentos-fiscais/${documento.id}/print-view`, "html");
       } catch (err: unknown) {
-        alert(err instanceof Error ? err.message : "Erro ao abrir PDF");
+        alert(err instanceof Error ? err.message : "Erro ao abrir talão POS");
       }
     },
     [baseUrl]
@@ -271,7 +271,7 @@ export default function OutrosDocumentosPage() {
         imprimindo={imprimindo}
         onVerDetalhes={verDetalhes}
         onImprimirA4={imprimirA4}
-        onImprimirPdf={imprimirPdfNavegador}
+        onImprimirPdf={imprimir80mm}
         onBaixarPdf={baixarPdf}
         formatKz={formatKz}
         documentoFiscalService={documentoFiscalService}

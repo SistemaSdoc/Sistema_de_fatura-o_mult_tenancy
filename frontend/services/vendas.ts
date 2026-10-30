@@ -44,7 +44,21 @@ export interface User {
   ultimo_login?: string | null;
 }
 
-export type TipoDocumentoFiscal = "FT" | "FR" | "FP" | "RC" | "NC" | "ND" | "FA" | "FRt";
+export type TipoDocumentoFiscal =
+  | "FT"
+  | "FR"
+  | "FP"
+  | "RC"
+  | "NC"
+  | "ND"
+  | "FA"
+  | "FRt"
+  | "FG"
+  | "FGR"
+  | "TV"
+  | "FGEN"
+  | "AC"
+  | "ACR";
 
 export const NOMES_TIPO_DOCUMENTO: Record<TipoDocumentoFiscal, string> = {
   FT: "Fatura",
@@ -55,10 +69,16 @@ export const NOMES_TIPO_DOCUMENTO: Record<TipoDocumentoFiscal, string> = {
   ND: "Nota de Débito",
   FA: "Fatura de Adiantamento",
   FRt: "Fatura de Retificação",
+  FG: "Fatura Global",
+  FGR: "Fatura Global-Recibo",
+  TV: "Talão de Venda",
+  FGEN: "Fatura Genérica",
+  AC: "Aviso de Cobrança",
+  ACR: "Aviso de Cobrança-Recibo",
 };
 
-export const TIPOS_DOCUMENTO_VENDA: TipoDocumentoFiscal[] = ["FT", "FR", "FP"];
-export const TIPOS_VENDA: TipoDocumentoFiscal[] = ["FT", "FR", "RC"];
+export const TIPOS_DOCUMENTO_VENDA: TipoDocumentoFiscal[] = ["FT", "FR", "FP", "FG", "FGR", "TV"];
+export const TIPOS_VENDA: TipoDocumentoFiscal[] = ["FT", "FR", "RC", "FG", "FGR", "TV"];
 
 export type EstadoDocumentoFiscal = "emitido" | "paga" | "parcialmente_paga" | "cancelado" | "expirado";
 export type EstadoPagamentoVenda = "paga" | "pendente" | "parcial" | "cancelada";
@@ -639,20 +659,38 @@ export interface EvolucaoMensal {
 /* ================== HELPERS DE PAYLOAD ================== */
 
 function criarPayloadVenda(payload: CriarVendaPayload): Record<string, unknown> {
-  const out: Record<string, unknown> = { itens: payload.itens };
+  const out: Record<string, unknown> = {};
 
-  if (payload.cliente_id) {
+  // 1. TRATAMENTO DO CLIENTE (Evita enviar UUID vazio)
+  if (payload.cliente_id && payload.cliente_id.trim() !== "") {
     out.cliente_id = payload.cliente_id;
-  } else if (payload.cliente_nome?.trim()) {
-    out.cliente_nome = payload.cliente_nome.trim();
-    if (payload.cliente_nif) out.cliente_nif = payload.cliente_nif;
+  } else {
+    out.cliente_nome = payload.cliente_nome?.trim() || "Consumidor Final";
+    if (payload.cliente_nif?.trim()) out.cliente_nif = payload.cliente_nif.trim();
   }
 
-  if (payload.tipo_documento) out.tipo_documento = payload.tipo_documento;
-  out.faturar = payload.tipo_documento !== "FP";
+  // 2. TRATAMENTO DOS ITENS (Força a conversão de string para número)
+  out.itens = payload.itens.map((item) => ({
+    produto_id: item.produto_id,
+    quantidade: Number(item.quantidade),
+    preco_venda: Number(item.preco_venda),
+    desconto: Number(item.desconto || 0),
+    taxa_retencao: item.taxa_retencao ? Number(item.taxa_retencao) : undefined,
+  }));
 
-  if (payload.tipo_documento === "FR" && payload.dados_pagamento) {
-    out.dados_pagamento = payload.dados_pagamento;
+  // 3. TRATAMENTO DO PAGAMENTO
+  if (payload.dados_pagamento) {
+    out.dados_pagamento = {
+      metodo: payload.dados_pagamento.metodo,
+      valor: Number(payload.dados_pagamento.valor),
+      referencia: payload.dados_pagamento.referencia,
+      data: payload.dados_pagamento.data,
+    };
+  }
+
+  if (payload.tipo_documento) {
+    out.tipo_documento = payload.tipo_documento;
+    out.faturar = payload.tipo_documento !== "FP";
   }
 
   if (payload.observacoes) out.observacoes = payload.observacoes;
@@ -660,10 +698,9 @@ function criarPayloadVenda(payload: CriarVendaPayload): Record<string, unknown> 
   if (payload.iban?.trim()) out.iban = payload.iban.trim();
   if (payload.numero_conta?.trim()) out.numero_conta = payload.numero_conta.trim();
 
-  // CORREÇÃO: Sempre enviar desconto_global e troco, mesmo que seja 0
-  // O backend espera receber estes campos
-  out.desconto_global = payload.desconto_global !== undefined ? payload.desconto_global : 0;
-  out.troco = payload.troco !== undefined ? payload.troco : 0;
+  // 4. FORÇAR OS TOTAIS A SEREM NÚMEROS
+  out.desconto_global = Number(payload.desconto_global || 0);
+  out.troco = Number(payload.troco || 0);
 
   return out;
 }
@@ -714,10 +751,15 @@ export const vendaService = {
 
   async criar(payload: CriarVendaPayload): Promise<{ venda: Venda; message: string } | null> {
     try {
-      const { data } = await api.post(`${API}/vendas`, criarPayloadVenda(payload));
+      const payloadLimpo = criarPayloadVenda(payload);
+      const { data } = await api.post(`${API}/vendas`, payloadLimpo);
       if (data.venda) data.venda = this.normalizar(data.venda);
       return data;
-    } catch (err) {
+    } catch (err: any) {
+      // 👇 DEBUG: Mostra o erro exato do Laravel na consola
+      console.error("🚨 ERRO DE VALIDAÇÃO (Laravel):", err.response?.data?.errors);
+      console.log("📦 PAYLOAD ENVIADO:", criarPayloadVenda(payload));
+      
       handleAxiosError(err, "[VENDA] criar");
       return null;
     }
@@ -1915,6 +1957,13 @@ export function getMetodoPagamentoNome(metodo?: string): string {
 }
 
 export function validarPayloadVenda(payload: CriarVendaPayload): string | null {
+  if (
+    payload.tipo_documento === "FR" &&
+    !payload.cliente_id &&
+    (!payload.cliente_nome?.trim() || payload.cliente_nome.trim().toLowerCase() === "consumidor final")
+  ) {
+    return "Fatura-Recibo exige a identificação do cliente. Selecione um cliente ou informe o nome do adquirente.";
+  }
   if (!payload.cliente_id && !payload.cliente_nome?.trim()) return "É necessário informar um cliente (cadastrado ou avulso)";
   if (payload.tipo_documento === "FR") {
     if (!payload.dados_pagamento) return "Fatura-Recibo requer dados de pagamento";

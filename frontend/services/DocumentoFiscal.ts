@@ -5,15 +5,29 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 // ==================== TIPOS ====================
 
-export type TipoDocumento = "FT" | "FR" | "FP" | "FA" | "NC" | "ND" | "RC" | "FRt";
+export type TipoDocumento =
+  | "FT"
+  | "FR"
+  | "FP"
+  | "FA"
+  | "NC"
+  | "ND"
+  | "RC"
+  | "FRt"
+  | "FG"
+  | "FGR"
+  | "TV"
+  | "FGEN"
+  | "AC"
+  | "ACR";
 export type EstadoDocumento = "emitido" | "paga" | "parcialmente_paga" | "cancelado" | "expirado";
 export type MetodoPagamento = "transferencia" | "multibanco" | "dinheiro" | "cheque" | "cartao";
 
-export const TIPOS_VENDA: TipoDocumento[] = ["FT", "FR", "RC"];
-export const TIPOS_NAO_VENDA: TipoDocumento[] = ["FP", "FA", "NC", "ND", "FRt"];
-export const TIPOS_DOCUMENTO_VENDA: TipoDocumento[] = ["FT", "FR"];
-export const TIPOS_ORIGEM_NC: TipoDocumento[] = ["FT", "FR"]; // Nota de Crédito
-export const TIPOS_ORIGEM_ND: TipoDocumento[] = ["FT"]; // Nota de Débito (apenas FT)
+export const TIPOS_VENDA: TipoDocumento[] = ["FT", "FR", "RC", "FG", "FGR", "TV"];
+export const TIPOS_NAO_VENDA: TipoDocumento[] = ["FP", "FA", "NC", "ND", "FRt", "FGEN", "AC", "ACR"];
+export const TIPOS_DOCUMENTO_VENDA: TipoDocumento[] = ["FT", "FR", "FG", "FGR", "TV"];
+export const TIPOS_ORIGEM_NC: TipoDocumento[] = ["FT", "FR", "FG", "FGR"]; // Nota de Crédito
+export const TIPOS_ORIGEM_ND: TipoDocumento[] = ["FT", "FG"]; // Nota de Débito
 
 export interface ItemDocumento {
   id?: string;
@@ -57,6 +71,11 @@ export interface DocumentoFiscal {
   hora_emissao: string;
   data_vencimento?: string | null;
   data_cancelamento?: string | null;
+  periodo_referencia_inicio?: string | null;
+  periodo_referencia_fim?: string | null;
+  auto_faturacao?: boolean;
+  motivo_auto_faturacao?: string | null;
+  anexos?: AnexoFacturaGlobal[];
 
   // Campos de desconto e pagamento
   desconto_global?: number;
@@ -179,6 +198,60 @@ export interface EmitirDocumentoDTO {
   nome_banco?: string;
   iban?: string;
   numero_conta?: string;
+}
+
+export interface AnexoFacturaGlobal {
+  id?: string;
+  tipo_anexo: "guia_remessa" | "guia_transporte" | "folha_servico" | "outro";
+  referencia: string;
+  data_anexo: string;
+  valor_total?: number;
+  observacoes?: string;
+}
+
+export interface ItemEmissaoEspecial {
+  produto_id?: string;
+  descricao: string;
+  quantidade: number;
+  preco_venda: number;
+  preco_unitario?: number;
+  desconto?: number;
+  taxa_iva?: number;
+  codigo_isencao?: string;
+}
+
+export interface EmitirFacturaGlobalDTO {
+  tipo_documento: "FG" | "FGR";
+  cliente_id?: string;
+  cliente_nome?: string;
+  cliente_nif?: string;
+  itens: ItemEmissaoEspecial[];
+  periodo_referencia_inicio: string;
+  periodo_referencia_fim: string;
+  anexos: AnexoFacturaGlobal[];
+  dados_pagamento?: DadosPagamento;
+  data_vencimento?: string;
+  referencia_externa?: string;
+  observacoes?: string;
+}
+
+export interface EmitirTalaoVendaDTO {
+  cliente_nome?: string;
+  itens: ItemEmissaoEspecial[];
+  dados_pagamento: DadosPagamento;
+  referencia_externa?: string;
+}
+
+export interface EmitirAutoFacturacaoDTO {
+  cliente_nome: string;
+  cliente_nif?: string;
+  itens: ItemEmissaoEspecial[];
+  motivo_auto_faturacao: string;
+  tipo_bem: "bem" | "servico";
+  bens_essenciais?: boolean;
+  dados_pagamento: DadosPagamento;
+  referencia_externa?: string;
+  observacoes?: string;
 }
 
 export interface GerarReciboDTO {
@@ -351,8 +424,12 @@ class DocumentoFiscalService {
 
   // ── Emissão ─────────────────────────────────────────────
 async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
-    if (!dados.cliente_id && !dados.cliente_nome && dados.tipo_documento === 'FR') {
-        throw new Error('Factura-Recibo (FR) requer um cliente (cadastrado ou avulso)');
+    if (
+        dados.tipo_documento === 'FR' &&
+        !dados.cliente_id &&
+        (!dados.cliente_nome?.trim() || dados.cliente_nome.trim().toLowerCase() === 'consumidor final')
+    ) {
+        throw new Error('Factura-Recibo (FR) exige a identificação do cliente (cadastrado ou avulso)');
     }
 
     // ✅ Log para debug
@@ -409,6 +486,24 @@ async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
     dados: Omit<EmitirDocumentoDTO, "tipo_documento"> & { fatura_id: string; motivo: string }
   ): Promise<DocumentoFiscal> {
     return this.emitir({ ...dados, tipo_documento: "FRt" });
+  }
+
+  async emitirFacturaGlobal(dados: EmitirFacturaGlobalDTO): Promise<DocumentoFiscal> {
+    const response = await api.post<ApiResponse<DocumentoFiscal>>(`${this.baseUrl}/factura-global`, dados);
+    if (!response.data.success) throw new Error(response.data.message);
+    return this._enriquecerDocumento(response.data.data);
+  }
+
+  async emitirTalaoVenda(dados: EmitirTalaoVendaDTO): Promise<DocumentoFiscal> {
+    const response = await api.post<ApiResponse<DocumentoFiscal>>(`${this.baseUrl}/talao-venda`, dados);
+    if (!response.data.success) throw new Error(response.data.message);
+    return this._enriquecerDocumento(response.data.data);
+  }
+
+  async emitirAutoFacturacao(dados: EmitirAutoFacturacaoDTO): Promise<DocumentoFiscal> {
+    const response = await api.post<ApiResponse<DocumentoFiscal>>(`${this.baseUrl}/auto-facturacao`, dados);
+    if (!response.data.success) throw new Error(response.data.message);
+    return this._enriquecerDocumento(response.data.data);
   }
 
   // ── Notas de Crédito / Débito (CORRIGIDO) ──────────────
@@ -1029,6 +1124,12 @@ async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
       ND: "Nota de Débito",
       RC: "Recibo",
       FRt: "Factura de Retificação",
+      FG: "Factura Global",
+      FGR: "Factura Global-Recibo",
+      TV: "Talão de Venda",
+      FGEN: "Factura Genérica",
+      AC: "Aviso de Cobrança",
+      ACR: "Aviso de Cobrança-Recibo",
     };
     return nomes[tipo] ?? tipo;
   }
@@ -1043,6 +1144,12 @@ async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
       ND: "amber",
       RC: "teal",
       FRt: "pink",
+      FG: "indigo",
+      FGR: "indigo",
+      TV: "slate",
+      FGEN: "cyan",
+      AC: "rose",
+      ACR: "rose",
     };
     return cores[tipo] ?? "gray";
   }

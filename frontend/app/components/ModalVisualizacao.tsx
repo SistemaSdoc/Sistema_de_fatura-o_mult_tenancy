@@ -26,11 +26,20 @@ import {
 } from "@/components/ui/dialog";
 
 const TIPOS_DOCUMENTO = [
+    { value: "FT" as TipoDocumento, label: "Factura", icon: FileText, cor: "#334155" },
+    { value: "FR" as TipoDocumento, label: "Factura-Recibo", icon: FileText, cor: "#334155" },
+    { value: "RC" as TipoDocumento, label: "Recibo", icon: FileText, cor: "#64748b" },
     { value: "FP" as TipoDocumento, label: "Proforma", icon: FileWarning, cor: "#f97316" },
     { value: "FA" as TipoDocumento, label: "Adiantamento", icon: CreditCard, cor: "#8b5cf6" },
     { value: "NC" as TipoDocumento, label: "Nota de Crédito", icon: FileX, cor: "#ef4444" },
     { value: "ND" as TipoDocumento, label: "Nota de Débito", icon: FileX, cor: "#f59e0b" },
     { value: "FRt" as TipoDocumento, label: "Retificação", icon: FileCheck, cor: "#ec4899" },
+    { value: "FG" as TipoDocumento, label: "Factura Global", icon: FileText, cor: "#4f46e5" },
+    { value: "FGR" as TipoDocumento, label: "Factura Global-Recibo", icon: FileText, cor: "#4f46e5" },
+    { value: "TV" as TipoDocumento, label: "Talão de Venda", icon: FileText, cor: "#64748b" },
+    { value: "FGEN" as TipoDocumento, label: "Factura Genérica", icon: FileText, cor: "#06b6d4" },
+    { value: "AC" as TipoDocumento, label: "Aviso de Cobrança", icon: FileText, cor: "#f43f5e" },
+    { value: "ACR" as TipoDocumento, label: "Aviso de Cobrança-Recibo", icon: FileText, cor: "#f43f5e" },
 ] as const;
 
 const getEstadoConfig = (estado: EstadoDocumento, theme: string) => {
@@ -49,7 +58,8 @@ const formatarValor = (valor: number) =>
 
 const formatarData = (data: string) => format(new Date(data), "dd/MM/yyyy", { locale: pt });
 
-const getTipoInfo = (tipo: TipoDocumento) => TIPOS_DOCUMENTO.find((t) => t.value === tipo) || TIPOS_DOCUMENTO[0];
+const getTipoInfo = (tipo: TipoDocumento) =>
+    TIPOS_DOCUMENTO.find((t) => t.value === tipo) || { label: tipo, icon: FileText, cor: "#64748b" };
 
 const EstadoBadge: React.FC<{ estado: EstadoDocumento }> = ({ estado }) => {
     const { theme } = useTheme();

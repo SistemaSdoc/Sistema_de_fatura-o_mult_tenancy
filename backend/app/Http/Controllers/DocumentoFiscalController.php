@@ -1015,6 +1015,136 @@ public function emitir(Request $request): JsonResponse
         }
     }
 
+    /**
+ * Factura Global (FG / FGR) — Art. 3.º al. j), Art. 8.º n.º 2 do DP 71/25.
+ * Requer período de referência (máx. 31 dias) e anexos (guias de remessa,
+ * folhas de serviço, etc.).
+ */
+public function emitirFacturaGlobal(Request $request)
+{
+    $validated = $request->validate([
+        'tipo_documento'            => 'required|in:FG,FGR',
+        'cliente_id'                => 'nullable|uuid',
+        'cliente_nome'              => 'nullable|string|max:255',
+        'cliente_nif'               => 'nullable|string|max:20',
+        'itens'                     => 'required|array|min:1',
+        'itens.*.produto_id'        => 'nullable|uuid',
+        'itens.*.descricao'         => 'required|string|max:255',
+        'itens.*.quantidade'        => 'required|numeric|min:0.01',
+        'itens.*.preco_venda'       => 'required|numeric|min:0',
+        'itens.*.preco_unitario'    => 'nullable|numeric|min:0',
+        'itens.*.desconto'          => 'nullable|numeric|min:0',
+        'itens.*.taxa_iva'          => 'nullable|numeric|in:0,5,14',
+        'itens.*.codigo_isencao'    => 'nullable|string|max:5',
+        'periodo_referencia_inicio' => 'required|date',
+        'periodo_referencia_fim'    => 'required|date|after_or_equal:periodo_referencia_inicio',
+        'anexos'                    => 'required|array|min:1',
+        'anexos.*.tipo_anexo'       => 'required|in:guia_remessa,guia_transporte,folha_servico,outro',
+        'anexos.*.referencia'       => 'required|string|max:100',
+        'anexos.*.data_anexo'       => 'required|date',
+        'anexos.*.valor_total'      => 'nullable|numeric|min:0',
+        'anexos.*.observacoes'      => 'nullable|string|max:1000',
+        'dados_pagamento'           => 'required_if:tipo_documento,FGR|array',
+        'dados_pagamento.metodo'    => 'required_with:dados_pagamento|in:dinheiro,multibanco,transferencia,cartao,cheque',
+        'dados_pagamento.valor'     => 'required_with:dados_pagamento|numeric|min:0.01',
+        'dados_pagamento.data'      => 'nullable|date',
+        'dados_pagamento.referencia'=> 'nullable|string|max:100',
+        'data_vencimento'           => 'nullable|date',
+        'referencia_externa'        => 'nullable|string|max:100',
+        'observacoes'               => 'nullable|string|max:1000',
+    ]);
+
+    $doc = app(DocumentoFiscalService::class)->emitirFacturaGlobal($validated);
+
+    return response()->json([
+        'success' => true,
+        'message' => "{$doc->tipo_documento_nome} {$doc->numero_documento} emitida com sucesso.",
+        'data'    => $doc,
+    ], 201);
+}
+
+/**
+ * Talão de Venda (TV) — Art. 5.º n.º 2-3 do DP 71/25.
+ * Destina-se a adquirente final sem NIF. Se o cliente tiver NIF, emita FR.
+ */
+public function emitirTalaoVenda(Request $request)
+{
+    $validated = $request->validate([
+        'cliente_nome'           => 'nullable|string|max:255',
+        'cliente_nif'            => 'nullable|string|max:20',
+        'itens'                  => 'required|array|min:1',
+        'itens.*.produto_id'     => 'nullable|uuid',
+        'itens.*.descricao'      => 'required|string|max:255',
+        'itens.*.quantidade'     => 'required|numeric|min:0.01',
+        'itens.*.preco_venda'    => 'required|numeric|min:0',
+        'itens.*.preco_unitario' => 'nullable|numeric|min:0',
+        'itens.*.desconto'       => 'nullable|numeric|min:0',
+        'itens.*.taxa_iva'       => 'nullable|numeric|in:0,5,14',
+        'itens.*.codigo_isencao' => 'nullable|string|max:5',
+        'dados_pagamento'        => 'required|array',
+        'dados_pagamento.metodo' => 'required|in:dinheiro,multibanco,transferencia,cartao,cheque',
+        'dados_pagamento.valor'  => 'required|numeric|min:0.01',
+        'dados_pagamento.data'   => 'nullable|date',
+        'dados_pagamento.referencia' => 'nullable|string|max:100',
+        'referencia_externa'     => 'nullable|string|max:100',
+    ]);
+
+    // Validação semântica: TV não pode levar NIF
+    if (!empty($validated['cliente_nif'])) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Talão de Venda é para adquirente sem NIF. Se o cliente tem NIF, emita uma Factura-Recibo (FR).',
+        ], 422);
+    }
+
+    $doc = app(DocumentoFiscalService::class)->emitirTalaoVenda($validated);
+
+    return response()->json([
+        'success' => true,
+        'message' => "Talão de Venda {$doc->numero_documento} emitido com sucesso.",
+        'data'    => $doc,
+    ], 201);
+}
+
+/**
+ * Auto-Facturação (FR com flag) — Art. 11.º-14.º do DP 71/25.
+ * Regime para aquisição de bens/serviços a produtores primários sem NIF.
+ * Aplica retenção na fonte (IRT ou Imposto Industrial).
+ */
+public function emitirAutoFacturacao(Request $request)
+{
+    $validated = $request->validate([
+        'cliente_nome'               => 'required|string|max:255',
+        'cliente_nif'                => 'nullable|string|max:20',
+        'itens'                      => 'required|array|min:1',
+        'itens.*.produto_id'         => 'nullable|uuid',
+        'itens.*.descricao'          => 'required|string|max:255',
+        'itens.*.quantidade'         => 'required|numeric|min:0.01',
+        'itens.*.preco_venda'        => 'required|numeric|min:0',
+        'itens.*.preco_unitario'     => 'nullable|numeric|min:0',
+        'itens.*.desconto'           => 'nullable|numeric|min:0',
+        'itens.*.taxa_iva'           => 'nullable|numeric|in:0,5,14',
+        'itens.*.codigo_isencao'     => 'nullable|string|max:5',
+        'motivo_auto_faturacao'      => 'required|string|max:255',
+        'tipo_bem'                   => 'required|in:bem,servico',
+        'bens_essenciais'            => 'nullable|boolean',
+        'dados_pagamento'            => 'required|array',
+        'dados_pagamento.metodo'     => 'required|in:dinheiro,transferencia,cheque',
+        'dados_pagamento.valor'      => 'required|numeric|min:0.01',
+        'dados_pagamento.data'       => 'nullable|date',
+        'dados_pagamento.referencia' => 'nullable|string|max:100',
+        'referencia_externa'         => 'nullable|string|max:100',
+        'observacoes'                => 'nullable|string|max:1000',
+    ]);
+
+    $doc = app(DocumentoFiscalService::class)->emitirAutoFacturacao($validated);
+
+    return response()->json([
+        'success' => true,
+        'message' => "Auto-facturação {$doc->numero_documento} emitida (série {$doc->serie}).",
+        'data'    => $doc,
+    ], 201);
+}
     public function adiantamentosPendentes(Request $request): JsonResponse
     {
         $modo = $this->getModo();
@@ -1219,6 +1349,9 @@ public function emitir(Request $request): JsonResponse
             $dados['itens']   = $docInfo->itens ?? [];
             $dados['docInfo'] = $docInfo;
 
+            $numeroVia = $this->registarViaDocumento($id);
+            $documento->print_count = $numeroVia;
+            $dados['numeroVia'] = $this->rotuloVia($numeroVia);
             $impressoraService->imprimirDocumento($documento, $dados, $user);
 
             return response()->json([
@@ -1232,12 +1365,12 @@ public function emitir(Request $request): JsonResponse
         }
     }
 
-    public function printA4(Request $request, string $id): \Illuminate\Contracts\View\View
+    public function printView(Request $request, string $id): \Illuminate\Contracts\View\View
     {
         try {
             $this->verificarAcessoUsuario();
 
-            Log::info('printA4 called', ['id' => $id, 'modo' => $this->getModo()]);
+            Log::info('printView called', ['id' => $id, 'modo' => $this->getModo()]);
 
             if ($this->isColectivo()) {
                 $documento = SharedDocumentoFiscal::doTenant()->with(['itens.produto', 'cliente'])->where('id', $id)->firstOrFail();
@@ -1266,7 +1399,7 @@ public function emitir(Request $request): JsonResponse
                         $empresaArray['logo_base64'] = 'data:' . $logoMime . ';base64,' . base64_encode($logoConteudo);
                     }
                 } catch (\Throwable $logoErr) {
-                    Log::warning('printA4: erro ao converter logo', ['error' => $logoErr->getMessage()]);
+                    Log::warning('printView: erro ao converter logo', ['error' => $logoErr->getMessage()]);
                 }
             }
 
@@ -1304,7 +1437,7 @@ public function emitir(Request $request): JsonResponse
                     ]);
                     $qrCodeImg = $result->getDataUri();
                 } catch (\Throwable $e) {
-                    Log::warning('printA4: erro ao gerar QR Code', ['error' => $e->getMessage()]);
+                    Log::warning('printView: erro ao gerar QR Code', ['error' => $e->getMessage()]);
                 }
             }
 
@@ -1312,6 +1445,9 @@ public function emitir(Request $request): JsonResponse
             $proofQrHtml = $documento->tipo_documento === 'FP'
                 ? ''
                 : $this->gerarQrHtml($proofUrl);
+
+            $numeroVia = $this->registarViaDocumento($id);
+            $documento->print_count = $numeroVia;
 
             return view('documentos.print-view', [
                 'empresa'         => $dados['empresa'],
@@ -1328,14 +1464,15 @@ public function emitir(Request $request): JsonResponse
                 'descontoGlobal'  => $dados['desconto_global'] ?? 0,
                 'troco'           => $dados['troco'] ?? 0,
                 'temDesconto'     => ($dados['desconto_global'] ?? 0) > 0,
+                'numeroVia'       => $this->rotuloVia($numeroVia),
                 'modo'            => $this->getModo(),
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            Log::error('printA4: documento não encontrado', ['id' => $id]);
+            Log::error('printView: documento não encontrado', ['id' => $id]);
             abort(404, 'Documento não encontrado');
         } catch (\Exception $e) {
-            Log::error('Erro no printA4', ['error' => $e->getMessage()]);
-            abort(500, 'Erro ao gerar impressão A4: ' . $e->getMessage());
+            Log::error('Erro no printView', ['error' => $e->getMessage()]);
+            abort(500, 'Erro ao gerar talão POS de 80mm: ' . $e->getMessage());
         }
     }
 
@@ -1388,6 +1525,10 @@ public function emitir(Request $request): JsonResponse
             if (empty($dados['empresa']['endereco']) && !empty($dados['empresa']['morada'])) {
                 $dados['empresa']['endereco'] = $dados['empresa']['morada'];
             }
+
+            $numeroVia = $this->registarViaDocumento($id);
+            $documento->print_count = $numeroVia;
+            $dados['numeroVia'] = $this->rotuloVia($numeroVia);
 
             $pdf = Pdf::loadView('documentos.pdf', $dados)
                 ->setPaper('a4', 'portrait')
@@ -1576,6 +1717,8 @@ public function emitir(Request $request): JsonResponse
 
             $proofUrl    = $this->montarUrlDeProva($request, $id);
             $proofQrHtml = $this->gerarQrHtml($proofUrl);
+            $numeroVia = $this->registarViaDocumento($id);
+            $documento->print_count = $numeroVia;
 
             return view('documentos.pdf-viewer', [
                 'empresa'         => $empresaArray,
@@ -1589,6 +1732,7 @@ public function emitir(Request $request): JsonResponse
                 'qr_html'         => $this->gerarQrHtml($qrCodeTexto),
                 'proof_url'       => $proofUrl,
                 'proof_qr_html'   => $proofQrHtml,
+                'numeroVia'       => $this->rotuloVia($numeroVia),
                 'modo'            => $this->getModo(),
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
@@ -1597,9 +1741,28 @@ public function emitir(Request $request): JsonResponse
             Log::error('Erro no pdfViewer', ['error' => $e->getMessage()]);
             abort(500, 'Erro ao gerar visualização do PDF');
         }
+
     }
 
+    private function registarViaDocumento(string $id): int
+    {
+        return DB::transaction(function () use ($id): int {
+            $documento = $this->isColectivo()
+                ? SharedDocumentoFiscal::doTenant()->where('id', $id)->lockForUpdate()->firstOrFail()
+                : TenantDocumentoFiscal::where('id', $id)->lockForUpdate()->firstOrFail();
 
+            $documento->increment('print_count');
+
+            return (int) $documento->print_count;
+        });
+    }
+
+private function rotuloVia(int $numeroVia): string
+{
+    return $numeroVia <= 1
+        ? 'Original'
+        : $numeroVia . '.ª via, em conformidade com a original';
+}
 
     public function converterProforma(Request $request, string $proformaId): JsonResponse
     {

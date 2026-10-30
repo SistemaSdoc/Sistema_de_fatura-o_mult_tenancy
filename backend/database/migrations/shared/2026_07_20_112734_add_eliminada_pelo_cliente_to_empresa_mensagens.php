@@ -11,9 +11,14 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::connection('shared')->table('empresa_mensagens', function (Blueprint $table) {
-            $table->boolean('eliminada_pelo_cliente')->default(false)->after('lida_em');
-        });
+        $schema = Schema::connection('shared');
+
+        // Cada coluna verificada e criada individualmente, na conexão correta
+        if (! $schema->hasColumn('empresa_mensagens', 'eliminada_pelo_cliente')) {
+            $schema->table('empresa_mensagens', function (Blueprint $table) {
+                $table->string('eliminada_pelo_cliente', 255)->nullable();
+            });
+        }
     }
 
     /**
@@ -21,8 +26,12 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::connection('shared')->table('empresa_mensagens', function (Blueprint $table) {
-            $table->dropColumn('eliminada_pelo_cliente');
-        });
+        $schema = Schema::connection('shared');
+
+        if ($schema->hasColumn('empresa_mensagens', 'eliminada_pelo_cliente')) {
+            $schema->table('empresa_mensagens', function (Blueprint $table) {
+                $table->dropColumn('eliminada_pelo_cliente');
+            });
+        }
     }
 };

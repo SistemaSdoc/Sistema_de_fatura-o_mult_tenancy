@@ -124,7 +124,8 @@ export default function RelatoriosPage() {
     pagamentos: false,
     movimentos_stock: false,
   });
-  const [exportLoading, setExportLoading] = useState(false);
+  const [exportandoPDF, setExportandoPDF] = useState(false);
+  const [exportandoExcel, setExportandoExcel] = useState(false);
   const [exportandoSaft, setExportandoSaft] = useState(false);
 
   const [dataInicio, setDataInicio] = useState("");
@@ -299,58 +300,58 @@ export default function RelatoriosPage() {
       showToast("Sem dados", "error", "Não há dados disponíveis para exportar");
       return;
     }
-    setExportLoading(true);
+    setExportandoPDF(true);
     try {
       await exportarPDF(activeTab, dados, getPeriodoAtivo());
       showToast("PDF exportado", "success", "Ficheiro PDF exportado com sucesso");
     } catch {
       showToast("Erro ao exportar", "error", "Não foi possível gerar o ficheiro PDF");
     } finally {
-      setExportLoading(false);
+      setExportandoPDF(false);
     }
   };
 
-const handleExportarCompleto = async () => {
-  setExportLoading(true);
-  try {
-    const params = new URLSearchParams();
-    // usar o período da aba ativa ou um período global
-    if (activeTab === 'vendas') {
-      params.append('data_inicio', periodoVendas.data_inicio);
-      params.append('data_fim', periodoVendas.data_fim);
-    } else if (activeTab === 'documentos') {
-      params.append('data_inicio', periodoDocumentos.data_inicio);
-      params.append('data_fim', periodoDocumentos.data_fim);
-    } else if (activeTab === 'movimentos_stock') {
-      params.append('data_inicio', periodoMovimentos.data_inicio);
-      params.append('data_fim', periodoMovimentos.data_fim);
-    } else {
-      params.append('data_inicio', getPeriodoPredefinido("este_mes").data_inicio);
-      params.append('data_fim', getPeriodoPredefinido("este_mes").data_fim);
-    }
+  const handleExportarCompleto = async () => {
+    setExportandoExcel(true);
+    try {
+      const params = new URLSearchParams();
+      if (activeTab === "vendas") {
+        params.append("data_inicio", periodoVendas.data_inicio);
+        params.append("data_fim", periodoVendas.data_fim);
+      } else if (activeTab === "documentos") {
+        params.append("data_inicio", periodoDocumentos.data_inicio);
+        params.append("data_fim", periodoDocumentos.data_fim);
+      } else if (activeTab === "movimentos_stock") {
+        params.append("data_inicio", periodoMovimentos.data_inicio);
+        params.append("data_fim", periodoMovimentos.data_fim);
+      } else {
+        const periodo = getPeriodoPredefinido("este_mes");
+        params.append("data_inicio", periodo.data_inicio);
+        params.append("data_fim", periodo.data_fim);
+      }
 
-    const response = await api.get('/api/relatorios/exportar-completo', {
-      params,
-      responseType: 'blob',
-    });
-    const blob = new Blob([response.data], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `relatorio_completo_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
-    showToast("Relatório completo exportado", "success", "Excel com todas as folhas gerado com sucesso");
-  } catch (error) {
-    showToast("Erro ao exportar", "error", "Não foi possível gerar o ficheiro completo");
-  } finally {
-    setExportLoading(false);
-  }
-};
+      const response = await api.get("/api/relatorios/exportar-completo", {
+        params,
+        responseType: "blob",
+      });
+      const blob = new Blob([response.data], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `relatorio_completo_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      showToast("Relatório completo exportado", "success", "Excel com todas as folhas gerado com sucesso");
+    } catch {
+      showToast("Erro ao exportar", "error", "Não foi possível gerar o ficheiro completo");
+    } finally {
+      setExportandoExcel(false);
+    }
+  };
 
   const handleExportarSaft = async () => {
     setExportandoSaft(true);
@@ -457,18 +458,24 @@ const handleExportarCompleto = async () => {
               </button>
               <button
                 onClick={handleExportarCompleto}
-                disabled={exportLoading || !getDadosAtivos()}
+                disabled={exportandoExcel || !getDadosAtivos()}
+                aria-busy={exportandoExcel}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 transition-all"
                 style={{ backgroundColor: colors.secondary, borderRadius: 4 }}>
-                <FileSpreadsheet size={12} />
+                {exportandoExcel ? (
+                  <div className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                ) : (
+                  <FileSpreadsheet size={12} />
+                )}
                 Excel
               </button>
               <button
                 onClick={handleExportPDF}
-                disabled={exportLoading || !getDadosAtivos()}
+                disabled={exportandoPDF || !getDadosAtivos()}
+                aria-busy={exportandoPDF}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 transition-all"
                 style={{ backgroundColor: colors.primary, borderRadius: 4 }}>
-                {exportLoading ? (
+                {exportandoPDF ? (
                   <div className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
                 ) : (
                   <Download size={12} />

@@ -595,6 +595,9 @@ class ImpressoraTermicaService
         $hora = $d->hora_emissao ? substr($d->hora_emissao, 0, 5) : '';
 
         $this->printer->text($this->linhaLR('Serie: ' . ($d->serie ?? ''), $data . ' ' . $hora) . "\n");
+        $numeroVia = (int) ($d->print_count ?? 0);
+        $via = $numeroVia <= 1 ? 'Original' : $numeroVia . '.ª via';
+        $this->printer->text('Via: ' . $via . "\n");
         $this->printer->text(str_repeat('-', $this->L) . "\n");
     }
 

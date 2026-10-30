@@ -31,14 +31,17 @@ class StockService
     protected string $modo = 'colectivo';
     protected ?object $tenantUser = null;
 
-    private const TIPOS_MOVIMENTO_VALIDOS = [
-        'compra',
-        'venda',
-        'ajuste',
-        'nota_credito',
-        'venda_cancelada',
-        'nota_credito_cancelada'
-    ];
+private const TIPOS_MOVIMENTO_VALIDOS = [
+    'compra',
+    'venda',
+    'ajuste',
+    'nota_credito',
+    'venda_cancelada',
+    'nota_credito_cancelada',
+    // DP 71/25 — auto-facturação (Art. 11.º-14.º)
+    'auto_facturacao',
+    'auto_facturacao_cancelada',
+];
 
     /* =====================================================================
      | GETTERS - OBTÊM DADOS DA SESSÃO
@@ -577,81 +580,108 @@ public function movimentar(
             ->get();
     }
 
-    public function processarDocumentoFiscal(object $documento): void
-    {
-        $this->verificarAcessoUsuario();
+public function processarDocumentoFiscal(object $documento): void
+{
+    $this->verificarAcessoUsuario();
 
-        Log::info('[StockService] Processando documento fiscal', [
-            'documento_id' => $documento->id,
-            'tipo' => $documento->tipo_documento,
-            'modo' => $this->getModo(),
-        ]);
+    Log::info('[StockService] Processando documento fiscal', [
+        'documento_id' => $documento->id,
+        'tipo' => $documento->tipo_documento,
+        'auto_faturacao' => $documento->auto_faturacao ?? false,
+        'modo' => $this->getModo(),
+    ]);
 
-        if ($documento->estado === 'cancelado') {
-            Log::warning('[StockService] Documento cancelado, ignorando');
-            return;
-        }
-
-        if (!$documento->afetaStock()) {
-            Log::info('[StockService] Documento não afeta stock');
-            return;
-        }
-
-        $tipo = $documento->tipo_documento === 'NC' ? 'entrada' : 'saida';
-        $tipoMovimento = $documento->tipo_documento === 'NC' ? 'nota_credito' : 'venda';
-        $userId = $documento->user_id ?? null;
-
-        foreach ($documento->itens as $item) {
-            if (!$item->produto_id || $item->produto?->tipo === 'servico') {
-                continue;
-            }
-
-            $this->movimentar(
-                $item->produto_id,
-                abs((int) $item->quantidade),
-                $tipo,
-                $tipoMovimento,
-                $documento->id,
-                "Documento: {$documento->numero_documento} | Item: {$item->descricao}",
-                $userId
-            );
-        }
+    if ($documento->estado === 'cancelado') {
+        Log::warning('[StockService] Documento cancelado, ignorando');
+        return;
     }
 
-    public function reverterDocumentoFiscal(object $documento): void
-    {
-        $this->verificarAcessoUsuario();
-
-        Log::info('[StockService] Revertendo documento fiscal', [
-            'documento_id' => $documento->id,
-            'modo' => $this->getModo(),
-        ]);
-
-        if (!$documento->afetaStock()) {
-            return;
-        }
-
-        $tipo = $documento->tipo_documento === 'NC' ? 'saida' : 'entrada';
-        $tipoMovimento = $documento->tipo_documento === 'NC'
-            ? 'nota_credito_cancelada'
-            : 'venda_cancelada';
-
-        $userId = $documento->user_id ?? null;
-
-        foreach ($documento->itens as $item) {
-            if (!$item->produto_id || $item->produto?->tipo === 'servico') {
-                continue;
-            }
-
-            $this->movimentar(
-                $item->produto_id,
-                abs((int) $item->quantidade),
-                $tipo,
-                $tipoMovimento,
-                $documento->id,
-                "Reversão por cancelamento: {$documento->numero_documento}",
-                $userId
-            );
-        }
+    if (!$documento->afetaStock()) {
+        Log::info('[StockService] Documento não afeta stock');
+        return;
     }
+
+    // ─── Direcção e tipo de movimento ────────────────────────
+    // Auto-facturação (FR com auto_faturacao=true) → ENTRADA
+    //   (compra a produtor primário; Art. 13.º DP 71/25)
+    // NC → ENTRADA (devolução de venda)
+    // Restantes (FT, FR, FG, FGR, TV) → SAÍDA (venda)
+    if (!empty($documento->auto_faturacao)) {
+        $tipo = 'entrada';
+        $tipoMovimento = 'auto_facturacao';
+    } elseif ($documento->tipo_documento === 'NC') {
+        $tipo = 'entrada';
+        $tipoMovimento = 'nota_credito';
+    } else {
+        $tipo = 'saida';
+        $tipoMovimento = 'venda';
+    }
+
+    $userId = $documento->user_id ?? null;
+
+    foreach ($documento->itens as $item) {
+        if (!$item->produto_id || $item->produto?->tipo === 'servico') {
+            continue;
+        }
+
+        $this->movimentar(
+            $item->produto_id,
+            abs((int) $item->quantidade),
+            $tipo,
+            $tipoMovimento,
+            $documento->id,
+            "Documento: {$documento->numero_documento} | Item: {$item->descricao}",
+            $userId
+        );
+    }
+}
+
+public function reverterDocumentoFiscal(object $documento): void
+{
+    $this->verificarAcessoUsuario();
+
+    Log::info('[StockService] Revertendo documento fiscal', [
+        'documento_id' => $documento->id,
+        'tipo' => $documento->tipo_documento,
+        'auto_faturacao' => $documento->auto_faturacao ?? false,
+        'modo' => $this->getModo(),
+    ]);
+
+    if (!$documento->afetaStock()) {
+        return;
+    }
+
+    // ─── Reversão espelha o movimento original ──────────────
+    // Auto-facturação (entrada) → reverter com SAÍDA
+    // NC (entrada)             → reverter com SAÍDA
+    // Restantes (saída)        → reverter com ENTRADA
+    if (!empty($documento->auto_faturacao)) {
+        $tipo = 'saida';
+        $tipoMovimento = 'auto_facturacao_cancelada';
+    } elseif ($documento->tipo_documento === 'NC') {
+        $tipo = 'saida';
+        $tipoMovimento = 'nota_credito_cancelada';
+    } else {
+        $tipo = 'entrada';
+        $tipoMovimento = 'venda_cancelada';
+    }
+
+    $userId = $documento->user_id ?? null;
+
+    foreach ($documento->itens as $item) {
+        if (!$item->produto_id || $item->produto?->tipo === 'servico') {
+            continue;
+        }
+
+        $this->movimentar(
+            $item->produto_id,
+            abs((int) $item->quantidade),
+            $tipo,
+            $tipoMovimento,
+            $documento->id,
+            "Reversão por cancelamento: {$documento->numero_documento}",
+            $userId
+        );
+    }
+}
 }

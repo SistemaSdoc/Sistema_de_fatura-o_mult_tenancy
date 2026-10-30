@@ -38,6 +38,7 @@ use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Concerns\WithMultipleSheets;
+use Maatwebsite\Excel\Concerns\Export;
 use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
@@ -1244,7 +1245,7 @@ class RelatorioExport implements
         return $this->isColectivo() ? SharedMovimentoStock::doTenant() : TenantMovimentoStock::query();
     }
 
-    public function collection()
+public function collection(): \Illuminate\Support\Enumerable
     {
         try {
             $dados = match ($this->tipo) {
@@ -1613,7 +1614,7 @@ class RelatorioExport implements
  | CLASSE DE EXPORTAÇÃO PARA RELATÓRIO DE DESEMPENHO (MÚLTIPLAS FOLHAS)
  | ================================================================== */
 
-class RelatorioDesempenhoExport implements WithMultipleSheets, WithTitle
+class RelatorioDesempenhoExport implements Export, WithMultipleSheets, WithTitle
 {
     protected $dataInicio;
     protected $dataFim;
@@ -1938,7 +1939,7 @@ class ResumoDesempenhoSheet implements FromArray, WithHeadings, WithTitle, WithC
 /**
  * Exportação do relatório completo (múltiplas folhas + gráficos)
  */
-class RelatorioCompletoExport implements WithMultipleSheets
+class RelatorioCompletoExport implements Export, WithMultipleSheets
 {
     protected $dataInicio;
     protected $dataFim;

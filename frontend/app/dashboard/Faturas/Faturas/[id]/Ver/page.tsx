@@ -37,6 +37,12 @@ const TIPO_LABEL: Record<TipoDocumento, string> = {
   ND: "Nota de Débito",
   RC: "Recibo",
   FRt: "Factura de Retificação",
+  FG: "Factura Global",
+  FGR: "Factura Global-Recibo",
+  TV: "Talão de Venda",
+  FGEN: "Factura Genérica",
+  AC: "Aviso de Cobrança",
+  ACR: "Aviso de Cobrança-Recibo",
 };
 
 const METODOS_PAGAMENTO: Record<string, string> = {

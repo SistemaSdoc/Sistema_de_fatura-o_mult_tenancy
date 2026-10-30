@@ -170,6 +170,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
           "/dashboard/Vendas",
           "/dashboard/Faturas/Fatura_Normal",
           "/dashboard/Faturas/Faturas_Proforma",
+          "/dashboard/Faturas/AutoFacturacao",
           "/dashboard/Faturas/Faturas",
           "/dashboard/Faturas/DC",
           "/dashboard/ajuda",
@@ -181,6 +182,7 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
           "/dashboard/Vendas",
           "/dashboard/Faturas/Fatura_Normal",
           "/dashboard/Faturas/Faturas_Proforma",
+          "/dashboard/Faturas/AutoFacturacao",
           "/dashboard/Faturas/Faturas",
           "/dashboard/Faturas/DC",
           "/dashboard/Produtos_servicos",
@@ -576,6 +578,10 @@ export default function MainEmpresa({ children, companyLogo, companyName }: Main
               {
                 label: "Gerar proformas",
                 path: "/dashboard/Faturas/Faturas_Proforma",
+              },
+              {
+                label: "Auto-facturação",
+                path: "/dashboard/Faturas/AutoFacturacao",
               },
               {
                 label: "Vendas geradas",
