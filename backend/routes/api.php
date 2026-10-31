@@ -295,7 +295,6 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
                 ->where('id', $uuidPattern)->name('clientes.force-delete');
             Route::post('/{id}/ativar', [ClienteController::class, 'ativar'])
                 ->where('id', $uuidPattern)->name('clientes.ativar');
-            Route::post('/clientes/importar', [ClienteController::class, 'importar']);
             Route::post('/{id}/inativar', [ClienteController::class, 'inativar'])
                 ->where('id', $uuidPattern)->name('clientes.inativar');
         });
@@ -443,6 +442,10 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::post('factura-global',  [DocumentoFiscalController::class, 'emitirFacturaGlobal']);
             Route::post('talao-venda',     [DocumentoFiscalController::class, 'emitirTalaoVenda']);
             Route::post('auto-facturacao', [DocumentoFiscalController::class, 'emitirAutoFacturacao']);
+            Route::post('aviso-cobranca', [DocumentoFiscalController::class, 'emitirAvisoCobranca'])
+                ->name('documentos.aviso-cobranca');
+            Route::post('nota-debito', [DocumentoFiscalController::class, 'criarNotaDebitoAutonoma'])
+                ->name('documentos.nota-debito-autonoma');
 
             Route::get('/', [DocumentoFiscalController::class, 'index'])
                 ->middleware('log.panel')->name('documentos.index');

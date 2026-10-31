@@ -20,8 +20,7 @@ return new class extends Migration
             'FA',   -- Fatura de Adiantamento
             'NC',   -- Nota de Crédito
             'ND',   -- Nota de Débito
-            'RC',   -- Recibo
-            'FRt'   -- Fatura de Retificação
+            'RC'    -- Recibo
         ) NOT NULL");
     }
 
@@ -37,8 +36,7 @@ return new class extends Migration
             'FA',   -- Fatura de Adiantamento
             'NC',   -- Nota de Crédito
             'ND',   -- Nota de Débito
-            'RC',   -- Recibo
-            'FRt'   -- Fatura de Retificação
+            'RC'    -- Recibo
         ) NOT NULL");
     }
 };

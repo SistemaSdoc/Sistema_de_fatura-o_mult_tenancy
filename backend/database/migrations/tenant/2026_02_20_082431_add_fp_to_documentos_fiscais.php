@@ -25,8 +25,7 @@ return new class extends Migration
             'FA',   -- Fatura de Adiantamento
             'NC',   -- Nota de Crédito
             'ND',   -- Nota de Débito
-            'RC',   -- Recibo
-            'FRt'   -- Fatura de Retificação
+            'RC'    -- Recibo
         ) NOT NULL");
 
         Log::info('✅ ENUM tipo_documento atualizado com FP (Fatura Proforma)');
@@ -47,8 +46,7 @@ return new class extends Migration
             'FA',   -- Fatura de Adiantamento
             'NC',   -- Nota de Crédito
             'ND',   -- Nota de Débito
-            'RC',   -- Recibo
-            'FRt'   -- Fatura de Retificação
+            'RC'    -- Recibo
         ) NOT NULL");
 
         Log::info('🔄 ENUM tipo_documento revertido (FP removido)');

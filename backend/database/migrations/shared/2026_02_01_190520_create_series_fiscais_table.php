@@ -40,7 +40,6 @@ return new class extends Migration
                 'NC',  // Nota de Crédito
                 'ND',  // Nota de Débito
                 'RC',  // Recibo
-                'FRt', // Fatura de Retificação
             ]);
 
             // Código da série (ex: 'A', 'LOJA2', 'P', etc.)
@@ -177,20 +176,6 @@ return new class extends Migration
                 'ativa'          => true,
                 'padrao'         => true,
                 'valida_agt'     => false,
-                'created_at'     => $now,
-                'updated_at'     => $now,
-            ],
-            [
-                'id'             => (string) Str::uuid(),
-                'tipo_documento' => 'FRt',
-                'serie'          => 'RETIF',
-                'descricao'      => 'Série padrão — Faturas de Retificação',
-                'ano'            => $ano,
-                'ultimo_numero'  => 0,
-                'digitos'        => 4,
-                'ativa'          => true,
-                'padrao'         => true,
-                'valida_agt'     => true,
                 'created_at'     => $now,
                 'updated_at'     => $now,
             ],

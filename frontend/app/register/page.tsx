@@ -64,6 +64,7 @@ interface FormData {
   endereco: string;
   regime_fiscal: "simplificado" | "geral";
   sujeito_iva: boolean;
+  is_seguradora: boolean;
   nome_banco?: string | null;
   numero_conta?: string | null;
   iban?: string | null;
@@ -208,6 +209,7 @@ function RegisterCompanyPageContent() {
     endereco: "",
     regime_fiscal: "simplificado",
     sujeito_iva: false,
+    is_seguradora: false,
     nome_banco: "",
     numero_conta: "",
     iban: "",
@@ -444,6 +446,7 @@ function RegisterCompanyPageContent() {
         endereco: form.endereco,
         regime_fiscal: form.regime_fiscal,
         sujeito_iva: form.sujeito_iva,
+        is_seguradora: form.is_seguradora,
         nome_banco: form.nome_banco,
         numero_conta: form.numero_conta,
         iban: form.iban,
@@ -1027,6 +1030,19 @@ function RegisterCompanyPageContent() {
                       />
                       <span className="text-sm" style={{ color: colors.text }}>
                         Sujeito a IVA
+                      </span>
+                    </label>
+                    <label className="flex items-center gap-3 py-3 md:col-span-2">
+                      <input
+                        type="checkbox"
+                        name="is_seguradora"
+                        checked={form.is_seguradora}
+                        onChange={handleChange}
+                        className="h-4 w-4 shrink-0"
+                        style={{ accentColor: colors.primary }}
+                      />
+                      <span className="text-sm" style={{ color: colors.text }}>
+                        Esta empresa é uma seguradora
                       </span>
                     </label>
                   </div>

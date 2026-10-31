@@ -22,7 +22,7 @@ let dashboardFetchPromise: Promise<DashboardData | null> | null = null;
 
 export type TipoDocumentoFiscal =
     | 'FT' | 'FR' | 'FP' | 'RC'
-    | 'NC' | 'ND' | 'FA' | 'FRt';
+    | 'NC' | 'ND' | 'FA';
 
 export type EstadoDocumentoFiscal =
     | 'emitido' | 'paga' | 'parcialmente_paga'
@@ -600,7 +600,7 @@ export const dashboardService = {
         const nomes: Record<TipoDocumentoFiscal, string> = {
             FT: 'Fatura', FR: 'Fatura-Recibo', FP: 'Fatura Proforma',
             RC: 'Recibo', NC: 'Nota de Crédito', ND: 'Nota de Débito',
-            FA: 'Fatura de Adiantamento', FRt: 'Fatura de Retificação',
+            FA: 'Fatura de Adiantamento',
         };
         return nomes[tipo] || tipo;
     },
@@ -610,7 +610,7 @@ export const dashboardService = {
             FT: 'bg-blue-100 text-blue-800', FR: 'bg-green-100 text-green-800',
             FP: 'bg-orange-100 text-orange-800', FA: 'bg-purple-100 text-purple-800',
             NC: 'bg-red-100 text-red-800', ND: 'bg-amber-100 text-amber-800',
-            RC: 'bg-teal-100 text-teal-800', FRt: 'bg-pink-100 text-pink-800',
+            RC: 'bg-teal-100 text-teal-800',
         } as Record<TipoDocumentoFiscal, string>)[tipo] || 'bg-gray-100 text-gray-800';
     },
 

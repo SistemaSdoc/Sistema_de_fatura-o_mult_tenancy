@@ -329,7 +329,7 @@ class VendaController extends Controller
                 $query->whereHas('documentoFiscal', fn($q) => $q->whereIn('tipo_documento', ['FT', 'FR', 'RC']));
             }
             if ($request->boolean('apenas_nao_vendas')) {
-                $query->whereHas('documentoFiscal', fn($q) => $q->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FRt']));
+                $query->whereHas('documentoFiscal', fn($q) => $q->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND']));
             }
 
             $orderBy = in_array($request->order_by, ['data_venda', 'created_at', 'total', 'numero_documento'])
@@ -710,14 +710,14 @@ private function contarDocumentosMes($empresaId): int
 {
     if ($this->isColectivo()) {
         return SharedDocumentoFiscal::doTenant()
-            ->whereIn('tipo_documento', ['FT', 'FR', 'FP', 'NC', 'ND', 'RC', 'FRt'])
+            ->whereIn('tipo_documento', ['FT', 'FR', 'FP', 'NC', 'ND', 'RC'])
             ->where('estado', '!=', 'cancelado')
             ->whereMonth('created_at', now()->month)
             ->whereYear('created_at', now()->year)
             ->count();
     } else {
         //  SEM empresa_id no singular
-        return TenantDocumentoFiscal::whereIn('tipo_documento', ['FT', 'FR', 'FP', 'NC', 'ND', 'RC', 'FRt'])
+        return TenantDocumentoFiscal::whereIn('tipo_documento', ['FT', 'FR', 'FP', 'NC', 'ND', 'RC'])
             ->where('estado', '!=', 'cancelado')
             ->whereMonth('created_at', now()->month)
             ->whereYear('created_at', now()->year)

@@ -37,7 +37,7 @@ class ProdutosSheetImport implements ToCollection
         $this->modo = session('tenant_modo', $empresa?->modo ?? 'colectivo');
     }
 
-    public function collection(Collection $rows)
+    public function collection(Collection $rows): void
     {
         $headerIndex = self::HEADING_ROW - 1; // 0-based dentro de $rows
         $headerRow = $rows->get($headerIndex, collect());
@@ -207,6 +207,10 @@ class ProdutosSheetImport implements ToCollection
         ]);
         $label = preg_replace('/\s+/', '_', $label);
         $label = trim($label, '_');
+
+        if ($label === 'estoque_minim') {
+            $label = 'estoque_minimo';
+        }
 
         return $label !== '' ? $label : null;
     }

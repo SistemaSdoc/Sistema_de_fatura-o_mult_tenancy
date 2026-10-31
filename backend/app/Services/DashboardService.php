@@ -767,7 +767,7 @@ private function getServicosMaisVendidos(int $dias = 30): array
         $query = $this->queryComScope('documento')
             ->whereNotIn('estado', [$cancelado]);
 
-        $tipos = ['FT', 'FR', 'NC', 'ND', 'FP', 'FA', 'RC', 'FRt'];
+        $tipos = ['FT', 'FR', 'NC', 'ND', 'FP', 'FA', 'RC'];
         $porTipo = [];
         foreach ($tipos as $tipo) {
             $queryTipo = (clone $query)->where('tipo_documento', $tipo);
@@ -1144,7 +1144,6 @@ private function getServicosMaisVendidos(int $dias = 30): array
             'ND'  => 'Nota de Débito',
             'FA'  => 'Fatura de Adiantamento',
             'FP'  => 'Fatura Proforma',
-            'FRt' => 'Fatura de Retificação',
             default => 'Desconhecido',
         };
     }

@@ -46,7 +46,7 @@ return new class extends Migration
             $table->string('cliente_nome')->nullable();
             $table->string('cliente_nif', 20)->nullable();
 
-            // Auto-relacionamento para NC, ND, RC, FRt — FK adicionada abaixo
+            // Auto-relacionamento para NC, ND, RC — FK adicionada abaixo
             $table->uuid('fatura_id')->nullable()->index();
 
             // ── Numeração fiscal ─────────────────────────────────────────
@@ -63,7 +63,6 @@ return new class extends Migration
                 'NC',  // Nota de Crédito           — Não é venda, afecta stock
                 'ND',  // Nota de Débito            — Não é venda
                 'RC',  // Recibo                    — É venda
-                'FRt', // Fatura de Retificação     — Não é venda
             ]);
 
             // ── Datas ────────────────────────────────────────────────────
@@ -173,7 +172,7 @@ return new class extends Migration
                 ->constrained('produtos')
                 ->nullOnDelete();
 
-            // Auto-relacionamento para NC, ND, FRt — FK adicionada abaixo
+            // Auto-relacionamento para NC, ND — FK adicionada abaixo
             $table->uuid('item_origem_id')->nullable()->index();
 
             // ── Dados do item ────────────────────────────────────────────

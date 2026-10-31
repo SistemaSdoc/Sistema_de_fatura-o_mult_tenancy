@@ -13,7 +13,7 @@ use Illuminate\Support\Str;
  * 
  * Formato do número: {TIPO} {SERIE}/{ANO}/{NUMERO}
  * 
- *  SÉRIE FIXA POR TIPO DE DOCUMENTO (ex: FT, FR, FP, FA, NC, ND, RC, FRT)
+ *  SÉRIE FIXA POR TIPO DE DOCUMENTO (ex: FT, FR, FP, FA, NC, ND, RC)
  * Exemplo de número gerado: FT FT/2026/0001
  */
 class SerieFiscal extends Model

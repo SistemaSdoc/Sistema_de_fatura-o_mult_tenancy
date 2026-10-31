@@ -43,7 +43,6 @@ $tiposDocumento = [
     'NC' => 'Nota de Crédito',
     'ND' => 'Nota de Débito',
     'RC' => 'Recibo',
-    'FRt' => 'Fact. Retificação',
     'FG' => 'Factura Global',
     'FGR' => 'Factura Global-Recibo',
     'TV' => 'Talão de Venda'

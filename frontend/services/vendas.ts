@@ -52,7 +52,6 @@ export type TipoDocumentoFiscal =
   | "NC"
   | "ND"
   | "FA"
-  | "FRt"
   | "FG"
   | "FGR"
   | "TV"
@@ -68,7 +67,6 @@ export const NOMES_TIPO_DOCUMENTO: Record<TipoDocumentoFiscal, string> = {
   NC: "Nota de Crédito",
   ND: "Nota de Débito",
   FA: "Fatura de Adiantamento",
-  FRt: "Fatura de Retificação",
   FG: "Fatura Global",
   FGR: "Fatura Global-Recibo",
   TV: "Talão de Venda",
@@ -1936,7 +1934,6 @@ export function getTipoDocumentoColor(tipo: TipoDocumentoFiscal): string {
         NC: "bg-red-100 text-red-800",
         ND: "bg-amber-100 text-amber-800",
         RC: "bg-teal-100 text-teal-800",
-        FRt: "bg-pink-100 text-pink-800",
       } as Record<TipoDocumentoFiscal, string>
     )[tipo] || "bg-gray-100 text-gray-800"
   );

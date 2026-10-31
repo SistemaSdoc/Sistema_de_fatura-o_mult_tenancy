@@ -614,7 +614,7 @@ public function exportarCompleto(Request $request)
             $dados = $request->validate([
                 'data_inicio' => 'nullable|date',
                 'data_fim' => 'nullable|date|after_or_equal:data_inicio',
-                'tipo' => 'nullable|in:FT,FR,FP,FA,NC,ND,RC,FRt',
+                'tipo' => 'nullable|in:FT,FR,FP,FA,NC,ND,RC',
                 'cliente_id' => 'nullable|uuid|exists:clientes,id',
                 'cliente_nome' => 'nullable|string|max:255',
                 'estado' => 'nullable|in:emitido,paga,parcialmente_paga,cancelado,expirado',
@@ -649,7 +649,7 @@ public function exportarCompleto(Request $request)
             }
 
             if (!empty($dados['apenas_nao_vendas'])) {
-                $query->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FRt']);
+                $query->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND']);
             }
 
             if (!empty($dados['com_retencao'])) {
@@ -811,7 +811,7 @@ public function exportarCompleto(Request $request)
             $dados = $request->validate([
                 'data_inicio' => 'nullable|date',
                 'data_fim' => 'nullable|date|after_or_equal:data_inicio',
-                'tipo' => 'nullable|in:FT,FR,FP,FA,NC,ND,RC,FRt',
+                'tipo' => 'nullable|in:FT,FR,FP,FA,NC,ND,RC',
                 'cliente_id' => 'nullable|uuid|exists:clientes,id',
                 'incluir_retencoes' => 'nullable|boolean',
             ]);

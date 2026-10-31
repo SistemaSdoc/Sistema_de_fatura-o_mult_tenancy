@@ -13,7 +13,6 @@ export type TipoDocumento =
   | "NC"
   | "ND"
   | "RC"
-  | "FRt"
   | "FG"
   | "FGR"
   | "TV"
@@ -24,7 +23,7 @@ export type EstadoDocumento = "emitido" | "paga" | "parcialmente_paga" | "cancel
 export type MetodoPagamento = "transferencia" | "multibanco" | "dinheiro" | "cheque" | "cartao";
 
 export const TIPOS_VENDA: TipoDocumento[] = ["FT", "FR", "RC", "FG", "FGR", "TV"];
-export const TIPOS_NAO_VENDA: TipoDocumento[] = ["FP", "FA", "NC", "ND", "FRt", "FGEN", "AC", "ACR"];
+export const TIPOS_NAO_VENDA: TipoDocumento[] = ["FP", "FA", "NC", "ND", "FGEN", "AC", "ACR"];
 export const TIPOS_DOCUMENTO_VENDA: TipoDocumento[] = ["FT", "FR", "FG", "FGR", "TV"];
 export const TIPOS_ORIGEM_NC: TipoDocumento[] = ["FT", "FR", "FG", "FGR"]; // Nota de Crédito
 export const TIPOS_ORIGEM_ND: TipoDocumento[] = ["FT", "FG"]; // Nota de Débito
@@ -63,6 +62,7 @@ export interface DocumentoFiscal {
   cliente_nome?: string | null;
   cliente_nif?: string | null;
   fatura_id?: string | null;
+  fatura_convertida?: boolean;
   serie: string;
   numero: number;
   numero_documento: string;
@@ -288,6 +288,15 @@ export interface CriarNotaDebitoDTO extends Omit<EmitirDocumentoDTO, "tipo_docum
   motivo?: string;
 }
 
+export interface NotaDebitoAutonomaDTO extends Omit<CriarNotaDebitoDTO, "cliente_id"> {
+  cliente_id: string;
+}
+
+export interface AvisoCobrancaDTO extends Omit<EmitirDocumentoDTO, "tipo_documento" | "cliente_id"> {
+  cliente_id: string;
+  itens: ItemDocumento[];
+}
+
 /**
  * Resposta detalhada após emissão de Nota de Crédito
  */
@@ -459,6 +468,14 @@ async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
     return this.emitir({ ...dados, tipo_documento: "FP" });
   }
 
+  async converterProforma(id: string): Promise<DocumentoFiscal> {
+    const response = await api.post<ApiResponse<DocumentoFiscal>>(`${this.baseUrl}/${id}/converter-proforma`, {
+      tipo_destino: "FT",
+    });
+    if (!response.data.success) throw new Error(response.data.message);
+    return this._enriquecerDocumento(response.data.data);
+  }
+
   async emitirFaturaAdiantamento(
     dados: Omit<EmitirDocumentoDTO, "tipo_documento" | "itens"> & { descricao?: string }
   ): Promise<DocumentoFiscal> {
@@ -482,12 +499,6 @@ async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
     return this.emitir({ ...dados, tipo_documento: "RC" });
   }
 
-  async emitirFaturaRetificacao(
-    dados: Omit<EmitirDocumentoDTO, "tipo_documento"> & { fatura_id: string; motivo: string }
-  ): Promise<DocumentoFiscal> {
-    return this.emitir({ ...dados, tipo_documento: "FRt" });
-  }
-
   async emitirFacturaGlobal(dados: EmitirFacturaGlobalDTO): Promise<DocumentoFiscal> {
     const response = await api.post<ApiResponse<DocumentoFiscal>>(`${this.baseUrl}/factura-global`, dados);
     if (!response.data.success) throw new Error(response.data.message);
@@ -496,6 +507,18 @@ async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
 
   async emitirTalaoVenda(dados: EmitirTalaoVendaDTO): Promise<DocumentoFiscal> {
     const response = await api.post<ApiResponse<DocumentoFiscal>>(`${this.baseUrl}/talao-venda`, dados);
+    if (!response.data.success) throw new Error(response.data.message);
+    return this._enriquecerDocumento(response.data.data);
+  }
+
+  async emitirNotaDebitoAutonoma(dados: NotaDebitoAutonomaDTO): Promise<DocumentoFiscal> {
+    const response = await api.post<ApiResponse<DocumentoFiscal>>(`${this.baseUrl}/nota-debito`, dados);
+    if (!response.data.success) throw new Error(response.data.message);
+    return this._enriquecerDocumento(response.data.data);
+  }
+
+  async emitirAvisoCobranca(dados: AvisoCobrancaDTO): Promise<DocumentoFiscal> {
+    const response = await api.post<ApiResponse<DocumentoFiscal>>(`${this.baseUrl}/aviso-cobranca`, dados);
     if (!response.data.success) throw new Error(response.data.message);
     return this._enriquecerDocumento(response.data.data);
   }
@@ -1102,10 +1125,6 @@ async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
   ehNotaDebito(documento: DocumentoFiscal): boolean {
     return documento.tipo_documento === "ND";
   }
-  ehFaturaRetificacao(documento: DocumentoFiscal): boolean {
-    return documento.tipo_documento === "FRt";
-  }
-
   getNomeCliente(documento: DocumentoFiscal): string {
     return documento.cliente?.nome ?? documento.cliente_nome ?? "Consumidor Final";
   }
@@ -1123,7 +1142,6 @@ async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
       NC: "Nota de Crédito",
       ND: "Nota de Débito",
       RC: "Recibo",
-      FRt: "Factura de Retificação",
       FG: "Factura Global",
       FGR: "Factura Global-Recibo",
       TV: "Talão de Venda",
@@ -1143,7 +1161,6 @@ async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
       NC: "red",
       ND: "amber",
       RC: "teal",
-      FRt: "pink",
       FG: "indigo",
       FGR: "indigo",
       TV: "slate",

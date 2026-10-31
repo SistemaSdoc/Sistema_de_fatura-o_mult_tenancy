@@ -22,7 +22,7 @@ return new class extends Migration
             $conn->statement("
                 ALTER TABLE series_fiscais
                 MODIFY COLUMN tipo_documento ENUM(
-                    'FT','FR','FP','FA','RC','NC','ND','FRt',
+                    'FT','FR','FP','FA','RC','NC','ND',
                     'FG','FGR','TV','FGEN','AC','ACR'
                 ) NOT NULL
             ");
@@ -32,7 +32,7 @@ return new class extends Migration
             $conn->statement("
                 ALTER TABLE documentos_fiscais
                 MODIFY COLUMN tipo_documento ENUM(
-                    'FT','FR','FP','FA','RC','NC','ND','FRt',
+                    'FT','FR','FP','FA','RC','NC','ND',
                     'FG','FGR','TV','FGEN','AC','ACR'
                 ) NOT NULL
             ");
@@ -47,7 +47,7 @@ return new class extends Migration
             $conn->statement("
                 ALTER TABLE series_fiscais
                 MODIFY COLUMN tipo_documento ENUM(
-                    'FT','FR','FP','FA','RC','NC','ND','FRt'
+                    'FT','FR','FP','FA','RC','NC','ND'
                 ) NOT NULL
             ");
         }
@@ -56,7 +56,7 @@ return new class extends Migration
             $conn->statement("
                 ALTER TABLE documentos_fiscais
                 MODIFY COLUMN tipo_documento ENUM(
-                    'FT','FR','FP','FA','RC','NC','ND','FRt'
+                    'FT','FR','FP','FA','RC','NC','ND'
                 ) NOT NULL
             ");
         }

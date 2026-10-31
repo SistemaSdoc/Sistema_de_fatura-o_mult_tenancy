@@ -10,7 +10,6 @@ import {
     FileWarning,
     CreditCard,
     FileX,
-    FileCheck,
     Printer,
     Download,
 } from "lucide-react";
@@ -33,7 +32,6 @@ const TIPOS_DOCUMENTO = [
     { value: "FA" as TipoDocumento, label: "Adiantamento", icon: CreditCard, cor: "#8b5cf6" },
     { value: "NC" as TipoDocumento, label: "Nota de Crédito", icon: FileX, cor: "#ef4444" },
     { value: "ND" as TipoDocumento, label: "Nota de Débito", icon: FileX, cor: "#f59e0b" },
-    { value: "FRt" as TipoDocumento, label: "Retificação", icon: FileCheck, cor: "#ec4899" },
     { value: "FG" as TipoDocumento, label: "Factura Global", icon: FileText, cor: "#4f46e5" },
     { value: "FGR" as TipoDocumento, label: "Factura Global-Recibo", icon: FileText, cor: "#4f46e5" },
     { value: "TV" as TipoDocumento, label: "Talão de Venda", icon: FileText, cor: "#64748b" },

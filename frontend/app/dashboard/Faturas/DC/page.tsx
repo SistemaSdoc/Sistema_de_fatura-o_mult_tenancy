@@ -71,6 +71,7 @@ export default function OutrosDocumentosPage() {
   const [error, setError] = useState<string | null>(null);
   const [baixandoPdf, setBaixandoPdf] = useState<string | null>(null);
   const [imprimindo] = useState<string | null>(null);
+  const [convertendoProforma, setConvertendoProforma] = useState<string | null>(null);
   const [dropdownAberto, setDropdownAberto] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -101,7 +102,7 @@ export default function OutrosDocumentosPage() {
       });
       if (!resultado?.data) throw new Error("Erro ao carregar");
       // Filtra apenas os tipos desta página
-      const filtrados = resultado.data.filter((d) => ["FP", "FA", "NC", "ND", "FRt"].includes(d.tipo_documento));
+      const filtrados = resultado.data.filter((d) => ["FP", "FA", "NC", "ND"].includes(d.tipo_documento));
       setDocumentos(filtrados);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Erro ao carregar");
@@ -158,6 +159,23 @@ export default function OutrosDocumentosPage() {
   const verDetalhes = (doc: DocumentoFiscal) => {
     if (doc.id) router.push(`/dashboard/Faturas/Faturas/${doc.id}/Ver`);
   };
+
+  const converterProforma = useCallback(async (doc: DocumentoFiscal) => {
+    if (!doc.id || !window.confirm(`Converter a Proforma ${doc.numero_documento} numa nova fatura? A Proforma original será mantida.`)) {
+      return;
+    }
+
+    try {
+      setConvertendoProforma(doc.id);
+      const fatura = await documentoFiscalService.converterProforma(doc.id);
+      await carregarDocumentos();
+      router.push(`/dashboard/Faturas/Faturas/${fatura.id}/Ver`);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Erro ao converter a Proforma");
+    } finally {
+      setConvertendoProforma(null);
+    }
+  }, [carregarDocumentos, router]);
 
   /* ── Formatar moeda ── */
   const formatKz = (valor: number | string | undefined) => {
@@ -273,6 +291,8 @@ export default function OutrosDocumentosPage() {
         onImprimirA4={imprimirA4}
         onImprimirPdf={imprimir80mm}
         onBaixarPdf={baixarPdf}
+        onConverterProforma={converterProforma}
+        convertendoProforma={convertendoProforma}
         formatKz={formatKz}
         documentoFiscalService={documentoFiscalService}
         colors={colors}

@@ -107,6 +107,16 @@ export const ModalImportar: React.FC<ModalImportarProps> = ({
         <div className="px-5 py-4 space-y-4">
           {!resultado ? (
             <>
+              <a
+                href="/templates/template_importacao_clientes.xlsx"
+                download
+                className="flex items-center gap-1.5 text-xs font-medium w-fit transition-opacity hover:opacity-70"
+                style={{ color: colors.primary }}
+              >
+                <Download className="w-3.5 h-3.5" />
+                Baixar modelo de importação
+              </a>
+
               {!arquivo ? (
                 <label
                   className="flex flex-col items-center justify-center gap-2 border-2 border-dashed cursor-pointer py-10 px-4 text-center transition-colors hover:opacity-80"

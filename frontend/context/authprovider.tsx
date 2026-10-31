@@ -21,6 +21,7 @@ export interface Empresa {
     endereco: string | null;
     regime_fiscal?: string | null;
     sujeito_iva?: boolean;
+    is_seguradora?: boolean;
     iva_padrao?: number;
     subscricao?: string;
     modo?: string;

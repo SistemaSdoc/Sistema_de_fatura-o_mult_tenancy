@@ -239,6 +239,7 @@ BUILDING;
             'endereco'       => 'required|string|max:500',
             'regime_fiscal'  => 'required|in:simplificado,geral',
             'sujeito_iva'    => 'required|boolean',
+            'is_seguradora'  => 'sometimes|boolean',
             'iva_padrao'     => 'nullable|numeric|min:0|max:100',
             'nome_banco'     => 'nullable|string|max:255',
             'numero_conta'   => 'nullable|string|max:50|unique:landlord.empresas,numero_conta',
@@ -321,6 +322,7 @@ BUILDING;
                 'modo'          => $request->modo,
                 'regime_fiscal' => $request->regime_fiscal,
                 'sujeito_iva'   => $request->sujeito_iva,
+                'is_seguradora' => $request->boolean('is_seguradora'),
                 'iva_padrao'    => $request->regime_fiscal === 'simplificado'
                     ? 0.0
                     : (float) ($request->iva_padrao ?? self::IVA_PADRAO_DEFAULT),
@@ -709,7 +711,7 @@ BUILDING;
                 ],
                 'documentos' => [
                     'total'    => 0,
-                    'tipos'    => ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC', 'FRt'],
+                    'tipos'    => ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC'],
                     'recentes' => [],
                 ],
                 'mensagens' => [],
@@ -732,7 +734,7 @@ BUILDING;
         }
 
         $tiposFaturacao = ['FT', 'FR', 'RC'];
-        $tiposTodos     = ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC', 'FRt'];
+        $tiposTodos     = ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC'];
 
         $documentosBase      = clone $documentosQuery;
         $documentosFaturacao = (clone $documentosQuery)
@@ -866,6 +868,7 @@ BUILDING;
                 'serie_padrao_fatura' => 'FT',
                 'regime_fiscal'       => $empresa->regime_fiscal ?? 'simplificado',
                 'sujeito_iva'         => (bool) $empresa->sujeito_iva,
+                'is_seguradora'       => (bool) $empresa->is_seguradora,
             ],
         ], 200);
     }
@@ -988,10 +991,14 @@ BUILDING;
         $validated = $request->validate([
             'regime_fiscal' => 'sometimes|in:simplificado,geral',
             'sujeito_iva'   => 'sometimes|boolean',
+            'is_seguradora' => 'sometimes|boolean',
         ]);
 
         if (array_key_exists('regime_fiscal', $validated)) {
             $empresa->regime_fiscal = $validated['regime_fiscal'];
+        }
+        if (array_key_exists('is_seguradora', $validated)) {
+            $empresa->is_seguradora = $validated['is_seguradora'];
         }
 
         if (($empresa->regime_fiscal ?? 'geral') === 'simplificado') {
@@ -1010,6 +1017,7 @@ BUILDING;
                 'serie_padrao_fatura' => 'FT',
                 'regime_fiscal'       => $empresa->regime_fiscal ?? 'simplificado',
                 'sujeito_iva'         => (bool) $empresa->sujeito_iva,
+                'is_seguradora'       => (bool) $empresa->is_seguradora,
             ],
         ], 200);
     }
@@ -1091,6 +1099,7 @@ BUILDING;
             'iban'          => 'nullable|string|max:34',
             'regime_fiscal' => 'sometimes|in:simplificado,geral',
             'sujeito_iva'   => 'sometimes|boolean',
+            'is_seguradora' => 'sometimes|boolean',
             'modo'          => 'sometimes|in:colectivo,singular',
         ]);
 
@@ -1105,6 +1114,7 @@ BUILDING;
             'iban',
             'regime_fiscal',
             'sujeito_iva',
+            'is_seguradora',
             'modo',
         ]));
 
@@ -1148,6 +1158,7 @@ BUILDING;
             'modo'          => 'sometimes|in:colectivo,singular',
             'regime_fiscal' => 'sometimes|in:simplificado,geral',
             'sujeito_iva'   => 'sometimes|boolean',
+            'is_seguradora' => 'sometimes|boolean',
         ]);
 
         $empresa->update($request->only([
@@ -1164,6 +1175,7 @@ BUILDING;
             'modo',
             'regime_fiscal',
             'sujeito_iva',
+            'is_seguradora',
         ]));
 
         if (($empresa->regime_fiscal ?? 'geral') === 'simplificado') {

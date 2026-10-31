@@ -15,6 +15,7 @@ export interface Empresa {
   regime_fiscal: "simplificado" | "geral";
   modo: "colectivo" | "singular"; 
   sujeito_iva: boolean;
+  is_seguradora?: boolean;
   iva_padrao?: number;
   status: "ativo" | "suspenso";
   data_registro: string;
@@ -33,6 +34,7 @@ export interface UpdateEmpresaData {
   iban?: string | null;
   regime_fiscal?: "simplificado" | "geral";
   sujeito_iva?: boolean;
+  is_seguradora?: boolean;
   iva_padrao?: number;
 }
 
@@ -107,6 +109,7 @@ export interface ConfiguracoesFiscais {
   serie_padrao_fatura: string;
   regime_fiscal: "simplificado" | "geral";
   sujeito_iva: boolean;
+  is_seguradora: boolean;
 }
 
 export const fetchConfiguracoesFiscais = async (): Promise<ConfiguracoesFiscais> => {

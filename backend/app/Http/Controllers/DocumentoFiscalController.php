@@ -256,7 +256,7 @@ class DocumentoFiscalController extends Controller
             $this->verificarAcessoUsuario();
 
             $filtros = $request->validate([
-                'tipo'                    => 'nullable|in:FT,FR,FP,FA,NC,ND,RC,FRt',
+                'tipo'                    => 'nullable|in:FT,FR,FP,FA,NC,ND,RC',
                 'estado'                  => 'nullable|in:emitido,paga,parcialmente_paga,cancelado,expirado',
                 'cliente_id'              => 'nullable|uuid|exists:clientes,id',
                 'cliente_nome'            => 'nullable|string|max:255',
@@ -341,7 +341,7 @@ public function emitir(Request $request): JsonResponse
                 function () {
                     // Usa o método auxiliar que já filtra pelo tenant
                     return $this->queryDocumentosFiscais()
-                        ->whereIn('tipo_documento', ['FT', 'FR', 'FP', 'NC', 'ND', 'RC', 'FRt'])
+                        ->whereIn('tipo_documento', ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC', 'AC'])
                         ->where('estado', '!=', 'cancelado')
                         ->whereMonth('created_at', now()->month)
                         ->whereYear('created_at', now()->year)
@@ -360,7 +360,7 @@ public function emitir(Request $request): JsonResponse
 
         // Validação dos dados de entrada (mantida inalterada)
         $dados = $request->validate([
-            'tipo_documento'             => 'required|in:FT,FR,FP,FA,NC,ND,RC,FRt',
+            'tipo_documento'             => 'required|in:FT,FR,FP,FA,NC,ND,RC,AC',
             'venda_id'                   => 'nullable|uuid|exists:vendas,id',
             'cliente_id'                 => 'nullable|uuid|exists:clientes,id',
             'cliente_nome'               => 'nullable|string|max:255',
@@ -371,7 +371,7 @@ public function emitir(Request $request): JsonResponse
             'itens.*.descricao'          => 'required_with:itens|string',
             'itens.*.quantidade'         => 'required_with:itens|numeric|min:0.01',
             'itens.*.preco_unitario'     => 'required_with:itens|numeric|min:0',
-            'itens.*.taxa_iva'           => 'required_with:itens|numeric|min:0|max:100',
+            'itens.*.taxa_iva'           => 'required_unless:tipo_documento,ND|nullable|numeric|min:0|max:100',
             'itens.*.desconto'           => 'nullable|numeric|min:0',
             'itens.*.codigo_isencao'     => 'nullable|string|in:M00,M01,M02,M03,M04,M05,M06,M99',
             'itens.*.taxa_retencao'      => 'nullable|numeric|in:0,2,5,6.5,10,15',
@@ -481,10 +481,10 @@ public function emitir(Request $request): JsonResponse
                 ], 422);
             }
 
-            if (!in_array($documento->tipo_documento, ['FT', 'FA'])) {
+            if (!in_array($documento->tipo_documento, ['FT', 'FA', 'AC'], true)) {
                 return response()->json([
                     'success' => false,
-                    'message' => "Apenas Faturas (FT) e Faturas de Adiantamento (FA) podem gerar recibos. Tipo atual: {$documento->tipo_documento}",
+                    'message' => "Apenas Faturas (FT), Faturas de Adiantamento (FA) e Avisos de Cobrança (AC) podem gerar recibos. Tipo atual: {$documento->tipo_documento}",
                 ], 422);
             }
 
@@ -534,14 +534,14 @@ public function emitir(Request $request): JsonResponse
              * - Correção de erro no valor da fatura
              * - Desconto concedido após emissão
              * - Cancelamento de serviços não prestados
-             * - Retificação de IVA incorreto
+             * - Nota de Crédito por IVA incorreto
              */
 
-            // 1. Verificar se o documento é uma Fatura (FT) ou Fatura-Recibo (FR)
-            if (!in_array($documento->tipo_documento, ['FT', 'FR'])) {
+            // NC pode retificar os documentos de faturação aceites pelo serviço.
+            if (!in_array($documento->tipo_documento, ['FT', 'FR', 'FG', 'FGR'], true)) {
                 return response()->json([
                     'success' => false,
-                    'message' => "Nota de Crédito só pode ser emitida a partir de Fatura (FT) ou Fatura-Recibo (FR). Tipo atual: {$documento->tipo_documento}",
+                    'message' => "Nota de Crédito só pode ser emitida a partir de FT, FR, FG ou FGR. Tipo atual: {$documento->tipo_documento}",
                 ], 422);
             }
 
@@ -665,6 +665,81 @@ public function emitir(Request $request): JsonResponse
         }
     }
 
+    public function emitirAvisoCobranca(Request $request): JsonResponse
+    {
+        $modo = $this->getModo();
+
+        try {
+            $this->verificarAcessoUsuario();
+            $dados = $request->validate([
+                'cliente_id'             => 'required|uuid|exists:clientes,id',
+                'itens'                  => 'required|array|min:1',
+                'itens.*.produto_id'     => 'nullable|uuid|exists:produtos,id',
+                'itens.*.descricao'      => 'required|string|max:255',
+                'itens.*.quantidade'     => 'required|numeric|min:0.01',
+                'itens.*.preco_unitario' => 'required|numeric|min:0',
+                'itens.*.taxa_iva'       => 'required|numeric|min:0|max:100',
+                'itens.*.desconto'       => 'nullable|numeric|min:0',
+                'motivo'                 => 'nullable|string|max:500',
+                'data_vencimento'        => 'nullable|date',
+                'observacoes'            => 'nullable|string|max:1000',
+            ]);
+
+            $dados['tipo_documento'] = 'AC';
+            $documento = $this->documentoService->emitirDocumento($dados);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Aviso de Cobrança emitido com sucesso.',
+                'data' => $documento,
+                'modo' => $modo,
+            ], 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'message' => 'Erro de validação', 'errors' => $e->errors()], 422);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            return $this->erroInterno('Erro ao emitir Aviso de Cobrança', $e);
+        }
+    }
+
+    public function criarNotaDebitoAutonoma(Request $request): JsonResponse
+    {
+        $modo = $this->getModo();
+
+        try {
+            $this->verificarAcessoUsuario();
+            $dados = $request->validate([
+                'cliente_id'             => 'required|uuid|exists:clientes,id',
+                'itens'                  => 'required|array|min:1',
+                'itens.*.produto_id'     => 'nullable|uuid|exists:produtos,id',
+                'itens.*.descricao'      => 'required|string|min:5',
+                'itens.*.quantidade'     => 'required|numeric|min:0.01',
+                'itens.*.preco_unitario' => 'required|numeric|min:0',
+                'itens.*.taxa_iva'       => 'nullable|numeric|min:0|max:100',
+                'itens.*.desconto'       => 'nullable|numeric|min:0',
+                'itens.*.eh_servico'     => 'required|accepted',
+                'motivo'                 => 'nullable|string|max:500',
+                'data_vencimento'        => 'nullable|date',
+            ]);
+
+            $documento = $this->documentoService->criarNotaDebitoAutonoma($dados);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Nota de Débito autónoma emitida com sucesso.',
+                'data' => $documento,
+                'modo' => $modo,
+            ], 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'message' => 'Erro de validação', 'errors' => $e->errors()], 422);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            return $this->erroInterno('Erro ao emitir Nota de Débito autónoma', $e);
+        }
+    }
+
     public function criarNotaDebito(Request $request, string $documentoId): JsonResponse
     {
         $modo = $this->getModo();
@@ -695,10 +770,10 @@ public function emitir(Request $request): JsonResponse
              */
 
             // 1. Verificar se o documento é uma Fatura (FT)
-            if (!in_array($documento->tipo_documento, ['FT'])) {
+            if (!in_array($documento->tipo_documento, ['FT', 'FG'], true)) {
                 return response()->json([
                     'success' => false,
-                    'message' => "Nota de Débito só pode ser emitida a partir de Fatura (FT). Tipo atual: {$documento->tipo_documento}",
+                    'message' => "Nota de Débito só pode ser emitida a partir de FT ou FG. Tipo atual: {$documento->tipo_documento}",
                 ], 422);
             }
 
@@ -852,8 +927,7 @@ public function emitir(Request $request): JsonResponse
             $valorTotalND = 0;
             foreach ($dados['itens'] as $item) {
                 $subtotal = $item['quantidade'] * $item['preco_unitario'];
-                $iva = $subtotal * ($item['taxa_iva'] / 100);
-                $valorTotalND += $subtotal + $iva;
+                $valorTotalND += max(0, $subtotal - (float) ($item['desconto'] ?? 0));
             }
 
             if ($valorTotalND <= 0) {
@@ -872,18 +946,13 @@ public function emitir(Request $request): JsonResponse
             DB::beginTransaction();
 
             try {
-                $nd = $this->documentoService->emitirDocumento($dados);
+                $valorOriginal = (float) $documento->total_liquido;
+                $nd = $this->documentoService->criarNotaDebito($documento, $dados);
 
                 /**
                  * 8. Atualizar o estado da fatura original
                  */
-                $novoValorTotal = $documento->total_liquido + $valorTotalND;
-
-                // Se a fatura estava paga, passa a parcialmente_paga
-                if ($documento->estado === 'paga') {
-                    $documento->estado = 'parcialmente_paga';
-                    $documento->save();
-                }
+                $novoValorTotal = $valorOriginal + $valorTotalND;
 
                 DB::commit();
 
@@ -895,7 +964,7 @@ public function emitir(Request $request): JsonResponse
                         'fatura_original' => [
                             'id' => $documento->id,
                             'numero' => $documento->numero_documento,
-                            'valor_original' => $documento->total_liquido,
+                            'valor_original' => $valorOriginal,
                             'valor_debito' => $valorTotalND,
                             'novo_valor_total' => $novoValorTotal,
                             'valor_pago_anterior' => $valorPago,
@@ -1792,7 +1861,8 @@ private function rotuloVia(int $numeroVia): string
 
             return response()->json([
                 'success' => true,
-                'message' => 'Proforma convertida com sucesso para ' . ($dados['tipo_destino'] === 'FR' ? 'Fatura-Recibo' : 'Fatura'),
+                'message' => ($dados['tipo_destino'] === 'FR' ? 'Fatura-Recibo' : 'Fatura')
+                    . ' emitida a partir da Proforma. A Proforma original foi mantida.',
                 'data' => $documento,
                 'modo' => $modo,
             ], 201);

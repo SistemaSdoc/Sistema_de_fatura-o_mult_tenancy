@@ -5,6 +5,7 @@ import { DocumentoFiscal, TipoDocumento } from "@/services/DocumentoFiscal";
 import {
   Eye,
   FileText,
+  FileCheck,
   Printer,
   Download,
   ChevronLeft,
@@ -17,7 +18,6 @@ const TIPO_LABEL: Partial<Record<TipoDocumento, string>> = {
   FA: "Factura de Adiantamento",
   NC: "Nota de Crédito",
   ND: "Nota de Débito",
-  FRt: "Factura de Retificação",
   FGEN: "Factura Genérica",
   AC: "Aviso de Cobrança",
   ACR: "Aviso de Cobrança-Recibo",
@@ -32,12 +32,11 @@ const ESTADO_LABEL: Record<string, string> = {
 };
 
 /* ─── Tipos de aba ────────────────────────────────────────────────────────── */
-type TabAtiva = "proforma" | "credito_debito" | "retificacao" | "sectoriais";
+type TabAtiva = "proforma" | "credito_debito" | "sectoriais";
 
 const TABS: { key: TabAtiva; label: string; tipos: TipoDocumento[] }[] = [
   { key: "proforma", label: "Proformas ", tipos: ["FP", "FA"] },
   { key: "credito_debito", label: "Notas Crédito/Débito", tipos: ["NC", "ND"] },
-  { key: "retificacao", label: "Retificações", tipos: ["FRt"] },
   { key: "sectoriais", label: "Documentos sectoriais", tipos: ["FGEN", "AC", "ACR"] },
 ];
 
@@ -66,6 +65,8 @@ interface OutrosDocumentosTableProps {
   onImprimirA4: (doc: DocumentoFiscal) => void;        // 🆕 Impressão A4
   onImprimirPdf: (doc: DocumentoFiscal) => void;       // PDF visualização
   onBaixarPdf: (doc: DocumentoFiscal) => Promise<void>;
+  onConverterProforma: (doc: DocumentoFiscal) => Promise<void>;
+  convertendoProforma: string | null;
   formatKz: (v: number | string | undefined) => string;
   documentoFiscalService: {
     getNomeCliente: (doc: DocumentoFiscal) => string;
@@ -83,7 +84,6 @@ function TipoBadge({ tipo, colors }: { tipo: TipoDocumento; colors: ColorsTheme 
     FA: { bg: `${colors.warning}1a`, text: colors.secondary },
     NC: { bg: `${colors.warning}1a`, text: colors.primary },
     ND: { bg: `${colors.secondary}1a`, text: colors.secondary },
-    FRt: { bg: `${colors.primary}1a`, text: colors.primary },
   };
   const s = palette[tipo] ?? { bg: colors.hover, text: colors.textSecondary };
   return (
@@ -225,6 +225,11 @@ function DocCard({
         </span>
         <div className="flex gap-1 flex-wrap shrink-0">
           <TipoBadge tipo={doc.tipo_documento} colors={colors} />
+          {doc.tipo_documento === "FP" && doc.fatura_convertida && (
+            <span className="text-xs font-medium" style={{ color: colors.success }}>
+              Convertida
+            </span>
+          )}
           {doc.estado && <EstadoBadge estado={doc.estado} colors={colors} />}
         </div>
       </div>
@@ -257,6 +262,8 @@ export default function OutrosDocumentosTable({
   onImprimirA4,
   onImprimirPdf,
   onBaixarPdf,
+  onConverterProforma,
+  convertendoProforma,
   formatKz,
   documentoFiscalService,
   colors,
@@ -267,7 +274,6 @@ export default function OutrosDocumentosTable({
   const [paginas, setPaginas] = useState<Record<TabAtiva, number>>({
     proforma: 1,
     credito_debito: 1,
-    retificacao: 1,
     sectoriais: 1,
   });
 
@@ -333,6 +339,20 @@ export default function OutrosDocumentosTable({
               >
                 <Eye size={12} /> Ver detalhes
               </button>
+              {doc.tipo_documento === "FP" && !doc.fatura_convertida && !["cancelado", "expirado"].includes(doc.estado) && (
+                <button
+                  onClick={() => {
+                    void onConverterProforma(doc);
+                    setOpen(false);
+                  }}
+                  disabled={convertendoProforma === doc.id}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:opacity-70 whitespace-nowrap disabled:opacity-50"
+                  style={{ color: colors.primary }}
+                >
+                  {convertendoProforma === doc.id ? <Spinner color={colors.primary} /> : <FileCheck size={12} />}
+                  Converter em fatura
+                </button>
+              )}
               <button
                 onClick={() => {
                   onImprimirA4(doc);
@@ -375,6 +395,16 @@ export default function OutrosDocumentosTable({
   /* ── Acções por documento (desktop - várias opções) ── */
   const acoesDesktop = (doc: DocumentoFiscal) => (
     <div className="flex justify-center gap-0.5">
+      {doc.tipo_documento === "FP" && !doc.fatura_convertida && !["cancelado", "expirado"].includes(doc.estado) && (
+        <IconBtn
+          onClick={() => void onConverterProforma(doc)}
+          disabled={convertendoProforma === doc.id}
+          title="Converter em fatura"
+          color={colors.primary}
+        >
+          {convertendoProforma === doc.id ? <Spinner color={colors.primary} /> : <FileCheck size={16} />}
+        </IconBtn>
+      )}
       <IconBtn onClick={() => onVerDetalhes(doc)} title="Ver detalhes" color={colors.text}>
         <Eye size={16} />
       </IconBtn>
@@ -479,6 +509,11 @@ export default function OutrosDocumentosTable({
                 </td>
                 <td className="px-3 py-2">
                   <TipoBadge tipo={doc.tipo_documento} colors={colors} />
+                  {doc.tipo_documento === "FP" && doc.fatura_convertida && (
+                    <span className="block mt-1 text-xs font-medium" style={{ color: colors.success }}>
+                      Convertida
+                    </span>
+                  )}
                 </td>
                 <td
                   className="px-3 py-2 text-xs"

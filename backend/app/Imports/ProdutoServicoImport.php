@@ -2,6 +2,7 @@
 
 namespace App\Imports;
 
+use Maatwebsite\Excel\Concerns\Import;
 use Maatwebsite\Excel\Concerns\WithMultipleSheets;
 
 /**
@@ -10,7 +11,7 @@ use Maatwebsite\Excel\Concerns\WithMultipleSheets;
  * Os nomes abaixo têm de bater certo com os nomes das folhas no ficheiro
  * (as que geramos: "Produtos" e "Serviços").
  */
-class ProdutoServicoImport implements WithMultipleSheets
+class ProdutoServicoImport implements Import, WithMultipleSheets
 {
     public function __construct(
         public ProdutosSheetImport $produtosImport,

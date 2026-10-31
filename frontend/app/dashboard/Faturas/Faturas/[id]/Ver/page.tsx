@@ -36,7 +36,6 @@ const TIPO_LABEL: Record<TipoDocumento, string> = {
   NC: "Nota de Crédito",
   ND: "Nota de Débito",
   RC: "Recibo",
-  FRt: "Factura de Retificação",
   FG: "Factura Global",
   FGR: "Factura Global-Recibo",
   TV: "Talão de Venda",
@@ -1273,6 +1272,11 @@ export default function VisualizarNotaPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalTipo, setModalTipo] = useState<"NC" | "ND" | null>(null);
+  const [mostrarModalRegularizacao, setMostrarModalRegularizacao] = useState(false);
+  const [faturasElegiveis, setFaturasElegiveis] = useState<DocumentoFiscal[]>([]);
+  const [faturaRegularizacaoId, setFaturaRegularizacaoId] = useState("");
+  const [valorRegularizacao, setValorRegularizacao] = useState("");
+  const [loadingRegularizacao, setLoadingRegularizacao] = useState(false);
   const [podeGerarNC, setPodeGerarNC] = useState<{ pode: boolean; motivo?: string }>({ pode: false });
   const [podeGerarND, setPodeGerarND] = useState<{ pode: boolean; motivo?: string }>({ pode: false });
   const [toast, setToast] = useState<{
@@ -1324,6 +1328,50 @@ export default function VisualizarNotaPage() {
     } else {
       showToast("Erro ao redirecionar", "error", "Erro ao redirecionar para a nota gerada.");
       router.push("/dashboard/Faturas/Faturas");
+    }
+  };
+
+  const abrirRegularizacao = async (adiantamento: DocumentoFiscal) => {
+    if (!adiantamento.cliente_id) {
+      showToast("Não é possível regularizar", "error", "O adiantamento não está associado a um cliente cadastrado.");
+      return;
+    }
+
+    try {
+      const resultado = await documentoFiscalService.listar({
+        tipo: "FT",
+        cliente_id: adiantamento.cliente_id,
+        per_page: 100,
+      });
+      const elegiveis = resultado.data.filter((fatura) => !["cancelado", "paga", "expirado"].includes(fatura.estado));
+      setFaturasElegiveis(elegiveis);
+      setFaturaRegularizacaoId(elegiveis[0]?.id ?? "");
+      setValorRegularizacao("");
+      setMostrarModalRegularizacao(true);
+    } catch (e) {
+      showToast("Erro ao carregar faturas", "error", e instanceof Error ? e.message : "Não foi possível carregar as faturas do cliente.");
+    }
+  };
+
+  const confirmarRegularizacao = async () => {
+    if (!nota?.id || !faturaRegularizacaoId || Number(valorRegularizacao) <= 0) {
+      showToast("Dados incompletos", "error", "Selecione uma fatura e informe um valor superior a zero.");
+      return;
+    }
+
+    try {
+      setLoadingRegularizacao(true);
+      await documentoFiscalService.vincularAdiantamento(nota.id, {
+        fatura_id: faturaRegularizacaoId,
+        valor: Number(valorRegularizacao),
+      });
+      setMostrarModalRegularizacao(false);
+      showToast("Adiantamento regularizado", "success", "O valor foi associado à fatura selecionada.");
+      await carregarNota();
+    } catch (e) {
+      showToast("Erro ao regularizar", "error", e instanceof Error ? e.message : "Não foi possível regularizar o adiantamento.");
+    } finally {
+      setLoadingRegularizacao(false);
     }
   };
 
@@ -1466,6 +1514,16 @@ export default function VisualizarNotaPage() {
 
           {/* ── Ações ── */}
           <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+            {nota.tipo_documento === "FA" && nota.estado === "emitido" && (
+              <button
+                onClick={() => void abrirRegularizacao(nota)}
+                className="p-2 rounded transition-colors flex items-center gap-1.5 text-xs font-medium"
+                style={{ backgroundColor: colors.primary, color: "#fff" }}
+                title="Regularizar numa fatura">
+                <FilePlus className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Regularizar</span>
+              </button>
+            )}
             {/* ── Botão para Gerar Nota de Crédito ── */}
             {podeGerarNotas && (
               <button
@@ -1830,6 +1888,71 @@ export default function VisualizarNotaPage() {
           colors={colors}
           showToast={showToast}
         />
+      )}
+      {mostrarModalRegularizacao && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md space-y-4 rounded-lg border p-5 shadow-xl" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+            <h2 className="text-lg font-semibold" style={{ color: colors.text }}>
+              Regularizar adiantamento
+            </h2>
+            <p className="text-sm" style={{ color: colors.textSecondary }}>
+              Escolha uma fatura do mesmo cliente e indique o valor a aplicar. O servidor valida o saldo disponível.
+            </p>
+            {faturasElegiveis.length === 0 ? (
+              <p className="text-sm" style={{ color: colors.warning }}>
+                Não existem faturas pendentes deste cliente.
+              </p>
+            ) : (
+              <>
+                <label className="block space-y-1 text-sm" style={{ color: colors.text }}>
+                  Fatura
+                  <select
+                    value={faturaRegularizacaoId}
+                    onChange={(event) => setFaturaRegularizacaoId(event.target.value)}
+                    className="w-full rounded border px-3 py-2"
+                    style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text }}>
+                    {faturasElegiveis.map((fatura) => (
+                      <option key={fatura.id} value={fatura.id}>
+                        {fatura.numero_documento} — {fmtKz(fatura.total_liquido)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block space-y-1 text-sm" style={{ color: colors.text }}>
+                  Valor a regularizar
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={valorRegularizacao}
+                    onChange={(event) => setValorRegularizacao(event.target.value)}
+                    className="w-full rounded border px-3 py-2"
+                    style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text }}
+                  />
+                </label>
+              </>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setMostrarModalRegularizacao(false)}
+                className="rounded border px-3 py-2 text-sm"
+                style={{ borderColor: colors.border, color: colors.text }}>
+                Fechar
+              </button>
+              {faturasElegiveis.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => void confirmarRegularizacao()}
+                  disabled={loadingRegularizacao}
+                  className="rounded px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  style={{ backgroundColor: colors.primary }}>
+                  {loadingRegularizacao ? "A regularizar…" : "Confirmar"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </MainEmpresa>
   );

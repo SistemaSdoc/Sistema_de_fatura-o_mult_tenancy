@@ -24,7 +24,7 @@ class ClientesImport implements ToCollection, WithHeadingRow, WithBatchInserts, 
         protected ?string $tenantId   // ← era ?int, agora ?string
     ) {}
 
-    public function collection(Collection $rows)
+    public function collection(Collection $rows): void
     {
         foreach ($rows as $index => $row) {
             $linha = $index + 2; // +2 porque a linha 1 é cabeçalho e o índice começa em 0

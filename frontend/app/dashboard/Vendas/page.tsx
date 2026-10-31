@@ -104,6 +104,21 @@ const TIPOS_DOCUMENTO_OPCOES: {
     descricao: "Factura Global com pagamento imediato",
   },
   {
+    value: "FA",
+    label: "Factura de Adiantamento",
+    descricao: "Adiantamento associado a um cliente; pode ser regularizado numa FT",
+  },
+  {
+    value: "ND",
+    label: "Nota de Débito",
+    descricao: "Débito autónomo para um cliente; sem liquidação de IVA",
+  },
+  {
+    value: "AC",
+    label: "Aviso de Cobrança",
+    descricao: "Documento específico para empresas seguradoras",
+  },
+  {
     value: "TV",
     label: "Talão de Venda",
     descricao: "Consumidor final sem NIF · Art. 5.º DP 71/25",
@@ -121,7 +136,6 @@ const TITULOS_DOCUMENTO: Record<TipoDocumentoFiscal, string> = {
   NC: "Nota de Crédito",
   ND: "Nota de Débito",
   RC: "Recibo",
-  FRt: "Factura de Retificação",
   FGEN: "Factura Genérica",
   AC: "Aviso de Cobrança",
   ACR: "Aviso de Cobrança-Recibo",
@@ -362,12 +376,13 @@ export default function NovaFaturaReciboPage() {
       setClienteAvulso("");
       setClienteAvulsoNif("");
       setNifError(null);
-    } else if (tipo === "FT" || tipo === "FR") {
+    } else if (["FT", "FR", "FA", "ND", "AC"].includes(tipo)) {
       setModoCliente("cadastrado");
       setClienteSelecionado(null);
       setClienteAvulso("");
       setClienteAvulsoNif("");
       setNifError(null);
+      if (tipo === "ND") setTipoItemSelecionado("servico");
     }
 
     setTipoDocDropdownAberto(false);
@@ -375,6 +390,11 @@ export default function NovaFaturaReciboPage() {
 
   // ✅ NOVO — Handler do botão "Cadastrado" com bloqueio para TV
   const handleModoClienteChange = (modo: ModoCliente) => {
+    if (modo === "avulso" && ["FA", "ND", "AC"].includes(tipoDocumento)) {
+      showToast("Este documento exige um cliente cadastrado.", "warning");
+      return;
+    }
+
     if (documentoTalao && modo === "cadastrado") {
       showToast(
         "Talão de Venda só pode ser emitido para consumidor final (não cadastrado). Use Factura-Recibo para clientes cadastrados.",
@@ -658,9 +678,11 @@ export default function NovaFaturaReciboPage() {
   const subtotalBruto = arredondar(itens.reduce((a, i) => a + i.preco_venda * i.quantidade, 0));
   const totalDesconto = arredondar(itens.reduce((a, i) => a + i.desconto, 0));
   const totalBase = arredondar(itens.reduce((a, i) => a + i.base_tributavel, 0));
-  const totalIva = arredondar(itens.reduce((a, i) => a + i.valor_iva, 0));
+  const totalIva = tipoDocumento === "ND" ? 0 : arredondar(itens.reduce((a, i) => a + i.valor_iva, 0));
   const totalRetencao = arredondar(itens.reduce((a, i) => a + i.valor_retencao, 0));
-  const totalLiquido = arredondar(itens.reduce((a, i) => a + i.subtotal, 0));
+  const totalLiquido = arredondar(
+    itens.reduce((a, i) => a + (tipoDocumento === "ND" ? i.base_tributavel - i.valor_retencao : i.subtotal), 0)
+  );
 
   const percentualDesconto = subtotalBruto > 0 ? (totalDesconto / subtotalBruto) * 100 : 0;
 
@@ -669,11 +691,14 @@ export default function NovaFaturaReciboPage() {
   const falta = valorPagamento > 0 && valorPagamento < totalLiquido ? arredondar(totalLiquido - valorPagamento) : 0;
 
   const pagamentoSuficiente =
-    totalLiquido > 0 && (["FG", "FT"].includes(tipoDocumento) || valorPagamento >= totalLiquido);
+    totalLiquido > 0 && (["FG", "FT", "FA", "ND", "AC"].includes(tipoDocumento) || valorPagamento >= totalLiquido);
 
   const documentoGlobal = tipoDocumento === "FG" || tipoDocumento === "FGR";
   const documentoTalao = tipoDocumento === "TV";
   const documentoCredito = tipoDocumento === "FT";
+  const documentoNotaDebito = tipoDocumento === "ND";
+  const documentoAdiantamento = tipoDocumento === "FA";
+  const documentoAvisoCobranca = tipoDocumento === "AC";
 
   // ✅ NOVO — Calcula alertas contextuais em tempo real
   const alertas: Alerta[] = useMemo(() => {
@@ -702,6 +727,22 @@ export default function NovaFaturaReciboPage() {
         id: "fr-sem-cliente",
         tipo: "warning",
         mensagem: "Selecione um cliente cadastrado para emitir a Factura-Recibo.",
+      });
+    }
+
+    if ((documentoAdiantamento || documentoNotaDebito || documentoAvisoCobranca) && !clienteSelecionado) {
+      lista.push({
+        id: "documento-sem-cliente",
+        tipo: "error",
+        mensagem: "Este documento exige um cliente cadastrado.",
+      });
+    }
+
+    if (documentoNotaDebito && itens.some((item) => !item.eh_servico)) {
+      lista.push({
+        id: "nd-produto-fisico",
+        tipo: "error",
+        mensagem: "A Nota de Débito autónoma só pode conter serviços, juros ou multas.",
       });
     }
 
@@ -811,8 +852,9 @@ export default function NovaFaturaReciboPage() {
       return ordem[a.tipo] - ordem[b.tipo];
     });
   }, [
-    itens.length, tipoDocumento, modoCliente, clienteAvulso, clienteSelecionado, clienteAvulsoNif,
-    documentoGlobal, documentoTalao, periodoInicio, periodoFim, referenciaAnexo, dataAnexo,
+    itens, tipoDocumento, modoCliente, clienteAvulso, clienteSelecionado, clienteAvulsoNif,
+    documentoGlobal, documentoTalao, documentoAdiantamento, documentoNotaDebito, documentoAvisoCobranca,
+    periodoInicio, periodoFim, referenciaAnexo, dataAnexo,
     valorPagamento, totalLiquido, nifError,
   ]);
 
@@ -826,6 +868,8 @@ export default function NovaFaturaReciboPage() {
       return modoCliente === "avulso" && !clienteAvulsoNif.trim();
     }
 
+    if ((documentoAdiantamento || documentoNotaDebito || documentoAvisoCobranca) && !clienteSelecionado) return false;
+    if (documentoNotaDebito && itens.some((item) => !item.eh_servico)) return false;
     if (modoCliente === "cadastrado") return !!clienteSelecionado;
     return clienteAvulso.trim().length > 0;
   };
@@ -884,6 +928,50 @@ export default function NovaFaturaReciboPage() {
 
       if (documentoTalao && (modoCliente !== "avulso" || clienteAvulsoNif.trim())) {
         showToast("O Talão de Venda destina-se a consumidor sem NIF. Use cliente avulso e não informe NIF.", "error");
+        return;
+      }
+
+      if (documentoAdiantamento || documentoNotaDebito || documentoAvisoCobranca) {
+        if (!clienteSelecionado) {
+          showToast("Este documento exige um cliente cadastrado.", "error");
+          return;
+        }
+
+        const itensEmissao = itens.map((item) => ({
+          produto_id: item.produto_id,
+          descricao: item.descricao,
+          quantidade: item.quantidade,
+          preco_unitario: arredondar(item.preco_venda),
+          desconto: arredondar(item.desconto),
+          taxa_iva: documentoNotaDebito ? 0 : normalizarTaxaIva(item.taxa_iva),
+          eh_servico: item.eh_servico,
+          taxa_retencao: item.eh_servico ? item.taxa_retencao : undefined,
+        }));
+
+        if (documentoAdiantamento) {
+          await documentoFiscalService.emitir({
+            tipo_documento: "FA",
+            cliente_id: clienteSelecionado.id,
+            itens: itensEmissao,
+            observacoes: observacoes.trim() || undefined,
+          });
+        } else if (documentoNotaDebito) {
+          await documentoFiscalService.emitirNotaDebitoAutonoma({
+            cliente_id: clienteSelecionado.id,
+            itens: itensEmissao,
+            motivo: observacoes.trim() || undefined,
+          });
+        } else {
+          await documentoFiscalService.emitirAvisoCobranca({
+            cliente_id: clienteSelecionado.id,
+            itens: itensEmissao,
+            motivo: observacoes.trim() || undefined,
+          });
+        }
+
+        showToast("Documento emitido com sucesso! Redirecionando...", "success");
+        await recarregarProdutos({ avisarEstoqueBaixo: false });
+        setTimeout(() => router.push("/dashboard/Faturas/Faturas"), 1500);
         return;
       }
 
@@ -1016,6 +1104,7 @@ export default function NovaFaturaReciboPage() {
   const produtoSel = produtos.find((p) => p.id === formItem.produto_id);
   const itensFiltrados = produtos.filter((p) => {
     if (p.status !== "ativo") return false;
+    if (tipoDocumento === "ND" && p.tipo !== "servico") return false;
     if (tipoItemSelecionado === "produto" && p.tipo !== "produto") return false;
     if (tipoItemSelecionado === "servico" && p.tipo !== "servico") return false;
     if (p.tipo === "produto" && p.estoque_atual <= 0) return false;
@@ -1090,7 +1179,9 @@ export default function NovaFaturaReciboPage() {
                     <div
                       className="absolute z-50 left-0 right-0 mt-1 border shadow-lg max-h-80 overflow-y-auto"
                       style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-                      {TIPOS_DOCUMENTO_OPCOES.map((opcao) => (
+                      {TIPOS_DOCUMENTO_OPCOES
+                        .filter((opcao) => opcao.value !== "AC" || user?.empresa?.is_seguradora)
+                        .map((opcao) => (
                         <button
                           key={opcao.value}
                           type="button"
@@ -1307,25 +1398,30 @@ export default function NovaFaturaReciboPage() {
               <div className="flex-1 px-3 py-2.5 min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="inline-flex border overflow-hidden shrink-0" style={{ borderColor: colors.border }}>
-                    {(["produto", "servico"] as TipoItem[]).map((tipo) => (
-                      <button
-                        key={tipo}
-                        type="button"
-                        onClick={() => {
-                          setTipoItemSelecionado(tipo);
-                          setBuscaItem("");
-                          setFormItem({ produto_id: "", quantidade: 1, desconto: 0 });
-                          setPreviewItem(null);
-                          setDropdownAberto(false);
-                        }}
-                        className="px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap"
-                        style={{
-                          backgroundColor: tipoItemSelecionado === tipo ? colors.primary : "transparent",
-                          color: tipoItemSelecionado === tipo ? "white" : colors.textSecondary,
-                        }}>
-                        {tipo === "produto" ? "Produto" : "Serviço"}
-                      </button>
-                    ))}
+                    {(["produto", "servico"] as TipoItem[]).map((tipo) => {
+                      const bloqueadoPorNotaDebito = documentoNotaDebito && tipo === "produto";
+                      return (
+                        <button
+                          key={tipo}
+                          type="button"
+                          disabled={bloqueadoPorNotaDebito}
+                          onClick={() => {
+                            setTipoItemSelecionado(tipo);
+                            setBuscaItem("");
+                            setFormItem({ produto_id: "", quantidade: 1, desconto: 0 });
+                            setPreviewItem(null);
+                            setDropdownAberto(false);
+                          }}
+                          className="px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap disabled:cursor-not-allowed"
+                          style={{
+                            backgroundColor: tipoItemSelecionado === tipo ? colors.primary : "transparent",
+                            color: tipoItemSelecionado === tipo ? "white" : colors.textSecondary,
+                            opacity: bloqueadoPorNotaDebito ? 0.45 : 1,
+                          }}>
+                          {tipo === "produto" ? "Produto" : "Serviço"}
+                        </button>
+                      );
+                    })}
                   </div>
 
                   <div className="relative w-full sm:flex-1 sm:min-w-[200px]" ref={dropdownRef}>
@@ -1617,7 +1713,7 @@ export default function NovaFaturaReciboPage() {
                           {formatarPreco(item.preco_venda)}
                         </td>
                         <td className="px-3 py-2.5 text-right hidden md:table-cell" style={{ color: colors.blue }}>
-                          {formatarPreco(item.valor_iva)}
+                          {formatarPreco(documentoNotaDebito ? 0 : item.valor_iva)}
                         </td>
                         <td
                           className="px-3 py-2.5 text-right hidden lg:table-cell"
@@ -1625,7 +1721,7 @@ export default function NovaFaturaReciboPage() {
                           {item.valor_retencao > 0 ? `−${formatarPreco(item.valor_retencao)}` : "—"}
                         </td>
                         <td className="px-3 py-2.5 text-right font-bold" style={{ color: colors.secondary }}>
-                          {formatarPreco(item.subtotal)}
+                          {formatarPreco(documentoNotaDebito ? item.base_tributavel - item.valor_retencao : item.subtotal)}
                         </td>
                         <td className="px-2 py-2.5 text-center">
                           <button

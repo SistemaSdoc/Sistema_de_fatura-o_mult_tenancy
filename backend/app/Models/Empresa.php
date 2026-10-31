@@ -28,6 +28,7 @@ class Empresa extends Model
         'db_name', 
         'regime_fiscal', 
         'sujeito_iva', 
+        'is_seguradora',
         'iva_padrao',
         'nome_banco',
         'numero_conta',
@@ -43,6 +44,7 @@ class Empresa extends Model
 
     protected $casts = [
         'sujeito_iva' => 'boolean',
+        'is_seguradora' => 'boolean',
         'iva_padrao' => 'decimal:2',
         'data_registro' => 'date',
         'data_ativacao' => 'date',

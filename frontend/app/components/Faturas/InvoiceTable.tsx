@@ -20,7 +20,6 @@ const TIPO_LABEL: Record<TipoDocumento, string> = {
   NC: "Nota de Crédito",
   ND: "Nota de Débito",
   RC: "Recibo",
-  FRt: "Factura de Retificação",
   FG: "Factura Global",
   FGR: "Factura Global-Recibo",
   TV: "Talão de Venda",

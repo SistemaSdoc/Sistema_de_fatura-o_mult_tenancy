@@ -61,7 +61,7 @@ class DocumentoFiscalService
             'eh_venda'              => true,
             'gera_recibo'           => true,
             'estado_inicial'        => 'emitido',
-            'exige_cliente'         => false,
+            'exige_cliente'         => true,
             'aceita_pagamento'      => true,
             'pode_ter_adiantamento' => true,
             'requer_assinatura'     => true,
@@ -132,18 +132,6 @@ class DocumentoFiscalService
             'pode_ter_adiantamento' => false,
             'requer_assinatura'     => false,
         ],
-        'FRt' => [
-            'nome'                  => 'Factura de Retificação (depreciado)',
-            'afeta_stock'           => false,
-            'eh_venda'              => false,
-            'gera_recibo'           => false,
-            'estado_inicial'        => 'emitido',
-            'exige_cliente'         => false,
-            'aceita_pagamento'      => false,
-            'pode_ter_adiantamento' => false,
-            'requer_assinatura'     => true,
-        ],
-
         // ─── DP 71/25 ─────────────────────────────────────────
         'FG' => [
             'nome'                  => 'Factura Global',
@@ -347,20 +335,29 @@ class DocumentoFiscalService
             throw new \InvalidArgumentException("Tipo de documento {$tipo} não suportado.");
         }
 
-        if ($tipo === 'FRt') {
-            throw new \InvalidArgumentException(
-                "Factura de Retificação (FRt) foi descontinuada pelo DP 71/25. Use Nota de Crédito (NC)."
-            );
-        }
-
         $config = $this->configuracoesTipo[$tipo];
         $autoFaturacao = !empty($dados['auto_faturacao']);
 
-        return DB::transaction(function () use ($dados, $tipo, $config, $autoFaturacao) {
+        $connection = DB::connection($this->isColectivo() ? 'shared' : 'tenant');
+
+        return $connection->transaction(function () use ($dados, $tipo, $config, $autoFaturacao) {
 
             $empresa = $this->obterEmpresa();
             $aplicaIva = $empresa->sujeito_iva;
             $regime = $empresa->regime_fiscal;
+
+            if (($config['sectorial'] ?? null) === 'segurador' && !$empresa->is_seguradora) {
+                throw new \InvalidArgumentException("{$config['nome']} só pode ser emitido por uma empresa seguradora.");
+            }
+            if ($tipo === 'FA' && empty($dados['cliente_id'])) {
+                throw new \InvalidArgumentException('Factura de Adiantamento exige um cliente cadastrado.');
+            }
+            if ($tipo === 'ND' && empty($dados['fatura_id']) && empty($dados['cliente_id'])) {
+                throw new \InvalidArgumentException('Nota de Débito autónoma exige um cliente cadastrado.');
+            }
+            if ($tipo === 'AC' && empty($dados['cliente_id'])) {
+                throw new \InvalidArgumentException('Aviso de Cobrança exige um cliente cadastrado.');
+            }
 
             $this->validarDadosPorTipo($dados, $tipo, $config);
 
@@ -369,6 +366,7 @@ class DocumentoFiscalService
             }
             if ($tipo === 'ND') {
                 $this->validarNotaDebito($dados);
+                $this->validarServicosNotaDebito($dados['itens']);
             }
 
             [$numero, $numeroDocumento, $serieFiscal] = $this->gerarNumeroDocumento($tipo, $autoFaturacao);
@@ -388,7 +386,7 @@ class DocumentoFiscalService
                 );
             }
 
-            $totais = $this->processarItens($dados['itens'] ?? [], $aplicaIva, $regime, $taxaRetencaoAuto);
+            $totais = $this->processarItens($dados['itens'] ?? [], $aplicaIva, $regime, $taxaRetencaoAuto, $tipo);
             $clienteId = $this->resolverCliente($dados, $tipo);
 
             $documentoData = [
@@ -484,6 +482,77 @@ class DocumentoFiscalService
         });
     }
 
+    public function converterProforma(
+        SharedDocumentoFiscal|TenantDocumentoFiscal $proforma,
+        array $dados
+    ): SharedDocumentoFiscal|TenantDocumentoFiscal
+    {
+        $this->verificarAcessoUsuario();
+
+        $tipoDestino = $dados['tipo_destino'] ?? 'FT';
+        if (!in_array($tipoDestino, ['FT', 'FR'], true)) {
+            throw new \InvalidArgumentException('A Proforma só pode ser convertida em Fatura ou Fatura-Recibo.');
+        }
+
+        $connection = DB::connection($this->isColectivo() ? 'shared' : 'tenant');
+
+        return $connection->transaction(function () use ($proforma, $dados, $tipoDestino) {
+            $query = $this->isColectivo()
+                ? SharedDocumentoFiscal::doTenant()
+                : TenantDocumentoFiscal::query();
+
+            $origem = $query->with('itens')
+                ->whereKey($proforma->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($origem->tipo_documento !== 'FP') {
+                throw new \InvalidArgumentException('Apenas Faturas Proforma podem ser convertidas.');
+            }
+
+            if (in_array($origem->estado, ['cancelado', 'expirado'], true)) {
+                throw new \InvalidArgumentException('Não é possível converter uma Proforma cancelada ou expirada.');
+            }
+
+            $documentosQuery = $this->isColectivo()
+                ? SharedDocumentoFiscal::doTenant()
+                : TenantDocumentoFiscal::query();
+
+            if ($documentosQuery->where('fatura_id', $origem->id)
+                ->whereIn('tipo_documento', ['FT', 'FR'])
+                ->exists()) {
+                throw new \InvalidArgumentException('Esta Proforma já foi convertida numa fatura.');
+            }
+
+            $itens = $origem->itens->map(fn ($item) => [
+                'produto_id' => $item->produto_id,
+                'descricao' => $item->descricao,
+                'quantidade' => (float) $item->quantidade,
+                'preco_venda' => (float) $item->preco_unitario,
+                'desconto' => (float) $item->desconto,
+                'taxa_iva' => (float) $item->taxa_iva,
+                'taxa_retencao' => (float) $item->taxa_retencao,
+                'codigo_isencao' => $item->codigo_isencao,
+            ])->all();
+
+            if ($itens === []) {
+                throw new \InvalidArgumentException('A Proforma não tem itens para converter.');
+            }
+
+            return $this->emitirDocumento([
+                'tipo_documento' => $tipoDestino,
+                'fatura_id' => $origem->id,
+                'cliente_id' => $origem->cliente_id,
+                'cliente_nome' => $origem->cliente_nome,
+                'cliente_nif' => $origem->cliente_nif,
+                'itens' => $itens,
+                'data_vencimento' => $dados['data_vencimento'] ?? null,
+                'dados_pagamento' => $dados['dados_pagamento'] ?? null,
+                'referencia_externa' => $origem->referencia_externa,
+            ]);
+        });
+    }
+
     /* =====================================================================
      | RECIBO / NC / ND / ADIANTAMENTO (mantidos)
      | ================================================================== */
@@ -492,9 +561,9 @@ class DocumentoFiscalService
     {
         $this->verificarAcessoUsuario();
 
-        if (!in_array($documentoOrigem->tipo_documento, ['FT', 'FA', 'FP', 'FG'])) {
+        if (!in_array($documentoOrigem->tipo_documento, ['FT', 'FA', 'FP', 'FG', 'AC'])) {
             throw new \InvalidArgumentException(
-                "Apenas FT, FA, FP e FG podem receber recibo. Tipo atual: {$documentoOrigem->tipo_documento}"
+                "Apenas FT, FA, FP, FG e AC podem receber recibo. Tipo atual: {$documentoOrigem->tipo_documento}"
             );
         }
 
@@ -664,7 +733,7 @@ class DocumentoFiscalService
         $saldo = (float) $fatura->total_liquido - $totalJaCreditado;
 
         if ($saldo <= 0.01) {
-            $fatura->update(['estado' => 'paga']);
+            $fatura->update(['estado' => 'cancelado']);
         } else {
             $totalPago = $this->calcularTotalPago($fatura);
             if ($totalPago > 0 && $saldo < (float) $fatura->total_liquido) {
@@ -713,6 +782,25 @@ class DocumentoFiscalService
         return $nd->load('documentoOrigem', 'itens', 'cliente');
     }
 
+    public function criarNotaDebitoAutonoma(array $dados)
+    {
+        $this->verificarAcessoUsuario();
+
+        if (empty($dados['cliente_id'])) {
+            throw new \InvalidArgumentException('Nota de Débito autónoma exige um cliente cadastrado.');
+        }
+        if (empty($dados['itens'])) {
+            throw new \InvalidArgumentException('Nota de Débito exige itens.');
+        }
+
+        $this->validarServicosNotaDebito($dados['itens']);
+        $dados['tipo_documento'] = 'ND';
+        $dados['fatura_id'] = null;
+        $dados['motivo'] = $dados['motivo'] ?? 'Nota de Débito autónoma';
+
+        return $this->emitirDocumento($dados)->load('itens', 'cliente');
+    }
+
     private function validarServicosNotaDebito(array $itens): void
     {
         foreach ($itens as $item) {
@@ -722,9 +810,31 @@ class DocumentoFiscalService
 
             if (!empty($item['produto_id'])) {
                 $produto = $this->buscarProduto($item['produto_id']);
-                if ($produto && $produto->tipo === 'produto') {
+                if (!$produto || $produto->tipo !== 'servico') {
                     throw new \InvalidArgumentException(
-                        "Nota de Débito só para serviços. Item '{$item['descricao']}' é produto."
+                        "Nota de Débito só para serviços. O item '{$item['descricao']}' não é um serviço válido."
+                    );
+                }
+            } elseif (empty($item['eh_servico'] ?? null)) {
+                $descricao = Str::lower($item['descricao']);
+                if (!Str::contains($descricao, [
+                    'serviço',
+                    'servico',
+                    'consulta',
+                    'consultoria',
+                    'manutenção',
+                    'manutencao',
+                    'instalação',
+                    'instalacao',
+                    'juro',
+                    'multa',
+                    'taxa',
+                    'comissão',
+                    'comissao',
+                    'penalidade',
+                ])) {
+                    throw new \InvalidArgumentException(
+                        "Item '{$item['descricao']}' deve identificar um serviço, juro ou multa."
                     );
                 }
             }
@@ -764,11 +874,19 @@ class DocumentoFiscalService
 
     private function validarNotaDebito(array $dados): void
     {
-        if (empty($dados['fatura_id'])) {
-            throw new \InvalidArgumentException('ND deve referenciar fatura.');
-        }
         if (empty($dados['itens'])) {
             throw new \InvalidArgumentException('ND deve conter itens.');
+        }
+        $valorTotal = array_sum(array_map(
+            fn (array $item) => max(
+                0,
+                (float) ($item['quantidade'] ?? 0) * (float) ($item['preco_venda'] ?? $item['preco_unitario'] ?? 0)
+                    - (float) ($item['desconto'] ?? 0)
+            ),
+            $dados['itens']
+        ));
+        if ($valorTotal <= 0) {
+            throw new \InvalidArgumentException('O valor total da Nota de Débito deve ser maior que zero.');
         }
     }
 
@@ -786,27 +904,46 @@ class DocumentoFiscalService
     {
         $this->verificarAcessoUsuario();
 
-        if ($adiantamento->tipo_documento !== 'FA') {
-            throw new \InvalidArgumentException("Apenas FA pode ser vinculada.");
-        }
-        if ($adiantamento->estado !== 'emitido') {
-            throw new \InvalidArgumentException("Adiantamento deve estar emitido.");
-        }
-        if ($fatura->tipo_documento !== 'FT') {
-            throw new \InvalidArgumentException("Apenas FT pode receber adiantamentos.");
-        }
-        if (in_array($fatura->estado, ['cancelado', 'paga'])) {
-            throw new \InvalidArgumentException("Fatura cancelada ou paga.");
-        }
-        if ($valor > (float) $adiantamento->total_liquido) {
-            throw new \InvalidArgumentException("Valor excede o adiantamento.");
-        }
-        if ($valor > $this->calcularValorPendente($fatura) + 0.01) {
-            throw new \InvalidArgumentException("Valor excede o pendente da fatura.");
+        if ($valor <= 0) {
+            throw new \InvalidArgumentException("Valor a regularizar deve ser maior que zero.");
         }
 
-        return DB::transaction(function () use ($adiantamento, $fatura, $valor) {
-            DB::table('adiantamento_fatura')->insert([
+        $connection = DB::connection($this->isColectivo() ? 'shared' : 'tenant');
+
+        return $connection->transaction(function () use ($adiantamento, $fatura, $valor, $connection) {
+            $documentosQuery = $this->isColectivo()
+                ? SharedDocumentoFiscal::doTenant()
+                : TenantDocumentoFiscal::query();
+            $adiantamento = (clone $documentosQuery)->whereKey($adiantamento->id)->lockForUpdate()->firstOrFail();
+            $fatura = (clone $documentosQuery)->whereKey($fatura->id)->lockForUpdate()->firstOrFail();
+
+            if ($adiantamento->tipo_documento !== 'FA') {
+                throw new \InvalidArgumentException("Apenas FA pode ser vinculada.");
+            }
+            if ($adiantamento->estado !== 'emitido') {
+                throw new \InvalidArgumentException("Adiantamento deve estar emitido.");
+            }
+            if ($fatura->tipo_documento !== 'FT') {
+                throw new \InvalidArgumentException("Apenas FT pode receber adiantamentos.");
+            }
+            if (empty($adiantamento->cliente_id) || $adiantamento->cliente_id !== $fatura->cliente_id) {
+                throw new \InvalidArgumentException("A Fatura e o adiantamento devem pertencer ao mesmo cliente.");
+            }
+            if (in_array($fatura->estado, ['cancelado', 'paga'])) {
+                throw new \InvalidArgumentException("Fatura cancelada ou paga.");
+            }
+
+            $totalJaUtilizado = (float) $connection->table('adiantamento_fatura')
+                ->where('adiantamento_id', $adiantamento->id)
+                ->sum('valor_utilizado');
+            if ($valor > (float) $adiantamento->total_liquido - $totalJaUtilizado + 0.01) {
+                throw new \InvalidArgumentException("Valor excede o saldo disponível do adiantamento.");
+            }
+            if ($valor > $this->calcularValorPendente($fatura) + 0.01) {
+                throw new \InvalidArgumentException("Valor excede o pendente da fatura.");
+            }
+
+            $connection->table('adiantamento_fatura')->insert([
                 'id' => Str::uuid(),
                 'adiantamento_id' => $adiantamento->id,
                 'fatura_id' => $fatura->id,
@@ -815,7 +952,7 @@ class DocumentoFiscalService
                 'updated_at' => now(),
             ]);
 
-            $totalUtilizado = DB::table('adiantamento_fatura')
+            $totalUtilizado = $connection->table('adiantamento_fatura')
                 ->where('adiantamento_id', $adiantamento->id)
                 ->sum('valor_utilizado');
 
@@ -823,7 +960,7 @@ class DocumentoFiscalService
                 $adiantamento->update(['estado' => 'paga']);
             }
 
-            $totalAdiantamentos = DB::table('adiantamento_fatura')
+            $totalAdiantamentos = $connection->table('adiantamento_fatura')
                 ->where('fatura_id', $fatura->id)
                 ->sum('valor_utilizado');
 
@@ -1000,6 +1137,7 @@ class DocumentoFiscalService
         $query = $this->isColectivo()
             ? SharedDocumentoFiscal::doTenant()->with('cliente', 'venda', 'itens.produto', 'anexos')
             : TenantDocumentoFiscal::with('cliente', 'venda', 'itens.produto', 'anexos');
+        $query->withExists(['faturasConvertidas as fatura_convertida']);
 
         if (!empty($filtros['tipo'])) {
             $query->where('tipo_documento', $filtros['tipo']);
@@ -1023,7 +1161,7 @@ class DocumentoFiscalService
             $query->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'FG', 'FGR', 'TV']);
         }
         if (!empty($filtros['apenas_nao_vendas'])) {
-            $query->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FRt', 'FGEN', 'AC', 'ACR']);
+            $query->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FGEN', 'AC', 'ACR']);
         }
         if (!empty($filtros['apenas_globais'])) {
             $query->whereIn('tipo_documento', ['FG', 'FGR']);
@@ -1083,13 +1221,21 @@ class DocumentoFiscalService
 
     public function calcularValorPendente($documento): float
     {
-        if (!in_array($documento->tipo_documento, ['FT', 'FA', 'FG'])) {
+        if (!in_array($documento->tipo_documento, ['FT', 'FA', 'FG', 'AC'])) {
             return 0.0;
         }
 
         $totalPago = $this->calcularTotalPago($documento);
 
         if ($documento->tipo_documento === 'FA') {
+            $totalUtilizado = (float) DB::connection($this->isColectivo() ? 'shared' : 'tenant')
+                ->table('adiantamento_fatura')
+                ->where('adiantamento_id', $documento->id)
+                ->sum('valor_utilizado');
+            return max(0.0, (float) $documento->total_liquido - $totalPago - $totalUtilizado);
+        }
+
+        if ($documento->tipo_documento === 'AC') {
             return max(0.0, (float) $documento->total_liquido - $totalPago);
         }
 
@@ -1220,7 +1366,7 @@ class DocumentoFiscalService
                 ->whereBetween('data_cancelamento', [$inicioMes, $hoje])->count(),
             'total_vendas_mes' => (clone $query)->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'FG', 'FGR', 'TV'])
                 ->whereBetween('data_emissao', [$inicioMes->toDateString(), $hoje->toDateString()])->count(),
-            'total_nao_vendas_mes' => (clone $query)->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FRt', 'FGEN', 'AC', 'ACR'])
+            'total_nao_vendas_mes' => (clone $query)->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FGEN', 'AC', 'ACR'])
                 ->whereBetween('data_emissao', [$inicioMes->toDateString(), $hoje->toDateString()])->count(),
             'auto_facturacao_mes' => (clone $query)->where('auto_faturacao', true)
                 ->whereBetween('data_emissao', [$inicioMes->toDateString(), $hoje->toDateString()])->count(),
@@ -1248,7 +1394,7 @@ class DocumentoFiscalService
                 'total_vendas' => (float) (clone $query)->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'FG', 'FGR', 'TV'])
                     ->whereBetween('data_emissao', [$inicio->toDateString(), $fim->toDateString()])
                     ->where('estado', '!=', 'cancelado')->sum('total_liquido'),
-                'total_nao_vendas' => (float) (clone $query)->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FRt', 'FGEN', 'AC', 'ACR'])
+                'total_nao_vendas' => (float) (clone $query)->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FGEN', 'AC', 'ACR'])
                     ->whereBetween('data_emissao', [$inicio->toDateString(), $fim->toDateString()])
                     ->where('estado', '!=', 'cancelado')->sum('total_liquido'),
                 'total_pendente' => (float) (clone $query)->whereIn('tipo_documento', ['FT', 'FA', 'FG'])
@@ -1396,7 +1542,7 @@ class DocumentoFiscalService
             ->when(!empty($filtros['data_inicio']), fn($q) => $q->whereDate('data_emissao', '>=', $filtros['data_inicio']))
             ->when(!empty($filtros['data_fim']), fn($q) => $q->whereDate('data_emissao', '<=', $filtros['data_fim']))
             ->when(!empty($filtros['apenas_vendas']), fn($q) => $q->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'FG', 'FGR', 'TV']))
-            ->when(!empty($filtros['apenas_nao_vendas']), fn($q) => $q->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FRt', 'FGEN', 'AC', 'ACR']))
+            ->when(!empty($filtros['apenas_nao_vendas']), fn($q) => $q->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FGEN', 'AC', 'ACR']))
             ->when(!empty($filtros['apenas_auto_facturacao']), fn($q) => $q->where('auto_faturacao', true))
             ->orderBy('data_emissao', 'desc')->orderBy('hora_emissao', 'desc')->orderBy('numero', 'desc')
             ->get();
@@ -1535,7 +1681,8 @@ class DocumentoFiscalService
         array $itens,
         bool $aplicaIva,
         string $regime,
-        ?float $taxaRetencaoAuto = null
+        ?float $taxaRetencaoAuto = null,
+        ?string $tipoDocumento = null
     ): array
     {
         $totalBase = 0.0;
@@ -1562,7 +1709,10 @@ class DocumentoFiscalService
             $codigoIsencao = null;
             $motivoIsencao = null;
 
-            if ($aplicaIva) {
+            if ($tipoDocumento === 'ND') {
+                $codigoIsencao = 'M00';
+                $motivoIsencao = self::MOTIVOS_ISENCAO['M00'];
+            } elseif ($aplicaIva) {
                 if ($regime === 'geral') {
                     $taxaIva = (float) ($item['taxa_iva'] ?? $produto?->taxa_iva ?? $this->taxaIvaVigente());
                     if ($taxaIva === 0.0) {
@@ -1711,7 +1861,6 @@ class DocumentoFiscalService
                 'NC' => 'C',
                 'ND' => 'D',
                 'RC' => 'R',
-                'FRt' => 'FRT',
                 'FG' => 'G',
                 'FGR' => 'GR',
                 'TV' => 'T',
@@ -1896,7 +2045,6 @@ if ($temAutoFact) {
             'NC' => 'Notas de Crédito',
             'ND' => 'Notas de Débito',
             'RC' => 'Recibos',
-            'FRt' => 'Faturas de Retificação (legado)',
             'FG' => 'Faturas Globais',
             'FGR' => 'Faturas Globais-Recibo',
             'TV' => 'Talões de Venda',
@@ -1919,18 +2067,20 @@ if ($temAutoFact) {
                 && Str::lower(trim((string) ($dados['cliente_nome'] ?? ''))) === 'consumidor final';
 
             if (!$temCliente || $clienteGenerico) {
+                $mensagem = $tipo === 'FR'
+                    ? 'Factura-Recibo requer a identificação do cliente; Consumidor Final não é válido.'
+                    : "{$config['nome']} requer a identificação do cliente.";
                 throw new \InvalidArgumentException(
-                    "{$config['nome']} requer a identificação do cliente; Consumidor Final não é válido para uma Fatura-Recibo."
+                    $mensagem
                 );
             }
         }
 
         $regras = [
             'FR' => ['dados_pagamento'],
-            'FA' => ['data_vencimento'],
             'RC' => ['fatura_id'],
             'NC' => ['fatura_id', 'motivo', 'itens'],
-            'ND' => ['fatura_id', 'itens'],
+            'ND' => ['itens'],
             'FG' => ['periodo_referencia_inicio', 'periodo_referencia_fim', 'anexos', 'itens'],
             'FGR' => ['periodo_referencia_inicio', 'periodo_referencia_fim', 'anexos', 'itens'],
             'TV' => ['itens'],
@@ -1988,15 +2138,15 @@ if ($temAutoFact) {
             if ($tipo === 'ND' && !in_array($origem->tipo_documento, ['FT', 'FG'], true)) {
                 throw new \InvalidArgumentException("ND só de FT ou FG. Tipo: {$origem->tipo_documento}");
             }
-            if ($tipo === 'RC' && !in_array($origem->tipo_documento, ['FT', 'FA', 'FP', 'FG'], true)) {
-                throw new \InvalidArgumentException("RC só de FT/FA/FP/FG. Tipo: {$origem->tipo_documento}");
+            if ($tipo === 'RC' && !in_array($origem->tipo_documento, ['FT', 'FA', 'FP', 'FG', 'AC'], true)) {
+                throw new \InvalidArgumentException("RC só de FT/FA/FP/FG/AC. Tipo: {$origem->tipo_documento}");
             }
         }
     }
 
     private function calcularDataVencimento(string $tipo, array $dados, Carbon $dataEmissao): ?string
     {
-        if (in_array($tipo, ['RC', 'NC', 'FRt', 'FP', 'TV', 'FGR', 'FGEN', 'ACR'], true)) {
+        if (in_array($tipo, ['RC', 'NC', 'FP', 'TV', 'FGR', 'FGEN', 'ACR'], true)) {
             return null;
         }
 

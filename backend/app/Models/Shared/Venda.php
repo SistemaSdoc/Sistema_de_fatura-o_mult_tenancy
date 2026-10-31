@@ -287,7 +287,6 @@ class Venda extends Model
             'FA'  => 'Fatura de Adiantamento',
             'NC'  => 'Nota de Crédito',
             'ND'  => 'Nota de Débito',
-            'FRt' => 'Fatura de Retificação',
             default => 'Venda',
         };
     }

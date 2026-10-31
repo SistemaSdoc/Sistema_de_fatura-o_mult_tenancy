@@ -21,7 +21,7 @@ class ServicosSheetImport implements ToCollection
 
     private string $modo;
 
-    private const TAXAS_VALIDAS = [0, 2, 5, 6.5, 10, 15];
+    private const TAXAS_VALIDAS = [0.0, 2.0, 5.0, 6.5, 10.0, 15.0];
     private const CODIGOS_ISENCAO_VALIDOS = ['M00', 'M01', 'M02', 'M03', 'M04', 'M05', 'M06', 'M99'];
     private const UNIDADES_VALIDAS = ['hora', 'dia', 'semana', 'mes'];
 
@@ -34,7 +34,7 @@ class ServicosSheetImport implements ToCollection
         $this->modo = session('tenant_modo', $empresa?->modo ?? 'colectivo');
     }
 
-    public function collection(Collection $rows)
+    public function collection(Collection $rows): void
     {
         $headerIndex = self::HEADING_ROW - 1; // 0-based dentro de $rows
         $headerRow = $rows->get($headerIndex, collect());

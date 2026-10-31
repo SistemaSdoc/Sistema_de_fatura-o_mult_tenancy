@@ -223,6 +223,7 @@ export function EmpresaTab({ colors, showToast }: EmpresaTabProps) {
     endereco: "",
     regime_fiscal: "simplificado" as "simplificado" | "geral",
     sujeito_iva: true,
+    is_seguradora: false,
     nome_banco: "",
     iban: "",
     numero_conta: "",
@@ -239,6 +240,7 @@ export function EmpresaTab({ colors, showToast }: EmpresaTabProps) {
         endereco: empresa.endereco ?? "",
         regime_fiscal: (empresa.regime_fiscal ?? "simplificado") as "simplificado" | "geral",
         sujeito_iva: empresa.sujeito_iva === true,
+        is_seguradora: empresa.is_seguradora === true,
         nome_banco: empresa.nome_banco ?? "",
         numero_conta: empresa.numero_conta ?? "",
         iban: empresa.iban ?? "",
@@ -271,6 +273,7 @@ export function EmpresaTab({ colors, showToast }: EmpresaTabProps) {
         numero_conta: form.numero_conta,
         nome_banco: form.nome_banco,
         sujeito_iva: form.regime_fiscal === "geral",
+        is_seguradora: form.is_seguradora,
       });
 
       if (response.data.success) {
@@ -464,6 +467,19 @@ export function EmpresaTab({ colors, showToast }: EmpresaTabProps) {
               />
             </div>
           </div>
+          <label className="flex items-center gap-3 py-2">
+            <input
+              type="checkbox"
+              checked={form.is_seguradora}
+              disabled={isSuspended}
+              onChange={(event) => setForm((current) => ({ ...current, is_seguradora: event.target.checked }))}
+              className="h-4 w-4 shrink-0"
+              style={{ accentColor: colors.primary }}
+            />
+            <span className="text-sm" style={{ color: colors.text }}>
+              Empresa seguradora (permite emitir Avisos de Cobrança)
+            </span>
+          </label>
         </CardContent>
         <CardFooter className="flex justify-end border-t pt-6" style={{ borderColor: colors.border }}>
           <SaveButton

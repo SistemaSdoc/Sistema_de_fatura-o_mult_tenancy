@@ -10,7 +10,6 @@ use Illuminate\Support\Facades\DB;
  *
  * Alterações DP 71/25:
  *  - Novos tipos: FG, FGR, TV, FGEN, AC, ACR
- *  - FRt marcado como depreciado (mantido para legado)
  *  - Novos campos: periodo_referencia_inicio/fim, auto_faturacao,
  *    motivo_auto_faturacao, software_certificacao_numero, print_count
  *  - Nova relação: anexos() (Factura Global)
@@ -100,7 +99,6 @@ class DocumentoFiscal extends TenantModel
     const TIPO_NOTA_CREDITO        = 'NC';
     const TIPO_NOTA_DEBITO         = 'ND';
     const TIPO_RECIBO              = 'RC';
-    const TIPO_FATURA_RETIFICACAO  = 'FRt'; // @deprecated
 
     // DP 71/25
     const TIPO_FACTURA_GLOBAL         = 'FG';
@@ -124,7 +122,6 @@ class DocumentoFiscal extends TenantModel
         self::TIPO_FATURA_ADIANTAMENTO,
         self::TIPO_NOTA_CREDITO,
         self::TIPO_NOTA_DEBITO,
-        self::TIPO_FATURA_RETIFICACAO,
         self::TIPO_FACTURA_GENERICA,
         self::TIPO_AVISO_COBRANCA,
         self::TIPO_AVISO_COBRANCA_RECIBO,
@@ -198,8 +195,13 @@ class DocumentoFiscal extends TenantModel
                 self::TIPO_NOTA_CREDITO,
                 self::TIPO_NOTA_DEBITO,
                 self::TIPO_RECIBO,
-                self::TIPO_FATURA_RETIFICACAO,
             ]);
+    }
+
+    public function faturasConvertidas()
+    {
+        return $this->hasMany(DocumentoFiscal::class, 'fatura_id')
+            ->whereIn('tipo_documento', [self::TIPO_FATURA, self::TIPO_FATURA_RECIBO]);
     }
 
     public function itens()
@@ -368,7 +370,6 @@ class DocumentoFiscal extends TenantModel
             self::TIPO_NOTA_CREDITO           => 'Nota de Crédito',
             self::TIPO_NOTA_DEBITO            => 'Nota de Débito',
             self::TIPO_RECIBO                 => 'Recibo',
-            self::TIPO_FATURA_RETIFICACAO     => '⚠️ Factura de Retificação (depreciado)',
             self::TIPO_FACTURA_GLOBAL         => 'Factura Global',
             self::TIPO_FACTURA_GLOBAL_RECIBO  => 'Factura Global-Recibo',
             self::TIPO_TALAO_VENDA            => 'Talão de Venda',
@@ -490,7 +491,6 @@ class DocumentoFiscal extends TenantModel
             self::TIPO_NOTA_CREDITO           => 'red',
             self::TIPO_NOTA_DEBITO            => 'amber',
             self::TIPO_RECIBO                 => 'teal',
-            self::TIPO_FATURA_RETIFICACAO     => 'pink',
             self::TIPO_FACTURA_GLOBAL         => 'indigo',
             self::TIPO_FACTURA_GLOBAL_RECIBO  => 'indigo',
             self::TIPO_TALAO_VENDA            => 'slate',
@@ -643,11 +643,6 @@ class DocumentoFiscal extends TenantModel
     public function ehRecibo(): bool
     {
         return $this->tipo_documento === self::TIPO_RECIBO;
-    }
-
-    public function ehFaturaRetificacao(): bool
-    {
-        return $this->tipo_documento === self::TIPO_FATURA_RETIFICACAO;
     }
 
     public function ehFacturaGlobal(): bool

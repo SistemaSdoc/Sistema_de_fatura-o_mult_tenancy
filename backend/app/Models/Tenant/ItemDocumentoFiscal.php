@@ -99,7 +99,7 @@ class ItemDocumentoFiscal extends TenantModel
     }
 
     /**
-     * Item original no documento de origem (para NC, ND, FRt)
+     * Item original no documento de origem (para NC e ND)
      */
     public function itemOrigem()
     {

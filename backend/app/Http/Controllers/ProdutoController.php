@@ -1088,7 +1088,7 @@ class ProdutoController extends Controller
         try {
             $this->verificarAcessoUsuario();
 
-            if (!$this->hasRole(['admin', 'gestor'])) {
+            if (!$this->hasRole(['admin', 'gestor', 'contablista', 'operador'])) {
                 return response()->json(['error' => 'Não autorizado'], 403);
             }
 

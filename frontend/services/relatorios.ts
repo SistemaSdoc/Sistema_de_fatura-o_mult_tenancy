@@ -595,7 +595,7 @@ export const relatoriosService = {
     async getRelatorioFaturacao(params?: {
         data_inicio?: string;
         data_fim?: string;
-        tipo?: "FT" | "FR" | "FP" | "FA" | "NC" | "ND" | "RC" | "FRt";
+        tipo?: "FT" | "FR" | "FP" | "FA" | "NC" | "ND" | "RC";
         cliente_id?: string;
         incluir_retencoes?: boolean;
     }): Promise<RelatorioFaturacao> {
@@ -645,7 +645,7 @@ export const relatoriosService = {
     async getRelatorioDocumentosFiscais(params?: {
         data_inicio?: string;
         data_fim?: string;
-        tipo?: "FT" | "FR" | "FP" | "FA" | "NC" | "ND" | "RC" | "FRt";
+        tipo?: "FT" | "FR" | "FP" | "FA" | "NC" | "ND" | "RC";
         cliente_id?: string;
         cliente_nome?: string;
         estado?: "emitido" | "paga" | "parcialmente_paga" | "cancelado" | "expirado";
