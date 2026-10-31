@@ -900,95 +900,146 @@ class DocumentoFiscalService
         }
     }
 
-    public function vincularAdiantamento($adiantamento, $fatura, float $valor): array
+    public function vincularAdiantamento($adiantamento, $fatura): array
     {
         $this->verificarAcessoUsuario();
 
-        if ($valor <= 0) {
-            throw new \InvalidArgumentException("Valor a regularizar deve ser maior que zero.");
-        }
-
         $connection = DB::connection($this->isColectivo() ? 'shared' : 'tenant');
 
-        return $connection->transaction(function () use ($adiantamento, $fatura, $valor, $connection) {
+        return $connection->transaction(function () use ($adiantamento, $fatura, $connection) {
             $documentosQuery = $this->isColectivo()
                 ? SharedDocumentoFiscal::doTenant()
                 : TenantDocumentoFiscal::query();
-            $adiantamento = (clone $documentosQuery)->whereKey($adiantamento->id)->lockForUpdate()->firstOrFail();
+            $adiantamento = (clone $documentosQuery)
+                ->with('itens.produto')
+                ->whereKey($adiantamento->id)
+                ->lockForUpdate()
+                ->firstOrFail();
             $fatura = (clone $documentosQuery)->whereKey($fatura->id)->lockForUpdate()->firstOrFail();
 
             if ($adiantamento->tipo_documento !== 'FA') {
-                throw new \InvalidArgumentException("Apenas FA pode ser vinculada.");
+                throw new \InvalidArgumentException("Apenas uma Fatura de Adiantamento pode ser regularizada.");
             }
-            if ($adiantamento->estado !== 'emitido') {
-                throw new \InvalidArgumentException("Adiantamento deve estar emitido.");
+            if (in_array($adiantamento->estado, ['cancelado', 'expirado'], true)) {
+                throw new \InvalidArgumentException("Não é possível regularizar um adiantamento cancelado ou expirado.");
             }
             if ($fatura->tipo_documento !== 'FT') {
-                throw new \InvalidArgumentException("Apenas FT pode receber adiantamentos.");
+                throw new \InvalidArgumentException("A regularização exige uma Fatura definitiva (FT).");
             }
             if (empty($adiantamento->cliente_id) || $adiantamento->cliente_id !== $fatura->cliente_id) {
                 throw new \InvalidArgumentException("A Fatura e o adiantamento devem pertencer ao mesmo cliente.");
             }
-            if (in_array($fatura->estado, ['cancelado', 'paga'])) {
-                throw new \InvalidArgumentException("Fatura cancelada ou paga.");
+            if (in_array($fatura->estado, ['cancelado', 'expirado'], true)) {
+                throw new \InvalidArgumentException("Não é possível aplicar o adiantamento a uma Fatura cancelada ou expirada.");
             }
 
-            $totalJaUtilizado = (float) $connection->table('adiantamento_fatura')
-                ->where('adiantamento_id', $adiantamento->id)
-                ->sum('valor_utilizado');
-            if ($valor > (float) $adiantamento->total_liquido - $totalJaUtilizado + 0.01) {
-                throw new \InvalidArgumentException("Valor excede o saldo disponível do adiantamento.");
-            }
-            if ($valor > $this->calcularValorPendente($fatura) + 0.01) {
-                throw new \InvalidArgumentException("Valor excede o pendente da fatura.");
+            $notasCreditoExistentes = (clone $documentosQuery)
+                ->where('fatura_id', $adiantamento->id)
+                ->where('tipo_documento', 'NC')
+                ->where('estado', '!=', 'cancelado')
+                ->exists();
+            if ($notasCreditoExistentes) {
+                throw new \InvalidArgumentException("Este adiantamento já foi regularizado através de uma Nota de Crédito.");
             }
 
-            $vinculoExistente = $connection->table('adiantamento_fatura')
-                ->where('adiantamento_id', $adiantamento->id)
-                ->where('fatura_id', $fatura->id)
-                ->lockForUpdate()
-                ->first();
+            $vinculosQuery = $connection->table('adiantamento_fatura')
+                ->where('adiantamento_id', $adiantamento->id);
+            if ($this->isColectivo()) {
+                $vinculosQuery->where('tenant_id', $this->empresa->id);
+            }
+            $vinculosExistentes = $vinculosQuery->lockForUpdate()->get();
+            if ($vinculosExistentes->contains(fn ($vinculo) => $vinculo->fatura_id !== $fatura->id)) {
+                throw new \InvalidArgumentException("O adiantamento já está associado a outra Fatura.");
+            }
 
+            $valorAdiantamento = (float) $adiantamento->total_liquido;
+            $valorJaAlocado = (float) $vinculosExistentes->sum('valor_utilizado');
+            if ($valorJaAlocado > $valorAdiantamento + 0.01) {
+                throw new \InvalidArgumentException("O valor já associado excede o total do adiantamento.");
+            }
+            $valorAAlocar = max(0, $valorAdiantamento - $valorJaAlocado);
+            if ($fatura->estado === 'paga' && $valorAAlocar > 0.01) {
+                throw new \InvalidArgumentException("A Fatura definitiva já está paga e não tem saldo para receber este adiantamento.");
+            }
+            if ($valorAAlocar > $this->calcularValorPendente($fatura) + 0.01) {
+                throw new \InvalidArgumentException("O valor do adiantamento excede o saldo pendente da Fatura definitiva.");
+            }
+
+            $itensNC = $adiantamento->itens->map(fn ($item) => [
+                'produto_id' => $item->produto_id,
+                'descricao' => $item->descricao,
+                'quantidade' => (float) $item->quantidade,
+                'preco_venda' => (float) $item->preco_unitario,
+                'desconto' => (float) $item->desconto,
+                'taxa_iva' => (float) $item->taxa_iva,
+                'taxa_retencao' => (float) $item->taxa_retencao,
+                'codigo_isencao' => $item->codigo_isencao,
+                'eh_servico' => $item->produto?->tipo === 'servico',
+            ])->all();
+
+            if ($itensNC === []) {
+                throw new \InvalidArgumentException("O adiantamento não tem itens para emitir a Nota de Crédito.");
+            }
+
+            $empresa = $this->obterEmpresa();
+            $totaisNC = $this->processarItens(
+                $itensNC,
+                (bool) $empresa->sujeito_iva,
+                $empresa->regime_fiscal,
+                null,
+                'NC'
+            );
+            if (abs((float) $totaisNC['liquido'] - $valorAdiantamento) > 0.01) {
+                throw new \InvalidArgumentException(
+                    "Não foi possível reproduzir o valor total do adiantamento na Nota de Crédito. Verifique os dados fiscais dos itens."
+                );
+            }
+
+            $notaCredito = $this->emitirDocumento([
+                'tipo_documento' => 'NC',
+                'fatura_id' => $adiantamento->id,
+                'cliente_id' => $adiantamento->cliente_id,
+                'itens' => $itensNC,
+                'motivo' => "Regularização de adiantamento {$adiantamento->numero_documento}",
+                '_regularizacao_adiantamento' => true,
+            ]);
+
+            $vinculoExistente = $vinculosExistentes->firstWhere('fatura_id', $fatura->id);
             if ($vinculoExistente) {
-                $connection->table('adiantamento_fatura')
-                    ->where('id', $vinculoExistente->id)
-                    ->update([
-                        'valor_utilizado' => (float) $vinculoExistente->valor_utilizado + $valor,
-                        'updated_at' => now(),
-                    ]);
+                $vinculoQuery = $connection->table('adiantamento_fatura')
+                    ->where('id', $vinculoExistente->id);
+                if ($this->isColectivo()) {
+                    $vinculoQuery->where('tenant_id', $this->empresa->id);
+                }
+                $vinculoQuery->update([
+                    'valor_utilizado' => $valorAdiantamento,
+                    'updated_at' => now(),
+                ]);
             } else {
-                $connection->table('adiantamento_fatura')->insert([
+                $vinculoData = [
                     'id' => Str::uuid(),
                     'adiantamento_id' => $adiantamento->id,
                     'fatura_id' => $fatura->id,
-                    'valor_utilizado' => $valor,
+                    'valor_utilizado' => $valorAdiantamento,
                     'created_at' => now(),
                     'updated_at' => now(),
-                ]);
+                ];
+                if ($this->isColectivo()) {
+                    $vinculoData['tenant_id'] = $this->empresa->id;
+                }
+                $connection->table('adiantamento_fatura')->insert($vinculoData);
             }
 
-            $totalUtilizado = $connection->table('adiantamento_fatura')
-                ->where('adiantamento_id', $adiantamento->id)
-                ->sum('valor_utilizado');
-
-            if ((float) $totalUtilizado >= (float) $adiantamento->total_liquido) {
-                $adiantamento->update(['estado' => 'paga']);
-            }
-
-            $totalAdiantamentos = $connection->table('adiantamento_fatura')
-                ->where('fatura_id', $fatura->id)
-                ->sum('valor_utilizado');
-
-            $totalPago = $this->calcularTotalPago($fatura);
-            $valorPendente = (float) $fatura->total_liquido - $totalPago - (float) $totalAdiantamentos;
-
-            $fatura->update([
-                'estado' => $valorPendente <= 0.01 ? 'paga' : 'parcialmente_paga',
-            ]);
+            $valorPendente = $this->calcularValorPendente($fatura);
+            $estadoFatura = $valorPendente <= 0.01
+                ? 'paga'
+                : ($valorPendente < (float) $fatura->total_liquido - 0.01 ? 'parcialmente_paga' : 'emitido');
+            $fatura->update(['estado' => $estadoFatura]);
 
             return [
                 'adiantamento' => $adiantamento->fresh(),
                 'fatura' => $fatura->fresh(),
+                'nota_credito' => $notaCredito->load('documentoOrigem', 'itens', 'cliente'),
             ];
         });
     }
@@ -1242,21 +1293,32 @@ class DocumentoFiscalService
 
         $totalPago = $this->calcularTotalPago($documento);
 
+        $connection = DB::connection($this->isColectivo() ? 'shared' : 'tenant');
         if ($documento->tipo_documento === 'FA') {
-            $totalUtilizado = (float) DB::connection($this->isColectivo() ? 'shared' : 'tenant')
-                ->table('adiantamento_fatura')
-                ->where('adiantamento_id', $documento->id)
-                ->sum('valor_utilizado');
-            return max(0.0, (float) $documento->total_liquido - $totalPago - $totalUtilizado);
+            $vinculosQuery = $connection->table('adiantamento_fatura')
+                ->where('adiantamento_id', $documento->id);
+            if ($this->isColectivo()) {
+                $vinculosQuery->where('tenant_id', $this->empresa->id);
+            }
+            $totalUtilizado = (float) $vinculosQuery->sum('valor_utilizado');
+            $totalCreditado = (float) $this->documentoFiscalModel()
+                ->where('fatura_id', $documento->id)
+                ->where('tipo_documento', 'NC')
+                ->where('estado', '!=', 'cancelado')
+                ->sum('total_liquido');
+            return max(0.0, (float) $documento->total_liquido - $totalPago - max($totalUtilizado, $totalCreditado));
         }
 
         if ($documento->tipo_documento === 'AC') {
             return max(0.0, (float) $documento->total_liquido - $totalPago);
         }
 
-        $totalAdiantamentos = (float) DB::table('adiantamento_fatura')
-            ->where('fatura_id', $documento->id)
-            ->sum('valor_utilizado');
+        $vinculosQuery = $connection->table('adiantamento_fatura')
+            ->where('fatura_id', $documento->id);
+        if ($this->isColectivo()) {
+            $vinculosQuery->where('tenant_id', $this->empresa->id);
+        }
+        $totalAdiantamentos = (float) $vinculosQuery->sum('valor_utilizado');
 
         return max(0.0, (float) $documento->total_liquido - $totalPago - $totalAdiantamentos);
     }
@@ -2147,7 +2209,15 @@ if ($temAutoFact) {
                 throw new \InvalidArgumentException('Documento de origem não encontrado.');
             }
 
-            if (in_array($tipo, ['NC'], true) && !in_array($origem->tipo_documento, ['FT', 'FR', 'FG', 'FGR'], true)) {
+            $ncRegularizaAdiantamento = $tipo === 'NC'
+                && $origem->tipo_documento === 'FA'
+                && ($dados['_regularizacao_adiantamento'] ?? false) === true;
+
+            if (
+                $tipo === 'NC'
+                && !in_array($origem->tipo_documento, ['FT', 'FR', 'FG', 'FGR'], true)
+                && !$ncRegularizaAdiantamento
+            ) {
                 throw new \InvalidArgumentException("NC só de FT/FR/FG/FGR. Tipo: {$origem->tipo_documento}");
             }
             if ($tipo === 'ND' && !in_array($origem->tipo_documento, ['FT', 'FG'], true)) {
@@ -2243,7 +2313,18 @@ if ($temAutoFact) {
 
     private function executarAcoesPosCriacao($documento, array $dados, string $tipo): void
     {
-        if ($this->configuracoesTipo[$tipo]['afeta_stock'] ?? false) {
+        $afetaStock = $this->configuracoesTipo[$tipo]['afeta_stock'] ?? false;
+        if ($tipo === 'NC' && !empty($dados['fatura_id'])) {
+            $origemQuery = $this->isColectivo()
+                ? SharedDocumentoFiscal::doTenant()
+                : TenantDocumentoFiscal::query();
+            $origem = $origemQuery->whereKey($dados['fatura_id'])->first();
+            if ($origem?->tipo_documento === 'FA') {
+                $afetaStock = false;
+            }
+        }
+
+        if ($afetaStock) {
             $this->movimentarStock($documento, $tipo);
         }
 

@@ -122,7 +122,7 @@ export interface DocumentoFiscal {
   notasCredito?: DocumentoFiscal[];
   notasDebito?: DocumentoFiscal[];
   faturasAdiantamento?: (DocumentoFiscal & { pivot?: { valor_utilizado: number } })[];
-  faturasVinculadas?: DocumentoFiscal[];
+  faturasVinculadas?: (DocumentoFiscal & { pivot?: { valor_utilizado: number } })[];
 
   // Campos calculados no frontend
   tem_servicos?: boolean;
@@ -263,7 +263,6 @@ export interface GerarReciboDTO {
 
 export interface VincularAdiantamentoDTO {
   fatura_id: string;
-  valor: number;
 }
 
 export interface CancelarDocumentoDTO {
@@ -846,8 +845,8 @@ async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
   async vincularAdiantamento(
     adiantamentoId: string,
     dados: VincularAdiantamentoDTO
-  ): Promise<{ adiantamento: DocumentoFiscal; fatura: DocumentoFiscal }> {
-    const response = await api.post<ApiResponse<{ adiantamento: DocumentoFiscal; fatura: DocumentoFiscal }>>(
+  ): Promise<{ adiantamento: DocumentoFiscal; fatura: DocumentoFiscal; nota_credito: DocumentoFiscal }> {
+    const response = await api.post<ApiResponse<{ adiantamento: DocumentoFiscal; fatura: DocumentoFiscal; nota_credito: DocumentoFiscal }>>(
       `${this.baseUrl}/${adiantamentoId}/vincular-adiantamento`,
       dados
     );
@@ -855,6 +854,7 @@ async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
     return {
       adiantamento: this._enriquecerDocumento(response.data.data.adiantamento),
       fatura: this._enriquecerDocumento(response.data.data.fatura),
+      nota_credito: this._enriquecerDocumento(response.data.data.nota_credito),
     };
   }
 
@@ -970,7 +970,11 @@ async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
     const totalPago = documento.recibos?.reduce((sum, r) => (r.estado !== "cancelado" ? sum + Number(r.total_liquido) : sum), 0) ?? 0;
 
     if (documento.tipo_documento === "FA") {
-      return Math.max(0, Number(documento.total_liquido) - totalPago);
+      const totalCreditado =
+        documento.notasCredito?.reduce((sum, nc) => (nc.estado !== "cancelado" ? sum + Number(nc.total_liquido) : sum), 0) ?? 0;
+      const totalAlocado =
+        documento.faturasVinculadas?.reduce((sum, fatura) => sum + Number(fatura.pivot?.valor_utilizado ?? 0), 0) ?? 0;
+      return Math.max(0, Number(documento.total_liquido) - totalPago - Math.max(totalCreditado, totalAlocado));
     }
 
     const totalAdiantamentos = documento.faturasAdiantamento?.reduce((sum, a) => sum + Number(a.pivot?.valor_utilizado ?? 0), 0) ?? 0;

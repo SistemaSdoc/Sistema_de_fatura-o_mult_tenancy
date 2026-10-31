@@ -1006,22 +1006,21 @@ public function emitir(Request $request): JsonResponse
 
             $dados = $request->validate([
                 'fatura_id' => 'required|uuid|exists:documentos_fiscais,id',
-                'valor'     => 'required|numeric|min:0.01|max:' . $adiantamento->total_liquido,
             ]);
 
             $fatura    = $this->documentoService->buscarDocumento($dados['fatura_id']);
-            $resultado = $this->documentoService->vincularAdiantamento($adiantamento, $fatura, (float) $dados['valor']);
+            $resultado = $this->documentoService->vincularAdiantamento($adiantamento, $fatura);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Adiantamento vinculado com sucesso',
+                'message' => 'Adiantamento regularizado com Nota de Crédito',
                 'data'    => $resultado,
                 'modo'    => $modo,
             ]);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
-            return $this->erroInterno('Erro ao vincular adiantamento', $e);
+            return $this->erroInterno('Erro ao regularizar adiantamento', $e);
         }
     }
 

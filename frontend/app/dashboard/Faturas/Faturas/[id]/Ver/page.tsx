@@ -307,11 +307,15 @@ function TotaisSection({
   const pctDesconto = descontoGlobal > 0 && subtotalBruto > 0 ? (descontoGlobal / subtotalBruto) * 100 : 0;
   const temDesconto = descontoGlobal > 0;
   const temTroco = troco > 0;
+  const totalAdiantamentos =
+    nota.faturasAdiantamento?.reduce((sum, adiantamento) => sum + Number(adiantamento.pivot?.valor_utilizado ?? 0), 0) ?? 0;
+  const totalPago = Number(nota.valor_pago ?? 0);
+  const saldoPendente = Number(nota.saldo_pendente ?? Math.max(0, total - totalPago - totalAdiantamentos));
 
   const metodoPagamento =
     (isFR || isRC) && nota.metodo_pagamento ? (METODOS_PAGAMENTO[nota.metodo_pagamento] ?? nota.metodo_pagamento) : null;
 
-  const labelTotal = isFT ? "TOTAL A PAGAR" : isFR || isRC ? "TOTAL PAGO" : isNC ? "TOTAL A CREDITAR" : isND ? "TOTAL A DEBITAR" : "TOTAL";
+  const labelTotal = isFT ? "TOTAL DA FATURA" : isFR || isRC ? "TOTAL PAGO" : isNC ? "TOTAL A CREDITAR" : isND ? "TOTAL A DEBITAR" : "TOTAL";
 
   return (
     <div className="px-4 py-3 flex justify-end">
@@ -327,13 +331,16 @@ function TotaisSection({
         {ret > 0 && <Row label={`Retenção (${pctRet.toFixed(1)}%)`} value={`− ${fmtKz(ret)}`} colors={colors} />}
         {metodoPagamento && <Row label="Forma de Pagamento" value={metodoPagamento} colors={colors} />}
         {temTroco && <Row label="Troco" value={fmtKz(troco)} colors={colors} />}
+        {isFT && totalAdiantamentos > 0 && (
+          <Row label="Adiantamentos regularizados" value={`− ${fmtKz(totalAdiantamentos)}`} colors={colors} accent={colors.success} />
+        )}
+        {isFT && totalPago > 0 && <Row label="Pagamentos recebidos" value={`− ${fmtKz(totalPago)}`} colors={colors} />}
         <div className="flex justify-between items-center pt-2 border-t mt-1" style={{ borderColor: colors.border }}>
           <span className="text-sm font-bold" style={{ color: colors.text }}>
-            {labelTotal}
+            {isFT ? "SALDO PENDENTE" : labelTotal}
           </span>
           <span className="text-base font-bold" style={{ color: accent }}>
-            {isNC ? "−" : isND ? "+" : ""}
-            {fmtKz(total)}
+            {isFT ? fmtKz(saldoPendente) : `${isNC ? "−" : isND ? "+" : ""}${fmtKz(total)}`}
           </span>
         </div>
       </div>
@@ -1275,7 +1282,6 @@ export default function VisualizarNotaPage() {
   const [mostrarModalRegularizacao, setMostrarModalRegularizacao] = useState(false);
   const [faturasElegiveis, setFaturasElegiveis] = useState<DocumentoFiscal[]>([]);
   const [faturaRegularizacaoId, setFaturaRegularizacaoId] = useState("");
-  const [valorRegularizacao, setValorRegularizacao] = useState("");
   const [loadingRegularizacao, setLoadingRegularizacao] = useState(false);
   const [podeGerarNC, setPodeGerarNC] = useState<{ pode: boolean; motivo?: string }>({ pode: false });
   const [podeGerarND, setPodeGerarND] = useState<{ pode: boolean; motivo?: string }>({ pode: false });
@@ -1343,10 +1349,12 @@ export default function VisualizarNotaPage() {
         cliente_id: adiantamento.cliente_id,
         per_page: 100,
       });
-      const elegiveis = resultado.data.filter((fatura) => !["cancelado", "paga", "expirado"].includes(fatura.estado));
+      const faturasJaAssociadas = new Set(adiantamento.faturasVinculadas?.map((fatura) => fatura.id) ?? []);
+      const elegiveis = resultado.data.filter(
+        (fatura) => faturasJaAssociadas.has(fatura.id) || !["cancelado", "paga", "expirado"].includes(fatura.estado)
+      );
       setFaturasElegiveis(elegiveis);
       setFaturaRegularizacaoId(elegiveis[0]?.id ?? "");
-      setValorRegularizacao("");
       setMostrarModalRegularizacao(true);
     } catch (e) {
       showToast("Erro ao carregar faturas", "error", e instanceof Error ? e.message : "Não foi possível carregar as faturas do cliente.");
@@ -1354,20 +1362,23 @@ export default function VisualizarNotaPage() {
   };
 
   const confirmarRegularizacao = async () => {
-    if (!nota?.id || !faturaRegularizacaoId || Number(valorRegularizacao) <= 0) {
-      showToast("Dados incompletos", "error", "Selecione uma fatura e informe um valor superior a zero.");
+    if (!nota?.id || !faturaRegularizacaoId) {
+      showToast("Dados incompletos", "error", "Selecione a fatura definitiva para regularizar o adiantamento.");
       return;
     }
 
     try {
       setLoadingRegularizacao(true);
-      await documentoFiscalService.vincularAdiantamento(nota.id, {
+      const resultado = await documentoFiscalService.vincularAdiantamento(nota.id, {
         fatura_id: faturaRegularizacaoId,
-        valor: Number(valorRegularizacao),
       });
       setMostrarModalRegularizacao(false);
-      showToast("Adiantamento regularizado", "success", "O valor foi associado à fatura selecionada.");
-      await carregarNota();
+      showToast(
+        "Adiantamento regularizado",
+        "success",
+        `Foi emitida a Nota de Crédito ${resultado.nota_credito.numero_documento} pelo valor integral do adiantamento.`
+      );
+      router.push(`/dashboard/Faturas/Faturas/${resultado.nota_credito.id}/Ver`);
     } catch (e) {
       showToast("Erro ao regularizar", "error", e instanceof Error ? e.message : "Não foi possível regularizar o adiantamento.");
     } finally {
@@ -1514,14 +1525,14 @@ export default function VisualizarNotaPage() {
 
           {/* ── Ações ── */}
           <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
-            {nota.tipo_documento === "FA" && nota.estado === "emitido" && (
+            {nota.tipo_documento === "FA" && !nota.notasCredito?.some((nc) => nc.estado !== "cancelado") && (
               <button
                 onClick={() => void abrirRegularizacao(nota)}
                 className="p-2 rounded transition-colors flex items-center gap-1.5 text-xs font-medium"
                 style={{ backgroundColor: colors.primary, color: "#fff" }}
-                title="Regularizar numa fatura">
+                title="Emitir Nota de Crédito e regularizar numa Fatura">
                 <FilePlus className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Regularizar</span>
+                <span className="hidden sm:inline">Regularizar com NC</span>
               </button>
             )}
             {/* ── Botão para Gerar Nota de Crédito ── */}
@@ -1658,6 +1669,29 @@ export default function VisualizarNotaPage() {
               )}
             </div>
           </div>
+
+          {isFT && (nota.faturasAdiantamento?.length ?? 0) > 0 && (
+            <div className="border rounded" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+              <div className="px-4 py-2 border-b" style={{ backgroundColor: colors.hover, borderColor: colors.border }}>
+                <span className="text-xs font-bold uppercase tracking-wider" style={{ color: colors.textSecondary }}>
+                  Adiantamentos regularizados
+                </span>
+              </div>
+              <div className="p-3 space-y-2">
+                {nota.faturasAdiantamento?.map((adiantamento) => (
+                  <Row
+                    key={adiantamento.id}
+                    label={`FA ${adiantamento.numero_documento}`}
+                    value={fmtKz(adiantamento.pivot?.valor_utilizado)}
+                    link
+                    onLink={() => router.push(`/dashboard/Faturas/Faturas/${adiantamento.id}/Ver`)}
+                    colors={colors}
+                    accent={colors.success}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Linha 2: Produtos / Serviços */}
           <div>
@@ -1893,10 +1927,11 @@ export default function VisualizarNotaPage() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md space-y-4 rounded-lg border p-5 shadow-xl" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
             <h2 className="text-lg font-semibold" style={{ color: colors.text }}>
-              Regularizar adiantamento
+              Regularizar adiantamento com Nota de Crédito
             </h2>
             <p className="text-sm" style={{ color: colors.textSecondary }}>
-              Escolha uma fatura do mesmo cliente e indique o valor a aplicar. O servidor valida o saldo disponível.
+              Será emitida uma Nota de Crédito referenciada a esta FA pelo seu valor total de {fmtKz(nota.total_liquido)}.
+              Escolha a Fatura definitiva do mesmo cliente onde este crédito será aplicado.
             </p>
             {faturasElegiveis.length === 0 ? (
               <p className="text-sm" style={{ color: colors.warning }}>
@@ -1917,18 +1952,6 @@ export default function VisualizarNotaPage() {
                       </option>
                     ))}
                   </select>
-                </label>
-                <label className="block space-y-1 text-sm" style={{ color: colors.text }}>
-                  Valor a regularizar
-                  <input
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    value={valorRegularizacao}
-                    onChange={(event) => setValorRegularizacao(event.target.value)}
-                    className="w-full rounded border px-3 py-2"
-                    style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text }}
-                  />
                 </label>
               </>
             )}

@@ -114,6 +114,13 @@ export default function AjudaPage() {
         tags: ["proforma", "orçamento", "FP"],
       },
       {
+        question: "Como regularizar uma Fatura de Adiantamento?",
+        answer:
+          'Depois de emitir a factura definitiva (FT) para o mesmo cliente, abra a Fatura de Adiantamento (FA) e escolha "Regularizar com NC". Selecione a FT. O sistema emite uma Nota de Crédito pelo valor total da FA, referencia a NC à FA e aplica o crédito à FT. A FA original não é alterada; o saldo pendente da FT passa a mostrar o valor restante.',
+        category: "faturacao",
+        tags: ["adiantamento", "FA", "regularização", "nota de crédito", "NC"],
+      },
+      {
         question: "Como aplicar descontos ou acrescentos?",
         answer:
           'Durante a criação da factura, existe um campo "Desconto" onde pode aplicar uma percentagem de desconto sobre o total. Também pode adicionar taxas extras, como serviço de entrega, antes de finalizar.',

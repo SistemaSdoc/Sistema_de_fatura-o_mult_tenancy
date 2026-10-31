@@ -1022,8 +1022,8 @@ export const documentoFiscalService = {
 
   async vincularAdiantamento(
     adiantamentoId: string,
-    payload: { fatura_id: string; valor: number }
-  ): Promise<{ message: string; data: { adiantamento: DocumentoFiscal; fatura: DocumentoFiscal } } | null> {
+    payload: { fatura_id: string }
+  ): Promise<{ message: string; data: { adiantamento: DocumentoFiscal; fatura: DocumentoFiscal; nota_credito: DocumentoFiscal } } | null> {
     try {
       const { data } = await api.post(`${API}/documentos-fiscais/${adiantamentoId}/vincular-adiantamento`, payload);
       return data;
