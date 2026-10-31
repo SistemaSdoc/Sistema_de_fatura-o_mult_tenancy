@@ -142,7 +142,7 @@ export default function FaturasPage() {
     try {
       setLoading(true);
       setError(null);
-      const filtros: FiltrosDocumento = { per_page: 100 };
+      const filtros: FiltrosDocumento = { per_page: 100, apenas_vendas: true };
       const resultado = await documentoFiscalService.listar(filtros);
       if (!resultado?.data) throw new Error("Erro ao carregar");
       setDocumentos(resultado.data);

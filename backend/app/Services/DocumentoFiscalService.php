@@ -943,14 +943,29 @@ class DocumentoFiscalService
                 throw new \InvalidArgumentException("Valor excede o pendente da fatura.");
             }
 
-            $connection->table('adiantamento_fatura')->insert([
-                'id' => Str::uuid(),
-                'adiantamento_id' => $adiantamento->id,
-                'fatura_id' => $fatura->id,
-                'valor_utilizado' => $valor,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+            $vinculoExistente = $connection->table('adiantamento_fatura')
+                ->where('adiantamento_id', $adiantamento->id)
+                ->where('fatura_id', $fatura->id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($vinculoExistente) {
+                $connection->table('adiantamento_fatura')
+                    ->where('id', $vinculoExistente->id)
+                    ->update([
+                        'valor_utilizado' => (float) $vinculoExistente->valor_utilizado + $valor,
+                        'updated_at' => now(),
+                    ]);
+            } else {
+                $connection->table('adiantamento_fatura')->insert([
+                    'id' => Str::uuid(),
+                    'adiantamento_id' => $adiantamento->id,
+                    'fatura_id' => $fatura->id,
+                    'valor_utilizado' => $valor,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
 
             $totalUtilizado = $connection->table('adiantamento_fatura')
                 ->where('adiantamento_id', $adiantamento->id)
@@ -1158,10 +1173,10 @@ class DocumentoFiscalService
             $query->whereDate('data_emissao', '<=', $filtros['data_fim']);
         }
         if (!empty($filtros['apenas_vendas'])) {
-            $query->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'FG', 'FGR', 'TV']);
+            $query->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'TV']);
         }
         if (!empty($filtros['apenas_nao_vendas'])) {
-            $query->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FGEN', 'AC', 'ACR']);
+            $query->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FG', 'FGR', 'FGEN', 'AC', 'ACR']);
         }
         if (!empty($filtros['apenas_globais'])) {
             $query->whereIn('tipo_documento', ['FG', 'FGR']);

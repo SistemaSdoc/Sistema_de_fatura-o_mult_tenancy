@@ -528,7 +528,7 @@ export default function NovaFaturaNormalPage() {
       }
       await criarVenda(payload);
       showToast("Factura criada com sucesso! Redirecionando...", "success");
-      setTimeout(() => router.push("/dashboard/Faturas/Faturas"), 1500);
+      setTimeout(() => router.push("/dashboard/Faturas/Faturas?secao=ft"), 1500);
     } catch (err: unknown) {
       showToast(err instanceof AxiosError ? err.response?.data?.message || "Erro ao salvar" : "Erro ao salvar", "error");
     } finally {

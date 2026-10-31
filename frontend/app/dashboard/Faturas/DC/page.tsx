@@ -102,7 +102,7 @@ export default function OutrosDocumentosPage() {
       });
       if (!resultado?.data) throw new Error("Erro ao carregar");
       // Filtra apenas os tipos desta página
-      const filtrados = resultado.data.filter((d) => ["FP", "FA", "NC", "ND"].includes(d.tipo_documento));
+      const filtrados = resultado.data.filter((d) => ["FP", "FA", "NC", "ND", "FG", "FGR"].includes(d.tipo_documento));
       setDocumentos(filtrados);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Erro ao carregar");

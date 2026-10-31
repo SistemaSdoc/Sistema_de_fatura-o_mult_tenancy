@@ -971,7 +971,12 @@ export default function NovaFaturaReciboPage() {
 
         showToast("Documento emitido com sucesso! Redirecionando...", "success");
         await recarregarProdutos({ avisarEstoqueBaixo: false });
-        setTimeout(() => router.push("/dashboard/Faturas/Faturas"), 1500);
+        const destino = documentoAdiantamento
+          ? "/dashboard/Faturas/DC?secao=proforma"
+          : documentoNotaDebito
+            ? "/dashboard/Faturas/DC?secao=credito_debito"
+            : "/dashboard/Faturas/DC?secao=sectoriais";
+        setTimeout(() => router.push(destino), 1500);
         return;
       }
 
@@ -1066,7 +1071,10 @@ export default function NovaFaturaReciboPage() {
 
         showToast("Documento emitido com sucesso! Redirecionando...", "success");
         await recarregarProdutos({ avisarEstoqueBaixo: false });
-        setTimeout(() => router.push("/dashboard/Faturas/Faturas"), 1500);
+        const destino = documentoGlobal
+          ? "/dashboard/Faturas/DC?secao=global"
+          : "/dashboard/Faturas/Faturas?secao=fr";
+        setTimeout(() => router.push(destino), 1500);
         return;
       }
 
@@ -1079,7 +1087,10 @@ export default function NovaFaturaReciboPage() {
       showToast(" Venda criada com sucesso! Redirecionando...", "success");
 
       await recarregarProdutos({ avisarEstoqueBaixo: false });
-      setTimeout(() => router.push("/dashboard/Faturas/Faturas"), 1500);
+      const destino = tipoDocumento === "FT"
+        ? "/dashboard/Faturas/Faturas?secao=ft"
+        : "/dashboard/Faturas/Faturas?secao=fr";
+      setTimeout(() => router.push(destino), 1500);
     } catch (err: unknown) {
       const mensagemErro = err instanceof AxiosError
         ? err.response?.data?.message || "Erro ao salvar"

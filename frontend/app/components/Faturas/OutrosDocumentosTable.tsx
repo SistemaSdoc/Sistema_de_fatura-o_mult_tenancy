@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { DocumentoFiscal, TipoDocumento } from "@/services/DocumentoFiscal";
 import {
   Eye,
@@ -16,6 +16,8 @@ import {
 const TIPO_LABEL: Partial<Record<TipoDocumento, string>> = {
   FP: "Factura Proforma",
   FA: "Factura de Adiantamento",
+  FG: "Factura Global",
+  FGR: "Factura Global-Recibo",
   NC: "Nota de Crédito",
   ND: "Nota de Débito",
   FGEN: "Factura Genérica",
@@ -32,10 +34,11 @@ const ESTADO_LABEL: Record<string, string> = {
 };
 
 /* ─── Tipos de aba ────────────────────────────────────────────────────────── */
-type TabAtiva = "proforma" | "credito_debito" | "sectoriais";
+type TabAtiva = "proforma" | "global" | "credito_debito" | "sectoriais";
 
 const TABS: { key: TabAtiva; label: string; tipos: TipoDocumento[] }[] = [
-  { key: "proforma", label: "Proformas ", tipos: ["FP", "FA"] },
+  { key: "proforma", label: "Proformas / Adiantamentos", tipos: ["FP", "FA"] },
+  { key: "global", label: "Facturas Globais", tipos: ["FG", "FGR"] },
   { key: "credito_debito", label: "Notas Crédito/Débito", tipos: ["NC", "ND"] },
   { key: "sectoriais", label: "Documentos sectoriais", tipos: ["FGEN", "AC", "ACR"] },
 ];
@@ -76,6 +79,19 @@ interface OutrosDocumentosTableProps {
 }
 
 const POR_PAGINA = 10;
+
+function subscribeToSearch(onChange: () => void) {
+  window.addEventListener("popstate", onChange);
+  return () => window.removeEventListener("popstate", onChange);
+}
+
+function getSecaoFromSearch() {
+  return new URLSearchParams(window.location.search).get("secao");
+}
+
+function getServerSecao() {
+  return null;
+}
 
 /* ─── Badge Tipo ──────────────────────────────────────────────────────────── */
 function TipoBadge({ tipo, colors }: { tipo: TipoDocumento; colors: ColorsTheme }) {
@@ -268,11 +284,14 @@ export default function OutrosDocumentosTable({
   documentoFiscalService,
   colors,
 }: OutrosDocumentosTableProps) {
-  const [tabAtiva, setTabAtiva] = useState<TabAtiva>("proforma");
+  const secao = useSyncExternalStore(subscribeToSearch, getSecaoFromSearch, getServerSecao);
+  const [tabEscolhida, setTabEscolhida] = useState<TabAtiva | null>(null);
+  const tabAtiva = tabEscolhida ?? TABS.find((tab) => tab.key === secao)?.key ?? "proforma";
 
   // Paginação independente por aba
   const [paginas, setPaginas] = useState<Record<TabAtiva, number>>({
     proforma: 1,
+    global: 1,
     credito_debito: 1,
     sectoriais: 1,
   });
@@ -582,7 +601,7 @@ export default function OutrosDocumentosTable({
           return (
             <button
               key={tab.key}
-              onClick={() => setTabAtiva(tab.key)}
+              onClick={() => setTabEscolhida(tab.key)}
               className="flex items-center gap-1.5 px-3 sm:px-4 py-2.5 text-xs font-medium shrink-0 whitespace-nowrap"
               style={{
                 color: ativa ? colors.text : colors.textSecondary,

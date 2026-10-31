@@ -516,7 +516,7 @@ export default function NovaFaturaProformaPage() {
 
       await emitirDocumentoFiscal(payload);
       showToast("Proforma criada com sucesso! Redirecionando...", "success");
-      setTimeout(() => router.push("/dashboard/Faturas/DC"), 1500);
+      setTimeout(() => router.push("/dashboard/Faturas/DC?secao=proforma"), 1500);
     } catch (err: unknown) {
       showToast(err instanceof AxiosError ? err.response?.data?.message || "Erro ao salvar proforma" : "Erro ao salvar proforma", "error");
     } finally {

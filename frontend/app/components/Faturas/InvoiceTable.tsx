@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { DocumentoFiscal, TipoDocumento } from "@/services/DocumentoFiscal";
 import {
   Eye,
@@ -73,6 +73,19 @@ interface InvoiceTableProps {
 
 const POR_PAGINA = 10;
 type TabAtiva = "fr" | "ft";
+
+function subscribeToSearch(onChange: () => void) {
+  window.addEventListener("popstate", onChange);
+  return () => window.removeEventListener("popstate", onChange);
+}
+
+function getSecaoFromSearch() {
+  return new URLSearchParams(window.location.search).get("secao");
+}
+
+function getServerSecao() {
+  return null;
+}
 
 /* ── Badge Tipo ── */
 function TipoBadge({ tipo, colors }: { tipo: TipoDocumento; colors: ColorsTheme }) {
@@ -274,13 +287,15 @@ export default function InvoiceTable({
   documentoFiscalService,
   colors,
 }: InvoiceTableProps) {
-  const [tabAtiva, setTabAtiva] = useState<TabAtiva>("fr");
+  const secao = useSyncExternalStore(subscribeToSearch, getSecaoFromSearch, getServerSecao);
+  const [tabEscolhida, setTabEscolhida] = useState<TabAtiva | null>(null);
+  const tabAtiva = tabEscolhida ?? (secao === "ft" ? "ft" : "fr");
   const [paginaFR, setPaginaFR] = useState(1);
   const [paginaFT, setPaginaFT] = useState(1);
 
   /* ── Separação por aba ── */
-  const docsFR = documentos.filter((d) => ["FR", "RC", "FGR", "TV"].includes(d.tipo_documento));
-  const docsFT = documentos.filter((d) => ["FT", "FG"].includes(d.tipo_documento));
+  const docsFR = documentos.filter((d) => ["FR", "RC", "TV"].includes(d.tipo_documento));
+  const docsFT = documentos.filter((d) => d.tipo_documento === "FT");
 
   const totalPagesFR = Math.max(Math.ceil(docsFR.length / POR_PAGINA), 1);
   const totalPagesFT = Math.max(Math.ceil(docsFT.length / POR_PAGINA), 1);
@@ -614,7 +629,7 @@ export default function InvoiceTable({
         style={{ borderBottom: `1px solid ${colors.border}` }}
       >
         <button
-          onClick={() => setTabAtiva("fr")}
+          onClick={() => setTabEscolhida("fr")}
           className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium shrink-0"
           style={{
             color: tabAtiva === "fr" ? colors.text : colors.textSecondary,
@@ -637,7 +652,7 @@ export default function InvoiceTable({
         </button>
 
         <button
-          onClick={() => setTabAtiva("ft")}
+          onClick={() => setTabEscolhida("ft")}
           className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium shrink-0"
           style={{
             color: tabAtiva === "ft" ? colors.text : colors.textSecondary,
