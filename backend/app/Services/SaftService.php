@@ -725,7 +725,7 @@ class SaftService
             $docTotals->appendChild($dom->createElement('GrossTotal', number_format($grossTotal, 2, '.', '')));
 
             // Payment
-            if (in_array($doc->tipo_documento, ['FR', 'FGR', 'TV', 'RC']) && $doc->metodo_pagamento) {
+            if (in_array($doc->tipo_documento, ['FR', 'FGR', 'TV', 'RC', 'RG']) && $doc->metodo_pagamento) {
                 $payment = $dom->createElement('Payment');
                 $payment->appendChild($dom->createElement('PaymentMechanism', $this->mapPaymentMethod($doc->metodo_pagamento)));
                 $payment->appendChild($dom->createElement('PaymentAmount', number_format($grossTotal, 2, '.', '')));
@@ -825,7 +825,7 @@ class SaftService
         $endDate = date('Y-m-t', strtotime($startDate));
 
         $recibos = $this->queryDocumentosFiscais()
-            ->where('tipo_documento', 'RC')
+            ->whereIn('tipo_documento', ['RC', 'RG'])
             ->whereBetween('data_emissao', [$startDate, $endDate])
             ->where('estado', '!=', 'cancelado')
             ->with('documentoOrigem.itens.produto')

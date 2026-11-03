@@ -8,6 +8,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::connection('tenant')->hasTable('factura_global_anexos')) {
+            return;
+        }
+
         Schema::create('factura_global_anexos', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('documento_fiscal_id');

@@ -82,6 +82,7 @@ const TIPOS_DOCUMENTO_OPCOES: {
   value: TipoDocumentoFiscal;
   label: string;
   descricao: string;
+  indisponivel?: boolean;
 }[] = [
   {
     value: "FT",
@@ -92,6 +93,11 @@ const TIPOS_DOCUMENTO_OPCOES: {
     value: "FR",
     label: "Factura-Recibo",
     descricao: "Factura e comprovativo de pagamento imediato",
+  },
+  {
+    value: "FP",
+    label: "Factura Proforma",
+    descricao: "Proposta comercial sem movimentação de stock",
   },
   {
     value: "FG",
@@ -119,6 +125,28 @@ const TIPOS_DOCUMENTO_OPCOES: {
     descricao: "Documento específico para empresas seguradoras",
   },
   {
+    value: "ACR",
+    label: "Aviso de Cobrança-Recibo",
+    descricao: "Aviso de Cobrança pago no acto · Apenas seguradoras",
+  },
+  {
+    value: "FGEN",
+    label: "Factura Genérica",
+    descricao: "Documento sectorial para operações financeiras",
+  },
+  {
+    value: "NC",
+    label: "Nota de Crédito",
+    descricao: "Emitida a partir de uma factura existente",
+    indisponivel: true,
+  },
+  {
+    value: "RC",
+    label: "Recibo",
+    descricao: "Emitido a partir de uma factura ou aviso de cobrança",
+    indisponivel: true,
+  },
+  {
     value: "TV",
     label: "Talão de Venda",
     descricao: "Consumidor final sem NIF · Art. 5.º DP 71/25",
@@ -136,6 +164,8 @@ const TITULOS_DOCUMENTO: Record<TipoDocumentoFiscal, string> = {
   NC: "Nota de Crédito",
   ND: "Nota de Débito",
   RC: "Recibo",
+  RG: "Outros Recibos",
+  RE: "Recibo de Estorno",
   FGEN: "Factura Genérica",
   AC: "Aviso de Cobrança",
   ACR: "Aviso de Cobrança-Recibo",
@@ -376,7 +406,7 @@ export default function NovaFaturaReciboPage() {
       setClienteAvulso("");
       setClienteAvulsoNif("");
       setNifError(null);
-    } else if (["FT", "FR", "FA", "ND", "AC"].includes(tipo)) {
+    } else if (["FT", "FR", "FA", "ND", "AC", "FGEN", "ACR"].includes(tipo)) {
       setModoCliente("cadastrado");
       setClienteSelecionado(null);
       setClienteAvulso("");
@@ -390,7 +420,7 @@ export default function NovaFaturaReciboPage() {
 
   // ✅ NOVO — Handler do botão "Cadastrado" com bloqueio para TV
   const handleModoClienteChange = (modo: ModoCliente) => {
-    if (modo === "avulso" && ["FA", "ND", "AC"].includes(tipoDocumento)) {
+    if (modo === "avulso" && ["FA", "ND", "AC", "FGEN", "ACR"].includes(tipoDocumento)) {
       showToast("Este documento exige um cliente cadastrado.", "warning");
       return;
     }
@@ -691,7 +721,7 @@ export default function NovaFaturaReciboPage() {
   const falta = valorPagamento > 0 && valorPagamento < totalLiquido ? arredondar(totalLiquido - valorPagamento) : 0;
 
   const pagamentoSuficiente =
-    totalLiquido > 0 && (["FG", "FT", "FA", "ND", "AC"].includes(tipoDocumento) || valorPagamento >= totalLiquido);
+    totalLiquido > 0 && (["FG", "FT", "FA", "ND", "AC", "FP", "FGEN"].includes(tipoDocumento) || valorPagamento >= totalLiquido);
 
   const documentoGlobal = tipoDocumento === "FG" || tipoDocumento === "FGR";
   const documentoTalao = tipoDocumento === "TV";
@@ -699,6 +729,7 @@ export default function NovaFaturaReciboPage() {
   const documentoNotaDebito = tipoDocumento === "ND";
   const documentoAdiantamento = tipoDocumento === "FA";
   const documentoAvisoCobranca = tipoDocumento === "AC";
+  const documentoExigeCliente = ["FA", "ND", "AC", "FGEN", "ACR"].includes(tipoDocumento);
 
   // ✅ NOVO — Calcula alertas contextuais em tempo real
   const alertas: Alerta[] = useMemo(() => {
@@ -730,7 +761,7 @@ export default function NovaFaturaReciboPage() {
       });
     }
 
-    if ((documentoAdiantamento || documentoNotaDebito || documentoAvisoCobranca) && !clienteSelecionado) {
+    if (documentoExigeCliente && !clienteSelecionado) {
       lista.push({
         id: "documento-sem-cliente",
         tipo: "error",
@@ -853,7 +884,7 @@ export default function NovaFaturaReciboPage() {
     });
   }, [
     itens, tipoDocumento, modoCliente, clienteAvulso, clienteSelecionado, clienteAvulsoNif,
-    documentoGlobal, documentoTalao, documentoAdiantamento, documentoNotaDebito, documentoAvisoCobranca,
+    documentoGlobal, documentoTalao, documentoAdiantamento, documentoNotaDebito, documentoAvisoCobranca, documentoExigeCliente,
     periodoInicio, periodoFim, referenciaAnexo, dataAnexo,
     valorPagamento, totalLiquido, nifError,
   ]);
@@ -868,7 +899,7 @@ export default function NovaFaturaReciboPage() {
       return modoCliente === "avulso" && !clienteAvulsoNif.trim();
     }
 
-    if ((documentoAdiantamento || documentoNotaDebito || documentoAvisoCobranca) && !clienteSelecionado) return false;
+    if (documentoExigeCliente && !clienteSelecionado) return false;
     if (documentoNotaDebito && itens.some((item) => !item.eh_servico)) return false;
     if (modoCliente === "cadastrado") return !!clienteSelecionado;
     return clienteAvulso.trim().length > 0;
@@ -913,8 +944,10 @@ export default function NovaFaturaReciboPage() {
       if (bloquearSeDadosIncompletos()) return;
       if (!podeFinalizar()) return;
 
-      const estoqueOk = await revalidarEstoqueAntesDeFinalizar();
-      if (!estoqueOk) return;
+      if (["FT", "FR", "FG", "FGR", "TV"].includes(tipoDocumento)) {
+        const estoqueOk = await revalidarEstoqueAntesDeFinalizar();
+        if (!estoqueOk) return;
+      }
 
       if (documentoGlobal && (!periodoInicio || !periodoFim || !tipoAnexo || !referenciaAnexo.trim() || !dataAnexo)) {
         showToast("Informe o período de referência e os dados de pelo menos um anexo para a Factura Global.", "error");
@@ -980,7 +1013,42 @@ export default function NovaFaturaReciboPage() {
         return;
       }
 
-      const isPagamentoObrigatorio = ["FR", "FGR", "TV"].includes(tipoDocumento);
+      if (["FP", "FGEN", "ACR"].includes(tipoDocumento)) {
+        const itensDocumento = itens.map((item) => ({
+          produto_id: item.produto_id,
+          descricao: item.descricao,
+          quantidade: item.quantidade,
+          preco_unitario: arredondar(item.preco_venda),
+          desconto: arredondar(item.desconto),
+          taxa_iva: normalizarTaxaIva(item.taxa_iva),
+          taxa_retencao: item.eh_servico ? item.taxa_retencao : undefined,
+          eh_servico: item.eh_servico,
+        }));
+
+        await documentoFiscalService.emitir({
+          tipo_documento: tipoDocumento,
+          cliente_id: clienteSelecionado?.id,
+          cliente_nome: clienteSelecionado?.id ? undefined : clienteAvulso.trim() || undefined,
+          cliente_nif: clienteSelecionado?.nif ?? (clienteAvulsoNif.trim() || undefined),
+          itens: itensDocumento,
+          dados_pagamento: tipoDocumento === "ACR" ? {
+            metodo: formPagamento.metodo,
+            valor: arredondar(Math.min(valorPagamento, totalLiquido)),
+            referencia: formPagamento.referencia || undefined,
+            data: formPagamento.data_pagamento,
+          } : undefined,
+          observacoes: observacoes.trim() || undefined,
+        });
+
+        showToast("Documento emitido com sucesso! Redirecionando...", "success");
+        const destino = tipoDocumento === "FP"
+          ? "/dashboard/Faturas/Faturas?secao=proforma"
+          : "/dashboard/Faturas/DC?secao=sectoriais";
+        setTimeout(() => router.push(destino), 1500);
+        return;
+      }
+
+      const isPagamentoObrigatorio = ["FR", "FGR", "TV", "ACR"].includes(tipoDocumento);
       const temPagamento = valorPagamento > 0;
       const deveEnviarPagamento = isPagamentoObrigatorio || temPagamento;
 
@@ -1191,19 +1259,24 @@ export default function NovaFaturaReciboPage() {
                       className="absolute z-50 left-0 right-0 mt-1 border shadow-lg max-h-80 overflow-y-auto"
                       style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                       {TIPOS_DOCUMENTO_OPCOES
-                        .filter((opcao) => opcao.value !== "AC" || user?.empresa?.is_seguradora)
+                        .filter((opcao) => !["AC", "ACR"].includes(opcao.value) || user?.empresa?.is_seguradora)
                         .map((opcao) => (
                         <button
                           key={opcao.value}
                           type="button"
-                          onClick={() => handleTipoDocumentoChange(opcao.value)}
+                          onClick={() => !opcao.indisponivel && handleTipoDocumentoChange(opcao.value)}
+                          disabled={opcao.indisponivel}
                           className="w-full px-3 py-2.5 text-left text-sm border-b last:border-0"
                           style={{
                             backgroundColor: tipoDocumento === opcao.value ? `${colors.primary}10` : "transparent",
                             borderColor: colors.border,
-                            color: colors.blue,
+                            color: opcao.indisponivel ? colors.textSecondary : colors.blue,
+                            opacity: opcao.indisponivel ? 0.6 : 1,
+                            cursor: opcao.indisponivel ? "not-allowed" : "pointer",
                           }}
-                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = colors.hover)}
+                          onMouseEnter={(e) => {
+                            if (!opcao.indisponivel) e.currentTarget.style.backgroundColor = colors.hover;
+                          }}
                           onMouseLeave={(e) =>
                             (e.currentTarget.style.backgroundColor =
                               tipoDocumento === opcao.value ? `${colors.primary}10` : "transparent")

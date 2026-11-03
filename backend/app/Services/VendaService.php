@@ -357,7 +357,7 @@ class VendaService
                 }
 
                 $novoEstadoPagamento = $this->determinarEstadoAposEmissao($tipoDocumento);
-                $novoStatus = in_array($tipoDocumento, ['FT', 'FR', 'RC']) ? 'faturada' : 'aberta';
+                $novoStatus = in_array($tipoDocumento, ['FT', 'FR', 'RC', 'RG'], true) ? 'faturada' : 'aberta';
 
                 $venda->update([
                     'documento_fiscal_id' => $documento->id,
@@ -803,7 +803,7 @@ private function processarItens(object $venda, array $itens, bool $aplicaIva, st
     {
         if (!$faturar) return 'pendente';
         return match ($tipoDocumento) {
-            'FR', 'RC' => 'paga',
+            'FR', 'RC', 'RG' => 'paga',
             default    => 'pendente',
         };
     }

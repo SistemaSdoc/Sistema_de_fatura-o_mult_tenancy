@@ -20,9 +20,11 @@ import {
   CheckCircle,
   AlertCircle as AlertCircleIcon,
   DollarSign,
+  RotateCcw,
 } from "lucide-react";
 import MainEmpresa from "@/app/components/MainEmpresa";
 import { documentoFiscalService, DocumentoFiscal, ItemDocumento, TipoDocumento } from "@/services/DocumentoFiscal";
+import { produtoService, Produto } from "@/services/produtos";
 import { useThemeColors, LIGHT_COLORS } from "@/context/ThemeContext";
 import { ToastNotification } from "@/components/ToastNotification";
 
@@ -36,6 +38,8 @@ const TIPO_LABEL: Record<TipoDocumento, string> = {
   NC: "Nota de Crédito",
   ND: "Nota de Débito",
   RC: "Recibo",
+  RG: "Outros Recibos",
+  RE: "Recibo de Estorno",
   FG: "Factura Global",
   FGR: "Factura Global-Recibo",
   TV: "Talão de Venda",
@@ -58,6 +62,8 @@ const ESTADO_LABEL: Record<string, string> = {
   parcialmente_paga: "Parcial",
   cancelado: "Cancelado",
   expirado: "Expirado",
+  estornado: "Estornado",
+  parcialmente_estornado: "Parcialmente estornado",
 };
 
 /* ── Utilitários ─────────────────────────────────────── */
@@ -102,6 +108,16 @@ function Badge({ estado, colors }: { estado: string; colors: typeof LIGHT_COLORS
       bg: `${colors.textSecondary}20`,
       text: colors.textSecondary,
       border: `${colors.textSecondary}30`,
+    },
+    estornado: {
+      bg: `${colors.danger}20`,
+      text: colors.danger,
+      border: `${colors.danger}30`,
+    },
+    parcialmente_estornado: {
+      bg: `${colors.warning}20`,
+      text: colors.warning,
+      border: `${colors.warning}30`,
     },
   };
   const style = map[estado] ?? map.emitido;
@@ -280,6 +296,9 @@ function TotaisSection({
   const isND = nota.tipo_documento === "ND";
   const isFR = nota.tipo_documento === "FR";
   const isRC = nota.tipo_documento === "RC";
+  const isRG = nota.tipo_documento === "RG";
+  const isRecibo = isRC || isRG;
+  const isRE = nota.tipo_documento === "RE";
   const isFT = nota.tipo_documento === "FT";
 
   const base = Number(docParaTotais.base_tributavel ?? 0);
@@ -313,9 +332,19 @@ function TotaisSection({
   const saldoPendente = Number(nota.saldo_pendente ?? Math.max(0, total - totalPago - totalAdiantamentos));
 
   const metodoPagamento =
-    (isFR || isRC) && nota.metodo_pagamento ? (METODOS_PAGAMENTO[nota.metodo_pagamento] ?? nota.metodo_pagamento) : null;
+    (isFR || isRecibo) && nota.metodo_pagamento ? (METODOS_PAGAMENTO[nota.metodo_pagamento] ?? nota.metodo_pagamento) : null;
 
-  const labelTotal = isFT ? "TOTAL DA FATURA" : isFR || isRC ? "TOTAL PAGO" : isNC ? "TOTAL A CREDITAR" : isND ? "TOTAL A DEBITAR" : "TOTAL";
+  const labelTotal = isFT
+    ? "TOTAL DA FATURA"
+    : isFR || isRecibo
+      ? "TOTAL PAGO"
+      : isRE
+        ? "TOTAL ESTORNADO"
+        : isNC
+          ? "TOTAL A CREDITAR"
+          : isND
+            ? "TOTAL A DEBITAR"
+            : "TOTAL";
 
   return (
     <div className="px-4 py-3 flex justify-end">
@@ -725,12 +754,40 @@ function ModalNotaDebito({
   const [showNovoItem, setShowNovoItem] = useState(false);
   const [novoItemDescricao, setNovoItemDescricao] = useState("");
   const [novoItemPreco, setNovoItemPreco] = useState("");
-  const [novoItemIva, setNovoItemIva] = useState("14");
   const [novoItemQuantidade, setNovoItemQuantidade] = useState("1");
+  const [servicosCatalogo, setServicosCatalogo] = useState<Produto[]>([]);
+  const [loadingServicos, setLoadingServicos] = useState(true);
+  const [erroServicos, setErroServicos] = useState<string | null>(null);
+  const [buscaServico, setBuscaServico] = useState("");
 
   // Buscar prazo máximo para ND
   const [prazoMaximo, setPrazoMaximo] = useState<Date | null>(null);
   const [prazoExpirado, setPrazoExpirado] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    produtoService
+      .listarServicos()
+      .then(({ produtos }) => {
+        if (active) {
+          const lista = Array.isArray(produtos) ? produtos : produtos.data;
+          setServicosCatalogo(lista.filter((produto) => produto.tipo === "servico" && produto.status === "ativo"));
+        }
+      })
+      .catch((e: unknown) => {
+        if (active) {
+          setErroServicos(e instanceof Error ? e.message : "Não foi possível carregar os serviços.");
+        }
+      })
+      .finally(() => {
+        if (active) setLoadingServicos(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (documento.id && documento.data_emissao) {
@@ -750,18 +807,36 @@ function ModalNotaDebito({
   const totalSelecionado = itensComChave.reduce((acc, item) => {
     const qtd = quantidades[item._key] ?? 0;
     const preco = Number(item.preco_unitario ?? 0);
-    const taxa = Number(item.taxa_iva ?? 0);
-    return acc + qtd * preco * (1 + taxa / 100);
+    return acc + qtd * preco;
   }, 0);
 
   const totalNovosItens = novosItens.reduce((acc, item) => {
     const qtd = Number(item.quantidade ?? 0);
     const preco = Number(item.preco_unitario ?? 0);
-    const taxa = Number(item.taxa_iva ?? 0);
-    return acc + qtd * preco * (1 + taxa / 100);
+    return acc + qtd * preco;
   }, 0);
 
   const totalGeral = totalSelecionado + totalNovosItens;
+  const servicosFiltrados = servicosCatalogo.filter((servico) =>
+    servico.nome.toLocaleLowerCase().includes(buscaServico.trim().toLocaleLowerCase())
+  );
+
+  const handleAdicionarServicoCatalogo = (servico: Produto) => {
+    setNovosItens((itens) => [
+      ...itens,
+      {
+        produto_id: servico.id,
+        descricao: servico.nome,
+        quantidade: 1,
+        preco_unitario: Number(servico.preco_venda),
+        taxa_iva: 0,
+        taxa_retencao: servico.taxa_retencao ?? undefined,
+        eh_servico: true,
+      },
+    ]);
+    setErro(null);
+    showToast(`Serviço "${servico.nome}" adicionado.`, "success");
+  };
 
   const handleAdicionarNovoItem = () => {
     if (!novoItemDescricao.trim() || !novoItemPreco || Number(novoItemPreco) <= 0) {
@@ -799,14 +874,13 @@ function ModalNotaDebito({
       descricao: novoItemDescricao.trim(),
       quantidade: Number(novoItemQuantidade) || 1,
       preco_unitario: Number(novoItemPreco),
-      taxa_iva: Number(novoItemIva),
+      taxa_iva: 0,
       eh_servico: true,
     };
 
     setNovosItens([...novosItens, novoItem]);
     setNovoItemDescricao("");
     setNovoItemPreco("");
-    setNovoItemIva("14");
     setNovoItemQuantidade("1");
     setShowNovoItem(false);
     setErro(null);
@@ -828,7 +902,7 @@ function ModalNotaDebito({
           descricao: item.descricao,
           quantidade: Number(quantidades[item._key]),
           preco_unitario: Number(item.preco_unitario),
-          taxa_iva: Number(item.taxa_iva),
+          taxa_iva: 0,
           taxa_retencao: item.taxa_retencao ?? 0,
           eh_servico: ehServico,
         };
@@ -845,22 +919,14 @@ function ModalNotaDebito({
     }
 
     const todosItens = [
-      ...itensSelecionados.map(({ produto_id, descricao, quantidade, preco_unitario, taxa_iva, taxa_retencao, eh_servico }) => ({
-        produto_id,
-        descricao,
-        quantidade,
-        preco_unitario,
-        taxa_iva,
-        taxa_retencao,
-        eh_servico,
-      })),
+      ...itensSelecionados.map((item) => ({ ...item, taxa_iva: 0 })),
       ...novosItens.map((item) => ({
-        produto_id: undefined,
+        produto_id: item.produto_id,
         descricao: item.descricao,
         quantidade: Number(item.quantidade),
         preco_unitario: Number(item.preco_unitario),
-        taxa_iva: Number(item.taxa_iva),
-        taxa_retencao: 0,
+        taxa_iva: 0,
+        taxa_retencao: item.taxa_retencao ?? 0,
         eh_servico: true,
       })),
     ];
@@ -1018,7 +1084,7 @@ function ModalNotaDebito({
                           style={{
                             color: colors.textSecondary,
                           }}>
-                          {fmtKz(item.preco_unitario)} · IVA {item.taxa_iva}%
+                          {fmtKz(item.preco_unitario)} · IVA 0%
                           {isServico && (
                             <span className="ml-1" style={{ color: colors.secondary }}>
                               · Serviço
@@ -1102,7 +1168,7 @@ function ModalNotaDebito({
           <div>
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-semibold" style={{ color: colors.text }}>
-                Serviços Adicionais
+                Adicionar serviços do catálogo
               </p>
               <button
                 onClick={() => setShowNovoItem(!showNovoItem)}
@@ -1111,6 +1177,58 @@ function ModalNotaDebito({
                 <PlusCircle className="w-3.5 h-3.5" />
                 Adicionar
               </button>
+            </div>
+
+            <input
+              type="search"
+              value={buscaServico}
+              onChange={(e) => setBuscaServico(e.target.value)}
+              placeholder="Pesquisar serviço..."
+              className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none mb-2"
+              style={{
+                backgroundColor: colors.background,
+                borderColor: colors.border,
+                color: colors.text,
+              }}
+            />
+            <div className="border rounded max-h-36 overflow-y-auto divide-y mb-3" style={{ borderColor: colors.border }}>
+              {loadingServicos ? (
+                <p className="px-3 py-2 text-sm text-center" style={{ color: colors.textSecondary }}>
+                  A carregar serviços...
+                </p>
+              ) : erroServicos ? (
+                <p className="px-3 py-2 text-sm" style={{ color: colors.danger }}>
+                  Não foi possível carregar o catálogo: {erroServicos}
+                </p>
+              ) : servicosFiltrados.length === 0 ? (
+                <p className="px-3 py-2 text-sm text-center" style={{ color: colors.textSecondary }}>
+                  Nenhum serviço ativo encontrado.
+                </p>
+              ) : (
+                servicosFiltrados.map((servico) => (
+                  <div
+                    key={servico.id}
+                    className="flex items-center justify-between gap-3 px-3 py-2"
+                    style={{ borderColor: colors.border }}>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate" style={{ color: colors.text }}>
+                        {servico.nome}
+                      </p>
+                      <p className="text-xs" style={{ color: colors.textSecondary }}>
+                        {fmtKz(servico.preco_venda)} · IVA 0%
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleAdicionarServicoCatalogo(servico)}
+                      className="shrink-0 flex items-center gap-1 px-2 py-1 text-xs border rounded"
+                      style={{ borderColor: colors.border, color: colors.primary }}>
+                      <PlusCircle className="w-3.5 h-3.5" />
+                      Adicionar
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
 
             {showNovoItem && (
@@ -1127,7 +1245,7 @@ function ModalNotaDebito({
                     color: colors.text,
                   }}
                 />
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <input
                     type="number"
                     value={novoItemQuantidade}
@@ -1154,20 +1272,10 @@ function ModalNotaDebito({
                       color: colors.text,
                     }}
                   />
-                  <select
-                    value={novoItemIva}
-                    onChange={(e) => setNovoItemIva(e.target.value)}
-                    className="border rounded px-2 py-1 text-sm focus:outline-none"
-                    style={{
-                      backgroundColor: colors.background,
-                      borderColor: colors.border,
-                      color: colors.text,
-                    }}>
-                    <option value="0">0%</option>
-                    <option value="5">5%</option>
-                    <option value="14">14%</option>
-                  </select>
                 </div>
+                <p className="text-xs" style={{ color: colors.textSecondary }}>
+                  IVA aplicado à Nota de Débito: 0%.
+                </p>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setShowNovoItem(false)}
@@ -1283,6 +1391,11 @@ export default function VisualizarNotaPage() {
   const [faturasElegiveis, setFaturasElegiveis] = useState<DocumentoFiscal[]>([]);
   const [faturaRegularizacaoId, setFaturaRegularizacaoId] = useState("");
   const [loadingRegularizacao, setLoadingRegularizacao] = useState(false);
+  const [estornando, setEstornando] = useState(false);
+  const [mostrarModalEstorno, setMostrarModalEstorno] = useState(false);
+  const [valorEstorno, setValorEstorno] = useState("");
+  const [motivoEstorno, setMotivoEstorno] = useState("");
+  const [erroEstorno, setErroEstorno] = useState<string | null>(null);
   const [podeGerarNC, setPodeGerarNC] = useState<{ pode: boolean; motivo?: string }>({ pode: false });
   const [podeGerarND, setPodeGerarND] = useState<{ pode: boolean; motivo?: string }>({ pode: false });
   const [toast, setToast] = useState<{
@@ -1293,6 +1406,47 @@ export default function VisualizarNotaPage() {
 
   const showToast = (message: string, type: "success" | "error" | "warning" | "info" = "info", description?: string) => {
     setToast({ message, type, description });
+  };
+
+  const abrirModalEstorno = () => {
+    if (!nota) return;
+    const totalEstornado = nota.documentosDerivados
+      ?.filter((doc) => doc.tipo_documento === "RE" && doc.estado !== "cancelado")
+      .reduce((total, doc) => total + Number(doc.total_liquido), 0) ?? 0;
+    setValorEstorno(Math.max(0, Number(nota.total_liquido) - totalEstornado).toFixed(2));
+    setMotivoEstorno("");
+    setErroEstorno(null);
+    setMostrarModalEstorno(true);
+  };
+
+  const estornarRecibo = async () => {
+    if (!nota?.id || estornando) return;
+
+    const valor = Number(valorEstorno.replace(",", "."));
+    if (!Number.isFinite(valor) || valor <= 0 || valor > Number(nota.total_liquido)) {
+      setErroEstorno("O valor deve ser positivo e não pode exceder o valor do recibo.");
+      return;
+    }
+
+    if (motivoEstorno.trim().length < 5) {
+      setErroEstorno("Informe o motivo do estorno com pelo menos 5 caracteres.");
+      return;
+    }
+
+    try {
+      setEstornando(true);
+      const estorno = await documentoFiscalService.estornarRecibo(nota.id, {
+        valor,
+        motivo: motivoEstorno.trim(),
+      });
+      setMostrarModalEstorno(false);
+      showToast("Recibo de Estorno emitido", "success");
+      router.push("/dashboard/Faturas/DC?secao=estornos");
+    } catch (error) {
+      setErroEstorno(error instanceof Error ? error.message : "Não foi possível estornar o recibo.");
+    } finally {
+      setEstornando(false);
+    }
   };
 
   const carregarNota = useCallback(async () => {
@@ -1310,7 +1464,7 @@ export default function VisualizarNotaPage() {
       setPodeGerarNC(documentoFiscalService.podeEmitirNotaCredito(doc));
       setPodeGerarND(documentoFiscalService.podeEmitirNotaDebito(doc));
 
-      if ((doc.tipo_documento === "NC" || doc.tipo_documento === "ND" || doc.tipo_documento === "RC") && doc.documentoOrigem?.id) {
+      if (["NC", "ND", "RC", "RG", "RE"].includes(doc.tipo_documento) && doc.documentoOrigem?.id) {
         const origem = await documentoFiscalService.buscarPorId(doc.documentoOrigem.id);
         setDocumentoOrigem(origem);
       }
@@ -1428,22 +1582,29 @@ export default function VisualizarNotaPage() {
   const isNC = nota.tipo_documento === "NC";
   const isND = nota.tipo_documento === "ND";
   const isRC = nota.tipo_documento === "RC";
+  const isRG = nota.tipo_documento === "RG";
+  const isRecibo = isRC || isRG;
+  const isRE = nota.tipo_documento === "RE";
   const isFT = nota.tipo_documento === "FT";
   const isFR = nota.tipo_documento === "FR";
   const isFP = nota.tipo_documento === "FP";
-  const accent = isNC ? colors.danger : isND ? colors.success : colors.secondary;
+  const totalEstornadoRecibo = nota.documentosDerivados
+    ?.filter((doc) => doc.tipo_documento === "RE" && doc.estado !== "cancelado")
+    .reduce((total, doc) => total + Number(doc.total_liquido), 0) ?? 0;
+  const valorDisponivelEstorno = Math.max(0, Number(nota.total_liquido) - totalEstornadoRecibo);
+  const accent = isNC || isRE ? colors.danger : isND ? colors.success : colors.secondary;
 
   // Verificar se pode gerar notas (apenas FT/FR que não estão canceladas)
   const podeGerarNotas = (isFT || isFR) && nota.estado !== "cancelado" && nota.estado !== "expirado";
 
   // Verificar se é uma nota de crédito/débito (mostrar botão de voltar para origem)
-  const isNotaCorrecao = isNC || isND || isRC;
+  const isNotaCorrecao = isNC || isND || isRecibo || isRE;
 
   /* Para recibos, usar itens do documento de origem */
-  const itensParaExibir = isRC && documentoOrigem?.itens ? documentoOrigem.itens : (nota.itens ?? []);
+  const itensParaExibir = isRecibo && documentoOrigem?.itens ? documentoOrigem.itens : (nota.itens ?? []);
 
   /* Para totais de RC, usar doc de origem */
-  const docParaTotais = isRC && documentoOrigem ? documentoOrigem : nota;
+  const docParaTotais = isRecibo && documentoOrigem ? documentoOrigem : nota;
 
   /* Operador / utilizador */
   const operador = nota.user?.name ?? "Sistema";
@@ -1525,6 +1686,18 @@ export default function VisualizarNotaPage() {
 
           {/* ── Ações ── */}
           <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+            {isRecibo && ["paga", "parcialmente_estornado"].includes(nota.estado) && valorDisponivelEstorno > 0.01 && (
+              <button
+                type="button"
+                onClick={abrirModalEstorno}
+                disabled={estornando}
+                className="p-2 rounded transition-colors flex items-center gap-1.5 text-xs font-medium disabled:opacity-50"
+                style={{ backgroundColor: colors.danger, color: "#fff" }}
+                title="Emitir Recibo de Estorno">
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{estornando ? "A estornar…" : "Estornar"}</span>
+              </button>
+            )}
             {nota.tipo_documento === "FA" && !nota.notasCredito?.some((nc) => nc.estado !== "cancelado") && (
               <button
                 onClick={() => void abrirRegularizacao(nota)}
@@ -1654,7 +1827,7 @@ export default function VisualizarNotaPage() {
               {documentoOrigem && (
                 <Row
                   label="Referente a"
-                  value={`${TIPO_LABEL[documentoOrigem.tipo_documento] ?? documentoOrigem.tipo_documento} Nº ${documentoOrigem.numero_documento}`}
+                    value={`${TIPO_LABEL[documentoOrigem.tipo_documento] ?? documentoOrigem.tipo_documento} Nº ${documentoOrigem.numero_documento}${isRE ? ` · Emissão: ${fmtData(documentoOrigem.data_emissao)}` : ""}`}
                   link
                   onLink={() => router.push(`/dashboard/Faturas/Faturas/${documentoOrigem.id}/Ver`)}
                   colors={colors}
@@ -1705,7 +1878,7 @@ export default function VisualizarNotaPage() {
               <span className="text-xs font-bold uppercase tracking-wider" style={{ color: colors.textSecondary }}>
                 {isNC ? "Itens Creditados" : isND ? "Itens Debitados" : "Produtos / Serviços"}
               </span>
-              {isRC && documentoOrigem && (
+              {isRecibo && documentoOrigem && (
                 <span className="text-xs ml-1" style={{ color: colors.textSecondary }}>
                   (do documento de origem)
                 </span>
@@ -1728,7 +1901,7 @@ export default function VisualizarNotaPage() {
           <TotaisSection nota={nota} docParaTotais={docParaTotais} colors={colors} accent={accent} />
         </div>
 
-        {/* ── Seção de Documentos Derivados (NC/ND/RC) ── */}
+        {/* ── Seção de Documentos Derivados ── */}
         {(nota.notasCredito && nota.notasCredito.length > 0) ||
         (nota.notasDebito && nota.notasDebito.length > 0) ||
         (nota.recibos && nota.recibos.length > 0) ? (
@@ -1883,9 +2056,10 @@ export default function VisualizarNotaPage() {
             <div className="flex items-center gap-2">
               {isNC && <MinusCircle className="w-4 h-4" style={{ color: colors.danger }} />}
               {isND && <PlusCircle className="w-4 h-4" style={{ color: colors.success }} />}
-              {isRC && <Receipt className="w-4 h-4" style={{ color: colors.secondary }} />}
+              {isRecibo && <Receipt className="w-4 h-4" style={{ color: colors.secondary }} />}
+              {isRE && <RotateCcw className="w-4 h-4" style={{ color: colors.danger }} />}
               <span>
-                {isNC ? "Nota de Crédito" : isND ? "Nota de Débito" : "Recibo"}
+                {isNC ? "Nota de Crédito" : isND ? "Nota de Débito" : isRE ? "Recibo de Estorno" : isRG ? "Outros Recibos" : "Recibo"}
                 {" gerado a partir de "}
                 <button
                   onClick={() => router.push(`/dashboard/Faturas/Faturas/${documentoOrigem.id}/Ver`)}
@@ -1903,6 +2077,94 @@ export default function VisualizarNotaPage() {
       </div>
 
       {/* ── Modal NC ── */}
+      {mostrarModalEstorno && nota && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !estornando) setMostrarModalEstorno(false);
+          }}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="estorno-titulo"
+            className="w-full max-w-md space-y-4 rounded-lg border p-5 shadow-xl"
+            style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+            <div className="flex items-start gap-3">
+              <RotateCcw className="mt-1 h-5 w-5 shrink-0" style={{ color: colors.danger }} />
+              <div>
+                <h2 id="estorno-titulo" className="text-lg font-semibold" style={{ color: colors.text }}>
+                  Estornar recibo
+                </h2>
+                <p className="text-sm" style={{ color: colors.textSecondary }}>
+                  {nota.numero_documento} · Valor do recibo: {fmtKz(nota.total_liquido)}
+                </p>
+              </div>
+            </div>
+            <p className="text-sm" style={{ color: colors.textSecondary }}>
+            O estorno emitirá um RE ligado a este recibo e actualizará o saldo do documento de origem.
+            Pode fazer estornos parciais sucessivos até ao limite ainda disponível de {fmtKz(valorDisponivelEstorno)}.
+            </p>
+            <label className="block space-y-1 text-sm" style={{ color: colors.text }}>
+              Valor a estornar
+              <input
+                type="number"
+                min="0.01"
+                max={valorDisponivelEstorno}
+                step="0.01"
+                value={valorEstorno}
+                onChange={(event) => {
+                  setValorEstorno(event.target.value);
+                  setErroEstorno(null);
+                }}
+                disabled={estornando}
+                className="w-full rounded border px-3 py-2"
+                style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text }}
+              />
+            </label>
+            <label className="block space-y-1 text-sm" style={{ color: colors.text }}>
+              Motivo
+              <textarea
+                minLength={5}
+                maxLength={500}
+                rows={3}
+                value={motivoEstorno}
+                onChange={(event) => {
+                  setMotivoEstorno(event.target.value);
+                  setErroEstorno(null);
+                }}
+                disabled={estornando}
+                className="w-full resize-y rounded border px-3 py-2"
+                style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text }}
+                placeholder="Descreva o motivo do estorno (mínimo 5 caracteres)"
+              />
+            </label>
+            {erroEstorno && (
+              <p role="alert" className="text-sm" style={{ color: colors.danger }}>
+                {erroEstorno}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setMostrarModalEstorno(false)}
+                disabled={estornando}
+                className="rounded border px-3 py-2 text-sm disabled:opacity-50"
+                style={{ borderColor: colors.border, color: colors.text }}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void estornarRecibo()}
+                disabled={estornando}
+                className="inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                style={{ backgroundColor: colors.danger }}>
+                {estornando && <Loader2 className="h-4 w-4 animate-spin" />}
+                {estornando ? "A emitir RE…" : "Confirmar estorno"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {modalTipo === "NC" && (
         <ModalNotaCredito
           documento={nota}

@@ -627,7 +627,7 @@ class RelatoriosService
         }
         if (!empty($filtros['apenas_vendas'])) {
             $query->whereHas('documentoFiscal', function ($q) {
-                $q->whereIn('tipo_documento', ['FT', 'FR', 'RC']);
+                $q->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'RG']);
             });
         }
         if (!empty($filtros['estado_pagamento'])) {

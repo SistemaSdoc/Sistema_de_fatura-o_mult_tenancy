@@ -336,7 +336,7 @@ class ImpressoraTermicaService
             $this->imprimirCabecalho($empresa);
             $this->imprimirTipoNumero($documento);
 
-            if ($documento->tipo_documento === 'RC' && $docInfo !== $documento) {
+            if (in_array($documento->tipo_documento, ['RC', 'RG'], true) && $docInfo !== $documento) {
                 $this->imprimirOrigemRc($docInfo);
             }
 
@@ -474,7 +474,7 @@ class ImpressoraTermicaService
      */
     private function resolverDocInfo(DocumentoFiscal $documento): DocumentoFiscal
     {
-        if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
+        if (in_array($documento->tipo_documento, ['RC', 'RG'], true) && $documento->fatura_id) {
             $origem = $this->buscarDocumentoOrigem($documento->fatura_id);
             return $origem ?? $documento;
         }

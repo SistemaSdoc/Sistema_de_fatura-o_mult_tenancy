@@ -645,7 +645,7 @@ public function exportarCompleto(Request $request)
             }
 
             if (!empty($dados['apenas_vendas'])) {
-                $query->whereIn('tipo_documento', ['FT', 'FR', 'RC']);
+                $query->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'RG']);
             }
 
             if (!empty($dados['apenas_nao_vendas'])) {

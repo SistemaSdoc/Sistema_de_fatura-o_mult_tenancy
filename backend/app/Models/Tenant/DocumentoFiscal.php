@@ -99,6 +99,8 @@ class DocumentoFiscal extends TenantModel
     const TIPO_NOTA_CREDITO        = 'NC';
     const TIPO_NOTA_DEBITO         = 'ND';
     const TIPO_RECIBO              = 'RC';
+    const TIPO_OUTROS_RECIBOS      = 'RG';
+    const TIPO_RECIBO_ESTORNO      = 'RE';
 
     // DP 71/25
     const TIPO_FACTURA_GLOBAL         = 'FG';
@@ -112,6 +114,7 @@ class DocumentoFiscal extends TenantModel
         self::TIPO_FATURA,
         self::TIPO_FATURA_RECIBO,
         self::TIPO_RECIBO,
+        self::TIPO_OUTROS_RECIBOS,
         self::TIPO_FACTURA_GLOBAL,
         self::TIPO_FACTURA_GLOBAL_RECIBO,
         self::TIPO_TALAO_VENDA,
@@ -122,6 +125,7 @@ class DocumentoFiscal extends TenantModel
         self::TIPO_FATURA_ADIANTAMENTO,
         self::TIPO_NOTA_CREDITO,
         self::TIPO_NOTA_DEBITO,
+        self::TIPO_RECIBO_ESTORNO,
         self::TIPO_FACTURA_GENERICA,
         self::TIPO_AVISO_COBRANCA,
         self::TIPO_AVISO_COBRANCA_RECIBO,
@@ -195,6 +199,8 @@ class DocumentoFiscal extends TenantModel
                 self::TIPO_NOTA_CREDITO,
                 self::TIPO_NOTA_DEBITO,
                 self::TIPO_RECIBO,
+                self::TIPO_OUTROS_RECIBOS,
+                self::TIPO_RECIBO_ESTORNO,
             ]);
     }
 
@@ -218,7 +224,13 @@ class DocumentoFiscal extends TenantModel
     public function recibos()
     {
         return $this->hasMany(DocumentoFiscal::class, 'fatura_id')
-            ->where('tipo_documento', self::TIPO_RECIBO);
+            ->whereIn('tipo_documento', [self::TIPO_RECIBO, self::TIPO_OUTROS_RECIBOS]);
+    }
+
+    public function estornos()
+    {
+        return $this->hasMany(DocumentoFiscal::class, 'fatura_id')
+            ->where('tipo_documento', self::TIPO_RECIBO_ESTORNO);
     }
 
     public function notasCredito()
@@ -370,6 +382,8 @@ class DocumentoFiscal extends TenantModel
             self::TIPO_NOTA_CREDITO           => 'Nota de Crédito',
             self::TIPO_NOTA_DEBITO            => 'Nota de Débito',
             self::TIPO_RECIBO                 => 'Recibo',
+            self::TIPO_OUTROS_RECIBOS         => 'Outros Recibos',
+            self::TIPO_RECIBO_ESTORNO         => 'Recibo de Estorno',
             self::TIPO_FACTURA_GLOBAL         => 'Factura Global',
             self::TIPO_FACTURA_GLOBAL_RECIBO  => 'Factura Global-Recibo',
             self::TIPO_TALAO_VENDA            => 'Talão de Venda',
@@ -477,6 +491,8 @@ class DocumentoFiscal extends TenantModel
             self::ESTADO_PARCIALMENTE_PAGA => 'yellow',
             self::ESTADO_CANCELADO         => 'red',
             self::ESTADO_EXPIRADO          => 'gray',
+            'estornado'                    => 'red',
+            'parcialmente_estornado'       => 'orange',
             default                        => 'gray',
         };
     }
@@ -491,6 +507,8 @@ class DocumentoFiscal extends TenantModel
             self::TIPO_NOTA_CREDITO           => 'red',
             self::TIPO_NOTA_DEBITO            => 'amber',
             self::TIPO_RECIBO                 => 'teal',
+            self::TIPO_OUTROS_RECIBOS      => 'teal',
+            self::TIPO_RECIBO_ESTORNO      => 'red',
             self::TIPO_FACTURA_GLOBAL         => 'indigo',
             self::TIPO_FACTURA_GLOBAL_RECIBO  => 'indigo',
             self::TIPO_TALAO_VENDA            => 'slate',
@@ -557,9 +575,18 @@ class DocumentoFiscal extends TenantModel
             return 0.0;
         }
 
-        $totalPago = $this->recibos()
+        $recibos = $this->recibos()
             ->where('estado', '!=', self::ESTADO_CANCELADO)
-            ->sum('total_liquido');
+            ->get(['id', 'total_liquido']);
+        $totalPago = (float) $recibos->sum('total_liquido');
+        if ($recibos->isNotEmpty()) {
+            $totalPago -= (float) static::query()
+                ->whereIn('fatura_id', $recibos->pluck('id'))
+                ->where('tipo_documento', self::TIPO_RECIBO_ESTORNO)
+                ->where('estado', '!=', self::ESTADO_CANCELADO)
+                ->sum('total_liquido');
+        }
+        $totalPago = max(0.0, $totalPago);
 
         if ($this->tipo_documento === self::TIPO_FATURA) {
             $totalAdiantamentos = DB::table('adiantamento_fatura')
@@ -642,7 +669,7 @@ class DocumentoFiscal extends TenantModel
 
     public function ehRecibo(): bool
     {
-        return $this->tipo_documento === self::TIPO_RECIBO;
+        return in_array($this->tipo_documento, [self::TIPO_RECIBO, self::TIPO_OUTROS_RECIBOS], true);
     }
 
     public function ehFacturaGlobal(): bool

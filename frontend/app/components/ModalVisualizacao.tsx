@@ -28,6 +28,8 @@ const TIPOS_DOCUMENTO = [
     { value: "FT" as TipoDocumento, label: "Factura", icon: FileText, cor: "#334155" },
     { value: "FR" as TipoDocumento, label: "Factura-Recibo", icon: FileText, cor: "#334155" },
     { value: "RC" as TipoDocumento, label: "Recibo", icon: FileText, cor: "#64748b" },
+    { value: "RG" as TipoDocumento, label: "Outros Recibos", icon: FileText, cor: "#0d9488" },
+    { value: "RE" as TipoDocumento, label: "Recibo de Estorno", icon: FileX, cor: "#ef4444" },
     { value: "FP" as TipoDocumento, label: "Proforma", icon: FileWarning, cor: "#f97316" },
     { value: "FA" as TipoDocumento, label: "Adiantamento", icon: CreditCard, cor: "#8b5cf6" },
     { value: "NC" as TipoDocumento, label: "Nota de Crédito", icon: FileX, cor: "#ef4444" },
@@ -45,6 +47,8 @@ const getEstadoConfig = (estado: EstadoDocumento, theme: string) => {
         emitido: { bg: theme === "dark" ? "bg-blue-900/30" : "bg-blue-100", text: theme === "dark" ? "text-blue-300" : "text-blue-700", border: theme === "dark" ? "border-blue-800" : "border-blue-200", label: "Emitido" },
         paga: { bg: theme === "dark" ? "bg-green-900/30" : "bg-green-100", text: theme === "dark" ? "text-green-300" : "text-green-700", border: theme === "dark" ? "border-green-800" : "border-green-200", label: "Pago" },
         parcialmente_paga: { bg: theme === "dark" ? "bg-orange-900/30" : "bg-orange-100", text: theme === "dark" ? "text-orange-300" : "text-orange-700", border: theme === "dark" ? "border-orange-800" : "border-orange-200", label: "Parcial" },
+        estornado: { bg: theme === "dark" ? "bg-red-900/30" : "bg-red-100", text: theme === "dark" ? "text-red-300" : "text-red-700", border: theme === "dark" ? "border-red-800" : "border-red-200", label: "Estornado" },
+        parcialmente_estornado: { bg: theme === "dark" ? "bg-orange-900/30" : "bg-orange-100", text: theme === "dark" ? "text-orange-300" : "text-orange-700", border: theme === "dark" ? "border-orange-800" : "border-orange-200", label: "Parcialmente estornado" },
         cancelado: { bg: theme === "dark" ? "bg-red-900/30" : "bg-red-100", text: theme === "dark" ? "text-red-300" : "text-red-700", border: theme === "dark" ? "border-red-800" : "border-red-200", label: "Cancelado" },
         expirado: { bg: theme === "dark" ? "bg-gray-800" : "bg-gray-100", text: theme === "dark" ? "text-gray-300" : "text-gray-700", border: theme === "dark" ? "border-gray-700" : "border-gray-200", label: "Expirado" },
     };

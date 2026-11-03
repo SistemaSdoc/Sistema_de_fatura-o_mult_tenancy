@@ -479,6 +479,8 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
                 ->where('documento', $uuidPattern)->name('documentos.recibos');
             Route::post('/{id}/recibo', [DocumentoFiscalController::class, 'gerarRecibo'])
                 ->where('id', $uuidPattern)->name('documentos.gerar-recibo');
+            Route::post('/{id}/estorno', [DocumentoFiscalController::class, 'estornarRecibo'])
+                ->where('id', $uuidPattern)->name('documentos.estornar-recibo');
 
             // Cancelamento e vinculação
             Route::post('/{documento}/cancelar', [DocumentoFiscalController::class, 'cancelar'])

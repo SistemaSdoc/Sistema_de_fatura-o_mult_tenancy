@@ -23,6 +23,7 @@ const TIPO_LABEL: Partial<Record<TipoDocumento, string>> = {
   FGEN: "Factura Genérica",
   AC: "Aviso de Cobrança",
   ACR: "Aviso de Cobrança-Recibo",
+  RE: "Recibo de Estorno",
 };
 
 const ESTADO_LABEL: Record<string, string> = {
@@ -31,16 +32,19 @@ const ESTADO_LABEL: Record<string, string> = {
   emitido: "Pendente",
   cancelado: "Cancelado",
   expirado: "Expirado",
+  estornado: "Estornado",
+  parcialmente_estornado: "Parcialmente estornado",
 };
 
 /* ─── Tipos de aba ────────────────────────────────────────────────────────── */
-type TabAtiva = "proforma" | "global" | "credito_debito" | "sectoriais";
+type TabAtiva = "proforma" | "global" | "credito_debito" | "sectoriais" | "estornos";
 
 const TABS: { key: TabAtiva; label: string; tipos: TipoDocumento[] }[] = [
   { key: "proforma", label: "Proformas / Adiantamentos", tipos: ["FP", "FA"] },
   { key: "global", label: "Facturas Globais", tipos: ["FG", "FGR"] },
   { key: "credito_debito", label: "Notas Crédito/Débito", tipos: ["NC", "ND"] },
   { key: "sectoriais", label: "Documentos sectoriais", tipos: ["FGEN", "AC", "ACR"] },
+  { key: "estornos", label: "Recibos de Estorno", tipos: ["RE"] },
 ];
 
 /* ─── Theme ───────────────────────────────────────────────────────────────── */
@@ -294,6 +298,7 @@ export default function OutrosDocumentosTable({
     global: 1,
     credito_debito: 1,
     sectoriais: 1,
+    estornos: 1,
   });
 
   const setPagina = (tab: TabAtiva, p: number) =>

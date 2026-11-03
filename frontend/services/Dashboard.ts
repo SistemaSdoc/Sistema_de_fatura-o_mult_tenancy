@@ -21,12 +21,12 @@ let dashboardFetchPromise: Promise<DashboardData | null> | null = null;
 /* ================== TIPOS ================== */
 
 export type TipoDocumentoFiscal =
-    | 'FT' | 'FR' | 'FP' | 'RC'
+    | 'FT' | 'FR' | 'FP' | 'RC' | 'RG' | 'RE'
     | 'NC' | 'ND' | 'FA';
 
 export type EstadoDocumentoFiscal =
     | 'emitido' | 'paga' | 'parcialmente_paga'
-    | 'cancelado' | 'expirado';
+    | 'cancelado' | 'expirado' | 'estornado' | 'parcialmente_estornado';
 
 export type EstadoPagamentoVenda = 'paga' | 'pendente' | 'parcial' | 'cancelada';
 
@@ -601,6 +601,7 @@ export const dashboardService = {
             FT: 'Fatura', FR: 'Fatura-Recibo', FP: 'Fatura Proforma',
             RC: 'Recibo', NC: 'Nota de Crédito', ND: 'Nota de Débito',
             FA: 'Fatura de Adiantamento',
+            RG: 'Outros Recibos', RE: 'Recibo de Estorno',
         };
         return nomes[tipo] || tipo;
     },
@@ -611,6 +612,7 @@ export const dashboardService = {
             FP: 'bg-orange-100 text-orange-800', FA: 'bg-purple-100 text-purple-800',
             NC: 'bg-red-100 text-red-800', ND: 'bg-amber-100 text-amber-800',
             RC: 'bg-teal-100 text-teal-800',
+            RG: 'bg-teal-100 text-teal-800', RE: 'bg-red-100 text-red-800',
         } as Record<TipoDocumentoFiscal, string>)[tipo] || 'bg-gray-100 text-gray-800';
     },
 

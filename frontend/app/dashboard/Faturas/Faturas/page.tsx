@@ -1,15 +1,30 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import type { FormEvent } from "react";
 import MainEmpresa from "@/app/components/MainEmpresa";
 import { useRouter } from "next/navigation";
 import InvoiceTable from "@/app/components/Faturas/InvoiceTable";
-import { documentoFiscalService, DocumentoFiscal, FiltrosDocumento, GerarReciboDTO } from "@/services/DocumentoFiscal";
+import {
+  documentoFiscalService,
+  DocumentoFiscal,
+  FiltrosDocumento,
+  GerarReciboDTO,
+  MetodoPagamento,
+} from "@/services/DocumentoFiscal";
 import { useThemeColors } from "@/context/ThemeContext";
 import { useAuth, getIncompleteEmpresaFields, formatIncompleteFields } from "@/context/authprovider";
 import { ModalDadosIncompletos } from "../../../components/ModalDadosIncompletos";
 import { FileText, ChevronDown } from "lucide-react";
 import Cookies from "js-cookie";
+
+const METODOS_RECIBO: { value: MetodoPagamento; label: string }[] = [
+  { value: "dinheiro", label: "Dinheiro" },
+  { value: "transferencia", label: "Transferência bancária" },
+  { value: "multibanco", label: "Multibanco" },
+  { value: "cheque", label: "Cheque" },
+  { value: "cartao", label: "Cartão" },
+];
 
 // ── Helper: lê o XSRF-TOKEN do cookie (já descodificado) ───────────────────
 function getXsrfToken(): string {
@@ -111,6 +126,10 @@ export default function FaturasPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [gerandoRecibo, setGerandoRecibo] = useState<string | null>(null);
+  const [reciboModalDoc, setReciboModalDoc] = useState<DocumentoFiscal | null>(null);
+  const [valorRecibo, setValorRecibo] = useState("");
+  const [metodoRecibo, setMetodoRecibo] = useState<MetodoPagamento>("dinheiro");
+  const [referenciaRecibo, setReferenciaRecibo] = useState("");
   const [baixandoPdf, setBaixandoPdf] = useState<string | null>(null);
   const [imprimindo, setImprimindo] = useState<string | null>(null);
   const [imprimindoTermica, setImprimindoTermica] = useState<string | null>(null);
@@ -229,7 +248,7 @@ export default function FaturasPage() {
   };
 
   /* ── Gerar recibo ── */
-  const gerarRecibo = async (doc: DocumentoFiscal) => {
+  const gerarRecibo = (doc: DocumentoFiscal) => {
     if (!doc.id) return;
     // Verificar campos obrigatórios da empresa antes de gerar recibo
     const missing = getIncompleteEmpresaFields(user?.empresa);
@@ -249,15 +268,29 @@ export default function FaturasPage() {
       setModalDadosIncompletosOpen(true);
       return;
     }
+    setValorRecibo(String(Number(doc.saldo_pendente ?? doc.total_liquido)));
+    setMetodoRecibo("dinheiro");
+    setReferenciaRecibo("");
+    setReciboModalDoc(doc);
+  };
+
+  const confirmarGeracaoRecibo = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const doc = reciboModalDoc;
+    const valor = Number(valorRecibo);
+    if (!doc?.id || !Number.isFinite(valor) || valor <= 0) return;
+
     try {
       setGerandoRecibo(doc.id);
       const dados: GerarReciboDTO = {
-        valor: doc.total_liquido,
-        metodo_pagamento: "dinheiro",
+        valor,
+        metodo_pagamento: metodoRecibo,
         data_pagamento: new Date().toISOString().split("T")[0],
+        referencia: referenciaRecibo.trim() || undefined,
       };
       const recibo = await documentoFiscalService.gerarRecibo(doc.id, dados);
       await carregarDocumentos();
+      setReciboModalDoc(null);
       if (recibo?.id) await imprimir80mm(recibo);
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Erro");
@@ -417,6 +450,75 @@ export default function FaturasPage() {
         camposFaltantes={camposFaltantes}
         colors={colors}
       />
+
+      {reciboModalDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <form
+            onSubmit={confirmarGeracaoRecibo}
+            className="w-full max-w-md space-y-4 rounded-lg border p-5 shadow-xl"
+            style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+            <div>
+              <h2 className="text-lg font-bold" style={{ color: colors.text }}>Registar pagamento</h2>
+              <p className="text-sm" style={{ color: colors.textSecondary }}>
+                O método escolhido determina o tipo de recibo: dinheiro gera RC; os outros métodos geram RG.
+              </p>
+            </div>
+            <label className="block space-y-1 text-sm" style={{ color: colors.text }}>
+              Método de pagamento
+              <select
+                value={metodoRecibo}
+                onChange={(event) => {
+                  const metodo = METODOS_RECIBO.find((item) => item.value === event.target.value)?.value;
+                  if (metodo) setMetodoRecibo(metodo);
+                }}
+                className="w-full rounded border px-3 py-2"
+                style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text }}>
+                {METODOS_RECIBO.map((metodo) => (
+                  <option key={metodo.value} value={metodo.value}>{metodo.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block space-y-1 text-sm" style={{ color: colors.text }}>
+              Valor recebido
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                required
+                value={valorRecibo}
+                onChange={(event) => setValorRecibo(event.target.value)}
+                className="w-full rounded border px-3 py-2"
+                style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text }}
+              />
+            </label>
+            <label className="block space-y-1 text-sm" style={{ color: colors.text }}>
+              Referência (opcional)
+              <input
+                value={referenciaRecibo}
+                onChange={(event) => setReferenciaRecibo(event.target.value)}
+                className="w-full rounded border px-3 py-2"
+                style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text }}
+              />
+            </label>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setReciboModalDoc(null)}
+                className="rounded border px-4 py-2 text-sm"
+                style={{ borderColor: colors.border, color: colors.text }}>
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={gerandoRecibo === reciboModalDoc.id}
+                className="rounded px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                style={{ backgroundColor: colors.primary }}>
+                {gerandoRecibo === reciboModalDoc.id ? "A emitir…" : "Emitir recibo"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* ── Tabela de documentos ── */}
       <InvoiceTable

@@ -87,6 +87,8 @@ const documentoLabel: Record<string, string> = {
   NC: "Nota de Crédito",
   ND: "Nota de Débito",
   RC: "Recibo",
+  RG: "Outros Recibos",
+  RE: "Recibo de Estorno",
 };
 
 const estadoLabel: Record<string, string> = {

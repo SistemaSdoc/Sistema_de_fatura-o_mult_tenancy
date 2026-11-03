@@ -711,7 +711,7 @@ BUILDING;
                 ],
                 'documentos' => [
                     'total'    => 0,
-                    'tipos'    => ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC'],
+                    'tipos'    => ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC', 'RG', 'RE'],
                     'recentes' => [],
                 ],
                 'mensagens' => [],
@@ -733,8 +733,8 @@ BUILDING;
             $pagamentosQuery = SharedPagamento::query()->where('tenant_id', $empresa->id);
         }
 
-        $tiposFaturacao = ['FT', 'FR', 'RC'];
-        $tiposTodos     = ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC'];
+        $tiposFaturacao = ['FT', 'FR', 'RC', 'RG'];
+        $tiposTodos     = ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC', 'RG', 'RE'];
 
         $documentosBase      = clone $documentosQuery;
         $documentosFaturacao = (clone $documentosQuery)
@@ -826,9 +826,9 @@ BUILDING;
             : SharedDocumentoFiscal::query()->where('tenant_id', $empresa->id);
 
         return (float) $query
-            ->whereIn('tipo_documento', ['FR', 'RC'])
-            ->where('estado', 'paga')
-            ->sum('total_liquido');
+            ->whereIn('tipo_documento', ['FR', 'RC', 'RG', 'RE'])
+            ->where('estado', '!=', 'cancelado')
+            ->sum(DB::raw("CASE WHEN tipo_documento = 'RE' THEN -total_liquido ELSE total_liquido END"));
     }
 
     /* ================================================================

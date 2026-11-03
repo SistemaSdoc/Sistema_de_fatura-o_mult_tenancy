@@ -49,6 +49,8 @@ export type TipoDocumentoFiscal =
   | "FR"
   | "FP"
   | "RC"
+  | "RG"
+  | "RE"
   | "NC"
   | "ND"
   | "FA"
@@ -64,6 +66,8 @@ export const NOMES_TIPO_DOCUMENTO: Record<TipoDocumentoFiscal, string> = {
   FR: "Fatura-Recibo",
   FP: "Fatura Proforma",
   RC: "Recibo",
+  RG: "Outros Recibos",
+  RE: "Recibo de Estorno",
   NC: "Nota de Crédito",
   ND: "Nota de Débito",
   FA: "Fatura de Adiantamento",
@@ -76,9 +80,16 @@ export const NOMES_TIPO_DOCUMENTO: Record<TipoDocumentoFiscal, string> = {
 };
 
 export const TIPOS_DOCUMENTO_VENDA: TipoDocumentoFiscal[] = ["FT", "FR", "FP", "FG", "FGR", "TV"];
-export const TIPOS_VENDA: TipoDocumentoFiscal[] = ["FT", "FR", "RC", "FG", "FGR", "TV"];
+export const TIPOS_VENDA: TipoDocumentoFiscal[] = ["FT", "FR", "RC", "RG", "FG", "FGR", "TV"];
 
-export type EstadoDocumentoFiscal = "emitido" | "paga" | "parcialmente_paga" | "cancelado" | "expirado";
+export type EstadoDocumentoFiscal =
+  | "emitido"
+  | "paga"
+  | "parcialmente_paga"
+  | "cancelado"
+  | "expirado"
+  | "estornado"
+  | "parcialmente_estornado";
 export type EstadoPagamentoVenda = "paga" | "pendente" | "parcial" | "cancelada";
 export type TipoProduto = "produto" | "servico";
 export type StatusProduto = "ativo" | "inativo";
@@ -1917,6 +1928,8 @@ export function getEstadoDocumentoColor(estado: EstadoDocumentoFiscal): string {
       emitido: "bg-blue-100 text-blue-800",
       paga: "bg-green-100 text-green-800",
       parcialmente_paga: "bg-teal-100 text-teal-800",
+      estornado: "bg-red-100 text-red-800",
+      parcialmente_estornado: "bg-orange-100 text-orange-800",
       cancelado: "bg-red-100 text-red-800",
       expirado: "bg-gray-100 text-gray-800",
     }[estado] || "bg-gray-100 text-gray-800"
@@ -1934,6 +1947,8 @@ export function getTipoDocumentoColor(tipo: TipoDocumentoFiscal): string {
         NC: "bg-red-100 text-red-800",
         ND: "bg-amber-100 text-amber-800",
         RC: "bg-teal-100 text-teal-800",
+        RG: "bg-teal-100 text-teal-800",
+        RE: "bg-red-100 text-red-800",
       } as Record<TipoDocumentoFiscal, string>
     )[tipo] || "bg-gray-100 text-gray-800"
   );

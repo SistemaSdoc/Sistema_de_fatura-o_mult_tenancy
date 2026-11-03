@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Shared\DocumentoFiscal as SharedDocumentoFiscal;
+use App\Models\Shared\Produto as SharedProduto;
 use App\Models\Tenant\DocumentoFiscal as TenantDocumentoFiscal;
+use App\Models\Tenant\Produto as TenantProduto;
 use App\Models\Empresa;
 use App\Models\LandlordUser;
 use App\Models\Shared\User as SharedUser;
@@ -23,6 +25,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -256,8 +259,8 @@ class DocumentoFiscalController extends Controller
             $this->verificarAcessoUsuario();
 
             $filtros = $request->validate([
-                'tipo'                    => 'nullable|in:FT,FR,FP,FA,NC,ND,RC',
-                'estado'                  => 'nullable|in:emitido,paga,parcialmente_paga,cancelado,expirado',
+                'tipo'                    => 'nullable|in:FT,FR,FP,FA,NC,ND,RC,RG,RE',
+                'estado'                  => 'nullable|in:emitido,paga,parcialmente_paga,cancelado,expirado,estornado,parcialmente_estornado',
                 'cliente_id'              => 'nullable|uuid|exists:clientes,id',
                 'cliente_nome'            => 'nullable|string|max:255',
                 'data_inicio'             => 'nullable|date',
@@ -341,7 +344,7 @@ public function emitir(Request $request): JsonResponse
                 function () {
                     // Usa o método auxiliar que já filtra pelo tenant
                     return $this->queryDocumentosFiscais()
-                        ->whereIn('tipo_documento', ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC', 'AC'])
+                        ->whereIn('tipo_documento', ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC', 'RG', 'RE', 'AC', 'FGEN', 'ACR'])
                         ->where('estado', '!=', 'cancelado')
                         ->whereMonth('created_at', now()->month)
                         ->whereYear('created_at', now()->year)
@@ -359,15 +362,23 @@ public function emitir(Request $request): JsonResponse
         // ============================================================
 
         // Validação dos dados de entrada (mantida inalterada)
+        $conexaoTenant = $this->isColectivo() ? 'shared' : 'tenant';
+        $regraClienteExiste = Rule::exists("{$conexaoTenant}.clientes", 'id')->whereNull('deleted_at');
+        $regraProdutoExiste = Rule::exists("{$conexaoTenant}.produtos", 'id')->whereNull('deleted_at');
+        if ($this->isColectivo()) {
+            $regraClienteExiste->where('tenant_id', $this->empresa->id);
+            $regraProdutoExiste->where('tenant_id', $this->empresa->id);
+        }
+
         $dados = $request->validate([
-            'tipo_documento'             => 'required|in:FT,FR,FP,FA,NC,ND,RC,AC',
+            'tipo_documento'             => 'required|in:FT,FR,FP,FA,NC,ND,RC,AC,FGEN,ACR',
             'venda_id'                   => 'nullable|uuid|exists:vendas,id',
-            'cliente_id'                 => 'nullable|uuid|exists:clientes,id',
+            'cliente_id'                 => ['nullable', 'uuid', $regraClienteExiste],
             'cliente_nome'               => 'nullable|string|max:255',
             'cliente_nif'                => 'nullable|string|max:14',
             'fatura_id'                  => 'nullable|uuid|exists:documentos_fiscais,id',
             'itens'                      => 'required_unless:tipo_documento,FA|array',
-            'itens.*.produto_id'         => 'nullable|uuid|exists:produtos,id',
+            'itens.*.produto_id'         => ['nullable', 'uuid', $regraProdutoExiste],
             'itens.*.descricao'          => 'required_with:itens|string',
             'itens.*.quantidade'         => 'required_with:itens|numeric|min:0.01',
             'itens.*.preco_unitario'     => 'required_with:itens|numeric|min:0',
@@ -387,6 +398,13 @@ public function emitir(Request $request): JsonResponse
             'iban'                       => 'nullable|string|max:34',
             'numero_conta'               => 'nullable|string|max:20',
         ]);
+
+        if (in_array($dados['tipo_documento'], ['RC', 'RG', 'RE'], true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Recibos e estornos só podem ser emitidos a partir do documento de origem.',
+            ], 422);
+        }
 
         // Log dos dados recebidos para debug (mantido)
         Log::info('[DocumentoFiscalController] Dados recebidos para emissão', [
@@ -481,10 +499,10 @@ public function emitir(Request $request): JsonResponse
                 ], 422);
             }
 
-            if (!in_array($documento->tipo_documento, ['FT', 'FA', 'AC'], true)) {
+            if (!in_array($documento->tipo_documento, ['FT', 'FA', 'FG', 'AC'], true)) {
                 return response()->json([
                     'success' => false,
-                    'message' => "Apenas Faturas (FT), Faturas de Adiantamento (FA) e Avisos de Cobrança (AC) podem gerar recibos. Tipo atual: {$documento->tipo_documento}",
+                    'message' => "Apenas Faturas (FT/FG), Faturas de Adiantamento (FA) e Avisos de Cobrança (AC) podem gerar recibos. Tipo atual: {$documento->tipo_documento}",
                 ], 422);
             }
 
@@ -513,6 +531,37 @@ public function emitir(Request $request): JsonResponse
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
             return $this->erroInterno('Erro ao gerar recibo', $e);
+        }
+    }
+
+    public function estornarRecibo(Request $request, string $documentoId): JsonResponse
+    {
+        $modo = $this->getModo();
+
+        try {
+            $this->verificarAcessoUsuario();
+            $recibo = $this->documentoService->buscarDocumento($documentoId);
+            $dados = $request->validate([
+                'valor'  => 'required|numeric|min:0.01',
+                'motivo' => 'required|string|min:5|max:500',
+            ]);
+
+            $estorno = $this->documentoService->estornarRecibo($recibo, $dados);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Recibo de Estorno emitido com sucesso.',
+                'data' => $estorno,
+                'modo' => $modo,
+            ], 201);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
+            return response()->json(['success' => false, 'message' => 'Recibo não encontrado.'], 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'message' => 'Erro de validação', 'errors' => $e->errors()], 422);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            return $this->erroInterno('Erro ao estornar recibo', $e);
         }
     }
 
@@ -578,7 +627,11 @@ public function emitir(Request $request): JsonResponse
 
             $dados = $request->validate([
                 'itens'                  => 'required|array|min:1',
-                'itens.*.produto_id'     => 'nullable|uuid|exists:produtos,id',
+                'itens.*.produto_id'     => [
+                    'nullable',
+                    'uuid',
+                    Rule::exists(($this->isColectivo() ? 'shared' : 'tenant') . '.produtos', 'id'),
+                ],
                 'itens.*.descricao'      => 'required|string',
                 'itens.*.quantidade'     => 'required|numeric|min:0.01',
                 'itens.*.preco_unitario' => 'required|numeric|min:0',
@@ -671,10 +724,18 @@ public function emitir(Request $request): JsonResponse
 
         try {
             $this->verificarAcessoUsuario();
+            $conexaoTenant = $this->isColectivo() ? 'shared' : 'tenant';
+            $regraClienteExiste = Rule::exists("{$conexaoTenant}.clientes", 'id')->whereNull('deleted_at');
+            $regraProdutoExiste = Rule::exists("{$conexaoTenant}.produtos", 'id')->whereNull('deleted_at');
+            if ($this->isColectivo()) {
+                $regraClienteExiste->where('tenant_id', $this->empresa->id);
+                $regraProdutoExiste->where('tenant_id', $this->empresa->id);
+            }
+
             $dados = $request->validate([
-                'cliente_id'             => 'required|uuid|exists:clientes,id',
+                'cliente_id'             => ['required', 'uuid', $regraClienteExiste],
                 'itens'                  => 'required|array|min:1',
-                'itens.*.produto_id'     => 'nullable|uuid|exists:produtos,id',
+                'itens.*.produto_id'     => ['nullable', 'uuid', $regraProdutoExiste],
                 'itens.*.descricao'      => 'required|string|max:255',
                 'itens.*.quantidade'     => 'required|numeric|min:0.01',
                 'itens.*.preco_unitario' => 'required|numeric|min:0',
@@ -709,10 +770,18 @@ public function emitir(Request $request): JsonResponse
 
         try {
             $this->verificarAcessoUsuario();
+            $conexaoTenant = $this->isColectivo() ? 'shared' : 'tenant';
+            $regraClienteExiste = Rule::exists("{$conexaoTenant}.clientes", 'id')->whereNull('deleted_at');
+            $regraProdutoExiste = Rule::exists("{$conexaoTenant}.produtos", 'id')->whereNull('deleted_at');
+            if ($this->isColectivo()) {
+                $regraClienteExiste->where('tenant_id', $this->empresa->id);
+                $regraProdutoExiste->where('tenant_id', $this->empresa->id);
+            }
+
             $dados = $request->validate([
-                'cliente_id'             => 'required|uuid|exists:clientes,id',
+                'cliente_id'             => ['required', 'uuid', $regraClienteExiste],
                 'itens'                  => 'required|array|min:1',
-                'itens.*.produto_id'     => 'nullable|uuid|exists:produtos,id',
+                'itens.*.produto_id'     => ['nullable', 'uuid', $regraProdutoExiste],
                 'itens.*.descricao'      => 'required|string|min:5',
                 'itens.*.quantidade'     => 'required|numeric|min:0.01',
                 'itens.*.preco_unitario' => 'required|numeric|min:0',
@@ -810,10 +879,17 @@ public function emitir(Request $request): JsonResponse
             // 4. Validar se a fatura já foi paga (neste caso, só permite juros/multas)
             $valorPago = $this->documentoService->calcularValorPago($documento);
             $faturaPaga = $documento->estado === 'paga' || $valorPago >= $documento->total_liquido;
+            $regraProdutoExiste = Rule::exists(
+                ($this->isColectivo() ? 'shared' : 'tenant') . '.produtos',
+                'id'
+            )->whereNull('deleted_at');
+            if ($this->isColectivo()) {
+                $regraProdutoExiste->where('tenant_id', $this->empresa->id);
+            }
 
             $dados = $request->validate([
                 'itens'                  => 'required|array|min:1',
-                'itens.*.produto_id'     => 'nullable|uuid|exists:produtos,id',
+                'itens.*.produto_id'     => ['nullable', 'uuid', $regraProdutoExiste],
                 'itens.*.descricao'      => 'required|string|min:5', // Descrição detalhada
                 'itens.*.quantidade'     => 'required|numeric|min:0.01',
                 'itens.*.preco_unitario' => 'required|numeric|min:0',
@@ -862,7 +938,9 @@ public function emitir(Request $request): JsonResponse
                 $produto = null;
                 // Verifica se é serviço pelo produto_id
                 if (!empty($item['produto_id'])) {
-                    $produto = \App\Models\Tenant\Produto::find($item['produto_id']);
+                    $produto = $this->isColectivo()
+                        ? SharedProduto::doTenant()->where('id', $item['produto_id'])->first()
+                        : TenantProduto::find($item['produto_id']);
                     if ($produto && $produto->tipo !== 'servico') {
                         $itensInvalidos[] = $item['descricao'];
                     } elseif ($produto && $produto->tipo === 'servico') {
@@ -1062,12 +1140,12 @@ public function emitir(Request $request): JsonResponse
             if ($this->isColectivo()) {
                 $recibos = SharedDocumentoFiscal::doTenant()
                     ->where('fatura_id', $documento->id)
-                    ->where('tipo_documento', 'RC')
+                    ->whereIn('tipo_documento', ['RC', 'RG'])
                     ->with('user')
                     ->get();
             } else {
                 $recibos = TenantDocumentoFiscal::where('fatura_id', $documento->id)
-                    ->where('tipo_documento', 'RC')
+                    ->whereIn('tipo_documento', ['RC', 'RG'])
                     ->with('user')
                     ->get();
             }
@@ -1404,7 +1482,7 @@ public function emitirAutoFacturacao(Request $request)
 
             $dados = $this->documentoService->dadosParaPdf($documento);
 
-            if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
+            if (in_array($documento->tipo_documento, ['RC', 'RG'], true) && $documento->fatura_id) {
                 if ($this->isColectivo()) {
                     $docInfo = SharedDocumentoFiscal::doTenant()->with(['itens.produto', 'cliente'])->where('id', $documento->fatura_id)->first();
                 } else {
@@ -1478,7 +1556,7 @@ public function emitirAutoFacturacao(Request $request)
             }
 
             $documentoOrigem = null;
-            if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
+            if (in_array($documento->tipo_documento, ['RC', 'RG'], true) && $documento->fatura_id) {
                 if ($this->isColectivo()) {
                     $documentoOrigem = SharedDocumentoFiscal::doTenant()->with(['itens.produto', 'cliente'])->where('id', $documento->fatura_id)->first();
                 } else {
@@ -1668,7 +1746,7 @@ public function emitirAutoFacturacao(Request $request)
             }
 
             $documentoOrigem = null;
-            if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
+            if (in_array($documento->tipo_documento, ['RC', 'RG'], true) && $documento->fatura_id) {
                 if ($this->modo === 'colectivo') {
                     $documentoOrigem = SharedDocumentoFiscal::doTenant()
                         ->with(['itens.produto', 'cliente', 'user'])
@@ -1724,7 +1802,7 @@ public function emitirAutoFacturacao(Request $request)
             $dados = $this->documentoService->dadosParaPdf($documento);
 
             $documentoOrigem = null;
-            if ($documento->tipo_documento === 'RC' && $documento->fatura_id) {
+            if (in_array($documento->tipo_documento, ['RC', 'RG'], true) && $documento->fatura_id) {
                 if ($this->isColectivo()) {
                     $documentoOrigem = SharedDocumentoFiscal::doTenant()->with(['itens.produto', 'cliente'])->where('id', $documento->fatura_id)->first();
                 } else {

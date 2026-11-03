@@ -12,7 +12,7 @@ return new class extends Migration
         DB::connection('shared')->statement("
             ALTER TABLE series_fiscais
             MODIFY COLUMN tipo_documento ENUM(
-                'FT','FR','FP','FA','RC','NC','ND',
+                'FT','FR','FP','FA','RC','RG','RE','NC','ND','FRt',
                 'FG','FGR','TV','FGEN','AC','ACR'
             ) NOT NULL
         ");
@@ -20,7 +20,7 @@ return new class extends Migration
         DB::connection('shared')->statement("
             ALTER TABLE documentos_fiscais
             MODIFY COLUMN tipo_documento ENUM(
-                'FT','FR','FP','FA','RC','NC','ND',
+                'FT','FR','FP','FA','RC','RG','RE','NC','ND',
                 'FG','FGR','TV','FGEN','AC','ACR'
             ) NOT NULL
         ");

@@ -532,14 +532,19 @@ protected function verificarAcessoUsuario(): void
             $documentoModel::TIPO_NOTA_DEBITO,
             $documentoModel::TIPO_FATURA_RECIBO,
         ];
+        $documentosRecibo = [
+            $documentoModel::TIPO_RECIBO,
+            $documentoModel::TIPO_OUTROS_RECIBOS,
+            $documentoModel::TIPO_RECIBO_ESTORNO,
+        ];
 
         $query = $this->queryComScope('documento');
 
         $pagamentosHoje = (clone $query)
-            ->where('tipo_documento', $documentoModel::TIPO_RECIBO)
+            ->whereIn('tipo_documento', $documentosRecibo)
             ->whereNotIn('estado', [$cancelado])
             ->whereDate('data_emissao', $hoje->toDateString())
-            ->sum('total_liquido');
+            ->sum(DB::raw("CASE WHEN tipo_documento = 'RE' THEN -total_liquido ELSE total_liquido END"));
 
         $totalPendente = (clone $query)
             ->whereIn('tipo_documento', $documentosDebito)
@@ -572,12 +577,16 @@ protected function verificarAcessoUsuario(): void
         $cancelado = $documentoModel::ESTADO_CANCELADO;
 
         $query = $this->queryComScope('documento')
-            ->where('tipo_documento', $documentoModel::TIPO_RECIBO)
+            ->whereIn('tipo_documento', [
+                $documentoModel::TIPO_RECIBO,
+                $documentoModel::TIPO_OUTROS_RECIBOS,
+                $documentoModel::TIPO_RECIBO_ESTORNO,
+            ])
             ->whereNotIn('estado', [$cancelado])
             ->select(
                 'metodo_pagamento',
                 DB::raw('COUNT(*) as quantidade'),
-                DB::raw('SUM(total_liquido) as valor_total')
+                DB::raw("SUM(CASE WHEN tipo_documento = 'RE' THEN -total_liquido ELSE total_liquido END) as valor_total")
             )
             ->groupBy('metodo_pagamento');
 
@@ -825,27 +834,32 @@ private function getServicosMaisVendidos(int $dias = 30): array
             $documentoModel::TIPO_NOTA_DEBITO,
             $documentoModel::TIPO_FATURA_RECIBO,
         ];
+        $documentosRecibo = [
+            $documentoModel::TIPO_RECIBO,
+            $documentoModel::TIPO_OUTROS_RECIBOS,
+            $documentoModel::TIPO_RECIBO_ESTORNO,
+        ];
 
         $query = $this->queryComScope('documento');
 
         $recebidosHoje = (clone $query)
-            ->where('tipo_documento', $documentoModel::TIPO_RECIBO)
+            ->whereIn('tipo_documento', $documentosRecibo)
             ->whereNotIn('estado', [$cancelado])
             ->whereDate('data_emissao', $hoje->toDateString())
-            ->sum('total_liquido');
+            ->sum(DB::raw("CASE WHEN tipo_documento = 'RE' THEN -total_liquido ELSE total_liquido END"));
 
         $recebidosMes = (clone $query)
-            ->where('tipo_documento', $documentoModel::TIPO_RECIBO)
+            ->whereIn('tipo_documento', $documentosRecibo)
             ->whereNotIn('estado', [$cancelado])
             ->whereMonth('data_emissao', $hoje->month)
             ->whereYear('data_emissao', $hoje->year)
-            ->sum('total_liquido');
+            ->sum(DB::raw("CASE WHEN tipo_documento = 'RE' THEN -total_liquido ELSE total_liquido END"));
 
         $recebidosAno = (clone $query)
-            ->where('tipo_documento', $documentoModel::TIPO_RECIBO)
+            ->whereIn('tipo_documento', $documentosRecibo)
             ->whereNotIn('estado', [$cancelado])
             ->whereYear('data_emissao', $hoje->year)
-            ->sum('total_liquido');
+            ->sum(DB::raw("CASE WHEN tipo_documento = 'RE' THEN -total_liquido ELSE total_liquido END"));
 
         $pendentes = (clone $query)
             ->whereIn('tipo_documento', $documentosDebito)
@@ -866,9 +880,12 @@ private function getServicosMaisVendidos(int $dias = 30): array
             ->get();
 
         $metodos = (clone $query)
-            ->where('tipo_documento', $documentoModel::TIPO_RECIBO)
+            ->whereIn('tipo_documento', $documentosRecibo)
             ->whereNotIn('estado', [$cancelado])
-            ->select('metodo_pagamento', DB::raw('SUM(total_liquido) as total'))
+            ->select(
+                'metodo_pagamento',
+                DB::raw("SUM(CASE WHEN tipo_documento = 'RE' THEN -total_liquido ELSE total_liquido END) as total")
+            )
             ->groupBy('metodo_pagamento')
             ->pluck('total', 'metodo_pagamento')
             ->toArray();
@@ -1083,11 +1100,15 @@ private function getServicosMaisVendidos(int $dias = 30): array
 
             $faturas = (clone $query)->where('tipo_documento', $documentoModel::TIPO_FATURA);
             $nc = (clone $query)->where('tipo_documento', $documentoModel::TIPO_NOTA_CREDITO);
-            $rc = (clone $query)->where('tipo_documento', $documentoModel::TIPO_RECIBO);
+            $rc = (clone $query)->whereIn('tipo_documento', [
+                $documentoModel::TIPO_RECIBO,
+                $documentoModel::TIPO_OUTROS_RECIBOS,
+                $documentoModel::TIPO_RECIBO_ESTORNO,
+            ]);
             $fp = (clone $query)->where('tipo_documento', $documentoModel::TIPO_FATURA_PROFORMA);
 
             $valorFaturado = (clone $faturas)->sum('total_liquido');
-            $valorPago = (clone $rc)->sum('total_liquido');
+            $valorPago = (clone $rc)->sum(DB::raw("CASE WHEN tipo_documento = 'RE' THEN -total_liquido ELSE total_liquido END"));
 
             $meses[] = [
                 'mes'                 => $mes,

@@ -20,6 +20,8 @@ const TIPO_LABEL: Record<TipoDocumento, string> = {
   NC: "Nota de Crédito",
   ND: "Nota de Débito",
   RC: "Recibo",
+  RG: "Outros Recibos",
+  RE: "Recibo de Estorno",
   FG: "Factura Global",
   FGR: "Factura Global-Recibo",
   TV: "Talão de Venda",
@@ -34,6 +36,8 @@ const ESTADO_LABEL: Record<string, string> = {
   emitido: "Pendente",
   cancelado: "Cancelado",
   expirado: "Expirado",
+  estornado: "Estornado",
+  parcialmente_estornado: "Parcialmente estornado",
 };
 
 interface ColorsTheme {
@@ -294,7 +298,7 @@ export default function InvoiceTable({
   const [paginaFT, setPaginaFT] = useState(1);
 
   /* ── Separação por aba ── */
-  const docsFR = documentos.filter((d) => ["FR", "RC", "TV"].includes(d.tipo_documento));
+  const docsFR = documentos.filter((d) => ["FR", "RC", "RG", "TV"].includes(d.tipo_documento));
   const docsFT = documentos.filter((d) => d.tipo_documento === "FT");
 
   const totalPagesFR = Math.max(Math.ceil(docsFR.length / POR_PAGINA), 1);

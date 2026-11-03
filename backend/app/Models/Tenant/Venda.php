@@ -108,7 +108,7 @@ class Venda extends TenantModel
     public function scopeVendasValidas($query)
     {
         return $query->whereHas('documentoFiscal', fn ($q) =>
-            $q->whereIn('tipo_documento', ['FT', 'FR', 'RC'])
+            $q->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'RG'])
         );
     }
 
@@ -207,7 +207,7 @@ class Venda extends TenantModel
     public function getEhVendaAttribute(): bool
     {
         return $this->documentoFiscal
-            && in_array($this->documentoFiscal->tipo_documento, ['FT', 'FR', 'RC']);
+            && in_array($this->documentoFiscal->tipo_documento, ['FT', 'FR', 'RC', 'RG'], true);
     }
 
     public function getEhFaturaAttribute(): bool
@@ -332,7 +332,7 @@ class Venda extends TenantModel
         }
 
         $estado = match ($this->documentoFiscal->tipo_documento) {
-            'FR', 'RC' => 'paga',
+            'FR', 'RC', 'RG' => 'paga',
             'FP'       => 'pendente',
             default    => match ($this->documentoFiscal->estado) {
                 DocumentoFiscal::ESTADO_PAGA              => 'paga',

@@ -88,6 +88,28 @@ class DocumentoFiscalService
             'pode_ter_adiantamento' => false,
             'requer_assinatura'     => false,
         ],
+        'RG' => [
+            'nome'                  => 'Outros Recibos',
+            'afeta_stock'           => false,
+            'eh_venda'              => true,
+            'gera_recibo'           => false,
+            'estado_inicial'        => 'paga',
+            'exige_cliente'         => false,
+            'aceita_pagamento'      => false,
+            'pode_ter_adiantamento' => false,
+            'requer_assinatura'     => false,
+        ],
+        'RE' => [
+            'nome'                  => 'Recibo de Estorno',
+            'afeta_stock'           => false,
+            'eh_venda'              => false,
+            'gera_recibo'           => false,
+            'estado_inicial'        => 'emitido',
+            'exige_cliente'         => false,
+            'aceita_pagamento'      => false,
+            'pode_ter_adiantamento' => false,
+            'requer_assinatura'     => true,
+        ],
         'FA' => [
             'nome'                  => 'Factura de Adiantamento',
             'afeta_stock'           => false,
@@ -334,6 +356,9 @@ class DocumentoFiscalService
         if (!isset($this->configuracoesTipo[$tipo])) {
             throw new \InvalidArgumentException("Tipo de documento {$tipo} não suportado.");
         }
+        if (in_array($tipo, ['RC', 'RG', 'RE'], true)) {
+            throw new \InvalidArgumentException('Recibos e estornos só podem ser emitidos a partir do documento de origem.');
+        }
 
         $config = $this->configuracoesTipo[$tipo];
         $autoFaturacao = !empty($dados['auto_faturacao']);
@@ -387,6 +412,12 @@ class DocumentoFiscalService
             }
 
             $totais = $this->processarItens($dados['itens'] ?? [], $aplicaIva, $regime, $taxaRetencaoAuto, $tipo);
+            if (
+                $tipo === 'ACR'
+                && abs((float) $dados['dados_pagamento']['valor'] - $totais['liquido']) > 0.01
+            ) {
+                throw new \InvalidArgumentException('Aviso de Cobrança-Recibo exige o pagamento total do documento.');
+            }
             $clienteId = $this->resolverCliente($dados, $tipo);
 
             $documentoData = [
@@ -471,7 +502,7 @@ class DocumentoFiscalService
                 ]);
             }
 
-            if (in_array($tipo, ['FR', 'FGR', 'TV'], true) && !empty($dados['dados_pagamento'])) {
+            if (in_array($tipo, ['FR', 'FGR', 'TV', 'ACR'], true) && !empty($dados['dados_pagamento'])) {
                 $documento->update([
                     'metodo_pagamento' => $dados['dados_pagamento']['metodo'],
                     'referencia_pagamento' => $dados['dados_pagamento']['referencia'] ?? null,
@@ -589,7 +620,8 @@ class DocumentoFiscalService
                 throw new \InvalidArgumentException("Valor ({$valorPago}) excede pendente ({$valorPendente}).");
             }
 
-            [$numero, $numeroDocumento, $serieFiscal] = $this->gerarNumeroDocumento('RC');
+            $tipoRecibo = $this->tipoReciboPorMetodo($dados['metodo_pagamento'] ?? 'dinheiro');
+            [$numero, $numeroDocumento, $serieFiscal] = $this->gerarNumeroDocumento($tipoRecibo);
 
             $agoraAngola = Carbon::now('Africa/Luanda');
 
@@ -600,7 +632,7 @@ class DocumentoFiscalService
                 'serie' => $serieFiscal->serie ?? 'A',
                 'numero' => $numero,
                 'numero_documento' => $numeroDocumento,
-                'tipo_documento' => 'RC',
+                'tipo_documento' => $tipoRecibo,
                 'data_emissao' => $dados['data_pagamento'] ?? $agoraAngola->toDateString(),
                 'hora_emissao' => $agoraAngola->toTimeString(),
                 'data_vencimento' => null,
@@ -643,6 +675,121 @@ class DocumentoFiscalService
 
             return $recibo->load('documentoOrigem', 'cliente');
         });
+    }
+
+    public function estornarRecibo($documentoRecibo, array $dados)
+    {
+        $this->verificarAcessoUsuario();
+
+        return DB::transaction(function () use ($documentoRecibo, $dados) {
+            $query = $this->isColectivo()
+                ? SharedDocumentoFiscal::doTenant()
+                : TenantDocumentoFiscal::query();
+            $recibo = $query->whereKey($documentoRecibo->id)->lockForUpdate()->firstOrFail();
+
+            if (!in_array($recibo->tipo_documento, ['RC', 'RG'], true)) {
+                throw new \InvalidArgumentException('Apenas recibos RC ou RG podem ser estornados.');
+            }
+            if (!in_array($recibo->estado, ['paga', 'parcialmente_estornado'], true)) {
+                throw new \InvalidArgumentException('Este recibo já foi estornado ou não está disponível para estorno.');
+            }
+            if (empty($recibo->fatura_id)) {
+                throw new \InvalidArgumentException('O recibo não está associado a um documento de origem.');
+            }
+
+            $queryEstornosExistentes = ($this->isColectivo()
+                ? SharedDocumentoFiscal::doTenant()
+                : TenantDocumentoFiscal::query())
+                ->where('fatura_id', $recibo->id)
+                ->where('tipo_documento', 'RE')
+                ->where('estado', '!=', 'cancelado');
+            $totalEstornado = (float) $queryEstornosExistentes->sum('total_liquido');
+
+            $valor = round((float) ($dados['valor'] ?? 0), 2);
+            $valorRecibo = round((float) $recibo->total_liquido, 2);
+            $valorDisponivel = $this->calcularValorDisponivelEstorno($valorRecibo, $totalEstornado);
+            if ($valor <= 0 || $valor > $valorDisponivel + 0.001) {
+                throw new \InvalidArgumentException(
+                    'O valor do estorno deve ser positivo e não pode exceder o saldo ainda não estornado do recibo (' .
+                    number_format($valorDisponivel, 2, ',', '.') . ').'
+                );
+            }
+
+            [$numero, $numeroDocumento, $serieFiscal] = $this->gerarNumeroDocumento('RE');
+            $agoraAngola = Carbon::now('Africa/Luanda');
+            $estornoData = [
+                'id' => Str::uuid(),
+                'user_id' => $this->getUserId(),
+                'fatura_id' => $recibo->id,
+                'serie' => $serieFiscal->serie ?? 'E',
+                'numero' => $numero,
+                'numero_documento' => $numeroDocumento,
+                'tipo_documento' => 'RE',
+                'data_emissao' => $dados['data_estorno'] ?? $agoraAngola->toDateString(),
+                'hora_emissao' => $agoraAngola->toTimeString(),
+                'base_tributavel' => 0,
+                'total_iva' => 0,
+                'total_retencao' => 0,
+                'total_liquido' => $valor,
+                'estado' => 'emitido',
+                'motivo' => $dados['motivo'],
+                'metodo_pagamento' => $recibo->metodo_pagamento,
+                'referencia_pagamento' => $recibo->referencia_pagamento,
+                'hash_fiscal' => null,
+                'rsa_assinatura' => null,
+                'rsa_versao_chave' => null,
+                'qr_code' => null,
+                'hash_anterior' => null,
+                'auto_faturacao' => false,
+                'print_count' => 0,
+            ];
+            if ($this->isColectivo()) {
+                $estornoData['tenant_id'] = $this->empresa->id;
+            }
+            foreach (['cliente_id', 'cliente_nome', 'cliente_nif'] as $campo) {
+                if ($recibo->{$campo}) {
+                    $estornoData[$campo] = $recibo->{$campo};
+                }
+            }
+
+            $estorno = $this->isColectivo()
+                ? SharedDocumentoFiscal::create($estornoData)
+                : TenantDocumentoFiscal::create($estornoData);
+
+            $recibo->update([
+                'estado' => $this->estadoReciboAposEstorno($valorRecibo, $totalEstornado + $valor),
+            ]);
+
+            $documentoOrigem = $this->buscarDocumento($recibo->fatura_id);
+            $valorPendente = $this->calcularValorPendente($documentoOrigem);
+            $valorPago = $this->calcularTotalPago($documentoOrigem);
+            $documentoOrigem->update([
+                'estado' => $valorPendente <= 0.01
+                    ? 'paga'
+                    : ($valorPago > 0.01 ? 'parcialmente_paga' : 'emitido'),
+            ]);
+
+            $estorno->update(['hash_fiscal' => $this->gerarHashSimples($estorno)]);
+
+            return $estorno->load('documentoOrigem', 'cliente');
+        });
+    }
+
+    private function calcularValorDisponivelEstorno(float $valorRecibo, float $totalEstornado): float
+    {
+        return round(max(0, $valorRecibo - $totalEstornado), 2);
+    }
+
+    private function estadoReciboAposEstorno(float $valorRecibo, float $totalEstornado): string
+    {
+        return $this->calcularValorDisponivelEstorno($valorRecibo, $totalEstornado) <= 0.01
+            ? 'estornado'
+            : 'parcialmente_estornado';
+    }
+
+    private function tipoReciboPorMetodo(string $metodoPagamento): string
+    {
+        return $metodoPagamento === 'dinheiro' ? 'RC' : 'RG';
     }
 
     public function criarNotaCredito($documentoOrigem, array $dados)
@@ -777,7 +924,6 @@ class DocumentoFiscalService
         $this->herdarCliente($dados, $documentoOrigem);
 
         $nd = $this->emitirDocumento($dados);
-        $this->atualizarEstadoFaturaAposDebito($documentoOrigem, $nd);
 
         return $nd->load('documentoOrigem', 'itens', 'cliente');
     }
@@ -887,16 +1033,6 @@ class DocumentoFiscalService
         ));
         if ($valorTotal <= 0) {
             throw new \InvalidArgumentException('O valor total da Nota de Débito deve ser maior que zero.');
-        }
-    }
-
-    private function atualizarEstadoFaturaAposDebito($fatura, $nd): void
-    {
-        $novoValor = (float) $fatura->total_liquido + (float) $nd->total_liquido;
-        $fatura->update(['total_liquido' => $novoValor]);
-
-        if ($fatura->estado === 'paga') {
-            $fatura->update(['estado' => 'parcialmente_paga']);
         }
     }
 
@@ -1224,10 +1360,10 @@ class DocumentoFiscalService
             $query->whereDate('data_emissao', '<=', $filtros['data_fim']);
         }
         if (!empty($filtros['apenas_vendas'])) {
-            $query->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'TV']);
+            $query->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'RG', 'TV']);
         }
         if (!empty($filtros['apenas_nao_vendas'])) {
-            $query->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FG', 'FGR', 'FGEN', 'AC', 'ACR']);
+            $query->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'RE', 'FG', 'FGR', 'FGEN', 'AC', 'ACR']);
         }
         if (!empty($filtros['apenas_globais'])) {
             $query->whereIn('tipo_documento', ['FG', 'FGR']);
@@ -1441,9 +1577,9 @@ class DocumentoFiscalService
                 ->where('estado', 'emitido')->count(),
             'documentos_cancelados_mes' => (clone $query)->where('estado', 'cancelado')
                 ->whereBetween('data_cancelamento', [$inicioMes, $hoje])->count(),
-            'total_vendas_mes' => (clone $query)->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'FG', 'FGR', 'TV'])
+            'total_vendas_mes' => (clone $query)->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'RG', 'FG', 'FGR', 'TV'])
                 ->whereBetween('data_emissao', [$inicioMes->toDateString(), $hoje->toDateString()])->count(),
-            'total_nao_vendas_mes' => (clone $query)->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FGEN', 'AC', 'ACR'])
+            'total_nao_vendas_mes' => (clone $query)->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'RE', 'FGEN', 'AC', 'ACR'])
                 ->whereBetween('data_emissao', [$inicioMes->toDateString(), $hoje->toDateString()])->count(),
             'auto_facturacao_mes' => (clone $query)->where('auto_faturacao', true)
                 ->whereBetween('data_emissao', [$inicioMes->toDateString(), $hoje->toDateString()])->count(),
@@ -1468,10 +1604,10 @@ class DocumentoFiscalService
             $evolucao[] = [
                 'mes' => $mes,
                 'ano' => $ano,
-                'total_vendas' => (float) (clone $query)->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'FG', 'FGR', 'TV'])
+                'total_vendas' => (float) (clone $query)->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'RG', 'FG', 'FGR', 'TV'])
                     ->whereBetween('data_emissao', [$inicio->toDateString(), $fim->toDateString()])
                     ->where('estado', '!=', 'cancelado')->sum('total_liquido'),
-                'total_nao_vendas' => (float) (clone $query)->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FGEN', 'AC', 'ACR'])
+                'total_nao_vendas' => (float) (clone $query)->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'RE', 'FGEN', 'AC', 'ACR'])
                     ->whereBetween('data_emissao', [$inicio->toDateString(), $fim->toDateString()])
                     ->where('estado', '!=', 'cancelado')->sum('total_liquido'),
                 'total_pendente' => (float) (clone $query)->whereIn('tipo_documento', ['FT', 'FA', 'FG'])
@@ -1494,7 +1630,7 @@ class DocumentoFiscalService
             ? SharedDocumentoFiscal::doTenant()
             : TenantDocumentoFiscal::query();
 
-        $porMetodo = (clone $query)->whereIn('tipo_documento', ['RC', 'FR', 'FGR', 'TV', 'ACR'])
+        $porMetodo = (clone $query)->whereIn('tipo_documento', ['RC', 'RG', 'FR', 'FGR', 'TV', 'ACR'])
             ->where('estado', '!=', 'cancelado')
             ->whereBetween('data_emissao', [$inicioMes->toDateString(), $hoje->toDateString()])
             ->select('metodo_pagamento', DB::raw('COUNT(*) as quantidade'), DB::raw('SUM(total_liquido) as total'))
@@ -1507,12 +1643,12 @@ class DocumentoFiscalService
                 ],
             ]);
 
-        $totalPagoMes = (clone $query)->whereIn('tipo_documento', ['RC', 'FR', 'FGR', 'TV', 'ACR'])
+        $totalPagoMes = (clone $query)->whereIn('tipo_documento', ['RC', 'RG', 'FR', 'FGR', 'TV', 'ACR'])
             ->where('estado', '!=', 'cancelado')
             ->whereBetween('data_emissao', [$inicioMes->toDateString(), $hoje->toDateString()])
             ->sum('total_liquido');
 
-        $totalPagoAno = (clone $query)->whereIn('tipo_documento', ['RC', 'FR', 'FGR', 'TV', 'ACR'])
+        $totalPagoAno = (clone $query)->whereIn('tipo_documento', ['RC', 'RG', 'FR', 'FGR', 'TV', 'ACR'])
             ->where('estado', '!=', 'cancelado')
             ->whereBetween('data_emissao', [$inicioAno->toDateString(), $hoje->toDateString()])
             ->sum('total_liquido');
@@ -1618,8 +1754,8 @@ class DocumentoFiscalService
             ->when(!empty($filtros['cliente_id']), fn($q) => $q->where('cliente_id', $filtros['cliente_id']))
             ->when(!empty($filtros['data_inicio']), fn($q) => $q->whereDate('data_emissao', '>=', $filtros['data_inicio']))
             ->when(!empty($filtros['data_fim']), fn($q) => $q->whereDate('data_emissao', '<=', $filtros['data_fim']))
-            ->when(!empty($filtros['apenas_vendas']), fn($q) => $q->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'FG', 'FGR', 'TV']))
-            ->when(!empty($filtros['apenas_nao_vendas']), fn($q) => $q->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'FGEN', 'AC', 'ACR']))
+            ->when(!empty($filtros['apenas_vendas']), fn($q) => $q->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'RG', 'FG', 'FGR', 'TV']))
+            ->when(!empty($filtros['apenas_nao_vendas']), fn($q) => $q->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'RE', 'FGEN', 'AC', 'ACR']))
             ->when(!empty($filtros['apenas_auto_facturacao']), fn($q) => $q->where('auto_faturacao', true))
             ->orderBy('data_emissao', 'desc')->orderBy('hora_emissao', 'desc')->orderBy('numero', 'desc')
             ->get();
@@ -1938,6 +2074,8 @@ class DocumentoFiscalService
                 'NC' => 'C',
                 'ND' => 'D',
                 'RC' => 'R',
+                'RG' => 'RG',
+                'RE' => 'E',
                 'FG' => 'G',
                 'FGR' => 'GR',
                 'TV' => 'T',
@@ -2016,7 +2154,7 @@ class DocumentoFiscalService
         $modo = $this->getModo();
         $ano = now()->year;
 
-        $tipos = ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC', 'FG', 'FGR', 'TV'];
+        $tipos = ['FT', 'FR', 'FP', 'FA', 'NC', 'ND', 'RC', 'RG', 'RE', 'FG', 'FGR', 'TV'];
 
         $seriesMap = [
             'FT' => 'A',
@@ -2026,6 +2164,8 @@ class DocumentoFiscalService
             'NC' => 'C',
             'ND' => 'D',
             'RC' => 'R',
+            'RG' => 'RG',
+            'RE' => 'E',
             'FG' => 'G',
             'FGR' => 'GR',
             'TV' => 'T',
@@ -2122,6 +2262,8 @@ if ($temAutoFact) {
             'NC' => 'Notas de Crédito',
             'ND' => 'Notas de Débito',
             'RC' => 'Recibos',
+            'RG' => 'Outros Recibos',
+            'RE' => 'Recibos de Estorno',
             'FG' => 'Faturas Globais',
             'FGR' => 'Faturas Globais-Recibo',
             'TV' => 'Talões de Venda',
@@ -2155,7 +2297,10 @@ if ($temAutoFact) {
 
         $regras = [
             'FR' => ['dados_pagamento'],
+            'ACR' => ['dados_pagamento'],
             'RC' => ['fatura_id'],
+            'RG' => ['fatura_id'],
+            'RE' => ['fatura_id', 'motivo'],
             'NC' => ['fatura_id', 'motivo', 'itens'],
             'ND' => ['itens'],
             'FG' => ['periodo_referencia_inicio', 'periodo_referencia_fim', 'anexos', 'itens'],
@@ -2199,7 +2344,7 @@ if ($temAutoFact) {
             throw new \InvalidArgumentException('Auto-facturação só se aplica a FR (Art. 12.º n.º 1).');
         }
 
-        // Verificar origem para NC/ND/RC
+        // Verificar origem para documentos derivados.
         if (!empty($dados['fatura_id'])) {
             $origem = $this->isColectivo()
                 ? SharedDocumentoFiscal::doTenant()->find($dados['fatura_id'])
@@ -2223,8 +2368,8 @@ if ($temAutoFact) {
             if ($tipo === 'ND' && !in_array($origem->tipo_documento, ['FT', 'FG'], true)) {
                 throw new \InvalidArgumentException("ND só de FT ou FG. Tipo: {$origem->tipo_documento}");
             }
-            if ($tipo === 'RC' && !in_array($origem->tipo_documento, ['FT', 'FA', 'FP', 'FG', 'AC'], true)) {
-                throw new \InvalidArgumentException("RC só de FT/FA/FP/FG/AC. Tipo: {$origem->tipo_documento}");
+            if (in_array($tipo, ['RC', 'RG'], true) && !in_array($origem->tipo_documento, ['FT', 'FA', 'FP', 'FG', 'AC'], true)) {
+                throw new \InvalidArgumentException("Recibo só de FT/FA/FP/FG/AC. Tipo: {$origem->tipo_documento}");
             }
         }
     }
@@ -2339,10 +2484,25 @@ if ($temAutoFact) {
             ? SharedDocumentoFiscal::doTenant()
             : TenantDocumentoFiscal::query();
 
-        return (float) $query->where('fatura_id', $documento->id)
-            ->whereIn('tipo_documento', ['RC'])
+        $recibos = $query->where('fatura_id', $documento->id)
+            ->whereIn('tipo_documento', ['RC', 'RG'])
+            ->where('estado', '!=', 'cancelado')
+            ->get(['id', 'total_liquido']);
+        if ($recibos->isEmpty()) {
+            return 0.0;
+        }
+
+        $totalRecibos = (float) $recibos->sum('total_liquido');
+        $queryEstornos = $this->isColectivo()
+            ? SharedDocumentoFiscal::doTenant()
+            : TenantDocumentoFiscal::query();
+        $totalEstornado = (float) $queryEstornos
+            ->whereIn('fatura_id', $recibos->pluck('id'))
+            ->where('tipo_documento', 'RE')
             ->where('estado', '!=', 'cancelado')
             ->sum('total_liquido');
+
+        return max(0.0, $totalRecibos - $totalEstornado);
     }
 
     private function actualizarEstadoAposPagamento($documentoOrigem, float $valorPago): void

@@ -13,17 +13,26 @@ export type TipoDocumento =
   | "NC"
   | "ND"
   | "RC"
+  | "RG"
+  | "RE"
   | "FG"
   | "FGR"
   | "TV"
   | "FGEN"
   | "AC"
   | "ACR";
-export type EstadoDocumento = "emitido" | "paga" | "parcialmente_paga" | "cancelado" | "expirado";
+export type EstadoDocumento =
+  | "emitido"
+  | "paga"
+  | "parcialmente_paga"
+  | "cancelado"
+  | "expirado"
+  | "estornado"
+  | "parcialmente_estornado";
 export type MetodoPagamento = "transferencia" | "multibanco" | "dinheiro" | "cheque" | "cartao";
 
-export const TIPOS_VENDA: TipoDocumento[] = ["FT", "FR", "RC", "FG", "FGR", "TV"];
-export const TIPOS_NAO_VENDA: TipoDocumento[] = ["FP", "FA", "NC", "ND", "FGEN", "AC", "ACR"];
+export const TIPOS_VENDA: TipoDocumento[] = ["FT", "FR", "RC", "RG", "FG", "FGR", "TV"];
+export const TIPOS_NAO_VENDA: TipoDocumento[] = ["FP", "FA", "NC", "ND", "RE", "FGEN", "AC", "ACR"];
 export const TIPOS_DOCUMENTO_VENDA: TipoDocumento[] = ["FT", "FR", "FG", "FGR", "TV"];
 export const TIPOS_ORIGEM_NC: TipoDocumento[] = ["FT", "FR", "FG", "FGR"]; // Nota de Crédito
 export const TIPOS_ORIGEM_ND: TipoDocumento[] = ["FT", "FG"]; // Nota de Débito
@@ -259,6 +268,11 @@ export interface GerarReciboDTO {
   metodo_pagamento: MetodoPagamento;
   data_pagamento?: string;
   referencia?: string;
+}
+
+export interface EstornarReciboDTO {
+  valor: number;
+  motivo: string;
 }
 
 export interface VincularAdiantamentoDTO {
@@ -841,6 +855,12 @@ async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
     return response.data.data.map(this._enriquecerDocumento.bind(this));
   }
 
+  async estornarRecibo(documentoId: string, dados: EstornarReciboDTO): Promise<DocumentoFiscal> {
+    const response = await api.post<ApiResponse<DocumentoFiscal>>(`${this.baseUrl}/${documentoId}/estorno`, dados);
+    if (!response.data.success) throw new Error(response.data.message);
+    return this._enriquecerDocumento(response.data.data);
+  }
+
   // ── Adiantamentos ────────────────────────────────────────
   async vincularAdiantamento(
     adiantamentoId: string,
@@ -1146,6 +1166,8 @@ async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
       NC: "Nota de Crédito",
       ND: "Nota de Débito",
       RC: "Recibo",
+      RG: "Outros Recibos",
+      RE: "Recibo de Estorno",
       FG: "Factura Global",
       FGR: "Factura Global-Recibo",
       TV: "Talão de Venda",
@@ -1165,6 +1187,8 @@ async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
       NC: "red",
       ND: "amber",
       RC: "teal",
+      RG: "teal",
+      RE: "red",
       FG: "indigo",
       FGR: "indigo",
       TV: "slate",
@@ -1187,6 +1211,8 @@ async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
       emitido: "yellow",
       paga: "green",
       parcialmente_paga: "orange",
+      estornado: "red",
+      parcialmente_estornado: "orange",
       cancelado: "red",
       expirado: "gray",
     };
@@ -1198,6 +1224,8 @@ async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
       emitido: "Emitido",
       paga: "Pago",
       parcialmente_paga: "Parcial",
+      estornado: "Estornado",
+      parcialmente_estornado: "Parcialmente estornado",
       cancelado: "Cancelado",
       expirado: "Expirado",
     };
