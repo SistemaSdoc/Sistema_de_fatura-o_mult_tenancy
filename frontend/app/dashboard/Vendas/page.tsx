@@ -14,7 +14,6 @@ import {
   Info,
   User,
   Package,
-  FileText,
   Minus,
   Calculator,
   Search,
@@ -31,6 +30,7 @@ import type { Produto, CriarVendaPayload, DadosPagamento, TipoDocumentoFiscal } 
 import { documentoFiscalService } from "@/services/DocumentoFiscal";
 import { ModalDadosIncompletos } from "../../components/ModalDadosIncompletos";
 import { ToastNotification } from "@/components/ToastNotification";
+import { LinhaCampoFormulario } from "@/app/components/Formularios/LinhaCampoFormulario";
 
 import { clienteService, formatarNIF, type Cliente } from "@/services/clientes";
 
@@ -1611,15 +1611,9 @@ export default function NovaFaturaReciboPage() {
             </div>
 
             {/* ── Observações ── */}
-            <div className="flex flex-col sm:flex-row min-h-[44px]">
-              <div className="flex items-center gap-1.5 px-3 py-2.5 w-full sm:w-28 shrink-0" style={{ backgroundColor: colors.hover }}>
-                <FileText size={13} style={{ color: colors.blue }} />
-                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: colors.blue }}>
-                  Obs.
-                </span>
-              </div>
-              <div className="flex-1 px-3 py-2.5">
+            <LinhaCampoFormulario label="Obs." colors={colors} larguraLabel="sm:w-28" htmlFor="observacoes-venda">
                 <input
+                  id="observacoes-venda"
                   type="text"
                   placeholder="Observações adicionais…"
                   className="w-full px-3 py-1.5 text-sm outline-none"
@@ -1627,8 +1621,7 @@ export default function NovaFaturaReciboPage() {
                   value={observacoes}
                   onChange={(e) => setObservacoes(e.target.value)}
                 />
-              </div>
-            </div>
+            </LinhaCampoFormulario>
           </div>
         </div>
 

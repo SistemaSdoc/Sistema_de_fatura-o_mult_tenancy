@@ -7,6 +7,7 @@ import MainEmpresa from "@/app/components/MainEmpresa";
 import { ToastNotification } from "@/components/ToastNotification";
 import { useThemeColors } from "@/context/ThemeContext";
 import { documentoFiscalService } from "@/services/DocumentoFiscal";
+import { LinhaCampoFormulario } from "@/app/components/Formularios/LinhaCampoFormulario";
 
 interface ItemAutoFacturacao {
   descricao: string;
@@ -107,91 +108,39 @@ export default function AutoFacturacaoPage() {
 
   return (
     <MainEmpresa>
-      <main className="mx-auto max-w-6xl space-y-5 px-2 pb-8 sm:px-4" style={{ backgroundColor: colors.background }}>
+      <main className="mx-auto max-w-5xl space-y-3 px-2 pb-8 sm:px-4" style={{ backgroundColor: colors.background }}>
         {toast && <ToastNotification message={toast.message} type={toast.type} onClose={() => setToast(null)} colors={colors} />}
-        <header
-          className="relative mt-2 overflow-hidden px-5 py-5 text-white shadow-sm sm:px-7 sm:py-6"
-          style={{ background: `linear-gradient(120deg, ${colors.primary}, ${colors.blue ?? colors.secondary})` }}
-        >
-          <div className="absolute -right-8 -top-12 h-44 w-44 rounded-full border border-white/10" />
-          <div className="absolute -right-2 -top-6 h-32 w-32 rounded-full border border-white/10" />
-          <div className="relative flex items-start gap-3">
+        <header className="mt-2 flex items-center gap-2">
             <button
               type="button"
               onClick={() => router.back()}
               aria-label="Voltar"
-              className="mt-0.5 shrink-0 rounded-md bg-white/10 p-2 transition-colors hover:bg-white/20"
-            >
+              className="shrink-0 p-1.5 transition-opacity hover:opacity-70"
+              style={{ color: colors.primary }}>
               <ArrowLeft size={18} />
             </button>
-            <div className="min-w-0 flex-1">
-              <div className="mb-1 flex items-center gap-2 text-white/75">
-                <FileText size={14} />
-                <span className="text-[10px] font-semibold uppercase tracking-[0.18em]">Documentos fiscais</span>
-              </div>
-              <h1 className="text-xl font-bold sm:text-2xl">Auto-facturação</h1>
-              <p className="mt-1 max-w-2xl text-sm text-white/80">
-                Registe a aquisição de bens ou serviços e emita a Factura-Recibo com o respetivo pagamento.
-              </p>
-            </div>
-          </div>
+            <h1 className="text-lg font-bold" style={{ color: colors.secondary }}>Auto-facturação</h1>
         </header>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {[
-            { label: "Itens", value: String(itens.length), detalhe: "na aquisição", icon: ShoppingCart },
-            { label: "Subtotal", value: `${formatarMontante(subtotal)} Kz`, detalhe: "sem IVA", icon: FileText },
-            { label: "IVA", value: `${formatarMontante(totalIva)} Kz`, detalhe: "imposto estimado", icon: FileText },
-            { label: "Total", value: `${formatarMontante(total)} Kz`, detalhe: "a pagar", icon: CheckCircle2 },
-          ].map(({ label, value, detalhe, icon: Icone }, index) => (
-            <div
-              key={label}
-              className="flex min-w-0 items-start gap-2 border p-3 shadow-sm sm:gap-3 sm:p-4"
-              style={{ backgroundColor: colors.card, borderColor: colors.border }}
-            >
-              <span
-                className="rounded-md p-2"
-                style={{ backgroundColor: `${index === 3 ? colors.secondary : colors.primary}18`, color: index === 3 ? colors.secondary : colors.primary }}
-              >
-                <Icone size={16} />
-              </span>
-              <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>{label}</p>
-                <p className="truncate text-sm font-bold tabular-nums sm:text-base" style={{ color: index === 3 ? colors.secondary : colors.text }}>{value}</p>
-                <p className="hidden text-[10px] sm:block" style={{ color: colors.textSecondary }}>{detalhe}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <form onSubmit={emitir} className="space-y-4">
+        <form onSubmit={emitir} className="space-y-3">
           <section className="overflow-hidden border shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-            <div className="flex items-center gap-3 px-4 py-3" style={{ backgroundColor: colors.primary }}>
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-sm font-bold text-white">1</span>
-              <div>
-                <div className="flex items-center gap-2 text-white">
-                  <User size={15} />
-                  <span className="text-sm font-bold">Produtor e fundamento</span>
-                </div>
-                <p className="mt-0.5 text-xs text-white/75">Identificação do fornecedor e motivo da aquisição</p>
-              </div>
+            <div className="flex items-center gap-2 px-3 py-1.5" style={{ backgroundColor: colors.primary }}>
+              <User size={14} className="text-white" />
+              <span className="text-xs font-medium uppercase tracking-wider text-white">Dados da Aquisição</span>
             </div>
-            <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-5">
-              <label className="space-y-1 text-sm" style={{ color: colors.textSecondary }}>
-                Nome do produtor/fornecedor *
-                <input required maxLength={255} value={produtor} onChange={(e) => setProdutor(e.target.value)} className="w-full border px-3 py-2 text-sm" style={inputStyle} />
-              </label>
-              <label className="space-y-1 text-sm" style={{ color: colors.textSecondary }}>
-                NIF (se existir)
-                <input maxLength={20} value={nifProdutor} onChange={(e) => setNifProdutor(e.target.value)} className="w-full border px-3 py-2 text-sm" style={inputStyle} />
-              </label>
-              <label className="space-y-1 text-sm sm:col-span-2" style={{ color: colors.textSecondary }}>
-                Motivo da auto-facturação *
-                <input required maxLength={255} value={motivo} onChange={(e) => setMotivo(e.target.value)} className="w-full border px-3 py-2 text-sm" style={inputStyle} />
-              </label>
-              <label className="space-y-1 text-sm" style={{ color: colors.textSecondary }}>
-                Tipo de aquisição
+            <div className="divide-y" style={{ borderColor: colors.border }}>
+              <LinhaCampoFormulario label="Produtor/fornecedor *" colors={colors} htmlFor="autofact-produtor">
+                <input id="autofact-produtor" required maxLength={255} value={produtor} onChange={(e) => setProdutor(e.target.value)} className="w-full border px-3 py-2 text-sm" style={inputStyle} />
+              </LinhaCampoFormulario>
+              <LinhaCampoFormulario label="NIF (se existir)" colors={colors} htmlFor="autofact-nif">
+                <input id="autofact-nif" maxLength={20} value={nifProdutor} onChange={(e) => setNifProdutor(e.target.value)} className="w-full border px-3 py-2 text-sm" style={inputStyle} />
+              </LinhaCampoFormulario>
+              <LinhaCampoFormulario label="Motivo *" colors={colors} htmlFor="autofact-motivo">
+                <input id="autofact-motivo" required maxLength={255} value={motivo} onChange={(e) => setMotivo(e.target.value)} className="w-full border px-3 py-2 text-sm" style={inputStyle} />
+              </LinhaCampoFormulario>
+              <LinhaCampoFormulario label="Tipo de aquisição" colors={colors} htmlFor="autofact-tipo">
                 <select
+                  id="autofact-tipo"
                   value={tipoBem}
                   onChange={(e) => {
                     const value = e.target.value as "bem" | "servico";
@@ -203,31 +152,27 @@ export default function AutoFacturacaoPage() {
                   <option value="bem">Bens</option>
                   <option value="servico">Serviços</option>
                 </select>
-              </label>
-              <label className="flex items-center gap-2 text-sm sm:pt-6" style={{ color: colors.text }}>
+              </LinhaCampoFormulario>
+              <LinhaCampoFormulario label="Classificação" colors={colors}>
+                <label className="flex items-center gap-2 py-2 text-sm" style={{ color: colors.text }}>
                 <input type="checkbox" checked={bensEssenciais} disabled={tipoBem === "servico"} onChange={(e) => setBensEssenciais(e.target.checked)} />
                 Bens essenciais
-              </label>
+                </label>
+              </LinhaCampoFormulario>
             </div>
           </section>
 
           <section className="overflow-hidden border shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-            <div className="flex items-center justify-between gap-3 px-4 py-3" style={{ backgroundColor: colors.primary }}>
+            <div className="flex items-center justify-between gap-2 px-3 py-1.5" style={{ backgroundColor: colors.primary }}>
               <div className="flex items-center gap-2">
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-sm font-bold text-white">2</span>
-                <div className="flex items-center gap-2 text-white">
-                  <ShoppingCart size={15} />
-                  <div>
-                    <span className="block text-sm font-bold">Bens ou serviços</span>
-                    <span className="block text-xs text-white/75">Adicione os itens e respetivas taxas de IVA</span>
-                  </div>
-                </div>
+                <ShoppingCart size={14} className="text-white" />
+                <span className="text-xs font-medium uppercase tracking-wider text-white">Itens da Aquisição ({itens.length})</span>
               </div>
-              <button type="button" onClick={() => setItens((atuais) => [...atuais, novoItem()])} className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-white px-3 py-2 text-xs font-semibold transition-opacity hover:opacity-90" style={{ color: colors.primary }}>
+              <button type="button" onClick={() => setItens((atuais) => [...atuais, novoItem()])} className="inline-flex shrink-0 items-center gap-1 px-2 py-1 text-xs font-semibold text-white transition-opacity hover:opacity-80">
                 <Plus size={15} /> Adicionar item
               </button>
             </div>
-            <div className="space-y-3 p-4 sm:p-5">
+            <div className="space-y-3 p-3">
               {itens.map((item, index) => (
                 <div key={index} className="grid gap-3 border p-3 sm:grid-cols-[minmax(0,1fr)_90px_140px_110px_40px] sm:items-end sm:p-4" style={{ borderColor: colors.border, backgroundColor: colors.background }}>
                   <label className="space-y-1 text-xs font-medium" style={{ color: colors.textSecondary }}>
@@ -271,29 +216,27 @@ export default function AutoFacturacaoPage() {
           </section>
 
           <section className="overflow-hidden border shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-            <div className="flex items-center gap-3 px-4 py-3" style={{ backgroundColor: colors.primary }}>
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-sm font-bold text-white">3</span>
-              <div className="flex items-center gap-2 text-white">
-                <FileText size={15} />
-                <div>
-                  <span className="block text-sm font-bold">Pagamento</span>
-                  <span className="block text-xs text-white/75">Confirme como a aquisição foi liquidada</span>
-                </div>
-              </div>
+            <div className="flex items-center gap-2 px-3 py-1.5" style={{ backgroundColor: colors.primary }}>
+              <FileText size={14} className="text-white" />
+              <span className="text-xs font-medium uppercase tracking-wider text-white">Pagamento</span>
             </div>
-            <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-5">
-              <label className="space-y-1 text-sm" style={{ color: colors.textSecondary }}>
-                Método de pagamento
-                <select value={metodoPagamento} onChange={(e) => setMetodoPagamento(e.target.value as typeof metodoPagamento)} className="w-full border px-3 py-2 text-sm" style={inputStyle}>
+            <div className="divide-y" style={{ borderColor: colors.border }}>
+              <LinhaCampoFormulario label="Método de pagamento" colors={colors} htmlFor="autofact-metodo">
+                <select id="autofact-metodo" value={metodoPagamento} onChange={(e) => setMetodoPagamento(e.target.value as typeof metodoPagamento)} className="w-full border px-3 py-2 text-sm" style={inputStyle}>
                   <option value="dinheiro">Dinheiro</option>
                   <option value="transferencia">Transferência</option>
                   <option value="cheque">Cheque</option>
                 </select>
-              </label>
-              <label className="space-y-1 text-sm" style={{ color: colors.textSecondary }}>
-                Referência do pagamento
-                <input maxLength={100} value={referenciaPagamento} onChange={(e) => setReferenciaPagamento(e.target.value)} className="w-full border px-3 py-2 text-sm" style={inputStyle} />
-              </label>
+              </LinhaCampoFormulario>
+              <LinhaCampoFormulario label="Referência do pagamento" colors={colors} htmlFor="autofact-referencia">
+                <input id="autofact-referencia" maxLength={100} value={referenciaPagamento} onChange={(e) => setReferenciaPagamento(e.target.value)} className="w-full border px-3 py-2 text-sm" style={inputStyle} />
+              </LinhaCampoFormulario>
+            </div>
+            <div className="border-t px-4 py-3" style={{ borderColor: colors.border }}>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-sm font-semibold" style={{ color: colors.text }}>Total a pagar</span>
+                <span className="text-lg font-bold tabular-nums" style={{ color: colors.secondary }}>{formatarMontante(total)} Kz</span>
+              </div>
             </div>
           </section>
 
@@ -301,7 +244,7 @@ export default function AutoFacturacaoPage() {
             <p className="text-xs" style={{ color: colors.textSecondary }}>
               O documento será emitido pelo valor total de <strong style={{ color: colors.text }}>{formatarMontante(total)} Kz</strong>.
             </p>
-            <button type="submit" disabled={aEmitir} className="flex items-center justify-center gap-2 px-6 py-3 text-sm font-bold text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50" style={{ backgroundColor: colors.primary }}>
+            <button type="submit" disabled={aEmitir} className="flex w-full items-center justify-center gap-2 border px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto" style={{ backgroundColor: colors.primary, borderColor: colors.primary }}>
               {aEmitir ? "A emitir..." : <><CheckCircle2 size={17} /> Emitir Factura-Recibo</>}
             </button>
           </div>
