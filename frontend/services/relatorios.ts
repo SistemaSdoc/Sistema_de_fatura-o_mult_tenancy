@@ -763,12 +763,10 @@ export function getPeriodoLabel(tipo: PeriodoTipo): string {
 
 export function formatarData(data: string | null): string {
     if (!data) return "-";
-    try {
-        const [ano, mes, dia] = data.split("-");
-        return `${dia}/${mes}/${ano}`;
-    } catch {
-        return data;
-    }
+    const dataIso = data.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!dataIso) return data;
+    const [, ano, mes, dia] = dataIso;
+    return `${dia}/${mes}/${ano}`;
 }
 
 export function formatarDataInput(data: Date): string {

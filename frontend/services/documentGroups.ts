@@ -1,16 +1,24 @@
+export const FATURAJA_GRAFICO_CORES = [
+  "#123859",
+  "#F9941F",
+  "#315F7F",
+  "#FBB35E",
+  "#7893A8",
+] as const;
+
 export const DOCUMENT_GROUPS = [
-  { key: "faturacao", label: "Facturação de Vendas", color: "#123859", types: ["FT", "FR", "FG", "FGR", "TV", "AF"] },
-  { key: "recebimentos", label: "Recebimentos", color: "#10B981", types: ["RC", "RG", "ACR"] },
-  { key: "correcoes", label: "Correcções e Estornos", color: "#EF4444", types: ["NC", "ND", "RE"] },
-  { key: "pre_venda", label: "Adiantamentos e Propostas", color: "#F59E0B", types: ["FA", "FP"] },
-  { key: "sectoriais", label: "Sectoriais", color: "#8B5CF6", types: ["AC", "FGEN"] },
+  { key: "faturacao", label: "Facturação de Vendas", color: FATURAJA_GRAFICO_CORES[0], types: ["FT", "FR", "FG", "FGR", "TV", "AF"] },
+  { key: "recebimentos", label: "Recebimentos", color: FATURAJA_GRAFICO_CORES[1], types: ["RC", "RG", "ACR"] },
+  { key: "correcoes", label: "Correcções e Estornos", color: FATURAJA_GRAFICO_CORES[2], types: ["NC", "ND", "RE"] },
+  { key: "pre_venda", label: "Adiantamentos e Propostas", color: FATURAJA_GRAFICO_CORES[3], types: ["FA", "FP"] },
+  { key: "sectoriais", label: "Sectoriais", color: FATURAJA_GRAFICO_CORES[4], types: ["AC", "FGEN"] },
 ] as const;
 
 const IMPACT_GROUPS = [
-  { key: "faturacao", label: "Facturação Bruta", color: "#123859", types: ["FT", "FR", "FG", "FGR", "TV", "AF"] },
-  { key: "recebimentos", label: "Recebimentos", color: "#10B981", types: ["RC", "RG", "ACR"] },
-  { key: "regularizacoes", label: "Saídas/Reduções", color: "#EF4444", types: ["NC", "RE"] },
-  { key: "pendente", label: "Valores Pendentes", color: "#F59E0B", types: ["FT", "FA"] },
+  { key: "faturacao", label: "Facturação Bruta", color: FATURAJA_GRAFICO_CORES[0], types: ["FT", "FR", "FG", "FGR", "TV", "AF"] },
+  { key: "recebimentos", label: "Recebimentos", color: FATURAJA_GRAFICO_CORES[1], types: ["RC", "RG", "ACR"] },
+  { key: "regularizacoes", label: "Saídas/Reduções", color: FATURAJA_GRAFICO_CORES[2], types: ["NC", "RE"] },
+  { key: "pendente", label: "Valores Pendentes", color: FATURAJA_GRAFICO_CORES[3], types: ["FT", "FA"] },
 ] as const;
 
 const PAGOS_POR_TIPO = new Set(["FR", "RC", "RG", "ACR", "FGR", "TV"]);
@@ -82,9 +90,9 @@ export function agruparEstadosPorTipo(rows: DocumentoEstadoResumo[]): GrupoGrafi
     result.set(grupo, (result.get(grupo) ?? 0) + Number(row.quantidade ?? 0));
   }
   return [
-    { grupo: "Pagos/Liquidados", quantidade: result.get("Pagos/Liquidados") ?? 0, valor: 0, cor: "#10B981" },
-    { grupo: "Emitidos/A Receber", quantidade: result.get("Emitidos/A Receber") ?? 0, valor: 0, cor: "#F59E0B" },
-    { grupo: "Cancelados/Estornados", quantidade: result.get("Cancelados/Estornados") ?? 0, valor: 0, cor: "#EF4444" },
+    { grupo: "Pagos/Liquidados", quantidade: result.get("Pagos/Liquidados") ?? 0, valor: 0, cor: FATURAJA_GRAFICO_CORES[0] },
+    { grupo: "Emitidos/A Receber", quantidade: result.get("Emitidos/A Receber") ?? 0, valor: 0, cor: FATURAJA_GRAFICO_CORES[1] },
+    { grupo: "Cancelados/Estornados", quantidade: result.get("Cancelados/Estornados") ?? 0, valor: 0, cor: FATURAJA_GRAFICO_CORES[4] },
   ];
 }
 
@@ -95,9 +103,9 @@ export function agruparEstadosDocumentos(documents: DocumentoItemEstado[]): Grup
     result.set(grupo, (result.get(grupo) ?? 0) + 1);
   }
   return [
-    { grupo: "Pagos/Liquidados", quantidade: result.get("Pagos/Liquidados") ?? 0, valor: 0, cor: "#10B981" },
-    { grupo: "Emitidos/A Receber", quantidade: result.get("Emitidos/A Receber") ?? 0, valor: 0, cor: "#F59E0B" },
-    { grupo: "Cancelados/Estornados", quantidade: result.get("Cancelados/Estornados") ?? 0, valor: 0, cor: "#EF4444" },
+    { grupo: "Pagos/Liquidados", quantidade: result.get("Pagos/Liquidados") ?? 0, valor: 0, cor: FATURAJA_GRAFICO_CORES[0] },
+    { grupo: "Emitidos/A Receber", quantidade: result.get("Emitidos/A Receber") ?? 0, valor: 0, cor: FATURAJA_GRAFICO_CORES[1] },
+    { grupo: "Cancelados/Estornados", quantidade: result.get("Cancelados/Estornados") ?? 0, valor: 0, cor: FATURAJA_GRAFICO_CORES[4] },
   ];
 }
 

@@ -13,9 +13,11 @@ import {
   Cell,
   Legend,
   TooltipProps,
+  LegendPayload,
 } from "recharts";
 import { FileText, Package, Receipt, TrendingUp } from "lucide-react";
 import type { ThemeColors } from "@/context/ThemeContext";
+import { FATURAJA_GRAFICO_CORES } from "@/services/documentGroups";
 
 type ProdutoItem = {
   nome: string;
@@ -62,9 +64,24 @@ export function DashboardCharts({
   formatterValor,
   formatterTotal,
 }: DashboardChartsProps) {
+  const isDarkMode = colors.background === "#171717";
+  const renderLegend = ({ payload }: { payload?: ReadonlyArray<LegendPayload> }) => (
+    <ul className="flex flex-col gap-1">
+      {payload?.map((item, index) => {
+        const corLegenda = index % 2 === 0 ? colors.secondary : "#FFFFFF";
+        return (
+          <li key={`${item.value ?? "legend"}-${index}`} className="flex items-center gap-2 text-[11px] leading-5">
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: corLegenda }} />
+            <span style={{ color: corLegenda }}>{item.value}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+
   return (
     <>
-      <div className="grid grid-cols-1 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div
           className="p-3 sm:p-4 shadow border"
           style={{ backgroundColor: colors.card, borderColor: colors.border }}
@@ -91,7 +108,7 @@ export function DashboardCharts({
                     {produtosData.map((_, index) => (
                       <Cell
                         key={index}
-                        fill={index === 0 ? colors.secondary : `${colors.secondary}${Math.max(50, 95 - index * 15)}`}
+                        fill={FATURAJA_GRAFICO_CORES[index % FATURAJA_GRAFICO_CORES.length]}
                       />
                     ))}
                   </Bar>
@@ -105,9 +122,6 @@ export function DashboardCharts({
           </div>
         </div>
 
-      </div>
-
-      <div className="grid grid-cols-1 gap-4">
         <div
           className="p-3 sm:p-4 shadow border"
           style={{ backgroundColor: colors.card, borderColor: colors.border }}
@@ -129,7 +143,6 @@ export function DashboardCharts({
                     innerRadius="38%"
                     outerRadius="70%"
                     paddingAngle={3}
-                    label={({ name, percent }) => `${name}: ${((percent ?? 0) * 100).toFixed(0)}%`}
                   >
                     {documentosPorFuncao.map((item) => <Cell key={item.grupo} fill={item.cor} />)}
                   </Pie>
@@ -137,7 +150,14 @@ export function DashboardCharts({
                     contentStyle={tooltipStyle}
                     formatter={(value: ChartValue) => [`${Number(scalarChartValue(value) ?? 0)} documentos`, "Quantidade"]}
                   />
-                  <Legend />
+                  <Legend
+                    layout="vertical"
+                    align="right"
+                    verticalAlign="middle"
+                    iconType="circle"
+                    content={isDarkMode ? renderLegend : undefined}
+                    wrapperStyle={{ fontSize: 11, lineHeight: "1.8" }}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
@@ -147,7 +167,9 @@ export function DashboardCharts({
             )}
           </div>
         </div>
+      </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div
           className="p-3 sm:p-4 shadow border"
           style={{ backgroundColor: colors.card, borderColor: colors.border }}
@@ -185,7 +207,7 @@ export function DashboardCharts({
             <FileText style={{ color: colors.secondary }} size={18} />
             Estado dos Documentos
           </h2>
-          <div className="h-44 sm:h-52 w-full">
+          <div className="h-56 sm:h-64 w-full">
             {documentosPorEstado.some((item) => item.quantidade > 0) ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -198,8 +220,6 @@ export function DashboardCharts({
                     paddingAngle={4}
                     dataKey="quantidade"
                     nameKey="grupo"
-                    label={({ percent }) => `${((percent ?? 0) * 100).toFixed(0)}%`}
-                    labelLine={false}
                   >
                     {documentosPorEstado.map((item) => <Cell key={item.grupo} fill={item.cor} />)}
                   </Pie>
@@ -207,7 +227,14 @@ export function DashboardCharts({
                     contentStyle={tooltipStyle}
                     formatter={(value: ChartValue) => [`${Number(scalarChartValue(value) ?? 0)} documentos`, "Quantidade"]}
                   />
-                  <Legend />
+                  <Legend
+                    layout="vertical"
+                    align="right"
+                    verticalAlign="middle"
+                    iconType="circle"
+                    content={isDarkMode ? renderLegend : undefined}
+                    wrapperStyle={{ fontSize: 11, lineHeight: "1.8" }}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             ) : (

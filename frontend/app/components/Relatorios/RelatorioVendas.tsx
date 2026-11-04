@@ -99,9 +99,24 @@ export function RelatorioVendasComponent({
 
       <SecaoGrafico titulo="Volume de Documentos Emitidos" colors={colors}>
         {documentosPorFuncao.some((item) => item.quantidade > 0) ? (
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height={280}>
             <PieChart>
-              <Pie data={documentosPorFuncao} dataKey="quantidade" nameKey="grupo" cx="50%" cy="50%" innerRadius="38%" outerRadius="70%" paddingAngle={3}>
+              <Pie
+                data={documentosPorFuncao}
+                dataKey="quantidade"
+                nameKey="grupo"
+                cx="50%"
+                cy="46%"
+                innerRadius={0}
+                outerRadius="62%"
+                paddingAngle={3}
+                label={({ x, y, percent }) => percent ? (
+                  <text x={x} y={y} fill={colors.text} fontSize={12} fontWeight={600} textAnchor="middle" dominantBaseline="central">
+                    {(percent * 100).toFixed(0)}%
+                  </text>
+                ) : null}
+                labelLine={false}
+              >
                 {documentosPorFuncao.map((item) => <Cell key={item.grupo} fill={item.cor} />)}
               </Pie>
               <Tooltip formatter={(value) => [`${Number(value ?? 0)} documentos`, "Quantidade"]} contentStyle={tooltipStyle(colors)} />
@@ -111,35 +126,52 @@ export function RelatorioVendasComponent({
         ) : <SemDados colors={colors} />}
       </SecaoGrafico>
 
-      <SecaoGrafico titulo="Balanço Financeiro (Kz)" colors={colors}>
-        {impactoFinanceiro.some((item) => item.valor > 0) ? (
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={impactoFinanceiro} margin={{ bottom: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
-              <XAxis dataKey="grupo" interval={0} angle={-15} textAnchor="end" height={55} tick={{ fontSize: 10, fill: colors.textSecondary }} />
-              <YAxis tick={{ fontSize: 10, fill: colors.textSecondary }} />
-              <Tooltip formatter={(value) => [formatarKwanza(Number(value ?? 0)), "Valor"]} contentStyle={tooltipStyle(colors)} />
-              <Bar dataKey="valor" name="Valor" radius={[3, 3, 0, 0]}>
-                {impactoFinanceiro.map((item) => <Cell key={item.grupo} fill={item.cor} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        ) : <SemDados colors={colors} />}
-      </SecaoGrafico>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <SecaoGrafico titulo="Balanço Financeiro (Kz)" colors={colors}>
+          {impactoFinanceiro.some((item) => item.valor > 0) ? (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={impactoFinanceiro} margin={{ bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+                <XAxis dataKey="grupo" interval={0} angle={-15} textAnchor="end" height={55} tick={{ fontSize: 10, fill: colors.textSecondary }} />
+                <YAxis tick={{ fontSize: 10, fill: colors.textSecondary }} />
+                <Tooltip formatter={(value) => [formatarKwanza(Number(value ?? 0)), "Valor"]} contentStyle={tooltipStyle(colors)} />
+                <Bar dataKey="valor" name="Valor" radius={[3, 3, 0, 0]}>
+                  {impactoFinanceiro.map((item) => <Cell key={item.grupo} fill={item.cor} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <SemDados colors={colors} />}
+        </SecaoGrafico>
 
-      <SecaoGrafico titulo="Estado dos Documentos" colors={colors}>
-        {documentosPorEstado.some((item) => item.quantidade > 0) ? (
-          <ResponsiveContainer width="100%" height={250}>
-            <PieChart>
-              <Pie data={documentosPorEstado} dataKey="quantidade" nameKey="grupo" cx="50%" cy="50%" innerRadius="38%" outerRadius="70%" paddingAngle={4}>
-                {documentosPorEstado.map((item) => <Cell key={item.grupo} fill={item.cor} />)}
-              </Pie>
-              <Tooltip formatter={(value) => [`${Number(value ?? 0)} documentos`, "Quantidade"]} contentStyle={tooltipStyle(colors)} />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-        ) : <SemDados colors={colors} />}
-      </SecaoGrafico>
+        <SecaoGrafico titulo="Estado dos Documentos" colors={colors}>
+          {documentosPorEstado.some((item) => item.quantidade > 0) ? (
+            <ResponsiveContainer width="100%" height={280}>
+              <PieChart>
+                <Pie
+                  data={documentosPorEstado}
+                  dataKey="quantidade"
+                  nameKey="grupo"
+                  cx="50%"
+                  cy="46%"
+                  innerRadius={0}
+                  outerRadius="62%"
+                  paddingAngle={4}
+                  label={({ x, y, percent }) => percent ? (
+                    <text x={x} y={y} fill={colors.text} fontSize={12} fontWeight={600} textAnchor="middle" dominantBaseline="central">
+                      {(percent * 100).toFixed(0)}%
+                    </text>
+                  ) : null}
+                  labelLine={false}
+                >
+                  {documentosPorEstado.map((item) => <Cell key={item.grupo} fill={item.cor} />)}
+                </Pie>
+                <Tooltip formatter={(value) => [`${Number(value ?? 0)} documentos`, "Quantidade"]} contentStyle={tooltipStyle(colors)} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : <SemDados colors={colors} />}
+        </SecaoGrafico>
+      </div>
 
       {/* ÚLTIMAS VENDAS */}
       <SecaoGrafico titulo="Últimas Vendas" colors={colors}>

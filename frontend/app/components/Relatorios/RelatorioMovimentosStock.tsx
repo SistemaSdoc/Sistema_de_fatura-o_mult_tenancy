@@ -44,6 +44,7 @@ export function RelatorioMovimentosStockComponent({
   const dadosMovAgrupado = useMemo(() => {
     return relatorioMovimentos?.agrupado ?? [];
   }, [relatorioMovimentos]);
+  const mostrarGraficoUnico = (dadosMovPorTipo.length > 0) !== (dadosMovAgrupado.length > 0);
 
   const handleAplicarFiltros = () => {
     onCarregar({
@@ -152,38 +153,44 @@ export function RelatorioMovimentosStockComponent({
         />
       </div>
 
-      {dadosMovPorTipo.length > 0 && (
-        <SecaoGrafico titulo="Movimentos por Tipo" colors={colors}>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={dadosMovPorTipo}>
-              <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
-              <XAxis dataKey="tipo" tick={{ fontSize: 10, fill: colors.textSecondary }} />
-              <YAxis yAxisId="left" tick={{ fontSize: 10, fill: colors.textSecondary }} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: colors.textSecondary }} />
-              <Tooltip contentStyle={tooltipStyle(colors)} />
-              <Legend />
-              <Bar yAxisId="left" dataKey="registos" fill={colors.primary} name="Nº Registos" radius={[2, 2, 0, 0]} />
-              <Bar yAxisId="right" dataKey="quantidade" fill={colors.secondary} name="Quantidade" radius={[2, 2, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </SecaoGrafico>
-      )}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {dadosMovPorTipo.length > 0 && (
+          <div className={mostrarGraficoUnico ? "lg:col-span-2" : ""}>
+            <SecaoGrafico titulo="Movimentos por Tipo" colors={colors} semBorda>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={dadosMovPorTipo}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+                  <XAxis dataKey="tipo" tick={{ fontSize: 10, fill: colors.textSecondary }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 10, fill: colors.textSecondary }} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: colors.textSecondary }} />
+                  <Tooltip contentStyle={tooltipStyle(colors)} />
+                  <Legend />
+                  <Bar yAxisId="left" dataKey="registos" fill={colors.primary} name="Nº Registos" radius={[2, 2, 0, 0]} />
+                  <Bar yAxisId="right" dataKey="quantidade" fill={colors.secondary} name="Quantidade" radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </SecaoGrafico>
+          </div>
+        )}
 
-      {dadosMovAgrupado.length > 0 && (
-        <SecaoGrafico titulo="Evolução — Entradas vs Saídas" colors={colors}>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={dadosMovAgrupado}>
-              <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
-              <XAxis dataKey="label" tick={{ fontSize: 10, fill: colors.textSecondary }} />
-              <YAxis tick={{ fontSize: 10, fill: colors.textSecondary }} />
-              <Tooltip contentStyle={tooltipStyle(colors)} />
-              <Legend />
-              <Bar dataKey="entradas" fill={colors.secondary} name="Entradas" radius={[2, 2, 0, 0]} />
-              <Bar dataKey="saidas" fill={colors.primary} name="Saídas" radius={[2, 2, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </SecaoGrafico>
-      )}
+        {dadosMovAgrupado.length > 0 && (
+          <div className={mostrarGraficoUnico ? "lg:col-span-2" : ""}>
+            <SecaoGrafico titulo="Evolução — Entradas vs Saídas" colors={colors} semBorda>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={dadosMovAgrupado}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: colors.textSecondary }} />
+                  <YAxis tick={{ fontSize: 10, fill: colors.textSecondary }} />
+                  <Tooltip contentStyle={tooltipStyle(colors)} />
+                  <Legend />
+                  <Bar dataKey="entradas" fill={colors.secondary} name="Entradas" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="saidas" fill={colors.primary} name="Saídas" radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </SecaoGrafico>
+          </div>
+        )}
+      </div>
 
       <SecaoGrafico titulo="Detalhe de Movimentos" colors={colors}>
         {(relatorioMovimentos.movimentos?.length ?? 0) > 0 ? (

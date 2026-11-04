@@ -302,7 +302,7 @@ export default function RelatoriosPage() {
     }
     setExportandoPDF(true);
     try {
-      await exportarPDF(activeTab, dados, getPeriodoAtivo());
+      await exportarPDF(activeTab, dados, getPeriodoAtivo(), user?.empresa);
       showToast("PDF exportado", "success", "Ficheiro PDF exportado com sucesso");
     } catch {
       showToast("Erro ao exportar", "error", "Não foi possível gerar o ficheiro PDF");

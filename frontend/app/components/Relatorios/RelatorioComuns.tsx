@@ -26,12 +26,14 @@ export function KpiCell({ label, value, sub, color, colors, border, last, alerta
   );
 }
 
-export function SecaoGrafico({ titulo, children, colors }: { titulo: string; children: React.ReactNode; colors: any }) {
+export function SecaoGrafico({ titulo, children, colors, semBorda = false }: {
+  titulo: string; children: React.ReactNode; colors: any; semBorda?: boolean;
+}) {
   return (
-    <div className="border" style={{ borderColor: colors.border, backgroundColor: colors.card }}>
+    <div className={semBorda ? "" : "border"} style={{ borderColor: colors.border, backgroundColor: colors.card }}>
       <div
-        className="px-4 py-2 border-b flex items-center gap-2"
-        style={{ borderColor: colors.border, backgroundColor: colors.hover }}
+        className={`px-4 py-2 flex items-center gap-2${semBorda ? "" : " border-b"}`}
+        style={{ borderColor: colors.border, backgroundColor: semBorda ? "transparent" : colors.hover }}
       >
         <span className="w-1.5 h-4 inline-block" style={{ backgroundColor: colors.primary }} />
         <p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: colors.textSecondary }}>
