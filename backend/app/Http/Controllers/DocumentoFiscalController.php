@@ -259,7 +259,7 @@ class DocumentoFiscalController extends Controller
             $this->verificarAcessoUsuario();
 
             $filtros = $request->validate([
-                'tipo'                    => 'nullable|in:FT,FR,FP,FA,NC,ND,RC,RG,RE',
+                'tipo'                    => 'nullable|in:FT,FR,AF,FP,FA,NC,ND,RC,RG,RE,FG,FGR,TV,FGEN,AC,ACR',
                 'estado'                  => 'nullable|in:emitido,paga,parcialmente_paga,cancelado,expirado,estornado,parcialmente_estornado',
                 'cliente_id'              => 'nullable|uuid|exists:clientes,id',
                 'cliente_nome'            => 'nullable|string|max:255',
@@ -269,6 +269,7 @@ class DocumentoFiscalController extends Controller
                 'adiantamentos_pendentes' => 'nullable|in:0,1,true,false',
                 'proformas_pendentes'     => 'nullable|in:0,1,true,false',
                 'apenas_vendas'           => 'nullable|in:0,1,true,false',
+                'incluir_auto_facturacao' => 'nullable|in:0,1,true,false',
                 'apenas_nao_vendas'       => 'nullable|in:0,1,true,false',
                 'per_page'                => 'nullable|integer|min:1|max:100',
                 'page'                    => 'nullable|integer|min:1',
@@ -279,6 +280,7 @@ class DocumentoFiscalController extends Controller
 
             $booleans = [
                 'apenas_vendas',
+                'incluir_auto_facturacao',
                 'apenas_nao_vendas',
                 'pendentes',
                 'adiantamentos_pendentes',
@@ -371,7 +373,7 @@ public function emitir(Request $request): JsonResponse
         }
 
         $dados = $request->validate([
-            'tipo_documento'             => 'required|in:FT,FR,FP,FA,NC,ND,RC,AC,FGEN,ACR',
+            'tipo_documento'             => 'required|in:FT,FR,FP,FA,NC,ND,RC,AC,FGEN',
             'venda_id'                   => 'nullable|uuid|exists:vendas,id',
             'cliente_id'                 => ['nullable', 'uuid', $regraClienteExiste],
             'cliente_nome'               => 'nullable|string|max:255',
@@ -761,6 +763,38 @@ public function emitir(Request $request): JsonResponse
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
             return $this->erroInterno('Erro ao emitir Aviso de Cobrança', $e);
+        }
+    }
+
+    public function emitirAvisoCobrancaRecibo(Request $request, string $id): JsonResponse
+    {
+        $modo = $this->getModo();
+
+        try {
+            $this->verificarAcessoUsuario();
+            $dados = $request->validate([
+                'metodo_pagamento' => 'required|in:transferencia,multibanco,dinheiro,cheque,cartao',
+                'valor'             => 'required|numeric|min:0.01',
+                'data_pagamento'    => 'nullable|date',
+                'referencia'        => 'nullable|string|max:100',
+            ]);
+
+            $documento = $this->documentoService->emitirAvisoCobrancaRecibo($id, $dados);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Aviso de Cobrança-Recibo emitido com sucesso.',
+                'data' => $documento,
+                'modo' => $modo,
+            ], 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'message' => 'Erro de validação', 'errors' => $e->errors()], 422);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
+            return response()->json(['success' => false, 'message' => 'Aviso de Cobrança não encontrado.'], 404);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            return $this->erroInterno('Erro ao emitir Aviso de Cobrança-Recibo', $e);
         }
     }
 
@@ -1253,7 +1287,7 @@ public function emitirTalaoVenda(Request $request)
 }
 
 /**
- * Auto-Facturação (FR com flag) — Art. 11.º-14.º do DP 71/25.
+ * Auto-Facturação (AF) — Art. 11.º-14.º do DP 71/25.
  * Regime para aquisição de bens/serviços a produtores primários sem NIF.
  * Aplica retenção na fonte (IRT ou Imposto Industrial).
  */
@@ -1482,7 +1516,7 @@ public function emitirAutoFacturacao(Request $request)
 
             $dados = $this->documentoService->dadosParaPdf($documento);
 
-            if (in_array($documento->tipo_documento, ['RC', 'RG'], true) && $documento->fatura_id) {
+            if (in_array($documento->tipo_documento, ['RC', 'RG', 'ACR'], true) && $documento->fatura_id) {
                 if ($this->isColectivo()) {
                     $docInfo = SharedDocumentoFiscal::doTenant()->with(['itens.produto', 'cliente'])->where('id', $documento->fatura_id)->first();
                 } else {
@@ -1556,7 +1590,7 @@ public function emitirAutoFacturacao(Request $request)
             }
 
             $documentoOrigem = null;
-            if (in_array($documento->tipo_documento, ['RC', 'RG'], true) && $documento->fatura_id) {
+            if (in_array($documento->tipo_documento, ['RC', 'RG', 'ACR'], true) && $documento->fatura_id) {
                 if ($this->isColectivo()) {
                     $documentoOrigem = SharedDocumentoFiscal::doTenant()->with(['itens.produto', 'cliente'])->where('id', $documento->fatura_id)->first();
                 } else {

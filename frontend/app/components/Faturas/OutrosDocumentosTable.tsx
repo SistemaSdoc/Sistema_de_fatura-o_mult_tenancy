@@ -8,6 +8,7 @@ import {
   FileCheck,
   Printer,
   Download,
+  CircleDollarSign,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -74,6 +75,7 @@ interface OutrosDocumentosTableProps {
   onBaixarPdf: (doc: DocumentoFiscal) => Promise<void>;
   onConverterProforma: (doc: DocumentoFiscal) => Promise<void>;
   convertendoProforma: string | null;
+  onEmitirAcr: (doc: DocumentoFiscal) => void;
   formatKz: (v: number | string | undefined) => string;
   documentoFiscalService: {
     getNomeCliente: (doc: DocumentoFiscal) => string;
@@ -284,6 +286,7 @@ export default function OutrosDocumentosTable({
   onBaixarPdf,
   onConverterProforma,
   convertendoProforma,
+  onEmitirAcr,
   formatKz,
   documentoFiscalService,
   colors,
@@ -377,6 +380,18 @@ export default function OutrosDocumentosTable({
                   Converter em fatura
                 </button>
               )}
+              {doc.tipo_documento === "AC" && doc.estado === "emitido" && (
+                <button
+                  onClick={() => {
+                    onEmitirAcr(doc);
+                    setOpen(false);
+                  }}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:opacity-70 whitespace-nowrap"
+                  style={{ color: colors.success }}
+                >
+                  <CircleDollarSign size={12} /> Registar pagamento e emitir ACR
+                </button>
+              )}
               <button
                 onClick={() => {
                   onImprimirA4(doc);
@@ -419,6 +434,15 @@ export default function OutrosDocumentosTable({
   /* ── Acções por documento (desktop - várias opções) ── */
   const acoesDesktop = (doc: DocumentoFiscal) => (
     <div className="flex justify-center gap-0.5">
+      {doc.tipo_documento === "AC" && doc.estado === "emitido" && (
+        <IconBtn
+          onClick={() => onEmitirAcr(doc)}
+          title="Registar pagamento e emitir ACR"
+          color={colors.success}
+        >
+          <CircleDollarSign size={16} />
+        </IconBtn>
+      )}
       {doc.tipo_documento === "FP" && !doc.fatura_convertida && !["cancelado", "expirado"].includes(doc.estado) && (
         <IconBtn
           onClick={() => void onConverterProforma(doc)}

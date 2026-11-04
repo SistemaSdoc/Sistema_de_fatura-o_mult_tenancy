@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 export type TipoDocumento =
   | "FT"
   | "FR"
+  | "AF"
   | "FP"
   | "FA"
   | "NC"
@@ -32,7 +33,7 @@ export type EstadoDocumento =
 export type MetodoPagamento = "transferencia" | "multibanco" | "dinheiro" | "cheque" | "cartao";
 
 export const TIPOS_VENDA: TipoDocumento[] = ["FT", "FR", "RC", "RG", "FG", "FGR", "TV"];
-export const TIPOS_NAO_VENDA: TipoDocumento[] = ["FP", "FA", "NC", "ND", "RE", "FGEN", "AC", "ACR"];
+export const TIPOS_NAO_VENDA: TipoDocumento[] = ["AF", "FP", "FA", "NC", "ND", "RE", "FGEN", "AC", "ACR"];
 export const TIPOS_DOCUMENTO_VENDA: TipoDocumento[] = ["FT", "FR", "FG", "FGR", "TV"];
 export const TIPOS_ORIGEM_NC: TipoDocumento[] = ["FT", "FR", "FG", "FGR"]; // Nota de Crédito
 export const TIPOS_ORIGEM_ND: TipoDocumento[] = ["FT", "FG"]; // Nota de Débito
@@ -176,6 +177,7 @@ export interface FiltrosDocumento {
   adiantamentos_pendentes?: boolean;
   proformas_pendentes?: boolean;
   apenas_vendas?: boolean;
+  incluir_auto_facturacao?: boolean;
   apenas_nao_vendas?: boolean;
   per_page?: number;
   page?: number;
@@ -308,6 +310,13 @@ export interface NotaDebitoAutonomaDTO extends Omit<CriarNotaDebitoDTO, "cliente
 export interface AvisoCobrancaDTO extends Omit<EmitirDocumentoDTO, "tipo_documento" | "cliente_id"> {
   cliente_id: string;
   itens: ItemDocumento[];
+}
+
+export interface EmitirAvisoCobrancaReciboDTO {
+  metodo_pagamento: MetodoPagamento;
+  valor: number;
+  data_pagamento?: string;
+  referencia?: string;
 }
 
 /**
@@ -532,6 +541,18 @@ async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
 
   async emitirAvisoCobranca(dados: AvisoCobrancaDTO): Promise<DocumentoFiscal> {
     const response = await api.post<ApiResponse<DocumentoFiscal>>(`${this.baseUrl}/aviso-cobranca`, dados);
+    if (!response.data.success) throw new Error(response.data.message);
+    return this._enriquecerDocumento(response.data.data);
+  }
+
+  async emitirAvisoCobrancaRecibo(
+    avisoId: string,
+    dados: EmitirAvisoCobrancaReciboDTO
+  ): Promise<DocumentoFiscal> {
+    const response = await api.post<ApiResponse<DocumentoFiscal>>(
+      `${this.baseUrl}/${avisoId}/aviso-cobranca-recibo`,
+      dados
+    );
     if (!response.data.success) throw new Error(response.data.message);
     return this._enriquecerDocumento(response.data.data);
   }
@@ -1161,6 +1182,7 @@ async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
     const nomes: Record<TipoDocumento, string> = {
       FT: "Factura",
       FR: "Factura-Recibo",
+      AF: "Factura/Recibo de Autofacturação",
       FP: "Factura Proforma",
       FA: "Factura de Adiantamento",
       NC: "Nota de Crédito",
@@ -1182,6 +1204,7 @@ async emitir(dados: EmitirDocumentoDTO): Promise<DocumentoFiscal> {
     const cores: Record<TipoDocumento, string> = {
       FT: "blue",
       FR: "green",
+      AF: "purple",
       FP: "orange",
       FA: "purple",
       NC: "red",

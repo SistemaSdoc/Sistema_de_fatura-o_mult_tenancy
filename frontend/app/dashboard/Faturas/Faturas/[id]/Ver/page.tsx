@@ -33,6 +33,7 @@ import { ToastNotification } from "@/components/ToastNotification";
 const TIPO_LABEL: Record<TipoDocumento, string> = {
   FT: "Factura",
   FR: "Factura-Recibo",
+  AF: "Factura/Recibo de Autofacturação",
   FP: "Factura Proforma",
   FA: "Factura de Adiantamento",
   NC: "Nota de Crédito",

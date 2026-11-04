@@ -36,7 +36,8 @@ if (!empty(data_get($empresa, 'logo_base64'))) {
 }
 
 $tiposDocumento = [
-    'FT' => 'Factura', 'FR' => 'Factura-Recibo', 'FA' => 'Fact. Adiantamento',
+    'FT' => 'Factura', 'FR' => 'Factura-Recibo', 'AF' => 'Factura/Recibo de Autofacturação',
+    'FA' => 'Fact. Adiantamento',
     'NC' => 'Nota de Crédito', 'ND' => 'Nota de Débito', 'RC' => 'Recibo',
     'FG' => 'Factura Global', 'FGR' => 'Factura Global-Recibo', 'TV' => 'Talão de Venda'
 ];
@@ -44,8 +45,10 @@ $tiposDocumento = [
 $documentoOrigemInfo = null;
 $itensParaExibir = $itens ?? collect();
 $docParaTotais = $documento;
+$isAutoFaturacao = $documento->tipo_documento === 'AF' || (bool) ($documento->auto_faturacao ?? false);
+$dataVencimento = $documento->data_vencimento ?: $documento->data_emissao;
 
-if ($documento->tipo_documento === 'RC') {
+if (in_array($documento->tipo_documento, ['RC', 'ACR'], true)) {
     if (isset($documentoOrigem) && $documentoOrigem) {
         $documentoOrigemInfo = $documentoOrigem;
     } elseif (isset($documento->documentoOrigem) && $documento->documentoOrigem) {
@@ -173,6 +176,9 @@ $regimeExibicao = match ($regimeFiscal) {
                     @if(!empty($empresaLogo) && $empresaLogo !== asset('images/default-logo.png'))
                         <img src="{{ $empresaLogo }}" class="logo-img" alt="Logo">
                     @endif
+                    @if($isAutoFaturacao)
+                        <div style="font-size: 9px; font-weight: bold; margin-bottom: 3px;">Adquirente/Emitente</div>
+                    @endif
                     <div class="company-name">{{ $empresaNome }}</div>
                     <div class="company-info">
                         @if(!empty($empresaMorada) && $empresaMorada !== 'Endereço não registrado'){{ $empresaMorada }}<br>@endif
@@ -191,11 +197,19 @@ $regimeExibicao = match ($regimeFiscal) {
                         @endif
                     </div>
                     <div class="client-box">
-                        Exmo.(s) Sr(s)<br>
+                        @if($isAutoFaturacao)
+                            <strong>Fornecedor substituído</strong><br>
+                        @else
+                            Exmo.(s) Sr(s)<br>
+                        @endif
                         <strong>{{ strtoupper($cliente['nome'] ?? 'CONSUMIDOR FINAL') }}</strong><br>
                         @if(!empty($cliente['morada'])) {{ $cliente['morada'] }}<br> @endif
                         Luanda - Angola<br>
-                        @if(!empty($cliente['nif'])) Contribuinte: {{ $cliente['nif'] }} @endif
+                        @if($isAutoFaturacao)
+                            NIF: {{ $cliente['nif'] ?? 'Não indicado' }}
+                        @elseif(!empty($cliente['nif']))
+                            Contribuinte: {{ $cliente['nif'] }}
+                        @endif
                     </div>
                 </td>
             </tr>
@@ -204,12 +218,16 @@ $regimeExibicao = match ($regimeFiscal) {
         <!-- IDENTIFICAÇÃO DO DOCUMENTO -->
         <div class="doc-title-box">
             <div class="doc-title">
-                {{ $tiposDocumento[$documento->tipo_documento] ?? 'Documento' }}- n.º {{ $documento->numero_documento }}
+                @if($isAutoFaturacao)
+                    Factura/Recibo de Autofacturação - n.º {{ $documento->numero_documento }}
+                @else
+                    {{ $tiposDocumento[$documento->tipo_documento] ?? 'Documento' }}- n.º {{ $documento->numero_documento }}
+                @endif
             </div>
             
-            @if($documento->tipo_documento === 'RC' && $documentoOrigemInfo)
+            @if(in_array($documento->tipo_documento, ['RC', 'ACR'], true) && $documentoOrigemInfo)
                 <div style="font-size: 9px; margin-top: 4px; margin-bottom: 8px;">
-                    <strong>Doc. Origem:</strong> {{ $documentoOrigemInfo->numero_documento }} 
+                    <strong>{{ $documento->tipo_documento === 'ACR' ? 'Aviso de Cobrança pago:' : 'Doc. Origem:' }}</strong> {{ $documentoOrigemInfo->numero_documento }}
                     (emitido em {{ \Carbon\Carbon::parse($documentoOrigemInfo->data_emissao)->format('d/m/Y') }})
                 </div>
             @endif
@@ -217,15 +235,15 @@ $regimeExibicao = match ($regimeFiscal) {
             <table class="doc-meta">
                 <tr>
                     <th style="width: 15%;">Data de emissão</th>
-                    <th style="width: 20%;">Contribuinte</th>
+                    <th style="width: 20%;">{{ $isAutoFaturacao ? 'NIF do Fornecedor' : 'Contribuinte' }}</th>
                     <th style="width: 15%;">Vencimento</th>
                     <th style="width: 15%;">V/ Ref.</th>
                     <th style="width: 35%;">Observações</th>
                 </tr>
                 <tr>
                     <td>{{ \Carbon\Carbon::parse($documento->data_emissao)->format('Y-m-d') }}</td>
-                    <td>{{ $cliente['nif'] ?? '999999990' }}</td>
-                    <td>{{ $documento->data_vencimento ? \Carbon\Carbon::parse($documento->data_vencimento)->format('Y-m-d') : '-' }}</td>
+                    <td>{{ $cliente['nif'] ?? ($isAutoFaturacao ? 'Não indicado' : '999999990') }}</td>
+                    <td>{{ \Carbon\Carbon::parse($dataVencimento)->format('Y-m-d') }}</td>
                     <td>{{ $documento->referencia_externa ?? '-' }}</td>
                     <td>{{ $documento->observacoes ?? '' }}</td>
                 </tr>
@@ -247,19 +265,36 @@ $regimeExibicao = match ($regimeFiscal) {
             </thead>
             <tbody>
                 @foreach($itensParaExibir as $item)
+                    @php
+                        $quantidadeItem = (float) (data_get($item, 'quantidade') ?? 0);
+                        $precoUnitarioItem = (float) (data_get($item, 'preco_unitario') ?? 0);
+                        $descontoItem = (float) (data_get($item, 'desconto') ?? 0);
+                        $valorIvaItem = (float) (data_get($item, 'valor_iva') ?? 0);
+                        $retencaoItem = (float) (data_get($item, 'valor_retencao') ?? 0);
+                        $totalLinhaItem = data_get($item, 'total_linha');
+                        $totalLinhaItem = $totalLinhaItem !== null
+                            ? (float) $totalLinhaItem
+                            : max(($quantidadeItem * $precoUnitarioItem) - $descontoItem + $valorIvaItem - $retencaoItem, 0);
+                        $taxaDescontoItem = data_get($item, 'taxa_desconto');
+                        $taxaDescontoItem = $taxaDescontoItem !== null
+                            ? (float) $taxaDescontoItem
+                            : ($quantidadeItem * $precoUnitarioItem > 0
+                                ? ($descontoItem / ($quantidadeItem * $precoUnitarioItem)) * 100
+                                : 0);
+                    @endphp
                     <tr>
-                        <td>{{ $item->codigo_produto ?? $item->produto->codigo ?? 'N/A' }}</td>
+                        <td>{{ data_get($item, 'referencia') ?? data_get($item, 'produto.codigo') ?? data_get($item, 'produto_id') ?? 'N/A' }}</td>
                         <td>
-                            {{ $item->descricao ?? $item->nome_produto ?? '' }}
+                            {{ data_get($item, 'descricao') ?? data_get($item, 'produto.nome') ?? 'Item' }}
                             @if(($item->taxa_iva ?? 0) <= 0 && !empty($item->codigo_isencao))
                                 <br><small style="color: #555;">({{ $item->codigo_isencao }} - {{ $item->motivo_isencao }})</small>
                             @endif
                         </td>
-                        <td class="r">{{ number_format((float)($item->preco_unitario ?? 0), 2, ',', '.') }} Kz</td>
-                        <td class="c">{{ number_format((float)($item->quantidade ?? 0), 2, ',', '.') }}</td>
-                        <td class="c">{{ number_format((float)($item->taxa_iva ?? 0), 2, ',', '.') }}%</td>
-                        <td class="c">{{ number_format((float)($item->taxa_desconto ?? 0), 2, ',', '.') }}%</td>
-                        <td class="r"><strong>{{ number_format((float)($item->total_linha ?? 0), 2, ',', '.') }} Kz</strong></td>
+                        <td class="r">{{ number_format($precoUnitarioItem, 2, ',', '.') }} Kz</td>
+                        <td class="c">{{ number_format($quantidadeItem, 2, ',', '.') }}</td>
+                        <td class="c">{{ number_format((float) (data_get($item, 'taxa_iva') ?? 0), 2, ',', '.') }}%</td>
+                        <td class="c">{{ number_format($taxaDescontoItem, 2, ',', '.') }}%</td>
+                        <td class="r"><strong>{{ number_format($totalLinhaItem, 2, ',', '.') }} Kz</strong></td>
                     </tr>
                 @endforeach
             </tbody>
@@ -359,6 +394,11 @@ $regimeExibicao = match ($regimeFiscal) {
                 @if($empresaBanco) Banco: {{ $empresaBanco }} | @endif
                 @if($empresaConta) Conta: {{ $empresaConta }} | @endif
                 @if($empresaIban) IBAN: {{ $empresaIban }} @endif
+            </div>
+        @endif
+        @if($documento->tipo_documento === 'ACR' && !empty($documento->metodo_pagamento))
+            <div style="margin-top: 8px; font-size: 9px;">
+                <strong>Pagamento recebido:</strong> {{ ucfirst(str_replace('_', ' ', $documento->metodo_pagamento)) }}
             </div>
         @endif
 

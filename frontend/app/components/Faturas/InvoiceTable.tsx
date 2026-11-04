@@ -15,6 +15,7 @@ import {
 const TIPO_LABEL: Record<TipoDocumento, string> = {
   FT: "Factura",
   FR: "Factura-Recibo",
+  AF: "Factura/Recibo de Autofacturação",
   FP: "Factura Proforma",
   FA: "Factura de Adiantamento",
   NC: "Nota de Crédito",
@@ -298,7 +299,7 @@ export default function InvoiceTable({
   const [paginaFT, setPaginaFT] = useState(1);
 
   /* ── Separação por aba ── */
-  const docsFR = documentos.filter((d) => ["FR", "RC", "RG", "TV"].includes(d.tipo_documento));
+  const docsFR = documentos.filter((d) => ["FR", "AF", "RC", "RG", "TV"].includes(d.tipo_documento));
   const docsFT = documentos.filter((d) => d.tipo_documento === "FT");
 
   const totalPagesFR = Math.max(Math.ceil(docsFR.length / POR_PAGINA), 1);

@@ -3,12 +3,20 @@
 namespace Tests\Unit;
 
 use App\Services\DocumentoFiscalService;
+use App\Models\Shared\SerieFiscal as SharedSerieFiscal;
+use App\Models\Tenant\SerieFiscal as TenantSerieFiscal;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionMethod;
 
 class RetencaoAutoFacturacaoTest extends TestCase
 {
+    public function test_auto_billing_flag_is_mass_assignable_for_both_series_models(): void
+    {
+        self::assertTrue((new SharedSerieFiscal())->isFillable('auto_faturacao'));
+        self::assertTrue((new TenantSerieFiscal())->isFillable('auto_faturacao'));
+    }
+
     public function test_withholding_reduces_the_amount_paid_to_the_supplier(): void
     {
         $processarItens = new ReflectionMethod(DocumentoFiscalService::class, 'processarItens');

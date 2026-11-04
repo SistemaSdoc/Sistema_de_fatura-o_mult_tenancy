@@ -94,6 +94,7 @@ class DocumentoFiscal extends TenantModel
 
     const TIPO_FATURA              = 'FT';
     const TIPO_FATURA_RECIBO       = 'FR';
+    const TIPO_AUTO_FACTURACAO     = 'AF';
     const TIPO_FATURA_PROFORMA     = 'FP';
     const TIPO_FATURA_ADIANTAMENTO = 'FA';
     const TIPO_NOTA_CREDITO        = 'NC';
@@ -129,6 +130,7 @@ class DocumentoFiscal extends TenantModel
         self::TIPO_FACTURA_GENERICA,
         self::TIPO_AVISO_COBRANCA,
         self::TIPO_AVISO_COBRANCA_RECIBO,
+        self::TIPO_AUTO_FACTURACAO,
     ];
 
     const TIPOS_GLOBAIS = [
@@ -201,6 +203,7 @@ class DocumentoFiscal extends TenantModel
                 self::TIPO_RECIBO,
                 self::TIPO_OUTROS_RECIBOS,
                 self::TIPO_RECIBO_ESTORNO,
+                self::TIPO_AVISO_COBRANCA_RECIBO,
             ]);
     }
 
@@ -224,7 +227,7 @@ class DocumentoFiscal extends TenantModel
     public function recibos()
     {
         return $this->hasMany(DocumentoFiscal::class, 'fatura_id')
-            ->whereIn('tipo_documento', [self::TIPO_RECIBO, self::TIPO_OUTROS_RECIBOS]);
+            ->whereIn('tipo_documento', [self::TIPO_RECIBO, self::TIPO_OUTROS_RECIBOS, self::TIPO_AVISO_COBRANCA_RECIBO]);
     }
 
     public function estornos()
@@ -377,6 +380,7 @@ class DocumentoFiscal extends TenantModel
         return [
             self::TIPO_FATURA                 => 'Factura',
             self::TIPO_FATURA_RECIBO          => 'Factura-Recibo',
+            self::TIPO_AUTO_FACTURACAO        => 'Factura/Recibo de Autofacturação',
             self::TIPO_FATURA_PROFORMA        => 'Factura Proforma',
             self::TIPO_FATURA_ADIANTAMENTO    => 'Factura de Adiantamento',
             self::TIPO_NOTA_CREDITO           => 'Nota de Crédito',
@@ -502,6 +506,7 @@ class DocumentoFiscal extends TenantModel
         return match ($this->tipo_documento) {
             self::TIPO_FATURA                 => 'blue',
             self::TIPO_FATURA_RECIBO          => 'green',
+            self::TIPO_AUTO_FACTURACAO        => 'purple',
             self::TIPO_FATURA_PROFORMA        => 'orange',
             self::TIPO_FATURA_ADIANTAMENTO    => 'purple',
             self::TIPO_NOTA_CREDITO           => 'red',
@@ -684,8 +689,8 @@ class DocumentoFiscal extends TenantModel
 
     public function ehAutoFacturacao(): bool
     {
-        return $this->tipo_documento === self::TIPO_FATURA_RECIBO
-            && $this->auto_faturacao === true;
+        return $this->tipo_documento === self::TIPO_AUTO_FACTURACAO
+            || ($this->tipo_documento === self::TIPO_FATURA_RECIBO && $this->auto_faturacao === true);
     }
 
     public function exigePeriodoReferencia(): bool
@@ -703,6 +708,7 @@ class DocumentoFiscal extends TenantModel
         return in_array($this->tipo_documento, [
             self::TIPO_FATURA,
             self::TIPO_FATURA_RECIBO,
+            self::TIPO_AUTO_FACTURACAO,
             self::TIPO_NOTA_CREDITO,
             self::TIPO_FACTURA_GLOBAL,
             self::TIPO_FACTURA_GLOBAL_RECIBO,

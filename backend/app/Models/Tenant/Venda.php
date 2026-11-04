@@ -258,6 +258,7 @@ class Venda extends TenantModel
         return match ($this->documentoFiscal?->tipo_documento ?? $this->tipo_documento_fiscal) {
             'FT'  => 'Fatura',
             'FR'  => 'Fatura-Recibo',
+            'AF'  => 'Factura/Recibo de Autofacturação',
             'RC'  => 'Recibo',
             'FP'  => 'Fatura Proforma',
             'FA'  => 'Fatura de Adiantamento',

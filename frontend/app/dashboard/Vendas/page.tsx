@@ -125,11 +125,6 @@ const TIPOS_DOCUMENTO_OPCOES: {
     descricao: "Documento específico para empresas seguradoras",
   },
   {
-    value: "ACR",
-    label: "Aviso de Cobrança-Recibo",
-    descricao: "Aviso de Cobrança pago no acto · Apenas seguradoras",
-  },
-  {
     value: "FGEN",
     label: "Factura Genérica",
     descricao: "Documento sectorial para operações financeiras",
@@ -406,7 +401,7 @@ export default function NovaFaturaReciboPage() {
       setClienteAvulso("");
       setClienteAvulsoNif("");
       setNifError(null);
-    } else if (["FT", "FR", "FA", "ND", "AC", "FGEN", "ACR"].includes(tipo)) {
+    } else if (["FT", "FR", "FA", "ND", "AC", "FGEN"].includes(tipo)) {
       setModoCliente("cadastrado");
       setClienteSelecionado(null);
       setClienteAvulso("");
@@ -420,7 +415,7 @@ export default function NovaFaturaReciboPage() {
 
   // ✅ NOVO — Handler do botão "Cadastrado" com bloqueio para TV
   const handleModoClienteChange = (modo: ModoCliente) => {
-    if (modo === "avulso" && ["FA", "ND", "AC", "FGEN", "ACR"].includes(tipoDocumento)) {
+    if (modo === "avulso" && ["FA", "ND", "AC", "FGEN"].includes(tipoDocumento)) {
       showToast("Este documento exige um cliente cadastrado.", "warning");
       return;
     }
@@ -729,7 +724,7 @@ export default function NovaFaturaReciboPage() {
   const documentoNotaDebito = tipoDocumento === "ND";
   const documentoAdiantamento = tipoDocumento === "FA";
   const documentoAvisoCobranca = tipoDocumento === "AC";
-  const documentoExigeCliente = ["FA", "ND", "AC", "FGEN", "ACR"].includes(tipoDocumento);
+  const documentoExigeCliente = ["FA", "ND", "AC", "FGEN"].includes(tipoDocumento);
 
   // ✅ NOVO — Calcula alertas contextuais em tempo real
   const alertas: Alerta[] = useMemo(() => {
@@ -1013,7 +1008,7 @@ export default function NovaFaturaReciboPage() {
         return;
       }
 
-      if (["FP", "FGEN", "ACR"].includes(tipoDocumento)) {
+      if (["FP", "FGEN"].includes(tipoDocumento)) {
         const itensDocumento = itens.map((item) => ({
           produto_id: item.produto_id,
           descricao: item.descricao,
@@ -1031,12 +1026,6 @@ export default function NovaFaturaReciboPage() {
           cliente_nome: clienteSelecionado?.id ? undefined : clienteAvulso.trim() || undefined,
           cliente_nif: clienteSelecionado?.nif ?? (clienteAvulsoNif.trim() || undefined),
           itens: itensDocumento,
-          dados_pagamento: tipoDocumento === "ACR" ? {
-            metodo: formPagamento.metodo,
-            valor: arredondar(Math.min(valorPagamento, totalLiquido)),
-            referencia: formPagamento.referencia || undefined,
-            data: formPagamento.data_pagamento,
-          } : undefined,
           observacoes: observacoes.trim() || undefined,
         });
 
@@ -1048,7 +1037,7 @@ export default function NovaFaturaReciboPage() {
         return;
       }
 
-      const isPagamentoObrigatorio = ["FR", "FGR", "TV", "ACR"].includes(tipoDocumento);
+      const isPagamentoObrigatorio = ["FR", "FGR", "TV"].includes(tipoDocumento);
       const temPagamento = valorPagamento > 0;
       const deveEnviarPagamento = isPagamentoObrigatorio || temPagamento;
 
@@ -1259,7 +1248,7 @@ export default function NovaFaturaReciboPage() {
                       className="absolute z-50 left-0 right-0 mt-1 border shadow-lg max-h-80 overflow-y-auto"
                       style={{ backgroundColor: colors.card, borderColor: colors.border }}>
                       {TIPOS_DOCUMENTO_OPCOES
-                        .filter((opcao) => !["AC", "ACR"].includes(opcao.value) || user?.empresa?.is_seguradora)
+                        .filter((opcao) => opcao.value !== "AC" || user?.empresa?.is_seguradora)
                         .map((opcao) => (
                         <button
                           key={opcao.value}

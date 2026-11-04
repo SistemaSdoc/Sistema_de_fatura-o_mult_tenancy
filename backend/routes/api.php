@@ -444,6 +444,8 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::post('auto-facturacao', [DocumentoFiscalController::class, 'emitirAutoFacturacao']);
             Route::post('aviso-cobranca', [DocumentoFiscalController::class, 'emitirAvisoCobranca'])
                 ->name('documentos.aviso-cobranca');
+            Route::post('/{id}/aviso-cobranca-recibo', [DocumentoFiscalController::class, 'emitirAvisoCobrancaRecibo'])
+                ->where('id', $uuidPattern)->name('documentos.aviso-cobranca-recibo');
             Route::post('nota-debito', [DocumentoFiscalController::class, 'criarNotaDebitoAutonoma'])
                 ->name('documentos.nota-debito-autonoma');
 

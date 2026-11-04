@@ -39,6 +39,7 @@ if (!empty($empresa['logo_base64'])) {
 $tiposDocumento = [
     'FT' => 'Factura',
     'FR' => 'Factura-Recibo',
+    'AF' => 'Factura/Recibo de Autofacturação',
     'FA' => 'Fact. Adiantamento',
     'NC' => 'Nota de Crédito',
     'ND' => 'Nota de Débito',
@@ -77,7 +78,7 @@ $metodosPagamento = [
 
 // Determinar qual documento usar para os totais (para recibos, usa o documento de origem)
 $docParaTotais = $documento;
-if ($documento->tipo_documento === 'RC' && isset($documentoOrigem) && $documentoOrigem) {
+if (in_array($documento->tipo_documento, ['RC', 'ACR'], true) && isset($documentoOrigem) && $documentoOrigem) {
     $docParaTotais = $documentoOrigem;
 }
 
@@ -104,7 +105,8 @@ if ($descontoGlobal > 0 && ($docParaTotais->base_tributavel ?? 0) > 0) {
 }
 
 $temTroco = $troco > 0;
-$isAutoFaturacao = (bool) ($documento->auto_faturacao ?? false);
+$isAutoFaturacao = $documento->tipo_documento === 'AF' || (bool) ($documento->auto_faturacao ?? false);
+$dataVencimento = $documento->data_vencimento ?: $documento->data_emissao;
 $taxaRetencao = (float) ($docParaTotais->base_tributavel ?? 0) > 0
     ? (float) ($docParaTotais->total_retencao ?? 0) / (float) $docParaTotais->base_tributavel * 100
     : 0;
@@ -275,6 +277,9 @@ $valorPorExtenso = $isAutoFaturacao
                 <span><strong>Hora:</strong> {{ substr($documento->hora_emissao ?? now()->format('H:i:s'), 0, 5) }}</span>
             </div>
             <div class="doc-row full">
+                <span><strong>Vencimento:</strong> {{ \Carbon\Carbon::parse($dataVencimento)->format('d/m/Y') }}</span>
+            </div>
+            <div class="doc-row full">
                 <span><strong>Operador:</strong> {{ $documento->user->name ?? 'Sistema' }}</span>
             </div>
             
@@ -292,19 +297,19 @@ $valorPorExtenso = $isAutoFaturacao
         </div>
 
         <!-- Referência (se for RC e tiver factura de origem) -->
-        @if($documento->tipo_documento === 'RC' && $documentoOrigem)
+        @if(in_array($documento->tipo_documento, ['RC', 'ACR'], true) && $documentoOrigem)
         <div class="reference">
-            <strong>Ref. Documento Origem:</strong><br>
+            <strong>{{ $documento->tipo_documento === 'ACR' ? 'Aviso de Cobrança pago:' : 'Ref. Documento Origem:' }}</strong><br>
             {{ $documentoOrigem->tipo_documento_nome }} Nº {{ $documentoOrigem->numero_documento }}
         </div>
         @endif
 
         <!-- Cliente -->
         <div class="client-section">
-            <div class="section-title">{{ $isAutoFaturacao ? 'FORNECEDOR / PRODUTOR' : 'CLIENTE' }}</div>
+            <div class="section-title">{{ $isAutoFaturacao ? 'FORNECEDOR SUBSTITUÍDO' : 'CLIENTE' }}</div>
             <div class="client-name">{{ $cliente['nome'] ?? 'Consumidor Final' }}</div>
-            @if(!empty($cliente['nif']))
-            <div class="client-details">NIF: {{ $cliente['nif'] }}</div>
+            @if($isAutoFaturacao || !empty($cliente['nif']))
+            <div class="client-details">NIF: {{ $cliente['nif'] ?? 'Não indicado' }}</div>
             @endif
             @if(!empty($cliente['morada']))
             <div class="client-details">{{ $cliente['morada'] }}</div>
@@ -324,11 +329,19 @@ $valorPorExtenso = $isAutoFaturacao
         <div class="items-section">
             <div class="section-title" style="margin-bottom: 5px;">ITENS</div>
             @forelse($itens as $item)
+            @php
+                $quantidadeItem = (float) (data_get($item, 'quantidade') ?? 0);
+                $precoUnitarioItem = (float) (data_get($item, 'preco_unitario') ?? 0);
+                $totalLinhaItem = data_get($item, 'total_linha');
+                $totalLinhaItem = $totalLinhaItem !== null
+                    ? (float) $totalLinhaItem
+                    : max($quantidadeItem * $precoUnitarioItem, 0);
+            @endphp
             <div class="item">
-                <div class="item-desc">{{ $item->descricao }}</div>
+                <div class="item-desc">{{ data_get($item, 'descricao') ?? data_get($item, 'produto.nome') ?? 'Item' }}</div>
                 <div class="item-line">
-                    <span class="item-qty">{{ number_format($item->quantidade, 0, ',', '.') }} x {{ number_format($item->preco_unitario, 2, ',', '.') }}</span>
-                    <span class="item-total">{{ number_format($item->total_linha ?? ($item->quantidade * $item->preco_unitario), 2, ',', '.') }} Kz</span>
+                    <span class="item-qty">{{ number_format($quantidadeItem, 2, ',', '.') }} x {{ number_format($precoUnitarioItem, 2, ',', '.') }}</span>
+                    <span class="item-total">{{ number_format($totalLinhaItem, 2, ',', '.') }} Kz</span>
                 </div>
                 @if(($item->taxa_iva ?? 0) > 0)
                 <div class="item-tax">IVA: {{ $item->taxa_iva }}%</div>
@@ -381,7 +394,7 @@ $valorPorExtenso = $isAutoFaturacao
                 <span>{{ number_format($documento->total_liquido, 2, ',', '.') }} Kz</span>
             </div>
             @endif
-            @if(in_array($documento->tipo_documento, ['FR', 'RC', 'TV', 'FG', 'FGR']) && !empty($documento->metodo_pagamento))
+            @if(in_array($documento->tipo_documento, ['FR', 'RC', 'TV', 'FG', 'FGR', 'ACR']) && !empty($documento->metodo_pagamento))
             <div class="total-line">
                 <span>Forma de Pagamento:</span>
                 <span>{{ $metodosPagamento[$documento->metodo_pagamento] ?? ucfirst($documento->metodo_pagamento) }}</span>
@@ -395,7 +408,7 @@ $valorPorExtenso = $isAutoFaturacao
             @endif
 
             <!-- ✅ CORREÇÃO: TOTAL GERAL para todos os tipos -->
-            @if(in_array($documento->tipo_documento, ['FT', 'FR', 'RC', 'TV', 'FG', 'FGR']))
+            @if(in_array($documento->tipo_documento, ['FT', 'FR', 'RC', 'TV', 'FG', 'FGR', 'ACR']))
             <div class="total-line grand-total">
                 <strong>
                     @if($documento->tipo_documento === 'FT') TOTAL A PAGAR
@@ -456,7 +469,7 @@ $valorPorExtenso = $isAutoFaturacao
         <div class="footer">
             <div class="footer-title">OBRIGADO PELA PREFERÊNCIA!</div>
             <div class="footer-msg">Volte sempre</div>
-            <div class="footer-msg">Processado pelo sistema de facturação faturaja</div>
+            <div class="footer-msg">Processado pelo sistema de facturação FaturaJa</div>
             <!-- ✅ CORREÇÃO: Fuso horário de Angola -->
             <div class="timestamp">{{ now('Africa/Luanda')->format('d/m/Y H:i:s') }}</div>
         </div>

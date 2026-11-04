@@ -168,7 +168,10 @@ class ItemDocumentoFiscal extends TenantModel
             return null;
         }
 
-        return $this->documentoFiscal->tipo_documento === 'NC' ? 'entrada' : 'saida';
+        return in_array($this->documentoFiscal->tipo_documento, ['NC', 'AF'], true)
+            || $this->documentoFiscal->ehAutoFacturacao()
+            ? 'entrada'
+            : 'saida';
     }
 
     /**

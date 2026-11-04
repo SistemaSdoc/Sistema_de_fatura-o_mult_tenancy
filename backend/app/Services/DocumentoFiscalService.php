@@ -77,6 +77,17 @@ class DocumentoFiscalService
             'pode_ter_adiantamento' => false,
             'requer_assinatura'     => true,
         ],
+        'AF' => [
+            'nome'                  => 'Factura/Recibo de Autofacturação',
+            'afeta_stock'           => true,
+            'eh_venda'              => false,
+            'gera_recibo'           => false,
+            'estado_inicial'        => 'paga',
+            'exige_cliente'         => true,
+            'aceita_pagamento'      => false,
+            'pode_ter_adiantamento' => false,
+            'requer_assinatura'     => true,
+        ],
         'FP' => [
             'nome'                  => 'Factura Proforma',
             'afeta_stock'           => false,
@@ -240,6 +251,86 @@ class DocumentoFiscalService
         $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
     }
 
+    public function emitirAvisoCobrancaRecibo(string $avisoId, array $dados)
+    {
+        $this->verificarAcessoUsuario();
+
+        $connection = DB::connection($this->isColectivo() ? 'shared' : 'tenant');
+
+        return $connection->transaction(function () use ($avisoId, $dados) {
+            $query = $this->isColectivo()
+                ? SharedDocumentoFiscal::doTenant()
+                : TenantDocumentoFiscal::query();
+            $aviso = $query->with('itens')->whereKey($avisoId)->lockForUpdate()->firstOrFail();
+
+            if ($aviso->tipo_documento !== 'AC') {
+                throw new \InvalidArgumentException('O ACR só pode ser emitido a partir de um Aviso de Cobrança (AC).');
+            }
+            if (in_array($aviso->estado, ['paga', 'cancelado', 'expirado'], true)) {
+                throw new \InvalidArgumentException('Este Aviso de Cobrança não está pendente de pagamento.');
+            }
+
+            $documentosQuery = $this->isColectivo()
+                ? SharedDocumentoFiscal::doTenant()
+                : TenantDocumentoFiscal::query();
+            $jaExisteAcr = (clone $documentosQuery)
+                ->where('fatura_id', $aviso->id)
+                ->where('tipo_documento', 'ACR')
+                ->where('estado', '!=', 'cancelado')
+                ->exists();
+            if ($jaExisteAcr) {
+                throw new \InvalidArgumentException('Este Aviso de Cobrança já tem um ACR emitido.');
+            }
+
+            $temReciboAnterior = (clone $documentosQuery)
+                ->where('fatura_id', $aviso->id)
+                ->whereIn('tipo_documento', ['RC', 'RG'])
+                ->where('estado', '!=', 'cancelado')
+                ->exists();
+            if ($temReciboAnterior) {
+                throw new \InvalidArgumentException('Já existe um recibo separado para este Aviso de Cobrança; não é possível emitir um ACR duplicado.');
+            }
+
+            $valorPagamento = (float) $dados['valor'];
+            if (abs($valorPagamento - (float) $aviso->total_liquido) > 0.01) {
+                throw new \InvalidArgumentException('O ACR comprova a liquidação integral. Registe o pagamento total do Aviso de Cobrança.');
+            }
+
+            $aviso->loadMissing('itens');
+            $dadosAcr = [
+                'tipo_documento' => 'ACR',
+                '_via_aviso_cobranca' => true,
+                'fatura_id' => $aviso->id,
+                'cliente_id' => $aviso->cliente_id,
+                'cliente_nome' => $aviso->cliente_nome,
+                'cliente_nif' => $aviso->cliente_nif,
+                'itens' => $aviso->itens->map(fn ($item) => [
+                    'produto_id' => $item->produto_id,
+                    'descricao' => $item->descricao,
+                    'quantidade' => (float) $item->quantidade,
+                    'preco_unitario' => (float) $item->preco_unitario,
+                    'desconto' => (float) $item->desconto,
+                    'taxa_iva' => (float) $item->taxa_iva,
+                    'codigo_isencao' => $item->codigo_isencao,
+                    'taxa_retencao' => (float) $item->taxa_retencao,
+                ])->all(),
+                'dados_pagamento' => [
+                    'metodo' => $dados['metodo_pagamento'],
+                    'valor' => $valorPagamento,
+                    'data' => $dados['data_pagamento'] ?? Carbon::now('Africa/Luanda')->toDateString(),
+                    'referencia' => $dados['referencia'] ?? null,
+                ],
+                'referencia_externa' => $aviso->referencia_externa,
+                'motivo' => $aviso->motivo,
+            ];
+
+            $acr = $this->emitirDocumento($dadosAcr);
+            $aviso->update(['estado' => 'paga']);
+
+            return $acr->load('itens.produto', 'cliente', 'documentoOrigem');
+        });
+    }
+
     protected function getModo(): string
     {
         $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
@@ -359,6 +450,9 @@ class DocumentoFiscalService
         if (in_array($tipo, ['RC', 'RG', 'RE'], true)) {
             throw new \InvalidArgumentException('Recibos e estornos só podem ser emitidos a partir do documento de origem.');
         }
+        if ($tipo === 'ACR' && empty($dados['_via_aviso_cobranca'])) {
+            throw new \InvalidArgumentException('O ACR só pode ser emitido ao registar o pagamento de um Aviso de Cobrança.');
+        }
 
         $config = $this->configuracoesTipo[$tipo];
         $autoFaturacao = !empty($dados['auto_faturacao']);
@@ -411,7 +505,35 @@ class DocumentoFiscalService
                 );
             }
 
-            $totais = $this->processarItens($dados['itens'] ?? [], $aplicaIva, $regime, $taxaRetencaoAuto, $tipo);
+            if ($tipo === 'ACR') {
+                $origemQuery = $this->isColectivo()
+                    ? SharedDocumentoFiscal::doTenant()
+                    : TenantDocumentoFiscal::query();
+                $origem = $origemQuery->with('itens')->findOrFail($dados['fatura_id']);
+                $totais = [
+                    'base' => (float) $origem->base_tributavel,
+                    'iva' => (float) $origem->total_iva,
+                    'retencao' => (float) $origem->total_retencao,
+                    'liquido' => (float) $origem->total_liquido,
+                    'itens_processados' => $origem->itens->map(fn ($item) => [
+                        'produto_id' => $item->produto_id,
+                        'descricao' => $item->descricao,
+                        'quantidade' => (float) $item->quantidade,
+                        'preco_unitario' => (float) $item->preco_unitario,
+                        'desconto' => (float) $item->desconto,
+                        'base_tributavel' => (float) $item->base_tributavel,
+                        'taxa_iva' => (float) $item->taxa_iva,
+                        'valor_iva' => (float) $item->valor_iva,
+                        'codigo_isencao' => $item->codigo_isencao,
+                        'motivo_isencao' => $item->motivo_isencao,
+                        'taxa_retencao' => (float) $item->taxa_retencao,
+                        'valor_retencao' => (float) $item->valor_retencao,
+                        'total_linha' => (float) $item->total_linha,
+                    ])->all(),
+                ];
+            } else {
+                $totais = $this->processarItens($dados['itens'] ?? [], $aplicaIva, $regime, $taxaRetencaoAuto, $tipo);
+            }
             if (
                 $tipo === 'ACR'
                 && abs((float) $dados['dados_pagamento']['valor'] - $totais['liquido']) > 0.01
@@ -502,7 +624,7 @@ class DocumentoFiscalService
                 ]);
             }
 
-            if (in_array($tipo, ['FR', 'FGR', 'TV', 'ACR'], true) && !empty($dados['dados_pagamento'])) {
+            if (in_array($tipo, ['FR', 'AF', 'FGR', 'TV', 'ACR'], true) && !empty($dados['dados_pagamento'])) {
                 $documento->update([
                     'metodo_pagamento' => $dados['dados_pagamento']['metodo'],
                     'referencia_pagamento' => $dados['dados_pagamento']['referencia'] ?? null,
@@ -1255,7 +1377,7 @@ class DocumentoFiscalService
     {
         $this->verificarAcessoUsuario();
 
-        $dados['tipo_documento'] = 'FR';
+        $dados['tipo_documento'] = 'AF';
         $dados['auto_faturacao'] = true;
 
         if (empty($dados['motivo_auto_faturacao'])) {
@@ -1360,10 +1482,23 @@ class DocumentoFiscalService
             $query->whereDate('data_emissao', '<=', $filtros['data_fim']);
         }
         if (!empty($filtros['apenas_vendas'])) {
-            $query->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'RG', 'TV']);
+            $query->where(function ($query) use ($filtros) {
+                $query->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'RG', 'TV']);
+                if (!empty($filtros['incluir_auto_facturacao'])) {
+                    $query->orWhere(function ($query) {
+                        $query->where('tipo_documento', 'AF')
+                            ->orWhere('auto_faturacao', true);
+                    });
+                }
+            });
+        } elseif (!empty($filtros['incluir_auto_facturacao'])) {
+            $query->where(function ($query) {
+                $query->where('tipo_documento', 'AF')
+                    ->orWhere('auto_faturacao', true);
+            });
         }
         if (!empty($filtros['apenas_nao_vendas'])) {
-            $query->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'RE', 'FG', 'FGR', 'FGEN', 'AC', 'ACR']);
+            $query->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'RE', 'FG', 'FGR', 'FGEN', 'AC', 'ACR', 'AF']);
         }
         if (!empty($filtros['apenas_globais'])) {
             $query->whereIn('tipo_documento', ['FG', 'FGR']);
@@ -1755,7 +1890,7 @@ class DocumentoFiscalService
             ->when(!empty($filtros['data_inicio']), fn($q) => $q->whereDate('data_emissao', '>=', $filtros['data_inicio']))
             ->when(!empty($filtros['data_fim']), fn($q) => $q->whereDate('data_emissao', '<=', $filtros['data_fim']))
             ->when(!empty($filtros['apenas_vendas']), fn($q) => $q->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'RG', 'FG', 'FGR', 'TV']))
-            ->when(!empty($filtros['apenas_nao_vendas']), fn($q) => $q->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'RE', 'FGEN', 'AC', 'ACR']))
+            ->when(!empty($filtros['apenas_nao_vendas']), fn($q) => $q->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'RE', 'FGEN', 'AC', 'ACR', 'AF']))
             ->when(!empty($filtros['apenas_auto_facturacao']), fn($q) => $q->where('auto_faturacao', true))
             ->orderBy('data_emissao', 'desc')->orderBy('hora_emissao', 'desc')->orderBy('numero', 'desc')
             ->get();
@@ -2208,12 +2343,10 @@ class DocumentoFiscalService
             }
         }
 
-        // Série especial AF (auto-facturação)
-// Série especial AF (auto-facturação)
+        // Série própria de auto-facturação.
 if ($temAutoFact) {
-    // Chave REAL da unique (não inclui auto_faturacao)
     $chaveReal = [
-        'tipo_documento' => 'FR',
+        'tipo_documento' => 'AF',
         'serie'          => 'AF',
         'ano'            => $ano,
     ];
@@ -2223,7 +2356,7 @@ if ($temAutoFact) {
 
     if ($existente) {
         // Já existe — garantir auto_faturacao=true e activa
-        if (!$existente->auto_faturacao || !$existente->ativa) {
+        if (!$existente->auto_faturacao || !$existente->ativa || !$existente->padrao) {
             $existente->update([
                 'auto_faturacao' => true,
                 'ativa'          => true,
@@ -2234,7 +2367,7 @@ if ($temAutoFact) {
         try {
             $dadosAF = array_merge($chaveReal, [
                 'id'             => (string) Str::uuid(),
-                'descricao'      => 'Série Auto-Facturação — Faturas-Recibo',
+                'descricao'      => 'Série de Facturas/Recibos de Autofacturação',
                 'digitos'        => 4,
                 'ultimo_numero'  => 0,
                 'ativa'          => true,
@@ -2257,6 +2390,7 @@ if ($temAutoFact) {
         return [
             'FT' => 'Faturas',
             'FR' => 'Faturas-Recibo',
+            'AF' => 'Facturas/Recibos de Autofacturação',
             'FP' => 'Faturas Proforma',
             'FA' => 'Faturas de Adiantamento',
             'NC' => 'Notas de Crédito',
@@ -2281,14 +2415,16 @@ if ($temAutoFact) {
     {
         if ($config['exige_cliente'] ?? false) {
             $temCliente = !empty($dados['cliente_id']) || !empty($dados['cliente_nome']);
-            $clienteGenerico = $tipo === 'FR'
+            $clienteGenerico = in_array($tipo, ['FR', 'AF'], true)
                 && empty($dados['cliente_id'])
                 && Str::lower(trim((string) ($dados['cliente_nome'] ?? ''))) === 'consumidor final';
 
             if (!$temCliente || $clienteGenerico) {
-                $mensagem = $tipo === 'FR'
+                $mensagem = $tipo === 'AF'
+                    ? 'Autofacturação requer a identificação do fornecedor substituído; Consumidor Final não é válido.'
+                    : ($tipo === 'FR'
                     ? 'Factura-Recibo requer a identificação do cliente; Consumidor Final não é válido.'
-                    : "{$config['nome']} requer a identificação do cliente.";
+                    : "{$config['nome']} requer a identificação do cliente.");
                 throw new \InvalidArgumentException(
                     $mensagem
                 );
@@ -2297,7 +2433,8 @@ if ($temAutoFact) {
 
         $regras = [
             'FR' => ['dados_pagamento'],
-            'ACR' => ['dados_pagamento'],
+            'AF' => ['dados_pagamento'],
+            'ACR' => ['dados_pagamento', 'fatura_id'],
             'RC' => ['fatura_id'],
             'RG' => ['fatura_id'],
             'RE' => ['fatura_id', 'motivo'],
@@ -2340,8 +2477,8 @@ if ($temAutoFact) {
         }
 
         // Auto-facturação
-        if (!empty($dados['auto_faturacao']) && $tipo !== 'FR') {
-            throw new \InvalidArgumentException('Auto-facturação só se aplica a FR (Art. 12.º n.º 1).');
+        if (!empty($dados['auto_faturacao']) && $tipo !== 'AF') {
+            throw new \InvalidArgumentException('Auto-facturação exige o tipo de documento AF (Art. 12.º n.º 1).');
         }
 
         // Verificar origem para documentos derivados.
@@ -2371,6 +2508,9 @@ if ($temAutoFact) {
             if (in_array($tipo, ['RC', 'RG'], true) && !in_array($origem->tipo_documento, ['FT', 'FA', 'FP', 'FG', 'AC'], true)) {
                 throw new \InvalidArgumentException("Recibo só de FT/FA/FP/FG/AC. Tipo: {$origem->tipo_documento}");
             }
+            if ($tipo === 'ACR' && $origem->tipo_documento !== 'AC') {
+                throw new \InvalidArgumentException('Aviso de Cobrança-Recibo só pode ser emitido a partir de um AC.');
+            }
         }
     }
 
@@ -2389,8 +2529,8 @@ if ($temAutoFact) {
         }
 
         $prazoDias = match ($tipo) {
-            'FR' => 0,
-            'ND' => 15,
+            'FR', 'AF' => 0,
+            'ND'      => 15,
             default => 30,
         };
 
@@ -2485,7 +2625,7 @@ if ($temAutoFact) {
             : TenantDocumentoFiscal::query();
 
         $recibos = $query->where('fatura_id', $documento->id)
-            ->whereIn('tipo_documento', ['RC', 'RG'])
+            ->whereIn('tipo_documento', ['RC', 'RG', 'ACR'])
             ->where('estado', '!=', 'cancelado')
             ->get(['id', 'total_liquido']);
         if ($recibos->isEmpty()) {

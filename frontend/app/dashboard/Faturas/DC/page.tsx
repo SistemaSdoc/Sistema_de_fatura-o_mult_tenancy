@@ -4,7 +4,11 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import MainEmpresa from "@/app/components/MainEmpresa";
-import { documentoFiscalService, type DocumentoFiscal } from "@/services/DocumentoFiscal";
+import {
+  documentoFiscalService,
+  type DocumentoFiscal,
+  type MetodoPagamento,
+} from "@/services/DocumentoFiscal";
 import { useThemeColors } from "@/context/ThemeContext";
 import OutrosDocumentosTable from "@/app/components/Faturas/OutrosDocumentosTable";
 import { FileText, ChevronDown } from "lucide-react";
@@ -72,6 +76,12 @@ export default function OutrosDocumentosPage() {
   const [baixandoPdf, setBaixandoPdf] = useState<string | null>(null);
   const [imprimindo] = useState<string | null>(null);
   const [convertendoProforma, setConvertendoProforma] = useState<string | null>(null);
+  const [avisoCobrancaSelecionado, setAvisoCobrancaSelecionado] = useState<DocumentoFiscal | null>(null);
+  const [emitindoAcr, setEmitindoAcr] = useState(false);
+  const [erroAcr, setErroAcr] = useState<string | null>(null);
+  const [metodoPagamentoAcr, setMetodoPagamentoAcr] = useState<MetodoPagamento>("dinheiro");
+  const [referenciaAcr, setReferenciaAcr] = useState("");
+  const [dataPagamentoAcr, setDataPagamentoAcr] = useState(new Date().toISOString().slice(0, 10));
   const [dropdownAberto, setDropdownAberto] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -178,6 +188,28 @@ export default function OutrosDocumentosPage() {
       setConvertendoProforma(null);
     }
   }, [carregarDocumentos, router]);
+
+  const emitirAcr = useCallback(async () => {
+    if (!avisoCobrancaSelecionado) return;
+
+    try {
+      setEmitindoAcr(true);
+      setErroAcr(null);
+      const acr = await documentoFiscalService.emitirAvisoCobrancaRecibo(avisoCobrancaSelecionado.id, {
+        metodo_pagamento: metodoPagamentoAcr,
+        valor: Number(avisoCobrancaSelecionado.total_liquido),
+        data_pagamento: dataPagamentoAcr,
+        referencia: referenciaAcr.trim() || undefined,
+      });
+      setAvisoCobrancaSelecionado(null);
+      await carregarDocumentos();
+      router.push(`/dashboard/Faturas/Faturas/${acr.id}/Ver`);
+    } catch (err: unknown) {
+      setErroAcr(err instanceof Error ? err.message : "Não foi possível emitir o Aviso de Cobrança-Recibo.");
+    } finally {
+      setEmitindoAcr(false);
+    }
+  }, [avisoCobrancaSelecionado, carregarDocumentos, dataPagamentoAcr, metodoPagamentoAcr, referenciaAcr, router]);
 
   /* ── Formatar moeda ── */
   const formatKz = (valor: number | string | undefined) => {
@@ -295,10 +327,97 @@ export default function OutrosDocumentosPage() {
         onBaixarPdf={baixarPdf}
         onConverterProforma={converterProforma}
         convertendoProforma={convertendoProforma}
+        onEmitirAcr={(doc) => {
+          setErroAcr(null);
+          setMetodoPagamentoAcr("dinheiro");
+          setReferenciaAcr("");
+          setDataPagamentoAcr(new Date().toISOString().slice(0, 10));
+          setAvisoCobrancaSelecionado(doc);
+        }}
         formatKz={formatKz}
         documentoFiscalService={documentoFiscalService}
         colors={colors}
       />
+      {avisoCobrancaSelecionado && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void emitirAcr();
+            }}
+            className="w-full max-w-md space-y-4 rounded-lg p-5 shadow-xl"
+            style={{ backgroundColor: colors.background, color: colors.text }}
+          >
+            <div>
+              <h2 className="text-lg font-semibold">Registar pagamento e emitir ACR</h2>
+              <p className="mt-1 text-sm" style={{ color: colors.textSecondary }}>
+                Confirme que recebeu o pagamento integral do Aviso de Cobrança {avisoCobrancaSelecionado.numero_documento}.
+                O ACR servirá como comprovativo, sem emissão de recibo separado.
+              </p>
+            </div>
+            <div className="text-sm font-semibold">
+              Valor recebido: {formatKz(avisoCobrancaSelecionado.total_liquido)}
+            </div>
+            <label className="block space-y-1 text-sm">
+              <span>Método de pagamento</span>
+              <select
+                required
+                value={metodoPagamentoAcr}
+                onChange={(event) => setMetodoPagamentoAcr(event.target.value as MetodoPagamento)}
+                className="w-full rounded border px-3 py-2"
+                style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
+              >
+                <option value="dinheiro">Dinheiro</option>
+                <option value="transferencia">Transferência</option>
+                <option value="multibanco">Multibanco</option>
+                <option value="cheque">Cheque</option>
+                <option value="cartao">Cartão</option>
+              </select>
+            </label>
+            <label className="block space-y-1 text-sm">
+              <span>Data do pagamento</span>
+              <input
+                required
+                type="date"
+                value={dataPagamentoAcr}
+                onChange={(event) => setDataPagamentoAcr(event.target.value)}
+                className="w-full rounded border px-3 py-2"
+                style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
+              />
+            </label>
+            <label className="block space-y-1 text-sm">
+              <span>Referência do pagamento (opcional)</span>
+              <input
+                value={referenciaAcr}
+                onChange={(event) => setReferenciaAcr(event.target.value)}
+                maxLength={100}
+                className="w-full rounded border px-3 py-2"
+                style={{ backgroundColor: colors.background, borderColor: colors.border, color: colors.text }}
+              />
+            </label>
+            {erroAcr && <p className="text-sm" style={{ color: colors.danger }}>{erroAcr}</p>}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setAvisoCobrancaSelecionado(null)}
+                disabled={emitindoAcr}
+                className="rounded border px-4 py-2 text-sm"
+                style={{ borderColor: colors.border }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={emitindoAcr}
+                className="rounded px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                style={{ backgroundColor: colors.primary }}
+              >
+                {emitindoAcr ? "A emitir…" : "Confirmar pagamento e emitir"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </MainEmpresa>
   );
 }

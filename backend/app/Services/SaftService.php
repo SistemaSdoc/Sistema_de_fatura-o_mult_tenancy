@@ -507,7 +507,7 @@ class SaftService
         $startDate = sprintf('%04d-%02d-01', $year, $month);
         $endDate = date('Y-m-t', strtotime($startDate));
 
-        $tiposDocumento = ['FT', 'FR', 'NC', 'ND', 'FG', 'FGR', 'TV', 'FA'];
+        $tiposDocumento = ['FT', 'FR', 'AF', 'NC', 'ND', 'FG', 'FGR', 'TV', 'FA'];
 
         $documentos = $this->queryDocumentosFiscais()
             ->whereIn('tipo_documento', $tiposDocumento)
@@ -546,6 +546,7 @@ class SaftService
         $invoiceTypeMap = [
             'FT' => 'FT',
             'FR' => 'FR',
+            'AF' => 'AF',
             'NC' => 'NC',
             'ND' => 'ND',
             'FG' => 'FG',
