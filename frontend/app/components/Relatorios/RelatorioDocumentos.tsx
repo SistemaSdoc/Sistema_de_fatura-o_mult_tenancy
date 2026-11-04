@@ -9,6 +9,9 @@ import {
   Legend,
   ResponsiveContainer,
   CartesianGrid,
+  PieChart,
+  Pie,
+  Cell,
 } from "recharts";
 
 import {
@@ -28,8 +31,13 @@ import {
   SemDados,
   tooltipStyle,
 } from "./RelatorioComuns";
+import {
+  agruparEstadosDocumentos,
+  agruparImpactoFinanceiro,
+  agruparPorFuncao,
+  resumirDocumentos,
+} from "@/services/documentGroups";
 
-import { ValueType, NameType } from "recharts/types/component/DefaultTooltipContent";
 
 interface Colors {
   primary: string;
@@ -37,12 +45,6 @@ interface Colors {
   border: string;
   textSecondary: string;
   [key: string]: string;
-}
-
-interface DadosPorTipoItem {
-  tipo: string;
-  quantidade: number;
-  valor: number;
 }
 
 interface ProformaItem {
@@ -68,34 +70,21 @@ export function RelatorioDocumentosComponent({
 }: RelatorioDocumentosProps) {
   const border = `1px solid ${colors.primary}`;
 
-  // Formatação eixo Y
-  const formatYAxis = (value: number): string => {
-    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-    if (value >= 1_000) return `${(value / 1_000).toFixed(0)}k`;
-    return value.toString();
-  };
-
-  // Dados por tipo
-  const dadosPorTipo = useMemo<DadosPorTipoItem[]>(() => {
-    const porTipo = relatorioDocumentos?.estatisticas?.por_tipo;
-    if (!porTipo) return [];
-
-    return Object.entries(porTipo).map(([tipo, dados]) => ({
-      tipo,
-      quantidade: dados?.quantidade ?? 0,
-      valor: dados?.valor ?? 0,
-    }));
-  }, [relatorioDocumentos?.estatisticas?.por_tipo]);
+  const resumoTipos = useMemo(
+    () => resumirDocumentos(relatorioDocumentos?.documentos ?? []),
+    [relatorioDocumentos?.documentos]
+  );
+  const documentosPorFuncao = useMemo(() => agruparPorFuncao(resumoTipos), [resumoTipos]);
+  const impactoFinanceiro = useMemo(() => agruparImpactoFinanceiro(resumoTipos), [resumoTipos]);
+  const documentosPorEstado = useMemo(
+    () => agruparEstadosDocumentos(relatorioDocumentos?.documentos ?? []),
+    [relatorioDocumentos?.documentos]
+  );
 
   // Proformas
   const ultimasProformas = useMemo<ProformaItem[]>(() => {
     return (relatorioProformas?.proformas ?? []).slice(0, 20);
   }, [relatorioProformas?.proformas]);
-
-  // ✅ TOOLTIP CORRIGIDO (SEM ERRO TYPESCRIPT)
-  const tooltipFormatter = (value: ValueType, name: NameType) => {
-    return [`${value ?? 0}`, `${name}`];
-  };
 
   if (isLoading) return <CarregandoLinha colors={colors} />;
   if (!relatorioDocumentos || !relatorioProformas) return <Vazio colors={colors} />;
@@ -141,58 +130,49 @@ export function RelatorioDocumentosComponent({
         />
       </div>
 
-      {/* GRÁFICO */}
-      {dadosPorTipo.length > 0 && (
-        <SecaoGrafico titulo="Documentos por Tipo" colors={colors}>
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={dadosPorTipo}>
-              <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
-
-              <XAxis
-                dataKey="tipo"
-                tick={{ fontSize: 10, fill: colors.textSecondary }}
-              />
-
-              <YAxis
-                yAxisId="left"
-                tick={{ fontSize: 10, fill: colors.textSecondary }}
-              />
-
-              <YAxis
-                yAxisId="right"
-                orientation="right"
-                tick={{ fontSize: 10, fill: colors.textSecondary }}
-                tickFormatter={formatYAxis}
-              />
-
- <Tooltip
-  formatter={(value, name) => {
-    return [`${value ?? 0}`, `${name}`];
-  }}
-  contentStyle={tooltipStyle(colors)}
-/>
-
+      <SecaoGrafico titulo="Volume de Documentos Emitidos" colors={colors}>
+        {documentosPorFuncao.some((item) => item.quantidade > 0) ? (
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Pie data={documentosPorFuncao} dataKey="quantidade" nameKey="grupo" cx="50%" cy="50%" innerRadius="38%" outerRadius="70%" paddingAngle={3}>
+                {documentosPorFuncao.map((item) => <Cell key={item.grupo} fill={item.cor} />)}
+              </Pie>
+              <Tooltip formatter={(value) => [`${Number(value ?? 0)} documentos`, "Quantidade"]} contentStyle={tooltipStyle(colors)} />
               <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        ) : <SemDados colors={colors} />}
+      </SecaoGrafico>
 
-              <Bar
-                yAxisId="left"
-                dataKey="quantidade"
-                fill={colors.primary}
-                name="Quantidade"
-                radius={[2, 2, 0, 0]}
-              />
-
-              <Bar
-                yAxisId="right"
-                dataKey="valor"
-                fill={colors.secondary}
-                name="Valor"
-                radius={[2, 2, 0, 0]}
-              />
+      <SecaoGrafico titulo="Balanço Financeiro (Kz)" colors={colors}>
+        {impactoFinanceiro.some((item) => item.valor > 0) ? (
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={impactoFinanceiro} margin={{ bottom: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+              <XAxis dataKey="grupo" interval={0} angle={-15} textAnchor="end" height={55} tick={{ fontSize: 10, fill: colors.textSecondary }} />
+              <YAxis tick={{ fontSize: 10, fill: colors.textSecondary }} />
+              <Tooltip formatter={(value) => [formatarKwanza(Number(value ?? 0)), "Valor"]} contentStyle={tooltipStyle(colors)} />
+              <Bar dataKey="valor" name="Valor" radius={[3, 3, 0, 0]}>
+                {impactoFinanceiro.map((item) => <Cell key={item.grupo} fill={item.cor} />)}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
-        </SecaoGrafico>
-      )}
+        ) : <SemDados colors={colors} />}
+      </SecaoGrafico>
+
+      <SecaoGrafico titulo="Estado dos Documentos" colors={colors}>
+        {documentosPorEstado.some((item) => item.quantidade > 0) ? (
+          <ResponsiveContainer width="100%" height={250}>
+            <PieChart>
+              <Pie data={documentosPorEstado} dataKey="quantidade" nameKey="grupo" cx="50%" cy="50%" innerRadius="38%" outerRadius="70%" paddingAngle={4}>
+                {documentosPorEstado.map((item) => <Cell key={item.grupo} fill={item.cor} />)}
+              </Pie>
+              <Tooltip formatter={(value) => [`${Number(value ?? 0)} documentos`, "Quantidade"]} contentStyle={tooltipStyle(colors)} />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        ) : <SemDados colors={colors} />}
+      </SecaoGrafico>
 
       {/* TABELA */}
       <SecaoGrafico titulo="Lista de Proformas" colors={colors}>

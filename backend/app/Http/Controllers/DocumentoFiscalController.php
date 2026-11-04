@@ -308,6 +308,116 @@ class DocumentoFiscalController extends Controller
         }
     }
 
+    public function exportarExcel(Request $request)
+    {
+        try {
+            $this->verificarAcessoUsuario();
+
+            $filtros = $request->validate([
+                'tipo'                    => 'nullable|in:FT,FR,AF,FP,FA,NC,ND,RC,RG,RE,FG,FGR,TV,FGEN,AC,ACR',
+                'estado'                  => 'nullable|in:emitido,paga,parcialmente_paga,cancelado,expirado,estornado,parcialmente_estornado',
+                'cliente_id'              => 'nullable|uuid|exists:clientes,id',
+                'cliente_nome'            => 'nullable|string|max:255',
+                'data_inicio'             => 'nullable|date',
+                'data_fim'                => 'nullable|date',
+                'pendentes'               => 'nullable|in:0,1,true,false',
+                'adiantamentos_pendentes' => 'nullable|in:0,1,true,false',
+                'proformas_pendentes'     => 'nullable|in:0,1,true,false',
+                'apenas_vendas'           => 'nullable|in:0,1,true,false',
+                'incluir_auto_facturacao' => 'nullable|in:0,1,true,false',
+                'apenas_nao_vendas'       => 'nullable|in:0,1,true,false',
+                'search'                  => 'nullable|string|max:255',
+                'com_retencao'            => 'nullable|in:0,1,true,false',
+                'tipo_item'               => 'nullable|in:produto,servico',
+            ]);
+
+            $booleans = [
+                'apenas_vendas',
+                'incluir_auto_facturacao',
+                'apenas_nao_vendas',
+                'pendentes',
+                'adiantamentos_pendentes',
+                'proformas_pendentes',
+                'com_retencao',
+            ];
+
+            foreach ($booleans as $campo) {
+                if (isset($filtros[$campo])) {
+                    $filtros[$campo] = filter_var($filtros[$campo], FILTER_VALIDATE_BOOLEAN);
+                }
+            }
+
+            $documentos = $this->documentoService->listarDocumentos(array_merge($filtros, ['per_page' => 50000]))->items();
+
+            $spreadsheet = new Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Documentos Fiscais');
+
+            $headers = [
+                'ID',
+                'Número Documento',
+                'Tipo',
+                'Cliente',
+                'NIF',
+                'Data Emissão',
+                'Base Tributável',
+                'IVA',
+                'Total Líquido',
+                'Estado',
+                'Método Pagamento',
+            ];
+            $sheet->fromArray([$headers], null, 'A1');
+            $sheet->getStyle('A1:K1')->getFont()->setBold(true);
+            $sheet->getStyle('A1:K1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF1F3A5F');
+            $sheet->getStyle('A1:K1')->getFont()->getColor()->setARGB('FFFFFFFF');
+
+            $linha = 2;
+            foreach ($documentos as $documento) {
+                $sheet->fromArray([
+                    [
+                        $documento->id,
+                        $documento->numero_documento,
+                        $documento->tipo_documento,
+                        $documento->cliente?->nome ?? $documento->cliente_nome ?? 'Consumidor Final',
+                        $documento->cliente?->nif ?? $documento->cliente_nif ?? '',
+                        $documento->data_emissao,
+                        (float) ($documento->base_tributavel ?? 0),
+                        (float) ($documento->total_iva ?? 0),
+                        (float) ($documento->total_liquido ?? 0),
+                        $documento->estado,
+                        $documento->metodo_pagamento ?? '',
+                    ],
+                ], null, 'A' . $linha);
+                $linha++;
+            }
+
+            foreach (range('A', 'K') as $coluna) {
+                $sheet->getColumnDimension($coluna)->setAutoSize(true);
+            }
+
+            $writer = new Xlsx($spreadsheet);
+            $nomeArquivo = 'documentos-fiscais-' . now()->format('Ymd_His') . '.xlsx';
+
+            return response()->streamDownload(function () use ($writer) {
+                $writer->save('php://output');
+            }, $nomeArquivo, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'message' => 'Erro de validação', 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            Log::error('[DocumentoFiscalController] Erro ao exportar Excel', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao exportar Excel: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function show(string $id): JsonResponse
     {
         $modo = $this->getModo();

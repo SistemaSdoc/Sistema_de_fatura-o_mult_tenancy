@@ -161,6 +161,9 @@ export interface DashboardData {
             quantidade: number;
             valor: number;
             retencao?: number;
+            quantidade_mes?: number;
+            valor_mes?: number;
+            valor_pendente?: number;
         }>>;
         por_estado: Array<{
             tipo: string;

@@ -614,7 +614,7 @@ public function exportarCompleto(Request $request)
             $dados = $request->validate([
                 'data_inicio' => 'nullable|date',
                 'data_fim' => 'nullable|date|after_or_equal:data_inicio',
-                'tipo' => 'nullable|in:FT,FR,FP,FA,NC,ND,RC',
+                'tipo' => 'nullable|in:FT,FR,AF,FP,FA,NC,ND,RC,RG,RE,FG,FGR,TV,FGEN,AC,ACR',
                 'cliente_id' => 'nullable|uuid|exists:clientes,id',
                 'cliente_nome' => 'nullable|string|max:255',
                 'estado' => 'nullable|in:emitido,paga,parcialmente_paga,cancelado,expirado',
@@ -627,7 +627,11 @@ public function exportarCompleto(Request $request)
             $dataFim = $dados['data_fim'] ?? now()->toDateString();
 
             //   QUERY COM SCOPE
-            $query = $this->queryDocumentosFiscais()->with(['cliente'])
+            $query = $this->queryDocumentosFiscais()
+                ->with(['cliente'])
+                ->withSum([
+                    'recibos as recibos_validos_sum' => fn ($query) => $query->where('estado', '!=', 'cancelado'),
+                ], 'total_liquido')
                 ->whereBetween('data_emissao', [$dataInicio, $dataFim]);
 
             if (!empty($dados['tipo'])) {
@@ -645,11 +649,11 @@ public function exportarCompleto(Request $request)
             }
 
             if (!empty($dados['apenas_vendas'])) {
-                $query->whereIn('tipo_documento', ['FT', 'FR', 'RC', 'RG']);
+                $query->whereIn('tipo_documento', ['FT', 'FR', 'AF', 'FG', 'FGR', 'TV', 'RC', 'RG', 'ACR']);
             }
 
             if (!empty($dados['apenas_nao_vendas'])) {
-                $query->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND']);
+                $query->whereIn('tipo_documento', ['FP', 'FA', 'NC', 'ND', 'RE', 'AC', 'FGEN']);
             }
 
             if (!empty($dados['com_retencao'])) {
@@ -665,11 +669,16 @@ public function exportarCompleto(Request $request)
                 'total_iva' => $documentos->sum('total_iva'),
                 'total_retencao' => $documentos->sum('total_retencao'),
                 'por_tipo' => $documentos->groupBy('tipo_documento')
-                    ->map(fn($docs) => [
-                        'quantidade' => $docs->count(),
-                        'valor' => $docs->sum('total_liquido'),
-                        'retencao' => $docs->sum('total_retencao'),
-                    ]),
+                    ->map(function ($docs) {
+                        $ativos = $docs->whereNotIn('estado', ['cancelado', 'cancelada']);
+                        return [
+                            'quantidade' => $docs->count(),
+                            'quantidade_emitida' => $ativos->count(),
+                            'valor' => $docs->sum('total_liquido'),
+                            'valor_emitido' => $ativos->sum('total_liquido'),
+                            'retencao' => $docs->sum('total_retencao'),
+                        ];
+                    }),
                 'por_estado' => $documentos->groupBy('estado')
                     ->map(fn($docs) => $docs->count()),
             ];
@@ -685,9 +694,19 @@ public function exportarCompleto(Request $request)
                     'filtros' => $dados,
                     'estatisticas' => $estatisticas,
                     'documentos' => $documentos->map(function ($d) {
-                        return array_merge($d->toArray(), [
+                        $resultado = array_merge($d->toArray(), [
                             'resumo' => $d->resumo ?? null,
                         ]);
+                        if (
+                            in_array($d->tipo_documento, ['FT', 'FA'], true)
+                            && in_array($d->estado, ['emitido', 'parcialmente_paga'], true)
+                        ) {
+                            $resultado['valor_pendente'] = max(
+                                0,
+                                (float) $d->total_liquido - (float) ($d->recibos_validos_sum ?? 0)
+                            );
+                        }
+                        return $resultado;
                     }),
                     'modo' => $modo,
                 ],

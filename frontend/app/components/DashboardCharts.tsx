@@ -23,31 +23,10 @@ type ProdutoItem = {
   valor: number;
 };
 
-type EvolucaoItem = {
-  mes: string;
-  [tipo: string]: number | string;
-};
-
-type EvolucaoTipo = {
-  codigo: string;
-  nome: string;
-  cor: string;
-};
-
-type DocumentoTipoItem = {
-  nome: string;
-  quantidade: number;
-  valor: number;
-};
-
-type EstadoDocumentoItem = {
-  estado: string;
-  quantidade: number;
-};
-
 type ChartValue = number | string | readonly (string | number)[] | null | undefined;
 type ScalarChartValue = number | string | null | undefined;
 type ChartFormatter = (value: ScalarChartValue) => [string, string];
+type GrupoGrafico = { grupo: string; quantidade: number; valor: number; cor: string };
 
 const scalarChartValue = (value: ChartValue): ScalarChartValue => {
   if (typeof value === "number" || typeof value === "string" || value == null) return value;
@@ -57,43 +36,35 @@ const scalarChartValue = (value: ChartValue): ScalarChartValue => {
 interface DashboardChartsProps {
   colors: ThemeColors;
   produtosData: ProdutoItem[];
-  evolucaoData: EvolucaoItem[];
-  evolucaoTipos: EvolucaoTipo[];
-  documentosPorTipo: DocumentoTipoItem[];
-  documentosPorEstado: EstadoDocumentoItem[];
+  documentosPorFuncao: GrupoGrafico[];
+  impactoFinanceiro: GrupoGrafico[];
+  documentosPorEstado: GrupoGrafico[];
   tooltipStyle: TooltipProps<number, string>["contentStyle"];
   gridStroke: string;
   tickStyle: { fill: string; fontSize: number };
-  pieColors: string[];
-  formatNumber: (value: number) => string;
   formatCompact: (value: number) => string;
   formatterQuantidade: ChartFormatter;
   formatterValor: ChartFormatter;
-  formatterDocsQuantidade: ChartFormatter;
   formatterTotal: ChartFormatter;
 }
 
 export function DashboardCharts({
   colors,
   produtosData,
-  evolucaoData,
-  evolucaoTipos,
-  documentosPorTipo,
+  documentosPorFuncao,
+  impactoFinanceiro,
   documentosPorEstado,
   tooltipStyle,
   gridStroke,
   tickStyle,
-  pieColors,
-  formatNumber,
   formatCompact,
   formatterQuantidade,
   formatterValor,
-  formatterDocsQuantidade,
   formatterTotal,
 }: DashboardChartsProps) {
   return (
     <>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         <div
           className="p-3 sm:p-4 shadow border"
           style={{ backgroundColor: colors.card, borderColor: colors.border }}
@@ -134,93 +105,44 @@ export function DashboardCharts({
           </div>
         </div>
 
-        <div
-          className="p-3 sm:p-4 shadow border"
-          style={{ backgroundColor: colors.card, borderColor: colors.border }}
-        >
-          <h2 className="text-sm sm:text-base font-semibold mb-3 flex items-center gap-2" style={{ color: colors.blue }}>
-            <TrendingUp style={{ color: colors.secondary }} size={18} />
-            Evolução Mensal por Tipo
-          </h2>
-          <div className="h-56 sm:h-72 lg:h-80 w-full">
-            {evolucaoData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={evolucaoData} margin={{ left: 0, right: 8, top: 4, bottom: 4 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
-                  <XAxis dataKey="mes" tick={tickStyle} stroke={colors.border} />
-                  <YAxis tickFormatter={formatCompact} width={48} tick={tickStyle} stroke={colors.border} />
-                  <Tooltip
-                    contentStyle={tooltipStyle}
-                    formatter={(value: ChartValue, name: string | number | undefined) => [
-                      formatterTotal(scalarChartValue(value))[0],
-                      String(name ?? "Valor"),
-                    ]}
-                  />
-                  <Legend />
-                  {evolucaoTipos.map((tipo) => (
-                    <Bar
-                      key={tipo.codigo}
-                      dataKey={tipo.codigo}
-                      name={tipo.nome}
-                      stackId="documentos"
-                      fill={tipo.cor}
-                    />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex items-center justify-center text-sm" style={{ color: colors.textSecondary }}>
-                Sem dados de evolução mensal
-              </div>
-            )}
-          </div>
-        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         <div
           className="p-3 sm:p-4 shadow border"
           style={{ backgroundColor: colors.card, borderColor: colors.border }}
         >
           <h2 className="text-sm sm:text-base font-semibold mb-3 flex items-center gap-2" style={{ color: colors.blue }}>
             <Receipt style={{ color: colors.secondary }} size={18} />
-            Docs por Tipo
+            Volume de Documentos Emitidos no Mês
           </h2>
           <div className="h-52 sm:h-64 w-full">
-            {documentosPorTipo.length > 0 ? (
+            {documentosPorFuncao.some((item) => item.quantidade > 0) ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={documentosPorTipo} margin={{ top: 4, right: 8, left: 0, bottom: 60 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                  <XAxis
-                    dataKey="nome"
-                    tick={{ ...tickStyle, fontSize: 10 }}
-                    stroke={colors.border}
-                    angle={-35}
-                    textAnchor="end"
-                    interval={0}
-                    height={70}
-                  />
-                  <YAxis yAxisId="left" orientation="left" stroke={colors.primary} tick={tickStyle} width={36} />
-                  <YAxis yAxisId="right" orientation="right" stroke={colors.secondary} tick={tickStyle} width={36} />
+                <PieChart>
+                  <Pie
+                    data={documentosPorFuncao}
+                    dataKey="quantidade"
+                    nameKey="grupo"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius="38%"
+                    outerRadius="70%"
+                    paddingAngle={3}
+                    label={({ name, percent }) => `${name}: ${((percent ?? 0) * 100).toFixed(0)}%`}
+                  >
+                    {documentosPorFuncao.map((item) => <Cell key={item.grupo} fill={item.cor} />)}
+                  </Pie>
                   <Tooltip
                     contentStyle={tooltipStyle}
-                    formatter={(value: ChartValue, name: string | number | undefined) => {
-                      if (name === "quantidade" || name === "Qtd") {
-                        return formatterDocsQuantidade(scalarChartValue(value));
-                      }
-                      if (name === "valor" || name === "Valor") {
-                        return formatterValor(scalarChartValue(value));
-                      }
-                      return [String(value ?? 0), name || ""];
-                    }}
+                    formatter={(value: ChartValue) => [`${Number(scalarChartValue(value) ?? 0)} documentos`, "Quantidade"]}
                   />
-                  <Bar yAxisId="left" dataKey="quantidade" fill={colors.blue}  name="Qtd" radius={[3, 3, 0, 0]} barSize={12} />
-                  <Bar yAxisId="right" dataKey="valor" fill={colors.secondary} name="Valor" radius={[3, 3, 0, 0]} barSize={12} />
-                </BarChart>
+                  <Legend />
+                </PieChart>
               </ResponsiveContainer>
             ) : (
               <div className="h-full flex items-center justify-center text-sm" style={{ color: colors.textSecondary }}>
-                Sem dados de documentos por tipo
+                Sem documentos emitidos neste mês
               </div>
             )}
           </div>
@@ -230,12 +152,41 @@ export function DashboardCharts({
           className="p-3 sm:p-4 shadow border"
           style={{ backgroundColor: colors.card, borderColor: colors.border }}
         >
-          <h2 className="text-sm sm:text-base font-semibold mb-3 flex items-center gap-2" style={{ color: colors.blue  }}>
+          <h2 className="text-sm sm:text-base font-semibold mb-3 flex items-center gap-2" style={{ color: colors.blue }}>
+            <TrendingUp style={{ color: colors.secondary }} size={18} />
+            Balanço Financeiro (Kz)
+          </h2>
+          <div className="h-56 sm:h-64 w-full">
+            {impactoFinanceiro.some((item) => item.valor > 0) ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={impactoFinanceiro} margin={{ top: 8, right: 16, left: 8, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
+                  <XAxis dataKey="grupo" tick={{ ...tickStyle, fontSize: 10 }} stroke={colors.border} interval={0} />
+                  <YAxis tickFormatter={formatCompact} tick={tickStyle} stroke={colors.border} />
+                  <Tooltip
+                    contentStyle={tooltipStyle}
+                    formatter={(value: ChartValue) => formatterTotal(scalarChartValue(value))}
+                  />
+                  <Bar dataKey="valor" name="Valor" radius={[4, 4, 0, 0]}>
+                    {impactoFinanceiro.map((item) => <Cell key={item.grupo} fill={item.cor} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-sm" style={{ color: colors.textSecondary }}>
+                Sem movimentos financeiros neste mês
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="p-3 sm:p-4 shadow border" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+          <h2 className="text-sm sm:text-base font-semibold mb-3 flex items-center gap-2" style={{ color: colors.blue }}>
             <FileText style={{ color: colors.secondary }} size={18} />
-            Docs por Estado
+            Estado dos Documentos
           </h2>
           <div className="h-44 sm:h-52 w-full">
-            {documentosPorEstado.length > 0 ? (
+            {documentosPorEstado.some((item) => item.quantidade > 0) ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -246,36 +197,25 @@ export function DashboardCharts({
                     outerRadius="68%"
                     paddingAngle={4}
                     dataKey="quantidade"
-                    nameKey="estado"
-                    label={({ percent }) => `${((percent || 0) * 100).toFixed(0)}%`}
+                    nameKey="grupo"
+                    label={({ percent }) => `${((percent ?? 0) * 100).toFixed(0)}%`}
                     labelLine={false}
                   >
-                    {documentosPorEstado.map((_, i) => (
-                      <Cell key={i} fill={pieColors[i % pieColors.length]} />
-                    ))}
+                    {documentosPorEstado.map((item) => <Cell key={item.grupo} fill={item.cor} />)}
                   </Pie>
-                  <Tooltip contentStyle={tooltipStyle} formatter={(value: ChartValue) => formatterDocsQuantidade(scalarChartValue(value))} />
+                  <Tooltip
+                    contentStyle={tooltipStyle}
+                    formatter={(value: ChartValue) => [`${Number(scalarChartValue(value) ?? 0)} documentos`, "Quantidade"]}
+                  />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
               <div className="h-full flex items-center justify-center text-sm" style={{ color: colors.textSecondary }}>
-                Sem dados de documentos por estado
+                Sem documentos neste mês
               </div>
             )}
           </div>
-          {documentosPorEstado.length > 0 && (
-            <div className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 mt-2 pt-3 border-t" style={{ borderColor: colors.border }}>
-              {documentosPorEstado.map((item, i) => (
-                <div key={i} className="flex items-center gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: pieColors[i % pieColors.length] }} />
-                  <span className="text-xs" style={{ color: colors.blue }}>
-                    {item.estado}: {formatNumber(item.quantidade)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
     </>

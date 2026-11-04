@@ -22,6 +22,7 @@ use App\Models\Tenant\User as TenantUser;
 
 use App\Models\Empresa;
 use App\Models\LandlordUser;
+use App\Support\GruposDocumentosFiscais;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -715,7 +716,11 @@ class RelatoriosService
             'modo'        => $modo,
         ]);
 
-        $query = $this->queryDocumentosFiscais()->with(['cliente']);
+        $query = $this->queryDocumentosFiscais()
+            ->with(['cliente'])
+            ->withSum([
+                'recibos as recibos_validos_sum' => fn ($query) => $query->where('estado', '!=', 'cancelado'),
+            ], 'total_liquido');
 
         if ($dataInicio) {
             $query->whereDate('data_emissao', '>=', $dataInicio);
@@ -743,16 +748,30 @@ class RelatoriosService
         });
 
         $porTipo = $documentosVenda->groupBy('tipo_documento')->map(function ($grupo) {
+            $tipo = $grupo->first()->tipo_documento;
+            $documentosAtivos = $grupo->whereNotIn('estado', ['cancelado', 'cancelada']);
+            $valorPendente = in_array($tipo, ['FT', 'FA'], true)
+                ? $documentosAtivos->whereIn('estado', ['emitido', 'parcialmente_paga'])->sum(
+                    fn ($doc) => max(0, (float) $doc->total_liquido - (float) ($doc->recibos_validos_sum ?? 0))
+                )
+                : 0;
+
             return [
                 'quantidade'    => $grupo->count(),
+                'quantidade_emitida' => $documentosAtivos->count(),
                 'total_liquido' => $grupo->sum('total_liquido'),
+                'valor_emitido' => $documentosAtivos->sum('total_liquido'),
                 'total_base'    => $grupo->sum('base_tributavel'),
                 'total_iva'     => $grupo->sum('total_iva'),
                 'total_retencao' => $grupo->sum('total_retencao'),
+                'valor_pendente' => $valorPendente,
             ];
         });
 
         $porEstado = $documentosVenda->groupBy('estado')->map(fn($g) => $g->count());
+        $porTipoEstado = $documentosVenda->groupBy('tipo_documento')->map(
+            fn ($grupo) => $grupo->groupBy('estado')->map(fn ($estadoDocs) => $estadoDocs->count())
+        );
 
         $faturacaoTotal    = $documentosVenda->sum('total_liquido');
         $faturacaoPaga     = $documentosVenda->whereIn('estado', ['paga'])->sum('total_liquido');
@@ -774,6 +793,7 @@ class RelatoriosService
             'faturacao_pendente' => $faturacaoPendente,
             'faturacao_por_mes'  => $faturacaoPorMes,
             'por_tipo'           => $porTipo,
+            'por_tipo_estado'    => $porTipoEstado,
             'por_estado'         => $porEstado,
             'periodo' => [
                 'data_inicio' => $dataInicio,
@@ -2329,6 +2349,21 @@ class CompletoDocumentosSheet implements FromArray, WithHeadings, WithTitle, Wit
                 $dados['total_retencao'] ?? 0,
             ];
         }
+        $linhas[] = ['', '', '', '', '', ''];
+        $linhas[] = ['RESUMO POR FUNÇÃO', '', '', '', '', ''];
+        foreach (GruposDocumentosFiscais::porFuncao($porTipo) as $grupo) {
+            $linhas[] = [$grupo['grupo'], $grupo['quantidade'], '', '', '', ''];
+        }
+        $linhas[] = ['', '', '', '', '', ''];
+        $linhas[] = ['BALANÇO FINANCEIRO', '', '', '', '', ''];
+        foreach (GruposDocumentosFiscais::impactoFinanceiro($porTipo) as $grupo) {
+            $linhas[] = [$grupo['grupo'], '', $grupo['valor'], '', '', ''];
+        }
+        $linhas[] = ['', '', '', '', '', ''];
+        $linhas[] = ['ESTADO DOS DOCUMENTOS', '', '', '', '', ''];
+        foreach (GruposDocumentosFiscais::porEstado($this->faturacao['por_tipo_estado'] ?? []) as $grupo) {
+            $linhas[] = [$grupo['grupo'], $grupo['quantidade'], '', '', '', ''];
+        }
         $linhas[] = ['PROFORMAS', $this->proformas['total'] ?? 0, $this->proformas['valor_total'] ?? 0, '', '', ''];
         return $linhas;
     }
@@ -2548,20 +2583,50 @@ class CompletoGraficosSheet implements FromArray, WithHeadings, WithTitle, WithS
 
     public function headings(): array
     {
-        return ['Mês', 'Faturação (Kz)'];
+        return [
+            'Mês', 'Facturação (Kz)', '',
+            'Grupo funcional', 'Quantidade', '',
+            'Grupo financeiro', 'Valor (Kz)', '',
+            'Estado', 'Quantidade',
+        ];
     }
 
     public function array(): array
     {
         $meses = $this->faturacao['faturacao_por_mes'] ?? [];
-        $dados = [];
-        foreach ($meses as $m) {
-            $dados[] = [$m['mes'], $m['total']];
+        if (empty($meses)) {
+            $meses = [['mes' => 'Sem dados', 'total' => 0]];
         }
-        if (empty($dados)) {
-            $dados = [['Sem dados', 0]];
+
+        $porTipo = $this->faturacao['por_tipo'] ?? [];
+        $funcao = GruposDocumentosFiscais::porFuncao($porTipo);
+        $impacto = GruposDocumentosFiscais::impactoFinanceiro($porTipo);
+        $estados = GruposDocumentosFiscais::porEstado($this->faturacao['por_tipo_estado'] ?? []);
+        $numLinhas = max(count($meses), count($funcao), count($impacto), count($estados));
+        $linhas = [];
+
+        for ($i = 0; $i < $numLinhas; $i++) {
+            $linha = array_fill(0, 11, '');
+            if (isset($meses[$i])) {
+                $linha[0] = $meses[$i]['mes'] ?? '';
+                $linha[1] = $meses[$i]['total'] ?? 0;
+            }
+            if (isset($funcao[$i])) {
+                $linha[3] = $funcao[$i]['grupo'];
+                $linha[4] = $funcao[$i]['quantidade'];
+            }
+            if (isset($impacto[$i])) {
+                $linha[6] = $impacto[$i]['grupo'];
+                $linha[7] = $impacto[$i]['valor'];
+            }
+            if (isset($estados[$i])) {
+                $linha[9] = $estados[$i]['grupo'];
+                $linha[10] = $estados[$i]['quantidade'];
+            }
+            $linhas[] = $linha;
         }
-        return $dados;
+
+        return $linhas;
     }
 
     public function styles(Worksheet $sheet): array
@@ -2585,93 +2650,22 @@ class CompletoGraficosSheet implements FromArray, WithHeadings, WithTitle, WithS
 
                 $colunas = $this->array();
                 $linhas = count($colunas) + 1;
+                $meses = $this->faturacao['faturacao_por_mes'] ?? [];
+                $fimMeses = max(2, count($meses) + 1);
+                $fimFuncao = count(GruposDocumentosFiscais::porFuncao($this->faturacao['por_tipo'] ?? [])) + 1;
+                $fimImpacto = count(GruposDocumentosFiscais::impactoFinanceiro($this->faturacao['por_tipo'] ?? [])) + 1;
+                $fimEstados = count(GruposDocumentosFiscais::porEstado($this->faturacao['por_tipo_estado'] ?? [])) + 1;
 
-                if ($linhas < 2) return;
+                $sheet->getStyle("B2:B{$fimMeses}")->getNumberFormat()->setFormatCode('#,##0.00" Kz"');
+                $sheet->getStyle("H2:H{$fimImpacto}")->getNumberFormat()->setFormatCode('#,##0.00" Kz"');
 
-                $sheet->getStyle("A2:B{$linhas}")
-                    ->getNumberFormat()
-                    ->setFormatCode('#,##0.00" Kz"');
-
-                // ========== GRÁFICO DE BARRAS ==========
-                $dataSeriesLabels = [
-                    new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_STRING, 'Gráficos!$B$1', null, 1),
-                ];
-                $xAxisTickValues = [
-                    new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_STRING, 'Gráficos!$A$2:$A$' . $linhas, null, $linhas - 1),
-                ];
-                $dataSeriesValues = [
-                    new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_NUMBER, 'Gráficos!$B$2:$B$' . $linhas, null, $linhas - 1),
-                ];
-
-                $series = new DataSeries(
-                    DataSeries::TYPE_BARCHART,
-                    DataSeries::GROUPING_CLUSTERED,
-                    range(0, count($dataSeriesValues) - 1),
-                    $dataSeriesLabels,
-                    $xAxisTickValues,
-                    $dataSeriesValues
-                );
-                $series->setPlotDirection(DataSeries::DIRECTION_COL);
-
-                $plotArea = new PlotArea(null, [$series]);
-                $legend = new Legend(Legend::POSITION_RIGHT, null, false);
-                $title = new Title('Faturação Mensal (Kz)');
-
-                $chart = new Chart('chart1', $title, $legend, $plotArea, true, 0, null, null);
-                $chart->setTopLeftPosition('D1');
-                $chart->setBottomRightPosition('M15');
-                $sheet->addChart($chart);
-
-                // ========== GRÁFICO DE PIZZA ==========
-                $tipos = $this->faturacao['por_tipo'] ?? [];
-                $labels = [];
-                $values = [];
-                foreach ($tipos as $tipo => $dados) {
-                    $labels[] = $tipo;
-                    $values[] = $dados['total_liquido'] ?? 0;
-                }
-
-                if (count($labels) > 0) {
-                    $sheet->setCellValue('D16', 'Tipo');
-                    $sheet->setCellValue('E16', 'Total');
-                    $row = 17;
-                    foreach ($labels as $i => $label) {
-                        $sheet->setCellValue("D{$row}", $label);
-                        $sheet->setCellValue("E{$row}", $values[$i]);
-                        $row++;
-                    }
-
-                    $dataSeriesLabelsPie = [
-                        new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_STRING, 'Gráficos!$E$16', null, 1),
-                    ];
-                    $xAxisTickValuesPie = [
-                        new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_STRING, 'Gráficos!$D$17:$D$' . ($row-1), null, $row-17),
-                    ];
-                    $dataSeriesValuesPie = [
-                        new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_NUMBER, 'Gráficos!$E$17:$E$' . ($row-1), null, $row-17),
-                    ];
-
-                    $seriesPie = new DataSeries(
-                        DataSeries::TYPE_PIECHART,
-                        null,
-                        range(0, count($dataSeriesValuesPie) - 1),
-                        $dataSeriesLabelsPie,
-                        $xAxisTickValuesPie,
-                        $dataSeriesValuesPie
-                    );
-
-                    $plotAreaPie = new PlotArea(null, [$seriesPie]);
-                    $legendPie = new Legend(Legend::POSITION_RIGHT, null, false);
-                    $titlePie = new Title('Distribuição por Tipo de Documento');
-
-                    $chartPie = new Chart('chart2', $titlePie, $legendPie, $plotAreaPie, true, 0, null, null);
-                    $chartPie->setTopLeftPosition('D18');
-                    $chartPie->setBottomRightPosition('M35');
-                    $sheet->addChart($chartPie);
-                }
+                $this->adicionarGrafico($sheet, 'Faturação Mensal (Kz)', DataSeries::TYPE_BARCHART, 'A', 'B', 2, $fimMeses, 'D36', 'M52');
+                $this->adicionarGrafico($sheet, 'Volume de Documentos por Função', DataSeries::TYPE_PIECHART, 'D', 'E', 2, $fimFuncao, 'D1', 'M16');
+                $this->adicionarGrafico($sheet, 'Balanço Financeiro (Kz)', DataSeries::TYPE_BARCHART, 'G', 'H', 2, $fimImpacto, 'N1', 'W16');
+                $this->adicionarGrafico($sheet, 'Estado dos Documentos', DataSeries::TYPE_PIECHART, 'J', 'K', 2, $fimEstados, 'D18', 'M34');
 
                 // Bordas para a tabela de dados
-                $sheet->getStyle("A1:B{$linhas}")
+                $sheet->getStyle("A1:K{$linhas}")
                     ->getBorders()->getAllBorders()
                     ->setBorderStyle(Border::BORDER_THIN)
                     ->getColor()->setRGB('D9D9D9');
@@ -2679,21 +2673,72 @@ class CompletoGraficosSheet implements FromArray, WithHeadings, WithTitle, WithS
                 // Zebra na tabela de dados
                 for ($i = 2; $i <= $linhas; $i++) {
                     if ($i % 2 == 0) {
-                        $sheet->getStyle("A{$i}:B{$i}")
+                        $sheet->getStyle("A{$i}:K{$i}")
                             ->getFill()->setFillType(Fill::FILL_SOLID)
                             ->getStartColor()->setRGB('F5F7FA');
                     }
                 }
 
                 // Larguras
-                foreach (range('A', 'M') as $col) {
+                foreach (range('A', 'W') as $col) {
                     $sheet->getColumnDimension($col)->setAutoSize(true);
                 }
 
                 // Rodapé
-                $sheet->setCellValue('A37', 'Relatório gerado por FaturaJá - www.faturaja.ao');
-                $sheet->getStyle('A37')->getFont()->setItalic(true)->setSize(8)->getColor()->setRGB('808080');
+                $sheet->setCellValue('A54', 'Relatório gerado por FaturaJá - www.faturaja.ao');
+                $sheet->getStyle('A54')->getFont()->setItalic(true)->setSize(8)->getColor()->setRGB('808080');
             },
         ];
+    }
+
+    private function adicionarGrafico(
+        Worksheet $sheet,
+        string $titulo,
+        string $tipoGrafico,
+        string $colunaCategoria,
+        string $colunaValor,
+        int $linhaInicio,
+        int $linhaFim,
+        string $cantoSuperior,
+        string $cantoInferior
+    ): void {
+        $quantidade = $linhaFim - $linhaInicio + 1;
+        $labels = [new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_STRING, 'Gráficos!$' . $colunaValor . '$1', null, 1)];
+        $categorias = [new DataSeriesValues(
+            DataSeriesValues::DATASERIES_TYPE_STRING,
+            'Gráficos!$' . $colunaCategoria . '$' . $linhaInicio . ':$' . $colunaCategoria . '$' . $linhaFim,
+            null,
+            $quantidade
+        )];
+        $valores = [new DataSeriesValues(
+            DataSeriesValues::DATASERIES_TYPE_NUMBER,
+            'Gráficos!$' . $colunaValor . '$' . $linhaInicio . ':$' . $colunaValor . '$' . $linhaFim,
+            null,
+            $quantidade
+        )];
+        $series = new DataSeries(
+            $tipoGrafico,
+            $tipoGrafico === DataSeries::TYPE_BARCHART ? DataSeries::GROUPING_CLUSTERED : null,
+            [0],
+            $labels,
+            $categorias,
+            $valores
+        );
+        if ($tipoGrafico === DataSeries::TYPE_BARCHART) {
+            $series->setPlotDirection(DataSeries::DIRECTION_COL);
+        }
+        $chart = new Chart(
+            'chart_' . strtolower(str_replace(' ', '_', $titulo)),
+            new Title($titulo),
+            new Legend(Legend::POSITION_RIGHT, null, false),
+            new PlotArea(null, [$series]),
+            true,
+            0,
+            null,
+            null
+        );
+        $chart->setTopLeftPosition($cantoSuperior);
+        $chart->setBottomRightPosition($cantoInferior);
+        $sheet->addChart($chart);
     }
 }

@@ -222,6 +222,9 @@ export interface FaturacaoPorTipo {
         total_base: number;
         total_iva: number;
         total_retencao?: number;
+        quantidade_emitida?: number;
+        valor_emitido?: number;
+        valor_pendente?: number;
     };
 }
 
@@ -237,6 +240,7 @@ export interface RelatorioFaturacao {
     faturacao_pendente: number;
     faturacao_por_mes: FaturacaoPorMes[];
     por_tipo: FaturacaoPorTipo;
+    por_tipo_estado?: Record<string, Record<string, number>>;
     por_tipo_correcao?: FaturacaoPorTipo;
     por_estado: Record<string, number>;
     retencoes?: FaturacaoRetencoes;
@@ -408,6 +412,7 @@ export interface DocumentoFiscalItem {
     total_iva: number;
     total_liquido: number;
     total_retencao?: number;
+    valor_pendente?: number;
     estado: string;
     resumo?: Record<string, unknown>;
 }

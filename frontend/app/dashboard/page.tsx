@@ -10,10 +10,14 @@ import MainEmpresa from "@/app/components/MainEmpresa";
 import {
   dashboardService,
   DashboardData as ServiceDashboardData,
-  isTipoDocumentoFiscal,
-  NOMES_TIPO_DOCUMENTO_FISCAL,
-  TIPOS_DOCUMENTO_FISCAL,
 } from "@/services/Dashboard";
+import {
+  agruparEstadosPorTipo,
+  agruparImpactoFinanceiro,
+  agruparPorFuncao,
+  type GrupoGrafico,
+  type TipoDocumentoResumo,
+} from "@/services/documentGroups";
 import { useThemeColors, useTheme, type ThemeColors } from "@/context/ThemeContext";
 import { usePathname, useRouter } from "next/navigation";
 import type { TooltipProps } from "recharts";
@@ -31,23 +35,6 @@ interface ProdutoItem {
   nome: string;
   quantidade: number;
   valor: number;
-}
-
-interface EvolucaoItem {
-  mes: string;
-  [tipo: string]: number | string;
-}
-
-const CORES_TIPO_DOCUMENTO = [
-  "#2563EB", "#16A34A", "#0891B2", "#EA580C",
-  "#7C3AED", "#DC2626", "#D97706", "#0D9488",
-  "#DB2777", "#4F46E5", "#65A30D", "#9333EA",
-  "#0284C7", "#C2410C", "#BE123C", "#475569",
-];
-
-interface EstadoDocumento {
-  estado: string;
-  quantidade: number;
 }
 
 interface SkeletonProps {
@@ -273,49 +260,21 @@ export default function DashboardPage() {
     valor: Number(p.valor_total) || 0,
   }));
 
-  const codigosMensais = new Set(graficos.evolucaoMensal.flatMap((item) => Object.keys(item)));
-  const codigosConhecidos = new Set<string>(TIPOS_DOCUMENTO_FISCAL);
-  const tiposEvolucao = [
-    ...TIPOS_DOCUMENTO_FISCAL.filter((tipo) => codigosMensais.has(tipo)),
-    ...[...codigosMensais]
-      .filter((tipo) => !codigosConhecidos.has(tipo))
-      .filter((tipo) => !["mes", "total", "retencao", "Total", "Retencao"].includes(tipo))
-      .sort(),
-  ].filter((tipo) => graficos.evolucaoMensal.some((item) => Number(item[tipo]) !== 0));
+  const porTipo = Object.fromEntries(
+    Object.entries(data.documentos_fiscais?.por_tipo ?? {})
+      .filter((entry): entry is [string, NonNullable<typeof entry[1]>] => entry[1] !== undefined)
+      .map(([tipo, resumo]) => [tipo, {
+        quantidade: Number(resumo.quantidade ?? 0),
+        valor: Number(resumo.valor ?? 0),
+        quantidade_mes: Number(resumo.quantidade_mes ?? 0),
+        valor_mes: Number(resumo.valor_mes ?? 0),
+        valor_pendente: Number(resumo.valor_pendente ?? 0),
+      }])
+  ) as Record<string, TipoDocumentoResumo>;
 
-  const evolucaoTipos = tiposEvolucao.map((codigo, index) => ({
-    codigo,
-    nome: isTipoDocumentoFiscal(codigo) ? NOMES_TIPO_DOCUMENTO_FISCAL[codigo] : codigo,
-    cor: CORES_TIPO_DOCUMENTO[index % CORES_TIPO_DOCUMENTO.length],
-  }));
-
-  const evolucaoData: EvolucaoItem[] = graficos.evolucaoMensal.map((item) => ({
-    mes: shortText(String(item.mes), 3),
-    ...Object.fromEntries(evolucaoTipos.map(({ codigo }) => [codigo, Number(item[codigo]) || 0])),
-  }));
-
-  const documentosPorTipo: { nome: string; quantidade: number; valor: number }[] = graficos.documentosPorTipo.map((item) => ({
-    nome: String(item.nome),
-    quantidade: Number(item.quantidade),
-    valor: Number(item.valor),
-  }));
-
-  const estadoLabel: Record<string, string> = {
-    paga: "Pago",
-    emitido: "Emitido",
-    cancelado: "Cancelado",
-    cancelada: "Cancelada",
-    parcialmente_paga: "Parcial",
-  };
-
-  const documentosPorEstado: EstadoDocumento[] = Object.values(
-    graficos.documentosPorEstado.reduce<Record<string, EstadoDocumento>>((acc, item) => {
-      const key = String(item.estado);
-      if (!acc[key]) acc[key] = { estado: estadoLabel[key] ?? key, quantidade: 0 };
-      acc[key].quantidade += Number(item.quantidade);
-      return acc;
-    }, {})
-  );
+  const documentosPorFuncao: GrupoGrafico[] = agruparPorFuncao(porTipo);
+  const impactoFinanceiro: GrupoGrafico[] = agruparImpactoFinanceiro(porTipo);
+  const documentosPorEstado: GrupoGrafico[] = agruparEstadosPorTipo(graficos.documentosPorEstado);
 
   const tooltipStyle: TooltipProps<number, string>["contentStyle"] = {
     backgroundColor: colors.card,
@@ -335,11 +294,6 @@ export default function DashboardPage() {
     return [formatKz(num), "Valor"];
   };
 
-  const formatterDocsQuantidade = (value: number | string | null | undefined): [string, string] => {
-    const num = Number(value ?? 0);
-    return [`${formatNumber(num)} docs`, "Quantidade"];
-  };
-
   const formatterTotal = (value: number | string | null | undefined): [string, string] => {
     const num = Number(value ?? 0);
     return [formatKz(num), "Total"];
@@ -347,8 +301,6 @@ export default function DashboardPage() {
 
   const gridStroke = theme === "dark" ? "#404040" : "#E5E7EB";
   const tickStyle = { fill: colors.blue, fontSize: 11 };
-  const pieColors = [colors.primary, colors.secondary,colors.blue, "#95a5a6", "#f39c12", "#e74c3c"];
-
   const kpiCards: Array<{
     href: string;
     icon: React.ElementType;
@@ -461,19 +413,15 @@ export default function DashboardPage() {
         <DashboardCharts
           colors={colors}
           produtosData={produtosData}
-          evolucaoData={evolucaoData}
-          evolucaoTipos={evolucaoTipos}
-          documentosPorTipo={documentosPorTipo}
+          documentosPorFuncao={documentosPorFuncao}
+          impactoFinanceiro={impactoFinanceiro}
           documentosPorEstado={documentosPorEstado}
           tooltipStyle={tooltipStyle}
           gridStroke={gridStroke}
           tickStyle={tickStyle}
-          pieColors={pieColors}
-          formatNumber={formatNumber}
           formatCompact={formatCompact}
           formatterQuantidade={formatterQuantidade}
           formatterValor={formatterValor}
-          formatterDocsQuantidade={formatterDocsQuantidade}
           formatterTotal={formatterTotal}
         />
 

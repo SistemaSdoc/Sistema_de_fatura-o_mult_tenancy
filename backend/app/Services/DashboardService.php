@@ -403,6 +403,8 @@ protected function verificarAcessoUsuario(): void
     {
         $documentoModel = $this->model('documento');
         $cancelado = $documentoModel::ESTADO_CANCELADO;
+        $inicioMes = now()->startOfMonth();
+        $fimMes = now()->endOfMonth();
 
         $query = $this->queryComScope('documento')
             ->whereNotIn('estado', [$cancelado])
@@ -414,25 +416,48 @@ protected function verificarAcessoUsuario(): void
             )
             ->groupBy('tipo_documento');
 
+        $pendentes = $this->queryComScope('documento')
+            ->whereIn('tipo_documento', [
+                $documentoModel::TIPO_FATURA,
+                $documentoModel::TIPO_FATURA_ADIANTAMENTO,
+            ])
+            ->whereIn('estado', [
+                $documentoModel::ESTADO_EMITIDO,
+                $documentoModel::ESTADO_PARCIALMENTE_PAGA,
+            ])
+            ->whereBetween('data_emissao', [$inicioMes, $fimMes])
+            ->withSum([
+                'recibos as recibos_validos_sum' => fn ($query) => $query->where('estado', '!=', $cancelado),
+            ], 'total_liquido')
+            ->get(['tipo_documento', 'total_liquido'])
+            ->groupBy('tipo_documento')
+            ->map(fn ($documentos) => $documentos->sum(
+                fn ($documento) => max(0, (float) $documento->total_liquido - (float) ($documento->recibos_validos_sum ?? 0))
+            ));
+
         return $query->get()
-            ->mapWithKeys(fn ($item) => [
-                $item->tipo_documento => [
+            ->mapWithKeys(function ($item) use ($query, $inicioMes, $fimMes, $pendentes) {
+                $porMes = (clone $query)
+                    ->where('tipo_documento', $item->tipo_documento)
+                    ->whereBetween('data_emissao', [$inicioMes, $fimMes]);
+
+                return [$item->tipo_documento => [
                     'nome'       => $this->nomeTipoDocumento($item->tipo_documento),
                     'quantidade' => $item->quantidade,
                     'valor'      => $item->valor,
                     'retencao'   => $item->retencao,
-                ],
-            ])
+                    'quantidade_mes' => (clone $porMes)->count(),
+                    'valor_mes' => (clone $porMes)->sum('total_liquido'),
+                    'valor_pendente' => (float) ($pendentes[$item->tipo_documento] ?? 0),
+                ]];
+            })
             ->toArray();
     }
 
     private function getDocumentosPorEstado(): array
     {
-        $documentoModel = $this->model('documento');
-        $cancelado = $documentoModel::ESTADO_CANCELADO;
-
         $query = $this->queryComScope('documento')
-            ->whereNotIn('estado', [$cancelado])
+            ->whereBetween('data_emissao', [now()->startOfMonth(), now()->endOfMonth()])
             ->select(
                 'tipo_documento',
                 'estado',

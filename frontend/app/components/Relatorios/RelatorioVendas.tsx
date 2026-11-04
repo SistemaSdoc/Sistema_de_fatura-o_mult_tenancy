@@ -1,11 +1,11 @@
 import React, { useMemo } from "react";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell,
-  Legend, ResponsiveContainer, AreaChart, Area, CartesianGrid,
+  BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, Legend, ResponsiveContainer, CartesianGrid,
 } from "recharts";
-import { RelatorioVendas, RelatorioFaturacao, FaturacaoPorTipo, formatarKwanza } from "@/services/relatorios";
+import { RelatorioVendas, RelatorioFaturacao, formatarKwanza } from "@/services/relatorios";
 import { KpiCell, SecaoGrafico, TabelaDados, EstadoBadge, CarregandoLinha, Vazio, SemDados, tooltipStyle } from "./RelatorioComuns";
 import { ThemeColors } from "@/context/ThemeContext";
+import { agruparEstadosPorTipo, agruparImpactoFinanceiro, agruparPorFuncao, type TipoDocumentoResumo } from "@/services/documentGroups";
 
 interface RelatorioVendasProps {
   colors: ThemeColors;
@@ -13,17 +13,6 @@ interface RelatorioVendasProps {
   relatorioVendas: RelatorioVendas | null;
   relatorioFaturacao: RelatorioFaturacao | null;
 }
-
-type PieItem = { name: string; value: number; color: string; total: number };
-type PieLabelPayload = { name?: string; percent?: number };
-type LinhaVenda = RelatorioVendas["vendas"][number];
-type FaturacaoTipoItem = FaturacaoPorTipo[string];
-
-const renderPieLabel = (entry: PieLabelPayload) =>
-  `${entry.name ?? ""}: ${(((entry.percent ?? 0)) * 100).toFixed(0)}%`;
-
-const formatTooltip = (value: unknown): string => formatarKwanza(Number(value ?? 0));
-const formatarQuantidadePie = (value: unknown): string => `${Number(value ?? 0)} documento(s)`;
 
 export function RelatorioVendasComponent({
   colors,
@@ -34,76 +23,22 @@ export function RelatorioVendasComponent({
   // KPIs - Usa diretamente os dados do backend
   const kpis = relatorioVendas?.kpis;
 
-  // Gráfico de distribuição de vendas
-  const dadosVendasPie = useMemo(() => {
-    if (!relatorioVendas) return [];
-    
-    // Usar dados do kpis
-    const totalVendas = kpis?.total_vendas ?? 0;
-    const result = [];
-    
-    if (totalVendas > 0) {
-      result.push({ 
-        name: "Total Vendas", 
-        value: totalVendas, 
-        color: colors.primary 
-      });
-    }
-    
-    return result;
-  }, [relatorioVendas, kpis, colors]);
-
-  // Gráfico de distribuição de facturação
-  const dadosFaturacaoPie = useMemo(() => {
-    if (!relatorioFaturacao) return [];
-    
-    const dados = [];
-    if (relatorioFaturacao.faturacao_paga > 0) {
-      dados.push({ 
-        name: "Paga", 
-        value: relatorioFaturacao.faturacao_paga, 
-        color: colors.secondary 
-      });
-    }
-    if (relatorioFaturacao.faturacao_pendente > 0) {
-      dados.push({ 
-        name: "Pendente", 
-        value: relatorioFaturacao.faturacao_pendente, 
-        color: colors.primary
-      });
-    }
-    return dados;
-  }, [relatorioFaturacao, colors]);
-
-  // Gráfico de evolução - usa agrupado do backend
-  const dadosEvolucao = useMemo(() => {
-    // agrupado may not be declared on the typed interface, use a safe runtime check
-    const agrupado = (relatorioVendas as any)?.agrupado;
-    if (!agrupado) return [];
-    return (agrupado as Array<Record<string, any>>).map((item) => ({
-      periodo: item.periodo || item.mes || item.chave,
-      total: item.total || 0,
-    }));
-  }, [relatorioVendas]);
-
-  // ✅ Documentos por tipo
-  const dadosPorTipo = useMemo(() => {
-    const porTipo = relatorioFaturacao?.por_tipo;
-    if (!porTipo) return [];
-
-    return Object.entries(porTipo).map(([tipo, item]) => ({
-      tipo,
-      quantidade: item?.quantidade ?? 0,
-      valor: item?.total_liquido ?? 0,
-    }));
-  }, [relatorioFaturacao]);
-
-  // Formatação inteligente do eixo Y
-  const formatYAxis = (value: number) => {
-    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-    if (value >= 1_000) return `${(value / 1_000).toFixed(0)}k`;
-    return value.toString();
-  };
+  const resumosPorTipo = useMemo<Record<string, TipoDocumentoResumo>>(() => {
+    const porTipo = relatorioFaturacao?.por_tipo ?? {};
+    return Object.fromEntries(Object.entries(porTipo).map(([tipo, dados]) => [tipo, {
+      quantidade_emitida: dados.quantidade_emitida ?? dados.quantidade,
+      valor_emitido: dados.valor_emitido ?? dados.total_liquido,
+      valor_pendente: dados.valor_pendente ?? 0,
+    }]));
+  }, [relatorioFaturacao?.por_tipo]);
+  const documentosPorFuncao = useMemo(() => agruparPorFuncao(resumosPorTipo), [resumosPorTipo]);
+  const impactoFinanceiro = useMemo(() => agruparImpactoFinanceiro(resumosPorTipo), [resumosPorTipo]);
+  const documentosPorEstado = useMemo(() => {
+    const porTipoEstado = relatorioFaturacao?.por_tipo_estado ?? {};
+    return agruparEstadosPorTipo(Object.entries(porTipoEstado).flatMap(([tipo, estados]) =>
+      Object.entries(estados).map(([estado, quantidade]) => ({ tipo, estado, quantidade }))
+    ));
+  }, [relatorioFaturacao?.por_tipo_estado]);
 
   // Últimas vendas
   const ultimasVendas = useMemo(() => {
@@ -162,145 +97,55 @@ export function RelatorioVendasComponent({
         />
       </div>
 
-      {/* GRÁFICOS */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Gráfico de Vendas */}
-        <SecaoGrafico titulo="Total de Vendas" colors={colors}>
-          {dadosVendasPie.length > 0 ? (
-            <ResponsiveContainer width="100%" height={240}>
-              <PieChart>
-                <Pie 
-                  data={dadosVendasPie} 
-                  dataKey="value" 
-                  nameKey="name" 
-                  cx="50%" 
-                  cy="50%" 
-                  outerRadius={85}
-                  label={(e: any) => `${e.name}: ${formatarKwanza(e.value)}`} 
-                  labelLine
-                >
-                  {dadosVendasPie.map((e, i) => <Cell key={i} fill={e.color} />)}
-                </Pie>
-                <Tooltip 
-                  formatter={(v: any) => formatarKwanza(Number(v))} 
-                  contentStyle={tooltipStyle(colors)} 
-                />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : <SemDados colors={colors} />}
-        </SecaoGrafico>
-
-        {/* Gráfico de Facturação */}
-        <SecaoGrafico titulo="Distribuição de Facturação" colors={colors}>
-          {dadosFaturacaoPie.length > 0 ? (
-            <ResponsiveContainer width="100%" height={240}>
-              <PieChart>
-                <Pie 
-                  data={dadosFaturacaoPie} 
-                  dataKey="value" 
-                  nameKey="name" 
-                  cx="50%" 
-                  cy="50%" 
-                  outerRadius={85}
-                  label={(e: any) => `${e.name}: ${((e.percent ?? 0) * 100).toFixed(0)}%`}
-                >
-                  {dadosFaturacaoPie.map((e, i) => <Cell key={i} fill={e.color} />)}
-                </Pie>
-                <Tooltip 
-                  formatter={(v: any) => formatarKwanza(Number(v))} 
-                  contentStyle={tooltipStyle(colors)} 
-                />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : <SemDados colors={colors} />}
-        </SecaoGrafico>
-      </div>
-
-      {/* EVOLUÇÃO DE VENDAS */}
-      {dadosEvolucao.length > 0 && (
-        <SecaoGrafico titulo="Evolução de Vendas" colors={colors}>
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={dadosEvolucao}>
-              <defs>
-                <linearGradient id="gVendas" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={colors.primary} stopOpacity={0.25} />
-                  <stop offset="95%" stopColor={colors.primary} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
-              <XAxis 
-                dataKey="periodo" 
-                tick={{ fontSize: 10, fill: colors.textSecondary }} 
-              />
-              <YAxis 
-                tick={{ fontSize: 10, fill: colors.textSecondary }} 
-                tickFormatter={formatYAxis} 
-              />
-              <Tooltip 
-                formatter={(v: any) => formatarKwanza(Number(v))} 
-                contentStyle={tooltipStyle(colors)} 
-              />
-              <Area 
-                type="monotone" 
-                dataKey="total" 
-                stroke={colors.primary} 
-                fill="url(#gVendas)" 
-                strokeWidth={1.5} 
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </SecaoGrafico>
-      )}
-
-      {/* DOCUMENTOS POR TIPO */}
-      {dadosPorTipo.length > 0 && (
-        <SecaoGrafico titulo="Documentos por Tipo" colors={colors}>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={dadosPorTipo}>
-              <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
-              <XAxis 
-                dataKey="tipo" 
-                tick={{ fontSize: 10, fill: colors.textSecondary }} 
-              />
-              <YAxis 
-                yAxisId="left" 
-                tick={{ fontSize: 10, fill: colors.textSecondary }} 
-                tickFormatter={formatYAxis} 
-              />
-              <YAxis 
-                yAxisId="right" 
-                orientation="right" 
-                tick={{ fontSize: 10, fill: colors.textSecondary }} 
-                tickFormatter={formatYAxis} 
-              />
-              <Tooltip contentStyle={tooltipStyle(colors)} />
+      <SecaoGrafico titulo="Volume de Documentos Emitidos" colors={colors}>
+        {documentosPorFuncao.some((item) => item.quantidade > 0) ? (
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Pie data={documentosPorFuncao} dataKey="quantidade" nameKey="grupo" cx="50%" cy="50%" innerRadius="38%" outerRadius="70%" paddingAngle={3}>
+                {documentosPorFuncao.map((item) => <Cell key={item.grupo} fill={item.cor} />)}
+              </Pie>
+              <Tooltip formatter={(value) => [`${Number(value ?? 0)} documentos`, "Quantidade"]} contentStyle={tooltipStyle(colors)} />
               <Legend />
-              <Bar 
-                yAxisId="left" 
-                dataKey="quantidade" 
-                fill={colors.primary} 
-                name="Quantidade" 
-                radius={[2, 2, 0, 0]} 
-              />
-              <Bar 
-                yAxisId="right" 
-                dataKey="valor" 
-                fill={colors.secondary} 
-                name="Valor" 
-                radius={[2, 2, 0, 0]} 
-              />
+            </PieChart>
+          </ResponsiveContainer>
+        ) : <SemDados colors={colors} />}
+      </SecaoGrafico>
+
+      <SecaoGrafico titulo="Balanço Financeiro (Kz)" colors={colors}>
+        {impactoFinanceiro.some((item) => item.valor > 0) ? (
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={impactoFinanceiro} margin={{ bottom: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+              <XAxis dataKey="grupo" interval={0} angle={-15} textAnchor="end" height={55} tick={{ fontSize: 10, fill: colors.textSecondary }} />
+              <YAxis tick={{ fontSize: 10, fill: colors.textSecondary }} />
+              <Tooltip formatter={(value) => [formatarKwanza(Number(value ?? 0)), "Valor"]} contentStyle={tooltipStyle(colors)} />
+              <Bar dataKey="valor" name="Valor" radius={[3, 3, 0, 0]}>
+                {impactoFinanceiro.map((item) => <Cell key={item.grupo} fill={item.cor} />)}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
-        </SecaoGrafico>
-      )}
+        ) : <SemDados colors={colors} />}
+      </SecaoGrafico>
+
+      <SecaoGrafico titulo="Estado dos Documentos" colors={colors}>
+        {documentosPorEstado.some((item) => item.quantidade > 0) ? (
+          <ResponsiveContainer width="100%" height={250}>
+            <PieChart>
+              <Pie data={documentosPorEstado} dataKey="quantidade" nameKey="grupo" cx="50%" cy="50%" innerRadius="38%" outerRadius="70%" paddingAngle={4}>
+                {documentosPorEstado.map((item) => <Cell key={item.grupo} fill={item.cor} />)}
+              </Pie>
+              <Tooltip formatter={(value) => [`${Number(value ?? 0)} documentos`, "Quantidade"]} contentStyle={tooltipStyle(colors)} />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        ) : <SemDados colors={colors} />}
+      </SecaoGrafico>
 
       {/* ÚLTIMAS VENDAS */}
       <SecaoGrafico titulo="Últimas Vendas" colors={colors}>
         <TabelaDados
           headers={["Nº Documento", "Cliente", "Total", "Estado"]}
-          rows={ultimasVendas.map((v: any) => [
+          rows={ultimasVendas.map((v) => [
             v.numero_documento || "-",
             typeof v.cliente === "string" ? v.cliente : v.cliente?.nome ?? "-",
             formatarKwanza(Number(v.total) ?? 0),

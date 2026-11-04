@@ -449,6 +449,8 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
             Route::post('nota-debito', [DocumentoFiscalController::class, 'criarNotaDebitoAutonoma'])
                 ->name('documentos.nota-debito-autonoma');
 
+            Route::get('/exportar-excel', [DocumentoFiscalController::class, 'exportarExcel'])
+                ->name('documentos.exportar-excel');
             Route::get('/', [DocumentoFiscalController::class, 'index'])
                 ->middleware('log.panel')->name('documentos.index');
             Route::get('/{documento}', [DocumentoFiscalController::class, 'show'])
