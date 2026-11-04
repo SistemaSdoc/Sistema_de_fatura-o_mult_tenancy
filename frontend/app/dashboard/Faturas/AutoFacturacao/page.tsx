@@ -2,19 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, FileText, Plus, ShoppingCart, Trash2, User } from "lucide-react";
+import { ArrowLeft, CheckCircle2, FileText, Plus, ShoppingCart, User } from "lucide-react";
 import MainEmpresa from "@/app/components/MainEmpresa";
 import { ToastNotification } from "@/components/ToastNotification";
 import { useThemeColors } from "@/context/ThemeContext";
 import { documentoFiscalService } from "@/services/DocumentoFiscal";
 import { LinhaCampoFormulario } from "@/app/components/Formularios/LinhaCampoFormulario";
-
-interface ItemAutoFacturacao {
-  descricao: string;
-  quantidade: string;
-  preco: string;
-  taxaIva: "0" | "5" | "14";
-}
+import { CabecalhoFormulario } from "@/app/components/Formularios/CabecalhoFormulario";
+import { ItemAutoFacturacaoForm, type ItemAutoFacturacao } from "@/app/components/Formularios/ItemAutoFacturacaoForm";
 
 const novoItem = (): ItemAutoFacturacao => ({
   descricao: "",
@@ -124,10 +119,7 @@ export default function AutoFacturacaoPage() {
 
         <form onSubmit={emitir} className="space-y-3">
           <section className="overflow-hidden border shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-            <div className="flex items-center gap-2 px-3 py-1.5" style={{ backgroundColor: colors.primary }}>
-              <User size={14} className="text-white" />
-              <span className="text-xs font-medium uppercase tracking-wider text-white">Dados da Aquisição</span>
-            </div>
+            <CabecalhoFormulario titulo="Dados da Aquisição" icone={<User size={14} className="text-white" />} colors={colors} />
             <div className="divide-y" style={{ borderColor: colors.border }}>
               <LinhaCampoFormulario label="Produtor/fornecedor *" colors={colors} htmlFor="autofact-produtor">
                 <input id="autofact-produtor" required maxLength={255} value={produtor} onChange={(e) => setProdutor(e.target.value)} className="w-full border px-3 py-2 text-sm" style={inputStyle} />
@@ -163,42 +155,27 @@ export default function AutoFacturacaoPage() {
           </section>
 
           <section className="overflow-hidden border shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-            <div className="flex items-center justify-between gap-2 px-3 py-1.5" style={{ backgroundColor: colors.primary }}>
-              <div className="flex items-center gap-2">
-                <ShoppingCart size={14} className="text-white" />
-                <span className="text-xs font-medium uppercase tracking-wider text-white">Itens da Aquisição ({itens.length})</span>
-              </div>
-              <button type="button" onClick={() => setItens((atuais) => [...atuais, novoItem()])} className="inline-flex shrink-0 items-center gap-1 px-2 py-1 text-xs font-semibold text-white transition-opacity hover:opacity-80">
-                <Plus size={15} /> Adicionar item
-              </button>
-            </div>
+            <CabecalhoFormulario
+              titulo={`Itens da Aquisição (${itens.length})`}
+              icone={<ShoppingCart size={14} className="text-white" />}
+              colors={colors}
+              acao={
+                <button type="button" onClick={() => setItens((atuais) => [...atuais, novoItem()])} className="inline-flex shrink-0 items-center gap-1 px-2 py-1 text-xs font-semibold text-white transition-opacity hover:opacity-80">
+                  <Plus size={15} /> Adicionar item
+                </button>
+              }
+            />
             <div className="space-y-3 p-3">
               {itens.map((item, index) => (
-                <div key={index} className="grid gap-3 border p-3 sm:grid-cols-[minmax(0,1fr)_90px_140px_110px_40px] sm:items-end sm:p-4" style={{ borderColor: colors.border, backgroundColor: colors.background }}>
-                  <label className="space-y-1 text-xs font-medium" style={{ color: colors.textSecondary }}>
-                    Descrição
-                    <input required maxLength={255} aria-label="Descrição do item" placeholder="Ex.: Matéria-prima" value={item.descricao} onChange={(e) => alterarItem(index, { descricao: e.target.value })} className="w-full border px-3 py-2 text-sm" style={inputStyle} />
-                  </label>
-                  <label className="space-y-1 text-xs font-medium" style={{ color: colors.textSecondary }}>
-                    Quantidade
-                    <input required type="number" min="0.01" step="0.01" aria-label="Quantidade" placeholder="1" value={item.quantidade} onChange={(e) => alterarItem(index, { quantidade: e.target.value })} className="w-full border px-3 py-2 text-sm" style={inputStyle} />
-                  </label>
-                  <label className="space-y-1 text-xs font-medium" style={{ color: colors.textSecondary }}>
-                    Preço unitário
-                    <input required type="number" min="0" step="0.01" aria-label="Preço unitário" placeholder="0,00" value={item.preco} onChange={(e) => alterarItem(index, { preco: e.target.value })} className="w-full border px-3 py-2 text-sm" style={inputStyle} />
-                  </label>
-                  <label className="space-y-1 text-xs font-medium" style={{ color: colors.textSecondary }}>
-                    Taxa de IVA
-                    <select aria-label="Taxa de IVA" value={item.taxaIva} onChange={(e) => alterarItem(index, { taxaIva: e.target.value as ItemAutoFacturacao["taxaIva"] })} className="w-full border px-3 py-2 text-sm" style={inputStyle}>
-                      <option value="0">IVA 0%</option>
-                      <option value="5">IVA 5%</option>
-                      <option value="14">IVA 14%</option>
-                    </select>
-                  </label>
-                  <button type="button" aria-label="Remover item" disabled={itens.length === 1} onClick={() => setItens((atuais) => atuais.filter((_, i) => i !== index))} className="flex h-9 items-center justify-center rounded-md transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-30" style={{ color: colors.danger }}>
-                    <Trash2 size={16} />
-                  </button>
-                </div>
+                <ItemAutoFacturacaoForm
+                  key={index}
+                  item={item}
+                  colors={colors}
+                  inputStyle={inputStyle}
+                  podeRemover={itens.length > 1}
+                  onChange={(patch) => alterarItem(index, patch)}
+                  onRemover={() => setItens((atuais) => atuais.filter((_, i) => i !== index))}
+                />
               ))}
               <div className="ml-auto w-full max-w-sm border-t pt-3" style={{ borderColor: colors.border }}>
                 <div className="flex justify-between py-1 text-sm" style={{ color: colors.textSecondary }}>
@@ -216,10 +193,7 @@ export default function AutoFacturacaoPage() {
           </section>
 
           <section className="overflow-hidden border shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-            <div className="flex items-center gap-2 px-3 py-1.5" style={{ backgroundColor: colors.primary }}>
-              <FileText size={14} className="text-white" />
-              <span className="text-xs font-medium uppercase tracking-wider text-white">Pagamento</span>
-            </div>
+            <CabecalhoFormulario titulo="Pagamento" icone={<FileText size={14} className="text-white" />} colors={colors} />
             <div className="divide-y" style={{ borderColor: colors.border }}>
               <LinhaCampoFormulario label="Método de pagamento" colors={colors} htmlFor="autofact-metodo">
                 <select id="autofact-metodo" value={metodoPagamento} onChange={(e) => setMetodoPagamento(e.target.value as typeof metodoPagamento)} className="w-full border px-3 py-2 text-sm" style={inputStyle}>

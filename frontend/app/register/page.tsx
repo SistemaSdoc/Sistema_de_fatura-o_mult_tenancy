@@ -37,6 +37,7 @@ import {
 import { ToastNotification } from "@/components/ToastNotification";
 import { planosService } from "@/services/planos";
 import { subscricaoService } from "@/services/subscricoes";
+import { RegistrationInputField } from "@/app/components/Formularios/RegistrationInputField";
 
 // --- Tipagem local do tema ---
 interface ThemeColors {
@@ -82,116 +83,6 @@ interface PagamentoData {
   parcelas: number;
   data_vencimento: string;
 }
-
-// --- Componente de Input ---
-interface InputFieldProps {
-  name: string;
-  icon: React.ElementType;
-  type?: string;
-  placeholder: string;
-  value: string;
-  onChange: (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
-  ) => void;
-  colors: ThemeColors;
-  required?: boolean;
-  isSelect?: boolean;
-  options?: { value: string; label: string }[];
-  prefix?: string;
-  maxLength?: number;
-  disabled?: boolean;
-}
-
-const InputField: React.FC<InputFieldProps> = ({
-  name,
-  icon: Icon,
-  type = "text",
-  placeholder,
-  value,
-  onChange,
-  colors,
-  required = false,
-  isSelect = false,
-  options = [],
-  prefix,
-  maxLength,
-  disabled = false,
-}) => {
-  const [isFocused, setIsFocused] = useState(false);
-  return (
-    <div className="relative w-full">
-      <Icon
-        size={18}
-        className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
-        style={{ color: isFocused ? colors.secondary : colors.textSecondary }}
-      />
-      {prefix && (
-        <div
-          className="absolute left-9 top-1/2 -translate-y-1/2 text-sm pointer-events-none"
-          style={{ color: colors.textSecondary }}
-        >
-          {prefix}
-        </div>
-      )}
-      {isSelect ? (
-        <>
-          <select
-            name={name}
-            value={value}
-            onChange={onChange}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-            required={required}
-            disabled={disabled}
-            className="w-full pl-10 pr-9 py-3 border outline-none text-sm transition-colors appearance-none"
-            style={{
-              backgroundColor: disabled ? `${colors.border}40` : colors.card,
-              borderColor: isFocused ? colors.secondary : colors.border,
-              color: colors.text,
-              cursor: disabled ? "not-allowed" : "pointer",
-            }}
-          >
-            <option value="" disabled>
-              {placeholder}
-            </option>
-            {options.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-          <ChevronDown
-            size={16}
-            className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-            style={{ color: colors.textSecondary }}
-          />
-        </>
-      ) : (
-        <input
-          type={type}
-          name={name}
-          placeholder={placeholder}
-          value={value}
-          onChange={onChange}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          required={required}
-          disabled={disabled}
-          inputMode={type === "number" ? "numeric" : undefined}
-          className="w-full pl-10 pr-4 py-3 border outline-none text-sm transition-colors"
-          style={{
-            backgroundColor: disabled ? `${colors.border}40` : colors.card,
-            borderColor: isFocused ? colors.secondary : colors.border,
-            color: colors.text,
-            cursor: disabled ? "not-allowed" : "default",
-            paddingLeft: prefix ? "3.75rem" : undefined,
-          }}
-          maxLength={maxLength}
-        />
-      )}
-    </div>
-  );
-};
 
 function RegisterCompanyPageContent() {
   const router = useRouter();
@@ -776,7 +667,7 @@ function RegisterCompanyPageContent() {
 
                   {/* CAMPOS DA EMPRESA */}
                   <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                    <InputField
+                    <RegistrationInputField
                       name="nome"
                       icon={Building2}
                       placeholder="Nome da empresa *"
@@ -785,7 +676,7 @@ function RegisterCompanyPageContent() {
                       colors={colors}
                       required
                     />
-                    <InputField
+                    <RegistrationInputField
                       name="nif"
                       icon={FileText}
                       placeholder="NIF (10 dígitos) *"
@@ -800,7 +691,7 @@ function RegisterCompanyPageContent() {
                       required
                       maxLength={10}
                     />
-                    <InputField
+                    <RegistrationInputField
                       name="email"
                       icon={Mail}
                       type="email"
@@ -810,7 +701,7 @@ function RegisterCompanyPageContent() {
                       colors={colors}
                       required
                     />
-                    <InputField
+                    <RegistrationInputField
                       name="telefone"
                       icon={Phone}
                       placeholder="Telefone *"
@@ -820,7 +711,7 @@ function RegisterCompanyPageContent() {
                       maxLength={9}
                       required
                     />
-                    <InputField
+                    <RegistrationInputField
                       name="nome_banco"
                       icon={Landmark}
                       placeholder="Nome do Banco"
@@ -828,7 +719,7 @@ function RegisterCompanyPageContent() {
                       onChange={handleChange}
                       colors={colors}
                     />
-                    <InputField
+                    <RegistrationInputField
                       name="numero_conta"
                       icon={CreditCard}
                       placeholder="Número da Conta"
@@ -842,7 +733,7 @@ function RegisterCompanyPageContent() {
                       colors={colors}
                       maxLength={11}
                     />
-                    <InputField
+                    <RegistrationInputField
                       name="iban"
                       icon={Banknote}
                       placeholder="Digite os 21 dígitos do IBAN"
@@ -856,7 +747,7 @@ function RegisterCompanyPageContent() {
                       colors={colors}
                       maxLength={21}
                     />
-                    <InputField
+                    <RegistrationInputField
                       name="subdomain"
                       icon={Globe}
                       placeholder="Subdomínio * (ex: minhaempresa)"
@@ -866,7 +757,7 @@ function RegisterCompanyPageContent() {
                       required
                     />
                     <div className="md:col-span-2">
-                      <InputField
+                      <RegistrationInputField
                         name="endereco"
                         icon={MapPin}
                         placeholder="Endereço completo *"
@@ -1009,7 +900,7 @@ function RegisterCompanyPageContent() {
 
                   {/* REGIME FISCAL E IVA */}
                   <div className="mt-4 grid grid-cols-1 gap-5 md:grid-cols-2">
-                    <InputField
+                    <RegistrationInputField
                       name="regime_fiscal"
                       icon={Briefcase}
                       placeholder="Regime Fiscal"
@@ -1052,7 +943,7 @@ function RegisterCompanyPageContent() {
               {step === 2 && (
                 <div className="space-y-6">
                   <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                    <InputField
+                    <RegistrationInputField
                       name="admin_name"
                       icon={User}
                       placeholder="Nome completo *"
@@ -1061,7 +952,7 @@ function RegisterCompanyPageContent() {
                       colors={colors}
                       required
                     />
-                    <InputField
+                    <RegistrationInputField
                       name="admin_email"
                       icon={Mail}
                       type="email"
@@ -1071,7 +962,7 @@ function RegisterCompanyPageContent() {
                       colors={colors}
                       required
                     />
-                    <InputField
+                    <RegistrationInputField
                       name="admin_password"
                       icon={Lock}
                       type="password"

@@ -24,13 +24,15 @@ import {
 import { AxiosError } from "axios";
 import MainEmpresa from "../../components/MainEmpresa";
 import { useAuth, getIncompleteEmpresaFields } from "@/context/authprovider";
-import { useThemeColors } from "@/context/ThemeContext";
+import { useThemeColors, type ThemeColors } from "@/context/ThemeContext";
 import { vendaService, produtoService, formatarPreco, validarPayloadVenda, isServico } from "@/services/vendas";
 import type { Produto, CriarVendaPayload, DadosPagamento, TipoDocumentoFiscal } from "@/services/vendas";
 import { documentoFiscalService } from "@/services/DocumentoFiscal";
 import { ModalDadosIncompletos } from "../../components/ModalDadosIncompletos";
 import { ToastNotification } from "@/components/ToastNotification";
 import { LinhaCampoFormulario } from "@/app/components/Formularios/LinhaCampoFormulario";
+import { CabecalhoFormulario } from "@/app/components/Formularios/CabecalhoFormulario";
+import { LinhaFiscal } from "@/app/components/Formularios/LinhaFiscal";
 
 import { clienteService, formatarNIF, type Cliente } from "@/services/clientes";
 
@@ -62,21 +64,6 @@ interface FormItemState {
 
 type ModoCliente = "cadastrado" | "avulso";
 type TipoItem = "produto" | "servico";
-
-interface ThemeColors {
-  background: string;
-  card: string;
-  border: string;
-  text: string;
-  textSecondary: string;
-  primary: string;
-  secondary: string;
-  danger: string;
-  success: string;
-  warning: string;
-  hover: string;
-  blue?: string;
-}
 
 const TIPOS_DOCUMENTO_OPCOES: {
   value: TipoDocumentoFiscal;
@@ -212,33 +199,6 @@ function calcularItem(produto: Produto, qtd: number, desc: number, id = uuidv4()
     codigo_produto: produto.codigo || undefined,
     eh_servico: ehServico,
   };
-}
-
-function LinhaFiscal({
-  label,
-  valor,
-  cor,
-  negrito,
-  colors,
-}: {
-  label: string;
-  valor: string;
-  cor?: string;
-  negrito?: boolean;
-  colors: ThemeColors;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 py-1">
-      <span className={`text-sm ${negrito ? "font-semibold" : ""}`} style={{ color: negrito ? colors.text : colors.textSecondary }}>
-        {label}
-      </span>
-      <span
-        className={`text-sm tabular-nums ${negrito ? "font-bold" : "font-medium"}`}
-        style={{ color: cor || (negrito ? colors.text : colors.textSecondary) }}>
-        {valor}
-      </span>
-    </div>
-  );
 }
 
 function AlertaContextual({ alerta, colors }: { alerta: Alerta; colors: ThemeColors }) {
@@ -1209,10 +1169,7 @@ export default function NovaFaturaReciboPage() {
             CARD 1 — Dados da Venda
         ════════════════════════════════════════════════════════════════ */}
         <div className="border shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-          <div className="px-3 py-1.5 flex items-center gap-2" style={{ backgroundColor: colors.primary }}>
-            <ShoppingCart size={14} className="text-white" />
-            <span className="text-white font-medium text-xs uppercase tracking-wider">Dados da Venda</span>
-          </div>
+          <CabecalhoFormulario titulo="Dados da Venda" icone={<ShoppingCart size={14} className="text-white" />} colors={colors} />
 
           <div className="divide-y" style={{ borderColor: colors.border }}>
             {/* ── Documento ── */}
@@ -1639,20 +1596,16 @@ export default function NovaFaturaReciboPage() {
         ════════════════════════════════════════════════════════════════ */}
         {itens.length > 0 ? (
           <div className="border shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-            <div className="px-3 py-1.5 flex items-center justify-between gap-2" style={{ backgroundColor: colors.primary }}>
-              <div className="flex items-center gap-2 min-w-0">
-                <ShoppingCart size={14} className="text-white shrink-0" />
-                <span className="text-white font-medium text-xs uppercase tracking-wider truncate">
-                  Itens da Venda
-                  <span className="ml-1.5 text-white/70 font-normal normal-case">
-                    ({itens.length} {itens.length !== 1 ? "itens" : "item"})
-                  </span>
-                </span>
-              </div>
-              <button onClick={() => setItens([])} className="shrink-0 text-white/70 hover:text-white text-xs transition-colors">
-                Limpar tudo
-              </button>
-            </div>
+            <CabecalhoFormulario
+              titulo={<>Itens da Venda <span className="ml-1.5 font-normal normal-case text-white/70">({itens.length} {itens.length !== 1 ? "itens" : "item"})</span></>}
+              icone={<ShoppingCart size={14} className="shrink-0 text-white" />}
+              colors={colors}
+              acao={
+                <button onClick={() => setItens([])} className="shrink-0 text-xs text-white/70 transition-colors hover:text-white">
+                  Limpar tudo
+                </button>
+              }
+            />
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead style={{ backgroundColor: colors.hover }}>

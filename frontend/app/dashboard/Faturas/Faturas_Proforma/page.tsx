@@ -24,10 +24,12 @@ import {
 import { AxiosError } from "axios";
 import MainEmpresa from "../../../components/MainEmpresa";
 import { useAuth, getIncompleteEmpresaFields, formatIncompleteFields } from "@/context/authprovider";
-import { useThemeColors } from "@/context/ThemeContext";
+import { useThemeColors, type ThemeColors } from "@/context/ThemeContext";
 import { emitirDocumentoFiscal, Produto, produtoService, CriarDocumentoFiscalPayload, isServico, formatarPreco } from "@/services/vendas";
 import { ModalDadosIncompletos } from "../../../components/ModalDadosIncompletos";
 import { ToastNotification } from "@/components/ToastNotification";
+import { LinhaFiscal } from "@/app/components/Formularios/LinhaFiscal";
+import { CabecalhoFormulario } from "@/app/components/Formularios/CabecalhoFormulario";
 
 // Importacao do servico de clientes
 import { clienteService, formatarNIF, type Cliente } from "@/services/clientes";
@@ -55,49 +57,6 @@ interface FormItemState {
 type ModoCliente = "cadastrado" | "avulso";
 type TipoItem = "produto" | "servico";
 
-interface ThemeColors {
-  background: string;
-  card: string;
-  border: string;
-  text: string;
-  textSecondary: string;
-  primary: string;
-  secondary: string;
-  danger: string;
-  success: string;
-  warning: string;
-  hover: string;
-}
-
-/* Linha fiscal */
-function LinhaFiscal({
-  label,
-  valor,
-  cor,
-  negrito,
-  colors,
-}: {
-  label: string;
-  valor: string;
-  cor?: string;
-  negrito?: boolean;
-  colors: ThemeColors;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 py-1">
-      <span className={`text-sm ${negrito ? "font-semibold" : ""}`} style={{ color: negrito ? colors.text : colors.textSecondary }}>
-        {label}
-      </span>
-      <span
-        className={`text-sm tabular-nums ${negrito ? "font-bold" : "font-medium"}`}
-        style={{ color: cor || (negrito ? colors.text : colors.textSecondary) }}>
-        {valor}
-      </span>
-    </div>
-  );
-}
-
-/* Pagina */
 export default function NovaFaturaProformaPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
@@ -573,10 +532,7 @@ export default function NovaFaturaProformaPage() {
 
         {/* CARD 1 — Dados da Proforma */}
         <div className="border shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-          <div className="px-3 py-1.5 flex items-center gap-2" style={{ backgroundColor: colors.primary }}>
-            <ShoppingCart size={14} className="text-white" />
-            <span className="text-white font-medium text-xs uppercase tracking-wider">Dados da Proforma</span>
-          </div>
+          <CabecalhoFormulario titulo="Dados da Proforma" icone={<ShoppingCart size={14} className="text-white" />} colors={colors} />
 
           <div className="divide-y" style={{ borderColor: colors.border }}>
             {/* Cliente */}
@@ -982,21 +938,12 @@ export default function NovaFaturaProformaPage() {
         {/* CARD 2 — Itens + Resumo Fiscal */}
         {itens.length > 0 ? (
           <div className="border shadow-sm overflow-hidden" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
-            {/* Header */}
-            <div className="px-3 py-1.5 flex items-center justify-between" style={{ backgroundColor: colors.primary }}>
-              <div className="flex items-center gap-2">
-                <ShoppingCart size={14} className="text-white" />
-                <span className="text-white font-medium text-xs uppercase tracking-wider">
-                  Itens da Proforma
-                  <span className="ml-1.5 text-white/70 font-normal normal-case">
-                    ({itens.length} {itens.length !== 1 ? "itens" : "item"})
-                  </span>
-                </span>
-              </div>
-              <button onClick={() => setItens([])} className="text-white/70 hover:text-white text-xs transition-colors">
-                Limpar tudo
-              </button>
-            </div>
+            <CabecalhoFormulario
+              titulo={<>Itens da Proforma <span className="ml-1.5 font-normal normal-case text-white/70">({itens.length} {itens.length !== 1 ? "itens" : "item"})</span></>}
+              icone={<ShoppingCart size={14} className="text-white" />}
+              colors={colors}
+              acao={<button onClick={() => setItens([])} className="shrink-0 text-xs text-white/70 transition-colors hover:text-white">Limpar tudo</button>}
+            />
 
             {/* Tabela de itens */}
             <div className="overflow-x-auto">
