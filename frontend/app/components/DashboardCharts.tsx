@@ -104,7 +104,7 @@ export function DashboardCharts({
                       return formatterValor(scalarChartValue(value));
                     }}
                   />
-                  <Bar dataKey="quantidade" radius={[0, 4, 4, 0]} barSize={16}>
+                  <Bar dataKey="quantidade" radius={0} stroke="none" barSize={16}>
                     {produtosData.map((_, index) => (
                       <Cell
                         key={index}
@@ -189,7 +189,7 @@ export function DashboardCharts({
                     contentStyle={tooltipStyle}
                     formatter={(value: ChartValue) => formatterTotal(scalarChartValue(value))}
                   />
-                  <Bar dataKey="valor" name="Valor" radius={[4, 4, 0, 0]}>
+                  <Bar dataKey="valor" name="Valor" radius={0} stroke="none">
                     {impactoFinanceiro.map((item) => <Cell key={item.grupo} fill={item.cor} />)}
                   </Bar>
                 </BarChart>

@@ -365,3 +365,11 @@
 ::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-hover-color, #94a3b8);
 }
+
+/* Mantém a interface com cantos retos em todos os componentes e temas. */
+*,
+*::before,
+*::after,
+::-webkit-scrollbar-thumb {
+  border-radius: 0 !important;
+}

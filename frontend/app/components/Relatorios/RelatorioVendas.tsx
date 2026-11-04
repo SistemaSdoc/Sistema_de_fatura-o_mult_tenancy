@@ -135,7 +135,7 @@ export function RelatorioVendasComponent({
                 <XAxis dataKey="grupo" interval={0} angle={-15} textAnchor="end" height={55} tick={{ fontSize: 10, fill: colors.textSecondary }} />
                 <YAxis tick={{ fontSize: 10, fill: colors.textSecondary }} />
                 <Tooltip formatter={(value) => [formatarKwanza(Number(value ?? 0)), "Valor"]} contentStyle={tooltipStyle(colors)} />
-                <Bar dataKey="valor" name="Valor" radius={[3, 3, 0, 0]}>
+                <Bar dataKey="valor" name="Valor" radius={0} stroke="none">
                   {impactoFinanceiro.map((item) => <Cell key={item.grupo} fill={item.cor} />)}
                 </Bar>
               </BarChart>
