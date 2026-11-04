@@ -479,15 +479,17 @@ protected function verificarAcessoUsuario(): void
 
         return $query->get()
             ->groupBy('mes')
-            ->map(fn ($grupo) => [
-                'mes'      => Carbon::createFromFormat('Y-m', $grupo->first()->mes)->format('m/Y'),
-                'FT'       => $grupo->firstWhere('tipo_documento', 'FT')?->total ?? 0,
-                'FR'       => $grupo->firstWhere('tipo_documento', 'FR')?->total ?? 0,
-                'NC'       => $grupo->firstWhere('tipo_documento', 'NC')?->total ?? 0,
-                'ND'       => $grupo->firstWhere('tipo_documento', 'ND')?->total ?? 0,
-                'total'    => $grupo->sum('total'),
-                'retencao' => $grupo->sum('retencao'),
-            ])
+            ->map(function ($grupo) {
+                $porTipo = $grupo->mapWithKeys(fn ($item) => [
+                    $item->tipo_documento => (float) $item->total,
+                ])->all();
+
+                return array_merge([
+                    'mes' => Carbon::createFromFormat('Y-m', $grupo->first()->mes)->format('m/Y'),
+                    'total' => (float) $grupo->sum('total'),
+                    'retencao' => (float) $grupo->sum('retencao'),
+                ], $porTipo);
+            })
             ->values()
             ->toArray();
     }
@@ -776,7 +778,7 @@ private function getServicosMaisVendidos(int $dias = 30): array
         $query = $this->queryComScope('documento')
             ->whereNotIn('estado', [$cancelado]);
 
-        $tipos = ['FT', 'FR', 'NC', 'ND', 'FP', 'FA', 'RC'];
+        $tipos = ['FT', 'FR', 'AF', 'FP', 'FA', 'NC', 'ND', 'RC', 'RG', 'RE', 'FG', 'FGR', 'TV', 'FGEN', 'AC', 'ACR'];
         $porTipo = [];
         foreach ($tipos as $tipo) {
             $queryTipo = (clone $query)->where('tipo_documento', $tipo);
@@ -1158,14 +1160,23 @@ private function getServicosMaisVendidos(int $dias = 30): array
     private function nomeTipoDocumento(string $tipo): string
     {
         return match ($tipo) {
-            'FT'  => 'Fatura',
-            'FR'  => 'Fatura-Recibo',
-            'RC'  => 'Recibo',
-            'NC'  => 'Nota de Crédito',
-            'ND'  => 'Nota de Débito',
-            'FA'  => 'Fatura de Adiantamento',
-            'FP'  => 'Fatura Proforma',
-            default => 'Desconhecido',
+            'FT' => 'Factura',
+            'FR' => 'Factura-Recibo',
+            'AF' => 'Factura/Recibo de Autofacturação',
+            'FP' => 'Factura Proforma',
+            'FA' => 'Factura de Adiantamento',
+            'NC' => 'Nota de Crédito',
+            'ND' => 'Nota de Débito',
+            'RC' => 'Recibo',
+            'RG' => 'Outros Recibos',
+            'RE' => 'Recibo de Estorno',
+            'FG' => 'Factura Global',
+            'FGR' => 'Factura Global-Recibo',
+            'TV' => 'Talão de Venda',
+            'FGEN' => 'Factura Genérica',
+            'AC' => 'Aviso de Cobrança',
+            'ACR' => 'Aviso de Cobrança-Recibo',
+            default => $tipo,
         };
     }
 

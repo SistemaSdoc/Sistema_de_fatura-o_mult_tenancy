@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import DocumentActionsMenu from "./DocumentActionsMenu";
 
 const TIPO_LABEL: Record<TipoDocumento, string> = {
   FT: "Factura",
@@ -130,43 +131,6 @@ function EstadoBadge({ estado, colors }: { estado: string; colors: ColorsTheme }
     >
       {ESTADO_LABEL[estado] ?? estado}
     </span>
-  );
-}
-
-/* ── Botão ícone ── */
-function IconBtn({
-  onClick,
-  disabled = false,
-  title,
-  color,
-  children,
-}: {
-  onClick: () => void;
-  disabled?: boolean;
-  title: string;
-  color: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className="p-1.5 hover:opacity-70 disabled:opacity-40"
-      style={{ color }}
-    >
-      {children}
-    </button>
-  );
-}
-
-/* ── Spinner ── */
-function Spinner({ color }: { color: string }) {
-  return (
-    <div
-      className="w-4 h-4 border-2 animate-spin rounded-full"
-      style={{ borderColor: `${color}30`, borderTopColor: color }}
-    />
   );
 }
 
@@ -323,96 +287,47 @@ export default function InvoiceTable({
     );
   }
 
-  /* ── Ações FR/RC ── */
-  const acoesFR = (doc: DocumentoFiscal) => (
-    <>
-      <IconBtn onClick={() => onVerDetalhes(doc)} title="Ver" color={colors.text}>
-        <Eye size={16} />
-      </IconBtn>
-      <IconBtn
-        onClick={() => onImprimir80mm(doc)}
-        disabled={imprimindo === doc.id}
-        title="Talão 80mm"
-        color={colors.teal || colors.primary}
-      >
-        {imprimindo === doc.id ? <Spinner color={colors.teal || colors.primary} /> : <Receipt size={16} />}
-      </IconBtn>
-      <IconBtn
-        onClick={() => onImprimirA4(doc)}
-        disabled={imprimindo === doc.id}
-        title="Imprimir A4"
-        color={colors.secondary}
-      >
-        {imprimindo === doc.id ? <Spinner color={colors.secondary} /> : <Printer size={16} />}
-      </IconBtn>
-      <IconBtn
-        onClick={() => onImprimirTermica(doc)}
-        disabled={imprimindoTermica === doc.id}
-        title="Imprimir na impressora térmica"
-        color={colors.success}
-      >
-        {imprimindoTermica === doc.id ? <Spinner color={colors.success} /> : <Printer size={16} />}
-      </IconBtn>
-      <IconBtn
-        onClick={() => onBaixarPdf(doc)}
-        disabled={baixandoPdf === doc.id}
-        title="Download PDF"
-        color={colors.text}
-      >
-        {baixandoPdf === doc.id ? <Spinner color={colors.text} /> : <Download size={16} />}
-      </IconBtn>
-    </>
-  );
-
-  /* ── Ações FT ── */
-  const acoesFT = (doc: DocumentoFiscal) => (
-    <>
-      <IconBtn onClick={() => onVerDetalhes(doc)} title="Ver" color={colors.text}>
-        <Eye size={16} />
-      </IconBtn>
-      {podeGerarRecibo(doc) && (
-        <IconBtn
-          onClick={() => onGerarRecibo(doc)}
-          disabled={gerandoRecibo === doc.id}
-          title="Gerar Recibo"
-          color={colors.primary}
-        >
-          {gerandoRecibo === doc.id ? <Spinner color={colors.success} /> : <FileText size={16} />}
-        </IconBtn>
-      )}
-      <IconBtn
-        onClick={() => onImprimir80mm(doc)}
-        disabled={imprimindo === doc.id}
-        title="Talão 80mm"
-        color={colors.teal || colors.primary}
-      >
-        {imprimindo === doc.id ? <Spinner color={colors.teal || colors.primary} /> : <Receipt size={16} />}
-      </IconBtn>
-      <IconBtn
-        onClick={() => onImprimirA4(doc)}
-        disabled={imprimindo === doc.id}
-        title="Imprimir A4"
-        color={colors.secondary}
-      >
-        {imprimindo === doc.id ? <Spinner color={colors.secondary} /> : <Printer size={16} />}
-      </IconBtn>
-      <IconBtn
-        onClick={() => onImprimirTermica(doc)}
-        disabled={imprimindoTermica === doc.id}
-        title="Imprimir na impressora térmica"
-        color={colors.success}
-      >
-        {imprimindoTermica === doc.id ? <Spinner color={colors.success} /> : <Printer size={16} />}
-      </IconBtn>
-      <IconBtn
-        onClick={() => onBaixarPdf(doc)}
-        disabled={baixandoPdf === doc.id}
-        title="Download PDF"
-        color={colors.text}
-      >
-        {baixandoPdf === doc.id ? <Spinner color={colors.text} /> : <Download size={16} />}
-      </IconBtn>
-    </>
+  const acoes = (doc: DocumentoFiscal, permitirRecibo: boolean) => (
+    <DocumentActionsMenu
+      label={`Ações de ${doc.numero_documento ?? "documento"}`}
+      colors={colors}
+      items={[
+        { label: "Ver detalhes do documento", icon: <Eye size={16} />, onSelect: () => onVerDetalhes(doc) },
+        ...(permitirRecibo && podeGerarRecibo(doc)
+          ? [{
+              label: "Registar pagamento / gerar recibo",
+              pendingLabel: "A gerar recibo…",
+              icon: <FileText size={16} />,
+              onSelect: () => { void onGerarRecibo(doc); },
+              pending: gerandoRecibo === doc.id,
+            }]
+          : []),
+        {
+          label: "Imprimir talão (80 mm)",
+          icon: <Receipt size={16} />,
+          onSelect: () => onImprimir80mm(doc),
+          pending: imprimindo === doc.id,
+        },
+        {
+          label: "Imprimir documento A4",
+          icon: <Printer size={16} />,
+          onSelect: () => onImprimirA4(doc),
+          pending: imprimindo === doc.id,
+        },
+        {
+          label: "Imprimir na impressora térmica",
+          icon: <Printer size={16} />,
+          onSelect: () => { void onImprimirTermica(doc); },
+          pending: imprimindoTermica === doc.id,
+        },
+        {
+          label: "Descarregar PDF",
+          icon: <Download size={16} />,
+          onSelect: () => { void onBaixarPdf(doc); },
+          pending: baixandoPdf === doc.id,
+        },
+      ]}
+    />
   );
 
   /* ── Tabela FR/RC ── */
@@ -477,7 +392,7 @@ export default function InvoiceTable({
                     {formatKz(doc.total_liquido)}
                   </td>
                   <td className="px-3 py-2 text-center">
-                    <div className="flex justify-center gap-1">{acoesFR(doc)}</div>
+                    <div className="flex justify-center">{acoes(doc, false)}</div>
                   </td>
                 </tr>
               ))
@@ -501,7 +416,7 @@ export default function InvoiceTable({
               getNomeCliente={documentoFiscalService.getNomeCliente}
               mostrarTipo
               mostrarEstado={false}
-              acoes={acoesFR(doc)}
+              acoes={acoes(doc, false)}
             />
           ))
         )}
@@ -584,7 +499,7 @@ export default function InvoiceTable({
                     )}
                   </td>
                   <td className="px-3 py-2 text-center">
-                    <div className="flex justify-center gap-1">{acoesFT(doc)}</div>
+                    <div className="flex justify-center">{acoes(doc, true)}</div>
                   </td>
                 </tr>
               ))
@@ -608,7 +523,7 @@ export default function InvoiceTable({
               getNomeCliente={documentoFiscalService.getNomeCliente}
               mostrarTipo={false}
               mostrarEstado
-              acoes={acoesFT(doc)}
+              acoes={acoes(doc, true)}
             />
           ))
         )}

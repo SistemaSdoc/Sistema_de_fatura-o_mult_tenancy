@@ -21,8 +21,36 @@ let dashboardFetchPromise: Promise<DashboardData | null> | null = null;
 /* ================== TIPOS ================== */
 
 export type TipoDocumentoFiscal =
-    | 'FT' | 'FR' | 'FP' | 'RC' | 'RG' | 'RE'
-    | 'NC' | 'ND' | 'FA';
+    | 'FT' | 'FR' | 'AF' | 'FP' | 'FA' | 'NC' | 'ND'
+    | 'RC' | 'RG' | 'RE' | 'FG' | 'FGR' | 'TV' | 'FGEN' | 'AC' | 'ACR';
+
+export const TIPOS_DOCUMENTO_FISCAL: TipoDocumentoFiscal[] = [
+    'FT', 'FR', 'AF', 'FP', 'FA', 'NC', 'ND',
+    'RC', 'RG', 'RE', 'FG', 'FGR', 'TV', 'FGEN', 'AC', 'ACR',
+];
+
+export const NOMES_TIPO_DOCUMENTO_FISCAL: Record<TipoDocumentoFiscal, string> = {
+    FT: 'Factura',
+    FR: 'Factura-Recibo',
+    AF: 'Factura/Recibo de Autofacturação',
+    FP: 'Factura Proforma',
+    FA: 'Factura de Adiantamento',
+    NC: 'Nota de Crédito',
+    ND: 'Nota de Débito',
+    RC: 'Recibo',
+    RG: 'Outros Recibos',
+    RE: 'Recibo de Estorno',
+    FG: 'Factura Global',
+    FGR: 'Factura Global-Recibo',
+    TV: 'Talão de Venda',
+    FGEN: 'Factura Genérica',
+    AC: 'Aviso de Cobrança',
+    ACR: 'Aviso de Cobrança-Recibo',
+};
+
+export function isTipoDocumentoFiscal(tipo: string): tipo is TipoDocumentoFiscal {
+    return Object.hasOwn(NOMES_TIPO_DOCUMENTO_FISCAL, tipo);
+}
 
 export type EstadoDocumentoFiscal =
     | 'emitido' | 'paga' | 'parcialmente_paga'
@@ -155,12 +183,9 @@ export interface DashboardData {
         }>;
         por_mes: Array<{
             mes: string;
-            FT: number;
-            FR: number;
-            NC: number;
-            ND: number;
             total: number;
             retencao?: number;
+            [tipo: string]: string | number | undefined;
         }>;
         por_dia: Array<{
             dia: string;
@@ -466,13 +491,18 @@ export const dashboardService = {
             pagamentosPorMetodo: [], documentosPorEstado: [], servicosVendidos: [],
         };
 
-        const evolucaoMensal = (d.documentos_fiscais?.por_mes || []).map(item => ({
-            mes:            item.mes,
-            Faturas:        item.FT || 0,
-            'Faturas-Recibo': item.FR || 0,
-            'Notas de Crédito': item.NC || 0,
-            Total:          item.total || 0,
-            Retencao:       item.retencao || 0,
+        const evolucaoMensal: Array<{
+            mes: string;
+            total: number;
+            retencao?: number;
+            Total: number;
+            Retencao: number;
+            [tipo: string]: string | number | undefined;
+        }> = (d.documentos_fiscais?.por_mes || []).map(item => ({
+            ...item,
+            mes: item.mes,
+            Total: item.total || 0,
+            Retencao: item.retencao || 0,
         }));
 
         const documentosPorTipo = Object.entries(d.documentos_fiscais?.por_tipo || {}).map(([tipo, info]) => ({
@@ -597,22 +627,20 @@ export const dashboardService = {
     },
 
     getNomeTipoDocumento(tipo: TipoDocumentoFiscal): string {
-        const nomes: Record<TipoDocumentoFiscal, string> = {
-            FT: 'Fatura', FR: 'Fatura-Recibo', FP: 'Fatura Proforma',
-            RC: 'Recibo', NC: 'Nota de Crédito', ND: 'Nota de Débito',
-            FA: 'Fatura de Adiantamento',
-            RG: 'Outros Recibos', RE: 'Recibo de Estorno',
-        };
-        return nomes[tipo] || tipo;
+        return NOMES_TIPO_DOCUMENTO_FISCAL[tipo] || tipo;
     },
 
     getTipoDocumentoColor(tipo: TipoDocumentoFiscal): string {
         return ({
             FT: 'bg-blue-100 text-blue-800', FR: 'bg-green-100 text-green-800',
+            AF: 'bg-cyan-100 text-cyan-800',
             FP: 'bg-orange-100 text-orange-800', FA: 'bg-purple-100 text-purple-800',
             NC: 'bg-red-100 text-red-800', ND: 'bg-amber-100 text-amber-800',
             RC: 'bg-teal-100 text-teal-800',
             RG: 'bg-teal-100 text-teal-800', RE: 'bg-red-100 text-red-800',
+            FG: 'bg-indigo-100 text-indigo-800', FGR: 'bg-indigo-100 text-indigo-800',
+            TV: 'bg-lime-100 text-lime-800', FGEN: 'bg-violet-100 text-violet-800',
+            AC: 'bg-rose-100 text-rose-800', ACR: 'bg-pink-100 text-pink-800',
         } as Record<TipoDocumentoFiscal, string>)[tipo] || 'bg-gray-100 text-gray-800';
     },
 

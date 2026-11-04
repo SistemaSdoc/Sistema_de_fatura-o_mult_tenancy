@@ -4,7 +4,6 @@ import { useState, useSyncExternalStore } from "react";
 import { DocumentoFiscal, TipoDocumento } from "@/services/DocumentoFiscal";
 import {
   Eye,
-  FileText,
   FileCheck,
   Printer,
   Download,
@@ -12,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import DocumentActionsMenu from "./DocumentActionsMenu";
 
 /* ─── Labels ──────────────────────────────────────────────────────────────── */
 const TIPO_LABEL: Partial<Record<TipoDocumento, string>> = {
@@ -135,43 +135,6 @@ function EstadoBadge({ estado, colors }: { estado: string; colors: ColorsTheme }
     >
       {ESTADO_LABEL[estado] ?? estado}
     </span>
-  );
-}
-
-/* ─── Botão ícone ─────────────────────────────────────────────────────────── */
-function IconBtn({
-  onClick,
-  disabled = false,
-  title,
-  color,
-  children,
-}: {
-  onClick: () => void;
-  disabled?: boolean;
-  title: string;
-  color: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className="p-1.5 hover:opacity-70 disabled:opacity-40"
-      style={{ color }}
-    >
-      {children}
-    </button>
-  );
-}
-
-/* ─── Spinner ─────────────────────────────────────────────────────────────── */
-function Spinner({ color }: { color: string }) {
-  return (
-    <div
-      className="w-4 h-4 border-2 animate-spin rounded-full"
-      style={{ borderColor: `${color}30`, borderTopColor: color }}
-    />
   );
 }
 
@@ -328,163 +291,53 @@ export default function OutrosDocumentosTable({
     );
   }
 
-  const AcoesDropdown = ({ doc, align = "right" }: { doc: DocumentoFiscal; align?: "left" | "right" }) => {
-    const [open, setOpen] = useState(false);
-
-    return (
-      <div className="relative">
-        <button
-          onClick={() => setOpen(!open)}
-          className="p-1.5 hover:opacity-70"
-          style={{ color: colors.text }}
-          title="Ações"
-        >
-          <FileText size={16} />
-        </button>
-        {open && (
-          <>
-            <div
-              className="fixed inset-0 z-10"
-              onClick={() => setOpen(false)}
-            />
-            <div
-              className={`absolute z-20 mt-1 w-40 max-w-[calc(100vw-2rem)] rounded shadow-lg py-1 ${
-                align === "right" ? "right-0" : "left-0"
-              }`}
-              style={{
-                backgroundColor: colors.card,
-                border: `1px solid ${colors.border}`,
-              }}
-            >
-              <button
-                onClick={() => {
-                  onVerDetalhes(doc);
-                  setOpen(false);
-                }}
-                className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:opacity-70 whitespace-nowrap"
-                style={{ color: colors.text }}
-              >
-                <Eye size={12} /> Ver detalhes
-              </button>
-              {doc.tipo_documento === "FP" && !doc.fatura_convertida && !["cancelado", "expirado"].includes(doc.estado) && (
-                <button
-                  onClick={() => {
-                    void onConverterProforma(doc);
-                    setOpen(false);
-                  }}
-                  disabled={convertendoProforma === doc.id}
-                  className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:opacity-70 whitespace-nowrap disabled:opacity-50"
-                  style={{ color: colors.primary }}
-                >
-                  {convertendoProforma === doc.id ? <Spinner color={colors.primary} /> : <FileCheck size={12} />}
-                  Converter em fatura
-                </button>
-              )}
-              {doc.tipo_documento === "AC" && doc.estado === "emitido" && (
-                <button
-                  onClick={() => {
-                    onEmitirAcr(doc);
-                    setOpen(false);
-                  }}
-                  className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:opacity-70 whitespace-nowrap"
-                  style={{ color: colors.success }}
-                >
-                  <CircleDollarSign size={12} /> Registar pagamento e emitir ACR
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  onImprimirA4(doc);
-                  setOpen(false);
-                }}
-                disabled={imprimindo === doc.id}
-                className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:opacity-70 whitespace-nowrap"
-                style={{ color: colors.secondary }}
-              >
-                {imprimindo === doc.id ? (
-                  <Spinner color={colors.secondary} />
-                ) : (
-                  <Printer size={12} />
-                )}
-                Imprimir A4
-              </button>
-              <button
-                onClick={() => {
-                  onBaixarPdf(doc);
-                  setOpen(false);
-                }}
-                disabled={baixandoPdf === doc.id}
-                className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:opacity-70 whitespace-nowrap"
-                style={{ color: colors.text }}
-              >
-                {baixandoPdf === doc.id ? (
-                  <Spinner color={colors.text} />
-                ) : (
-                  <Download size={12} />
-                )}
-                Baixar PDF
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    );
-  };
-
-  /* ── Acções por documento (desktop - várias opções) ── */
-  const acoesDesktop = (doc: DocumentoFiscal) => (
-    <div className="flex justify-center gap-0.5">
-      {doc.tipo_documento === "AC" && doc.estado === "emitido" && (
-        <IconBtn
-          onClick={() => onEmitirAcr(doc)}
-          title="Registar pagamento e emitir ACR"
-          color={colors.success}
-        >
-          <CircleDollarSign size={16} />
-        </IconBtn>
-      )}
-      {doc.tipo_documento === "FP" && !doc.fatura_convertida && !["cancelado", "expirado"].includes(doc.estado) && (
-        <IconBtn
-          onClick={() => void onConverterProforma(doc)}
-          disabled={convertendoProforma === doc.id}
-          title="Converter em fatura"
-          color={colors.primary}
-        >
-          {convertendoProforma === doc.id ? <Spinner color={colors.primary} /> : <FileCheck size={16} />}
-        </IconBtn>
-      )}
-      <IconBtn onClick={() => onVerDetalhes(doc)} title="Ver detalhes" color={colors.text}>
-        <Eye size={16} />
-      </IconBtn>
-
-      <IconBtn
-        onClick={() => onImprimirA4(doc)}
-        disabled={imprimindo === doc.id}
-        title="Imprimir A4"
-        color={colors.secondary}
-      >
-        {imprimindo === doc.id ? <Spinner color={colors.secondary} /> : <Printer size={16} />}
-      </IconBtn>
-
-
-      <IconBtn
-        onClick={() => onImprimirPdf(doc)}
-        disabled={imprimindo === doc.id}
-        title="Talão 80mm"
-        color={colors.teal || colors.primary}
-      >
-        {imprimindo === doc.id ? <Spinner color={colors.teal || colors.primary} /> : <Printer size={16} />}
-      </IconBtn>
-
-      <IconBtn
-        onClick={() => onBaixarPdf(doc)}
-        disabled={baixandoPdf === doc.id}
-        title="Baixar PDF"
-        color={colors.text}
-      >
-        {baixandoPdf === doc.id ? <Spinner color={colors.text} /> : <Download size={16} />}
-      </IconBtn>
-    </div>
+  const acoes = (doc: DocumentoFiscal) => (
+    <DocumentActionsMenu
+      label={`Ações de ${doc.numero_documento ?? "documento"}`}
+      colors={colors}
+      items={[
+        { label: "Ver detalhes do documento", icon: <Eye size={16} />, onSelect: () => onVerDetalhes(doc) },
+        ...(doc.tipo_documento === "AC" && doc.estado === "emitido"
+          ? [{
+              label: "Registar pagamento e emitir ACR",
+              icon: <CircleDollarSign size={16} />,
+              onSelect: () => onEmitirAcr(doc),
+              tone: colors.success,
+            }]
+          : []),
+        ...(doc.tipo_documento === "FP" && !doc.fatura_convertida && !["cancelado", "expirado"].includes(doc.estado)
+          ? [{
+              label: "Converter proforma em factura",
+              pendingLabel: "A converter proforma…",
+              icon: <FileCheck size={16} />,
+              onSelect: () => { void onConverterProforma(doc); },
+              pending: convertendoProforma === doc.id,
+              tone: colors.primary,
+            }]
+          : []),
+        {
+          label: "Imprimir documento A4",
+          pendingLabel: "A preparar impressão…",
+          icon: <Printer size={16} />,
+          onSelect: () => onImprimirA4(doc),
+          pending: imprimindo === doc.id,
+        },
+        {
+          label: "Imprimir talão (80 mm)",
+          pendingLabel: "A preparar impressão…",
+          icon: <Printer size={16} />,
+          onSelect: () => onImprimirPdf(doc),
+          pending: imprimindo === doc.id,
+        },
+        {
+          label: "Descarregar PDF",
+          pendingLabel: "A descarregar PDF…",
+          icon: <Download size={16} />,
+          onSelect: () => { void onBaixarPdf(doc); },
+          pending: baixandoPdf === doc.id,
+        },
+      ]}
+    />
   );
 
   /* ── Tabela desktop ── */
@@ -495,12 +348,12 @@ export default function OutrosDocumentosTable({
         style={{ borderCollapse: "collapse", tableLayout: "fixed", minWidth: 620 }}
       >
         <colgroup>
-          <col style={{ width: "15%" }} />
-          <col style={{ width: "25%" }} />
+          <col style={{ width: "16%" }} />
+          <col style={{ width: "27%" }} />
           <col style={{ width: "12%" }} />
-          <col style={{ width: "10%" }} />
-          <col style={{ width: "10%" }} />
-          <col style={{ width: "28%" }} />
+          <col style={{ width: "12%" }} />
+          <col style={{ width: "16%" }} />
+          <col style={{ width: "17%" }} />
         </colgroup>
         <thead style={{ backgroundColor: colors.primary }}>
           <tr className="text-white text-xs">
@@ -576,12 +429,7 @@ export default function OutrosDocumentosTable({
                   {formatKz(doc.total_liquido)}
                 </td>
                 <td className="px-3 py-2 text-center">
-                  <div className="hidden md:flex justify-center gap-0.5">
-                    {acoesDesktop(doc)}
-                  </div>
-                  <div className="md:hidden flex justify-center">
-                    <AcoesDropdown doc={doc} align="right" />
-                  </div>
+                  <div className="flex justify-center">{acoes(doc)}</div>
                 </td>
               </tr>
             ))
@@ -609,7 +457,7 @@ export default function OutrosDocumentosTable({
             colors={colors}
             formatKz={formatKz}
             getNomeCliente={documentoFiscalService.getNomeCliente}
-            acoes={<AcoesDropdown doc={doc} align="left" />}
+            acoes={acoes(doc)}
           />
         ))
       )}

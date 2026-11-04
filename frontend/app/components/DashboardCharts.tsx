@@ -7,8 +7,6 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  AreaChart,
-  Area,
   CartesianGrid,
   PieChart,
   Pie,
@@ -27,7 +25,13 @@ type ProdutoItem = {
 
 type EvolucaoItem = {
   mes: string;
-  total: number;
+  [tipo: string]: number | string;
+};
+
+type EvolucaoTipo = {
+  codigo: string;
+  nome: string;
+  cor: string;
 };
 
 type DocumentoTipoItem = {
@@ -41,14 +45,20 @@ type EstadoDocumentoItem = {
   quantidade: number;
 };
 
-type ChartValue = number | string | null | undefined;
-// use any for formatter input to match Recharts flexible Formatter signature
-type ChartFormatter = (value: any) => [string, string];
+type ChartValue = number | string | readonly (string | number)[] | null | undefined;
+type ScalarChartValue = number | string | null | undefined;
+type ChartFormatter = (value: ScalarChartValue) => [string, string];
+
+const scalarChartValue = (value: ChartValue): ScalarChartValue => {
+  if (typeof value === "number" || typeof value === "string" || value == null) return value;
+  return value[0] ?? 0;
+};
 
 interface DashboardChartsProps {
   colors: ThemeColors;
   produtosData: ProdutoItem[];
   evolucaoData: EvolucaoItem[];
+  evolucaoTipos: EvolucaoTipo[];
   documentosPorTipo: DocumentoTipoItem[];
   documentosPorEstado: EstadoDocumentoItem[];
   tooltipStyle: TooltipProps<number, string>["contentStyle"];
@@ -67,6 +77,7 @@ export function DashboardCharts({
   colors,
   produtosData,
   evolucaoData,
+  evolucaoTipos,
   documentosPorTipo,
   documentosPorEstado,
   tooltipStyle,
@@ -100,9 +111,9 @@ export function DashboardCharts({
                   <YAxis type="category" dataKey="nome" width={84} tick={tickStyle} stroke={colors.border} />
                   <Tooltip
                     contentStyle={tooltipStyle}
-                    formatter={(value: any, name: string | number | undefined) => {
-                      if (name === "quantidade") return formatterQuantidade(value);
-                      return formatterValor(value);
+                    formatter={(value: ChartValue, name: string | number | undefined) => {
+                      if (name === "quantidade") return formatterQuantidade(scalarChartValue(value));
+                      return formatterValor(scalarChartValue(value));
                     }}
                   />
                   <Bar dataKey="quantidade" radius={[0, 4, 4, 0]} barSize={16}>
@@ -129,24 +140,33 @@ export function DashboardCharts({
         >
           <h2 className="text-sm sm:text-base font-semibold mb-3 flex items-center gap-2" style={{ color: colors.blue }}>
             <TrendingUp style={{ color: colors.secondary }} size={18} />
-            Evolução Mensal
+            Evolução Mensal por Tipo
           </h2>
           <div className="h-56 sm:h-72 lg:h-80 w-full">
             {evolucaoData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={evolucaoData} margin={{ left: 0, right: 8, top: 4, bottom: 4 }}>
-                  <defs>
-                    <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={colors.primary} stopOpacity={0.3} />
-                      <stop offset="95%" stopColor={colors.primary} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
+                <BarChart data={evolucaoData} margin={{ left: 0, right: 8, top: 4, bottom: 4 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
                   <XAxis dataKey="mes" tick={tickStyle} stroke={colors.border} />
                   <YAxis tickFormatter={formatCompact} width={48} tick={tickStyle} stroke={colors.border} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(value: any) => formatterTotal(value)} />
-                  <Area type="monotone" dataKey="total" stroke={colors.secondary} fill="url(#colorTotal)" strokeWidth={2} />
-                </AreaChart>
+                  <Tooltip
+                    contentStyle={tooltipStyle}
+                    formatter={(value: ChartValue, name: string | number | undefined) => [
+                      formatterTotal(scalarChartValue(value))[0],
+                      String(name ?? "Valor"),
+                    ]}
+                  />
+                  <Legend />
+                  {evolucaoTipos.map((tipo) => (
+                    <Bar
+                      key={tipo.codigo}
+                      dataKey={tipo.codigo}
+                      name={tipo.nome}
+                      stackId="documentos"
+                      fill={tipo.cor}
+                    />
+                  ))}
+                </BarChart>
               </ResponsiveContainer>
             ) : (
               <div className="h-full flex items-center justify-center text-sm" style={{ color: colors.textSecondary }}>
@@ -184,12 +204,12 @@ export function DashboardCharts({
                   <YAxis yAxisId="right" orientation="right" stroke={colors.secondary} tick={tickStyle} width={36} />
                   <Tooltip
                     contentStyle={tooltipStyle}
-                    formatter={(value: any, name: string | number | undefined) => {
+                    formatter={(value: ChartValue, name: string | number | undefined) => {
                       if (name === "quantidade" || name === "Qtd") {
-                        return formatterDocsQuantidade(value);
+                        return formatterDocsQuantidade(scalarChartValue(value));
                       }
                       if (name === "valor" || name === "Valor") {
-                        return formatterValor(value);
+                        return formatterValor(scalarChartValue(value));
                       }
                       return [String(value ?? 0), name || ""];
                     }}
@@ -234,7 +254,7 @@ export function DashboardCharts({
                       <Cell key={i} fill={pieColors[i % pieColors.length]} />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={tooltipStyle} formatter={(value: any) => formatterDocsQuantidade(value)} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(value: ChartValue) => formatterDocsQuantidade(scalarChartValue(value))} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>

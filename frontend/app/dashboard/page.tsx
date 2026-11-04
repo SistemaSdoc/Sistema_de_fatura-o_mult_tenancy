@@ -7,7 +7,13 @@ import dynamic from "next/dynamic";
 import { useAuth } from "@/context/authprovider";
 
 import MainEmpresa from "@/app/components/MainEmpresa";
-import { dashboardService, DashboardData as ServiceDashboardData } from "@/services/Dashboard";
+import {
+  dashboardService,
+  DashboardData as ServiceDashboardData,
+  isTipoDocumentoFiscal,
+  NOMES_TIPO_DOCUMENTO_FISCAL,
+  TIPOS_DOCUMENTO_FISCAL,
+} from "@/services/Dashboard";
 import { useThemeColors, useTheme, type ThemeColors } from "@/context/ThemeContext";
 import { usePathname, useRouter } from "next/navigation";
 import type { TooltipProps } from "recharts";
@@ -29,8 +35,15 @@ interface ProdutoItem {
 
 interface EvolucaoItem {
   mes: string;
-  total: number;
+  [tipo: string]: number | string;
 }
+
+const CORES_TIPO_DOCUMENTO = [
+  "#2563EB", "#16A34A", "#0891B2", "#EA580C",
+  "#7C3AED", "#DC2626", "#D97706", "#0D9488",
+  "#DB2777", "#4F46E5", "#65A30D", "#9333EA",
+  "#0284C7", "#C2410C", "#BE123C", "#475569",
+];
 
 interface EstadoDocumento {
   estado: string;
@@ -260,9 +273,25 @@ export default function DashboardPage() {
     valor: Number(p.valor_total) || 0,
   }));
 
+  const codigosMensais = new Set(graficos.evolucaoMensal.flatMap((item) => Object.keys(item)));
+  const codigosConhecidos = new Set<string>(TIPOS_DOCUMENTO_FISCAL);
+  const tiposEvolucao = [
+    ...TIPOS_DOCUMENTO_FISCAL.filter((tipo) => codigosMensais.has(tipo)),
+    ...[...codigosMensais]
+      .filter((tipo) => !codigosConhecidos.has(tipo))
+      .filter((tipo) => !["mes", "total", "retencao", "Total", "Retencao"].includes(tipo))
+      .sort(),
+  ].filter((tipo) => graficos.evolucaoMensal.some((item) => Number(item[tipo]) !== 0));
+
+  const evolucaoTipos = tiposEvolucao.map((codigo, index) => ({
+    codigo,
+    nome: isTipoDocumentoFiscal(codigo) ? NOMES_TIPO_DOCUMENTO_FISCAL[codigo] : codigo,
+    cor: CORES_TIPO_DOCUMENTO[index % CORES_TIPO_DOCUMENTO.length],
+  }));
+
   const evolucaoData: EvolucaoItem[] = graficos.evolucaoMensal.map((item) => ({
     mes: shortText(String(item.mes), 3),
-    total: Number(item.Total) || 0,
+    ...Object.fromEntries(evolucaoTipos.map(({ codigo }) => [codigo, Number(item[codigo]) || 0])),
   }));
 
   const documentosPorTipo: { nome: string; quantidade: number; valor: number }[] = graficos.documentosPorTipo.map((item) => ({
@@ -433,6 +462,7 @@ export default function DashboardPage() {
           colors={colors}
           produtosData={produtosData}
           evolucaoData={evolucaoData}
+          evolucaoTipos={evolucaoTipos}
           documentosPorTipo={documentosPorTipo}
           documentosPorEstado={documentosPorEstado}
           tooltipStyle={tooltipStyle}
