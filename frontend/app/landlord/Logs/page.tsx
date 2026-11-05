@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useThemeColors } from "@/context/ThemeContext";
 import { landlordApi } from "@/services/axios";
 import MainLandlord from "@/app/components/MainLandlord";
+import { PaginationControls } from "@/app/components/PaginationControls";
 
 interface LinhaAuditoria {
   timestamp: string;
@@ -229,21 +230,15 @@ function AuditoriaPageContent() {
         </table>
       </div>
 
-      {resposta && resposta.total_paginas > 1 && (
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "16px" }}>
-          <button onClick={() => setPagina((p) => Math.max(1, p - 1))} disabled={pagina <= 1} style={pagBtnStyle(pagina <= 1)}>
-            ← Anterior
-          </button>
-          <span style={{ fontSize: "0.85rem" }}>
-            Página {resposta.pagina} de {resposta.total_paginas} ({resposta.total} registos)
-          </span>
-          <button
-            onClick={() => setPagina((p) => Math.min(resposta.total_paginas, p + 1))}
-            disabled={pagina >= resposta.total_paginas}
-            style={pagBtnStyle(pagina >= resposta.total_paginas)}>
-            Próxima →
-          </button>
-        </div>
+      {resposta && (
+        <PaginationControls
+          page={resposta.pagina}
+          totalPages={resposta.total_paginas}
+          totalItems={resposta.total}
+          pageSize={resposta.por_pagina}
+          onPageChange={setPagina}
+          colors={colors}
+        />
       )}
     </div>
   );
@@ -251,15 +246,6 @@ function AuditoriaPageContent() {
 
 const thStyle: React.CSSProperties = { padding: "12px 14px", fontWeight: 600, whiteSpace: "nowrap" };
 const tdStyle: React.CSSProperties = { padding: "12px 14px", whiteSpace: "normal", verticalAlign: "top" };
-const pagBtnStyle = (disabled: boolean): React.CSSProperties => ({
-  padding: "6px 12px",
-  borderRadius: "6px",
-  border: "1px solid #d0d0d0",
-  background: disabled ? "#f5f5f5" : "#fff",
-  color: disabled ? "#aaa" : "#000",
-  cursor: disabled ? "default" : "pointer",
-});
-
 export default function AuditoriaPage() {
   return (
     <MainLandlord>

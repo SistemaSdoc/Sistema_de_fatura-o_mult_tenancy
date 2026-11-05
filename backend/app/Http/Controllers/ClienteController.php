@@ -374,7 +374,8 @@ class ClienteController extends Controller
                 $query->where(function ($q) use ($request) {
                     $q->where('nome', 'LIKE', "%{$request->search}%")
                         ->orWhere('nif', 'LIKE', "%{$request->search}%")
-                        ->orWhere('email', 'LIKE', "%{$request->search}%");
+                        ->orWhere('email', 'LIKE', "%{$request->search}%")
+                        ->orWhere('telefone', 'LIKE', "%{$request->search}%");
                 });
                 Log::info('[ClienteController::index] Filtro search aplicado', [
                     'search' => $request->search

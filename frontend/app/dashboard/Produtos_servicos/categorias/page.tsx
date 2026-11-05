@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Plus,
   Search,
@@ -36,6 +36,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { ToastNotification } from "@/components/ToastNotification";
+import { PaginationControls } from "@/app/components/PaginationControls";
 
 /* ─── Tipos ──────────────────────────────────────────────────────── */
 interface FormCategoriaData {
@@ -55,6 +56,8 @@ const INITIAL_FORM: FormCategoriaData = {
   sujeito_iva: true,
   codigo_isencao: "",
 };
+
+const ITENS_POR_PAGINA = 10;
 
 type ApiError = {
   response?: {
@@ -121,12 +124,12 @@ export default function CategoriasPage() {
 
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [categoriasDeletadas, setCategoriasDeletadas] = useState<Categoria[]>([]);
-  const [categoriasFiltradas, setCategoriasFiltradas] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
   const [filtroStatus] = useState<"todos" | "ativo" | "inativo">("todos");
   const [filtroIVA] = useState<string>("todos");
   const [abaAtiva, setAbaAtiva] = useState<"ativos" | "lixeira">("ativos");
+  const [paginaAtual, setPaginaAtual] = useState(1);
   const [toast, setToast] = useState<{
     message: string;
     type: "success" | "error" | "warning" | "info";
@@ -148,19 +151,24 @@ export default function CategoriasPage() {
   };
 
   /* ── Filtro local ── */
-  useEffect(() => {
+  const categoriasFiltradas = useMemo(() => {
     const lista = abaAtiva === "ativos" ? categorias : categoriasDeletadas;
     const t = busca.toLowerCase();
-    setCategoriasFiltradas(
-      lista.filter((c) => {
-        const matchBusca = c.nome.toLowerCase().includes(t) || (c.descricao && c.descricao.toLowerCase().includes(t));
-        const matchStatus = filtroStatus === "todos" || c.status === filtroStatus;
-        const matchIVA =
-          filtroIVA === "todos" || (filtroIVA === "isento" && (!c.sujeito_iva || c.taxa_iva === 0)) || c.taxa_iva === Number(filtroIVA);
-        return matchBusca && matchStatus && matchIVA;
-      })
-    );
+    return lista.filter((c) => {
+      const matchBusca = c.nome.toLowerCase().includes(t) || (c.descricao && c.descricao.toLowerCase().includes(t));
+      const matchStatus = filtroStatus === "todos" || c.status === filtroStatus;
+      const matchIVA =
+        filtroIVA === "todos" || (filtroIVA === "isento" && (!c.sujeito_iva || c.taxa_iva === 0)) || c.taxa_iva === Number(filtroIVA);
+      return matchBusca && matchStatus && matchIVA;
+    });
   }, [busca, filtroStatus, filtroIVA, categorias, categoriasDeletadas, abaAtiva]);
+
+  const totalPaginas = Math.max(1, Math.ceil(categoriasFiltradas.length / ITENS_POR_PAGINA));
+  const paginaSegura = Math.min(paginaAtual, totalPaginas);
+  const categoriasPaginadas = categoriasFiltradas.slice(
+    (paginaSegura - 1) * ITENS_POR_PAGINA,
+    paginaSegura * ITENS_POR_PAGINA,
+  );
 
   /* ── Carregar ── */
   const carregarCategorias = useCallback(async () => {
@@ -186,8 +194,11 @@ export default function CategoriasPage() {
   }, []);
 
   useEffect(() => {
-    carregarCategorias();
-    carregarCategoriasDeletadas();
+    const timer = window.setTimeout(() => {
+      void carregarCategorias();
+      void carregarCategoriasDeletadas();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [carregarCategorias, carregarCategoriasDeletadas]);
 
   /* ── Handlers do formulário ── */
@@ -446,7 +457,10 @@ export default function CategoriasPage() {
               {(["ativos", "lixeira"] as const).map((aba) => (
                 <button
                   key={aba}
-                  onClick={() => setAbaAtiva(aba)}
+                  onClick={() => {
+                    setPaginaAtual(1);
+                    setAbaAtiva(aba);
+                  }}
                   className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors"
                   style={{
                     backgroundColor: abaAtiva === aba ? colors.primary : "transparent",
@@ -464,7 +478,10 @@ export default function CategoriasPage() {
               <input
                 type="text"
                 value={busca}
-                onChange={(e) => setBusca(e.target.value)}
+                onChange={(e) => {
+                  setPaginaAtual(1);
+                  setBusca(e.target.value);
+                }}
                 placeholder="Nome, descrição…"
                 className="w-full pl-9 pr-4 py-2 border outline-none text-sm"
                 style={{
@@ -552,7 +569,7 @@ export default function CategoriasPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y" style={{ borderColor: colors.border }}>
-                  {categoriasFiltradas.map((c) => (
+                  {categoriasPaginadas.map((c) => (
                     <tr
                       key={c.id}
                       className="transition-colors"
@@ -695,6 +712,14 @@ export default function CategoriasPage() {
                 </div>
               )}
             </div>
+            <PaginationControls
+              page={paginaSegura}
+              totalPages={totalPaginas}
+              totalItems={categoriasFiltradas.length}
+              pageSize={ITENS_POR_PAGINA}
+              onPageChange={setPaginaAtual}
+              colors={colors}
+            />
           </div>
         )}
       </div>
@@ -814,7 +839,7 @@ export default function CategoriasPage() {
               {!formData.sujeito_iva && (
                 <div className="space-y-1">
                   <Label className="text-xs" style={{ color: colors.blue }}>
-                    Código de Isenção 
+                    Código de Isenção
                   </Label>
                   <Select value={formData.codigo_isencao} onValueChange={(v) => handleSelectChange("codigo_isencao", v)}>
                     <SelectTrigger

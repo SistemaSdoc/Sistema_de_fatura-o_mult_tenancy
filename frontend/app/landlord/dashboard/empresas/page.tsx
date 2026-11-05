@@ -16,8 +16,6 @@ import {
     Filter,
     Power,
     Download,
-    ChevronLeft,
-    ChevronRight,
     Eye,
     Mail,
     Phone,
@@ -38,6 +36,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { PaginationControls } from "@/app/components/PaginationControls";
 
 interface Empresa {
     id: string;
@@ -67,7 +66,7 @@ export default function EmpresasDashboard() {
     const [selectedEmpresa, setSelectedEmpresa] = useState<Empresa | null>(null);
     const [showStatusDialog, setShowStatusDialog] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage] = useState(10);
+    const itemsPerPage = 10;
 
 
     useEffect(() => {
@@ -338,7 +337,10 @@ export default function EmpresasDashboard() {
                                 <Input
                                     placeholder="Buscar por nome, NIF ou email..."
                                     value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    onChange={(e) => {
+                                        setCurrentPage(1);
+                                        setSearchTerm(e.target.value);
+                                    }}
                                     className="pl-9 transition-all duration-200 focus:ring-2"
                                     style={{
                                         backgroundColor: colors.background,
@@ -356,7 +358,10 @@ export default function EmpresasDashboard() {
                                 />
                                 <select
                                     value={statusFilter}
-                                    onChange={(e) => setStatusFilter(e.target.value as "todos" | "ativo" | "suspenso")}
+                                    onChange={(e) => {
+                                        setCurrentPage(1);
+                                        setStatusFilter(e.target.value as "todos" | "ativo" | "suspenso");
+                                    }}
                                     className="w-full sm:w-auto pl-9 pr-3 py-2 text-sm border focus:outline-none"
                                     style={{
                                         backgroundColor: colors.background,
@@ -647,68 +652,14 @@ export default function EmpresasDashboard() {
                         ))}
                     </div>
 
-                    {/* Paginação */}
-                    {totalPages > 1 && (
-                        <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
-                            <div className="text-sm text-center sm:text-left" style={{ color: colors.textSecondary }}>
-                                Mostrando {startIndex + 1} - {Math.min(startIndex + itemsPerPage, filteredEmpresas.length)} de{" "}
-                                {filteredEmpresas.length}
-                            </div>
-                            <div className="flex items-center gap-3">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                                        disabled={safeCurrentPage === 1}
-                                    className="rounded-lg transition-all duration-200 hover:scale-105 cursor-pointer"
-                                    style={{ borderColor: colors.border, color: colors.text, backgroundColor: colors.card }}
-                                >
-                                    <ChevronLeft size={14} />
-                                    <span className="hidden sm:inline ml-1">Anterior</span>
-                                </Button>
-                                <div className="hidden sm:flex gap-1">
-                                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                                        let pageNum;
-                                        if (totalPages <= 5) pageNum = i + 1;
-                                        else if (safeCurrentPage <= 3) pageNum = i + 1;
-                                        else if (safeCurrentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
-                                        else pageNum = safeCurrentPage - 2 + i;
-
-                                        return (
-                                            <Button
-                                                key={pageNum}
-                                                size="sm"
-                                                variant={safeCurrentPage === pageNum ? "default" : "outline"}
-                                                onClick={() => setCurrentPage(pageNum)}
-                                                className="rounded-lg transition-all duration-200 cursor-pointer"
-                                                style={
-                                                    safeCurrentPage === pageNum
-                                                        ? { backgroundColor: colors.secondary, color: "#fff" }
-                                                        : { borderColor: colors.border, color: colors.text, backgroundColor: colors.card }
-                                                }
-                                            >
-                                                {pageNum}
-                                            </Button>
-                                        );
-                                    })}
-                                </div>
-                                <span className="sm:hidden text-sm font-medium" style={{ color: colors.text }}>
-                                    {safeCurrentPage} / {totalPages}
-                                </span>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                                    disabled={safeCurrentPage === totalPages}
-                                    className="rounded-lg transition-all duration-200 hover:scale-105 cursor-pointer"
-                                    style={{ borderColor: colors.border, color: colors.text, backgroundColor: colors.card }}
-                                >
-                                    <span className="hidden sm:inline mr-1">Próxima</span>
-                                    <ChevronRight size={14} />
-                                </Button>
-                            </div>
-                        </div>
-                    )}
+                    <PaginationControls
+                        page={safeCurrentPage}
+                        totalPages={totalPages}
+                        totalItems={filteredEmpresas.length}
+                        pageSize={itemsPerPage}
+                        onPageChange={setCurrentPage}
+                        colors={colors}
+                    />
                 </>
             )}
 

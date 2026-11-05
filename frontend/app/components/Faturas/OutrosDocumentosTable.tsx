@@ -8,10 +8,9 @@ import {
   Printer,
   Download,
   CircleDollarSign,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 import DocumentActionsMenu from "./DocumentActionsMenu";
+import { PaginationControls } from "@/app/components/PaginationControls";
 
 /* ─── Labels ──────────────────────────────────────────────────────────────── */
 const TIPO_LABEL: Partial<Record<TipoDocumento, string>> = {
@@ -135,53 +134,6 @@ function EstadoBadge({ estado, colors }: { estado: string; colors: ColorsTheme }
     >
       {ESTADO_LABEL[estado] ?? estado}
     </span>
-  );
-}
-
-/* ─── Paginação ───────────────────────────────────────────────────────────── */
-function Paginacao({
-  pagina,
-  total,
-  quantidade,
-  onAnterior,
-  onProxima,
-  colors,
-}: {
-  pagina: number;
-  total: number;
-  quantidade: number;
-  onAnterior: () => void;
-  onProxima: () => void;
-  colors: ColorsTheme;
-}) {
-  if (total <= 1) return null;
-  return (
-    <div
-      className="flex flex-wrap justify-between items-center gap-2 px-3 py-2 text-xs"
-      style={{ borderTop: `0.5px solid ${colors.border}`, color: colors.textSecondary }}
-    >
-      <span className="whitespace-nowrap">
-        {pagina} / {total} — {quantidade} documentos
-      </span>
-      <div className="flex gap-2 shrink-0">
-        <button
-          onClick={onAnterior}
-          disabled={pagina === 1}
-          className="disabled:opacity-30"
-          style={{ color: colors.text }}
-        >
-          <ChevronLeft size={14} />
-        </button>
-        <button
-          onClick={onProxima}
-          disabled={pagina === total}
-          className="disabled:opacity-30"
-          style={{ color: colors.text }}
-        >
-          <ChevronRight size={14} />
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -532,12 +484,12 @@ export default function OutrosDocumentosTable({
         <>
           {tabelaDesktop}
           {cardsMobile}
-          <Paginacao
-            pagina={pg}
-            total={totalPaginas}
-            quantidade={docsAtivos.length}
-            onAnterior={() => setPagina(tabAtiva, pg - 1)}
-            onProxima={() => setPagina(tabAtiva, pg + 1)}
+          <PaginationControls
+            page={pg}
+            totalPages={totalPaginas}
+            totalItems={docsAtivos.length}
+            pageSize={POR_PAGINA}
+            onPageChange={(page) => setPagina(tabAtiva, page)}
             colors={colors}
           />
         </>

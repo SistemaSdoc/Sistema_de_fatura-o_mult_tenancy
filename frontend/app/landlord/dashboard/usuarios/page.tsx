@@ -33,6 +33,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PaginationControls } from "@/app/components/PaginationControls";
 
 // ============================================================
 // TIPOS
@@ -113,6 +114,8 @@ export default function UsuariosLandlordPage() {
   const [activeTab, setActiveTab] = useState<"landlord" | "tenant" | "shared">("landlord");
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState<"todos" | "super_admin" | "admin_empresa">("todos");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   // ===== MODAIS =====
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -248,6 +251,19 @@ const totalGeral = useMemo(() => {
 
     return list;
   }, [activeTab, usuarios, tenantUsers, sharedUsers, searchTerm, roleFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / itemsPerPage));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedUsers = filteredUsers.slice(
+    (safeCurrentPage - 1) * itemsPerPage,
+    safeCurrentPage * itemsPerPage,
+  );
+
+  const changeTab = (tab: "landlord" | "tenant" | "shared") => {
+    setActiveTab(tab);
+    setCurrentPage(1);
+    setRoleFilter("todos");
+  };
 
   // ===== CRIAÇÃO =====
   const handleCriar = async () => {
@@ -411,6 +427,7 @@ const totalGeral = useMemo(() => {
           style={{ backgroundColor: colors.card, borderColor: colors.border }}
           onClick={() => {
             setActiveTab("landlord");
+            setCurrentPage(1);
             setSearchTerm("");
             setRoleFilter("todos");
           }}>
@@ -435,6 +452,7 @@ const totalGeral = useMemo(() => {
           style={{ backgroundColor: colors.card, borderColor: colors.border }}
           onClick={() => {
             setActiveTab("landlord");
+            setCurrentPage(1);
             setSearchTerm("");
             setRoleFilter("super_admin");
           }}>
@@ -462,6 +480,7 @@ const totalGeral = useMemo(() => {
           style={{ backgroundColor: colors.card, borderColor: colors.border }}
           onClick={() => {
             setActiveTab("landlord");
+            setCurrentPage(1);
             setSearchTerm("");
             setRoleFilter("admin_empresa");
           }}>
@@ -489,6 +508,7 @@ const totalGeral = useMemo(() => {
           style={{ backgroundColor: colors.card, borderColor: colors.border }}
           onClick={() => {
             setActiveTab("tenant");
+            setCurrentPage(1);
             setSearchTerm("");
           }}>
           <div
@@ -515,6 +535,7 @@ const totalGeral = useMemo(() => {
           style={{ backgroundColor: colors.card, borderColor: colors.border }}
           onClick={() => {
             setActiveTab("shared");
+            setCurrentPage(1);
             setSearchTerm("");
           }}>
           <div
@@ -542,8 +563,7 @@ const totalGeral = useMemo(() => {
             <Tabs
               value={activeTab}
               onValueChange={(v) => {
-                setActiveTab(v as any);
-                setRoleFilter("todos");
+                changeTab(v as "landlord" | "tenant" | "shared");
               }}
               className="flex-1">
               <TabsList className="grid w-full grid-cols-3" style={{ backgroundColor: colors.background }}>
@@ -583,7 +603,10 @@ const totalGeral = useMemo(() => {
                     return (
                       <button
                         key={r}
-                        onClick={() => setRoleFilter(r)}
+                        onClick={() => {
+                          setCurrentPage(1);
+                          setRoleFilter(r);
+                        }}
                         className="px-3 py-1.5 rounded-full text-xs font-medium border transition-colors whitespace-nowrap"
                         style={
                           ativo
@@ -618,7 +641,10 @@ const totalGeral = useMemo(() => {
                 <Input
                   placeholder="Buscar..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => {
+                    setCurrentPage(1);
+                    setSearchTerm(e.target.value);
+                  }}
                   className="pl-9"
                   style={{
                     backgroundColor: colors.background,
@@ -633,7 +659,7 @@ const totalGeral = useMemo(() => {
       </Card>
 
       {/* Listagem por aba */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+      <Tabs value={activeTab} onValueChange={(v) => changeTab(v as "landlord" | "tenant" | "shared")}>
         <TabsContent value="landlord">
           {filteredUsers.length === 0 ? (
             <EmptyState
@@ -642,7 +668,7 @@ const totalGeral = useMemo(() => {
             />
           ) : (
             <UserTable
-              users={filteredUsers as LandlordUserItem[]}
+              users={paginatedUsers as LandlordUserItem[]}
               colors={colors}
               currentUser={currentUser}
               actionLoading={actionLoading}
@@ -661,7 +687,7 @@ const totalGeral = useMemo(() => {
               message="Nenhum utilizador com base dedicada encontrado"
             />
           ) : (
-            <TenantTable users={filteredUsers as TenantUserItem[]} colors={colors} />
+            <TenantTable users={paginatedUsers as TenantUserItem[]} colors={colors} />
           )}
         </TabsContent>
 
@@ -672,10 +698,20 @@ const totalGeral = useMemo(() => {
               message="Nenhum utilizador com base compartilhada encontrado"
             />
           ) : (
-            <SharedTable users={filteredUsers as SharedUserItem[]} colors={colors} />
+            <SharedTable users={paginatedUsers as SharedUserItem[]} colors={colors} />
           )}
         </TabsContent>
       </Tabs>
+      {filteredUsers.length > 0 && (
+        <PaginationControls
+          page={safeCurrentPage}
+          totalPages={totalPages}
+          totalItems={filteredUsers.length}
+          pageSize={itemsPerPage}
+          onPageChange={setCurrentPage}
+          colors={colors}
+        />
+      )}
 
       {/* MODAL DE CRIAÇÃO */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>

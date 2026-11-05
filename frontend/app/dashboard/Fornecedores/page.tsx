@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Plus,
   Search,
@@ -25,6 +25,7 @@ import { useThemeColors, ThemeColors } from "@/context/ThemeContext";
 import { ToastNotification } from "@/components/ToastNotification";
 import { Modal } from "@/app/components/Clientes/Modal";
 import { ConfirmModal } from "@/app/components/Clientes/ConfirmModal";
+import { PaginationControls } from "@/app/components/PaginationControls";
 
 
 // --- Funcoes de validacao do NIF/BI ---
@@ -121,6 +122,29 @@ const INITIAL_FORM: FormFornecedorData = {
   tipo: "nacional",
   status: "ativo",
 };
+
+function buildFornecedorForm(fornecedor?: Fornecedor | null): FormFornecedorData {
+  if (!fornecedor) return INITIAL_FORM;
+
+  return {
+    nome: fornecedor.nome,
+    nif: fornecedor.nif || "",
+    tipo: fornecedor.tipo,
+    status: fornecedor.status,
+    telefone: fornecedor.telefone || "",
+    email: fornecedor.email || "",
+    endereco: fornecedor.endereco || "",
+  };
+}
+
+function getFornecedorNifTipo(fornecedor?: Fornecedor | null): TipoDocumento | null {
+  if (!fornecedor?.nif) return null;
+
+  const validacao = validarNIF(fornecedor.nif);
+  return validacao.valido ? validacao.tipo || null : null;
+}
+
+const ITENS_POR_PAGINA = 10;
 
 /* --- Menu de acoes com tres pontos --- */
 function ActionMenu({
@@ -282,32 +306,9 @@ function FormFornecedor({
   loading?: boolean;
 }) {
   const colors = useThemeColors();
-  const [form, setForm] = useState<FormFornecedorData>(INITIAL_FORM);
+  const [form, setForm] = useState<FormFornecedorData>(() => buildFornecedorForm(fornecedor));
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [nifTipo, setNifTipo] = useState<TipoDocumento | null>(null);
-
-  useEffect(() => {
-    if (fornecedor) {
-      setForm({
-        nome: fornecedor.nome,
-        nif: fornecedor.nif || "",
-        tipo: fornecedor.tipo,
-        status: fornecedor.status,
-        telefone: fornecedor.telefone || "",
-        email: fornecedor.email || "",
-        endereco: fornecedor.endereco || "",
-      });
-      if (fornecedor.nif) {
-        const validacao = validarNIF(fornecedor.nif);
-        if (validacao.valido) {
-          setNifTipo(validacao.tipo || null);
-        }
-      }
-    } else {
-      setForm(INITIAL_FORM);
-      setNifTipo(null);
-    }
-  }, [fornecedor]);
+  const [nifTipo, setNifTipo] = useState<TipoDocumento | null>(() => getFornecedorNifTipo(fornecedor));
 
   const setField = (name: string, value: string) => {
     setForm((p) => ({ ...p, [name]: value }));
@@ -597,12 +598,12 @@ export default function FornecedoresPage() {
 
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [fornecedoresDeletados, setFornecedoresDeletados] = useState<Fornecedor[]>([]);
-  const [fornecedoresFiltrados, setFornecedoresFiltrados] = useState<Fornecedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState<"todos" | "ativo" | "inativo">("todos");
   const [filtroTipo, setFiltroTipo] = useState<"todos" | "nacional" | "internacional">("todos");
   const [abaAtiva, setAbaAtiva] = useState<"ativos" | "lixeira">("ativos");
+  const [paginaAtual, setPaginaAtual] = useState(1);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "warning" | "info" } | null>(null);
 
   const [modalForm, setModalForm] = useState(false);
@@ -616,22 +617,27 @@ export default function FornecedoresPage() {
     setToast({ message, type });
   };
 
-  useEffect(() => {
+  const fornecedoresFiltrados = useMemo(() => {
     const lista = abaAtiva === "ativos" ? fornecedores : fornecedoresDeletados;
     const t = busca.toLowerCase();
-    setFornecedoresFiltrados(
-      lista.filter((f) => {
-        const matchBusca =
-          f.nome.toLowerCase().includes(t) ||
-          (f.nif && f.nif.toLowerCase().includes(t)) ||
-          (f.email && f.email.toLowerCase().includes(t)) ||
-          (f.telefone && f.telefone.includes(t));
-        const matchStatus = filtroStatus === "todos" || f.status === filtroStatus;
-        const matchTipo = filtroTipo === "todos" || f.tipo === filtroTipo;
-        return matchBusca && matchStatus && matchTipo;
-      })
-    );
+    return lista.filter((f) => {
+      const matchBusca =
+        f.nome.toLowerCase().includes(t) ||
+        (f.nif && f.nif.toLowerCase().includes(t)) ||
+        (f.email && f.email.toLowerCase().includes(t)) ||
+        (f.telefone && f.telefone.includes(t));
+      const matchStatus = filtroStatus === "todos" || f.status === filtroStatus;
+      const matchTipo = filtroTipo === "todos" || f.tipo === filtroTipo;
+      return matchBusca && matchStatus && matchTipo;
+    });
   }, [busca, filtroStatus, filtroTipo, fornecedores, fornecedoresDeletados, abaAtiva]);
+
+  const totalPaginas = Math.max(1, Math.ceil(fornecedoresFiltrados.length / ITENS_POR_PAGINA));
+  const paginaSegura = Math.min(paginaAtual, totalPaginas);
+  const fornecedoresPaginados = fornecedoresFiltrados.slice(
+    (paginaSegura - 1) * ITENS_POR_PAGINA,
+    paginaSegura * ITENS_POR_PAGINA,
+  );
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -654,7 +660,8 @@ export default function FornecedoresPage() {
   }, []);
 
   useEffect(() => {
-    carregar();
+    const timer = window.setTimeout(() => void carregar(), 0);
+    return () => window.clearTimeout(timer);
   }, [carregar]);
 
   const abrirCriar = () => {
@@ -711,7 +718,8 @@ export default function FornecedoresPage() {
       }
       fecharForm();
       await carregar();
-    } catch (err: any) {
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
       showToast(err.response?.data?.message || "Erro ao guardar fornecedor", "error");
     } finally {
       setLoadingAcao(false);
@@ -726,7 +734,8 @@ export default function FornecedoresPage() {
       showToast(`Fornecedor "${selecao.nome}" movido para a lixeira`, "success");
       fecharArquivar();
       await carregar();
-    } catch (err: any) {
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
       showToast(err.response?.data?.message || "Erro ao arquivar fornecedor", "error");
     } finally {
       setLoadingAcao(false);
@@ -741,7 +750,8 @@ export default function FornecedoresPage() {
       showToast(`Fornecedor "${selecao.nome}" restaurado com sucesso`, "success");
       fecharRestaurar();
       await carregar();
-    } catch (err: any) {
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
       showToast(err.response?.data?.message || "Erro ao restaurar fornecedor", "error");
     } finally {
       setLoadingAcao(false);
@@ -756,7 +766,8 @@ export default function FornecedoresPage() {
       showToast(`Fornecedor "${selecao.nome}" excluído permanentemente`, "success");
       fecharExcluir();
       await carregar();
-    } catch (err: any) {
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
       showToast(err.response?.data?.message || "Erro ao excluir fornecedor", "error");
     } finally {
       setLoadingAcao(false);
@@ -813,7 +824,10 @@ export default function FornecedoresPage() {
               {(["ativos", "lixeira"] as const).map((aba) => (
                 <button
                   key={aba}
-                  onClick={() => setAbaAtiva(aba)}
+                  onClick={() => {
+                    setPaginaAtual(1);
+                    setAbaAtiva(aba);
+                  }}
                   className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors"
                   style={{
                     backgroundColor: abaAtiva === aba ? colors.primary : "transparent",
@@ -830,7 +844,10 @@ export default function FornecedoresPage() {
               <input
                 type="text"
                 value={busca}
-                onChange={(e) => setBusca(e.target.value)}
+                onChange={(e) => {
+                  setPaginaAtual(1);
+                  setBusca(e.target.value);
+                }}
                 placeholder="Nome, NIF, email…"
                 className="w-full pl-9 pr-4 py-2 border outline-none text-sm"
                 style={{
@@ -843,7 +860,10 @@ export default function FornecedoresPage() {
 
             <select
               value={filtroTipo}
-              onChange={(e) => setFiltroTipo(e.target.value as any)}
+              onChange={(e) => {
+                setPaginaAtual(1);
+                setFiltroTipo(e.target.value as "todos" | "nacional" | "internacional");
+              }}
               className="px-3 py-2 border outline-none text-sm"
               style={{
                 backgroundColor: colors.card,
@@ -931,7 +951,7 @@ export default function FornecedoresPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y" style={{ borderColor: colors.border }}>
-                  {fornecedoresFiltrados.map((f) => {
+                  {fornecedoresPaginados.map((f) => {
                     const nifValidacao = f.nif ? validarNIF(f.nif) : null;
                     return (
                       <tr
@@ -1056,19 +1076,40 @@ export default function FornecedoresPage() {
                   <p className="text-sm" style={{ color: colors.textSecondary }}>
                     Nenhum fornecedor encontrado para busca
                   </p>
-                  <button onClick={() => setBusca("")} className="mt-2 text-sm underline" style={{ color: colors.primary }}>
+                  <button
+                    onClick={() => {
+                      setPaginaAtual(1);
+                      setBusca("");
+                    }}
+                    className="mt-2 text-sm underline"
+                    style={{ color: colors.primary }}
+                  >
                     Limpar pesquisa
                   </button>
                 </div>
               )}
             </div>
+            <PaginationControls
+              page={paginaSegura}
+              totalPages={totalPaginas}
+              totalItems={fornecedoresFiltrados.length}
+              pageSize={ITENS_POR_PAGINA}
+              onPageChange={setPaginaAtual}
+              colors={colors}
+            />
           </div>
         )}
       </div>
 
       {/* Modals */}
       <Modal isOpen={modalForm} onClose={fecharForm} title={selecao ? "Editar Fornecedor" : "Novo Fornecedor"} colors={colors}>
-        <FormFornecedor fornecedor={selecao} onSubmit={handleSubmit} onCancel={fecharForm} loading={loadingAcao} />
+        <FormFornecedor
+          key={selecao?.id ?? "new-fornecedor"}
+          fornecedor={selecao}
+          onSubmit={handleSubmit}
+          onCancel={fecharForm}
+          loading={loadingAcao}
+        />
       </Modal>
 
       <ConfirmModal

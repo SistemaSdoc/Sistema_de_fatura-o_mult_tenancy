@@ -13,7 +13,9 @@ import { FormCliente } from "@/app/components/Clientes/FormCliente";
 import { LoadingStats, LoadingTabela } from "@/app/components/Clientes/LoadingStates";
 import { TabelaClientes } from "@/app/components/Clientes/TabelaClientes";
 import { ModalImportar } from "@/app/components/Clientes/ModalImportar";
+import { PaginationControls } from "@/app/components/PaginationControls";
 
+const ITENS_POR_PAGINA = 12;
 
 /* ══════════════════════════════════════════════════════════════════
    PÁGINA PRINCIPAL
@@ -25,7 +27,11 @@ export default function ClientesPage() {
   const [clientesFiltrados, setClientesFiltrados] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
+  const [buscaAplicada, setBuscaAplicada] = useState("");
   const [filtroStatus, setFiltroStatus] = useState<"todos" | "ativos" | "inativos">("ativos");
+  const [paginaAtual, setPaginaAtual] = useState(1);
+  const [totalPaginas, setTotalPaginas] = useState(1);
+  const [totalClientes, setTotalClientes] = useState(0);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "warning" | "info" } | null>(null);
   const [modalImportar, setModalImportar] = useState(false);
   const [modalForm, setModalForm] = useState(false);
@@ -38,61 +44,40 @@ export default function ClientesPage() {
     setToast({ message, type });
   };
 
-  /* ── Filtro local ── */
   useEffect(() => {
-    const t = busca.toLowerCase();
-    setClientesFiltrados(
-      clientes.filter(
-        (c) =>
-          c.nome.toLowerCase().includes(t) ||
-          (c.nif && c.nif.toLowerCase().includes(t)) ||
-          (c.email && c.email.toLowerCase().includes(t)) ||
-          (c.telefone && c.telefone.includes(t))
-      )
-    );
-  }, [busca, clientes]);
+    const timer = window.setTimeout(() => setBuscaAplicada(busca), 300);
+    return () => window.clearTimeout(timer);
+  }, [busca]);
 
   /* ── Carregar ── */
   const carregar = useCallback(async () => {
     setLoading(true);
     try {
-      let data;
-
-      if (filtroStatus === "todos") {
-        const ativos = await clienteService.listar({
-          status: "ativo",
-          per_page: 12,
-        });
-        const inativos = await clienteService.listar({
-          status: "inativo",
-          per_page: 12,
-        });
-        data = [...(ativos.data || []), ...(inativos.data || [])];
-      } else if (filtroStatus === "ativos") {
-        const response = await clienteService.listar({
-          status: "ativo",
-          per_page: 12,
-        });
-        data = response.data || [];
-      } else {
-        const response = await clienteService.listar({
-          status: "inativo",
-          per_page: 12,
-        });
-        data = response.data || [];
-      }
-
-      setClientes(data);
-      setClientesFiltrados(data);
-    } catch {
-      /* silencioso — utilizador vê lista vazia */
+      const response = await clienteService.listar({
+        status: filtroStatus === "todos" ? "todos" : filtroStatus === "ativos" ? "ativo" : "inativo",
+        page: paginaAtual,
+        per_page: ITENS_POR_PAGINA,
+        search: buscaAplicada,
+      });
+      setClientes(response.data);
+      setClientesFiltrados(response.data);
+      setTotalPaginas(response.last_page);
+      setTotalClientes(response.total);
+    } catch (error) {
+      console.error("Erro ao carregar clientes:", error);
+      showToast("Erro ao carregar clientes", "error");
+      setClientes([]);
+      setClientesFiltrados([]);
+      setTotalPaginas(1);
+      setTotalClientes(0);
     } finally {
       setLoading(false);
     }
-  }, [filtroStatus]);
+  }, [filtroStatus, paginaAtual, buscaAplicada]);
 
   useEffect(() => {
-    carregar();
+    const timer = window.setTimeout(() => void carregar(), 0);
+    return () => window.clearTimeout(timer);
   }, [carregar]);
 
   /* ── Handlers de modal ── */
@@ -183,7 +168,7 @@ export default function ClientesPage() {
 
   /* ── Estatísticas ── */
   const stats = [
-    { icon: Users, label: "Total", value: clientes.length, color: colors.text },
+    { icon: Users, label: "Total", value: totalClientes, color: colors.text },
     {
       icon: CheckCircle,
       label: "Ativos",
@@ -227,7 +212,10 @@ export default function ClientesPage() {
               <input
                 type="text"
                 value={busca}
-                onChange={(e) => setBusca(e.target.value)}
+                onChange={(e) => {
+                  setPaginaAtual(1);
+                  setBusca(e.target.value);
+                }}
                 placeholder="Nome, NIF, email ou telefone…"
                 className="w-full pl-9 pr-4 py-2 border outline-none text-sm"
                 style={{
@@ -240,7 +228,10 @@ export default function ClientesPage() {
             {/* Filtro status */}
             <select
               value={filtroStatus}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFiltroStatus(e.target.value as "todos" | "ativos" | "inativos")}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                setPaginaAtual(1);
+                setFiltroStatus(e.target.value as "todos" | "ativos" | "inativos");
+              }}
               className="px-3 py-2 border outline-none text-sm"
               style={{
                 backgroundColor: colors.card,
@@ -323,16 +314,26 @@ export default function ClientesPage() {
             </button>
           </div>
         ) : (
-          <TabelaClientes
-            clientes={clientesFiltrados}
-            busca={busca}
-            colors={colors}
-            onVerDetalhes={abrirDetalhes}
-            onEditar={abrirEditar}
-            onStatus={abrirStatus}
-            onLimparBusca={() => setBusca("")}
-            onToast={showToast}
-          />
+          <>
+            <TabelaClientes
+              clientes={clientesFiltrados}
+              busca={busca}
+              colors={colors}
+              onVerDetalhes={abrirDetalhes}
+              onEditar={abrirEditar}
+              onStatus={abrirStatus}
+              onLimparBusca={() => setBusca("")}
+              onToast={showToast}
+            />
+            <PaginationControls
+              page={paginaAtual}
+              totalPages={totalPaginas}
+              totalItems={totalClientes}
+              pageSize={ITENS_POR_PAGINA}
+              onPageChange={setPaginaAtual}
+              colors={colors}
+            />
+          </>
         )}
       </div>
 

@@ -39,6 +39,8 @@ export function useEstoque() {
     const [itensDeletados, setItensDeletados] = useState<Produto[]>([]);
     const [categorias, setCategorias] = useState<Categoria[]>([]);
     const [movimentacoes, setMovimentacoes] = useState<MovimentoStock[]>([]);
+    const [totalMovimentacoes, setTotalMovimentacoes] = useState(0);
+    const [totalPaginasMovimentacoes, setTotalPaginasMovimentacoes] = useState(1);
 
     // Filtros
     const [busca, setBusca] = useState("");
@@ -77,13 +79,22 @@ export function useEstoque() {
         }
     }, []);
 
-    const carregarMovimentacoes = useCallback(async () => {
+    const carregarMovimentacoes = useCallback(async (page = 1) => {
         try {
             const movs = await movimentoStockService.listarMovimentos({
                 paginar: true,
-                per_page: 50,
+                page,
+                per_page: 10,
             });
-            setMovimentacoes(getCollection(movs.movimentos));
+            const dadosMovimentacoes = movs.movimentos;
+            setMovimentacoes(getCollection(dadosMovimentacoes));
+            if (Array.isArray(dadosMovimentacoes)) {
+                setTotalMovimentacoes(dadosMovimentacoes.length);
+                setTotalPaginasMovimentacoes(1);
+            } else {
+                setTotalMovimentacoes(dadosMovimentacoes.total);
+                setTotalPaginasMovimentacoes(dadosMovimentacoes.last_page);
+            }
         } catch (error) {
             console.error("Erro ao carregar movimentações:", error);
         }
@@ -225,6 +236,8 @@ export function useEstoque() {
         itensDeletados,
         categorias,
         movimentacoes,
+        totalMovimentacoes,
+        totalPaginasMovimentacoes,
         busca,
         categoriaFiltro,
         filtroEstoque,

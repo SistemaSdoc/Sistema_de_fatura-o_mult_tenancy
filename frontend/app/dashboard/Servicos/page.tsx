@@ -7,6 +7,7 @@ import MainEmpresa from "../../components/MainEmpresa";
 import { Plus, ArrowLeft } from "lucide-react";
 import { useThemeColors } from "@/context/ThemeContext";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { PaginationControls } from "@/app/components/PaginationControls";
 
 // Componentes
 import { ModalConfirmacaoServicos } from "@/app/components/Servicos/ModalConfirmacaoServicos";
@@ -22,12 +23,15 @@ const ModalEdicaoServico = dynamic(() => import("@/app/components/Servicos/Modal
   ssr: false,
 });
 
+const ITENS_POR_PAGINA = 10;
+
 export default function ServicosPage() {
   const router = useRouter();
   const colors = useThemeColors();
 
   // Estado para controlar o modal de novo serviço
   const [modalNovoServicoAberto, setModalNovoServicoAberto] = useState(false);
+  const [paginaAtual, setPaginaAtual] = useState(1);
 
   const {
     // Estados
@@ -82,6 +86,15 @@ export default function ServicosPage() {
     carregarDados();
     fecharModalNovoServico();
   };
+
+  const totalItens = abaAtiva === "itens" ? itens.length : itensDeletados.length;
+  const totalPaginas = Math.max(1, Math.ceil(totalItens / ITENS_POR_PAGINA));
+  const paginaSegura = Math.min(paginaAtual, totalPaginas);
+  const inicioPagina = (paginaSegura - 1) * ITENS_POR_PAGINA;
+  const itensDaPagina = (abaAtiva === "itens" ? itens : itensDeletados).slice(
+    inicioPagina,
+    inicioPagina + ITENS_POR_PAGINA,
+  );
 
   if (isInitialLoad) {
     return (
@@ -142,7 +155,10 @@ export default function ServicosPage() {
           }}>
           <TabsServicos
             abaAtiva={abaAtiva}
-            onAbaChange={setAbaAtiva}
+            onAbaChange={(aba) => {
+              setPaginaAtual(1);
+              setAbaAtiva(aba);
+            }}
             totalItens={itens.length}
             totalDeletados={itensDeletados.length}
             colors={colors}
@@ -151,17 +167,40 @@ export default function ServicosPage() {
           <div className="p-3 sm:p-4 md:p-6">
             {abaAtiva === "itens" && (
               <>
-                <FiltrosServicos busca={busca} onBuscaChange={setBusca} onAplicarFiltros={aplicarFiltros} colors={colors} />
+                <FiltrosServicos
+                  busca={busca}
+                  onBuscaChange={setBusca}
+                  onAplicarFiltros={() => {
+                    setPaginaAtual(1);
+                    void aplicarFiltros();
+                  }}
+                  colors={colors}
+                />
 
-                <TabelaServicos itens={itens} onEditar={abrirModalEditar} onMoverParaLixeira={abrirModalDeletar} colors={colors} />
+                <TabelaServicos
+                  itens={itensDaPagina}
+                  onEditar={abrirModalEditar}
+                  onMoverParaLixeira={abrirModalDeletar}
+                  colors={colors}
+                />
               </>
             )}
 
             {abaAtiva === "deletados" && (
               <TabelaLixeiraServicos
-                itens={itensDeletados}
+                itens={itensDaPagina}
                 onRestaurar={abrirModalRestaurar}
                 onDeletarPermanentemente={abrirModalForceDelete}
+                colors={colors}
+              />
+            )}
+            {totalItens > 0 && (
+              <PaginationControls
+                page={paginaSegura}
+                totalPages={totalPaginas}
+                totalItems={totalItens}
+                pageSize={ITENS_POR_PAGINA}
+                onPageChange={setPaginaAtual}
                 colors={colors}
               />
             )}

@@ -17,11 +17,13 @@ import { TabelaItens } from "@/app/components/Stock/TabelaItens";
 import { TabelaMovimentacoes } from "@/app/components/Stock/TabelaMovimentacoes";
 import { TabelaLixeira } from "@/app/components/Stock/TabelaLixeira";
 import { TabsEstoque } from "@/app/components/Stock/TabsEstoque";
+import { PaginationControls } from "@/app/components/PaginationControls";
 
 // Hooks
 import { useEstoque } from "@/hooks/useEstoque";
 
 const ModalImportacao = dynamic(() => import("@/app/components/Stock/ModalImportacao").then((mod) => mod.ModalImportacao), { ssr: false });
+const ITENS_POR_PAGINA = 10;
 
 const NovoProdutoForm = dynamic(() => import("@/app/components/Stock/NovoProdutoForm").then((mod) => mod.NovoProdutoForm), {
   ssr: false,
@@ -37,6 +39,9 @@ export default function EstoquePage() {
   // Estado para controlar o modal de novo produto
   const [modalNovoProdutoAberto, setModalNovoProdutoAberto] = useState(false);
   const [modalImportacaoAberto, setModalImportacaoAberto] = useState(false);
+  const [paginaItens, setPaginaItens] = useState(1);
+  const [paginaDeletados, setPaginaDeletados] = useState(1);
+  const [paginaMovimentacoes, setPaginaMovimentacoes] = useState(1);
   const {
     // Estados
     loading,
@@ -45,6 +50,8 @@ export default function EstoquePage() {
     itensDeletados,
     categorias,
     movimentacoes,
+    totalMovimentacoes,
+    totalPaginasMovimentacoes,
     busca,
     categoriaFiltro,
     filtroEstoque,
@@ -84,9 +91,9 @@ export default function EstoquePage() {
 
   useEffect(() => {
     if (abaAtiva === "movimentacoes") {
-      carregarMovimentacoes();
+      carregarMovimentacoes(paginaMovimentacoes);
     }
-  }, [abaAtiva, carregarMovimentacoes]);
+  }, [abaAtiva, carregarMovimentacoes, paginaMovimentacoes]);
 
   useEffect(() => {
     if (abaAtiva === "deletados") {
@@ -107,6 +114,22 @@ export default function EstoquePage() {
     carregarDados();
     fecharModalNovoProduto();
   };
+
+  const totalPaginasItens = Math.max(1, Math.ceil(itens.length / ITENS_POR_PAGINA));
+  const paginaItensSegura = Math.min(paginaItens, totalPaginasItens);
+  const paginaDeletadosSegura = Math.min(
+    paginaDeletados,
+    Math.max(1, Math.ceil(itensDeletados.length / ITENS_POR_PAGINA)),
+  );
+  const paginaMovimentacoesSegura = Math.min(paginaMovimentacoes, totalPaginasMovimentacoes);
+  const itensPaginados = itens.slice(
+    (paginaItensSegura - 1) * ITENS_POR_PAGINA,
+    paginaItensSegura * ITENS_POR_PAGINA,
+  );
+  const itensDeletadosPaginados = itensDeletados.slice(
+    (paginaDeletadosSegura - 1) * ITENS_POR_PAGINA,
+    paginaDeletadosSegura * ITENS_POR_PAGINA,
+  );
 
   if (loading && !resumo) {
     return (
@@ -196,7 +219,12 @@ export default function EstoquePage() {
           }}>
           <TabsEstoque
             abaAtiva={abaAtiva}
-            onAbaChange={setAbaAtiva}
+            onAbaChange={(aba) => {
+              setAbaAtiva(aba);
+              setPaginaItens(1);
+              setPaginaDeletados(1);
+              setPaginaMovimentacoes(1);
+            }}
             totalItens={itens.length}
             totalDeletados={itensDeletados.length}
             colors={colors}
@@ -207,37 +235,83 @@ export default function EstoquePage() {
               <>
                 <FiltrosEstoque
                   busca={busca}
-                  onBuscaChange={setBusca}
+                  onBuscaChange={(value) => {
+                    setPaginaItens(1);
+                    setBusca(value);
+                  }}
                   categoriaFiltro={categoriaFiltro}
-                  onCategoriaFiltroChange={setCategoriaFiltro}
+                  onCategoriaFiltroChange={(value) => {
+                    setPaginaItens(1);
+                    setCategoriaFiltro(value);
+                  }}
                   filtroEstoque={filtroEstoque}
-                  onFiltroEstoqueChange={setFiltroEstoque}
+                  onFiltroEstoqueChange={(value) => {
+                    setPaginaItens(1);
+                    setFiltroEstoque(value);
+                  }}
                   categorias={categorias}
                   loading={loading}
-                  onAplicarFiltros={aplicarFiltros}
+                  onAplicarFiltros={() => {
+                    setPaginaItens(1);
+                    aplicarFiltros();
+                  }}
                   showEstoqueFilter={true}
                   colors={colors}
                 />
 
                 <TabelaItens
-                  itens={itens}
+                  itens={itensPaginados}
                   onEditar={abrirModalEditar}
                   onRegistrarEntrada={abrirModalEntrada}
                   onMoverParaLixeira={abrirModalDeletar}
                   colors={colors}
                 />
+                <PaginationControls
+                  page={paginaItensSegura}
+                  totalPages={totalPaginasItens}
+                  totalItems={itens.length}
+                  pageSize={ITENS_POR_PAGINA}
+                  onPageChange={(page) => setPaginaItens(Math.min(page, totalPaginasItens))}
+                  colors={colors}
+                />
               </>
             )}
 
-            {abaAtiva === "movimentacoes" && <TabelaMovimentacoes movimentacoes={movimentacoes} colors={colors} />}
+            {abaAtiva === "movimentacoes" && (
+              <>
+                <TabelaMovimentacoes movimentacoes={movimentacoes} colors={colors} />
+                <PaginationControls
+                  page={paginaMovimentacoesSegura}
+                  totalPages={totalPaginasMovimentacoes}
+                  totalItems={totalMovimentacoes}
+                  pageSize={ITENS_POR_PAGINA}
+                  onPageChange={(page) => setPaginaMovimentacoes(Math.min(page, totalPaginasMovimentacoes))}
+                  colors={colors}
+                />
+              </>
+            )}
 
             {abaAtiva === "deletados" && (
-              <TabelaLixeira
-                itens={itensDeletados}
-                onRestaurar={abrirModalRestaurar}
-                onDeletarPermanentemente={abrirModalForceDelete}
-                colors={colors}
-              />
+              <>
+                <TabelaLixeira
+                  itens={itensDeletadosPaginados}
+                  onRestaurar={abrirModalRestaurar}
+                  onDeletarPermanentemente={abrirModalForceDelete}
+                  colors={colors}
+                />
+                <PaginationControls
+                  page={paginaDeletadosSegura}
+                  totalPages={Math.max(1, Math.ceil(itensDeletados.length / ITENS_POR_PAGINA))}
+                  totalItems={itensDeletados.length}
+                  pageSize={ITENS_POR_PAGINA}
+                  onPageChange={(page) =>
+                    setPaginaDeletados(
+                      Math.min(page, Math.max(1, Math.ceil(itensDeletados.length / ITENS_POR_PAGINA))),
+                    )
+                  }
+                  colors={colors}
+                />
+              </>
             )}
           </div>
         </div>

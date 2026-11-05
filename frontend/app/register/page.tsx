@@ -2,97 +2,46 @@
 
 import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Image from "next/image";
 import { useThemeColors } from "@/context/ThemeContext";
 import { api, setTenant } from "@/services/axios";
 import { AxiosError } from "axios";
 import Link from "next/link";
 import {
-  Building2,
-  FileText,
   Mail,
-  Briefcase,
   User,
   Lock,
   ArrowLeft,
   Loader2,
   ChevronRight,
-  Phone,
-  MapPin,
-  Upload,
-  Banknote,
   ChevronLeft,
-  ChevronDown,
   UserPlus,
   ArrowRight,
-  Globe,
-  Landmark,
   CreditCard,
-  Database,
-  Server,
-  Users,
   Calendar,
-  X,
 } from "lucide-react";
 import { ToastNotification } from "@/components/ToastNotification";
 import { planosService } from "@/services/planos";
 import { subscricaoService } from "@/services/subscricoes";
 import { RegistrationInputField } from "@/app/components/Formularios/RegistrationInputField";
-
-// --- Tipagem local do tema ---
-interface ThemeColors {
-  primary: string;
-  secondary: string;
-  background: string;
-  card: string;
-  text: string;
-  textSecondary: string;
-  border: string;
-  danger: string;
-  hover?: string;
-  success: string;
-  blue?: string;
-  warning: string;
-  info?: string;
-}
-
-// --- Tipagem do formulário ---
-interface FormData {
-  nome: string;
-  nif: string;
-  email: string;
-  telefone: string;
-  endereco: string;
-  regime_fiscal: "simplificado" | "geral";
-  sujeito_iva: boolean;
-  is_seguradora: boolean;
-  nome_banco?: string | null;
-  numero_conta?: string | null;
-  iban?: string | null;
-  logo: string;
-  subdomain: string;
-  modo: "colectivo" | "singular";
-  admin_name: string;
-  admin_email: string;
-  admin_password: string;
-}
-
-// --- Tipagem do pagamento (igual ao checkout) ---
-interface PagamentoData {
-  metodo: string;
-  parcelas: number;
-  data_vencimento: string;
-}
+import { RegistrationCompanyStep } from "./RegistrationCompanyStep";
+import {
+  RegistrationStepIndicator,
+} from "./RegistrationFlowComponents";
+import type {
+  RegistrationFormData,
+  RegistrationPaymentData,
+  RegistrationPlan,
+} from "./registration.types";
 
 function RegisterCompanyPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const planoId = searchParams.get("plano_id");
 
-  const colors = useThemeColors() as ThemeColors;
+  const colors = useThemeColors();
 
-  const [step, setStep] = useState(1);
-  const [form, setForm] = useState<FormData>({
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [form, setForm] = useState<RegistrationFormData>({
     nome: "",
     nif: "",
     email: "",
@@ -122,10 +71,10 @@ function RegisterCompanyPageContent() {
   } | null>(null);
 
   // --- Plano selecionado (Passo 3) ---
-  const [plano, setPlano] = useState<any>(null);
+  const [plano, setPlano] = useState<RegistrationPlan | null>(null);
 
   // --- Dados de pagamento (Passo 3) — mesma estrutura do checkout ---
-  const [pagamento, setPagamento] = useState<PagamentoData>({
+  const [pagamento, setPagamento] = useState<RegistrationPaymentData>({
     metodo: "transferencia",
     parcelas: 1,
     data_vencimento: "",
@@ -161,27 +110,51 @@ function RegisterCompanyPageContent() {
       e.target.type === "checkbox"
         ? (e.target as HTMLInputElement).checked
         : e.target.value;
-    setForm({ ...form, [e.target.name]: value });
+    setForm((previous) => ({
+      ...previous,
+      [e.target.name]: value,
+    }));
   };
 
   const handleIvaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const isChecked = e.target.checked;
-    setForm({
-      ...form,
+    setForm((previous) => ({
+      ...previous,
       sujeito_iva: isChecked,
       regime_fiscal: isChecked ? "geral" : "simplificado",
-    });
+    }));
+  };
+
+  const handleNifChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+  ) => {
+    const nif = e.target.value.replace(/\D/g, "").slice(0, 10);
+    setForm((previous) => ({ ...previous, nif }));
+  };
+
+  const handleAccountChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+  ) => {
+    const numero_conta = e.target.value.replace(/\D/g, "").slice(0, 11);
+    setForm((previous) => ({ ...previous, numero_conta }));
+  };
+
+  const handleIbanChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+  ) => {
+    const iban = `AO06${e.target.value.replace(/\D/g, "").slice(0, 21)}`;
+    setForm((previous) => ({ ...previous, iban }));
   };
 
   const handleRegimeChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
   ) => {
     const value = e.target.value as "simplificado" | "geral";
-    setForm({
-      ...form,
+    setForm((previous) => ({
+      ...previous,
       regime_fiscal: value,
       sujeito_iva: value === "geral",
-    });
+    }));
   };
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -280,8 +253,8 @@ function RegisterCompanyPageContent() {
     setStep(step === 3 ? 2 : 1);
   };
 
-  const toggleModo = (modo: "colectivo" | "singular") => {
-    setForm({ ...form, modo });
+  const toggleModo = (modo: RegistrationFormData["modo"]) => {
+    setForm((previous) => ({ ...previous, modo }));
   };
 
   const validatePagamento = (): boolean => {
@@ -421,11 +394,13 @@ function RegisterCompanyPageContent() {
               1500,
             );
           }
-        } catch (subErr: any) {
+        } catch (subErr: unknown) {
+          const subscriptionError =
+            subErr instanceof AxiosError ? subErr : undefined;
           console.error(
             "Erro ao criar subscrição:",
-            subErr.response?.status,
-            subErr.response?.data,
+            subscriptionError?.response?.status,
+            subscriptionError?.response?.data ?? subErr,
           );
           showToast(
             "Empresa criada, mas houve um problema ao gerar o pagamento. Tente novamente ou contacte o suporte.",
@@ -477,11 +452,6 @@ function RegisterCompanyPageContent() {
     }
   };
 
-  const regimeOptions = [
-    { value: "simplificado", label: "Regime Simplificado" },
-    { value: "geral", label: "Regime Geral" },
-  ];
-
   const planoEhPago = plano && Number(plano.valor_mensal) > 0;
 
   return (
@@ -526,66 +496,11 @@ function RegisterCompanyPageContent() {
           </div>
         </div>
 
-        {/* STEP INDICATOR */}
-        <div
-          className="mb-6 flex flex-row border-b sm:mb-8"
-          style={{ borderColor: colors.border }}
-        >
-          <div className="flex-1 py-3 text-center">
-            <div
-              className={`inline-flex flex-col items-center gap-1 text-xs font-medium sm:flex-row sm:gap-2 sm:text-sm ${step === 1 ? "opacity-100" : "opacity-50"}`}
-              style={{ color: step === 1 ? colors.primary : colors.text }}
-            >
-              <span
-                className="flex h-6 w-6 items-center justify-center rounded-full text-xs"
-                style={{
-                  backgroundColor: step === 1 ? colors.primary : colors.border,
-                  color: step === 1 ? "white" : colors.text,
-                }}
-              >
-                1
-              </span>
-              <span className="leading-tight">Dados da Empresa</span>
-            </div>
-          </div>
-          <div className="flex-1 py-3 text-center">
-            <div
-              className={`inline-flex flex-col items-center gap-1 text-xs font-medium sm:flex-row sm:gap-2 sm:text-sm ${step === 2 ? "opacity-100" : "opacity-50"}`}
-              style={{ color: step === 2 ? colors.primary : colors.text }}
-            >
-              <span
-                className="flex h-6 w-6 items-center justify-center rounded-full text-xs"
-                style={{
-                  backgroundColor: step === 2 ? colors.primary : colors.border,
-                  color: step === 2 ? "white" : colors.text,
-                }}
-              >
-                2
-              </span>
-              <span className="leading-tight">Administrador do sistema</span>
-            </div>
-          </div>
-          {planoId && (
-            <div className="flex-1 py-3 text-center">
-              <div
-                className={`inline-flex flex-col items-center gap-1 text-xs font-medium sm:flex-row sm:gap-2 sm:text-sm ${step === 3 ? "opacity-100" : "opacity-50"}`}
-                style={{ color: step === 3 ? colors.primary : colors.text }}
-              >
-                <span
-                  className="flex h-6 w-6 items-center justify-center rounded-full text-xs"
-                  style={{
-                    backgroundColor:
-                      step === 3 ? colors.primary : colors.border,
-                    color: step === 3 ? "white" : colors.text,
-                  }}
-                >
-                  3
-                </span>
-                <span className="leading-tight">Confirmar Plano</span>
-              </div>
-            </div>
-          )}
-        </div>
+        <RegistrationStepIndicator
+          step={step}
+          hasPlan={Boolean(planoId)}
+          colors={colors}
+        />
 
         <div
           className="border shadow-sm"
@@ -601,343 +516,20 @@ function RegisterCompanyPageContent() {
           >
             <div className="p-4 sm:p-6 md:p-8">
               {step === 1 && (
-                <div className="space-y-6">
-                  {/* LOGO */}
-                  <div>
-                    <label
-                      className="mb-2 block text-sm font-medium"
-                      style={{ color: colors.text }}
-                    >
-                      Logo da Empresa
-                    </label>
-                    <div className="flex flex-wrap items-center gap-4">
-                      {logoPreview ? (
-                        <div className="relative shrink-0">
-                          <Image
-                            src={logoPreview}
-                            alt="Logo"
-                            width={64}
-                            height={64}
-                            className="border object-cover"
-                            style={{ borderColor: colors.border }}
-                          />
-                          <button
-                            type="button"
-                            onClick={removeLogo}
-                            className="absolute -right-2 -top-2 p-1 text-white"
-                            style={{ background: colors.secondary }}
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
-                      ) : (
-                        <label
-                          className="hover:border-primary flex h-16 w-16 shrink-0 cursor-pointer flex-col items-center justify-center border-2 border-dashed"
-                          style={{ borderColor: colors.border }}
-                        >
-                          <Upload size={20} style={{ color: colors.text }} />
-                          <span
-                            className="mt-1 text-xs"
-                            style={{ color: colors.textSecondary }}
-                          >
-                            Upload
-                          </span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleLogoChange}
-                            className="hidden"
-                          />
-                        </label>
-                      )}
-                      <div className="flex min-w-0 items-center gap-4">
-                        <div
-                          className="hidden h-10 w-px sm:block"
-                          style={{ backgroundColor: colors.border }}
-                        />
-                        <span
-                          className="text-xs"
-                          style={{ color: colors.textSecondary }}
-                        >
-                          Adicione a logo da tua empresa (JPG/PNG até 2MB)
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* CAMPOS DA EMPRESA */}
-                  <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                    <RegistrationInputField
-                      name="nome"
-                      icon={Building2}
-                      placeholder="Nome da empresa *"
-                      value={form.nome}
-                      onChange={handleChange}
-                      colors={colors}
-                      required
-                    />
-                    <RegistrationInputField
-                      name="nif"
-                      icon={FileText}
-                      placeholder="NIF (10 dígitos) *"
-                      value={form.nif}
-                      onChange={(e) => {
-                        const raw = e.target.value
-                          .replace(/\D/g, "")
-                          .slice(0, 10);
-                        setForm({ ...form, nif: raw });
-                      }}
-                      colors={colors}
-                      required
-                      maxLength={10}
-                    />
-                    <RegistrationInputField
-                      name="email"
-                      icon={Mail}
-                      type="email"
-                      placeholder="Email da empresa *"
-                      value={form.email}
-                      onChange={handleChange}
-                      colors={colors}
-                      required
-                    />
-                    <RegistrationInputField
-                      name="telefone"
-                      icon={Phone}
-                      placeholder="Telefone *"
-                      value={form.telefone}
-                      onChange={handleChange}
-                      colors={colors}
-                      maxLength={9}
-                      required
-                    />
-                    <RegistrationInputField
-                      name="nome_banco"
-                      icon={Landmark}
-                      placeholder="Nome do Banco"
-                      value={form.nome_banco ?? ""}
-                      onChange={handleChange}
-                      colors={colors}
-                    />
-                    <RegistrationInputField
-                      name="numero_conta"
-                      icon={CreditCard}
-                      placeholder="Número da Conta"
-                      value={form.numero_conta ?? ""}
-                      onChange={(e) => {
-                        const raw = e.target.value
-                          .replace(/\D/g, "")
-                          .slice(0, 11);
-                        setForm({ ...form, numero_conta: raw });
-                      }}
-                      colors={colors}
-                      maxLength={11}
-                    />
-                    <RegistrationInputField
-                      name="iban"
-                      icon={Banknote}
-                      placeholder="Digite os 21 dígitos do IBAN"
-                      value={form.iban?.replace(/^AO06/, "") ?? ""}
-                      onChange={(e) => {
-                        const raw = e.target.value
-                          .replace(/\D/g, "")
-                          .slice(0, 21);
-                        setForm({ ...form, iban: `AO06${raw}` });
-                      }}
-                      colors={colors}
-                      maxLength={21}
-                    />
-                    <RegistrationInputField
-                      name="subdomain"
-                      icon={Globe}
-                      placeholder="Subdomínio * (ex: minhaempresa)"
-                      value={form.subdomain}
-                      onChange={handleChange}
-                      colors={colors}
-                      required
-                    />
-                    <div className="md:col-span-2">
-                      <RegistrationInputField
-                        name="endereco"
-                        icon={MapPin}
-                        placeholder="Endereço completo *"
-                        value={form.endereco}
-                        onChange={handleChange}
-                        colors={colors}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  {/* SELEÇÃO DO MODO */}
-                  <div className="mt-6">
-                    <label
-                      className="mb-3 block text-sm font-medium"
-                      style={{ color: colors.text }}
-                    >
-                      <Database
-                        size={16}
-                        className="mr-2 inline"
-                        style={{ color: colors.textSecondary }}
-                      />
-                      Modo de Funcionamento *
-                    </label>
-
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-                      {/* Opção Colectivo */}
-                      <div
-                        onClick={() => toggleModo("colectivo")}
-                        className="cursor-pointer rounded border p-3 transition-colors sm:p-4"
-                        style={{
-                          borderColor:
-                            form.modo === "colectivo"
-                              ? colors.primary
-                              : colors.border,
-                          backgroundColor:
-                            form.modo === "colectivo"
-                              ? `${colors.primary}0D`
-                              : "transparent",
-                        }}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="mt-1 flex-shrink-0">
-                            <input
-                              type="radio"
-                              title="Todas as empresas partilham a mesma base de dados. Ideal para empresas que pretendem uma gestão centralizada com custos reduzidos."
-                              name="modo_radio"
-                              value="colectivo"
-                              checked={form.modo === "colectivo"}
-                              onChange={() => toggleModo("colectivo")}
-                              className="mt-1 h-4 w-4"
-                              style={{ accentColor: colors.primary }}
-                            />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <Users
-                                size={18}
-                                className="shrink-0"
-                                style={{
-                                  color:
-                                    form.modo === "colectivo"
-                                      ? colors.secondary
-                                      : colors.textSecondary,
-                                }}
-                              />
-                              <span
-                                className="font-medium"
-                                style={{
-                                  color:
-                                    form.modo === "colectivo"
-                                      ? colors.secondary
-                                      : colors.text,
-                                }}
-                              >
-                                Colectivo
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Opção Singular */}
-                      <div
-                        onClick={() => toggleModo("singular")}
-                        className="cursor-pointer rounded border p-3 transition-colors sm:p-4"
-                        style={{
-                          borderColor:
-                            form.modo === "singular"
-                              ? colors.primary
-                              : colors.border,
-                          backgroundColor:
-                            form.modo === "singular"
-                              ? `${colors.primary}0D`
-                              : "transparent",
-                        }}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="mt-1 flex-shrink-0">
-                            <input
-                              type="radio"
-                              title="Cada empresa tem a sua própria base de dados dedicada. Ideal para empresas que necessitam de isolamento rigoroso de dados."
-                              name="modo_radio"
-                              value="singular"
-                              checked={form.modo === "singular"}
-                              onChange={() => toggleModo("singular")}
-                              className="mt-1 h-4 w-4"
-                              style={{ accentColor: colors.primary }}
-                            />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <Server
-                                size={18}
-                                className="shrink-0"
-                                style={{
-                                  color:
-                                    form.modo === "singular"
-                                      ? colors.secondary
-                                      : colors.textSecondary,
-                                }}
-                              />
-                              <span
-                                className="font-medium"
-                                style={{
-                                  color:
-                                    form.modo === "singular"
-                                      ? colors.secondary
-                                      : colors.text,
-                                }}
-                              >
-                                Singular
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* REGIME FISCAL E IVA */}
-                  <div className="mt-4 grid grid-cols-1 gap-5 md:grid-cols-2">
-                    <RegistrationInputField
-                      name="regime_fiscal"
-                      icon={Briefcase}
-                      placeholder="Regime Fiscal"
-                      value={form.regime_fiscal}
-                      onChange={handleRegimeChange}
-                      colors={colors}
-                      isSelect
-                      options={regimeOptions}
-                    />
-                    <label className="flex items-center gap-3 py-3">
-                      <input
-                        type="checkbox"
-                        name="sujeito_iva"
-                        checked={form.sujeito_iva}
-                        onChange={handleIvaChange}
-                        className="h-4 w-4 shrink-0"
-                        style={{ accentColor: colors.primary }}
-                      />
-                      <span className="text-sm" style={{ color: colors.text }}>
-                        Sujeito a IVA
-                      </span>
-                    </label>
-                    <label className="flex items-center gap-3 py-3 md:col-span-2">
-                      <input
-                        type="checkbox"
-                        name="is_seguradora"
-                        checked={form.is_seguradora}
-                        onChange={handleChange}
-                        className="h-4 w-4 shrink-0"
-                        style={{ accentColor: colors.primary }}
-                      />
-                      <span className="text-sm" style={{ color: colors.text }}>
-                        Esta empresa é uma seguradora
-                      </span>
-                    </label>
-                  </div>
-                </div>
+                <RegistrationCompanyStep
+                  form={form}
+                  colors={colors}
+                  logoPreview={logoPreview}
+                  onChange={handleChange}
+                  onNifChange={handleNifChange}
+                  onAccountChange={handleAccountChange}
+                  onIbanChange={handleIbanChange}
+                  onRegimeChange={handleRegimeChange}
+                  onIvaChange={handleIvaChange}
+                  onLogoChange={handleLogoChange}
+                  onRemoveLogo={removeLogo}
+                  onModeChange={toggleModo}
+                />
               )}
 
               {step === 2 && (
@@ -1021,15 +613,15 @@ function RegisterCompanyPageContent() {
                             KZ
                           </span>
                         </div>
-                        {plano.features?.length > 0 && (
+                        {plano.features && plano.features.length > 0 && (
                           <ul className="space-y-1 pt-2">
-                            {plano.features.map((f: any, i: number) => (
+                            {plano.features.map((feature, i) => (
                               <li
-                                key={i}
+                                key={`${feature.nome}-${i}`}
                                 className="text-sm"
                                 style={{ color: colors.text }}
                               >
-                                • {f.nome}
+                                • {feature.nome}
                               </li>
                             ))}
                           </ul>

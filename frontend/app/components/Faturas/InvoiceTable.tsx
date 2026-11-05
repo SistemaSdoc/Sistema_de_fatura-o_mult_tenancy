@@ -8,10 +8,9 @@ import {
   Printer,
   Receipt,
   Download,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 import DocumentActionsMenu from "./DocumentActionsMenu";
+import { PaginationControls } from "@/app/components/PaginationControls";
 
 const TIPO_LABEL: Record<TipoDocumento, string> = {
   FT: "Factura",
@@ -131,53 +130,6 @@ function EstadoBadge({ estado, colors }: { estado: string; colors: ColorsTheme }
     >
       {ESTADO_LABEL[estado] ?? estado}
     </span>
-  );
-}
-
-/* ── Paginação ── */
-function Paginacao({
-  pagina,
-  total,
-  quantidade,
-  onAnterior,
-  onProxima,
-  colors,
-}: {
-  pagina: number;
-  total: number;
-  quantidade: number;
-  onAnterior: () => void;
-  onProxima: () => void;
-  colors: ColorsTheme;
-}) {
-  if (total <= 1) return null;
-  return (
-    <div
-      className="flex justify-between items-center px-3 py-2 text-xs"
-      style={{ borderTop: `0.5px solid ${colors.border}`, color: colors.textSecondary }}
-    >
-      <span>
-        {pagina} / {total} — {quantidade} documentos
-      </span>
-      <div className="flex gap-2">
-        <button
-          onClick={onAnterior}
-          disabled={pagina === 1}
-          className="disabled:opacity-30"
-          style={{ color: colors.text }}
-        >
-          <ChevronLeft size={14} />
-        </button>
-        <button
-          onClick={onProxima}
-          disabled={pagina === total}
-          className="disabled:opacity-30"
-          style={{ color: colors.text }}
-        >
-          <ChevronRight size={14} />
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -422,12 +374,12 @@ export default function InvoiceTable({
         )}
       </div>
 
-      <Paginacao
-        pagina={pgFR}
-        total={totalPagesFR}
-        quantidade={docsFR.length}
-        onAnterior={() => setPaginaFR((p) => p - 1)}
-        onProxima={() => setPaginaFR((p) => p + 1)}
+      <PaginationControls
+        page={pgFR}
+        totalPages={totalPagesFR}
+        totalItems={docsFR.length}
+        pageSize={POR_PAGINA}
+        onPageChange={setPaginaFR}
         colors={colors}
       />
     </>
@@ -529,12 +481,12 @@ export default function InvoiceTable({
         )}
       </div>
 
-      <Paginacao
-        pagina={pgFT}
-        total={totalPagesFT}
-        quantidade={docsFT.length}
-        onAnterior={() => setPaginaFT((p) => p - 1)}
-        onProxima={() => setPaginaFT((p) => p + 1)}
+      <PaginationControls
+        page={pgFT}
+        totalPages={totalPagesFT}
+        totalItems={docsFT.length}
+        pageSize={POR_PAGINA}
+        onPageChange={setPaginaFT}
         colors={colors}
       />
     </>

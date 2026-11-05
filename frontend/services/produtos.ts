@@ -534,6 +534,7 @@ export const movimentoStockService = {
       tipo_movimento?: string;
       data_inicio?: string;
       data_fim?: string;
+      page?: number;
       paginar?: boolean;
       per_page?: number;
     } = {}
@@ -544,6 +545,7 @@ export const movimentoStockService = {
     if (params.tipo_movimento) q.append("tipo_movimento", params.tipo_movimento);
     if (params.data_inicio) q.append("data_inicio", params.data_inicio);
     if (params.data_fim) q.append("data_fim", params.data_fim);
+    if (params.page) q.append("page", params.page.toString());
     if (params.paginar) q.append("paginar", "true");
     if (params.per_page) q.append("per_page", params.per_page.toString());
 
