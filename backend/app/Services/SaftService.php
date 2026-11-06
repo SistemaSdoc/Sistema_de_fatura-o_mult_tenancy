@@ -43,6 +43,14 @@ use Carbon\Carbon;
  *  - FIX 2.6: TotalTax global recalculado a partir das linhas.
  *  - FIX 2.7: Products com ISE no regime simplificado.
  *  - FALLBACK: linha genérica quando documento não tem itens.
+ * 
+ * ✅ CORREÇÕES FINAIS (nov/2026):
+ *  - FIX 3: TaxAccountingBasis alterado de 'FT' para 'F' (Regime Geral).
+ *  - FIX 4: PaymentType nos recibos agora é dinâmico (RC ou RG).
+ *  - FIX 5: Código de isenção no Regime Simplificado forçado para 'M00'.
+ *  - FIX 6: Ordenação das linhas pelo campo 'ordem' antes de gerar o XML.
+ *  - FIX 7: Dados do fornecedor no bloco <Customer> em documentos AF.
+ *  - FIX 8: mapPaymentMethod traduz corretamente os mecanismos (NU, TB, CH, CC).
  */
 class SaftService
 {
@@ -93,11 +101,6 @@ class SaftService
      | ✅ FIX 2.1 — REGIME SIMPLIFICADO
      | ================================================================== */
 
-    /**
-     * Detecta se a empresa está em regime simplificado.
-     * No regime simplificado angolano, as faturas são emitidas SEM IVA.
-     * A AGT apura trimestralmente 7% sobre o volume de negócios.
-     */
     protected function isRegimeSimplificado(): bool
     {
         $empresa = $this->getEmpresa();
@@ -135,11 +138,6 @@ class SaftService
         return $this->taxaIvaVigente();
     }
 
-    /**
-     * Mapeia taxa para código SAF-T AO 1.01_01.
-     * Apenas ISE (0%), RED (5%), NOR (14%), NS (não sujeito), OUT (outros).
-     * NÃO existem RED5, RED7 ou INT em Angola.
-     */
     protected function mapTaxaToCode(float $taxa): string
     {
         if ($taxa == 0) return 'ISE';
@@ -201,23 +199,6 @@ class SaftService
     /* =====================================================================
      | MODELS
      | ================================================================== */
-
-    protected function clienteModel()
-    {
-        return $this->isColectivo() ? new SharedCliente() : new TenantCliente();
-    }
-    protected function produtoModel()
-    {
-        return $this->isColectivo() ? new SharedProduto() : new TenantProduto();
-    }
-    protected function documentoFiscalModel()
-    {
-        return $this->isColectivo() ? new SharedDocumentoFiscal() : new TenantDocumentoFiscal();
-    }
-    protected function movimentoStockModel()
-    {
-        return $this->isColectivo() ? new SharedMovimentoStock() : new TenantMovimentoStock();
-    }
 
     protected function queryDocumentosFiscais()
     {
@@ -335,8 +316,8 @@ class SaftService
         $header = $dom->createElement('Header');
         $root->appendChild($header);
 
-        // ✅ TaxAccountingBasis: S (simplificado) ou FT (faturação)
-        $taxBasis = $empresa->regime_fiscal === 'simplificado' ? 'S' : 'FT';
+        // ✅ FIX 3: TaxAccountingBasis: S (simplificado) ou F (Facturação/Regime Geral)
+        $taxBasis = $empresa->regime_fiscal === 'simplificado' ? 'S' : 'F';
 
         $header->appendChild($dom->createElement('AuditFileVersion', '1.01_01'));
         $header->appendChild($dom->createElement('CompanyID', $empresa->nome));
@@ -427,7 +408,7 @@ class SaftService
         $productsNode = $dom->createElement('Product');
         $masterFiles->appendChild($productsNode);
 
-        // ✅ Produto fallback "GERAL" (obrigatório quando há linhas sem produto real)
+        // ✅ Produto fallback "GERAL"
         $genericProduct = $dom->createElement('Product');
         $productsNode->appendChild($genericProduct);
         $genericProduct->appendChild($dom->createElement('ProductCode', 'GERAL'));
@@ -471,7 +452,6 @@ class SaftService
         $taxTable = $dom->createElement('TaxTable');
         $masterFiles->appendChild($taxTable);
 
-        // Apenas taxas válidas em Angola: 0%, 5%, 14%
         $taxas = [
             0  => ['ISE', 'Isento'],
             5  => ['RED', 'IVA a 5%'],
@@ -496,7 +476,7 @@ class SaftService
     }
 
     /* =====================================================================
-     | ✅ FIX 2.3-2.6 — SALES INVOICES
+     | SALES INVOICES
      | ================================================================== */
 
     private function addSalesInvoices(DOMDocument $dom, DOMElement $sourceDocs, int $year, int $month, Empresa $empresa): void
@@ -516,7 +496,6 @@ class SaftService
             ->with(['itens.produto', 'cliente'])
             ->get();
 
-        // ✅ FIX 2.6 — recalcular totais a partir das linhas
         $totalBase = 0;
         $totalTax = 0;
         $totalDebit = 0;
@@ -542,17 +521,9 @@ class SaftService
         $invoicesNode->appendChild($dom->createElement('TotalDebit', number_format($totalDebit, 2, '.', '')));
         $invoicesNode->appendChild($dom->createElement('TotalCredit', number_format($totalCredit, 2, '.', '')));
 
-        // Mapeamento de tipos DP 71/25 para InvoiceType SAF-T
         $invoiceTypeMap = [
-            'FT' => 'FT',
-            'FR' => 'FR',
-            'AF' => 'AF',
-            'NC' => 'NC',
-            'ND' => 'ND',
-            'FG' => 'FG',
-            'FGR' => 'FR',
-            'TV' => 'TV',
-            'FA' => 'FT',
+            'FT' => 'FT', 'FR' => 'FR', 'AF' => 'AF', 'NC' => 'NC', 'ND' => 'ND',
+            'FG' => 'FG', 'FGR' => 'FR', 'TV' => 'TV', 'FA' => 'FT',
         ];
 
         foreach ($documentos as $doc) {
@@ -563,13 +534,11 @@ class SaftService
             $invoice->appendChild($dom->createElement('InvoiceDate', $doc->data_emissao->format('Y-m-d')));
             $invoice->appendChild($dom->createElement('InvoiceType', $invoiceTypeMap[$doc->tipo_documento] ?? 'FT'));
 
-            // InvoiceStatus: N=Normal, F=Faturado, A=Anulado, S=Auto-faturação
             $status = 'N';
             if ($doc->auto_faturacao) $status = 'S';
             if ($doc->estado === 'cancelado') $status = 'A';
             if (in_array($doc->tipo_documento, ['TV']) && $doc->estado === 'paga') $status = 'F';
 
-            // ✅ Corrigido — data/hora parse correto
             $statusTimestamp = Carbon::parse($doc->data_emissao, 'Africa/Luanda')
                 ->setTimeFromTimeString(substr($doc->hora_emissao ?? '00:00:00', 0, 8))
                 ->format('Y-m-d\TH:i:s');
@@ -591,19 +560,26 @@ class SaftService
             $invoice->appendChild($dom->createElement('Period', (string) $month));
 
             $special = $dom->createElement('SpecialRegimes');
-            $special->appendChild($dom->createElement('SelfBillingIndicator', $doc->auto_faturacao ? '1' : '0'));
+            $special->appendChild($dom->createElement('SelfBillingIndicator', ($doc->auto_faturacao || $doc->tipo_documento === 'AF') ? '1' : '0'));
             $special->appendChild($dom->createElement('CashVATSchemeIndicator', '0'));
             $special->appendChild($dom->createElement('ThirdPartiesBillingIndicator', '0'));
             $invoice->appendChild($special);
 
             $invoice->appendChild($dom->createElement('SystemEntryDate', $doc->created_at->format('Y-m-d\TH:i:s')));
 
-            // Cliente
-            if ($doc->cliente_id && $doc->cliente) {
+            // ✅ FIX 7: Cliente / Fornecedor (Autofacturação)
+            if ($doc->tipo_documento === 'AF' || $doc->auto_faturacao) {
+                // Autofacturação: O <Customer> é o Fornecedor
+                $customerId = (string) ($doc->fornecedor_id ?? $doc->cliente_id ?? '0');
+                $customerTaxID = $doc->fornecedor_nif ?? $doc->cliente?->nif ?? '999999990';
+                $customerName  = $doc->fornecedor_nome ?? $doc->cliente?->nome ?? 'Fornecedor Desconhecido';
+            } elseif ($doc->cliente_id && $doc->cliente) {
+                // Normal
                 $customerId = (string) $doc->cliente_id;
                 $customerTaxID = $doc->cliente->nif ?? '999999990';
                 $customerName  = $doc->cliente->nome ?? '';
             } else {
+                // Consumidor Final
                 $customerId = '0';
                 $customerTaxID = '999999990';
                 $customerName  = 'Consumidor Final';
@@ -615,17 +591,18 @@ class SaftService
 
             $this->addShipAddress($dom, $invoice, $doc, $empresa);
 
-            // Linhas
             $temLinhas = false;
 
             if ($doc->itens && $doc->itens->count() > 0) {
-                foreach ($doc->itens as $item) {
+                // ✅ FIX 6: Ordenar os itens pela ordem (LineNumber) antes de imprimir
+                $itensOrdenados = $doc->itens->sortBy('ordem');
+
+                foreach ($itensOrdenados as $item) {
                     $produto = $item->produto;
                     if (!$produto) continue;
 
                     $temLinhas = true;
 
-                    // ✅ FIX 2.3 — lógica de IVA coerente
                     if ($this->isRegimeSimplificado()) {
                         $taxaIva = 0.0;
                         $taxCode = 'ISE';
@@ -652,7 +629,6 @@ class SaftService
                     $lineNode->appendChild($dom->createElement('Description', $produto->nome));
                     $lineNode->appendChild($dom->createElement('TaxBase', number_format($item->base_tributavel, 4, '.', '')));
 
-                    // ✅ FIX 2.4 — TaxAmount coerente
                     $taxAmountLinha = round(($item->base_tributavel * $taxaIva) / 100, 2);
 
                     $taxNode = $dom->createElement('Tax');
@@ -663,22 +639,20 @@ class SaftService
                     $taxNode->appendChild($dom->createElement('TaxAmount', number_format($taxAmountLinha, 2, '.', '')));
                     $lineNode->appendChild($taxNode);
 
-                
-                    //  Isenção obrigatória sempre que TaxCode=ISE
                     if ($taxaIva == 0) {
-                        $codigoIsencao = $item->codigo_isencao
-                            ?? ($this->isRegimeSimplificado() ? 'M01' : 'M99');
-
-                        $motivoIsencao = $item->motivo_isencao
-                            ?? ($this->isRegimeSimplificado()
-                                ? 'Regime simplificado — não liquida IVA nas facturas'
-                                : 'Não sujeito / não tributado');
+                        // ✅ FIX 5: Forçar M00 se for Regime Simplificado
+                        if ($this->isRegimeSimplificado()) {
+                            $codigoIsencao = 'M00';
+                            $motivoIsencao = 'Regime simplificado — não liquida IVA nas facturas';
+                        } else {
+                            $codigoIsencao = $item->codigo_isencao ?? 'M99';
+                            $motivoIsencao = $item->motivo_isencao ?? 'Não sujeito / não tributado';
+                        }
 
                         $lineNode->appendChild($dom->createElement('TaxExemptionReason', $motivoIsencao));
                         $lineNode->appendChild($dom->createElement('TaxExemptionCode', $codigoIsencao));
                     }
 
-                    // CreditAmount para NC e vendas normais; DebitAmount para ND
                     if (in_array($doc->tipo_documento, ['NC'])) {
                         $lineNode->appendChild($dom->createElement('CreditAmount', number_format($item->total_linha, 2, '.', '')));
                     } elseif (in_array($doc->tipo_documento, ['ND'])) {
@@ -689,7 +663,6 @@ class SaftService
                 }
             }
 
-            // ✅ FALLBACK — linha genérica se não houver itens
             if (!$temLinhas) {
                 $lineNode = $dom->createElement('Line');
                 $invoice->appendChild($lineNode);
@@ -715,7 +688,6 @@ class SaftService
                 $lineNode->appendChild($dom->createElement('CreditAmount', number_format((float) $doc->base_tributavel, 2, '.', '')));
             }
 
-            // ✅ FIX 2.5 — DocumentTotals recalculado
             [$docBase, $docTax] = $this->calcularTotaisDocumento($doc);
             $grossTotal = round($docBase + $docTax, 2);
 
@@ -725,10 +697,9 @@ class SaftService
             $docTotals->appendChild($dom->createElement('NetTotal', number_format($docBase, 2, '.', '')));
             $docTotals->appendChild($dom->createElement('GrossTotal', number_format($grossTotal, 2, '.', '')));
 
-            // Payment
             if (in_array($doc->tipo_documento, ['FR', 'FGR', 'TV', 'RC', 'RG']) && $doc->metodo_pagamento) {
                 $payment = $dom->createElement('Payment');
-                $payment->appendChild($dom->createElement('PaymentMechanism', $this->mapPaymentMethod($doc->metodo_pagamento)));
+                $payment->appendChild($dom->createElement('PaymentMechanism', $this->mapPaymentMethod($doc->metodo_pagamento, $doc->tipo_documento)));
                 $payment->appendChild($dom->createElement('PaymentAmount', number_format($grossTotal, 2, '.', '')));
                 $payment->appendChild($dom->createElement('PaymentDate', $doc->data_emissao->format('Y-m-d')));
                 $docTotals->appendChild($payment);
@@ -736,15 +707,6 @@ class SaftService
         }
     }
 
-    /**
-     * ✅ FIX 2.5/2.6 — Calcula base e IVA de um documento a partir das linhas.
-     * Nunca confia em $doc->base_tributavel / $doc->total_iva da BD.
-     */
-    /**
-     * ✅ FIX 2.5b — Calcula base e IVA de um documento a partir das linhas.
-     * Trata o caso de itens com produto=null (apagado ou não carregado)
-     * sem perder a base tributável.
-     */
     private function calcularTotaisDocumento($doc): array
     {
         $base = 0.0;
@@ -755,10 +717,8 @@ class SaftService
             foreach ($doc->itens as $it) {
                 $produtoIt = $it->produto;
 
-                // ✅ Item existe mas produto não foi carregado — usa base do item
                 if (!$produtoIt) {
                     $base += (float) $it->base_tributavel;
-                    // IVA: usa 0 no simplificado, senão usa item.taxa_iva
                     if (!$this->isRegimeSimplificado()) {
                         $taxaItem = isset($it->taxa_iva) && $it->taxa_iva !== null
                             ? (float) $it->taxa_iva
@@ -785,7 +745,6 @@ class SaftService
             }
         }
 
-        // Fallback: se nenhum item válido foi processado, usa valores da BD
         if ($somaItensValidos === 0) {
             $base = (float) $doc->base_tributavel;
             $tax = (float) $doc->total_iva;
@@ -839,7 +798,10 @@ class SaftService
             $payment->appendChild($dom->createElement('PaymentRefNo', $recibo->numero_documento));
             $payment->appendChild($dom->createElement('Period', (string) $month));
             $payment->appendChild($dom->createElement('TransactionDate', $recibo->data_emissao->format('Y-m-d')));
-            $payment->appendChild($dom->createElement('PaymentType', 'RG'));
+            
+            // ✅ FIX 4: PaymentType dinâmico
+            $payment->appendChild($dom->createElement('PaymentType', $recibo->tipo_documento));
+            
             $payment->appendChild($dom->createElement('SystemID', '1'));
             $payment->appendChild($dom->createElement('PaymentAmount', number_format($recibo->total_liquido, 2, '.', '')));
 
@@ -850,12 +812,12 @@ class SaftService
             $docStatus->appendChild($dom->createElement('PaymentStatus', 'N'));
             $docStatus->appendChild($dom->createElement('PaymentStatusDate', $recibo->created_at->format('Y-m-d\TH:i:s')));
             $docStatus->appendChild($dom->createElement('SourceID', '1'));
-            // ✅ FIX 1 — SourcePayment coerente com billingIndicator
             $docStatus->appendChild($dom->createElement('SourcePayment', $this->billingIndicator($empresa)));
             $payment->appendChild($docStatus);
 
             $paymentMethod = $dom->createElement('PaymentMethod');
-            $paymentMethod->appendChild($dom->createElement('PaymentMechanism', $this->mapPaymentMethod($recibo->metodo_pagamento)));
+            // ✅ FIX 8: Passar o tipo de documento para mapear o mecanismo correto
+            $paymentMethod->appendChild($dom->createElement('PaymentMechanism', $this->mapPaymentMethod($recibo->metodo_pagamento, $recibo->tipo_documento)));
             $paymentMethod->appendChild($dom->createElement('PaymentAmount', number_format($recibo->total_liquido, 2, '.', '')));
             $paymentMethod->appendChild($dom->createElement('PaymentDate', $recibo->data_emissao->format('Y-m-d')));
             $payment->appendChild($paymentMethod);
@@ -875,7 +837,6 @@ class SaftService
                 $line->appendChild($dom->createElement('SettlementAmount', '0.00'));
                 $line->appendChild($dom->createElement('CreditAmount', number_format($recibo->total_liquido, 2, '.', '')));
 
-                // TaxCode do recibo = TaxCode da fatura original
                 if ($this->isRegimeSimplificado()) {
                     $taxaOriginal = 0.0;
                     $taxCodeRecibo = 'ISE';
@@ -953,36 +914,29 @@ class SaftService
     }
 
     /* =====================================================================
-     | ✅ FIX 1 — HELPERS FINAIS
+     | HELPERS FINAIS
      | ================================================================== */
 
-    /**
-     * Determina o SourceBilling correcto (SAF-T AO 1.01_01).
-     * P = Produção (software certificado)
-     * T = Teste/Homologação (software NÃO certificado)
-     * I = Integrado
-     * M = Documento recuperado (NUNCA usar para emitidos pelo software)
-     */
     private function billingIndicator(Empresa $empresa): string
     {
         $validation = trim((string) ($empresa->software_validation_number ?? ''));
-
-        // Sem número de certificação → homologação/teste
         if ($validation === '' || strtoupper($validation) === 'EM_HOMOLOGACAO') {
             return 'T';
         }
-
-        // Se tiver número de validação válido → produção
         return 'P';
     }
 
-    private function mapPaymentMethod(?string $metodo): string
+    /**
+     * ✅ FIX 8: Mapeamento correto dos mecanismos de pagamento SAF-T.
+     */
+    private function mapPaymentMethod(?string $metodo, string $tipoDoc = 'RC'): string
     {
         return match ($metodo) {
-            'dinheiro' => 'NU',
-            'transferencia' => 'NU',
-            'multibanco' => 'NU',
-            'cartao' => 'NU',
+            'dinheiro' => $tipoDoc === 'RG' ? 'TB' : 'NU',
+            'transferencia' => 'TB',
+            'multibanco' => 'TB',
+            'cartao' => 'CC',
+            'cheque' => 'CH',
             default => 'NU',
         };
     }
