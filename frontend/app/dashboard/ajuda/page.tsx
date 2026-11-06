@@ -14,6 +14,8 @@ import {
   Settings,
   DollarSign,
   Building2,
+  Printer,
+  FileText, // Ícone adicionado para a nova categoria
 } from "lucide-react";
 import { useThemeColors } from "@/context/ThemeContext";
 
@@ -45,13 +47,13 @@ export default function AjudaPage() {
   const faqs = useMemo<FAQItem[]>(
     () => [
       // PRODUTOS E SERVIÇOS
-{
-  question: "Como cadastrar um novo produto ou serviço?",
-  answer:
-    'Vá ao menu "Gestão de Stock" e clique em "Stock". Depois clique no botão "Novo Produto" para cadastrar individualmente. Preencha o nome, descrição, preço de venda, quantidade em stock e a categoria. Para serviços, pode definir "Serviço" e o stock fica automático como 0. Não se esqueça de definir o IVA (se aplicável) e a margem de lucro. Dica: Se tiver muitos produtos para cadastrar, pode usar a opção "Importar" na página de Stock. Baixe o modelo Excel, preencha os campos do documento e faça o upload. O sistema irá processar e cadastrar todos de uma só vez, poupando tempo e evitando erros de digitação!',
-  category: "produtos",
-  tags: ["produto", "serviço", "cadastro", "stock", "importar", "Excel"],
-},
+      {
+        question: "Como cadastrar um novo produto ou serviço?",
+        answer:
+          'Vá ao menu "Gestão de Stock" e clique em "Stock". Depois clique no botão "Novo Produto" para cadastrar individualmente. Preencha o nome, descrição, preço de venda, quantidade em stock e a categoria. Para serviços, pode definir "Serviço" e o stock fica automático como 0. Não se esqueça de definir o IVA (se aplicável) e a margem de lucro. Dica: Se tiver muitos produtos para cadastrar, pode usar a opção "Importar" na página de Stock. Baixe o modelo Excel, preencha os campos do documento e faça o upload. O sistema irá processar e cadastrar todos de uma só vez, poupando tempo e evitando erros de digitação!',
+        category: "produtos",
+        tags: ["produto", "serviço", "cadastro", "stock", "importar", "Excel"],
+      },
       {
         question: "O que é o stock mínimo e para que serve?",
         answer:
@@ -59,7 +61,6 @@ export default function AjudaPage() {
         category: "produtos",
         tags: ["stock", "alerta", "inventário"],
       },
-
       {
         question: "Como definir preços diferentes para o mesmo produto?",
         answer:
@@ -91,7 +92,7 @@ export default function AjudaPage() {
         tags: ["histórico", "compras", "relatório"],
       },
 
-      // FACTURAÇÃO
+      // FACTURAÇÃO GERAL
       {
         question: "Como emitir uma factura-recibo?",
         answer:
@@ -134,6 +135,64 @@ export default function AjudaPage() {
         category: "faturacao",
         tags: ["erro", "correção", "nota de crédito", "NC"],
       },
+      {
+        question: "Como gerar uma Nota de Crédito?",
+        answer:
+          'Vá à página da factura que deseja corrigir, clique em "Emitir Nota de Crédito". Preencha o motivo (obrigatório, mínimo 10 caracteres) e os itens a serem creditados. O sistema irá gerar um novo documento que anula parcial ou totalmente a factura original.',
+        category: "faturacao",
+        tags: ["nota de crédito", "NC", "correção"],
+      },
+
+      // ⭐ DOCUMENTOS FISCAIS ESPECÍFICOS (Baseados nas Leis 71/25 e 683/25)
+      {
+        question: "O que é a Autofacturação (AF) e quando devo usá-la?",
+        answer:
+          "A Autofacturação (código AF) está prevista no Artigo 3.º, alínea c) do Decreto Presidencial n.º 71/25. É usada quando o adquirente (o cliente) emite a factura-recibo em substituição do fornecedor. Isto acontece, por exemplo, quando o fornecedor não está registado para emitir facturas em Angola. No FaturaJa, esta opção tem um fluxo próprio. Ao emitir, o sistema gera um documento com o tipo AF, identificando claramente quem está a emitir (Adquirente) e quem é o fornecedor substituído, com os respetivos NIFs.",
+        category: "documentos_fiscais",
+        tags: ["autofacturação", "AF", "fornecedor", "adquirente"],
+      },
+      {
+        question: "Qual é a diferença entre Recibo (RC) e Outros Recibos (RG)?",
+        answer:
+          "A diferença está no meio de pagamento. Segundo as especificações da AGT (Decreto Executivo n.º 683/25), o código RC deve ser usado exclusivamente para pagamentos em dinheiro (numerário). Para pagamentos por transferência bancária, cheque, cartão ou multibanco, o documento correto é o RG (Outros Recibos). O sistema faz esta distinção automaticamente com base no método de pagamento que selecionar. Se o cliente pagar em dinheiro, o sistema emite RC; se pagar por transferência, emite RG.",
+        category: "documentos_fiscais",
+        tags: ["recibo", "RC", "RG", "numerário", "transferência"],
+      },
+      {
+        question: "Como funciona o Estorno (RE) e quando devo usá-lo?",
+        answer:
+          "O Estorno (RE) é o documento utilizado para anular ou reverter um recibo (RC ou RG) que foi emitido com erro ou cujo pagamento foi revertido (ex.: um cheque devolvido). Em vez de apagar o recibo original, o que é proibido pela lei, emite-se um RE que referencia o recibo original e anula os seus efeitos. No FaturaJa, basta abrir o recibo que deseja anular e selecionar a opção 'Estornar'. O sistema gera o RE e atualiza o saldo da factura de origem, repondo a dívida.",
+        category: "documentos_fiscais",
+        tags: ["estorno", "RE", "anulação", "recibo"],
+      },
+      {
+        question: "O que são o Aviso de Cobrança (AC) e o Aviso de Cobrança/Recibo (ACR)?",
+        answer:
+          "Estes documentos são exclusivos para o setor segurador, conforme o Artigo 3.º, alínea d) do Decreto n.º 71/25. O AC é emitido pela seguradora para formalizar a cobrança do prémio do seguro. O ACR é a versão que já comprova o pagamento no mesmo documento, substituindo a necessidade de emitir um recibo separado (Artigo 6.º). No FaturaJa, estes tipos só ficam disponíveis se a empresa estiver configurada como 'Seguradora' nas definições.",
+        category: "documentos_fiscais",
+        tags: ["aviso de cobrança", "AC", "ACR", "seguradora"],
+      },
+      {
+        question: "Para que serve a Factura Genérica (FGEN)?",
+        answer:
+          "A Factura Genérica (FGEN) é um documento sectorial restrito a instituições financeiras (bancos), conforme previsto no Artigo 3.º do Decreto n.º 71/25. Serve para faturar, de forma consolidada e mensal, todos os serviços e comissões bancárias cobrados a um cliente. Se a sua empresa não for uma instituição financeira, não deve emitir FGEN. O sistema está preparado para validar esta restrição.",
+        category: "documentos_fiscais",
+        tags: ["factura genérica", "FGEN", "banco", "financeira"],
+      },
+      {
+        question: "Quando devo emitir um Talão de Venda (TV)?",
+        answer:
+          "O Talão de Venda (TV) é um documento simplificado, previsto no Artigo 3.º, alínea p) do Decreto n.º 71/25, para vendas a consumidor final sem NIF (quando a lei dispensa a emissão de factura). No FaturaJa, o TV exige pagamento imediato e não aceita NIF. Se o cliente fornecer o NIF, deve ser emitida uma Factura-Recibo (FR) em vez de TV.",
+        category: "documentos_fiscais",
+        tags: ["talão de venda", "TV", "consumidor final", "sem NIF"],
+      },
+      {
+        question: "Posso usar a Nota de Débito (ND) para adicionar um produto a uma factura?",
+        answer:
+          "Não. A Nota de Débito (ND) não serve para adicionar produtos ou serviços a uma factura existente. Segundo o Artigo 3.º, alínea m) do Decreto n.º 71/25, a ND serve para documentar débitos quando não há obrigação de emitir factura e sem liquidação de IVA (ex.: carregamento de vales pré-pagos ou repasse de despesas). Para corrigir ou adicionar itens a uma factura, o documento correto é sempre a Nota de Crédito (NC).",
+        category: "documentos_fiscais",
+        tags: ["nota de débito", "ND", "produto", "correção"],
+      },
 
       // FORNECEDORES E COMPRAS
       {
@@ -165,6 +224,64 @@ export default function AjudaPage() {
           'Em "Relatórios" há a opção "Margem de Lucro". O sistema calcula automaticamente a diferença entre o preço de venda e o preço de custo, mostrando qual produto dá mais lucro.',
         category: "relatorios",
         tags: ["rentabilidade", "margem", "lucro"],
+      },
+
+      // IMPRESSORAS TÉRMICAS
+      {
+        question: "Como adicionar uma nova impressora térmica?",
+        answer:
+          'Vá a "Configurações" e na secção "Empresa" encontrará o cartão "Impressoras térmicas". Clique em "Gerir impressoras" e depois preencha o nome (ex.: Epson Caixa 1), escolha a fila CUPS na lista (ex.: Epson_TM-T88IV_Raw) e o tipo (CUPS, USB direto ou Windows). Clique em "Adicionar". A primeira impressora adicionada fica automaticamente como padrão. Pode adicionar quantas quiser — cada caixa pode ter a sua.',
+        category: "impressoras",
+        tags: ["impressora", "adicionar", "configurar", "CUPS"],
+      },
+      {
+        question: "Como mudar a impressora padrão?",
+        answer:
+          'Em "Configurações → Empresa → Impressoras térmicas", clique em "Gerir impressoras". Na lista, ao lado de cada impressora que não é padrão, aparece uma estrela (⭐). Basta clicar nela e a impressora passa a ser a padrão para toda a empresa. A alteração é imediata — não precisa reiniciar nada.',
+        category: "impressoras",
+        tags: ["padrão", "default", "estrela", "mudar"],
+      },
+      {
+        question: "Como escolher uma impressora diferente só para imprimir um documento?",
+        answer:
+          'No topo da página "Facturas" (e noutras páginas de documentos) existe um botão com o ícone de impressora 🖨️ e o nome da impressora atual. Clique nele e escolha outra impressora da lista. Essa escolha vale apenas para a sua sessão — os outros utilizadores continuam a usar a padrão. Ao imprimir o próximo talão, ele sairá na impressora que escolheu.',
+        category: "impressoras",
+        tags: ["escolher", "selecionar", "trocar", "rápido"],
+      },
+      {
+        question: "Qual a diferença entre CUPS, USB direto e Windows?",
+        answer:
+          'CUPS é o sistema de impressão padrão do Linux e é o recomendado para a maioria dos casos — a impressora aparece como uma fila e o sistema envia os dados ESC/POS corretamente. USB direto envia os comandos diretamente para o dispositivo (/dev/usb/lp0) e é útil quando a fila CUPS não está configurada. Windows aplica-se apenas se o servidor estiver a correr em Windows, onde usa o nome da impressora do sistema. Na dúvida, escolha CUPS.',
+        category: "impressoras",
+        tags: ["CUPS", "USB", "Windows", "tipo", "diferença"],
+      },
+      {
+        question: "A impressora não imprime. O que fazer?",
+        answer:
+          'Verifique 3 coisas: (1) A impressora está ligada e com papel? (2) No "Gerir impressoras", a fila escolhida está correta e ativa? (3) Se estiver noutro computador ou rede, a impressora está acessível? Se a fila CUPS existir mas continuar sem imprimir, no terminal Linux confirme com "lpstat -p". Se nada funcionar, contacte o suporte com o nome da fila e a hora exata da tentativa — o registo do erro está nos logs do servidor.',
+        category: "impressoras",
+        tags: ["não imprime", "erro", "problema", "falha"],
+      },
+      {
+        question: "Posso ter impressoras diferentes em caixas diferentes?",
+        answer:
+          'Sim. Cada empresa pode ter várias impressoras registadas (por exemplo: "Caixa 1 - Epson", "Caixa 2 - Xprinter", "Armazém - Epson"). Cada utilizador pode escolher a sua no topo da página de facturas, ou pode definir uma como padrão para a empresa inteira. Uma impressora definida como padrão é a que todos os utilizadores usam quando não escolhem outra.',
+        category: "impressoras",
+        tags: ["várias", "múltiplas", "caixas", "empresa"],
+      },
+      {
+        question: "Como testar se a impressora está a funcionar?",
+        answer:
+          'O sistema testa automaticamente antes de enviar cada talão. Se a fila não responder, verá uma mensagem "Impressora não encontrada ou inativa". Para testar manualmente: em "Gerir impressoras", adicione a impressora, escolha-a no topo da página de facturas e clique em "Imprimir 80mm" num documento recente. Se sair o talão, está tudo bem. Se não sair, verifique os cabos e se o driver está carregado no sistema operativo.',
+        category: "impressoras",
+        tags: ["testar", "verificar", "funcionar", "teste"],
+      },
+      {
+        question: "Apaguei a impressora por engano. Posso recuperar?",
+        answer:
+          'Não é possível recuperar automaticamente, mas basta adicionar de novo. Em "Gerir impressoras", preencha o nome que tinha antes e escolha novamente a fila CUPS na lista. Como as filas CUPS são do sistema (e não do sistema de facturação), não se perderam — só o registo interno da empresa é que foi apagado. Se a impressora apagada era a padrão, a próxima que adicionar ficará como padrão.',
+        category: "impressoras",
+        tags: ["apagar", "recuperar", "engano", "remover"],
       },
 
       // SISTEMA E CONFIGURAÇÕES
@@ -219,29 +336,6 @@ export default function AjudaPage() {
         category: "geral",
         tags: ["lentidão", "performance", "cache"],
       },
-      // NOVA: Documentos fiscais
-      {
-        question: "Como gerar uma Nota de Crédito?",
-        answer:
-          'Vá à página da factura que deseja corrigir, clique em "Emitir Nota de Crédito". Preencha o motivo (obrigatório, mínimo 10 caracteres) e os itens a serem creditados. O sistema irá gerar um novo documento que anula parcial ou totalmente a factura original.',
-        category: "faturacao",
-        tags: ["nota de crédito", "NC", "correção"],
-      },
-      {
-        question: "Como gerar uma Nota de Débito?",
-        answer:
-          'Para emitir uma Nota de Débito, a factura original deve ser do tipo FT (Factura). A nota de débito só pode ser usada para serviços (não produtos físicos) e tem prazo máximo de 30 dias após a emissão da factura. Vá à página da factura e clique em "Emitir Nota de Débito".',
-        category: "faturacao",
-        tags: ["nota de débito", "ND", "serviços"],
-      },
-      // NOVA: Impressão
-      {
-        question: "Como configurar a impressão em talão térmico?",
-        answer:
-          'Em "Configurações", secção "Impressão", defina o tipo de impressora (USB ou rede) e o caminho. Para USB, normalmente é /dev/usb/lp0 no Linux. Para rede, informe o IP da impressora. Teste a conexão antes de usar.',
-        category: "configuracoes",
-        tags: ["impressão", "térmica", "talão", "USB"],
-      },
     ],
     []
   );
@@ -252,8 +346,10 @@ export default function AjudaPage() {
       { id: "produtos", label: "Produtos", icon: Package, description: "Gestão de produtos e stock" },
       { id: "clientes", label: "Clientes", icon: Users, description: "Cadastro e histórico" },
       { id: "faturacao", label: "Faturação", icon: FileSpreadsheet, description: "Facturas, recibos e proformas" },
+      { id: "documentos_fiscais", label: "Documentos Fiscais", icon: FileText, description: "AF, RC, RG, RE, AC, ACR, TV, FGEN" },
       { id: "fornecedores", label: "Fornecedores", icon: Building2, description: "Cadastro e compras" },
       { id: "relatorios", label: "Relatórios", icon: DollarSign, description: "Análise de vendas e rentabilidade" },
+      { id: "impressoras", label: "Impressoras", icon: Printer, description: "Configuração e uso de impressoras térmicas" },
       { id: "configuracoes", label: "Configurações", icon: Settings, description: "Empresa, fiscal e impressão" },
       { id: "geral", label: "Geral", icon: HelpCircle, description: "Dúvidas gerais" },
     ],
@@ -307,7 +403,7 @@ export default function AjudaPage() {
             <Search size={18} style={{ color: colors.textSecondary }} />
             <input
               type="text"
-              placeholder="O que você precisa? (Ex: como emitir factura, cadastrar produto...)"
+              placeholder="O que você precisa? (Ex: como emitir factura, configurar impressora...)"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="flex-1 bg-transparent outline-none text-sm"
