@@ -196,22 +196,42 @@ export default function FaturasPage() {
     [baseUrl]
   );
 
-  /* ── Talão POS autenticado (80mm) ── */
-  const imprimir80mm = useCallback(
-    async (documento: DocumentoFiscal) => {
-      if (!documento.id) return;
-      try {
-        setImprimindo(documento.id);
-        setImprimindo(documento.id);
-        await abrirUrlAutenticada(`${baseUrl}/api/documentos-fiscais/${documento.id}/print-view`, "html");
-      } catch (err: unknown) {
-        alert(err instanceof Error ? err.message : "Erro ao abrir talão POS");
-      } finally {
-        setImprimindo(null);
-      }
-    },
-    [baseUrl]
-  );
+/* ── Talão POS autenticado (80mm) → imprime na térmica ── */
+const imprimir80mm = useCallback(
+  async (documento: DocumentoFiscal) => {
+    if (!documento.id) return;
+    try {
+      setImprimindo(documento.id);
+      await imprimirTermica(
+        `${baseUrl}/api/documentos-fiscais/${documento.id}/imprimir-termica`
+      );
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Erro ao imprimir talão POS");
+    } finally {
+      setImprimindo(null);
+    }
+  },
+  [baseUrl]
+);
+
+/* ── Pré-visualizar talão 80mm (HTML no browser) ── */
+const preVisualizar80mm = useCallback(
+  async (documento: DocumentoFiscal) => {
+    if (!documento.id) return;
+    try {
+      setImprimindo(documento.id);
+      await abrirUrlAutenticada(
+        `${baseUrl}/api/documentos-fiscais/${documento.id}/print-view`,
+        "html"
+      );
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Erro ao abrir talão");
+    } finally {
+      setImprimindo(null);
+    }
+  },
+  [baseUrl]
+);
 
   /* ── Impressão Térmica (direto na USB) ── */
   const imprimirTermicaDocumento = useCallback(

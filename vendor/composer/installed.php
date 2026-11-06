@@ -1,0 +1,41 @@
+<?php return array(
+    'root' => array(
+        'name' => '__root__',
+        'pretty_version' => 'dev-main',
+        'version' => 'dev-main',
+        'reference' => '61d180eb3854427caa2ca468a9aa9e32ccfc433d',
+        'type' => 'library',
+        'install_path' => __DIR__ . '/../../',
+        'aliases' => array(),
+        'dev' => true,
+    ),
+    'versions' => array(
+        '__root__' => array(
+            'pretty_version' => 'dev-main',
+            'version' => 'dev-main',
+            'reference' => '61d180eb3854427caa2ca468a9aa9e32ccfc433d',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../../',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'mike42/escpos-php' => array(
+            'pretty_version' => 'v5.0',
+            'version' => '5.0.0.0',
+            'reference' => '985d57cbfbef60bb98c08cb139714735f28d4518',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../mike42/escpos-php',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'mike42/gfx-php' => array(
+            'pretty_version' => 'v1.0',
+            'version' => '1.0.0.0',
+            'reference' => 'f13863c32b2ecd1d897565b85f2e1eaec8cb6d2e',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../mike42/gfx-php',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+    ),
+);

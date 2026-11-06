@@ -5,7 +5,6 @@ import { v4 as uuidv4 } from "uuid";
 import { useRouter } from "next/navigation";
 import {
   Plus,
-  Trash2,
   ShoppingCart,
   FileText,
   CheckCircle2,
@@ -23,13 +22,14 @@ import {
 } from "lucide-react";
 import { AxiosError } from "axios";
 import MainEmpresa from "../../../components/MainEmpresa";
-import { useAuth, getIncompleteEmpresaFields, formatIncompleteFields } from "@/context/authprovider";
-import { useThemeColors, type ThemeColors } from "@/context/ThemeContext";
+import { useAuth, getIncompleteEmpresaFields } from "@/context/authprovider";
+import { useThemeColors } from "@/context/ThemeContext";
 import { emitirDocumentoFiscal, Produto, produtoService, CriarDocumentoFiscalPayload, isServico, formatarPreco } from "@/services/vendas";
 import { ModalDadosIncompletos } from "../../../components/ModalDadosIncompletos";
 import { ToastNotification } from "@/components/ToastNotification";
 import { LinhaFiscal } from "@/app/components/Formularios/LinhaFiscal";
 import { CabecalhoFormulario } from "@/app/components/Formularios/CabecalhoFormulario";
+import { EditableItemsTable } from "@/app/components/Formularios/EditableItemsTable";
 
 // Importacao do servico de clientes
 import { clienteService, formatarNIF, type Cliente } from "@/services/clientes";
@@ -947,129 +947,25 @@ export default function NovaFaturaProformaPage() {
 
             {/* Tabela de itens */}
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead style={{ backgroundColor: colors.hover }}>
-                  <tr className="border-b" style={{ borderColor: colors.border }}>
-                    <th className="py-2.5 px-3 text-left font-semibold text-xs" style={{ color: colors.textSecondary }}>
-                      Produto/Servico
-                    </th>
-                    <th className="py-2.5 px-3 text-center font-semibold text-xs" style={{ color: colors.textSecondary }}>
-                      Qtd.
-                    </th>
-                    <th
-                      className="py-2.5 px-3 text-right font-semibold text-xs hidden sm:table-cell"
-                      style={{ color: colors.textSecondary }}>
-                      Preco unit.
-                    </th>
-                    <th
-                      className="py-2.5 px-3 text-right font-semibold text-xs hidden md:table-cell"
-                      style={{ color: colors.textSecondary }}>
-                      IVA
-                    </th>
-                    <th
-                      className="py-2.5 px-3 text-right font-semibold text-xs hidden lg:table-cell"
-                      style={{ color: colors.textSecondary }}>
-                      Ret.
-                    </th>
-                    <th className="py-2.5 px-3 text-right font-semibold text-xs" style={{ color: colors.textSecondary }}>
-                      Subtotal
-                    </th>
-                    <th className="py-2.5 px-2 w-8" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {itens.map((item, idx) => {
-                    const p = produtos.find((x) => x.id === item.produto_id);
-                    const maxEst = p && !isServico(p) ? p.estoque_atual : 9999;
-                    return (
-                      <tr
-                        key={item.id}
-                        className="border-b last:border-0"
-                        style={{
-                          borderColor: colors.border,
-                          backgroundColor: idx % 2 !== 0 ? `${colors.hover}60` : "transparent",
-                        }}>
-                        <td className="px-3 py-2.5">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-medium truncate max-w-[100px] sm:max-w-[160px]" style={{ color: colors.blue }}>
-                              {item.descricao}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <div className="flex items-center justify-center gap-0.5">
-                            <button
-                              onClick={() => atualizarQtd(item.id, item.quantidade - 1)}
-                              className="w-6 h-6 flex items-center justify-center disabled:opacity-30"
-                              style={{ backgroundColor: colors.hover }}
-                              disabled={item.quantidade <= 1}>
-                              <Minus size={11} style={{ color: colors.blue }} />
-                            </button>
-                            <input
-                              type="number"
-                              min={1}
-                              max={maxEst}
-                              value={item.quantidade}
-                              onChange={(e) => {
-                                const val = parseInt(e.target.value);
-                                if (!isNaN(val) && val >= 1) {
-                                  const p = produtos.find((x) => x.id === item.produto_id);
-                                  if (p) {
-                                    const maxQtd = isServico(p) ? 9999 : p.estoque_atual;
-                                    const novaQtd = Math.min(Math.max(1, val), maxQtd);
-                                    atualizarQtd(item.id, novaQtd);
-                                  }
-                                }
-                              }}
-                              onBlur={(e) => {
-                                const val = parseInt(e.target.value);
-                                if (isNaN(val) || val < 1) {
-                                  atualizarQtd(item.id, 1);
-                                }
-                              }}
-                              className="w-12 text-center text-sm font-medium outline-none border rounded"
-                              style={{
-                                backgroundColor: colors.card,
-                                color: colors.blue,
-                                borderColor: colors.border,
-                              }}
-                            />
-                            <button
-                              onClick={() => atualizarQtd(item.id, item.quantidade + 1)}
-                              className="w-6 h-6 flex items-center justify-center disabled:opacity-30"
-                              style={{ backgroundColor: colors.hover }}
-                              disabled={item.quantidade >= maxEst}>
-                              <Plus size={11} style={{ color: colors.blue }} />
-                            </button>
-                          </div>
-                        </td>
-                        <td className="px-3 py-2.5 text-right hidden sm:table-cell" style={{ color: colors.textSecondary }}>
-                          {formatarPreco(item.preco_unitario)}
-                        </td>
-                        <td className="px-3 py-2.5 text-right hidden md:table-cell" style={{ color: colors.blue }}>
-                          {formatarPreco(item.valor_iva)}
-                        </td>
-                        <td
-                          className="px-3 py-2.5 text-right hidden lg:table-cell"
-                          style={{ color: item.valor_retencao > 0 ? colors.secondary : colors.textSecondary }}>
-                          {item.valor_retencao > 0 ? `-${formatarPreco(item.valor_retencao)}` : "—"}
-                        </td>
-                        <td className="px-3 py-2.5 text-right font-bold" style={{ color: colors.secondary }}>
-                          {formatarPreco(item.subtotal)}
-                        </td>
-                        <td className="px-2 py-2.5 text-center">
-                          <button
-                            onClick={() => removerItem(item.id)}
-                            className="w-7 h-7 flex items-center justify-center rounded hover:opacity-70 transition-opacity"
-                            style={{ color: colors.secondary }}>
-                            <Trash2 size={16} />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <EditableItemsTable
+                  items={itens.map((item) => ({
+                    id: item.id,
+                    produtoId: item.produto_id,
+                    descricao: item.descricao,
+                    quantidade: item.quantidade,
+                    precoUnitario: item.preco_unitario,
+                    baseTributavel: item.base_tributavel,
+                    valorIva: item.valor_iva,
+                    valorRetencao: item.valor_retencao,
+                    subtotal: item.subtotal,
+                  }))}
+                  products={produtos}
+                  colors={colors}
+                  descriptionLabel="Produto/Servico"
+                  priceLabel="Preco unit."
+                  onQuantityChange={atualizarQtd}
+                  onRemove={removerItem}
+                />
             </div>
 
             {/* Resumo Fiscal */}

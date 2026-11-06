@@ -4,25 +4,17 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Plus,
   Search,
-  Package,
   CheckCircle,
-  XCircle,
   AlertCircle,
   LayoutGrid,
   RotateCcw,
-  PencilLine,
   Trash2,
-  History,
-  MoreVertical,
 } from "lucide-react";
 import MainEmpresa from "../../../components/MainEmpresa";
 import {
   categoriaService,
   Categoria,
   CriarCategoriaInput,
-  getStatusLabel,
-  getTaxaIVALabel,
-  getCodigoIsencaoLabel,
   CodigoIsencao,
   TaxaIVA,
 } from "@/services/categorias";
@@ -31,12 +23,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { ToastNotification } from "@/components/ToastNotification";
 import { PaginationControls } from "@/app/components/PaginationControls";
+import { CategoriasTable } from "./CategoriasTable";
 
 /* ─── Tipos ──────────────────────────────────────────────────────── */
 interface FormCategoriaData {
@@ -554,150 +546,16 @@ export default function CategoriasPage() {
         ) : (
           <div className="border overflow-hidden shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr style={{ backgroundColor: colors.primary }}>
-                    {["Categoria", "Status", "IVA", "Descrição", "Ações"].map((h, i) => (
-                      <th
-                        key={h}
-                        className={`py-3 px-5 font-semibold text-white text-xs uppercase tracking-wider ${
-                          i === 4 ? "text-center" : "text-left"
-                        }`}>
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y" style={{ borderColor: colors.border }}>
-                  {categoriasPaginadas.map((c) => (
-                    <tr
-                      key={c.id}
-                      className="transition-colors"
-                      style={{
-                        backgroundColor: c.status === "inativo" ? `${colors.hover}80` : "transparent",
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = colors.hover)}
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.backgroundColor = c.status === "inativo" ? `${colors.hover}80` : "transparent")
-                      }>
-                      {/* Categoria */}
-                      <td className="py-3 px-5">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className="w-9 h-9 flex items-center justify-center flex-shrink-0"
-                            style={{
-                              backgroundColor: `${colors.primary}10`,
-                            }}>
-                            <Package className="w-4 h-4" style={{ color: colors.secondary }} />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="font-medium text-sm truncate" style={{ color: colors.text }}>
-                              {c.nome}
-                            </div>
-                            {c.deleted_at && (
-                              <div className="text-xs flex items-center gap-1 mt-0.5" style={{ color: colors.danger }}>
-                                <History className="w-3 h-3" />
-                                {new Date(c.deleted_at).toLocaleDateString("pt-PT")}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-3 px-5">
-                        <span
-                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium"
-                          style={{
-                            backgroundColor: c.status === "ativo" ? `${colors.secondary}18` : `${colors.textSecondary}18`,
-                            color: c.status === "ativo" ? colors.secondary : colors.textSecondary,
-                          }}>
-                          {c.status === "ativo" ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-                          {getStatusLabel(c.status)}
-                        </span>
-                      </td>
-
-                      {/* IVA */}
-                      <td className="py-3 px-5">
-                        <span
-                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium"
-                          style={{
-                            ...getTaxaIVABadgeStyle(c.taxa_iva as TaxaIVA, c.sujeito_iva),
-                          }}
-                          title={c.codigo_isencao ? getCodigoIsencaoLabel(c.codigo_isencao) || "" : ""}>
-                          {getTaxaIVALabel(c.taxa_iva, c.sujeito_iva)}
-                        </span>
-                      </td>
-
-                      {/* Descrição */}
-                      <td className="py-3 px-5">
-                        <span className="text-sm line-clamp-1 max-w-[200px]" style={{ color: colors.textSecondary }}>
-                          {c.descricao || <span className="italic">—</span>}
-                        </span>
-                      </td>
-
-                      {/* Ações - Menu de três pontos */}
-                      <td className="py-3 px-5">
-                        <div className="flex items-center justify-center">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <button
-                                className="p-2 transition-colors hover:opacity-70"
-                                style={{ color: colors.textSecondary }}
-                                title="Ações">
-                                <MoreVertical className="w-4 h-4" />
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent
-                              align="end"
-                              className="w-36"
-                              style={{
-                                backgroundColor: colors.card,
-                                borderColor: colors.border,
-                              }}>
-                              {abaAtiva === "ativos" ? (
-                                <>
-                                  <DropdownMenuItem
-                                    onClick={() => handleEditar(c)}
-                                    className="gap-2 cursor-pointer text-xs py-2"
-                                    style={{ color: colors.blue }}>
-                                    <PencilLine className="h-3.5 w-3.5" style={{ color: colors.blue }} />
-                                    Editar
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => handleConfirmarDelete(c)}
-                                    className="gap-2 cursor-pointer text-xs py-2"
-                                    style={{ color: colors.secondary }}>
-                                    <Trash2 className="h-3.5 w-3.5" style={{ color: colors.secondary }} />
-                                    Mover para lixeira
-                                  </DropdownMenuItem>
-                                </>
-                              ) : (
-                                <>
-                                  <DropdownMenuItem
-                                    onClick={() => handleConfirmarRestore(c)}
-                                    className="gap-2 cursor-pointer text-xs py-2"
-                                    style={{ color: colors.secondary }}>
-                                    <RotateCcw className="h-3.5 w-3.5" />
-                                    Restaurar
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => handleConfirmarForceDelete(c)}
-                                    className="gap-2 cursor-pointer text-xs py-2"
-                                    style={{ color: colors.secondary }}>
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                    Excluir permanentemente
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <CategoriasTable
+                categorias={categoriasPaginadas}
+                abaAtiva={abaAtiva}
+                colors={colors}
+                getTaxaIVABadgeStyle={getTaxaIVABadgeStyle}
+                onEditar={handleEditar}
+                onDelete={handleConfirmarDelete}
+                onRestore={handleConfirmarRestore}
+                onForceDelete={handleConfirmarForceDelete}
+              />
 
               {/* Sem resultados na pesquisa */}
               {categoriasFiltradas.length === 0 && busca && (

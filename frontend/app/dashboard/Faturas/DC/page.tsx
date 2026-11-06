@@ -64,6 +64,40 @@ async function abrirUrlAutenticada(url: string, tipo: "pdf" | "html" = "pdf") {
     setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
   }
 }
+
+/* ── Helper: imprime na térmica via API (ESC/POS) ───────────────────────── */
+async function imprimirTermica(url: string): Promise<void> {
+  const baseUrl = url.split("/api/")[0];
+
+  await garantirCsrf(baseUrl);
+  const xsrf = getXsrfToken();
+
+  const tenantId = localStorage.getItem("tenant_id");
+  if (!tenantId) {
+    throw new Error("Empresa não identificada. Faça login novamente.");
+  }
+
+  const res = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      Accept: "application/json",
+      "X-XSRF-TOKEN": xsrf,
+      "X-Requested-With": "XMLHttpRequest",
+      "X-Empresa-ID": tenantId,
+    },
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || `Erro ${res.status}`);
+  }
+
+  const data = await res.json();
+  if (!data.success) {
+    throw new Error(data.message || "Erro ao imprimir");
+  }
+}
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 export default function OutrosDocumentosPage() {
@@ -140,8 +174,21 @@ export default function OutrosDocumentosPage() {
     [baseUrl]
   );
 
-  /* ── Talão POS autenticado (80mm) ── */
+  /* ── Talão POS autenticado (80mm) → imprime na térmica (ESC/POS) ── */
   const imprimir80mm = useCallback(
+    async (documento: DocumentoFiscal) => {
+      if (!documento.id) return;
+      try {
+        await imprimirTermica(`${baseUrl}/api/documentos-fiscais/${documento.id}/imprimir-termica`);
+      } catch (err: unknown) {
+        alert(err instanceof Error ? err.message : "Erro ao imprimir talão POS");
+      }
+    },
+    [baseUrl]
+  );
+
+  /* ── Pré-visualizar talão 80mm no browser (HTML) — opcional ── */
+  const preVisualizar80mm = useCallback(
     async (documento: DocumentoFiscal) => {
       if (!documento.id) return;
       try {
@@ -324,6 +371,7 @@ export default function OutrosDocumentosPage() {
         onVerDetalhes={verDetalhes}
         onImprimirA4={imprimirA4}
         onImprimirPdf={imprimir80mm}
+        onPreVisualizarPdf={preVisualizar80mm}
         onBaixarPdf={baixarPdf}
         onConverterProforma={converterProforma}
         convertendoProforma={convertendoProforma}
