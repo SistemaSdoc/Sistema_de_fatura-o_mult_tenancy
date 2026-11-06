@@ -83,7 +83,10 @@ async function abrirUrlAutenticada(url: string, tipo: "pdf" | "html" = "pdf") {
 }
 
 // ── Helper: imprime térmica diretamente (a API já lida com a impressora) ────
-async function imprimirTermica(url: string): Promise<void> {
+async function imprimirTermica(
+  url: string,
+  queue?: string | null
+): Promise<void> {
   const baseUrl = url.split("/api/")[0];
 
   await garantirCsrf(baseUrl);
@@ -94,7 +97,12 @@ async function imprimirTermica(url: string): Promise<void> {
     throw new Error("Empresa não identificada. Faça login novamente.");
   }
 
-  const res = await fetch(url, {
+  // ⭐ Se houver queue, envia-a; senão, o back usa a padrão da BD
+  const urlFinal = queue
+    ? `${url}?queue=${encodeURIComponent(queue)}`
+    : url;
+
+  const res = await fetch(urlFinal, {
     method: "GET",
     credentials: "include",
     headers: {
@@ -180,6 +188,12 @@ export default function FaturasPage() {
     carregarDocumentos();
   }, [carregarDocumentos]);
 
+  // ── Helper: lê a queue ativa guardada pelo ImpressoraSelector ───────────────
+function getQueueAtiva(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("impressora_queue_ativa");
+}
+
   /* ── Imprimir A4 ── */
   const imprimirA4 = useCallback(
     async (documento: DocumentoFiscal) => {
@@ -202,9 +216,10 @@ const imprimir80mm = useCallback(
     if (!documento.id) return;
     try {
       setImprimindo(documento.id);
-      await imprimirTermica(
-        `${baseUrl}/api/documentos-fiscais/${documento.id}/imprimir-termica`
-      );
+await imprimirTermica(
+  `${baseUrl}/api/documentos-fiscais/${documento.id}/imprimir-termica`,
+  getQueueAtiva()
+);
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Erro ao imprimir talão POS");
     } finally {
@@ -239,7 +254,10 @@ const preVisualizar80mm = useCallback(
       if (!documento.id) return;
       try {
         setImprimindoTermica(documento.id);
-        await imprimirTermica(`${baseUrl}/api/documentos-fiscais/${documento.id}/imprimir-termica`);
+        await imprimirTermica(
+  `${baseUrl}/api/documentos-fiscais/${documento.id}/imprimir-termica`,
+  getQueueAtiva()
+);
         // Feedback visual opcional
         console.log("Documento enviado para impressão térmica");
       } catch (err: unknown) {

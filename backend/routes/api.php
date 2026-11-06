@@ -25,6 +25,7 @@ use App\Http\Controllers\SubscricaoController;
 use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\PagamentoLandlordController;
 use App\Http\Controllers\LandlordNotificacaoController;
+use App\Http\Controllers\ImpressoraController;
 
 $uuidPattern = '[0-9a-fA-F-]{36}';
 
@@ -491,6 +492,17 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
                 ->where('documento', $uuidPattern)->name('documentos.cancelar');
             Route::post('/{id}/vincular-adiantamento', [DocumentoFiscalController::class, 'vincularAdiantamento'])
                 ->where('id', $uuidPattern)->name('documentos.vincular');
+        });
+
+        Route::prefix('impressoras')->group(function () {
+            Route::get('/',              [ImpressoraController::class, 'index']);
+            Route::get('/cups',          [ImpressoraController::class, 'cupsDisponiveis']);
+            Route::post('/',             [ImpressoraController::class, 'store']);
+            Route::patch('/{id}',        [ImpressoraController::class, 'update']);
+            Route::delete('/{id}',       [ImpressoraController::class, 'destroy']);
+            Route::post('/{id}/default', [ImpressoraController::class, 'definirDefault']);
+            Route::post('/selecionar',   [ImpressoraController::class, 'selecionar']);
+            Route::post('/testar',       [ImpressoraController::class, 'testar']);
         });
 
         // ─── Pagamentos (faturas) ─────────────────────────────

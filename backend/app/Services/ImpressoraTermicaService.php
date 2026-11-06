@@ -5,12 +5,13 @@ namespace App\Services;
 use App\Services\PrintConnectors\LprRawPrintConnector;
 use App\Models\Shared\DocumentoFiscal as SharedDocumentoFiscal;
 use App\Models\Tenant\DocumentoFiscal as TenantDocumentoFiscal;
+use App\Models\Shared\Impressora as SharedImpressora;
+use App\Models\Tenant\Impressora as TenantImpressora;
 use App\Models\Empresa;
 use App\Models\LandlordUser;
 use App\Models\Shared\User as SharedUser;
 use App\Models\Tenant\User as TenantUser;
 use Mike42\Escpos\Printer;
-use Mike42\Escpos\PrintConnectors\FilePrintConnector;
 use Mike42\Escpos\PrintConnectors\WindowsPrintConnector;
 use Mike42\Escpos\CapabilityProfile;
 use Mike42\Escpos\EscposImage;
@@ -48,8 +49,8 @@ class ImpressoraTermicaService
     public function __construct()
     {
         // ✅ OBTÉM CONTEXTO DA SESSÃO
-        $this->empresa = app('current.empresa');
-        $this->modo = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
+        $this->empresa  = app('current.empresa');
+        $this->modo     = session('tenant_modo', $this->empresa?->modo ?? 'colectivo');
         $this->tenantId = $this->empresa?->id ?? null;
 
         $caminhoEnv = env('IMPRESSORA_USB_PATH');
@@ -101,6 +102,43 @@ class ImpressoraTermicaService
     }
 
     /* =====================================================================
+     | RESOLUÇÃO DA IMPRESSORA — SESSÃO → BD → .ENV
+     | ================================================================== */
+
+    /**
+     * Resolve a queue da impressora atual:
+     * 1. Sessão (escolha ativa do utilizador)
+     * 2. Default do tenant na BD (shared ou tenant, conforme o modo)
+     * 3. Fallback no .env
+     */
+protected function obterQueueAtual(?string $queueFront = null): string
+{
+    // 1. Queue enviada pelo front (padrão ou escolhida)
+    if (!empty($queueFront)) {
+        return $queueFront;
+    }
+
+    // 2. Padrão da BD
+    $this->getEmpresa();
+    if ($this->empresa) {
+        try {
+            $impressora = $this->isSingular()
+                ? TenantImpressora::where('is_default', true)->where('ativo', true)->first()
+                : SharedImpressora::doTenant()->where('is_default', true)->where('ativo', true)->first();
+
+            if ($impressora) {
+                return $impressora->queue;
+            }
+        } catch (\Throwable $e) {
+            Log::warning('[ImpressoraTermicaService] Falha ao ler default da BD: ' . $e->getMessage());
+        }
+    }
+
+    // 3. Fallback
+    return env('IMPRESSORA_CUPS_QUEUE', 'Epson_TM-T88IV_Raw');
+}
+
+    /* =====================================================================
      | VERIFICAÇÃO DE ACESSO
      | ================================================================== */
 
@@ -146,9 +184,9 @@ class ImpressoraTermicaService
         $this->tenantUser = $tenantUser;
 
         Log::info('[ImpressoraTermicaService] Acesso verificado com sucesso', [
-            'modo'     => $this->modo,
-            'user_id'  => $tenantUser->id,
-            'email'    => $tenantUser->email,
+            'modo'    => $this->modo,
+            'user_id' => $tenantUser->id,
+            'email'   => $tenantUser->email,
         ]);
     }
 
@@ -250,113 +288,104 @@ class ImpressoraTermicaService
      | TESTA CONEXÃO
      | ================================================================== */
 
-    public function testarConexao(?string $destino = null): bool
-    {
-        $so = strtoupper(substr(PHP_OS, 0, 3));
+public function testarConexao(?string $queue = null): bool
+{
+    $so = strtoupper(substr(PHP_OS, 0, 3));
 
-        try {
-            if ($so === 'WIN') {
-                $destino   = $destino ?: $this->caminhoUSB;
-                $connector = new WindowsPrintConnector($destino);
-                $profile   = CapabilityProfile::load('default');
-                $printer   = new Printer($connector, $profile);
-                $printer->close();
-                return true;
-            }
-
-            // Linux → verifica se a fila CUPS existe e está pronta
-            $queue = env('IMPRESSORA_CUPS_QUEUE', 'Epson_TM-T88IV_Raw');
-
-            exec('lpstat -p ' . escapeshellarg($queue) . ' 2>&1', $out, $code);
-
-            if ($code !== 0) {
-                Log::warning("[ImpressoraTermicaService] Fila CUPS não encontrada: {$queue}", [
-                    'output' => $out,
-                ]);
-                return false;
-            }
-
+    try {
+        if ($so === 'WIN') {
+            $destino   = $queue ?: $this->caminhoUSB;
+            $connector = new WindowsPrintConnector($destino);
+            $profile   = CapabilityProfile::load('default');
+            $printer   = new Printer($connector, $profile);
+            $printer->close();
             return true;
-        } catch (\Throwable $e) {
-            Log::error('[ImpressoraTermicaService] Falha no teste de conexão: ' . $e->getMessage());
+        }
+
+        $q = $this->obterQueueAtual($queue);
+
+        exec('lpstat -p ' . escapeshellarg($q) . ' 2>&1', $out, $code);
+
+        if ($code !== 0) {
+            Log::warning("[ImpressoraTermicaService] Fila CUPS não encontrada: {$q}", ['output' => $out]);
             return false;
         }
+
+        return true;
+    } catch (\Throwable $e) {
+        Log::error('[ImpressoraTermicaService] Falha no teste: ' . $e->getMessage());
+        return false;
     }
+}
 
     /* =====================================================================
      | MÉTODO PRINCIPAL — IMPRIMIR DOCUMENTO
      | ================================================================== */
 
-    public function imprimirDocumento(
-        \App\Models\Shared\DocumentoFiscal|\App\Models\Tenant\DocumentoFiscal $documento,
-        array $dados,
-        $user = null
-    ): void {
-        // ✅ Verifica acesso
-        $this->verificarAcessoUsuario();
+public function imprimirDocumento(
+    \App\Models\Shared\DocumentoFiscal|\App\Models\Tenant\DocumentoFiscal $documento,
+    array $dados,
+    $user = null,
+    ?string $queue = null
+): void {
+    $this->verificarAcessoUsuario();
 
-        $destino = $this->caminhoUSB;
-        $modo    = $this->getModo();
+    $destino = $this->obterQueueAtual($queue);
+    $modo    = $this->getModo();
 
-        Log::info('[ImpressoraTermicaService] Iniciando impressão', [
+    Log::info('[ImpressoraTermicaService] Iniciando impressão', [
+        'documento_id' => $documento->id ?? null,
+        'tipo'         => $documento->tipo_documento ?? null,
+        'modo'         => $modo,
+        'destino'      => $destino,
+        'queue_front'  => $queue,
+    ]);
+
+    try {
+        $this->conectarUSB($destino, $queue);
+
+        $docInfo = $this->resolverDocInfo($documento);
+
+        $empresa = $dados['empresa'] ?? $this->getDadosEmpresa();
+        $cliente = $dados['cliente'] ?? [];
+        $itens   = $dados['itens']   ?? $docInfo->itens ?? [];
+        $qrCode  = $dados['qr_code'] ?? null;
+
+        $this->imprimirCabecalho($empresa);
+        $this->imprimirTipoNumero($documento);
+
+        if (in_array($documento->tipo_documento, ['RC', 'RG'], true) && $docInfo !== $documento) {
+            $this->imprimirOrigemRc($docInfo);
+        }
+
+        $this->imprimirCliente($cliente);
+        $this->imprimirItens($itens);
+        $this->imprimirTotais($documento, $docInfo);
+
+        if (!empty($qrCode)) $this->imprimirQrCode($qrCode);
+        if (!empty($documento->hash_fiscal)) $this->imprimirHash($documento->hash_fiscal);
+
+        $this->imprimirRodape($modo);
+
+        $this->printer->cut();
+        $this->printer->close();
+
+        Log::info('[ImpressoraTermicaService] Impressão concluída', [
             'documento_id' => $documento->id ?? null,
-            'tipo'         => $documento->tipo_documento ?? null,
             'modo'         => $modo,
             'destino'      => $destino,
         ]);
-
-        try {
-            $this->conectarUSB($destino);
-
-            // ⭐ RESOLVER DOCUMENTO COM SCOPE CORRETO
-            $docInfo = $this->resolverDocInfo($documento);
-
-            $empresa = $dados['empresa'] ?? $this->getDadosEmpresa();
-            $cliente = $dados['cliente'] ?? [];
-            $itens   = $dados['itens']   ?? $docInfo->itens ?? [];
-            $qrCode  = $dados['qr_code'] ?? null;
-
-            $this->imprimirCabecalho($empresa);
-            $this->imprimirTipoNumero($documento);
-
-            if (in_array($documento->tipo_documento, ['RC', 'RG'], true) && $docInfo !== $documento) {
-                $this->imprimirOrigemRc($docInfo);
-            }
-
-            $this->imprimirCliente($cliente);
-            $this->imprimirItens($itens);
-            $this->imprimirTotais($documento, $docInfo);
-
-            if (!empty($qrCode)) {
-                $this->imprimirQrCode($qrCode);
-            }
-
-            if (!empty($documento->hash_fiscal)) {
-                $this->imprimirHash($documento->hash_fiscal);
-            }
-
-            $this->imprimirRodape($modo);
-
-            $this->printer->cut();
-            $this->printer->close();
-
-            Log::info('[ImpressoraTermicaService] Impressão concluída', [
-                'documento_id' => $documento->id ?? null,
-                'modo'         => $modo,
-            ]);
-        } catch (\Throwable $e) {
-            Log::error('[ImpressoraTermicaService] Erro na impressão', [
-                'documento_id' => $documento->id ?? null,
-                'destino'      => $destino,
-                'modo'         => $modo,
-                'error'        => $e->getMessage(),
-                'line'         => $e->getLine(),
-            ]);
-            throw new \RuntimeException('Falha ao imprimir: ' . $e->getMessage(), 0, $e);
-        } finally {
-            $this->fechar();
-        }
+    } catch (\Throwable $e) {
+        Log::error('[ImpressoraTermicaService] Erro na impressão', [
+            'documento_id' => $documento->id ?? null,
+            'destino'      => $destino,
+            'error'        => $e->getMessage(),
+        ]);
+        throw new \RuntimeException('Falha ao imprimir: ' . $e->getMessage(), 0, $e);
+    } finally {
+        $this->fechar();
     }
+}
 
     /* =====================================================================
      | OBTÉM DADOS DA EMPRESA PARA IMPRESSÃO
@@ -392,42 +421,40 @@ class ImpressoraTermicaService
      | CONEXÃO
      | ================================================================== */
 
-    private function conectarUSB(string $destino): void
-    {
-        $so = strtoupper(substr(PHP_OS, 0, 3));
+private function conectarUSB(string $destino, ?string $queue = null): void
+{
+    $so = strtoupper(substr(PHP_OS, 0, 3));
 
-        try {
-            if ($so === 'WIN') {
-                $connector = new WindowsPrintConnector($destino);
-                $profile   = CapabilityProfile::load('default');
-                $this->printer = new Printer($connector, $profile);
-                $this->inicializarImpressora();
-                Log::info("[ImpressoraTermicaService] Conectado via Windows USB: {$destino}");
-                return;
-            }
-
-            $queue     = env('IMPRESSORA_CUPS_QUEUE', 'Epson_TM-T88IV_Raw');
-            $connector = new LprRawPrintConnector($queue);
+    try {
+        if ($so === 'WIN') {
+            $connector = new WindowsPrintConnector($destino);
             $profile   = CapabilityProfile::load('default');
             $this->printer = new Printer($connector, $profile);
             $this->inicializarImpressora();
-
-            Log::info("[ImpressoraTermicaService] Conectado via CUPS raw queue: {$queue}");
-        } catch (\Throwable $e) {
-            Log::error('[ImpressoraTermicaService] Erro ao conectar à impressora: ' . $e->getMessage());
-            throw new \RuntimeException(
-                'Não foi possível conectar à impressora: ' . $e->getMessage(), 0, $e
-            );
+            Log::info("[ImpressoraTermicaService] Conectado via Windows USB: {$destino}");
+            return;
         }
-    }
 
-private function inicializarImpressora(): void
-{
-    $this->printer->initialize();
-    // CP850 via comando ESC/POS direto (compatível com todas as versões)
-    $this->printer->getPrintConnector()->write("\x1b\x74\x02");
-    $this->printer->setLineSpacing(24);
+        $q = $this->obterQueueAtual($queue);
+        $connector = new LprRawPrintConnector($q);
+        $profile   = CapabilityProfile::load('default');
+        $this->printer = new Printer($connector, $profile);
+        $this->inicializarImpressora();
+
+        Log::info("[ImpressoraTermicaService] Conectado via CUPS raw queue: {$q}");
+    } catch (\Throwable $e) {
+        Log::error('[ImpressoraTermicaService] Erro ao conectar: ' . $e->getMessage());
+        throw new \RuntimeException('Não foi possível conectar: ' . $e->getMessage(), 0, $e);
+    }
 }
+
+    private function inicializarImpressora(): void
+    {
+        $this->printer->initialize();
+        // CP850 via comando ESC/POS direto (compatível com todas as versões)
+        $this->printer->getPrintConnector()->write("\x1b\x74\x02");
+        $this->printer->setLineSpacing(24);
+    }
 
     /* =====================================================================
      | UTILITÁRIOS
@@ -598,68 +625,68 @@ private function inicializarImpressora(): void
         $this->printer->text(str_repeat('-', $this->L) . "\n");
     }
 
-private function imprimirItens(iterable $itens): void
-{
-    // Cabeçalho alinhado com as colunas dos dados
-    $this->printer->setEmphasis(true);
-    $this->printer->text(
-        str_pad('ITEM', 21) .
-        str_pad('QTD', 4, ' ', STR_PAD_LEFT) .
-        str_pad('TOTAL', 17, ' ', STR_PAD_LEFT) . "\n"
-    );
-    $this->printer->setEmphasis(false);
-    $this->printer->text(str_repeat('-', $this->L) . "\n");
+    private function imprimirItens(iterable $itens): void
+    {
+        // Cabeçalho alinhado com as colunas dos dados
+        $this->printer->setEmphasis(true);
+        $this->printer->text(
+            str_pad('ITEM', 21) .
+            str_pad('QTD', 4, ' ', STR_PAD_LEFT) .
+            str_pad('TOTAL', 17, ' ', STR_PAD_LEFT) . "\n"
+        );
+        $this->printer->setEmphasis(false);
+        $this->printer->text(str_repeat('-', $this->L) . "\n");
 
-    foreach ($itens as $item) {
-        // null-safe + mb_substr para não cortar caracteres multibyte (ç, ã, é)
-        $nome = $item->produto?->nome ?? $item->descricao ?? 'Item';
-        $desc = mb_substr($nome, 0, 21, 'UTF-8');
+        foreach ($itens as $item) {
+            // null-safe + mb_substr para não cortar caracteres multibyte (ç, ã, é)
+            $nome = $item->produto?->nome ?? $item->descricao ?? 'Item';
+            $desc = mb_substr($nome, 0, 21, 'UTF-8');
 
-        $qtd = number_format((float) ($item->quantidade ?? 1), 0);
+            $qtd = number_format((float) ($item->quantidade ?? 1), 0);
 
-        $valor = (float) ($item->total ?? $item->total_linha ?? 0);
-        $total = number_format($valor, 2, ',', '.') . ' Kz';
+            $valor = (float) ($item->total ?? $item->total_linha ?? 0);
+            $total = number_format($valor, 2, ',', '.') . ' Kz';
 
-        // Colunas: descrição (21) + quantidade (4) + total (17) = 42
-        $linha =
-            str_pad($desc, 21) .
-            str_pad($qtd, 4, ' ', STR_PAD_LEFT) .
-            str_pad($total, 17, ' ', STR_PAD_LEFT);
+            // Colunas: descrição (21) + quantidade (4) + total (17) = 42
+            $linha =
+                str_pad($desc, 21) .
+                str_pad($qtd, 4, ' ', STR_PAD_LEFT) .
+                str_pad($total, 17, ' ', STR_PAD_LEFT);
 
-        $this->printer->text($linha . "\n");
+            $this->printer->text($linha . "\n");
+        }
+
+        $this->printer->text(str_repeat('=', $this->L) . "\n");
     }
 
-    $this->printer->text(str_repeat('=', $this->L) . "\n");
-}
+    private function imprimirTotais(
+        \App\Models\Shared\DocumentoFiscal|\App\Models\Tenant\DocumentoFiscal $d,
+        \App\Models\Shared\DocumentoFiscal|\App\Models\Tenant\DocumentoFiscal $docInfo
+    ): void {
+        $base     = number_format((float) ($docInfo->base_tributavel ?? 0), 2, ',', '.');
+        $iva      = number_format((float) ($docInfo->total_iva ?? 0), 2, ',', '.');
+        $retencao = number_format((float) ($docInfo->total_retencao ?? 0), 2, ',', '.');
+        $total    = number_format((float) $d->total_liquido, 2, ',', '.');
 
-private function imprimirTotais(
-    \App\Models\Shared\DocumentoFiscal|\App\Models\Tenant\DocumentoFiscal $d,
-    \App\Models\Shared\DocumentoFiscal|\App\Models\Tenant\DocumentoFiscal $docInfo
-): void {
-    $base     = number_format((float) ($docInfo->base_tributavel ?? 0), 2, ',', '.');
-    $iva      = number_format((float) ($docInfo->total_iva ?? 0), 2, ',', '.');
-    $retencao = number_format((float) ($docInfo->total_retencao ?? 0), 2, ',', '.');
-    $total    = number_format((float) $d->total_liquido, 2, ',', '.');
+        // Colunas: rótulo (24) + valor (18) = 42
+        $linha = function (string $label, string $valor): string {
+            return str_pad($label, 24) . str_pad($valor . ' Kz', 18, ' ', STR_PAD_LEFT) . "\n";
+        };
 
-    // Colunas: rótulo (24) + valor (18) = 42
-    $linha = function (string $label, string $valor): string {
-        return str_pad($label, 24) . str_pad($valor . ' Kz', 18, ' ', STR_PAD_LEFT) . "\n";
-    };
+        $this->printer->text($linha('Base Tributavel:', $base));
+        $this->printer->text($linha('Total IVA:', $iva));
 
-    $this->printer->text($linha('Base Tributavel:', $base));
-    $this->printer->text($linha('Total IVA:', $iva));
+        if ((float) ($docInfo->total_retencao ?? 0) > 0) {
+            $this->printer->text($linha('Retencao:', '-' . $retencao));
+        }
 
-    if ((float) ($docInfo->total_retencao ?? 0) > 0) {
-        $this->printer->text($linha('Retencao:', '-' . $retencao));
+        $this->printer->text(str_repeat('-', $this->L) . "\n");
+
+        $this->printer->setEmphasis(true);
+        $this->printer->text($linha('TOTAL:', $total));
+        $this->printer->setEmphasis(false);
+        $this->printer->text(str_repeat('=', $this->L) . "\n");
     }
-
-    $this->printer->text(str_repeat('-', $this->L) . "\n");
-
-    $this->printer->setEmphasis(true);
-    $this->printer->text($linha('TOTAL:', $total));
-    $this->printer->setEmphasis(false);
-    $this->printer->text(str_repeat('=', $this->L) . "\n");
-}
 
     private function imprimirQrCode(string $qrCode): void
     {
@@ -702,7 +729,6 @@ private function imprimirTotais(
         $this->printer->text($this->textoProcessamento . "\n");
         $this->printer->text($this->mensagemFinal . "\n");
         $this->printer->text("*** Fim do Documento ***\n");
-
 
         $this->printer->setJustification(Printer::JUSTIFY_LEFT);
         $this->printer->feed(3);

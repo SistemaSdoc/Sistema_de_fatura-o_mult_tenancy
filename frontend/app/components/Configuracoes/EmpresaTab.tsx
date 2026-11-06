@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ThemeColors, FormInput, ReadonlyField, SaveButton, getLogoUrl, WithToast } from "./ConfiguracoesComuns";
+import ImpressoraCard from "./ImpressoraCard";
 
 /* ------------------------------------------------------------------ */
 /*  Helper: mensagens amigáveis (nunca expõe detalhes técnicos)        */
@@ -615,6 +616,9 @@ export function EmpresaTab({ colors, showToast }: EmpresaTabProps) {
           />
         </CardFooter>
       </Card>
+
+      {/* ⭐ Impressoras Térmicas */}
+      <ImpressoraCard colors={colors} />
 
       {/* Diálogo de confirmação */}
       <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>

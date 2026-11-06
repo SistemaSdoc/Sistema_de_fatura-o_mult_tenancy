@@ -1602,58 +1602,67 @@ public function emitirAutoFacturacao(Request $request)
         }
     }
 
-    public function imprimirTermica(string $id, ImpressoraTermicaService $impressoraService): JsonResponse
-    {
-        $modo = $this->getModo();
+public function imprimirTermica(
+    string $id,
+    ImpressoraTermicaService $impressoraService,
+    \Illuminate\Http\Request $request
+): JsonResponse {
+    $modo = $this->getModo();
 
-        try {
-            $this->verificarAcessoUsuario();
+    try {
+        $this->verificarAcessoUsuario();
 
-            $user = Auth::guard('landlord')->user();
-
-            if (!$impressoraService->testarConexao()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Impressora USB não encontrada ou sem permissão.',
-                ], 400);
-            }
-
-            if ($this->isColectivo()) {
-                $documento = SharedDocumentoFiscal::doTenant()->with(['itens.produto', 'cliente'])->where('id', $id)->firstOrFail();
-            } else {
-                $documento = TenantDocumentoFiscal::with(['itens.produto', 'cliente'])->where('id', $id)->firstOrFail();
-            }
-
-            $dados = $this->documentoService->dadosParaPdf($documento);
-
-            if (in_array($documento->tipo_documento, ['RC', 'RG', 'ACR'], true) && $documento->fatura_id) {
-                if ($this->isColectivo()) {
-                    $docInfo = SharedDocumentoFiscal::doTenant()->with(['itens.produto', 'cliente'])->where('id', $documento->fatura_id)->first();
-                } else {
-                    $docInfo = TenantDocumentoFiscal::with(['itens.produto', 'cliente'])->where('id', $documento->fatura_id)->first();
-                }
-            } else {
-                $docInfo = $documento;
-            }
-
-            $dados['itens']   = $docInfo->itens ?? [];
-            $dados['docInfo'] = $docInfo;
-
-            $numeroVia = $this->registarViaDocumento($id);
-            $documento->print_count = $numeroVia;
-            $dados['numeroVia'] = $this->rotuloVia($numeroVia);
-            $impressoraService->imprimirDocumento($documento, $dados, $user);
-
-            return response()->json([
-                'success' => true,
-                'id'      => $id,
-                'message' => 'Documento impresso com sucesso',
-                'modo'    => $modo,
-            ]);
-        } catch (\Exception $e) {
-            return $this->erroInterno('Erro na impressão térmica', $e);
+        // ⭐ Se o front enviar a queue escolhida, usa-a para a sessão
+        $queueEscolhida = $request->input('queue') ?? $request->query('queue');
+        if (!empty($queueEscolhida)) {
+            session(['impressora_queue' => $queueEscolhida]);
         }
+
+        $user = Auth::guard('landlord')->user();
+
+        if (!$impressoraService->testarConexao()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Impressora não encontrada ou inativa.',
+            ], 400);
+        }
+
+        if ($this->isColectivo()) {
+            $documento = SharedDocumentoFiscal::doTenant()->with(['itens.produto', 'cliente'])->where('id', $id)->firstOrFail();
+        } else {
+            $documento = TenantDocumentoFiscal::with(['itens.produto', 'cliente'])->where('id', $id)->firstOrFail();
+        }
+
+        $dados = $this->documentoService->dadosParaPdf($documento);
+
+        if (in_array($documento->tipo_documento, ['RC', 'RG', 'ACR'], true) && $documento->fatura_id) {
+            $docInfo = $this->isColectivo()
+                ? SharedDocumentoFiscal::doTenant()->with(['itens.produto', 'cliente'])->where('id', $documento->fatura_id)->first()
+                : TenantDocumentoFiscal::with(['itens.produto', 'cliente'])->where('id', $documento->fatura_id)->first();
+        } else {
+            $docInfo = $documento;
+        }
+
+        $dados['itens']     = $docInfo->itens ?? [];
+        $dados['docInfo']   = $docInfo;
+
+        $numeroVia = $this->registarViaDocumento($id);
+        $documento->print_count = $numeroVia;
+        $dados['numeroVia'] = $this->rotuloVia($numeroVia);
+
+        $impressoraService->imprimirDocumento($documento, $dados, $user);
+
+        return response()->json([
+            'success' => true,
+            'id'      => $id,
+            'message' => 'Documento impresso com sucesso',
+            'modo'    => $modo,
+            'queue'   => session('impressora_queue'),
+        ]);
+    } catch (\Exception $e) {
+        return $this->erroInterno('Erro na impressão térmica', $e);
     }
+}
 
     public function printView(Request $request, string $id): \Illuminate\Contracts\View\View
     {
