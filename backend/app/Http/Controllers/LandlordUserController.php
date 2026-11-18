@@ -465,88 +465,234 @@ public function alterarSenhaPropria(Request $request)
 /**
  * Lista todos os utilizadores do tenant (de todas as empresas)
  */
+
+/**
+ * Lista todos os utilizadores dos tenants em modo singular.
+ * Inclui logs detalhados para diagnóstico.
+ */
 public function listarTenantUsers()
 {
-    \Log::info('listarTenantUsers: Iniciando consulta', [
-        'user_id' => Auth::guard('landlord_api')->id()
+    $requestId = (string) Str::uuid();
+
+    Log::info('========== INÍCIO listarTenantUsers ==========', [
+        'request_id' => $requestId,
+        'data_hora' => now()->toDateTimeString(),
+        'auth_guard' => 'landlord_api',
+        'user_id' => Auth::guard('landlord_api')->id(),
     ]);
 
     $authUser = Auth::guard('landlord_api')->user();
+
     if (!$authUser) {
-        return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+        Log::warning('listarTenantUsers: utilizador não autenticado', [
+            'request_id' => $requestId,
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Unauthenticated',
+        ], 401);
     }
 
+    Log::info('listarTenantUsers: utilizador autenticado', [
+        'request_id' => $requestId,
+        'user_id' => $authUser->id,
+        'name' => $authUser->name,
+        'role' => $authUser->role,
+    ]);
+
+    $tenantUsers = [];
+    $empresasProcessadas = 0;
+    $empresasComErro = 0;
+
     try {
+        // 1. Procurar empresas singulares
         $empresas = Empresa::on('landlord')
             ->where('status', 'ativo')
             ->where('modo', 'singular')
             ->get();
 
-        $tenantUsers = [];
+        Log::info('listarTenantUsers: empresas encontradas', [
+            'request_id' => $requestId,
+            'total_empresas' => $empresas->count(),
+            'empresas' => $empresas->map(function ($empresa) {
+                return [
+                    'id' => $empresa->id,
+                    'nome' => $empresa->nome,
+                    'status' => $empresa->status,
+                    'modo' => $empresa->modo,
+                    'db_name' => $empresa->db_name,
+                ];
+            })->toArray(),
+        ]);
 
         foreach ($empresas as $empresa) {
             $database = $empresa->db_name;
 
+            Log::info('listarTenantUsers: a processar empresa', [
+                'request_id' => $requestId,
+                'empresa_id' => $empresa->id,
+                'empresa_nome' => $empresa->nome,
+                'database' => $database,
+            ]);
+
             if (empty($database)) {
-                \Log::warning("Empresa {$empresa->nome} sem db_name definido");
+                $empresasComErro++;
+
+                Log::warning('listarTenantUsers: empresa sem db_name', [
+                    'request_id' => $requestId,
+                    'empresa_id' => $empresa->id,
+                    'empresa_nome' => $empresa->nome,
+                ]);
+
                 continue;
             }
 
             try {
-                // 1. Purga a conexão existente
+                // 2. Limpar conexão anterior
                 DB::purge('tenant');
 
-                // 2. Altera a configuração com o novo database
-                config(['database.connections.tenant.database' => $database]);
+                Log::debug('listarTenantUsers: conexão anterior purgada', [
+                    'request_id' => $requestId,
+                    'empresa' => $empresa->nome,
+                ]);
 
-                // 3. Reconecta
+                // 3. Seleccionar base de dados
+                config([
+                    'database.connections.tenant.database' => $database,
+                ]);
+
+                Log::info('listarTenantUsers: configuração da conexão', [
+                    'request_id' => $requestId,
+                    'connection' => 'tenant',
+                    'database' => config('database.connections.tenant.database'),
+                    'driver' => config('database.connections.tenant.driver'),
+                    'host' => config('database.connections.tenant.host'),
+                ]);
+
+                // 4. Reconectar
                 DB::reconnect('tenant');
 
-                // 4. Agora executa a consulta
-                $users = DB::connection('tenant')
-                    ->table('users')
-                    ->select('id', 'name', 'email', 'role', 'ativo', 'created_at')
+                // 5. Testar conexão
+                $connection = DB::connection('tenant');
+                $connection->getPdo();
+
+                Log::info('listarTenantUsers: conexão estabelecida', [
+                    'request_id' => $requestId,
+                    'empresa' => $empresa->nome,
+                    'database' => $database,
+                ]);
+
+                // 6. Verificar tabela
+                $tableExists = $connection->getSchemaBuilder()
+                    ->hasTable('users');
+
+                Log::info('listarTenantUsers: verificação da tabela users', [
+                    'request_id' => $requestId,
+                    'empresa' => $empresa->nome,
+                    'table_exists' => $tableExists,
+                ]);
+
+                if (!$tableExists) {
+                    $empresasComErro++;
+
+                    Log::warning('listarTenantUsers: tabela users não encontrada', [
+                        'request_id' => $requestId,
+                        'empresa' => $empresa->nome,
+                        'database' => $database,
+                    ]);
+
+                    continue;
+                }
+
+                // 7. Consultar utilizadores
+                $users = $connection->table('users')
+                    ->select(
+                        'id',
+                        'name',
+                        'email',
+                        'role',
+                        'ativo',
+                        'created_at'
+                    )
                     ->get();
 
+                Log::info('listarTenantUsers: consulta executada', [
+                    'request_id' => $requestId,
+                    'empresa' => $empresa->nome,
+                    'database' => $database,
+                    'total_users' => $users->count(),
+                ]);
+
+                // 8. Associar empresa a cada utilizador
                 foreach ($users as $user) {
                     $user->empresa_id = $empresa->id;
                     $user->empresa_nome = $empresa->nome;
                     $user->modo = 'singular';
-                    $user->role = $user->role ?? 'user';
+
                     $tenantUsers[] = $user;
                 }
 
-                \Log::info("Usuários encontrados (singular)", [
-                    'empresa' => $empresa->nome,
-                    'quantidade' => $users->count()
-                ]);
+                $empresasProcessadas++;
 
-            } catch (\Exception $e) {
-                \Log::error("Erro ao buscar singulares para {$empresa->nome}", [
-                    'error' => $e->getMessage()
+            } catch (\Throwable $e) {
+                $empresasComErro++;
+
+                Log::error('listarTenantUsers: erro ao consultar tenant', [
+                    'request_id' => $requestId,
+                    'empresa_id' => $empresa->id,
+                    'empresa_nome' => $empresa->nome,
+                    'database' => $database,
+                    'exception' => get_class($e),
+                    'error' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
                 ]);
+            } finally {
+                // Não deixar a conexão anterior seleccionada.
+                DB::disconnect('tenant');
+                DB::purge('tenant');
             }
         }
 
-        \Log::info('listarTenantUsers: Consulta concluída', [
-            'total_empresas_singulares' => $empresas->count(),
-            'total_usuarios_singulares' => count($tenantUsers)
+        Log::info('========== FIM listarTenantUsers ==========', [
+            'request_id' => $requestId,
+            'total_empresas_encontradas' => $empresas->count(),
+            'total_empresas_processadas' => $empresasProcessadas,
+            'total_empresas_com_erro' => $empresasComErro,
+            'total_utilizadores' => count($tenantUsers),
         ]);
 
-        return response()->json(['success' => true, 'data' => $tenantUsers]);
+        return response()->json([
+            'success' => true,
+            'data' => $tenantUsers,
+            'diagnostico' => [
+                'request_id' => $requestId,
+                'empresas_encontradas' => $empresas->count(),
+                'empresas_processadas' => $empresasProcessadas,
+                'empresas_com_erro' => $empresasComErro,
+                'total_utilizadores' => count($tenantUsers),
+            ],
+        ]);
 
-    } catch (\Exception $e) {
-        \Log::error('listarTenantUsers: Erro geral', [
+    } catch (\Throwable $e) {
+        Log::critical('listarTenantUsers: erro geral', [
+            'request_id' => $requestId,
+            'exception' => get_class($e),
             'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+            'trace' => $e->getTraceAsString(),
         ]);
 
         return response()->json([
             'success' => false,
-            'message' => 'Erro ao processar a requisição: ' . $e->getMessage()
+            'message' => 'Erro ao listar utilizadores dos tenants.',
+            'request_id' => $requestId,
         ], 500);
     }
 }
+
 
 
 public function listarSharedUsers()
