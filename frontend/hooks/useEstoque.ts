@@ -65,7 +65,10 @@ export function useEstoque() {
         try {
             const [resumoData, itensData, cats] = await Promise.all([
                 movimentoStockService.resumo(),
-                produtoService.listarProdutos({ tipo: "produto" }),
+                produtoService.listarProdutos({
+                    tipo: "produto",
+                    paginar: false,
+                }),
                 produtoService.listarCategorias(),
             ]);
 
@@ -102,9 +105,9 @@ export function useEstoque() {
 
     const carregarDeletados = useCallback(async () => {
         try {
-            const response = await produtoService.listarDeletados({ 
-                paginar: false, 
-                tipo: "produto" 
+            const response = await produtoService.listarDeletados({
+                paginar: false,
+                tipo: "produto"
             });
             // Filtrar apenas produtos (garantia extra)
             const deletados = getCollection(response.produtos);
@@ -117,8 +120,11 @@ export function useEstoque() {
     const aplicarFiltros = useCallback(async () => {
         setLoading(true);
         try {
-            const filtros: Parameters<typeof produtoService.listarProdutos>[0] = { tipo: "produto" };
-            if (busca) filtros.busca = busca;
+            const filtros: Parameters<typeof produtoService.listarProdutos>[0] = {
+                tipo: "produto",
+                paginar: false,
+            };
+             if (busca) filtros.busca = busca;
             if (categoriaFiltro) filtros.categoria_id = categoriaFiltro;
             if (filtroEstoque === "baixo") filtros.estoque_baixo = true;
             if (filtroEstoque === "zerado") filtros.sem_estoque = true;
@@ -149,7 +155,7 @@ export function useEstoque() {
         if (!itemSelecionado) {
             return { success: false, error: "Nenhum item selecionado" };
         }
-        
+
         try {
             // Prepara os dados para atualização (apenas produtos)
             const dadosAtualizacao = {
@@ -168,7 +174,7 @@ export function useEstoque() {
             await carregarDados();
             setModalEdicaoAberto(false);
             setItemSelecionado(null);
-            
+
             return { success: true };
         } catch (error: unknown) {
             const apiError = getApiError(error);

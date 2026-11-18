@@ -267,9 +267,13 @@ export const produtoService = {
     if (params.estoque_baixo) q.append("estoque_baixo", "true");
     if (params.sem_estoque) q.append("sem_estoque", "true");
     if (params.ordenar) q.append("ordenar", params.ordenar);
-    if (params.direcao) q.append("direcao", params.direcao);
-    if (params.paginar) q.append("paginar", "true");
-    if (params.per_page) q.append("per_page", params.per_page.toString());
+    if (params.direcao) q.append("direcao", params.direcao);if (params.paginar !== undefined) {
+    q.append("paginar", String(params.paginar));
+}
+
+if (params.per_page) {
+    q.append("per_page", params.per_page.toString());
+}
     if (params.apenas_servicos) q.append("apenas_servicos", "true");
     if (params.apenas_produtos) q.append("apenas_produtos", "true");
     if (params.com_retencao) q.append("com_retencao", "true");
