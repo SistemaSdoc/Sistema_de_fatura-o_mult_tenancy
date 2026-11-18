@@ -8,15 +8,14 @@ return new class extends Migration
 {
     public function up(): void
     {
-        $schema = Schema::connection('tenant');
-        $schema->table('series_fiscais', function (Blueprint $table) use ($schema) {
-            if (!$schema->hasColumn('series_fiscais', 'auto_faturacao')) {
+        Schema::table('series_fiscais', function (Blueprint $table) {
+            if (! Schema::hasColumn('series_fiscais', 'auto_faturacao')) {
                 $table->boolean('auto_faturacao')->default(false)->after('serie');
             }
 
-            if (!$schema->hasIndex('series_fiscais', 'uk_serie_completa')) {
+            if (! Schema::hasIndex('series_fiscais', 'uk_serie_completa')) {
                 $table->unique(
-                    ['tenant_id', 'tipo_documento', 'serie', 'ano', 'auto_faturacao'],
+                    ['tipo_documento', 'serie', 'ano', 'auto_faturacao'],
                     'uk_serie_completa'
                 );
             }

@@ -9,25 +9,28 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // Desabilitar checagem de foreign keys temporariamente
-        DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+        $schema = Schema::connection('shared');
+        $db     = DB::connection('shared');
+
+        // O SET FOREIGN_KEY_CHECKS é por SESSÃO MySQL.
+        // Tem de ser feito na conexão 'shared', senão não tem efeito.
+        $db->statement('SET FOREIGN_KEY_CHECKS=0;');
 
         try {
-            // Verificar se a tabela movimentos_stock existe
-            if (Schema::hasTable('movimentos_stock')) {
+            if ($schema->hasTable('movimentos_stock')) {
 
-                // Remover a foreign key existente (tenta vários nomes possíveis)
-                $foreignKeys = DB::select("
+                // ── Tabela existe → só alterar a FK de produto_id ──
+                $foreignKeys = $db->select("
                     SELECT CONSTRAINT_NAME
                     FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
-                    WHERE TABLE_NAME = 'movimentos_stock'
-                    AND COLUMN_NAME = 'produto_id'
-                    AND TABLE_SCHEMA = DATABASE()
+                    WHERE TABLE_NAME    = 'movimentos_stock'
+                      AND COLUMN_NAME   = 'produto_id'
+                      AND TABLE_SCHEMA  = DATABASE()
                 ");
 
                 foreach ($foreignKeys as $key) {
                     try {
-                        Schema::table('movimentos_stock', function (Blueprint $table) use ($key) {
+                        $schema->table('movimentos_stock', function (Blueprint $table) use ($key) {
                             $table->dropForeign($key->CONSTRAINT_NAME);
                         });
                     } catch (\Exception $e) {
@@ -35,8 +38,7 @@ return new class extends Migration
                     }
                 }
 
-                // Adicionar nova foreign key com CASCADE
-                Schema::table('movimentos_stock', function (Blueprint $table) {
+                $schema->table('movimentos_stock', function (Blueprint $table) {
                     $table->foreign('produto_id')
                         ->references('id')
                         ->on('produtos')
@@ -44,11 +46,10 @@ return new class extends Migration
                 });
 
             } else {
-                // Se a tabela não existe, recriar ela completa
-                Schema::connection('shared')->create('movimentos_stock', function (Blueprint $table) {
+                // ── Tabela não existe → recriar completa ──
+                $schema->create('movimentos_stock', function (Blueprint $table) {
                     $table->uuid('id')->primary();
                     $table->uuid('tenant_id');
-
 
                     $table->uuid('produto_id');
                     $table->foreign('produto_id')
@@ -64,12 +65,8 @@ return new class extends Migration
 
                     $table->enum('tipo', ['entrada', 'saida', 'ajuste']);
                     $table->enum('tipo_movimento', [
-                        'compra',
-                        'venda',
-                        'ajuste',
-                        'nota_credito',
-                        'devolucao',
-                        'transferencia'
+                        'compra', 'venda', 'ajuste',
+                        'nota_credito', 'devolucao', 'transferencia',
                     ]);
                     $table->integer('quantidade');
                     $table->integer('estoque_anterior')->default(0);
@@ -90,38 +87,38 @@ return new class extends Migration
                 });
             }
         } finally {
-            // Reabilitar checagem de foreign keys
-            DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+            $db->statement('SET FOREIGN_KEY_CHECKS=1;');
         }
     }
 
     public function down(): void
     {
-        DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+        $schema = Schema::connection('shared');
+        $db     = DB::connection('shared');
+
+        $db->statement('SET FOREIGN_KEY_CHECKS=0;');
 
         try {
-            if (Schema::hasTable('movimentos_stock')) {
-                // Remove a foreign key cascade
-                $foreignKeys = DB::select("
+            if ($schema->hasTable('movimentos_stock')) {
+                $foreignKeys = $db->select("
                     SELECT CONSTRAINT_NAME
                     FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
-                    WHERE TABLE_NAME = 'movimentos_stock'
-                    AND COLUMN_NAME = 'produto_id'
-                    AND TABLE_SCHEMA = DATABASE()
+                    WHERE TABLE_NAME   = 'movimentos_stock'
+                      AND COLUMN_NAME  = 'produto_id'
+                      AND TABLE_SCHEMA = DATABASE()
                 ");
 
                 foreach ($foreignKeys as $key) {
                     try {
-                        Schema::table('movimentos_stock', function (Blueprint $table) use ($key) {
+                        $schema->table('movimentos_stock', function (Blueprint $table) use ($key) {
                             $table->dropForeign($key->CONSTRAINT_NAME);
                         });
                     } catch (\Exception $e) {
-                        // Ignora erro
+                        // Ignora
                     }
                 }
 
-                // Recria com RESTRICT (volta ao original)
-                Schema::table('movimentos_stock', function (Blueprint $table) {
+                $schema->table('movimentos_stock', function (Blueprint $table) {
                     $table->foreign('produto_id')
                         ->references('id')
                         ->on('produtos')
@@ -129,7 +126,7 @@ return new class extends Migration
                 });
             }
         } finally {
-            DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+            $db->statement('SET FOREIGN_KEY_CHECKS=1;');
         }
     }
 };

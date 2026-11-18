@@ -29,6 +29,12 @@ import { useThemeColors, LIGHT_COLORS } from "@/context/ThemeContext";
 import { ToastNotification } from "@/components/ToastNotification";
 import { ItensDocumentoTable } from "./ItensDocumentoTable";
 
+/* ── Helpers ─────────────────────────────────────────── */
+/** Normaliza qualquer valor para um inteiro >= min. */
+const toInt = (value: unknown, min = 0): number => {
+  const n = Math.floor(Number(value) || 0);
+  return n < min ? min : n;
+};
 
 /* ── Constantes ─────────────────────────────────────── */
 const TIPO_LABEL: Record<TipoDocumento, string> = {
@@ -292,7 +298,9 @@ function ModalNotaCredito({
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [quantidades, setQtd] = useState<Record<string, number>>(
-    Object.fromEntries(itensOriginais.map((item, i) => [`${item.id ?? i}`, Number(item.quantidade ?? 0)]))
+    Object.fromEntries(
+      itensOriginais.map((item, i) => [`${item.id ?? i}`, toInt(item.quantidade)])
+    )
   );
   const [saldoDisponivel, setSaldoDisponivel] = useState<number | null>(null);
 
@@ -334,7 +342,7 @@ function ModalNotaCredito({
       .map((item) => ({
         produto_id: item.produto_id ?? undefined,
         descricao: item.descricao,
-        quantidade: Number(quantidades[item._key]),
+        quantidade: toInt(quantidades[item._key], 1),
         preco_unitario: Number(item.preco_unitario),
         taxa_iva: Number(item.taxa_iva),
         taxa_retencao: item.taxa_retencao,
@@ -485,7 +493,7 @@ function ModalNotaCredito({
                 </p>
               ) : (
                 itensComChave.map((item) => {
-                  const maxQtd = Number(item.quantidade ?? 0);
+                  const maxQtd = toInt(item.quantidade);
                   return (
                     <div
                       key={item._key}
@@ -513,7 +521,7 @@ function ModalNotaCredito({
                           onClick={() =>
                             setQtd((q) => ({
                               ...q,
-                              [item._key]: Math.max(0, (q[item._key] ?? 0) - 1),
+                              [item._key]: Math.max(0, toInt(q[item._key]) - 1),
                             }))
                           }
                           className="w-6 h-6 flex items-center justify-center border rounded text-sm"
@@ -527,11 +535,12 @@ function ModalNotaCredito({
                           type="number"
                           min={0}
                           max={maxQtd}
+                          step={1}
                           value={quantidades[item._key] ?? 0}
                           onChange={(e) =>
                             setQtd((q) => ({
                               ...q,
-                              [item._key]: Math.min(maxQtd, Math.max(0, Number(e.target.value))),
+                              [item._key]: Math.min(maxQtd, toInt(e.target.value)),
                             }))
                           }
                           className="w-14 text-center text-sm border rounded px-1 py-0.5 focus:outline-none"
@@ -545,7 +554,7 @@ function ModalNotaCredito({
                           onClick={() =>
                             setQtd((q) => ({
                               ...q,
-                              [item._key]: Math.min(maxQtd, (q[item._key] ?? 0) + 1),
+                              [item._key]: Math.min(maxQtd, toInt(q[item._key]) + 1),
                             }))
                           }
                           className="w-6 h-6 flex items-center justify-center border rounded text-sm"
@@ -560,7 +569,7 @@ function ModalNotaCredito({
                           style={{
                             color: colors.textSecondary,
                           }}>
-                          /{maxQtd.toFixed(0)}
+                          /{maxQtd}
                         </span>
                       </div>
                     </div>
@@ -643,7 +652,9 @@ function ModalNotaDebito({
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [quantidades, setQtd] = useState<Record<string, number>>(
-    Object.fromEntries(itensOriginais.map((item, i) => [`${item.id ?? i}`, Number(item.quantidade ?? 0)]))
+    Object.fromEntries(
+      itensOriginais.map((item, i) => [`${item.id ?? i}`, toInt(item.quantidade)])
+    )
   );
   const [novosItens, setNovosItens] = useState<ItemDocumento[]>([]);
   const [showNovoItem, setShowNovoItem] = useState(false);
@@ -767,7 +778,7 @@ function ModalNotaDebito({
 
     const novoItem: ItemDocumento = {
       descricao: novoItemDescricao.trim(),
-      quantidade: Number(novoItemQuantidade) || 1,
+      quantidade: toInt(novoItemQuantidade, 1),
       preco_unitario: Number(novoItemPreco),
       taxa_iva: 0,
       eh_servico: true,
@@ -795,7 +806,7 @@ function ModalNotaDebito({
         return {
           produto_id: item.produto_id ?? undefined,
           descricao: item.descricao,
-          quantidade: Number(quantidades[item._key]),
+          quantidade: toInt(quantidades[item._key], 1),
           preco_unitario: Number(item.preco_unitario),
           taxa_iva: 0,
           taxa_retencao: item.taxa_retencao ?? 0,
@@ -818,7 +829,7 @@ function ModalNotaDebito({
       ...novosItens.map((item) => ({
         produto_id: item.produto_id,
         descricao: item.descricao,
-        quantidade: Number(item.quantidade),
+        quantidade: toInt(item.quantidade, 1),
         preco_unitario: Number(item.preco_unitario),
         taxa_iva: 0,
         taxa_retencao: item.taxa_retencao ?? 0,
@@ -962,8 +973,9 @@ function ModalNotaDebito({
               ) : (
                 itensComChave.map((item) => {
                   const isServico = ehServicoItem(item);
-                  const isProduto = item.produto_id && !isServico;
-                  const maxQtd = Number(item.quantidade ?? 0);
+                  const isProduto = Boolean(item.produto_id) && !isServico;
+                  const maxQtd = toInt(item.quantidade);
+                  const limite = isProduto ? 0 : maxQtd;
 
                   return (
                     <div
@@ -997,7 +1009,7 @@ function ModalNotaDebito({
                           onClick={() =>
                             setQtd((q) => ({
                               ...q,
-                              [item._key]: Math.max(0, (q[item._key] ?? 0) - 1),
+                              [item._key]: Math.max(0, toInt(q[item._key]) - 1),
                             }))
                           }
                           className="w-6 h-6 flex items-center justify-center border rounded text-sm"
@@ -1010,12 +1022,13 @@ function ModalNotaDebito({
                         <input
                           type="number"
                           min={0}
-                          max={isProduto ? 0 : maxQtd}
+                          max={limite}
+                          step={1}
                           value={quantidades[item._key] ?? 0}
                           onChange={(e) =>
                             setQtd((q) => ({
                               ...q,
-                              [item._key]: Math.min(isProduto ? 0 : maxQtd, Math.max(0, Number(e.target.value))),
+                              [item._key]: Math.min(limite, toInt(e.target.value)),
                             }))
                           }
                           className="w-14 text-center text-sm border rounded px-1 py-0.5 focus:outline-none"
@@ -1029,7 +1042,7 @@ function ModalNotaDebito({
                           onClick={() =>
                             setQtd((q) => ({
                               ...q,
-                              [item._key]: Math.min(isProduto ? 0 : maxQtd, (q[item._key] ?? 0) + 1),
+                              [item._key]: Math.min(limite, toInt(q[item._key]) + 1),
                             }))
                           }
                           className="w-6 h-6 flex items-center justify-center border rounded text-sm"
@@ -1144,9 +1157,13 @@ function ModalNotaDebito({
                   <input
                     type="number"
                     value={novoItemQuantidade}
-                    onChange={(e) => setNovoItemQuantidade(e.target.value)}
+                    onChange={(e) => {
+                      const v = toInt(e.target.value, 1);
+                      setNovoItemQuantidade(String(v));
+                    }}
                     placeholder="Qtd"
-                    min="1"
+                    min={1}
+                    step={1}
                     className="border rounded px-2 py-1 text-sm focus:outline-none"
                     style={{
                       backgroundColor: colors.background,
@@ -1205,7 +1222,7 @@ function ModalNotaDebito({
                     <div>
                       <span style={{ color: colors.text }}>{item.descricao}</span>
                       <span className="text-xs ml-2" style={{ color: colors.textSecondary }}>
-                        {item.quantidade} × {fmtKz(item.preco_unitario)}
+                        {toInt(item.quantidade)} × {fmtKz(item.preco_unitario)}
                       </span>
                     </div>
                     <button onClick={() => handleRemoverNovoItem(index)} className="text-xs" style={{ color: colors.danger }}>
@@ -1649,8 +1666,6 @@ export default function VisualizarNotaPage() {
           </div>
         </div>
 
-
-
         {/* ── Info adicional para ND ── */}
         {isND && (
           <div
@@ -1722,7 +1737,7 @@ export default function VisualizarNotaPage() {
               {documentoOrigem && (
                 <Row
                   label="Referente a"
-                    value={`${TIPO_LABEL[documentoOrigem.tipo_documento] ?? documentoOrigem.tipo_documento} Nº ${documentoOrigem.numero_documento}${isRE ? ` · Emissão: ${fmtData(documentoOrigem.data_emissao)}` : ""}`}
+                  value={`${TIPO_LABEL[documentoOrigem.tipo_documento] ?? documentoOrigem.tipo_documento} Nº ${documentoOrigem.numero_documento}${isRE ? ` · Emissão: ${fmtData(documentoOrigem.data_emissao)}` : ""}`}
                   link
                   onLink={() => router.push(`/dashboard/Faturas/Faturas/${documentoOrigem.id}/Ver`)}
                   colors={colors}
@@ -1930,22 +1945,6 @@ export default function VisualizarNotaPage() {
           </div>
         ) : null}
 
-        {/* ── Mensagem para Proformas ── 
-        {isFP && (
-          <div
-            className="border rounded p-4 text-center"
-            style={{
-              backgroundColor: `${colors.warning}08`,
-              borderColor: `${colors.warning}30`,
-            }}>
-            <p style={{ color: colors.textSecondary }}>
-              <Info className="w-4 h-4 inline mr-2" style={{ color: colors.warning }} />
-              Esta é uma Proforma (orçamento). Não pode gerar Notas de Crédito/Débito. Para emitir uma Nota de Correção, converta primeiro a
-              Proforma em Fatura.
-            </p>
-          </div>
-        )}*/}
-
         {/* ── Mensagem para Notas de Correção ── */}
         {isNotaCorrecao && documentoOrigem && (
           <div
@@ -1978,7 +1977,7 @@ export default function VisualizarNotaPage() {
         )}
       </div>
 
-      {/* ── Modal NC ── */}
+      {/* ── Modal Estorno ── */}
       {mostrarModalEstorno && nota && (
         <div
           className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4"
@@ -2003,8 +2002,8 @@ export default function VisualizarNotaPage() {
               </div>
             </div>
             <p className="text-sm" style={{ color: colors.textSecondary }}>
-            O estorno emitirá um RE ligado a este recibo e actualizará o saldo do documento de origem.
-            Pode fazer estornos parciais sucessivos até ao limite ainda disponível de {fmtKz(valorDisponivelEstorno)}.
+              O estorno emitirá um RE ligado a este recibo e actualizará o saldo do documento de origem. Pode fazer estornos
+              parciais sucessivos até ao limite ainda disponível de {fmtKz(valorDisponivelEstorno)}.
             </p>
             <label className="block space-y-1 text-sm" style={{ color: colors.text }}>
               Valor a estornar
@@ -2067,6 +2066,8 @@ export default function VisualizarNotaPage() {
           </div>
         </div>
       )}
+
+      {/* ── Modal NC ── */}
       {modalTipo === "NC" && (
         <ModalNotaCredito
           documento={nota}
@@ -2087,6 +2088,7 @@ export default function VisualizarNotaPage() {
           showToast={showToast}
         />
       )}
+
       {mostrarModalRegularizacao && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md space-y-4 rounded-lg border p-5 shadow-xl" style={{ backgroundColor: colors.card, borderColor: colors.border }}>

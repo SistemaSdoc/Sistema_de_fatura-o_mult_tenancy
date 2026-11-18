@@ -6,19 +6,14 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    public $connection = 'tenant';
-
     public function up(): void
     {
-        $connection = DB::connection('tenant');
-        $schema = Schema::connection('tenant');
-
-        if ($connection->getDriverName() !== 'mysql') {
+        if (DB::getDriverName() !== 'mysql') {
             return;
         }
 
-        if ($schema->hasTable('series_fiscais')) {
-            $connection->statement("
+        if (Schema::hasTable('series_fiscais')) {
+            DB::statement("
                 ALTER TABLE series_fiscais
                 MODIFY COLUMN tipo_documento ENUM(
                     'FT','FR','FP','FA','RC','RG','RE','NC','ND','FRt',
@@ -27,8 +22,8 @@ return new class extends Migration
             ");
         }
 
-        if ($schema->hasTable('documentos_fiscais')) {
-            $connection->statement("
+        if (Schema::hasTable('documentos_fiscais')) {
+            DB::statement("
                 ALTER TABLE documentos_fiscais
                 MODIFY COLUMN tipo_documento ENUM(
                     'FT','FR','FP','FA','RC','RG','RE','NC','ND',

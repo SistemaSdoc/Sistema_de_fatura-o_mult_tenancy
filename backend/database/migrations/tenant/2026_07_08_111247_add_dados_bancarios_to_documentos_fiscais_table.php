@@ -6,25 +6,37 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
-        Schema::table('documentos_fiscais', function (Blueprint $table) {
-            $table->string('nome_banco')->nullable()->after('referencia_pagamento');
-            $table->string('iban')->nullable()->after('nome_banco');
-            $table->string('numero_conta')->nullable()->after('iban');
-        });
+        if (! Schema::hasColumn('documentos_fiscais', 'nome_banco')) {
+            Schema::table('documentos_fiscais', function (Blueprint $table) {
+                $table->string('nome_banco', 255)->nullable()->after('referencia_externa');
+            });
+        }
+
+        if (! Schema::hasColumn('documentos_fiscais', 'iban')) {
+            Schema::table('documentos_fiscais', function (Blueprint $table) {
+                $table->string('iban', 34)->nullable()->after('nome_banco');
+            });
+        }
+
+        if (! Schema::hasColumn('documentos_fiscais', 'numero_conta')) {
+            Schema::table('documentos_fiscais', function (Blueprint $table) {
+                $table->string('numero_conta', 50)->nullable()->after('iban');
+            });
+        }
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-        Schema::table('documentos_fiscais', function (Blueprint $table) {
-            $table->dropColumn(['nome_banco', 'iban', 'numero_conta']);
-        });
+        if (Schema::hasColumn('documentos_fiscais', 'numero_conta')) {
+            Schema::table('documentos_fiscais', fn (Blueprint $t) => $t->dropColumn('numero_conta'));
+        }
+        if (Schema::hasColumn('documentos_fiscais', 'iban')) {
+            Schema::table('documentos_fiscais', fn (Blueprint $t) => $t->dropColumn('iban'));
+        }
+        if (Schema::hasColumn('documentos_fiscais', 'nome_banco')) {
+            Schema::table('documentos_fiscais', fn (Blueprint $t) => $t->dropColumn('nome_banco'));
+        }
     }
 };

@@ -8,14 +8,13 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::connection('tenant')->hasTable('factura_global_anexos')) {
+        if (Schema::hasTable('factura_global_anexos')) {
             return;
         }
 
         Schema::create('factura_global_anexos', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('documento_fiscal_id');
-            $table->uuid('tenant_id')->nullable();
 
             $table->enum('tipo_anexo', [
                 'guia_remessa',
@@ -34,7 +33,7 @@ return new class extends Migration
                 ->references('id')->on('documentos_fiscais')
                 ->cascadeOnDelete();
 
-            $table->index(['tenant_id', 'documento_fiscal_id'], 'idx_anexos_doc');
+            $table->index([ 'documento_fiscal_id'], 'idx_anexos_doc');
         });
     }
 

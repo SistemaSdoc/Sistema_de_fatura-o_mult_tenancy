@@ -8,14 +8,14 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('tenant')->table('users', function (Blueprint $table) {
+        Schema::table('users', function (Blueprint $table) {
             $table->timestamp('email_verified_at')->nullable()->after('printer_ip');
         });
     }
 
     public function down(): void
     {
-        Schema::connection('tenant')->table('users', function (Blueprint $table) {
+        Schema::table('users', function (Blueprint $table) {
             $table->dropColumn('email_verified_at');
         });
     }

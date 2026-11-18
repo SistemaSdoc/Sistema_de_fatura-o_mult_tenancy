@@ -21,8 +21,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        $schema = Schema::connection('shared');
+
         // 1. Adicionar taxa_iva e sujeito_iva à tabela categorias
-        Schema::table('categorias', function (Blueprint $table) {
+        $schema->table('categorias', function (Blueprint $table) {
             $table->decimal('taxa_iva', 5, 2)->default(14.00)->after('tipo')
                   ->comment('Taxa de IVA aplicada a todos os produtos desta categoria (AGT Angola)');
             $table->boolean('sujeito_iva')->default(true)->after('taxa_iva')
@@ -37,7 +39,7 @@ return new class extends Migration
         //
         // Se quiser remover completamente da tabela produtos, descomente:
         //
-        // Schema::table('produtos', function (Blueprint $table) {
+        // $schema->table('produtos', function (Blueprint $table) {
         //     $table->dropColumn(['taxa_iva', 'sujeito_iva']);
         // });
         //
@@ -47,7 +49,9 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('categorias', function (Blueprint $table) {
+        $schema = Schema::connection('shared');
+
+        $schema->table('categorias', function (Blueprint $table) {
             $table->dropColumn(['taxa_iva', 'sujeito_iva', 'codigo_isencao']);
         });
     }

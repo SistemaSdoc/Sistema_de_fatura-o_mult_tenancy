@@ -8,14 +8,16 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('categorias', function (Blueprint $table) {
+         $schema = Schema::connection('shared');
+        $schema->table('categorias', function (Blueprint $table) {
             $table->softDeletes()->after('updated_at');
         });
     }
 
     public function down(): void
     {
-        Schema::table('categorias', function (Blueprint $table) {
+        $schema = Schema::connection('shared');
+        $schema->table('categorias', function (Blueprint $table) {
             $table->dropSoftDeletes();
         });
     }
