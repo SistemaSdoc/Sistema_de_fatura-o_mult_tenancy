@@ -101,8 +101,8 @@ Route::prefix('landlord')->group(function () use ($uuidPattern) {
             Route::put('/empresa', [FreelancerController::class, 'atualizarDadosEmpresa']);
         });
 
-        // ─── FIX ── Pagamentos do plano — admin_empresa + super_admin ─
-        // Escopo por empresa é aplicado no controller (helper escopo())
+        // ─── Pagamentos do plano — admin_empresa + super_admin ─
+        // Escopo por empresa aplicado no controller (helper escopo())
         Route::prefix('pagamentos-plano')->group(function () use ($uuidPattern) {
             Route::get('/',    [PagamentoLandlordController::class, 'index']);
             Route::get('/{id}', [PagamentoLandlordController::class, 'show'])
@@ -173,7 +173,7 @@ Route::prefix('landlord')->group(function () use ($uuidPattern) {
 
             Route::post('/minha-empresa', [EmpresaController::class, 'storeParaLandlordAutenticado']);
 
-            // ─── FIX ── Pagamentos do plano — apenas ações de super_admin ─
+            // ─── Pagamentos do plano — apenas ações de super_admin ─
             Route::prefix('pagamentos-plano')->group(function () use ($uuidPattern) {
                 Route::get('/pendentes', [PagamentoLandlordController::class, 'pendentes']);
                 Route::post('/{id}/confirmar', [PagamentoLandlordController::class, 'confirmarPagamento'])
@@ -247,10 +247,8 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
     });
 
     /* ══════════════════════════════════════════════════════════
-      4.5  UTILIZADORES
+      4.5  UTILIZADORES (apenas /me — CRUD em 4.7)
        ══════════════════════════════════════════════════════════ */
-    // ─── FIX ── /users CRUD removido daqui (estava duplicado e sem role)
-    // O CRUD completo vive em 4.7 (role:admin,gestor)
     Route::get('/me', [UserController::class, 'me']);
 
     /* ══════════════════════════════════════════════════════════
@@ -275,8 +273,10 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
     Route::middleware('role:admin,gestor')->group(function () use ($uuidPattern) {
 
         // ─── Utilizadores (CRUD) ──────────────────────────────
+        // ─── FIX ── GET /users (index) restaurado
+        Route::get('/users', [UserController::class, 'index']);
         Route::post('/users', [UserController::class, 'store']);
-        Route::get('/users/create', [UserController::class, 'create']);
+        Route::get('/users/create', [UserController::class, 'create']); // antes de {id}
         Route::get('/users/{id}', [UserController::class, 'show']);
         Route::put('/users/{id}', [UserController::class, 'update']);
         Route::delete('/users/{id}', [UserController::class, 'destroy']);
@@ -383,7 +383,7 @@ Route::middleware(['resolve.tenant', 'auth.tenant'])->group(function () use ($uu
         });
 
         // ─── Clientes ─────────────────────────────────────────
-        // ─── FIX ── rotas fixas (importar/todos) ANTES do apiResource
+        // Rotas fixas (importar/ativar/inativar) ANTES do apiResource
         Route::prefix('clientes')->group(function () use ($uuidPattern) {
             Route::post('/importar', [ClienteController::class, 'importar']);
             Route::get('/', [ClienteController::class, 'index'])

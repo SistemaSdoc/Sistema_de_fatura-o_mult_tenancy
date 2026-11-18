@@ -121,13 +121,13 @@ export default function AutoFacturacaoPage() {
           <section className="overflow-hidden border shadow-sm" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
             <CabecalhoFormulario titulo="Dados da Aquisição" icone={<User size={14} className="text-white" />} colors={colors} />
             <div className="divide-y" style={{ borderColor: colors.border }}>
-              <LinhaCampoFormulario label="Produtor/fornecedor *" colors={colors} htmlFor="autofact-produtor">
+              <LinhaCampoFormulario label="Produtor/fornecedor" colors={colors} htmlFor="autofact-produtor">
                 <input id="autofact-produtor" required maxLength={255} value={produtor} onChange={(e) => setProdutor(e.target.value)} className="w-full border px-3 py-2 text-sm" style={inputStyle} />
               </LinhaCampoFormulario>
               <LinhaCampoFormulario label="NIF (se existir)" colors={colors} htmlFor="autofact-nif">
                 <input id="autofact-nif" maxLength={20} value={nifProdutor} onChange={(e) => setNifProdutor(e.target.value)} className="w-full border px-3 py-2 text-sm" style={inputStyle} />
               </LinhaCampoFormulario>
-              <LinhaCampoFormulario label="Motivo *" colors={colors} htmlFor="autofact-motivo">
+              <LinhaCampoFormulario label="Motivo" colors={colors} htmlFor="autofact-motivo">
                 <input id="autofact-motivo" required maxLength={255} value={motivo} onChange={(e) => setMotivo(e.target.value)} className="w-full border px-3 py-2 text-sm" style={inputStyle} />
               </LinhaCampoFormulario>
               <LinhaCampoFormulario label="Tipo de aquisição" colors={colors} htmlFor="autofact-tipo">
