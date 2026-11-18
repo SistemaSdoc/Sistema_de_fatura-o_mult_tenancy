@@ -16,27 +16,83 @@ use Illuminate\Support\Facades\Log;
 class PagamentoLandlordController extends Controller
 {
     /* ================================================================
+     | HELPERS DE ESCOPO  (evita IDOR)
+     | ================================================================ */
+
+    /**
+     * Devolve [User, isSuperAdmin, empresaId(s)]
+     * Funciona tanto em contexto landlord_api (admin_empresa / super_admin)
+     * como em contexto tenant (auth.tenant).
+     */
+    private function contexto(Request $request): array
+    {
+        $user = auth('landlord_api')->user()
+            ?? auth('tenant')->user()
+            ?? $request->user();
+
+        abort_if(!$user, 401, 'Não autenticado.');
+
+        $isSuperAdmin = in_array($user->role ?? null, ['super_admin'], true);
+
+        // ─── CASO (a): coluna empresa_id no próprio utilizador ─────
+        $empresaId = $user->empresa_id ?? null;
+
+        // ─── CASO (b): ligação por pivot (descomenta e apaga o caso a) ─
+        // $empresaIds = method_exists($user, 'empresas')
+        //     ? $user->empresas()->pluck('empresas.id')->all()
+        //     : [];
+
+        return [$user, $isSuperAdmin, $empresaId];
+    }
+
+    /**
+     * Aplica o filtro de empresa a uma query de Pagamento.
+     * super_admin → sem filtro. Outros → apenas a(s) sua(s) empresa(s).
+     */
+    private function escopo(Request $request, $query)
+    {
+        [$user, $isSuperAdmin, $empresaId] = $this->contexto($request);
+
+        if ($isSuperAdmin) {
+            return $query;
+        }
+
+        // CASO (a)
+        abort_unless($empresaId, 403, 'Utilizador sem empresa associada.');
+        return $query->where('empresa_id', $empresaId);
+
+        // CASO (b) — substitui as duas linhas acima por:
+        // $empresaIds = method_exists($user, 'empresas')
+        //     ? $user->empresas()->pluck('empresas.id')->all()
+        //     : [];
+        // abort_if(empty($empresaIds), 403, 'Utilizador sem empresa associada.');
+        // return $query->whereIn('empresa_id', $empresaIds);
+    }
+
+    /* ================================================================
      | LISTAR
      | ================================================================ */
     public function index(Request $request)
     {
         try {
-            $query = Pagamento::with(['subscricao', 'empresa', 'plano']);
+            $query = $this->escopo(
+                $request,
+                Pagamento::with(['subscricao', 'empresa', 'plano'])
+            );
 
-            if ($request->has('subscricao_id')) {
+            // Os filtros abaixo ficam limitados pelo escopo acima
+            if ($request->filled('subscricao_id')) {
                 $query->where('subscricao_id', $request->subscricao_id);
             }
-            if ($request->has('empresa_id')) {
+            if ($request->filled('empresa_id')) {
                 $query->where('empresa_id', $request->empresa_id);
             }
-            if ($request->has('status')) {
+            if ($request->filled('status')) {
                 $query->where('status', $request->status);
             }
 
-            $pagamentos = $query->orderByDesc('created_at')->get();
-
             return response()->json([
-                'pagamentos' => $pagamentos,
+                'pagamentos' => $query->orderByDesc('created_at')->get(),
             ]);
         } catch (\Exception $e) {
             Log::error('[PagamentoLandlordController::index] Erro', [
@@ -47,30 +103,46 @@ class PagamentoLandlordController extends Controller
     }
 
     /* ================================================================
+     | PENDENTES  (só super_admin — rota em grupo super_admin)
+     | ================================================================ */
+    public function pendentes(Request $request)
+    {
+        $pagamentos = Pagamento::with(['subscricao', 'empresa', 'plano'])
+            ->whereIn('status', ['pendente', 'em_analise'])
+            ->orderByDesc('created_at')
+            ->get();
+
+        return response()->json(['pagamentos' => $pagamentos]);
+    }
+
+    /* ================================================================
      | MOSTRAR
      | ================================================================ */
-    public function show($id)
+    public function show(Request $request, $id)
     {
         try {
-            $pagamento = Pagamento::with(['subscricao', 'empresa', 'plano'])->findOrFail($id);
+            $pagamento = $this->escopo(
+                $request,
+                Pagamento::with(['subscricao', 'empresa', 'plano'])
+            )->findOrFail($id);
 
             return response()->json([
-                'message' => 'Pagamento encontrado',
+                'message'   => 'Pagamento encontrado',
                 'pagamento' => [
-                    'id' => $pagamento->id,
-                    'empresa_id' => $pagamento->empresa_id,
-                    'subscricao_id' => $pagamento->subscricao_id,
-                    'plano_id' => $pagamento->plano_id,
-                    'valor' => $pagamento->valor,
-                    'metodo_pagamento' => $pagamento->metodo_pagamento,
-                    'referencia' => $pagamento->referencia,
-                    'status' => $pagamento->status,
-                    'motivo_rejeicao' => $pagamento->motivo_rejeicao,
+                    'id'                => $pagamento->id,
+                    'empresa_id'        => $pagamento->empresa_id,
+                    'subscricao_id'     => $pagamento->subscricao_id,
+                    'plano_id'          => $pagamento->plano_id,
+                    'valor'             => $pagamento->valor,
+                    'metodo_pagamento'  => $pagamento->metodo_pagamento,
+                    'referencia'        => $pagamento->referencia,
+                    'status'            => $pagamento->status,
+                    'motivo_rejeicao'   => $pagamento->motivo_rejeicao,
                     'comprovativo_path' => $pagamento->comprovativo_path,
-                    'historico_status' => $pagamento->historico_status ?? [],   // 
-                    'data_pagamento' => $pagamento->data_pagamento?->toISOString(),
-                    'created_at' => $pagamento->created_at?->toISOString(),
-                    'updated_at' => $pagamento->updated_at?->toISOString(),
+                    'historico_status'  => $pagamento->historico_status ?? [],
+                    'data_pagamento'    => $pagamento->data_pagamento?->toISOString(),
+                    'created_at'        => $pagamento->created_at?->toISOString(),
+                    'updated_at'        => $pagamento->updated_at?->toISOString(),
                 ],
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
@@ -78,48 +150,58 @@ class PagamentoLandlordController extends Controller
         } catch (\Exception $e) {
             Log::error('[PagamentoLandlordController::show] Erro', [
                 'pagamento_id' => $id,
-                'mensagem' => $e->getMessage(),
+                'mensagem'     => $e->getMessage(),
             ]);
             return response()->json(['message' => 'Erro interno'], 500);
         }
     }
 
     /* ================================================================
-     | CRIAR
+     | CRIAR  (tenant cria o seu próprio pagamento)
      | ================================================================ */
     public function store(Request $request)
     {
         try {
+            [$user, $isSuperAdmin, $empresaId] = $this->contexto($request);
+
             $validated = $request->validate([
-                'empresa_id' => 'required|exists:empresas,id',
-                'plano_id' => 'required|exists:planos,id',
-                'valor' => 'required|numeric|min:0.01',
+                'empresa_id'       => $isSuperAdmin
+                                        ? 'required|exists:empresas,id'
+                                        : 'nullable|exists:empresas,id',
+                'plano_id'         => 'required|exists:planos,id',
+                'valor'            => 'required|numeric|min:0.01',
                 'metodo_pagamento' => 'required|string|in:transferencia,multicaixa,cartao_credito',
-                'referencia' => 'nullable|string|max:100',
+                'referencia'       => 'nullable|string|max:100',
             ]);
 
+            // Não-super-admin só pode criar para a própria empresa
+            if (!$isSuperAdmin) {
+                abort_unless($empresaId, 403, 'Sem empresa associada.');
+                $validated['empresa_id'] = $empresaId;
+            }
+
             $pagamento = Pagamento::create([
-                'id' => (string) Str::uuid(),
-                'empresa_id' => $validated['empresa_id'],
-                'plano_id' => $validated['plano_id'],
-                'valor' => $validated['valor'],
+                'id'               => (string) Str::uuid(),
+                'empresa_id'       => $validated['empresa_id'],
+                'plano_id'         => $validated['plano_id'],
+                'valor'            => $validated['valor'],
                 'metodo_pagamento' => $validated['metodo_pagamento'],
-                'referencia' => $validated['referencia'] ?? Str::random(8),
-                'status' => 'pendente',
-                'data_pagamento' => null,
-                'subscricao_id' => null,
+                'referencia'       => $validated['referencia'] ?? Str::random(8),
+                'status'           => 'pendente',
+                'data_pagamento'   => null,
+                'subscricao_id'    => null,
                 'historico_status' => [
                     [
                         'status' => 'pendente',
                         'data'   => now()->toIso8601String(),
-                        'por'    => 'sistema',
+                        'por'    => $user->email ?? 'sistema',
                         'motivo' => 'Pagamento criado',
                     ],
                 ],
             ]);
 
             return response()->json([
-                'message' => 'Pagamento criado com sucesso',
+                'message'   => 'Pagamento criado com sucesso',
                 'pagamento' => $pagamento,
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -142,39 +224,42 @@ class PagamentoLandlordController extends Controller
                 'comprovativo' => 'required|file|mimes:jpg,jpeg,png,pdf|max:5120',
             ]);
 
-            $pagamento = Pagamento::with(['empresa', 'plano'])->findOrFail($id);
+            [$user] = $this->contexto($request);
 
-            if (!in_array($pagamento->status, ['pendente', 'rejeitado'])) {
+            $pagamento = $this->escopo(
+                $request,
+                Pagamento::with(['empresa', 'plano'])
+            )->findOrFail($id);
+
+            if (!in_array($pagamento->status, ['pendente', 'rejeitado'], true)) {
                 return response()->json([
                     'message' => 'Não é possível enviar comprovativo para este estado.',
                 ], 422);
             }
 
-            // Guardar ficheiro
             $path = $request->file('comprovativo')->store('comprovativos', 'public');
             $pagamento->comprovativo_path = $path;
-            $pagamento->status = 'em_analise';
-            $pagamento->motivo_rejeicao = null;
+            $pagamento->status            = 'em_analise';
+            $pagamento->motivo_rejeicao   = null;
 
-            //  Histórico
             $pagamento->registarStatus(
                 'em_analise',
-                por: auth('sanctum')->user()?->email ?? 'empresa',
+                por:    $user->email ?? 'sistema',
                 motivo: 'Comprovativo enviado',
             );
 
             $pagamento->save();
 
-            //  NOTIFICAÇÃO
+            // Notifica os super admins (destino correto)
             try {
-                $nomeEmpresa = $pagamento->empresa?->nome ?? 'Empresa desconhecida';
+                $nomeEmpresa    = $pagamento->empresa?->nome ?? 'Empresa desconhecida';
                 $valorFormatado = number_format($pagamento->valor, 2, ',', '.');
-                $planoNome = $pagamento->plano?->nome ?? '—';
+                $planoNome      = $pagamento->plano?->nome ?? '—';
 
                 NotificacaoService::enviarParaSuperAdmins(
-                    titulo: "Novo comprovativo: {$nomeEmpresa}",
-                    mensagem: "A empresa \"{$nomeEmpresa}\" enviou um comprovativo de pagamento de {$valorFormatado} AOA (plano {$planoNome}). Aguarda análise.",
-                    tipo: 'warning',
+                    titulo:     "Novo comprovativo: {$nomeEmpresa}",
+                    mensagem:   "A empresa \"{$nomeEmpresa}\" enviou um comprovativo de pagamento de {$valorFormatado} AOA (plano {$planoNome}). Aguarda análise.",
+                    tipo:       'warning',
                     tipoEvento: 'comprovativo_recebido',
                     dados: [
                         'Empresa'    => $nomeEmpresa,
@@ -182,18 +267,18 @@ class PagamentoLandlordController extends Controller
                         'Valor'      => "{$valorFormatado} AOA",
                         'Referência' => $pagamento->codigo_transacao ?? '—',
                     ],
-                    url: "/landlord/pagamentos-plano/{$pagamento->id}",
+                    url:       "/landlord/pagamentos-plano/{$pagamento->id}",
                     empresaId: $pagamento->empresa_id,
                 );
             } catch (\Throwable $e) {
                 Log::error('[uploadComprovativo] Falha na notificação', [
                     'pagamento_id' => $id,
-                    'erro' => $e->getMessage(),
+                    'erro'         => $e->getMessage(),
                 ]);
             }
 
             return response()->json([
-                'message' => 'Comprovativo enviado com sucesso. Aguarde análise.',
+                'message'   => 'Comprovativo enviado com sucesso. Aguarde análise.',
                 'pagamento' => $pagamento,
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -203,25 +288,29 @@ class PagamentoLandlordController extends Controller
         } catch (\Exception $e) {
             Log::error('[uploadComprovativo] Erro', [
                 'pagamento_id' => $id,
-                'mensagem' => $e->getMessage(),
+                'mensagem'     => $e->getMessage(),
             ]);
             return response()->json(['message' => 'Erro ao processar upload'], 500);
         }
     }
 
     /* ================================================================
-     | CONFIRMAR PAGAMENTO
+     | CONFIRMAR  (só super_admin — rota no grupo super_admin)
      | ================================================================ */
-    public function confirmarPagamento($id)
+    public function confirmarPagamento(Request $request, $id)
     {
         try {
-            $result = DB::transaction(function () use ($id) {
-                $pagamento = Pagamento::lockForUpdate()->with(['empresa', 'plano'])->findOrFail($id);
+            [$user] = $this->contexto($request);
+
+            $result = DB::transaction(function () use ($id, $user) {
+                $pagamento = Pagamento::lockForUpdate()
+                    ->with(['empresa', 'plano'])
+                    ->findOrFail($id);
 
                 if ($pagamento->status === 'pago') {
                     return response()->json([
-                        'message' => 'Pagamento já confirmado anteriormente',
-                        'subscricao_id' => $pagamento->subscricao_id,
+                        'message'        => 'Pagamento já confirmado anteriormente',
+                        'subscricao_id'  => $pagamento->subscricao_id,
                     ]);
                 }
 
@@ -237,64 +326,59 @@ class PagamentoLandlordController extends Controller
                     ], 422);
                 }
 
-                // Atualiza status
-                $pagamento->status = 'pago';
+                $pagamento->status         = 'pago';
                 $pagamento->data_pagamento = now();
 
-                //  Histórico
                 $pagamento->registarStatus(
                     'pago',
-                    por: auth('landlord')->user()?->email ?? 'landlord',
+                    por:    $user->email ?? 'landlord',
                     motivo: 'Pagamento confirmado',
                 );
 
-                // Criar ou renovar subscrição
                 if (!$pagamento->subscricao_id) {
-                    $plano = Plano::findOrFail($pagamento->plano_id);
-                    $duracaoMeses = $plano->duracao_meses ?? 1;
+                    $plano         = Plano::findOrFail($pagamento->plano_id);
+                    $duracaoMeses  = $plano->duracao_meses ?? 1;
 
                     $subscricao = Subscricao::create([
-                        'id' => (string) Str::uuid(),
-                        'empresa_id' => $pagamento->empresa_id,
-                        'plano_id' => $plano->id,
-                        'data_inicio' => now(),
-                        'data_fim' => now()->addMonths($duracaoMeses),
-                        'status' => 'ativa',
-                        'forma_pagamento' => $pagamento->metodo_pagamento,
+                        'id'                   => (string) Str::uuid(),
+                        'empresa_id'           => $pagamento->empresa_id,
+                        'plano_id'             => $plano->id,
+                        'data_inicio'          => now(),
+                        'data_fim'             => now()->addMonths($duracaoMeses),
+                        'status'               => 'ativa',
+                        'forma_pagamento'      => $pagamento->metodo_pagamento,
                         'renovacao_automatica' => true,
                     ]);
 
                     $pagamento->subscricao_id = $subscricao->id;
                 } else {
-                    $subscricao = $pagamento->subscricao;
-                    $duracaoMeses = $subscricao->plano->duracao_meses ?? 1;
+                    $subscricao    = $pagamento->subscricao;
+                    $duracaoMeses  = $subscricao->plano->duracao_meses ?? 1;
                     $subscricao->data_fim = Carbon::parse($subscricao->data_fim)->addMonths($duracaoMeses);
-                    $subscricao->status = 'ativa';
+                    $subscricao->status   = 'ativa';
                     $subscricao->save();
                 }
 
                 $pagamento->save();
 
-                // Marcar notificações anteriores como lidas
                 Notificacao::where('empresa_id', $pagamento->empresa_id)
                     ->where('tipo_evento', 'comprovativo_recebido')
                     ->where('lida', false)
                     ->update(['lida' => true, 'lida_em' => now()]);
 
-                //  NOTIFICAÇÃO
                 try {
                     $pagamento->loadMissing('empresa', 'plano');
-                    $nomeEmpresa = $pagamento->empresa?->nome ?? '—';
-                    $planoNome = $pagamento->plano?->nome ?? '—';
+                    $nomeEmpresa    = $pagamento->empresa?->nome ?? '—';
+                    $planoNome      = $pagamento->plano?->nome ?? '—';
                     $valorFormatado = number_format($pagamento->valor, 2, ',', '.');
-                    $dataFim = $subscricao->data_fim
+                    $dataFim        = $subscricao->data_fim
                         ? Carbon::parse($subscricao->data_fim)->format('d/m/Y')
                         : '—';
 
                     NotificacaoService::enviarParaSuperAdmins(
-                        titulo: "Pagamento confirmado: {$nomeEmpresa}",
-                        mensagem: "O pagamento de {$valorFormatado} AOA da empresa \"{$nomeEmpresa}\" foi confirmado. Plano \"{$planoNome}\" ativo até {$dataFim}.",
-                        tipo: 'success',
+                        titulo:     "Pagamento confirmado: {$nomeEmpresa}",
+                        mensagem:   "O pagamento de {$valorFormatado} AOA da empresa \"{$nomeEmpresa}\" foi confirmado. Plano \"{$planoNome}\" ativo até {$dataFim}.",
+                        tipo:       'success',
                         tipoEvento: 'pagamento_confirmado',
                         dados: [
                             'Empresa'    => $nomeEmpresa,
@@ -302,18 +386,18 @@ class PagamentoLandlordController extends Controller
                             'Valor'      => "{$valorFormatado} AOA",
                             'Válido até' => $dataFim,
                         ],
-                        url: "/landlord/empresas/{$pagamento->empresa_id}",
+                        url:       "/landlord/empresas/{$pagamento->empresa_id}",
                         empresaId: $pagamento->empresa_id,
                     );
                 } catch (\Throwable $e) {
                     Log::error('[confirmarPagamento] Falha na notificação', [
                         'pagamento_id' => $id,
-                        'erro' => $e->getMessage(),
+                        'erro'         => $e->getMessage(),
                     ]);
                 }
 
                 return response()->json([
-                    'message' => 'Pagamento confirmado e assinatura ativada',
+                    'message'       => 'Pagamento confirmado e assinatura ativada',
                     'subscricao_id' => $pagamento->subscricao_id,
                 ]);
             });
@@ -324,14 +408,14 @@ class PagamentoLandlordController extends Controller
         } catch (\Exception $e) {
             Log::error('[confirmarPagamento] Erro', [
                 'pagamento_id' => $id,
-                'mensagem' => $e->getMessage(),
+                'mensagem'     => $e->getMessage(),
             ]);
             return response()->json(['message' => 'Erro ao confirmar pagamento'], 500);
         }
     }
 
     /* ================================================================
-     | REJEITAR PAGAMENTO
+     | REJEITAR  (só super_admin)
      | ================================================================ */
     public function rejeitarPagamento(Request $request, $id)
     {
@@ -339,6 +423,8 @@ class PagamentoLandlordController extends Controller
             $request->validate([
                 'motivo' => 'required|string|max:500',
             ]);
+
+            [$user] = $this->contexto($request);
 
             $pagamento = Pagamento::with(['empresa', 'plano'])->findOrFail($id);
 
@@ -348,59 +434,55 @@ class PagamentoLandlordController extends Controller
                 ], 422);
             }
 
-            //  NOVO — bloquear rejeição duplicada
             if ($pagamento->status === 'rejeitado') {
                 return response()->json([
-                    'message' => 'Este pagamento já foi rejeitado.',
-                    'motivo_rejeicao' => $pagamento->motivo_rejeicao,
+                    'message'          => 'Este pagamento já foi rejeitado.',
+                    'motivo_rejeicao'  => $pagamento->motivo_rejeicao,
                 ], 422);
             }
 
-            $pagamento->status = 'rejeitado';
+            $pagamento->status          = 'rejeitado';
             $pagamento->motivo_rejeicao = $request->motivo;
 
-            //  Histórico
             $pagamento->registarStatus(
                 'rejeitado',
-                por: auth('landlord')->user()?->email ?? 'landlord',
+                por:    $user->email ?? 'landlord',
                 motivo: $request->motivo,
             );
 
             $pagamento->save();
 
-            // Marcar notificações de comprovativo como lidas
             Notificacao::where('empresa_id', $pagamento->empresa_id)
                 ->where('tipo_evento', 'comprovativo_recebido')
                 ->where('lida', false)
                 ->update(['lida' => true, 'lida_em' => now()]);
 
-            //  NOTIFICAÇÃO
             try {
                 $nomeEmpresa = $pagamento->empresa?->nome ?? '—';
-                $planoNome = $pagamento->plano?->nome ?? '—';
+                $planoNome   = $pagamento->plano?->nome ?? '—';
 
                 NotificacaoService::enviarParaSuperAdmins(
-                    titulo: "Pagamento rejeitado: {$nomeEmpresa}",
-                    mensagem: "O pagamento do plano \"{$planoNome}\" da empresa \"{$nomeEmpresa}\" foi rejeitado.\n\nMotivo: {$request->motivo}",
-                    tipo: 'danger',
+                    titulo:     "Pagamento rejeitado: {$nomeEmpresa}",
+                    mensagem:   "O pagamento do plano \"{$planoNome}\" da empresa \"{$nomeEmpresa}\" foi rejeitado.\n\nMotivo: {$request->motivo}",
+                    tipo:       'danger',
                     tipoEvento: 'pagamento_rejeitado',
                     dados: [
                         'Empresa' => $nomeEmpresa,
                         'Plano'   => $planoNome,
                         'Motivo'  => $request->motivo,
                     ],
-                    url: "/landlord/empresas/{$pagamento->empresa_id}",
+                    url:       "/landlord/empresas/{$pagamento->empresa_id}",
                     empresaId: $pagamento->empresa_id,
                 );
             } catch (\Throwable $e) {
                 Log::error('[rejeitarPagamento] Falha na notificação', [
                     'pagamento_id' => $id,
-                    'erro' => $e->getMessage(),
+                    'erro'         => $e->getMessage(),
                 ]);
             }
 
             return response()->json([
-                'message' => 'Pagamento rejeitado com sucesso.',
+                'message'   => 'Pagamento rejeitado com sucesso.',
                 'pagamento' => $pagamento,
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -410,16 +492,16 @@ class PagamentoLandlordController extends Controller
         } catch (\Exception $e) {
             Log::error('[rejeitarPagamento] Erro', [
                 'pagamento_id' => $id,
-                'mensagem' => $e->getMessage(),
+                'mensagem'     => $e->getMessage(),
             ]);
             return response()->json(['message' => 'Erro ao rejeitar pagamento'], 500);
         }
     }
 
     /* ================================================================
-     | ELIMINAR
+     | ELIMINAR  (só super_admin)
      | ================================================================ */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         try {
             $pagamento = Pagamento::findOrFail($id);
@@ -441,7 +523,7 @@ class PagamentoLandlordController extends Controller
     }
 
     /* ================================================================
-     | UPDATE (não implementado)
+     | UPDATE
      | ================================================================ */
     public function update(Request $request, $id)
     {
