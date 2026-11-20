@@ -1,5 +1,6 @@
-// src/app/(empresa)/estoque/hooks/useEstoque.ts
-import { useState, useCallback } from "react";
+
+import { useState, useCallback, useRef } from "react";
+
 import {
     produtoService,
     movimentoStockService,
@@ -8,8 +9,11 @@ import {
     MovimentoStock,
     AtualizarProdutoInput,
     PaginatedResponse,
-    ResumoStockResponse,
 } from "@/services/produtos";
+
+// ============================================
+// TIPOS
+// ============================================
 
 interface ModalConfirmacaoState {
     isOpen: boolean;
@@ -27,14 +31,28 @@ type ApiError = {
 };
 
 const getApiError = (error: unknown): ApiError =>
-    typeof error === "object" && error !== null ? (error as ApiError) : {};
+    typeof error === "object" && error !== null
+        ? (error as ApiError)
+        : {};
 
-const getCollection = <T,>(value: T[] | PaginatedResponse<T>): T[] =>
-    Array.isArray(value) ? value : value.data || [];
+const getCollection = <T,>(
+    value: T[] | PaginatedResponse<T>
+): T[] => {
+    return Array.isArray(value) ? value : value.data || [];
+};
+
+// ============================================
+// HOOK useServicos
+// ============================================
 
 export function useServicos() {
+    // ========================================
+    // ESTADOS
+    // ========================================
+
     const [loading, setLoading] = useState(true);
     const [isInitialLoad, setIsInitialLoad] = useState(true);
+
     const [itens, setItens] = useState<Produto[]>([]);
     const [itensDeletados, setItensDeletados] = useState<Produto[]>([]);
     const [categorias, setCategorias] = useState<Categoria[]>([]);
@@ -43,180 +61,395 @@ export function useServicos() {
     // Filtros
     const [busca, setBusca] = useState("");
     const [categoriaFiltro, setCategoriaFiltro] = useState("");
-    const [filtroEstoque, setFiltroEstoque] = useState<"todos" | "baixo" | "zerado">("todos");
+    const [filtroEstoque, setFiltroEstoque] = useState<
+        "todos" | "baixo" | "zerado"
+    >("todos");
 
     // Modais
     const [modalEntradaAberto, setModalEntradaAberto] = useState(false);
     const [modalEdicaoAberto, setModalEdicaoAberto] = useState(false);
     const [itemSelecionado, setItemSelecionado] = useState<Produto | null>(null);
-    const [modalConfirmacao, setModalConfirmacao] = useState<ModalConfirmacaoState>({
-        isOpen: false,
-        tipo: "delete",
-        produto: null,
-    });
 
-    // Tabs
-    const [abaAtiva, setAbaAtiva] = useState<"itens"  | "deletados">("itens");
+    const [modalConfirmacao, setModalConfirmacao] =
+        useState<ModalConfirmacaoState>({
+            isOpen: false,
+            tipo: "delete",
+            produto: null,
+        });
 
-    const carregarDados = useCallback(async () => {
+    // Abas
+    const [abaAtiva, setAbaAtiva] = useState<"itens" | "deletados">("itens");
+
+    // ========================================
+    // PROTECÇÃO DE CARREGAMENTOS SIMULTÂNEOS
+    // ========================================
+
+    const carregarDadosEmCurso = useRef<Promise<void> | null>(null);
+    const carregarDeletadosEmCurso = useRef<Promise<void> | null>(null);
+    const carregarMovimentacoesEmCurso = useRef<Promise<void> | null>(null);
+
+    // ========================================
+    // CARREGAR SERVIÇOS E CATEGORIAS
+    // ========================================
+
+    const carregarDados = useCallback((): Promise<void> => {
+        if (carregarDadosEmCurso.current) {
+            console.log(
+                "[SERVIÇOS] Carregamento já em curso. Pedido reutilizado."
+            );
+
+            return carregarDadosEmCurso.current;
+        }
+
+        const pedido = (async () => {
+            setLoading(true);
+
+            try {
+                console.count("[SERVIÇOS] Carregamento de dados");
+
+                const [itensData, cats] = await Promise.all([
+                    produtoService.listarProdutos({
+                        tipo: "servico",
+                    }),
+                    produtoService.listarCategorias(),
+                ]);
+
+                setItens(getCollection(itensData.produtos));
+                setCategorias(cats);
+            } catch (error: unknown) {
+                console.error("Erro ao carregar serviços:", error);
+            } finally {
+                setLoading(false);
+                setIsInitialLoad(false);
+                carregarDadosEmCurso.current = null;
+            }
+        })();
+
+        carregarDadosEmCurso.current = pedido;
+
+        return pedido;
+    }, []);
+
+    // ========================================
+    // CARREGAR MOVIMENTAÇÕES
+    // ========================================
+
+    const carregarMovimentacoes = useCallback((): Promise<void> => {
+        if (carregarMovimentacoesEmCurso.current) {
+            return carregarMovimentacoesEmCurso.current;
+        }
+
+        const pedido = (async () => {
+            try {
+                const movs = await movimentoStockService.listarMovimentos({
+                    paginar: true,
+                    per_page: 50,
+                });
+
+                setMovimentacoes(getCollection(movs.movimentos));
+            } catch (error: unknown) {
+                console.error("Erro ao carregar movimentações:", error);
+            } finally {
+                carregarMovimentacoesEmCurso.current = null;
+            }
+        })();
+
+        carregarMovimentacoesEmCurso.current = pedido;
+
+        return pedido;
+    }, []);
+
+    // ========================================
+    // CARREGAR SERVIÇOS ELIMINADOS
+    // ========================================
+
+    const carregarDeletados = useCallback((): Promise<void> => {
+        if (carregarDeletadosEmCurso.current) {
+            return carregarDeletadosEmCurso.current;
+        }
+
+        const pedido = (async () => {
+            try {
+                const response = await produtoService.listarDeletados({
+                    paginar: false,
+                    tipo: "servico",
+                });
+
+                const deletados = getCollection(response.produtos);
+
+                setItensDeletados(
+                    deletados.filter((item) => item.tipo === "servico")
+                );
+            } catch (error: unknown) {
+                console.error("Erro ao carregar serviços eliminados:", error);
+            } finally {
+                carregarDeletadosEmCurso.current = null;
+            }
+        })();
+
+        carregarDeletadosEmCurso.current = pedido;
+
+        return pedido;
+    }, []);
+
+    // ========================================
+    // APLICAR FILTROS
+    // ========================================
+
+    const aplicarFiltros = useCallback(async (): Promise<void> => {
         setLoading(true);
-        try {
-            const [itensData, cats] = await Promise.all([
-                produtoService.listarProdutos({ tipo: "servico" }),
-                produtoService.listarCategorias(),
-            ]);
-            setItens(getCollection(itensData.produtos));
-            setCategorias(cats);
-        } catch (error) {
-            console.error("Erro ao carregar dados:", error);
-        } finally {
-            setLoading(false);
-            setIsInitialLoad(false);
-        }
-    }, []);
 
-    const carregarMovimentacoes = useCallback(async () => {
         try {
-            const movs = await movimentoStockService.listarMovimentos({
-                paginar: true,
-                per_page: 50,
-            });
-            setMovimentacoes(getCollection(movs.movimentos));
-        } catch (error) {
-            console.error("Erro ao carregar movimentações:", error);
-        }
-    }, []);
+            const filtros: Parameters<
+                typeof produtoService.listarProdutos
+            >[0] = {
+                tipo: "servico",
+            };
 
-    const carregarDeletados = useCallback(async () => {
-        try {
-            const response = await produtoService.listarDeletados({ 
-                paginar: false, 
-                tipo: "servico" 
-            });
-            // Filtrar apenas serviços (garantia extra)
-            const deletados = getCollection(response.produtos);
-            setItensDeletados(deletados.filter(item => item.tipo === "servico"));
-        } catch (error) {
-            console.error("Erro ao carregar itens deletados:", error);
-        }
-    }, []);
+            if (busca.trim()) {
+                filtros.busca = busca.trim();
+            }
 
-    const aplicarFiltros = useCallback(async () => {
-        setLoading(true);
-        try {
-            const filtros: Parameters<typeof produtoService.listarProdutos>[0] = { tipo: "servico" };
-            if (busca) filtros.busca = busca;
-            if (categoriaFiltro) filtros.categoria_id = categoriaFiltro;
-            if (filtroEstoque === "baixo") filtros.estoque_baixo = true;
-            if (filtroEstoque === "zerado") filtros.sem_estoque = true;
+            if (categoriaFiltro) {
+                filtros.categoria_id = categoriaFiltro;
+            }
+
+            if (filtroEstoque === "baixo") {
+                filtros.estoque_baixo = true;
+            }
+
+            if (filtroEstoque === "zerado") {
+                filtros.sem_estoque = true;
+            }
+
+            console.count("[SERVIÇOS] Aplicação de filtros");
 
             const data = await produtoService.listarProdutos(filtros);
+
             setItens(getCollection(data.produtos));
-        } catch (error) {
-            console.error("Erro ao filtrar:", error);
+        } catch (error: unknown) {
+            console.error("Erro ao filtrar serviços:", error);
         } finally {
             setLoading(false);
         }
     }, [busca, categoriaFiltro, filtroEstoque]);
 
-    const handleEntrada = useCallback(async (quantidade: number, motivo: string) => {
-        if (!itemSelecionado) return;
-        await movimentoStockService.criarMovimento({
-            produto_id: itemSelecionado.id,
-            quantidade,
-            motivo,
-            tipo: "entrada",
-            tipo_movimento: "ajuste",
-        });
-        await carregarDados();
-        setModalEntradaAberto(false);
-    }, [itemSelecionado, carregarDados]);
+    // ========================================
+    // REGISTAR ENTRADA
+    // ========================================
 
-    const handleEditarItem = useCallback(async (dados: AtualizarProdutoInput): Promise<{ success: boolean; error?: string }> => {
-        if (!itemSelecionado) {
-            return { success: false, error: "Nenhum item selecionado" };
-        }
-        
-        try {
-            // Prepara os dados para atualização (apenas serviços)
-            const dadosAtualizacao = {
-                nome: dados.nome,
-                descricao: dados.descricao,
-                preco_venda: dados.preco_venda,
-                status: dados.status,
-                // Serviços mantêm próprio IVA
-                taxa_iva: dados.taxa_iva,
-                sujeito_iva: dados.sujeito_iva,
-                taxa_retencao: dados.taxa_retencao,
-                duracao_estimada: dados.duracao_estimada,
-                unidade_medida: dados.unidade_medida,
-                codigo_isencao: dados.codigo_isencao,
-            };
+    const handleEntrada = useCallback(
+        async (
+            quantidade: number,
+            motivo: string
+        ): Promise<void> => {
+            if (!itemSelecionado) return;
 
-            await produtoService.atualizarProduto(itemSelecionado.id, dadosAtualizacao);
+            await movimentoStockService.criarMovimento({
+                produto_id: itemSelecionado.id,
+                quantidade,
+                motivo,
+                tipo: "entrada",
+                tipo_movimento: "ajuste",
+            });
+
             await carregarDados();
-            setModalEdicaoAberto(false);
-            setItemSelecionado(null);
-            
-            return { success: true };
-        } catch (error: unknown) {
-            const apiError = getApiError(error);
-            console.error("Erro ao editar item:", error);
-            return { success: false, error: apiError.response?.data?.message || apiError.message || "Erro ao salvar alterações" };
-        }
-    }, [itemSelecionado, carregarDados]);
 
-    const handleDeletarItem = useCallback(async () => {
+            setModalEntradaAberto(false);
+        },
+        [itemSelecionado, carregarDados]
+    );
+
+    // ========================================
+    // EDITAR SERVIÇO
+    // ========================================
+
+    const handleEditarItem = useCallback(
+        async (
+            dados: AtualizarProdutoInput
+        ): Promise<{ success: boolean; error?: string }> => {
+            if (!itemSelecionado) {
+                return {
+                    success: false,
+                    error: "Nenhum serviço seleccionado",
+                };
+            }
+
+            try {
+                const dadosAtualizacao = {
+                    nome: dados.nome,
+                    descricao: dados.descricao,
+                    preco_venda: dados.preco_venda,
+                    status: dados.status,
+                    taxa_iva: dados.taxa_iva,
+                    sujeito_iva: dados.sujeito_iva,
+                    taxa_retencao: dados.taxa_retencao,
+                    duracao_estimada: dados.duracao_estimada,
+                    unidade_medida: dados.unidade_medida,
+                    codigo_isencao: dados.codigo_isencao,
+                };
+
+                await produtoService.atualizarProduto(
+                    itemSelecionado.id,
+                    dadosAtualizacao
+                );
+
+                await carregarDados();
+
+                setModalEdicaoAberto(false);
+                setItemSelecionado(null);
+
+                return { success: true };
+            } catch (error: unknown) {
+                const apiError = getApiError(error);
+
+                console.error("Erro ao editar serviço:", error);
+
+                return {
+                    success: false,
+                    error:
+                        apiError.response?.data?.message ||
+                        apiError.message ||
+                        "Erro ao guardar alterações",
+                };
+            }
+        },
+        [itemSelecionado, carregarDados]
+    );
+
+    // ========================================
+    // MOVER PARA A LIXEIRA
+    // ========================================
+
+    const handleDeletarItem = useCallback(async (): Promise<void> => {
         if (!modalConfirmacao.produto) return;
-        await produtoService.moverParaLixeira(modalConfirmacao.produto.id);
-        await carregarDados();
-        setModalConfirmacao({ isOpen: false, tipo: "delete", produto: null });
+
+        try {
+            await produtoService.moverParaLixeira(
+                modalConfirmacao.produto.id
+            );
+
+            await carregarDados();
+
+            setModalConfirmacao({
+                isOpen: false,
+                tipo: "delete",
+                produto: null,
+            });
+        } catch (error: unknown) {
+            console.error("Erro ao eliminar serviço:", error);
+        }
     }, [modalConfirmacao.produto, carregarDados]);
 
-    const handleRestaurarItem = useCallback(async () => {
+    // ========================================
+    // RESTAURAR SERVIÇO
+    // ========================================
+
+    const handleRestaurarItem = useCallback(async (): Promise<void> => {
         if (!modalConfirmacao.produto) return;
-        await produtoService.restaurarProduto(modalConfirmacao.produto.id);
-        await carregarDeletados();
-        await carregarDados();
-        setModalConfirmacao({ isOpen: false, tipo: "restore", produto: null });
+
+        try {
+            await produtoService.restaurarProduto(
+                modalConfirmacao.produto.id
+            );
+
+            await carregarDeletados();
+            await carregarDados();
+
+            setModalConfirmacao({
+                isOpen: false,
+                tipo: "restore",
+                produto: null,
+            });
+        } catch (error: unknown) {
+            console.error("Erro ao restaurar serviço:", error);
+        }
     }, [modalConfirmacao.produto, carregarDeletados, carregarDados]);
 
-    const handleForceDelete = useCallback(async () => {
+    // ========================================
+    // ELIMINAÇÃO PERMANENTE
+    // ========================================
+
+    const handleForceDelete = useCallback(async (): Promise<void> => {
         if (!modalConfirmacao.produto) return;
-        await produtoService.deletarPermanentemente(modalConfirmacao.produto.id);
-        await carregarDeletados();
-        setModalConfirmacao({ isOpen: false, tipo: "delete", produto: null });
+
+        try {
+            await produtoService.deletarPermanentemente(
+                modalConfirmacao.produto.id
+            );
+
+            await carregarDeletados();
+
+            setModalConfirmacao({
+                isOpen: false,
+                tipo: "delete",
+                produto: null,
+            });
+        } catch (error: unknown) {
+            console.error("Erro ao eliminar serviço permanentemente:", error);
+        }
     }, [modalConfirmacao.produto, carregarDeletados]);
 
-    const abrirModalEntrada = useCallback((item: Produto) => {
-        // Serviços não têm controle de estoque
-        alert("Serviços não têm controle de estoque");
-        return;
-    }, []);
+    // ========================================
+    // ABRIR MODAIS
+    // ========================================
 
-    const abrirModalEditar = useCallback((item: Produto) => {
+    const abrirModalEntrada = useCallback(
+        (_item: Produto): void => {
+            alert("Serviços não têm controlo de stock.");
+        },
+        []
+    );
+
+    const abrirModalEditar = useCallback((item: Produto): void => {
         setItemSelecionado(item);
         setModalEdicaoAberto(true);
     }, []);
 
-    const abrirModalDeletar = useCallback((item: Produto) => {
-        setModalConfirmacao({ isOpen: true, tipo: "delete", produto: item });
+    const abrirModalDeletar = useCallback((item: Produto): void => {
+        setModalConfirmacao({
+            isOpen: true,
+            tipo: "delete",
+            produto: item,
+        });
     }, []);
 
-    const abrirModalRestaurar = useCallback((item: Produto) => {
-        setModalConfirmacao({ isOpen: true, tipo: "restore", produto: item });
+    const abrirModalRestaurar = useCallback((item: Produto): void => {
+        setModalConfirmacao({
+            isOpen: true,
+            tipo: "restore",
+            produto: item,
+        });
     }, []);
 
-    const abrirModalForceDelete = useCallback((item: Produto) => {
-        setModalConfirmacao({ isOpen: true, tipo: "warning", produto: item });
+    const abrirModalForceDelete = useCallback((item: Produto): void => {
+        setModalConfirmacao({
+            isOpen: true,
+            tipo: "warning",
+            produto: item,
+        });
     }, []);
 
-    const fecharModais = useCallback(() => {
+    // ========================================
+    // FECHAR MODAIS
+    // ========================================
+
+    const fecharModais = useCallback((): void => {
         setModalEntradaAberto(false);
         setModalEdicaoAberto(false);
-        setModalConfirmacao({ isOpen: false, tipo: "delete", produto: null });
+
+        setModalConfirmacao({
+            isOpen: false,
+            tipo: "delete",
+            produto: null,
+        });
+
         setItemSelecionado(null);
     }, []);
+
+    // ========================================
+    // RETORNO DO HOOK
+    // ========================================
 
     return {
         // Estados
@@ -241,7 +474,7 @@ export function useServicos() {
         setFiltroEstoque,
         setAbaAtiva,
 
-        // Actions
+        // Acções
         carregarDados,
         carregarMovimentacoes,
         carregarDeletados,

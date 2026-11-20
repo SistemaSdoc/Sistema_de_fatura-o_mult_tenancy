@@ -1,6 +1,7 @@
+
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { Search, X } from "lucide-react";
 import { useThemeColors } from "@/context/ThemeContext";
 
@@ -20,13 +21,27 @@ export function FiltrosServicos({
     const contextColors = useThemeColors();
     const colors = propColors || contextColors;
 
-    useEffect(() => {
-        const timeoutId = setTimeout(() => {
-            onAplicarFiltros();
-        }, 300);
+    const primeiraMontagem = useRef(true);
+    const aplicarFiltrosRef = useRef(onAplicarFiltros);
 
-        return () => clearTimeout(timeoutId);
-    }, [busca, onAplicarFiltros]);
+    // Mantém a referência da função actualizada sem reiniciar o efeito.
+    useEffect(() => {
+        aplicarFiltrosRef.current = onAplicarFiltros;
+    }, [onAplicarFiltros]);
+
+    // Pesquisa automática apenas quando o texto muda.
+    useEffect(() => {
+        if (primeiraMontagem.current) {
+            primeiraMontagem.current = false;
+            return;
+        }
+
+        const timeoutId = window.setTimeout(() => {
+            aplicarFiltrosRef.current();
+        }, 500);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [busca]);
 
     const limparBusca = () => {
         onBuscaChange("");
@@ -36,6 +51,7 @@ export function FiltrosServicos({
         <div className="w-full mb-6">
             <div className="relative w-full max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none text-slate-400" />
+
                 <input
                     type="text"
                     value={busca}
@@ -48,10 +64,13 @@ export function FiltrosServicos({
                         color: colors.text
                     }}
                 />
+
                 {busca && (
                     <button
+                        type="button"
                         onClick={limparBusca}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        aria-label="Limpar pesquisa"
                     >
                         <X className="w-4 h-4" />
                     </button>

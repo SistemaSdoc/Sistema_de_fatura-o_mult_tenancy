@@ -11,75 +11,95 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Redirect;
 use Symfony\Component\HttpFoundation\Response;
+use Illuminate\Support\Facades\URL;
 
 class ResolveTenant
 {
     protected string $dominioBase;
-    protected array $publicRoutes;
 
     public function __construct()
     {
-        $this->dominioBase = env('APP_DOMAIN', 'localhost');
-        $this->publicRoutes = [
-            'landlord/*',
-            'api/landlord/*',
-            'admin/*',
-            'api/empresas',
-            'login',
-            'register',
-            'sanctum/csrf-cookie',
-            '_ignition/*',
-            'telescope/*',
-        ];
+        // Requer em config/app.php: 'domain' => env('APP_DOMAIN', 'localhost'),
+        // Ex.: APP_DOMAIN=app.factura-ja.ao
+        $this->dominioBase = rtrim(
+            config('app.domain', env('APP_DOMAIN', 'localhost')),
+            '.'
+        );
     }
 
     public function handle(Request $request, Closure $next): Response
-    {
-        // ============================================
-        // 1. ROTAS PÚBLICAS (LANDLORD)
-        // ============================================
-        if ($this->isPublicRoute($request)) {
-            Config::set('database.default', 'landlord');
-            DB::reconnect('landlord');
-            return $next($request);
-        }
+{
+    // ⭐ (Bug 5) limpa defaults de requests anteriores (Octane, queue workers, tests)
+    URL::defaults(['tenant' => null]);
 
-        // ============================================
-        // 2. API LANDLORD (pular lógica de tenant)
-        // ============================================
-        $path = $request->path();
-        if (str_starts_with($path, 'api/landlord/')) {
-            Config::set('database.default', 'landlord');
-            DB::reconnect('landlord');
-            return $next($request);
-        }
+    // ⭐ (Bug 4) pré-define tenant pelo subdomínio do host (para rotas públicas)
+    $subdomainHost = $this->extrairSubdomain($request->getHost());
+    if ($subdomainHost) {
+        URL::defaults(['tenant' => $subdomainHost]);
+    }
 
-        // ============================================
-        // 3. VERIFICAR SESSION (Tenant já identificado)
-        // ============================================
-        $tenantId = session('tenant_id');
-        if (!$tenantId) {
-            $tenantId = $request->header('X-Empresa-ID') ?: $request->header('X-Tenant-ID');
-        }
+    // ============================================
+    // 1. ROTAS PÚBLICAS (LANDLORD)
+    // ============================================
+    if ($this->isPublicRoute($request)) {
+        Config::set('database.default', 'landlord');
+        DB::reconnect('landlord');
+        return $next($request);
+    }
 
-        if ($tenantId) {
-            $empresa = Empresa::on('landlord')->find($tenantId);
-            if ($empresa && $empresa->status === 'ativo') {
-                session()->put('tenant_id', $empresa->id);
-                session()->put('tenant_subdomain', $empresa->subdomain);
-                $this->conectarTenant($empresa);
-                $this->registrarContexto($request, $empresa);
+    // ============================================
+    // 2. (removido — coberto por isPublicRoute)
+    // ============================================
 
-                Log::info('ResolveTenant: Tenant via sessão/header', [
-                    'empresa_id' => $empresa->id,
-                    'modo' => $empresa->modo,
-                    'via_header' => (bool) $request->header('X-Empresa-ID'),
-                ]);
+    // ============================================
+    // 3. VERIFICAR SESSION (Tenant já identificado)
+    //    + ISOLAMENTO: sessão de "acme" não vale em "beta.app..."
+    // ============================================
+    $tenantId  = session('tenant_id');
+    $viaHeader = false;
 
-                return $next($request);
+    if (!$tenantId) {
+        $tenantId  = $request->header('X-Empresa-ID') ?: $request->header('X-Tenant-ID');
+        $viaHeader = (bool) $tenantId;
+    }
+
+    if ($tenantId) {
+        $empresa        = Empresa::on('landlord')->find($tenantId);
+        $subdomainAtual = $this->extrairSubdomain($request->getHost());
+
+        if (!$viaHeader && $empresa && $subdomainAtual && $subdomainAtual !== $empresa->subdomain) {
+            Log::warning('ResolveTenant: Sessão de OUTRO tenant — a limpar', [
+                'session_tenant'    => $empresa->subdomain,
+                'current_subdomain' => $subdomainAtual,
+                'empresa_id'        => $empresa->id,
+            ]);
+
+            try {
+                auth()->guard('tenant')->logout();
+            } catch (\Throwable $e) {
+                // guard pode não ter user
             }
+
+            session()->forget(['tenant_id', 'tenant_subdomain']);
+            $empresa = null;
         }
 
+        if ($empresa && $empresa->status === 'ativo') {
+            session()->put('tenant_id', $empresa->id);
+            session()->put('tenant_subdomain', $empresa->subdomain);
+            $this->conectarTenant($empresa);
+            $this->registrarContexto($request, $empresa);
+            $this->reescreverUrl($request, $empresa);   // ⭐ (Bug 1) ADICIONADO
+
+            Log::info('ResolveTenant: Tenant via sessão/header', [
+                'empresa_id' => $empresa->id,
+                'modo'       => $empresa->modo,
+                'via_header' => $viaHeader,
+            ]);
+
+            return $next($request);
+        }
+    }
         // ============================================
         // 4. DETECTAR POR SUBDOMAIN (PRINCIPAL)
         // ============================================
@@ -129,14 +149,14 @@ class ResolveTenant
 
             Log::info('ResolveTenant: Tenant conectado', [
                 'empresa_id' => $empresa->id,
-                'subdomain' => $empresa->subdomain,
-                'modo' => $empresa->modo,
-                'database' => $empresa->modo === 'singular' ? $empresa->db_name : 'shared',
+                'subdomain'  => $empresa->subdomain,
+                'modo'       => $empresa->modo,
+                'database'   => $empresa->modo === 'singular' ? $empresa->db_name : 'shared',
             ]);
         } catch (\Exception $e) {
             Log::error('ResolveTenant: Erro ao conectar tenant', [
                 'empresa_id' => $empresa->id,
-                'error' => $e->getMessage(),
+                'error'      => $e->getMessage(),
             ]);
 
             return $this->errorResponse(
@@ -147,15 +167,9 @@ class ResolveTenant
         }
 
         // ============================================
-        // 11. REESCREVER URL
+        // 11. REESCREVER HEADERS INTERNOS
         // ============================================
         $this->reescreverUrl($request, $empresa);
-
-        Log::info('[AuthTenant] Verificando autenticação', [
-            'guard' => 'tenant',
-            'user' => auth()->guard('tenant')->user(),
-            'path' => $request->path(),
-        ]);
 
         return $next($request);
     }
@@ -166,18 +180,15 @@ class ResolveTenant
 
     protected function detectarPorSubdomain(Request $request): ?Empresa
     {
-        $host = $request->getHost();
-        $host = explode(':', $host)[0];
-
+        $host      = explode(':', $request->getHost())[0];
         $subdomain = $this->extrairSubdomain($host);
 
         Log::debug('ResolveTenant: Detectando por subdomain', [
-            'host' => $host,
+            'host'      => $host,
             'subdomain' => $subdomain,
         ]);
 
         if (!$subdomain) {
-            Log::debug('ResolveTenant: Nenhum subdomain encontrado');
             return null;
         }
 
@@ -191,8 +202,6 @@ class ResolveTenant
 
     protected function detectarPorFallback(Request $request): ?Empresa
     {
-        Log::debug('ResolveTenant: Tentando fallback detection');
-
         if ($empresaId = $request->header('X-Empresa-ID')) {
             Log::debug('ResolveTenant: Fallback por header', ['empresa_id' => $empresaId]);
             return Empresa::on('landlord')->find($empresaId);
@@ -248,35 +257,38 @@ class ResolveTenant
             return null;
         }
 
-        if (in_array($request->getHost(), ['localhost', '127.0.0.1']) || $this->isIP($request->getHost())) {
+        $hostAtual = explode(':', $request->getHost())[0];
+
+        if (in_array($hostAtual, ['localhost', '127.0.0.1']) || $this->isIP($hostAtual)) {
             return null;
         }
 
-        $hostAtual = $request->getHost();
         $hostEsperado = $this->montarHost($empresa->subdomain);
 
         if ($hostAtual === $hostEsperado) {
             return null;
         }
 
+        // Domínio base com sessão de tenant → 302 para o subdomínio
         if ($this->isDominioBase($hostAtual) && $empresa->subdomain) {
             $novaUrl = $this->montarUrl($request, $empresa->subdomain);
 
             Log::info('ResolveTenant: Redirecionando para subdomain', [
-                'de' => $request->fullUrl(),
+                'de'   => $request->fullUrl(),
                 'para' => $novaUrl,
             ]);
 
             return Redirect::to($novaUrl, 302);
         }
 
+        // Subdomínio errado → 301 permanente
         if (!$this->isDominioBase($hostAtual)) {
             $novaUrl = $this->montarUrl($request, $empresa->subdomain);
 
             Log::warning('ResolveTenant: Subdomain incorreto, redirecionando', [
-                'empresa_id' => $empresa->id,
+                'empresa_id'         => $empresa->id,
                 'subdomain_esperado' => $empresa->subdomain,
-                'host_atual' => $hostAtual,
+                'host_atual'         => $hostAtual,
             ]);
 
             return Redirect::to($novaUrl, 301);
@@ -285,25 +297,14 @@ class ResolveTenant
         return null;
     }
 
-    protected function isProofPath(Request $request): bool
-    {
-        return $request->is('api/documentos-fiscais/*/prova');
-    }
-
     protected function montarUrl(Request $request, string $subdomain): string
     {
-        $novoHost = $this->montarHost($subdomain);
         $scheme = $request->getScheme();
-        $path = $request->getPathInfo();
-        $query = $request->getQueryString();
+        $host   = $this->montarHost($subdomain);
+        $path   = $request->getPathInfo();
+        $query  = $request->getQueryString();
 
-        $url = "{$scheme}://{$novoHost}{$path}";
-
-        if ($query) {
-            $url .= "?{$query}";
-        }
-
-        return $url;
+        return "{$scheme}://{$host}{$path}" . ($query ? "?{$query}" : '');
     }
 
     protected function montarHost(string $subdomain): string
@@ -315,6 +316,19 @@ class ResolveTenant
     // HELPERS
     // ============================================
 
+    /**
+     * Extrai o subdomínio do tenant.
+     *
+     * base = app.factura-ja.ao
+     *   acme.app.factura-ja.ao      → "acme" ✓
+     *   app.factura-ja.ao           → null   (base)
+     *   www.app.factura-ja.ao       → null   (alias do base)
+     *   www.acme.app.factura-ja.ao  → null   (sub-subdomínio rejeitado)
+     *   a.b.app.factura-ja.ao       → null   (sub-subdomínio rejeitado)
+     *   localhost / 127.0.0.1       → null
+     *
+     * Em local/testing aceita "tenant.localhost" como fallback.
+     */
     protected function extrairSubdomain(string $host): ?string
     {
         $host = explode(':', $host)[0];
@@ -323,13 +337,28 @@ class ResolveTenant
             return null;
         }
 
-        $parts = explode('.', $host);
+        if ($this->isDominioBase($host)) {
+            return null;
+        }
 
-        if (count($parts) >= 3) {
-            if ($parts[0] === 'www') {
-                return $parts[1] ?? null;
+        $suffix = '.' . $this->dominioBase;
+
+        if (str_ends_with($host, $suffix)) {
+            $subdomain = substr($host, 0, -strlen($suffix));
+
+            if ($subdomain === '' || $subdomain === 'www' || str_contains($subdomain, '.')) {
+                return null;
             }
-            return $parts[0];
+
+            return $subdomain;
+        }
+
+        // Fallback de desenvolvimento: tenant.localhost
+        if (app()->environment('local', 'testing')) {
+            $parts = explode('.', $host);
+            if (count($parts) >= 2 && $parts[0] !== 'www') {
+                return $parts[0];
+            }
         }
 
         return null;
@@ -346,13 +375,38 @@ class ResolveTenant
         return filter_var($host, FILTER_VALIDATE_IP) !== false;
     }
 
+    /**
+     * Rotas que NÃO resolvem tenant.
+     *
+     * - Sempre públicas: Sanctum, Ignition, Telescope.
+     * - Landlord-only: landlord/*, api/landlord/*, admin/*, api/empresas.
+     * - login/register/password/email: públicos SÓ no domínio base.
+     *   Em acme.app..., o tenant precisa ser resolvido ANTES do login,
+     *   pois o guard `tenant` consulta o DB do tenant.
+     */
     protected function isPublicRoute(Request $request): bool
     {
-        foreach ($this->publicRoutes as $pattern) {
+        foreach (['sanctum/csrf-cookie', '_ignition/*', 'telescope/*'] as $pattern) {
             if ($request->is($pattern)) {
                 return true;
             }
         }
+
+        foreach (['landlord/*', 'api/landlord/*', 'admin/*', 'api/empresas'] as $pattern) {
+            if ($request->is($pattern)) {
+                return true;
+            }
+        }
+
+        $host = explode(':', $request->getHost())[0];
+        if ($this->isDominioBase($host)) {
+            foreach (['login', 'register', 'password/*', 'email/*'] as $pattern) {
+                if ($request->is($pattern)) {
+                    return true;
+                }
+            }
+        }
+
         return false;
     }
 
@@ -362,7 +416,7 @@ class ResolveTenant
 
     protected function conectarTenant(Empresa $empresa): void
     {
-        // Modo COLECTIVO -> Shared DB
+        // Modo COLECTIVO → Shared DB
         if ($empresa->modo === 'colectivo') {
             Config::set('database.default', 'shared');
             DB::reconnect('shared');
@@ -373,12 +427,11 @@ class ResolveTenant
             return;
         }
 
-        // Modo SINGULAR -> Tenant DB dedicado
+        // Modo SINGULAR → DB dedicado
         if (empty($empresa->db_name)) {
             throw new \Exception("A empresa {$empresa->id} não tem nome de base de dados definido.");
         }
 
-        // ⭐ VALIDAR SE O BANCO EXISTE (apenas em dev)
         if (app()->environment('local', 'testing')) {
             try {
                 $databases = DB::connection('landlord')->select('SHOW DATABASES');
@@ -393,7 +446,7 @@ class ResolveTenant
                 if (!$exists) {
                     Log::warning('ResolveTenant: Banco de dados não encontrado', [
                         'empresa_id' => $empresa->id,
-                        'db_name' => $empresa->db_name,
+                        'db_name'    => $empresa->db_name,
                     ]);
                 }
             } catch (\Exception $e) {
@@ -405,38 +458,36 @@ class ResolveTenant
 
         Config::set('database.connections.tenant.database', $empresa->db_name);
 
-        // ⭐ SÓ USAR PURGE EM AMBIENTE DE DESENVOLVIMENTO
         if (app()->environment('local', 'testing')) {
             DB::purge('tenant');
-            DB::reconnect('tenant');
-        } else {
-            DB::reconnect('tenant');
         }
-
+        DB::reconnect('tenant');
         Config::set('database.default', 'tenant');
 
         Log::info('ResolveTenant: Conectado ao Tenant DB (singular)', [
             'empresa_id' => $empresa->id,
-            'database' => $empresa->db_name,
+            'database'   => $empresa->db_name,
         ]);
     }
 
-    protected function registrarContexto(Request $request, Empresa $empresa): void
-    {
-        $request->attributes->set('current_empresa', $empresa);
-        $request->attributes->set('current_tenant', $empresa);
+protected function registrarContexto(Request $request, Empresa $empresa): void
+{
+    $request->attributes->set('current_empresa', $empresa);
+    $request->attributes->set('current_tenant', $empresa);
 
-        app()->instance('current.empresa', $empresa);
-        app()->instance('current.tenant', $empresa);
+    app()->instance('current.empresa', $empresa);
+    app()->instance('current.tenant', $empresa);
 
-        Config::set('app.current_empresa_id', $empresa->id);
-        Config::set('app.current_subdomain', $empresa->subdomain);
-        Config::set('app.current_modo', $empresa->modo);
+    Config::set('app.current_empresa_id', $empresa->id);
+    Config::set('app.current_subdomain', $empresa->subdomain);
+    Config::set('app.current_modo', $empresa->modo);
+
+    URL::defaults(['tenant' => $empresa->subdomain]); 
     }
 
     protected function reescreverUrl(Request $request, Empresa $empresa): void
     {
-        $request->headers->set('X-Current-Empresa-ID', $empresa->id);
+        $request->headers->set('X-Current-Empresa-ID', (string) $empresa->id);
         $request->headers->set('X-Current-Subdomain', $empresa->subdomain);
         $request->headers->set('X-Current-Modo', $empresa->modo);
     }
@@ -450,15 +501,15 @@ class ResolveTenant
         Log::warning('ResolveTenant: Empresa não encontrada', [
             'host' => $request->getHost(),
             'path' => $request->path(),
-            'ip' => $request->ip(),
+            'ip'   => $request->ip(),
         ]);
 
         if ($request->expectsJson() || $request->is('api/*')) {
             return response()->json([
-                'success' => false,
-                'message' => 'Empresa não identificada. Acesse via subdomain ou forneça X-Empresa-ID.',
+                'success'      => false,
+                'message'      => 'Empresa não identificada. Acesse via subdomain ou forneça X-Empresa-ID.',
                 'dominio_base' => $this->dominioBase,
-                'sugestao' => 'Use um subdomain válido ou o header X-Empresa-ID',
+                'sugestao'     => 'Use um subdomain válido ou o header X-Empresa-ID',
             ], 400);
         }
 
@@ -469,7 +520,7 @@ class ResolveTenant
     {
         Log::warning('ResolveTenant: Empresa suspensa', [
             'empresa_id' => $empresa->id,
-            'status' => $empresa->status,
+            'status'     => $empresa->status,
         ]);
 
         if ($request->expectsJson() || $request->is('api/*')) {
@@ -477,8 +528,8 @@ class ResolveTenant
                 'success' => false,
                 'message' => 'Empresa está suspensa. Entre em contato com o suporte.',
                 'empresa' => [
-                    'id' => $empresa->id,
-                    'nome' => $empresa->nome,
+                    'id'     => $empresa->id,
+                    'nome'   => $empresa->nome,
                     'status' => $empresa->status,
                 ],
             ], 403);

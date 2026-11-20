@@ -5,47 +5,74 @@ import { useRouter, usePathname } from "next/navigation";
 import { authApi, clearTenant, setTenant } from "@/services/axios";
 import { toast } from "sonner";
 
-// ============ TYPES ============
+// ============ TYPES (alinhados com WebAuthController) ============
+
+export interface PlanoFeature {
+  id: string | number;
+  nome: string;
+  descricao?: string | null;
+  icone?: string | null;
+  ativo?: boolean;
+  pivot?: { quantidade: number | null; unidade: string | null };
+}
+
+export interface Plano {
+  id: string | number;
+  nome: string;
+  valor_mensal: number | string;
+  valor_anual: number | string;
+  duracao_meses: number;
+  features: PlanoFeature[];
+}
+
+/** Devolvida apenas por GET /me (não vem no login). */
+export interface Subscricao {
+  id: string | number;
+  plano: Plano | null;
+  data_inicio: string | null;
+  data_fim: string | null;
+  status: string;
+  forma_pagamento?: string | null;
+  renovacao_automatica?: boolean;
+  cancelado_em?: string | null;
+}
 
 export interface Empresa {
-    id: string;
-    nome: string;
-    nif: string;
-    subdomain: string;
-    email: string;
-    logo: string | null;
-    nome_banco?: string | null;
-    numero_conta?: string | null;
-    iban?: string | null;
-    telefone: string | null;
-    endereco: string | null;
-    regime_fiscal?: string | null;
-    sujeito_iva?: boolean;
-    is_seguradora?: boolean;
-    iva_padrao?: number;
-    subscricao?: string;
-    modo?: string;
-    status?: string;
-    created_at?: string | null;
-    pagamento?: {
-        id: string;
-        valor: number;
-        data_vencimento: string;
-        codigo_transacao: string;
-        status: string;
-        metodo_pagamento: string | null;
-    };
+  id: string;
+  nome: string;
+  nif: string | null;
+  subdomain: string;
+  email: string;
+  logo: string | null;
+  telefone: string | null;
+  endereco: string | null;
+  regime_fiscal?: string | null;
+  sujeito_iva?: boolean;
+  is_seguradora?: boolean;
+  iva_padrao?: number;
+  status?: string;
+  data_registro?: string | null;
+  modo?: "singular" | "colectivo" | string;
+  // só em /me
+  nome_banco?: string | null;
+  numero_conta?: string | null;
+  iban?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  subscricao?: Subscricao | null;
 }
 
 export interface User {
-  printer_ip: string;
   id: string;
   name: string;
   email: string;
   role: string;
   ativo?: boolean;
-  created_at?: string;
-  ultimo_login?: string;
+  ultimo_login?: string | null;
+  created_at?: string | null;
+  email_verified_at?: string | null;
+  // campos legados (o controller não os devolve)
+  printer_ip?: string;
   oauth_verified?: boolean | null;
   empresa?: Empresa;
 }
@@ -53,8 +80,23 @@ export interface User {
 interface LoginResponse {
   success: boolean;
   message?: string;
+  redirect_url?: string; // URL do tenant (https://acme.app.factura-ja.ao/)
   user?: User;
   empresa?: Empresa;
+  errors?: Record<string, string[]>;
+}
+
+interface MeResponse {
+  success: boolean;
+  message?: string;
+  user?: User;
+  empresa?: Empresa;
+}
+
+interface LogoutResponse {
+  success: boolean;
+  message?: string;
+  redirect_url?: string; // domínio base
 }
 
 interface LogoutResult {
@@ -63,23 +105,19 @@ interface LogoutResult {
 }
 
 interface AuthContextData {
-    user: User | null;
-    loading: boolean;
-    isAuthenticated: boolean;
-    login: (
-        email: string,
-        password: string,
-        redirectTo?: string
-    ) => Promise<{ success: boolean; message?: string }>;
-    logout: () => Promise<LogoutResult>;
-    refreshUser: () => Promise<void>;
+  user: User | null;
+  loading: boolean;
+  isAuthenticated: boolean;
+  login: (email: string, password: string, redirectTo?: string) => Promise<{ success: boolean; message?: string }>;
+  logout: () => Promise<LogoutResult>;
+  refreshUser: () => Promise<void>;
 }
 
 // ============ CONTEXT ============
 
 export const AuthContext = createContext<AuthContextData | null>(null);
 
-// ============ COMPONENT ============
+// ============ CONSTANTS / HELPERS ============
 
 interface AuthProviderProps {
   children: ReactNode;
@@ -119,11 +157,11 @@ export const getIncompleteEmpresaFields = (empresa?: Empresa | null): string[] =
   return missing;
 };
 
-export const formatIncompleteFields = (fields: string[]): string => fields.map((field) => FIELD_LABELS[field] || field).join(", ");
+export const formatIncompleteFields = (fields: string[]): string =>
+  fields.map((field) => FIELD_LABELS[field] || field).join(", ");
 
-export const hasIncompleteEmpresaConfig = (empresa?: Empresa | null): boolean => {
-  return getIncompleteEmpresaFields(empresa).length > 0;
-};
+export const hasIncompleteEmpresaConfig = (empresa?: Empresa | null): boolean =>
+  getIncompleteEmpresaFields(empresa).length > 0;
 
 const shouldRedirectToOnboarding = (pathname: string | null, user: User | null): boolean => {
   if (!pathname || !pathname.startsWith("/dashboard")) return false;
@@ -146,6 +184,50 @@ const REDIRECT_MAP: Record<string, string> = {
   operador: "/dashboard/Vendas",
 };
 
+/** Estados HTTP do /me que significam "sessão inválida" → voltar ao login. */
+const SESSION_INVALID_STATUS = [401, 403, 404];
+
+/** Extrai a melhor mensagem de erro de uma resposta do controller (401/403/422/500). */
+const extractErrorMessage = (error: unknown, fallback: string): string => {
+  const e = error as {
+    response?: { data?: { message?: string; errors?: Record<string, string[]> } };
+    message?: string;
+  };
+  const data = e.response?.data;
+  if (data?.errors) {
+    const first = Object.values(data.errors)[0]?.[0];
+    if (first) return first;
+  }
+  return data?.message || e.message || fallback;
+};
+
+/**
+ * Navega para `path` no host indicado por `baseUrl` (redirect_url do controller).
+ * - Mesma origem  → router (SPA)
+ * - Outra origem (ex.: app.factura-ja.ao → acme.app.factura-ja.ao) → navegação completa
+ * Devolve true se foi feita navegação completa.
+ */
+const navigateToTenant = (
+  router: ReturnType<typeof useRouter>,
+  path: string,
+  baseUrl?: string
+): boolean => {
+  if (baseUrl) {
+    try {
+      const target = new URL(path, baseUrl);
+      if (target.origin !== window.location.origin) {
+        window.location.assign(target.toString());
+        return true;
+      }
+    } catch {
+      /* redirect_url inválido → fallback SPA */
+    }
+  }
+  router.replace(path);
+  return false;
+};
+
+// ============ COMPONENT ============
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const router = useRouter();
@@ -157,15 +239,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const hasFetched = useRef(false);
 
-const isNoAuthRoute = pathname
+  const isNoAuthRoute = pathname
     ? NO_AUTH_ROUTES.includes(pathname) || pathname.startsWith("/landlord")
     : false;
-  // ========== FETCH USER ==========
-  const fetchUser = useCallback(async (): Promise<void> => {
-    console.log("[AuthProvider] fetchUser iniciado");
 
+  // ========== FETCH USER (GET /me) ==========
+  const fetchUser = useCallback(async (): Promise<void> => {
     if (isLoggingOut) {
-      console.log("[AuthProvider] fetchUser cancelado (logout em andamento)");
       setLoading(false);
       return;
     }
@@ -178,38 +258,31 @@ const isNoAuthRoute = pathname
     setLoading(true);
     try {
       const response = await authApi.me();
+      const data: MeResponse = response.data;
 
-      if (response.data?.success && response.data.user) {
+      if (data?.success && data.user) {
         const userData: User = {
-          ...response.data.user,
-          empresa: response.data.empresa,
+          ...data.user,
+          empresa: data.empresa,
         };
 
         if (!ALLOWED_ROLES.includes(userData.role)) {
           console.warn("[AuthProvider] Role não reconhecida:", userData.role);
           setUser(null);
           clearTenant();
-          if (!isNoAuthRoute && pathname !== "/login") {
-            router.replace("/login");
-            toast.error(`Role "${userData.role}" não autorizada. Contacte o administrador.`);
-          }
+          router.replace("/login");
+          toast.error(`Role "${userData.role}" não autorizada. Contacte o administrador.`);
           return;
         }
 
         setUser(userData);
 
-        if (response.data.empresa?.id) {
+        if (data.empresa?.id) {
           setTenant({
-            id: response.data.empresa.id,
-            subdomain: response.data.empresa.subdomain,
+            id: data.empresa.id,
+            subdomain: data.empresa.subdomain,
           });
         }
-
-        console.log("[AuthProvider] User atualizado com sucesso:", {
-          id: userData.id,
-          role: userData.role,
-          empresa: userData.empresa?.nome,
-        });
 
         if (shouldRedirectToOnboarding(pathname, userData)) {
           router.replace("/onboarding");
@@ -222,26 +295,29 @@ const isNoAuthRoute = pathname
         }
       } else {
         setUser(null);
-        if (!isNoAuthRoute && pathname !== "/login") {
-          router.replace("/login");
-        }
+        clearTenant();
+        router.replace("/login");
       }
     } catch (error: any) {
-      if (error._silenced) {
-        console.log("[AuthProvider] Erro silenciado (400/401) – ignorado");
-      } else {
-        console.error("[AuthProvider] fetchUser falhou:", error);
-      }
+      const status: number | undefined = error?.response?.status;
+
       setUser(null);
-      if (!isNoAuthRoute && pathname !== "/login") {
+
+      if (error?._silenced || (status && SESSION_INVALID_STATUS.includes(status))) {
+        // 401 não autenticado | 403 sessão sem tenant | 404 empresa/utilizador inexistente
+        clearTenant();
         router.replace("/login");
+      } else {
+        // erro de rede / 5xx: não é problema de sessão, não limpa o tenant
+        console.error("[AuthProvider] fetchUser falhou:", error);
+        toast.error("Não foi possível validar a sessão. Tente novamente.");
       }
     } finally {
       setLoading(false);
     }
   }, [isNoAuthRoute, pathname, router, isLoggingOut]);
 
-  // ========== MOUNT / PATHNAME-CHANGE EFFECT ==========
+  // ========== MOUNT EFFECT ==========
   useEffect(() => {
     if (isNoAuthRoute) {
       setLoading(false);
@@ -256,10 +332,19 @@ const isNoAuthRoute = pathname
 
   // ========== LOGIN ==========
   const login = useCallback(
-    async (email: string, password: string): Promise<{ success: boolean; message?: string }> => {
+    async (
+      email: string,
+      password: string,
+      redirectTo?: string
+    ): Promise<{ success: boolean; message?: string }> => {
       setLoading(true);
 
       try {
+        // Importante: um tenant antigo guardado enviaria X-Tenant-ID e forçaria a
+        // Estratégia 1 do controller, impedindo o cross-tenant search (app.factura-ja.ao).
+        // Em subdomínio o tenant continua a ser resolvido pelo host.
+        clearTenant();
+
         await authApi.getCsrf();
 
         const response = await authApi.login(email, password);
@@ -270,7 +355,7 @@ const isNoAuthRoute = pathname
         }
 
         if (!data.user) {
-          throw new Error("Dados do usuário não retornados");
+          throw new Error("Dados do utilizador não retornados");
         }
 
         if (!ALLOWED_ROLES.includes(data.user.role)) {
@@ -280,8 +365,8 @@ const isNoAuthRoute = pathname
         }
 
         if (data.empresa) {
-          setTenant(data.empresa);
-          console.log("[AuthProvider] Tenant guardado no login:", data.empresa.id);
+          // mesmo formato usado no fetchUser
+          setTenant({ id: data.empresa.id, subdomain: data.empresa.subdomain });
         } else {
           console.warn("[AuthProvider] Login sem empresa!");
         }
@@ -292,30 +377,23 @@ const isNoAuthRoute = pathname
         };
         setUser(userData);
 
-        console.log("[AuthProvider] Login bem-sucedido:", {
-          id: userData.id,
-          role: userData.role,
-          name: userData.name,
-        });
+        const destination =
+          redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//")
+            ? redirectTo
+            : REDIRECT_MAP[userData.role] || "/dashboard";
 
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        // O controller devolve `redirect_url` (https://<subdomain>.<domínio>/).
+        // Se estamos no domínio base (cross-tenant), é preciso mudar de host.
+        const fullNavigation = navigateToTenant(router, destination, data.redirect_url);
 
-        const destination = REDIRECT_MAP[userData.role] || "/dashboard";
-        console.log("[AuthProvider] Redirecionando para:", {
-          role: userData.role,
-          destination,
-        });
-
-        router.replace(destination);
+        if (!fullNavigation) {
+          // já temos o user: evita um /me redundante no primeiro render do dashboard
+          hasFetched.current = true;
+        }
 
         return { success: true };
       } catch (error: unknown) {
-        const axiosError = error as {
-          response?: { data?: { message?: string } };
-          message?: string;
-        };
-        const message = axiosError.response?.data?.message || axiosError.message || "Erro ao fazer login";
-
+        const message = extractErrorMessage(error, "Erro ao fazer login");
         toast.error(message);
         return { success: false, message };
       } finally {
@@ -331,46 +409,52 @@ const isNoAuthRoute = pathname
     setLoading(true);
 
     let apiSuccess = false;
-    let apiMessage = "";
+    let redirectUrl: string | undefined;
 
     try {
-      await authApi.logout();
-      apiSuccess = true;
-      apiMessage = "Logout no servidor realizado";
-      console.log("[AuthProvider]", apiMessage);
+      const response = await authApi.logout();
+      const data: LogoutResponse = response.data;
+      apiSuccess = !!data?.success;
+      redirectUrl = data?.redirect_url;
     } catch (error) {
-      apiMessage = "Erro no logout do servidor";
-      console.warn("[AuthProvider]", apiMessage, error);
+      console.warn("[AuthProvider] Erro no logout do servidor", error);
     }
 
     // Limpa estado local
     setUser(null);
     clearTenant();
-    localStorage.removeItem("landlord_user");
-    sessionStorage.clear();
+    try {
+      localStorage.removeItem("landlord_user");
+      sessionStorage.clear();
+    } catch {
+      /* storage indisponível */
+    }
 
     hasFetched.current = false;
     setIsLoggingOut(false);
+    setLoading(false);
 
-    // Redireciona para login
-    router.replace("/login");
-
-    // Aguarda a página de login ser renderizada e recarrega para limpar completamente
-    setTimeout(() => {
-      window.location.reload();
-    }, 900);
+    // Navegação completa: sai do subdomínio do tenant para o domínio base
+    // (redirect_url do controller) e limpa todo o estado em memória.
+    let loginUrl = "/login";
+    if (redirectUrl) {
+      try {
+        loginUrl = new URL("/login", redirectUrl).toString();
+      } catch {
+        /* mantém /login relativo */
+      }
+    }
+    window.location.assign(loginUrl);
 
     return {
       success: true,
       message: apiSuccess ? "Logout realizado com sucesso" : "Logout local realizado",
     };
-  }, [router]);
+  }, []);
 
   // ========== REFRESH USER ==========
   const refreshUser = useCallback(async (): Promise<void> => {
-    console.log("[AuthProvider] refreshUser chamado - Forçando atualização");
-    hasFetched.current = false;
-    setUser(null);
+    hasFetched.current = true; // evita que o efeito dispare um segundo fetch
     setLoading(true);
     try {
       await fetchUser();

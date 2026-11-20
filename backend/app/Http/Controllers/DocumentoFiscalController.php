@@ -595,8 +595,11 @@ public function emitir(Request $request): JsonResponse
     }
 }
 
-    public function gerarRecibo(Request $request, string $documentoId): JsonResponse
-    {
+public function gerarRecibo(
+    Request $request,
+    string $tenant,
+    string $documentoId
+): JsonResponse    {
         $modo = $this->getModo();
 
         try {
@@ -1603,6 +1606,7 @@ public function emitirAutoFacturacao(Request $request)
     }
 
 public function imprimirTermica(
+    string $tenant,
     string $id,
     ImpressoraTermicaService $impressoraService,
     \Illuminate\Http\Request $request
@@ -2063,7 +2067,11 @@ private function rotuloVia(int $numeroVia): string
         : $numeroVia . '.ª via, em conformidade com a original';
 }
 
-    public function converterProforma(Request $request, string $proformaId): JsonResponse
+    public function converterProforma(
+    Request $request,
+    string $tenant,
+    string $proformaId
+): JsonResponse
     {
         $modo = $this->getModo();
 

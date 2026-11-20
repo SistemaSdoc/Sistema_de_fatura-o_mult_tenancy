@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
@@ -37,14 +38,43 @@ const ESTADO_LABEL: Record<string, string> = {
 };
 
 /* ─── Tipos de aba ────────────────────────────────────────────────────────── */
-type TabAtiva = "proforma" | "global" | "credito_debito" | "sectoriais" | "estornos";
+type TabAtiva =
+  | "proforma"
+  | "global"
+  | "credito_debito"
+  | "sectoriais"
+  | "estornos";
 
-const TABS: { key: TabAtiva; label: string; tipos: TipoDocumento[] }[] = [
-  { key: "proforma", label: "Proformas / Adiantamentos", tipos: ["FP", "FA"] },
-  { key: "global", label: "Facturas Globais", tipos: ["FG", "FGR"] },
-  { key: "credito_debito", label: "Notas Crédito/Débito", tipos: ["NC", "ND"] },
-  { key: "sectoriais", label: "Documentos sectoriais", tipos: ["FGEN", "AC", "ACR"] },
-  { key: "estornos", label: "Recibos de Estorno", tipos: ["RE"] },
+const TABS: {
+  key: TabAtiva;
+  label: string;
+  tipos: TipoDocumento[];
+}[] = [
+  {
+    key: "proforma",
+    label: "Proformas / Adiantamentos",
+    tipos: ["FP", "FA"],
+  },
+  {
+    key: "global",
+    label: "Facturas Globais",
+    tipos: ["FG", "FGR"],
+  },
+  {
+    key: "credito_debito",
+    label: "Notas Crédito/Débito",
+    tipos: ["NC", "ND"],
+  },
+  {
+    key: "sectoriais",
+    label: "Documentos sectoriais",
+    tipos: ["FGEN", "AC", "ACR"],
+  },
+  {
+    key: "estornos",
+    label: "Recibos de Estorno",
+    tipos: ["RE"],
+  },
 ];
 
 /* ─── Theme ───────────────────────────────────────────────────────────────── */
@@ -68,18 +98,26 @@ interface OutrosDocumentosTableProps {
   loading: boolean;
   baixandoPdf: string | null;
   imprimindo: string | null;
+
   onVerDetalhes: (doc: DocumentoFiscal) => void;
-  onImprimirA4: (doc: DocumentoFiscal) => void;        // 🆕 Impressão A4
-  onImprimirPdf: (doc: DocumentoFiscal) => void;       // PDF visualização
+  onImprimirA4: (doc: DocumentoFiscal) => void;
+  onImprimirPdf: (doc: DocumentoFiscal) => void;
+
+  // Pré-visualização do talão 80mm no browser
+  onPreVisualizarPdf: (doc: DocumentoFiscal) => void;
+
   onBaixarPdf: (doc: DocumentoFiscal) => Promise<void>;
   onConverterProforma: (doc: DocumentoFiscal) => Promise<void>;
   convertendoProforma: string | null;
   onEmitirAcr: (doc: DocumentoFiscal) => void;
+
   formatKz: (v: number | string | undefined) => string;
+
   documentoFiscalService: {
     getNomeCliente: (doc: DocumentoFiscal) => string;
     getNifCliente?: (doc: DocumentoFiscal) => string | null;
   };
+
   colors: ColorsTheme;
 }
 
@@ -87,6 +125,7 @@ const POR_PAGINA = 10;
 
 function subscribeToSearch(onChange: () => void) {
   window.addEventListener("popstate", onChange);
+
   return () => window.removeEventListener("popstate", onChange);
 }
 
@@ -99,14 +138,27 @@ function getServerSecao() {
 }
 
 /* ─── Badge Tipo ──────────────────────────────────────────────────────────── */
-function TipoBadge({ tipo, colors }: { tipo: TipoDocumento; colors: ColorsTheme }) {
-  const palette: Partial<Record<TipoDocumento, { bg: string; text: string }>> = {
+function TipoBadge({
+  tipo,
+  colors,
+}: {
+  tipo: TipoDocumento;
+  colors: ColorsTheme;
+}) {
+  const palette: Partial<
+    Record<TipoDocumento, { bg: string; text: string }>
+  > = {
     FP: { bg: `${colors.warning}1a`, text: colors.secondary },
     FA: { bg: `${colors.warning}1a`, text: colors.secondary },
     NC: { bg: `${colors.warning}1a`, text: colors.primary },
     ND: { bg: `${colors.secondary}1a`, text: colors.secondary },
   };
-  const s = palette[tipo] ?? { bg: colors.hover, text: colors.textSecondary };
+
+  const s = palette[tipo] ?? {
+    bg: colors.hover,
+    text: colors.textSecondary,
+  };
+
   return (
     <span
       className="inline-flex items-center px-2 py-0.5 text-xs font-semibold"
@@ -118,15 +170,41 @@ function TipoBadge({ tipo, colors }: { tipo: TipoDocumento; colors: ColorsTheme 
 }
 
 /* ─── Badge Estado ────────────────────────────────────────────────────────── */
-function EstadoBadge({ estado, colors }: { estado: string; colors: ColorsTheme }) {
+function EstadoBadge({
+  estado,
+  colors,
+}: {
+  estado: string;
+  colors: ColorsTheme;
+}) {
   const map: Record<string, { bg: string; text: string }> = {
-    paga: { bg: `${colors.secondary}1a`, text: colors.success },
-    parcialmente_paga: { bg: `${colors.secondary}1a`, text: colors.warning },
-    emitido: { bg: `${colors.secondary}1a`, text: colors.warning },
-    cancelado: { bg: `${colors.text}1a`, text: colors.danger },
-    expirado: { bg: `${colors.textSecondary}1a`, text: colors.textSecondary },
+    paga: {
+      bg: `${colors.secondary}1a`,
+      text: colors.success,
+    },
+    parcialmente_paga: {
+      bg: `${colors.secondary}1a`,
+      text: colors.warning,
+    },
+    emitido: {
+      bg: `${colors.secondary}1a`,
+      text: colors.warning,
+    },
+    cancelado: {
+      bg: `${colors.text}1a`,
+      text: colors.danger,
+    },
+    expirado: {
+      bg: `${colors.textSecondary}1a`,
+      text: colors.textSecondary,
+    },
   };
-  const s = map[estado] ?? { bg: colors.hover, text: colors.textSecondary };
+
+  const s = map[estado] ?? {
+    bg: colors.hover,
+    text: colors.textSecondary,
+  };
+
   return (
     <span
       className="inline-flex items-center px-2 py-0.5 text-xs font-semibold whitespace-nowrap"
@@ -157,29 +235,50 @@ function DocCard({
       style={{ borderBottom: `0.5px solid ${colors.border}` }}
     >
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <span className="text-sm font-medium truncate" style={{ color: colors.text }}>
+        <span
+          className="text-sm font-medium truncate"
+          style={{ color: colors.text }}
+        >
           {doc.numero_documento ?? doc.id}
         </span>
+
         <div className="flex gap-1 flex-wrap shrink-0">
           <TipoBadge tipo={doc.tipo_documento} colors={colors} />
+
           {doc.tipo_documento === "FP" && doc.fatura_convertida && (
-            <span className="text-xs font-medium" style={{ color: colors.success }}>
+            <span
+              className="text-xs font-medium"
+              style={{ color: colors.success }}
+            >
               Convertida
             </span>
           )}
-          {doc.estado && <EstadoBadge estado={doc.estado} colors={colors} />}
+
+          {doc.estado && (
+            <EstadoBadge estado={doc.estado} colors={colors} />
+          )}
         </div>
       </div>
 
-      <span className="text-xs truncate" style={{ color: colors.textSecondary }}>
+      <span
+        className="text-xs truncate"
+        style={{ color: colors.textSecondary }}
+      >
         {getNomeCliente(doc)}
       </span>
 
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs shrink-0" style={{ color: colors.textSecondary }}>
+        <span
+          className="text-xs shrink-0"
+          style={{ color: colors.textSecondary }}
+        >
           {new Date(doc.data_emissao).toLocaleDateString()}
         </span>
-        <span className="text-sm font-medium truncate" style={{ color: colors.text }}>
+
+        <span
+          className="text-sm font-medium truncate"
+          style={{ color: colors.text }}
+        >
           {formatKz(doc.total_liquido)}
         </span>
       </div>
@@ -198,6 +297,7 @@ export default function OutrosDocumentosTable({
   onVerDetalhes,
   onImprimirA4,
   onImprimirPdf,
+  onPreVisualizarPdf,
   onBaixarPdf,
   onConverterProforma,
   convertendoProforma,
@@ -206,11 +306,20 @@ export default function OutrosDocumentosTable({
   documentoFiscalService,
   colors,
 }: OutrosDocumentosTableProps) {
-  const secao = useSyncExternalStore(subscribeToSearch, getSecaoFromSearch, getServerSecao);
-  const [tabEscolhida, setTabEscolhida] = useState<TabAtiva | null>(null);
-  const tabAtiva = tabEscolhida ?? TABS.find((tab) => tab.key === secao)?.key ?? "proforma";
+  const secao = useSyncExternalStore(
+    subscribeToSearch,
+    getSecaoFromSearch,
+    getServerSecao
+  );
 
-  // Paginação independente por aba
+  const [tabEscolhida, setTabEscolhida] = useState<TabAtiva | null>(null);
+
+  const tabAtiva =
+    tabEscolhida ??
+    TABS.find((tab) => tab.key === secao)?.key ??
+    "proforma";
+
+  /* ─── Paginação independente por aba ─────────────────────────────────── */
   const [paginas, setPaginas] = useState<Record<TabAtiva, number>>({
     proforma: 1,
     global: 1,
@@ -219,54 +328,92 @@ export default function OutrosDocumentosTable({
     estornos: 1,
   });
 
-  const setPagina = (tab: TabAtiva, p: number) =>
-    setPaginas((prev) => ({ ...prev, [tab]: p }));
+  const setPagina = (tab: TabAtiva, p: number) => {
+    setPaginas((prev) => ({
+      ...prev,
+      [tab]: p,
+    }));
+  };
 
-  /* ── Documentos por aba ── */
+  /* ─── Documentos por aba ──────────────────────────────────────────────── */
   const docsTab = (tab: TabAtiva) => {
     const tipos = TABS.find((t) => t.key === tab)!.tipos;
-    return documentos.filter((d) => tipos.includes(d.tipo_documento));
+
+    return documentos.filter((d) =>
+      tipos.includes(d.tipo_documento)
+    );
   };
 
   const docsAtivos = docsTab(tabAtiva);
   const paginaAtual = paginas[tabAtiva];
-  const totalPaginas = Math.max(Math.ceil(docsAtivos.length / POR_PAGINA), 1);
-  const pg = Math.min(Math.max(paginaAtual, 1), totalPaginas);
-  const slice = docsAtivos.slice((pg - 1) * POR_PAGINA, pg * POR_PAGINA);
 
-  /* ── Vazio ── */
+  const totalPaginas = Math.max(
+    Math.ceil(docsAtivos.length / POR_PAGINA),
+    1
+  );
+
+  const pg = Math.min(
+    Math.max(paginaAtual, 1),
+    totalPaginas
+  );
+
+  const slice = docsAtivos.slice(
+    (pg - 1) * POR_PAGINA,
+    pg * POR_PAGINA
+  );
+
+  /* ─── Estado vazio ────────────────────────────────────────────────────── */
   if (!loading && documentos.length === 0) {
     return (
-      <div className="p-10 text-center" style={{ color: colors.textSecondary }}>
+      <div
+        className="p-10 text-center"
+        style={{ color: colors.textSecondary }}
+      >
         <p>Nenhum documento encontrado</p>
       </div>
     );
   }
 
+  /* ─── Menu de ações ────────────────────────────────────────────────────── */
   const acoes = (doc: DocumentoFiscal) => (
     <DocumentActionsMenu
       label={`Ações de ${doc.numero_documento ?? "documento"}`}
       colors={colors}
       items={[
-        { label: "Ver detalhes do documento", icon: <Eye size={16} />, onSelect: () => onVerDetalhes(doc) },
+        {
+          label: "Ver detalhes do documento",
+          icon: <Eye size={16} />,
+          onSelect: () => onVerDetalhes(doc),
+        },
+
         ...(doc.tipo_documento === "AC" && doc.estado === "emitido"
-          ? [{
-              label: "Registar pagamento e emitir ACR",
-              icon: <CircleDollarSign size={16} />,
-              onSelect: () => onEmitirAcr(doc),
-              tone: colors.success,
-            }]
+          ? [
+              {
+                label: "Registar pagamento e emitir ACR",
+                icon: <CircleDollarSign size={16} />,
+                onSelect: () => onEmitirAcr(doc),
+                tone: colors.success,
+              },
+            ]
           : []),
-        ...(doc.tipo_documento === "FP" && !doc.fatura_convertida && !["cancelado", "expirado"].includes(doc.estado)
-          ? [{
-              label: "Converter proforma em factura",
-              pendingLabel: "A converter proforma…",
-              icon: <FileCheck size={16} />,
-              onSelect: () => { void onConverterProforma(doc); },
-              pending: convertendoProforma === doc.id,
-              tone: colors.primary,
-            }]
+
+        ...(doc.tipo_documento === "FP" &&
+        !doc.fatura_convertida &&
+        !["cancelado", "expirado"].includes(doc.estado)
+          ? [
+              {
+                label: "Converter proforma em factura",
+                pendingLabel: "A converter proforma…",
+                icon: <FileCheck size={16} />,
+                onSelect: () => {
+                  void onConverterProforma(doc);
+                },
+                pending: convertendoProforma === doc.id,
+                tone: colors.primary,
+              },
+            ]
           : []),
+
         {
           label: "Imprimir documento A4",
           pendingLabel: "A preparar impressão…",
@@ -274,6 +421,13 @@ export default function OutrosDocumentosTable({
           onSelect: () => onImprimirA4(doc),
           pending: imprimindo === doc.id,
         },
+
+        {
+          label: "Pré-visualizar talão (80 mm)",
+          icon: <Eye size={16} />,
+          onSelect: () => onPreVisualizarPdf(doc),
+        },
+
         {
           label: "Imprimir talão (80 mm)",
           pendingLabel: "A preparar impressão…",
@@ -281,23 +435,30 @@ export default function OutrosDocumentosTable({
           onSelect: () => onImprimirPdf(doc),
           pending: imprimindo === doc.id,
         },
+
         {
           label: "Descarregar PDF",
           pendingLabel: "A descarregar PDF…",
           icon: <Download size={16} />,
-          onSelect: () => { void onBaixarPdf(doc); },
+          onSelect: () => {
+            void onBaixarPdf(doc);
+          },
           pending: baixandoPdf === doc.id,
         },
       ]}
     />
   );
 
-  /* ── Tabela desktop ── */
+  /* ─── Tabela desktop ───────────────────────────────────────────────────── */
   const tabelaDesktop = (
     <div className="hidden sm:block overflow-x-auto w-full">
       <table
         className="w-full text-sm"
-        style={{ borderCollapse: "collapse", tableLayout: "fixed", minWidth: 620 }}
+        style={{
+          borderCollapse: "collapse",
+          tableLayout: "fixed",
+          minWidth: 620,
+        }}
       >
         <colgroup>
           <col style={{ width: "16%" }} />
@@ -307,6 +468,7 @@ export default function OutrosDocumentosTable({
           <col style={{ width: "16%" }} />
           <col style={{ width: "17%" }} />
         </colgroup>
+
         <thead style={{ backgroundColor: colors.primary }}>
           <tr className="text-white text-xs">
             <th className="px-3 py-2 text-left">Documento</th>
@@ -317,6 +479,7 @@ export default function OutrosDocumentosTable({
             <th className="px-3 py-2 text-center">Ações</th>
           </tr>
         </thead>
+
         <tbody>
           {slice.length === 0 ? (
             <tr>
@@ -349,6 +512,7 @@ export default function OutrosDocumentosTable({
                 >
                   {doc.numero_documento ?? doc.id}
                 </td>
+
                 <td
                   className="px-3 py-2 text-xs"
                   style={{
@@ -360,28 +524,48 @@ export default function OutrosDocumentosTable({
                 >
                   {documentoFiscalService.getNomeCliente(doc)}
                 </td>
+
                 <td className="px-3 py-2">
-                  <TipoBadge tipo={doc.tipo_documento} colors={colors} />
-                  {doc.tipo_documento === "FP" && doc.fatura_convertida && (
-                    <span className="block mt-1 text-xs font-medium" style={{ color: colors.success }}>
-                      Convertida
-                    </span>
-                  )}
+                  <TipoBadge
+                    tipo={doc.tipo_documento}
+                    colors={colors}
+                  />
+
+                  {doc.tipo_documento === "FP" &&
+                    doc.fatura_convertida && (
+                      <span
+                        className="block mt-1 text-xs font-medium"
+                        style={{ color: colors.success }}
+                      >
+                        Convertida
+                      </span>
+                    )}
                 </td>
+
                 <td
                   className="px-3 py-2 text-xs"
-                  style={{ whiteSpace: "nowrap", color: colors.textSecondary }}
+                  style={{
+                    whiteSpace: "nowrap",
+                    color: colors.textSecondary,
+                  }}
                 >
                   {new Date(doc.data_emissao).toLocaleDateString()}
                 </td>
+
                 <td
                   className="px-3 py-2 text-right text-xs font-medium"
-                  style={{ whiteSpace: "nowrap", color: colors.text }}
+                  style={{
+                    whiteSpace: "nowrap",
+                    color: colors.text,
+                  }}
                 >
                   {formatKz(doc.total_liquido)}
                 </td>
+
                 <td className="px-3 py-2 text-center">
-                  <div className="flex justify-center">{acoes(doc)}</div>
+                  <div className="flex justify-center">
+                    {acoes(doc)}
+                  </div>
                 </td>
               </tr>
             ))
@@ -391,7 +575,7 @@ export default function OutrosDocumentosTable({
     </div>
   );
 
-  /* ── Cards mobile ── */
+  /* ─── Cards mobile ─────────────────────────────────────────────────────── */
   const cardsMobile = (
     <div className="sm:hidden">
       {slice.length === 0 ? (
@@ -416,17 +600,20 @@ export default function OutrosDocumentosTable({
     </div>
   );
 
-  /* ── Render principal ── */
+  /* ─── Render principal ─────────────────────────────────────────────────── */
   return (
     <div className="w-full flex flex-col">
-      {/* Abas — scroll horizontal no mobile para não cortar/quebrar o layout */}
       <div
         className="flex overflow-x-auto scroll-tabs"
-        style={{ borderBottom: `1px solid ${colors.border}`, WebkitOverflowScrolling: "touch" }}
+        style={{
+          borderBottom: `1px solid ${colors.border}`,
+          WebkitOverflowScrolling: "touch",
+        }}
       >
         {TABS.map((tab) => {
           const count = docsTab(tab.key).length;
           const ativa = tabAtiva === tab.key;
+
           return (
             <button
               key={tab.key}
@@ -444,6 +631,7 @@ export default function OutrosDocumentosTable({
               }}
             >
               {tab.label}
+
               {count > 0 && (
                 <span
                   className="px-1.5 py-0.5 text-xs font-semibold shrink-0"
@@ -459,19 +647,23 @@ export default function OutrosDocumentosTable({
           );
         })}
       </div>
+
       <style jsx>{`
         .scroll-tabs {
           scrollbar-width: none;
           -ms-overflow-style: none;
         }
+
         .scroll-tabs::-webkit-scrollbar {
           display: none;
         }
       `}</style>
 
-      {/* Conteúdo */}
       {loading ? (
-        <div className="p-10 text-center" style={{ color: colors.textSecondary }}>
+        <div
+          className="p-10 text-center"
+          style={{ color: colors.textSecondary }}
+        >
           <div
             className="w-5 h-5 border-2 animate-spin rounded-full mx-auto"
             style={{
@@ -484,6 +676,7 @@ export default function OutrosDocumentosTable({
         <>
           {tabelaDesktop}
           {cardsMobile}
+
           <PaginationControls
             page={pg}
             totalPages={totalPaginas}

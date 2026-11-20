@@ -56,6 +56,11 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
+    'domain' => env('APP_DOMAIN', 'localhost'),
+
+    'frontend_scheme' => env('FRONTEND_SCHEME', 'https'),
+    'frontend_port'   => env('FRONTEND_PORT'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

@@ -4,10 +4,30 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import Cookies from "js-cookie";
 
 // ============ CONFIGURAÇÃO BASE ============
+//
+// .env.local:
+//   NEXT_PUBLIC_APP_DOMAIN=app.factura-ja.localhost   (domínio base; em produção app.factura-ja.ao)
+//   NEXT_PUBLIC_API_PORT=                             (vazio quando o nginx serve tudo na 80/443; 8000 no setup antigo)
 
+const APP_DOMAIN = (process.env.NEXT_PUBLIC_APP_DOMAIN || "").trim().replace(/^\.+|\.+$/g, "").toLowerCase();
+const API_PORT = (process.env.NEXT_PUBLIC_API_PORT || "").trim();
+
+const portSuffix = (): string => (API_PORT ? `:${API_PORT}` : "");
+
+/** API do TENANT: mesmo host da página (subdomínio do tenant). */
 const getBaseURL = (): string => {
   if (typeof window === "undefined") return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-  return `${window.location.protocol}//${window.location.hostname}:8000`;
+  return `${window.location.protocol}//${window.location.hostname}${portSuffix()}`;
+};
+
+/**
+ * API do LANDLORD: SEMPRE o domínio base.
+ * As rotas do landlord só existem em app.factura-ja.*, por isso uma página de
+ * tenant (acme.app...) que chame o landlord tem de ir ao domínio base (CORS + cookies partilhados).
+ */
+const getLandlordBaseURL = (): string => {
+  if (typeof window === "undefined" || !APP_DOMAIN) return getBaseURL();
+  return `${window.location.protocol}//${APP_DOMAIN}${portSuffix()}`;
 };
 
 const baseConfig = {
@@ -17,7 +37,7 @@ const baseConfig = {
     "Content-Type": "application/json",
     "X-Requested-With": "XMLHttpRequest",
   },
-  timeout: 1890000,
+  timeout: 1890000, // 31 min — mantido do original (relatórios/SAF-T longos)
 };
 
 const debugApi = process.env.NEXT_PUBLIC_DEBUG_API === "true";
@@ -45,17 +65,17 @@ export const setTenant = (empresa: EmpresaData): void => {
   console.log("[TENANT] Definido:", empresa.id, empresa.subdomain);
 };
 
+/** O host é a fonte de verdade; localStorage e query só valem fora de um subdomínio de tenant. */
 export const getTenant = (): string | null => {
   if (typeof window === "undefined") return null;
 
-  const tenantId = localStorage.getItem("tenant_id");
-  if (tenantId) return tenantId;
-
-  const hostname = window.location.hostname;
-  const subdomain = extractSubdomain(hostname);
+  const subdomain = extractSubdomain(window.location.hostname);
   if (subdomain && !isReservedSubdomain(subdomain)) {
     return subdomain;
   }
+
+  const tenantId = localStorage.getItem("tenant_id");
+  if (tenantId) return tenantId;
 
   const urlParams = new URLSearchParams(window.location.search);
   const queryTenant = urlParams.get("tenant") || urlParams.get("empresa");
@@ -67,10 +87,27 @@ export const getTenant = (): string | null => {
   return null;
 };
 
+/** Igual ao ResolveTenant::extrairSubdomain (compara com o domínio base). */
 const extractSubdomain = (hostname: string): string | null => {
-  const parts = hostname.split(".");
+  const host = hostname.toLowerCase();
+  if (isIP(host)) return null;
+
+  if (APP_DOMAIN) {
+    if (host === APP_DOMAIN || host === `www.${APP_DOMAIN}`) return null;
+
+    const suffix = `.${APP_DOMAIN}`;
+    if (host.endsWith(suffix)) {
+      const sub = host.slice(0, -suffix.length);
+      if (!sub || sub === "www" || sub.includes(".")) return null;
+      return sub;
+    }
+    return null;
+  }
+
+  // Fallback legado (NEXT_PUBLIC_APP_DOMAIN não definido)
+  const parts = host.split(".");
   if (parts[0] === "www") parts.shift();
-  if (parts[0] === "localhost" || isIP(parts[0])) return null;
+  if (parts[0] === "localhost") return null;
   if (parts.length > 2) return parts[0];
   return null;
 };
@@ -84,20 +121,29 @@ const isIP = (value: string): boolean => {
   return /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(value);
 };
 
+const LANDLORD_PUBLIC_PATHS = ["/landlord/login", "/landlord/register"];
+
+/**
+ * Só expulsa para o login do landlord quando o utilizador está DENTRO do painel
+ * (e não nas páginas públicas). Utilizadores de onboarding/Google e de tenants
+ * também usam landlordApi e não podem ser atirados para o painel.
+ */
 const forceLandlordLogout = (): void => {
   if (typeof window === "undefined") return;
+
+  const path = window.location.pathname;
+  if (!path.startsWith("/landlord") || LANDLORD_PUBLIC_PATHS.includes(path)) return;
+
   console.log("[LANDLORD] Forçando logout...");
   localStorage.removeItem("landlord_user");
   clearTenant();
-  if (!window.location.pathname.includes("/landlord/login")) {
-    window.location.href = "/landlord/login";
-  }
+  window.location.href = "/landlord/login";
 };
 
 // ============ INSTÂNCIA DO LANDLORD ============
 
 export const landlordApi = axios.create({
-  baseURL: getBaseURL(),
+  baseURL: getLandlordBaseURL(),
   ...baseConfig,
 });
 
@@ -176,20 +222,31 @@ tenantApi.interceptors.request.use(
       config.headers["X-XSRF-TOKEN"] = xsrfToken;
     }
 
-    const tenant = getTenant();
-    if (tenant) {
-      config.headers["X-Empresa-ID"] = tenant;
-      config.headers["X-Tenant-ID"] = tenant;
-    } else {
-      const publicPaths = ["/sanctum/csrf-cookie", "/login", "/register"];
-      if (!publicPaths.some((p) => config.url?.includes(p))) {
-        console.warn("[TENANT] Nenhum tenant encontrado para:", config.url);
+    // Num subdomínio de tenant o HOST identifica a empresa — não se envia header.
+    // (Evita que um tenant antigo do localStorage contradiga o host.)
+    // Fora de subdomínio (domínio base) usa-se o tenant guardado, se existir.
+    let hostIsTenant = false;
+    if (typeof window !== "undefined") {
+      const sub = extractSubdomain(window.location.hostname);
+      hostIsTenant = !!sub && !isReservedSubdomain(sub);
+    }
+
+    if (!hostIsTenant) {
+      const tenant = getTenant();
+      if (tenant) {
+        config.headers["X-Empresa-ID"] = tenant;
+        config.headers["X-Tenant-ID"] = tenant;
+      } else {
+        const publicPaths = ["/sanctum/csrf-cookie", "/login", "/register"];
+        if (!publicPaths.some((p) => config.url?.includes(p))) {
+          console.warn("[TENANT] Nenhum tenant encontrado para:", config.url);
+        }
       }
     }
 
     if (debugApi) {
       console.log(`🏢 [TENANT] ${config.method?.toUpperCase()} ${config.url}`, {
-        tenant: getTenant(),
+        hostIsTenant,
       });
     }
     return config;
@@ -197,13 +254,10 @@ tenantApi.interceptors.request.use(
   (error: AxiosError) => Promise.reject(error)
 );
 
-// Interceptor de resposta do TENANT - agora silencia 400 e 401
+// Interceptor de resposta do TENANT: silencia 400 e 401.
+// O tenant NÃO é guardado aqui — fá-lo o AuthProvider (login e /me).
 tenantApi.interceptors.response.use(
   (response) => {
-    const isTenantLogin = response.config.url?.includes("/login") && !response.config.url?.includes("/api/landlord/");
-    if (isTenantLogin && response.data?.empresa) {
-      setTenant(response.data.empresa);
-    }
     if (debugApi) {
       console.log(`✅ [TENANT] ${response.status} ${response.config.url}`);
     }
@@ -213,14 +267,10 @@ tenantApi.interceptors.response.use(
     const status = error.response?.status;
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
-    // Se for 400 ou 401, não rejeitamos com erro - apenas logamos e retornamos um objeto sinalizado
+    // 400/401: sinaliza com _silenced mantendo o AxiosError (protótipo, response, isAxiosError)
     if (status === 400 || status === 401) {
       console.warn(`[TENANT] Requisição falhou (${status}): ${originalRequest.url}`);
-      // Retorna um objeto com _silenced para o chamador saber que foi tratado
-      return Promise.reject({
-        ...error,
-        _silenced: true,
-      });
+      return Promise.reject(Object.assign(error, { _silenced: true }));
     }
 
     // CSRF expirado (419) - renova e tenta novamente

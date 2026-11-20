@@ -304,7 +304,7 @@ class DocumentoFiscalService
                 'cliente_id' => $aviso->cliente_id,
                 'cliente_nome' => $aviso->cliente_nome,
                 'cliente_nif' => $aviso->cliente_nif,
-                'itens' => $aviso->itens->map(fn ($item) => [
+                'itens' => $aviso->itens->map(fn($item) => [
                     'produto_id' => $item->produto_id,
                     'descricao' => $item->descricao,
                     'quantidade' => (float) $item->quantidade,
@@ -515,7 +515,7 @@ class DocumentoFiscalService
                     'iva' => (float) $origem->total_iva,
                     'retencao' => (float) $origem->total_retencao,
                     'liquido' => (float) $origem->total_liquido,
-                    'itens_processados' => $origem->itens->map(fn ($item) => [
+                    'itens_processados' => $origem->itens->map(fn($item) => [
                         'produto_id' => $item->produto_id,
                         'descricao' => $item->descricao,
                         'quantidade' => (float) $item->quantidade,
@@ -638,8 +638,7 @@ class DocumentoFiscalService
     public function converterProforma(
         SharedDocumentoFiscal|TenantDocumentoFiscal $proforma,
         array $dados
-    ): SharedDocumentoFiscal|TenantDocumentoFiscal
-    {
+    ): SharedDocumentoFiscal|TenantDocumentoFiscal {
         $this->verificarAcessoUsuario();
 
         $tipoDestino = $dados['tipo_destino'] ?? 'FT';
@@ -673,11 +672,12 @@ class DocumentoFiscalService
 
             if ($documentosQuery->where('fatura_id', $origem->id)
                 ->whereIn('tipo_documento', ['FT', 'FR'])
-                ->exists()) {
+                ->exists()
+            ) {
                 throw new \InvalidArgumentException('Esta Proforma já foi convertida numa fatura.');
             }
 
-            $itens = $origem->itens->map(fn ($item) => [
+            $itens = $origem->itens->map(fn($item) => [
                 'produto_id' => $item->produto_id,
                 'descricao' => $item->descricao,
                 'quantidade' => (float) $item->quantidade,
@@ -833,7 +833,7 @@ class DocumentoFiscalService
             if ($valor <= 0 || $valor > $valorDisponivel + 0.001) {
                 throw new \InvalidArgumentException(
                     'O valor do estorno deve ser positivo e não pode exceder o saldo ainda não estornado do recibo (' .
-                    number_format($valorDisponivel, 2, ',', '.') . ').'
+                        number_format($valorDisponivel, 2, ',', '.') . ').'
                 );
             }
 
@@ -1146,7 +1146,7 @@ class DocumentoFiscalService
             throw new \InvalidArgumentException('ND deve conter itens.');
         }
         $valorTotal = array_sum(array_map(
-            fn (array $item) => max(
+            fn(array $item) => max(
                 0,
                 (float) ($item['quantidade'] ?? 0) * (float) ($item['preco_venda'] ?? $item['preco_unitario'] ?? 0)
                     - (float) ($item['desconto'] ?? 0)
@@ -1206,7 +1206,7 @@ class DocumentoFiscalService
                 $vinculosQuery->where('tenant_id', $this->empresa->id);
             }
             $vinculosExistentes = $vinculosQuery->lockForUpdate()->get();
-            if ($vinculosExistentes->contains(fn ($vinculo) => $vinculo->fatura_id !== $fatura->id)) {
+            if ($vinculosExistentes->contains(fn($vinculo) => $vinculo->fatura_id !== $fatura->id)) {
                 throw new \InvalidArgumentException("O adiantamento já está associado a outra Fatura.");
             }
 
@@ -1223,7 +1223,7 @@ class DocumentoFiscalService
                 throw new \InvalidArgumentException("O valor do adiantamento excede o saldo pendente da Fatura definitiva.");
             }
 
-            $itensNC = $adiantamento->itens->map(fn ($item) => [
+            $itensNC = $adiantamento->itens->map(fn($item) => [
                 'produto_id' => $item->produto_id,
                 'descricao' => $item->descricao,
                 'quantidade' => (float) $item->quantidade,
@@ -1528,6 +1528,12 @@ class DocumentoFiscalService
         $this->verificarAcessoUsuario();
 
         if (!Str::isUuid($documentoId)) {
+            Log::debug('DIAGNÓSTICO UUID - buscarDocumento', [
+                'documento_id' => $documentoId,
+                'tipo' => gettype($documentoId),
+                'comprimento' => strlen($documentoId),
+                'uuid_valido' => Str::isUuid($documentoId),
+            ]);
             throw new \InvalidArgumentException('ID inválido.');
         }
 
@@ -2031,8 +2037,7 @@ class DocumentoFiscalService
         string $regime,
         ?float $taxaRetencaoAuto = null,
         ?string $tipoDocumento = null
-    ): array
-    {
+    ): array {
         $totalBase = 0.0;
         $totalIva = 0.0;
         $totalRetencao = 0.0;
@@ -2344,45 +2349,45 @@ class DocumentoFiscalService
         }
 
         // Série própria de auto-facturação.
-if ($temAutoFact) {
-    $chaveReal = [
-        'tipo_documento' => 'AF',
-        'serie'          => 'AF',
-        'ano'            => $ano,
-    ];
-    if ($temTenantId) $chaveReal['tenant_id'] = $tenantId;
+        if ($temAutoFact) {
+            $chaveReal = [
+                'tipo_documento' => 'AF',
+                'serie'          => 'AF',
+                'ano'            => $ano,
+            ];
+            if ($temTenantId) $chaveReal['tenant_id'] = $tenantId;
 
-    $existente = $this->serieFiscalModel()->where($chaveReal)->first();
+            $existente = $this->serieFiscalModel()->where($chaveReal)->first();
 
-    if ($existente) {
-        // Já existe — garantir auto_faturacao=true e activa
-        if (!$existente->auto_faturacao || !$existente->ativa || !$existente->padrao) {
-            $existente->update([
-                'auto_faturacao' => true,
-                'ativa'          => true,
-                'padrao'         => true,
-            ]);
+            if ($existente) {
+                // Já existe — garantir auto_faturacao=true e activa
+                if (!$existente->auto_faturacao || !$existente->ativa || !$existente->padrao) {
+                    $existente->update([
+                        'auto_faturacao' => true,
+                        'ativa'          => true,
+                        'padrao'         => true,
+                    ]);
+                }
+            } else {
+                try {
+                    $dadosAF = array_merge($chaveReal, [
+                        'id'             => (string) Str::uuid(),
+                        'descricao'      => 'Série de Facturas/Recibos de Autofacturação',
+                        'digitos'        => 4,
+                        'ultimo_numero'  => 0,
+                        'ativa'          => true,
+                        'padrao'         => true,
+                        'valida_agt'     => true,
+                        'auto_faturacao' => true,
+                    ]);
+
+                    $this->serieFiscalModel()->create($dadosAF);
+                } catch (\Illuminate\Database\QueryException $e) {
+                    // Race condition: já foi criada por outro request
+                    if ($e->getCode() !== '23000') throw $e;
+                }
+            }
         }
-    } else {
-        try {
-            $dadosAF = array_merge($chaveReal, [
-                'id'             => (string) Str::uuid(),
-                'descricao'      => 'Série de Facturas/Recibos de Autofacturação',
-                'digitos'        => 4,
-                'ultimo_numero'  => 0,
-                'ativa'          => true,
-                'padrao'         => true,
-                'valida_agt'     => true,
-                'auto_faturacao' => true,
-            ]);
-
-            $this->serieFiscalModel()->create($dadosAF);
-        } catch (\Illuminate\Database\QueryException $e) {
-            // Race condition: já foi criada por outro request
-            if ($e->getCode() !== '23000') throw $e;
-        }
-    }
-}
     }
 
     private function getTipoDocumentoNome(string $tipo): string
@@ -2423,8 +2428,8 @@ if ($temAutoFact) {
                 $mensagem = $tipo === 'AF'
                     ? 'Autofacturação requer a identificação do fornecedor substituído; Consumidor Final não é válido.'
                     : ($tipo === 'FR'
-                    ? 'Factura-Recibo requer a identificação do cliente; Consumidor Final não é válido.'
-                    : "{$config['nome']} requer a identificação do cliente.");
+                        ? 'Factura-Recibo requer a identificação do cliente; Consumidor Final não é válido.'
+                        : "{$config['nome']} requer a identificação do cliente.");
                 throw new \InvalidArgumentException(
                     $mensagem
                 );

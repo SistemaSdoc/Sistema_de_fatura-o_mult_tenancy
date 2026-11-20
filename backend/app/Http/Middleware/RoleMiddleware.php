@@ -2,118 +2,103 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Empresa;
+use App\Models\Shared\User as SharedUser;
+use App\Models\Tenant\User as TenantUser;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Valida que o utilizador autenticado (guards landlord) é MEMBRO ATIVO da
+ * empresa do pedido e tem uma das roles exigidas.
+ *
+ * Uso: ->middleware('role:admin,gestor')
+ * Deve correr DEPOIS de resolve.tenant.
+ */
 class RoleMiddleware
 {
-    /**
-     * Handle an incoming request.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  \Closure  $next
-     * @param  mixed ...$roles  Lista de roles permitidas
-     */
     public function handle(Request $request, Closure $next, ...$roles)
     {
-        // ✅ 1. Verifica autenticação no guard landlord_api ou landlord
-        $landlordGuard = Auth::guard('landlord_api');
-        $guardUsed = 'landlord_api';
+        // 1. Autenticação (landlord_api ou landlord)
+        $guard = Auth::guard('landlord_api')->check()
+            ? Auth::guard('landlord_api')
+            : Auth::guard('landlord');
 
-        if (!$landlordGuard->check()) {
-            $landlordGuard = Auth::guard('landlord');
-            $guardUsed = 'landlord';
-        }
-
-        if (!$landlordGuard->check()) {
-            Log::warning('[ROLE] Usuário não autenticado no landlord', [
-                'guard_used' => $guardUsed,
-                'path' => $request->path(),
-            ]);
+        if (!$guard->check()) {
+            Log::warning('[ROLE] Não autenticado', ['path' => $request->path()]);
             return response()->json(['message' => 'Não autorizado'], 401);
         }
 
-        // ✅ 2. Obtém o landlord user
-        $landlordUser = $landlordGuard->user();
-        
-        // ✅ 3. Obtém o tenant_id da sessão
-        $tenantId = session('tenant_id');
-        if (!$tenantId) {
-            Log::warning('[ROLE] Tenant não identificado na sessão', [
-                'path' => $request->path(),
-                'session' => session()->all(),
-            ]);
+        $landlordUser = $guard->user();
+
+        // 2. Empresa do pedido: a resolvida pelo ResolveTenant; a sessão é só fallback
+        $empresa = $request->attributes->get('current_empresa');
+
+        if (!$empresa && session('tenant_id')) {
+            $empresa = Empresa::on('landlord')->find(session('tenant_id'));
+        }
+
+        if (!$empresa) {
+            Log::warning('[ROLE] Tenant não identificado', ['path' => $request->path()]);
             return response()->json(['message' => 'Tenant não identificado'], 401);
         }
 
-        // ✅ 4. Busca o usuário tenant correspondente
-        $user = $this->getTenantUser($landlordUser->email, $tenantId);
-        
+        // 3. Utilizador no tenant
+        $user = $this->getTenantUser($landlordUser->email, $empresa);
+
         if (!$user) {
-            Log::warning('[ROLE] Usuário não encontrado no tenant', [
-                'email' => $landlordUser->email,
-                'tenant_id' => $tenantId,
-                'path' => $request->path(),
+            Log::warning('[ROLE] Utilizador não pertence ao tenant', [
+                'landlord_user_id' => $landlordUser->id,
+                'tenant_id'        => $empresa->id,
+                'path'             => $request->path(),
             ]);
-            return response()->json(['message' => 'Usuário não encontrado no tenant'], 401);
+            return response()->json(['message' => 'Utilizador não pertence a esta empresa'], 403);
         }
 
-        // ✅ 5. Verifica a role
-        $userRole = $user->role ?? 'operador';
-        
-        if (!in_array($userRole, $roles)) {
+        // 4. Utilizador desativado (a sessão não morre ao desativar — aplica-se aqui)
+        if (!$user->ativo) {
+            Log::warning('[ROLE] Utilizador inativo', ['user_id' => $user->id, 'path' => $request->path()]);
+            return response()->json(['message' => 'Utilizador inativo. Contacte o administrador.'], 403);
+        }
+
+        // 5. Role (mesma fonte do UserController e do WebAuthController)
+        $userRole = method_exists($user, 'getRoleNoTenant')
+            ? ($user->getRoleNoTenant($empresa->id) ?? 'operador')
+            : ($user->role ?? 'operador');
+
+        if (!in_array($userRole, $roles, true)) {
             Log::warning('[ROLE] Acesso negado - role insuficiente', [
-                'user_id' => $user->id,
-                'user_role' => $userRole,
+                'user_id'        => $user->id,
+                'user_role'      => $userRole,
                 'roles_required' => $roles,
-                'path' => $request->path(),
+                'path'           => $request->path(),
             ]);
-            return response()->json([
-                'message' => 'Acesso negado: permissão insuficiente',
-                'user_role' => $userRole,
-                'roles_required' => $roles,
-            ], 403);
+            return response()->json(['message' => 'Acesso negado: permissão insuficiente'], 403);
         }
 
-        // ✅ 6. Armazena o usuário tenant na request para uso posterior
-        $request->merge(['tenant_user' => $user]);
-        $request->setUserResolver(function () use ($user) {
-            return $user;
-        });
+        // 6. Disponibiliza o utilizador do tenant
+        $request->attributes->set('tenant_user', $user);
+        $request->setUserResolver(fn () => $user);
 
-        Log::info('[ROLE] Acesso permitido', [
-            'user_id' => $user->id,
-            'user_role' => $userRole,
-            'path' => $request->path(),
-        ]);
+        // Compatibilidade: pesquise `tenant_user` nos controllers
+        // (grep -rn "tenant_user" app/). Se ninguém usar $request->tenant_user
+        // ou input('tenant_user'), apague esta linha — mete um model no input do pedido.
+        $request->merge(['tenant_user' => $user]);
 
         return $next($request);
     }
 
-    /**
-     * Busca o usuário no tenant correto (singulares ou colectivo)
-     */
-    private function getTenantUser(string $email, string $tenantId): ?object
+    private function getTenantUser(string $email, Empresa $empresa): ?object
     {
-        // Busca a empresa
-        $empresa = \App\Models\Empresa::on('landlord')->find($tenantId);
-        if (!$empresa) {
-            Log::error('[ROLE] Empresa não encontrada', ['tenant_id' => $tenantId]);
-            return null;
+        if ($empresa->modo === 'singular') {
+            return TenantUser::on('tenant')->where('email', $email)->first();
         }
 
-        // Busca o usuário conforme o modo da empresa
-        if ($empresa->modo === 'singular') {
-            return \App\Models\Tenant\User::on('tenant')
-                ->where('email', $email)
-                ->first();
-        } else {
-            return \App\Models\Shared\User::on('shared')
-                ->where('email', $email)
-                ->where('tenant_id', $tenantId)
-                ->first();
-        }
+        return SharedUser::on('shared')
+            ->where('email', $email)
+            ->where('tenant_id', $empresa->id)
+            ->first();
     }
 }

@@ -258,32 +258,49 @@ export interface DeletarResponse {
 const API_PREFIX = "/api";
 
 export const produtoService = {
-  async listarProdutos(params: ListarProdutosParams = {}): Promise<ListarProdutosResponse> {
-    const q = new URLSearchParams();
-    if (params.tipo) q.append("tipo", params.tipo);
-    if (params.status) q.append("status", params.status);
-    if (params.categoria_id) q.append("categoria_id", params.categoria_id);
-    if (params.busca) q.append("busca", params.busca);
-    if (params.estoque_baixo) q.append("estoque_baixo", "true");
-    if (params.sem_estoque) q.append("sem_estoque", "true");
-    if (params.ordenar) q.append("ordenar", params.ordenar);
-    if (params.direcao) q.append("direcao", params.direcao);if (params.paginar !== undefined) {
+ 
+async listarProdutos(params: ListarProdutosParams = {}): Promise<ListarProdutosResponse> {
+  const q = new URLSearchParams();
+
+  if (params.tipo) q.append("tipo", params.tipo);
+  if (params.status) q.append("status", params.status);
+  if (params.categoria_id) q.append("categoria_id", params.categoria_id);
+  if (params.busca) q.append("busca", params.busca);
+  if (params.estoque_baixo) q.append("estoque_baixo", "true");
+  if (params.sem_estoque) q.append("sem_estoque", "true");
+  if (params.ordenar) q.append("ordenar", params.ordenar);
+  if (params.direcao) q.append("direcao", params.direcao);
+
+  if (params.paginar !== undefined) {
     q.append("paginar", String(params.paginar));
-}
+  }
 
-if (params.per_page) {
+  if (params.per_page) {
     q.append("per_page", params.per_page.toString());
-}
-    if (params.apenas_servicos) q.append("apenas_servicos", "true");
-    if (params.apenas_produtos) q.append("apenas_produtos", "true");
-    if (params.com_retencao) q.append("com_retencao", "true");
-    // ✅ NOVOS: Filtros de IVA
-    if (params.taxa_iva !== undefined) q.append("taxa_iva", String(params.taxa_iva));
-    if (params.apenas_isentos) q.append("apenas_isentos", "true");
+  }
 
-    const response = await api.get(`${API_PREFIX}/produtos${q.toString() ? `?${q}` : ""}`);
-    return response.data;
-  },
+  if (params.apenas_servicos) q.append("apenas_servicos", "true");
+  if (params.apenas_produtos) q.append("apenas_produtos", "true");
+  if (params.com_retencao) q.append("com_retencao", "true");
+  if (params.taxa_iva !== undefined) q.append("taxa_iva", String(params.taxa_iva));
+  if (params.apenas_isentos) q.append("apenas_isentos", "true");
+
+  // RASTREIO TEMPORÁRIO
+  console.count(
+    `[RASTREIO] listarProdutos - tipo: ${params.tipo ?? "não definido"}`
+  );
+
+  console.trace(
+    `[RASTREIO] Origem da chamada - tipo: ${params.tipo ?? "não definido"}`
+  );
+
+  const response = await api.get(
+    `${API_PREFIX}/produtos${q.toString() ? `?${q}` : ""}`
+  );
+
+  return response.data;
+},
+
 
   async listarTodosCompletos(
     params: Omit<ListarProdutosParams, "status" | "estoque_baixo" | "sem_estoque"> = {}

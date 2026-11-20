@@ -6,60 +6,60 @@ use Closure;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Autentica pedidos de tenant.
+ *
+ * Os tenants autenticam-se pelos guards landlord (landlord_api / landlord),
+ * por isso é OBRIGATÓRIO provar que a sessão pertence à empresa do pedido.
+ * Sem isto, o cookie partilhado entre subdomínios (ou um X-Tenant-ID forjado,
+ * que o ResolveTenant grava em session('tenant_id')) daria acesso a outro tenant.
+ *
+ * Deve correr DEPOIS de resolve.tenant (usa o atributo current_empresa).
+ */
 class AuthTenant
 {
     public function handle($request, Closure $next)
     {
-        $landlordGuard = Auth::guard('landlord_api');
-        $guardUsed = 'landlord_api';
+        $guard = Auth::guard('landlord_api')->check()
+            ? Auth::guard('landlord_api')
+            : Auth::guard('landlord');
 
-        if (!$landlordGuard->check()) {
-            $landlordGuard = Auth::guard('landlord');
-            $guardUsed = 'landlord';
-        }
-
-        Log::info('1- [AUTH TENANT] Verificando autenticação', [
-            'cookies' => $request->cookies->all(),
-            'has_session_cookie' => $request->hasCookie('faturaja_session'),
-            'session_id' => session()->getId(),
-            'all_session' => session()->all(),
-            'guard_used' => $guardUsed,
-            'guard_check' => $landlordGuard->check(),
-            'guard_user' => $landlordGuard->user(),
-            'headers' => [
-                'origin' => $request->header('Origin'),
-                'referer' => $request->header('Referer'),
-            ],
-        ]);
-
-        // 1. Verifica autenticação no guard landlord_api ou landlord
-        if (!$landlordGuard->check()) {
-            Log::warning('[AUTH TENANT] 401 – Landlord não autenticado', [
-                'cookies' => $request->cookies->all(),
-                'session_id' => session()->getId(),
-                'path' => $request->path(),
-            ]);
+        // 1. Autenticação
+        if (!$guard->check()) {
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
 
-        // 2. Verifica se a sessão contém os dados do tenant (definidos no login)
-        if (!session()->has('tenant_id')) {
-            Log::warning('[AUTH TENANT] 401 – Tenant não identificado na sessão', [
-                'session' => session()->all(),
-                'path' => $request->path(),
-            ]);
+        $landlordUser = $guard->user();
+
+        if (!($landlordUser->ativo ?? true)) {
+            return response()->json(['message' => 'Conta desativada.'], 403);
+        }
+
+        // 2. Tenant resolvido para ESTE pedido
+        $empresa   = $request->attributes->get('current_empresa');
+        $empresaId = $empresa?->id ?? session('tenant_id');
+
+        if (!$empresaId || !session()->has('tenant_id')) {
             return response()->json(['message' => 'Tenant not identified.'], 401);
         }
 
-        // (Opcional) Aqui poderia verificar se o usuário tem permissão para este tenant
-        // Mas isso já pode ser feito nos services/controllers
+        // 3. A sessão tem de pertencer a esta empresa:
+        //    - auth_tenant_id: gravado no login (WebAuthController::finalizarLogin), ou
+        //    - empresa_id fixo da conta landlord (ex.: utilizador criado via Google/onboarding)
+        $autenticouNaEmpresa = session('auth_tenant_id') === $empresaId;
+        $contaDaEmpresa      = !empty($landlordUser->empresa_id) && $landlordUser->empresa_id === $empresaId;
 
-        Log::info('[AUTH TENANT] Autenticação bem-sucedida', [
-            'guard_used' => $guardUsed,
-            'user_id' => $landlordGuard->id(),
-            'tenant_id' => session('tenant_id'),
-            'path' => $request->path(),
-        ]);
+        if (!$autenticouNaEmpresa && !$contaDaEmpresa) {
+            Log::warning('[AUTH TENANT] 403 – sessão não pertence à empresa do pedido', [
+                'user_id'        => $landlordUser->id,
+                'empresa_pedido' => $empresaId,
+                'auth_tenant_id' => session('auth_tenant_id'),
+                'path'           => $request->path(),
+                'ip'             => $request->ip(),
+            ]);
+
+            return response()->json(['message' => 'Sessão não pertence a esta empresa.'], 403);
+        }
 
         return $next($request);
     }

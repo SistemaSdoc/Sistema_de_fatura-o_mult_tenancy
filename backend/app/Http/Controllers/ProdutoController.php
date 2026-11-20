@@ -326,35 +326,51 @@ class ProdutoController extends Controller
      | LISTAGEM
      | ================================================================== */
 
-    public function index(Request $request)
-    {
-        $modo = $this->getModo();
-        Log::info('[ProdutoController::index] Listando produtos', [
+public function index(Request $request)
+{
+    $modo = $this->getModo();
+
+    Log::info('[RASTREIO PRODUTOS] Nova requisição recebida', [
+        'endpoint' => $request->path(),
+        'url' => $request->fullUrl(),
+        'metodo' => $request->method(),
+        'referer' => $request->headers->get('referer'),
+        'tipo' => $request->query('tipo'),
+        'filtros' => $request->query(),
+        'user_agent' => $request->userAgent(),
+        'ip' => $request->ip(),
+    ]);
+
+    try {
+        $this->verificarAcessoUsuario();
+
+        $filtros = $this->extrairFiltros($request);
+
+        Log::info('[RASTREIO PRODUTOS] Filtros enviados ao serviço', [
+            'filtros' => $filtros,
+            'modo' => $modo,
+            'tenant_id' => $this->empresa?->id,
+        ]);
+
+        $produtos = $this->produtoService->listarProdutos($filtros);
+
+        return response()->json([
+            'message' => 'Lista de produtos carregada com sucesso',
+            'produtos' => $produtos,
+            'modo' => $modo,
+        ]);
+    } catch (\Exception $e) {
+        Log::error('[ProdutoController::index] Erro', [
+            'error' => $e->getMessage(),
             'modo' => $modo,
         ]);
 
-        try {
-            $this->verificarAcessoUsuario();
-
-            $filtros = $this->extrairFiltros($request);
-            $produtos = $this->produtoService->listarProdutos($filtros);
-
-            return response()->json([
-                'message'  => 'Lista de produtos carregada com sucesso',
-                'produtos' => $produtos,
-                'modo' => $modo,
-            ]);
-        } catch (\Exception $e) {
-            Log::error('[ProdutoController::index] Erro', [
-                'error' => $e->getMessage(),
-                'modo' => $modo,
-            ]);
-            return response()->json([
-                'message' => 'Erro ao listar produtos',
-                'error' => $e->getMessage()
-            ], 500);
-        }
+        return response()->json([
+            'message' => 'Erro ao listar produtos',
+            'error' => $e->getMessage()
+        ], 500);
     }
+}
 
     public function todos(Request $request)
     {

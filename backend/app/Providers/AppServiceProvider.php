@@ -7,6 +7,10 @@ use Illuminate\Support\Facades\DB;
 use App\Observers\EmpresaObserver;
 use Illuminate\Support\Facades\Config;
 use App\Models\Empresa;
+use Illuminate\Http\Request;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Support\Facades\RateLimiter;
+
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -30,6 +34,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+
+    
+        // AppServiceProvider::boot()
+        RateLimiter::for('login', fn(Request $r) => [
+            Limit::perMinute(5)->by(strtolower((string) $r->input('email')) . '|' . $r->ip()),
+            Limit::perMinute(30)->by($r->ip()),
+        ]);
 
         Empresa::observe(EmpresaObserver::class);
         // Evita reaplicar tenant em rotas públicas do landlord.
