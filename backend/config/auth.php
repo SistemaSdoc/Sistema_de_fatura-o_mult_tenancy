@@ -8,31 +8,31 @@ return [
     ],
 
     'guards' => [
-        // 🏠 LANDLORD - Web
+        //  LANDLORD - Web
         'landlord' => [
             'driver' => 'session',
             'provider' => 'landlord_users', //Corrigido
         ],
 
-        // 🏠 LANDLORD - API
+        //  LANDLORD - API
         'landlord_api' => [
             'driver' => 'session',
             'provider' => 'landlord_users', // Corrigido
         ],
 
-        // 🏢 TENANT - Web (raro)
+        //  TENANT - Web (raro)
         'tenant' => [
             'driver' => 'session',
             'provider' => 'tenant_users',     // Corrigido
         ],
 
-        // 🏢 TENANT - API (POS)
+        //  TENANT - API (POS)
         'tenant_api' => [
             'driver' => 'session',
             'provider' => 'tenant_users',     // Corrigido
         ],
 
-        // 🏢 TENANT - PIN
+        //  TENANT - PIN
         'tenant_pin' => [
             'driver' => 'session',
             'provider' => 'tenant_users',     // Corrigido
@@ -40,13 +40,13 @@ return [
     ],
 
     'providers' => [
-        // 🏠 Landlord: Super Admin e Suporte
+        //  Landlord: Super Admin e Suporte
         'landlord_users' => [              //  Corrigido: consistente
             'driver' => 'eloquent',
             'model' => App\Models\LandlordUser::class,
         ],
 
-        // 🏢 Tenant: Admin, Operador, Contablista da empresa
+        //  Tenant: Admin, Operador, Contablista da empresa
         'tenant_users' => [                //  Corrigido: consistente
             'driver' => 'eloquent',
             'model' => App\Models\Tenant\User::class,
@@ -54,14 +54,14 @@ return [
     ],
 
     'passwords' => [
-        'landlord_users' => [              // ✅ Corrigido: igual ao provider
+        'landlord_users' => [              // Corrigido: igual ao provider
             'provider' => 'landlord_users',
             'table' => 'password_reset_tokens',
             'expire' => 60,
             'throttle' => 60,
         ],
 
-        'tenant_users' => [               // ✅ Corrigido: igual ao provider
+        'tenant_users' => [               // Corrigido: igual ao provider
             'provider' => 'tenant_users',
             'table' => 'password_reset_tokens',
             'expire' => 60,

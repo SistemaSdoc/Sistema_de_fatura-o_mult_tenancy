@@ -39,7 +39,7 @@ public function toMail($notifiable)
     $dataPagamento = $pagamento->created_at->format('d/m/Y H:i');
 
     return (new MailMessage)
-        ->subject('📄 Novo comprovativo de pagamento aguardando análise')
+        ->subject(' Novo comprovativo de pagamento aguardando análise')
         ->greeting('Olá, Administrador!')
         ->line('Acabamos de receber um comprovativo de pagamento que aguarda a sua validação.')
         ->line('')
@@ -50,9 +50,9 @@ public function toMail($notifiable)
         ->line("- **Data do envio:** {$dataPagamento}")
         ->line('')
         ->line('Clique no botão abaixo para visualizar o comprovativo e tomar a decisão (aprovar ou rejeitar).')
-        ->action('🔍 Analisar comprovativo', $url)
+        ->action(' Analisar comprovativo', $url)
         ->line('')
-        ->line('⚠️ **Importante:** A empresa só terá acesso ao plano após a aprovação do pagamento.')
+        ->line('**Importante:** A empresa só terá acesso ao plano após a aprovação do pagamento.')
         ->line('')
         ->salutation('Equipa FaturaJA');
 }
