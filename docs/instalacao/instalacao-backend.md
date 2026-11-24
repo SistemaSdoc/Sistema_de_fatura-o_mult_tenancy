@@ -146,6 +146,14 @@ Executar as migrações em desenvolvimento:
 php artisan migrate
 ```
 
+```bash
+php artisan migrate --path=database/migrations/shared 
+```
+
+```bash
+php artisan migrate --path=database/migrations/tenant 
+```
+
 As migrações devem ser revistas antes da execução, principalmente quando existem várias bases de dados e ligações dinâmicas para tenants.
 
 ## 10. Preparar permissões
